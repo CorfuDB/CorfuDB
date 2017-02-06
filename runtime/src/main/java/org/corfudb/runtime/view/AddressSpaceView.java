@@ -51,7 +51,7 @@ public class AddressSpaceView extends AbstractView {
      */
     @Getter
     @Setter
-    Duration emptyDuration = Duration.ofMillis(5000L);
+    Duration emptyDuration = Duration.ofMillis(100L);
 
     public AddressSpaceView(CorfuRuntime runtime) {
         super(runtime);
@@ -130,7 +130,7 @@ public class AddressSpaceView extends AbstractView {
                 l.getSegment(address))
                 .write(address, stream, data, backpointerMap, streamAddresses, partialEntryFunction));
 
-        // Insert this write to our local cache.
+        // Insert this append to our local cache.
         if (!runtime.isCacheDisabled()) {
             InMemoryLogData ld = new InMemoryLogData(DataType.DATA, data);
             ld.setGlobalAddress(address);

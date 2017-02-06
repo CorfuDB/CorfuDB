@@ -12,6 +12,7 @@ import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.Collections;
@@ -99,12 +100,12 @@ public class ObjectsView extends AbstractView {
     }
 
     /**
-     * Creates a copy-on-write copy of an object.
+     * Creates a copy-on-append copy of an object.
      *
      * @param obj         The object that should be copied.
      * @param destination The destination ID of the object to be copied.
      * @param <T>         The type of the object being copied.
-     * @return A copy-on-write copy of the object.
+     * @return A copy-on-append copy of the object.
      */
     @SuppressWarnings("unchecked")
     public <T> T copy(@NonNull T obj, @NonNull UUID destination) {
@@ -113,7 +114,7 @@ public class ObjectsView extends AbstractView {
             CorfuSMRObjectProxy<T> proxy = (CorfuSMRObjectProxy<T>) ((ICorfuSMRObject) obj).getProxy();
             ObjectID oid = new ObjectID(destination, proxy.getOriginalClass(), null);
             return (T) objectCache.computeIfAbsent(oid, x -> {
-                StreamView sv = runtime.getStreamsView().copy(proxy.getSv().getStreamID(),
+                IStreamView sv = runtime.getStreamsView().copy(proxy.getSv().getID(),
                         destination, proxy.getTimestamp());
                 return CorfuProxyBuilder.getProxy(proxy.getOriginalClass(), null, sv, runtime,
                         proxy.getSerializer(), Collections.emptySet());
@@ -123,12 +124,12 @@ public class ObjectsView extends AbstractView {
             ICorfuSMR<T> proxy = (ICorfuSMR<T>)obj;
             ObjectID oid = new ObjectID(destination, proxy.getCorfuSMRProxy().getObjectType(), null);
             return (T) objectCache.computeIfAbsent(oid, x -> {
-                StreamView sv = runtime.getStreamsView().copy(proxy.getCorfuStreamID(),
+                IStreamView sv = runtime.getStreamsView().copy(proxy.getCorfuStreamID(),
                         destination, proxy.getCorfuSMRProxy().getVersion());
                 try {
                     return
                             CorfuCompileWrapperBuilder.getWrapper(proxy.getCorfuSMRProxy().getObjectType(),
-                                    runtime, sv.getStreamID(), null, Serializers.JSON);
+                                    runtime, sv.getID(), null, Serializers.JSON);
                 }
                 catch (Exception ex) {
                     throw new RuntimeException(ex);
@@ -138,12 +139,12 @@ public class ObjectsView extends AbstractView {
     }
 
     /**
-     * Creates a copy-on-write copy of an object.
+     * Creates a copy-on-append copy of an object.
      *
      * @param obj         The object that should be copied.
      * @param destination The destination stream name of the object to be copied.
      * @param <T>         The type of the object being copied.
-     * @return A copy-on-write copy of the object.
+     * @return A copy-on-append copy of the object.
      */
     @SuppressWarnings("unchecked")
     public <T> T copy(@NonNull T obj, @NonNull String destination) {

@@ -3,20 +3,21 @@ package org.corfudb.runtime.view;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.logprotocol.*;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.MultiSMREntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -135,12 +136,15 @@ public class ObjectsViewTest extends AbstractViewTest {
         assertThat(map)
                 .containsEntry("k", "v2");
 
-        StreamView txStream = r.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
-        ILogData[] txns = txStream.readTo(Long.MAX_VALUE);
-        assertThat(txns.length).isEqualTo(1);
-        assertThat(txns[0].getLogEntry(getRuntime()).getType()).isEqualTo(LogEntry.LogEntryType.MULTIOBJSMR);
+        IStreamView txStream = r.getStreamsView().get(ObjectsView
+                .TRANSACTION_STREAM_ID);
+        List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE);
+        assertThat(txns).hasSize(1);
+        assertThat(txns.get(0).getLogEntry(getRuntime()).getType())
+                .isEqualTo(LogEntry.LogEntryType.MULTIOBJSMR);
 
-        MultiObjectSMREntry tx1 = (MultiObjectSMREntry)txns[0].getLogEntry(getRuntime());
+        MultiObjectSMREntry tx1 = (MultiObjectSMREntry)txns.get(0).getLogEntry
+                (getRuntime());
         MultiSMREntry entryMap = tx1.getEntryMap().get(CorfuRuntime.getStreamID(mapA));
         assertThat(entryMap).isNotNull();
 
@@ -161,9 +165,9 @@ public class ObjectsViewTest extends AbstractViewTest {
         CorfuRuntime r = getDefaultRuntime();
 
         Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
-        StreamView streamB = r.getStreamsView().get(CorfuRuntime.getStreamID("b"));
+        IStreamView streamB = r.getStreamsView().get(CorfuRuntime.getStreamID("b"));
         smrMap.put("a", "b");
-        streamB.write(new SMREntry("hi", new Object[]{"hello"}, Serializers.PRIMITIVE));
+        streamB.append(new SMREntry("hi", new Object[]{"hello"}, Serializers.PRIMITIVE));
 
         //this TX should not conflict
         assertThat(smrMap)

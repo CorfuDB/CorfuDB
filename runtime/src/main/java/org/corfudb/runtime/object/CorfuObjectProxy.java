@@ -12,8 +12,7 @@ import org.corfudb.annotations.TransactionalMethod;
 import org.corfudb.protocols.logprotocol.TXLambdaReferenceEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.runtime.view.StreamView;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -35,7 +34,7 @@ public class CorfuObjectProxy<P> {
      * The underlying streamView for this CorfuObject.
      */
     @Getter
-    StreamView sv;
+    IStreamView sv;
 
     /**
      * The original class which this class proxies.
@@ -75,7 +74,7 @@ public class CorfuObjectProxy<P> {
     @Setter
     Class<? extends P> generatedClass;
 
-    public CorfuObjectProxy(CorfuRuntime runtime, StreamView sv,
+    public CorfuObjectProxy(CorfuRuntime runtime, IStreamView sv,
                             Class<P> originalClass, ISerializer serializer) {
         this.runtime = runtime;
         this.sv = sv;
@@ -94,7 +93,7 @@ public class CorfuObjectProxy<P> {
         //if (TransactionalContext.isInOptimisticTransaction()) {
             // TODO: in an optimistic TX, insert a Lambda TXn entry instead of converting everything
             // into a writeset
-         //   log.debug("Optimistic TXn, flatten TX into write set.");
+         //   log.debug("Optimistic TXn, flatten TX into append set.");
         //    return originalCall.call();
         //}
         // TODO: can we get rid of this origin based call?
@@ -115,7 +114,7 @@ public class CorfuObjectProxy<P> {
             Method m = originalClass.getDeclaredMethod(tm.modifiedStreamsFunction());
             m.setAccessible(true);
             Set<UUID> affectedStreams = (Set<UUID>) m.invoke(obj);
-            // write the transaction to the log
+            // append the transaction to the log
             log.trace("TX Method: {}, Affected streams: {}", method.getName(), affectedStreams);
             TXLambdaReferenceEntry tlre = new TXLambdaReferenceEntry(method, obj,
                     arguments, Serializers.JSON);
@@ -137,7 +136,7 @@ public class CorfuObjectProxy<P> {
                 cobj.getProxy().sync(cobj, txAddr);
                 return cf.join();
             } else {
-                // TX doesn't return anything, so we can blindly write to the log.
+                // TX doesn't return anything, so we can blindly append to the log.
                 long txAddr = runtime.getStreamsView().write(affectedStreams, tlre);
                 log.debug("Wrote TX to log@{}", txAddr);
                 return null;
@@ -157,12 +156,12 @@ public class CorfuObjectProxy<P> {
     }
 
     synchronized public void sync(P obj, long maxPos) {
-        log.trace("CorfuObjectProxy[{}] sync to pos {}", sv.getStreamID(), maxPos == Long.MAX_VALUE ? "MAX" : maxPos);
-        Arrays.stream(sv.readTo(maxPos));
+        log.trace("CorfuObjectProxy[{}] sync to pos {}", sv.getID(), maxPos == Long.MAX_VALUE ? "MAX" : maxPos);
+        sv.remainingUpTo(maxPos);
     }
 
     public UUID getStreamID() {
-        return sv.getStreamID();
+        return sv.getID();
     }
 
     public CorfuObjectProxy getProxy() {

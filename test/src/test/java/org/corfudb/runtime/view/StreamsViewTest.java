@@ -2,8 +2,10 @@ package org.corfudb.runtime.view;
 
 import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -27,28 +29,32 @@ public class StreamsViewTest extends AbstractViewTest {
         byte[] testPayload = "hello world".getBytes();
         byte[] testPayloadCopy = "hello world copy".getBytes();
 
-        StreamView sv = r.getStreamsView().get(streamA);
-        sv.write(testPayload);
+        IStreamView sv = r.getStreamsView().get(streamA);
+        sv.append(testPayload);
 
-        assertThat(sv.read().getPayload(getRuntime()))
+        assertThat(sv.next().getPayload(getRuntime()))
                 .isEqualTo(testPayload);
-        assertThat(sv.read())
+        assertThat(sv.next())
                 .isEqualTo(null);
 
-        StreamView svCopy = r.getStreamsView().copy(streamA, streamACopy, sv.getLogPointer() - 1L);
+        SequencerView sequencerView = r.getSequencerView();
+        IStreamView svCopy = r.getStreamsView().copy(streamA, streamACopy,
+                sequencerView.nextToken(
+                        Collections.singleton(sv.getID()),
+                        0).getToken());
 
-        assertThat(svCopy.read().getPayload(getRuntime()))
+        assertThat(svCopy.next().getPayload(getRuntime()))
                 .isEqualTo(testPayload);
-        assertThat(svCopy.read())
+        assertThat(svCopy.next())
                 .isEqualTo(null);
 
-        svCopy.write(testPayloadCopy);
+        svCopy.append(testPayloadCopy);
 
-        assertThat(svCopy.read().getPayload(getRuntime()))
+        assertThat(svCopy.next().getPayload(getRuntime()))
                 .isEqualTo(testPayloadCopy);
-        assertThat(svCopy.read())
+        assertThat(svCopy.next())
                 .isEqualTo(null);
-        assertThat(sv.read())
+        assertThat(sv.next())
                 .isEqualTo(null);
     }
 

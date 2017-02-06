@@ -17,7 +17,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnprocessedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.runtime.view.StreamView;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.LockUtils;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.ISerializer;
@@ -28,6 +28,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -61,7 +62,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
     boolean selfState = false;
     ICorfuSMRObject.SMRHandlerMethod postHandler;
 
-    public CorfuSMRObjectProxy(CorfuRuntime runtime, StreamView sv,
+    public CorfuSMRObjectProxy(CorfuRuntime runtime, IStreamView sv,
                                Class<P> originalClass, ISerializer serializer) {
         super(runtime, sv, originalClass, serializer);
         this.completableFutureMap = new ConcurrentHashMap<>();
@@ -225,7 +226,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
         if (methodAccessMode.get()) {
             return doUnderlyingCall(superMethod, Mmethod, allArguments);
         } else if (!TransactionalContext.isInTransaction()) {
-            // write the update to the stream and map a future for the completion.
+            // append the update to the stream and map a future for the completion.
             long updatePos = writeUpdateAndMapFuture(method, allArguments);
             // read up to this update.
             sync(obj, updatePos);
@@ -289,12 +290,12 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
 
     long writeUpdate(String method, Object[] arguments) {
         log.trace("Write update: {} with arguments {}", method, arguments);
-        return sv.write(new SMREntry(method, arguments, serializer));
+        return sv.append(new SMREntry(method, arguments, serializer));
     }
 
     long writeUpdateAndMapFuture(String method, Object[] arguments) {
         log.trace("Write update and map future: {} with arguments {}", method, arguments);
-        return sv.acquireAndWrite(new SMREntry(method, arguments, serializer),
+        return sv.append(new SMREntry(method, arguments, serializer),
                 t -> {
                     completableFutureMap.put(t.getToken(), new CompletableFuture<>());
                     return true;
@@ -329,7 +330,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
             methodAccessMode.set(false);
             // Update the current timestamp.
             timestamp = address;
-            log.trace("Timestamp for [{}] updated to {}", sv.getStreamID(), address);
+            log.trace("Timestamp for [{}] updated to {}", sv.getID(), address);
             if (completableFutureMap.containsKey(address)) {
                 completableFutureMap.get(address).complete(ret);
             }
@@ -372,10 +373,11 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
     @Override
     public synchronized void sync(P obj, long maxPos) {
         try (LockUtils.AutoCloseRWLock writeLock = new LockUtils.AutoCloseRWLock(rwLock).writeLock()) {
-            ILogData[] entries = sv.readTo(maxPos);
+            List<ILogData> entries = sv.remainingUpTo(maxPos);
             log.trace("Object[{}] sync to pos {}, read {} entries",
-                    sv.getStreamID(), maxPos == Long.MAX_VALUE ? "MAX" : maxPos, entries.length);
-            Arrays.stream(entries)
+                    sv.getID(), maxPos == Long.MAX_VALUE ? "MAX" :
+                            maxPos, entries.size());
+            entries.stream()
                     .filter(m -> m.getType() == DataType.DATA)
                     .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable)
                     .forEach(m -> applyUpdate(m.getGlobalAddress(), (LogEntry) m.getPayload(runtime), obj));

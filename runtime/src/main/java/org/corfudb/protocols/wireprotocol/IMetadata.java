@@ -29,30 +29,42 @@ public interface IMetadata {
     EnumMap<IMetadata.LogUnitMetadataType, Object> getMetadataMap();
 
     /**
-     * Get the streams that belong to this write.
+     * Get the streams that belong to this append.
      *
-     * @return A set of streams that belong to this write.
+     * @return A set of streams that belong to this append.
      */
     @SuppressWarnings("unchecked")
     default Set<UUID> getStreams() {
         return (Set<UUID>) getMetadataMap().getOrDefault(
                 LogUnitMetadataType.STREAM,
-                Collections.EMPTY_SET);
+                // Handle a special condition in the Replex case,
+                // where streams are stored in a stream address map instead.
+                getStreamAddressMap() == null ? Collections.EMPTY_SET :
+                getStreamAddressMap().keySet());
     }
 
     /**
-     * Set the streams that belong to this write.
+     * Get whether or not this entry contains a given stream.
+     * @param stream    The stream to check.
+     * @return          True, if the entry contains the given stream.
+     */
+    default boolean containsStream(UUID stream) {
+        return getStreams().contains(stream);
+    }
+
+    /**
+     * Set the streams that belong to this append.
      *
-     * @param streams The set of streams that will belong to this write.
+     * @param streams The set of streams that will belong to this append.
      */
     default void setStreams(Set<UUID> streams) {
         getMetadataMap().put(IMetadata.LogUnitMetadataType.STREAM, streams);
     }
 
     /**
-     * Get the rank of this write.
+     * Get the rank of this append.
      *
-     * @return The rank of this write.
+     * @return The rank of this append.
      */
     @SuppressWarnings("unchecked")
     default Long getRank() {
@@ -61,18 +73,18 @@ public interface IMetadata {
     }
 
     /**
-     * Set the rank of this write.
+     * Set the rank of this append.
      *
-     * @param rank The rank of this write.
+     * @param rank The rank of this append.
      */
     default void setRank(long rank) {
         getMetadataMap().put(IMetadata.LogUnitMetadataType.RANK, rank);
     }
 
     /**
-     * Get the logical stream addresses that belong to this write.
+     * Get the logical stream addresses that belong to this append.
      *
-     * @return A map of UUID to logical stream addresses that belong to this write.
+     * @return A map of UUID to logical stream addresses that belong to this append.
      */
     @SuppressWarnings("unchecked")
     default Map<UUID, Long> getLogicalAddresses() {
@@ -81,9 +93,9 @@ public interface IMetadata {
     }
 
     /**
-     * Set the logical stream addresses that belong to this write.
+     * Set the logical stream addresses that belong to this append.
      *
-     * @param streams The map from UUID to logical stream addresses that will belong to this write.
+     * @param streams The map from UUID to logical stream addresses that will belong to this append.
      */
     default void setLogicalAddresses(Map<UUID, Long> streams) {
         getMetadataMap().put(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES, streams);
@@ -107,6 +119,12 @@ public interface IMetadata {
     default Long getGlobalAddress() {
 
         return Optional.ofNullable((Long) getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse((long) -1);
+    }
+
+    @SuppressWarnings("unchecked")
+    default Map<UUID,Long> getStreamAddressMap() {
+        return ((Map<UUID,Long>) getMetadataMap()
+                .get(LogUnitMetadataType.STREAM_ADDRESSES));
     }
 
     @SuppressWarnings("unchecked")
