@@ -19,18 +19,8 @@ import java.util.*;
  * Created by Konstantin Spirov on 1/30/2017.
  */
 @Slf4j
-class QuorumReplicationStreamViewDelegate implements IStreamViewDelegate {
+class QuorumReplicationStreamViewDelegate extends ChainReplicationStreamViewDelegate implements IStreamViewDelegate {
     private QuorumReplicationStreamViewDelegate() {
-    }
-
-    @Override
-    public ILogData read(StreamView v, long max) {
-        throw new UnsupportedOperationException("Not implemented yet");
-    }
-
-    @Override
-    public ILogData[] readTo(StreamView v, long pos) {
-        throw new UnsupportedOperationException("Not implemented yet");
     }
 
     static class DelegateHolder {

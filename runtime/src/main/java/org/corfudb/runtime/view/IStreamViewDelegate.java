@@ -27,7 +27,7 @@ public interface IStreamViewDelegate {
     /**
      * Read the items from the stream until a given position is reached
      * @param receiver  The StreamView that delegates to this object
-     * @param pos  The highest position to read from (inclusive)
+     * @param pos  The highest position to read from (inclusive).
      * @return The next item from the stream.
      */
      ILogData[] readTo(StreamView receiver, long pos);

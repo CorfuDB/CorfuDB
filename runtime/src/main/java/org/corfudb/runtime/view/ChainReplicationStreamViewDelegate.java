@@ -18,7 +18,7 @@ import java.util.*;
 @Slf4j
 class ChainReplicationStreamViewDelegate implements IStreamViewDelegate {
 
-    private ChainReplicationStreamViewDelegate() {
+    ChainReplicationStreamViewDelegate() {
     }
 
     @Override

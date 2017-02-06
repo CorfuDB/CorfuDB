@@ -22,8 +22,6 @@ public class QuorumReplicationViewTest extends ChainReplicationViewTest {
         try {
             Layout newLayout = r.layout.get();
             newLayout.getSegment(0L).setReplicationMode(Layout.ReplicationMode.CHAIN_REPLICATION);
-            newLayout.getSegment(0L).setReplexes(Collections.singletonList(
-                    new Layout.LayoutStripe(Collections.singletonList(defaultConfigurationString))));
             newLayout.setEpoch(1);
             r.getLayoutView().committed(1L, newLayout);
             r.invalidateLayout();
@@ -32,5 +30,6 @@ public class QuorumReplicationViewTest extends ChainReplicationViewTest {
         }
         return r;
     }
+
 
 }
