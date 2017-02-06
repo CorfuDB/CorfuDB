@@ -15,6 +15,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 /**
+ * Font-end mechanism that writes and reads objects as log entries. Each entry
+ * is tagged with a stream-ID and contains back-pointers to recent
+ * offsets sharing the same stream-ID.
  * Created by mwei on 12/11/15.
  */
 @Slf4j
@@ -39,7 +42,7 @@ public class StreamView implements AutoCloseable {
         return getCurrentContext().logPointer.get();
     }
 
-    public StreamContext getCurrentContext() {
+    StreamContext getCurrentContext() {
         return streamContexts.first();
     }
 
@@ -85,28 +88,11 @@ public class StreamView implements AutoCloseable {
      */
     public long acquireAndWrite(Object object, Function<TokenResponse, Boolean> acquisitionCallback,
                                 Function<TokenResponse, Boolean> deacquisitionCallback) {
-        boolean replexOverwrite = false;
-        boolean overwrite = false;
         TokenResponse tokenResponse = null;
         while (true) {
-            long token;
-            if (replexOverwrite) {
-                tokenResponse =
-                        runtime.getSequencerView()
-                                .nextToken(Collections.singleton(streamID), 1, false, true);
-                token = tokenResponse.getToken();
-            } else if (overwrite) {
-                TokenResponse temp =
-                        runtime.getSequencerView()
-                                .nextToken(Collections.singleton(streamID), 1, true, false);
-                token = temp.getToken();
-                tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
-            }
-            else {
-                tokenResponse =
-                        runtime.getSequencerView().nextToken(Collections.singleton(streamID), 1);
-                token = tokenResponse.getToken();
-            }
+            tokenResponse =
+                    runtime.getSequencerView().nextToken(Collections.singleton(streamID), 1);
+            long token = tokenResponse.getToken();
             log.trace("Write[{}]: acquired token = {}, global addr: {}", streamID, tokenResponse, token);
             if (acquisitionCallback != null) {
                 if (!acquisitionCallback.apply(tokenResponse)) {
@@ -123,20 +109,11 @@ public class StreamView implements AutoCloseable {
                 runtime.getAddressSpaceView().write(token, Collections.singleton(streamID),
                         object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
                 return token;
-            } catch (ReplexOverwriteException re) {
-                if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
-                    log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
-                    return -1L;
-                }
-                replexOverwrite = true;
-                overwrite = false;
             } catch (OverwriteException oe) {
                 if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                     log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                     return -1L;
                 }
-                replexOverwrite = false;
-                overwrite = true;
                 log.debug("Overwrite occurred at {}, retrying.", token);
             }
         }
@@ -216,6 +193,11 @@ public class StreamView implements AutoCloseable {
         return resolvedBackpointers;
     }
 
+    private Layout.ReplicationMode getReplicationMode() {
+        return runtime.getLayoutView().getLayout().getSegments().get(
+                runtime.getLayoutView().getLayout().getSegments().size() - 1)
+                .getReplicationMode();
+    }
     /**
      * Read the next item from the stream.
      * This method is synchronized to protect against multiple readers.
@@ -224,226 +206,15 @@ public class StreamView implements AutoCloseable {
      */
     @SuppressWarnings("unchecked")
     public synchronized ILogData read() {
-        return read(Long.MAX_VALUE);
+        return getReplicationMode().getStreamViewDelegate().read(this, Long.MAX_VALUE);
     }
 
     public synchronized ILogData read(long maxGlobal) {
-        while (true) {
-            /*
-            long thisRead = logPointer.getAndIncrement();
-            if (thisRead == 0L)
-            {
-                //log.trace("Read[{}]: initial learn", streamID);
-                //use backpointers to build
-                //TODO: if this is a contiguous prefix, store in order to do a selective read.
-                //runtime.getAddressSpaceView().readPrefix(streamID);
-            }
-            */
-
-            // Pop the context if it has changed.
-            if (runtime.getLayoutView().getLayout().getSegments().get(
-                    runtime.getLayoutView().getLayout().getSegments().size() - 1)
-                    .getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
-                if (getCurrentContext().logPointer.get() > getCurrentContext().maxAddress) {
-                    StreamContext last = streamContexts.pollFirst();
-                    log.trace("Completed context {}@{}, removing.", last.contextID, last.maxAddress);
-                }
-
-                Long thisRead = getCurrentContext().currentBackpointerList.pollFirst();
-                if (thisRead == null) {
-                    getCurrentContext().currentBackpointerList =
-                            resolveBackpointersToRead(
-                                    getCurrentContext().contextID,
-                                    getCurrentContext().logPointer.get());
-                    log.trace("Backpointer list was empty, it has been filled with {} entries.",
-                            getCurrentContext().currentBackpointerList.size());
-                    if (getCurrentContext().currentBackpointerList.size() == 0) {
-                        log.trace("No backpointers resolved, nothing to read.");
-                        return null;
-                    }
-                    thisRead = getCurrentContext().currentBackpointerList.pollFirst();
-                }
-
-                if (thisRead > maxGlobal) {
-                    getCurrentContext().currentBackpointerList.add(thisRead);
-                    return null;
-                }
-
-                getCurrentContext().logPointer.set(thisRead + 1);
-
-                log.trace("Read[{}]: reading at {}", streamID, thisRead);
-                ILogData r = runtime.getAddressSpaceView().read(thisRead);
-                if (r.getType() == DataType.EMPTY) {
-                    //determine whether or not this is a hole
-                    long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
-                    log.trace("Read[{}]: latest token at {}", streamID, latestToken);
-                    if (latestToken < thisRead) {
-                        getCurrentContext().logPointer.decrementAndGet();
-                        return null;
-                    }
-                    log.debug("Read[{}]: hole detected at {} (token at {}), attempting fill.", streamID, thisRead, latestToken);
-                    try {
-                        runtime.getAddressSpaceView().fillHole(thisRead);
-                    } catch (OverwriteException oe) {
-                        //ignore overwrite.
-                    }
-                    r = runtime.getAddressSpaceView().read(thisRead);
-                    log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, r.getType());
-                }
-                Set<UUID> streams = (Set<UUID>) r.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM);
-                if (streams != null && streams.contains(getCurrentContext().contextID)) {
-                    log.trace("Read[{}]: valid entry at {}", streamID, thisRead);
-                    Object res = r.getPayload(runtime);
-                    if (res instanceof StreamCOWEntry) {
-                        StreamCOWEntry ce = (StreamCOWEntry) res;
-                        log.trace("Read[{}]: encountered COW entry for {}@{}", streamID, ce.getOriginalStream(),
-                                ce.getFollowUntil());
-                        streamContexts.add(new StreamContext(ce.getOriginalStream(), ce.getFollowUntil()));
-                    } else {
-                        return r;
-                    }
-                }
-            } else {
-                if (runtime.getLayoutView().getLayout().getSegments().get(
-                        runtime.getLayoutView().getLayout().getSegments().size() - 1)
-                        .getReplicationMode() == Layout.ReplicationMode.REPLEX) {
-                    long thisRead = getCurrentContext().logPointer.get();
-                    if (thisRead > maxGlobal) {
-                        return null;
-                    }
-                    log.trace("Doing a stream read, stream: {}, address: {}", streamID, thisRead);
-                    LogData result = runtime.getAddressSpaceView().read(streamID, thisRead, 1L).get(thisRead);
-                    getCurrentContext().logPointer.incrementAndGet();
-
-                    if (result.getType() == DataType.EMPTY) {
-                        //determine whether or not this is a hole
-                        long latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0)
-                                .getStreamAddresses().get(streamID);
-                        log.trace("Read[{}]: latest token at {}", streamID, latestToken);
-                        if (latestToken < thisRead) {
-                            getCurrentContext().logPointer.decrementAndGet();
-                            return null;
-                        }
-                        log.debug("Read[{}]: hole detected at {} (token at {}), attempting fill.", streamID, thisRead, latestToken);
-                        try {
-                            runtime.getAddressSpaceView().fillStreamHole(streamID, thisRead);
-                        } catch (OverwriteException oe) {
-                            //ignore overwrite.
-                        }
-                        result = runtime.getAddressSpaceView().read(streamID, thisRead, 1L).get(thisRead);
-                        log.debug("Read[{}]: holeFill {} result: {}", streamID, thisRead, result.getType());
-                    }
-                    if (result.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES)  == null)
-                        continue;
-
-                    Set<UUID> streams = ((Map<UUID, Long>) result.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES)).keySet();
-                    if (streams != null && streams.contains(getCurrentContext().contextID)) {
-                        log.trace("Read[{}]: valid entry at {}", streamID, thisRead);
-                        Object res = result.getPayload(runtime);
-                        if (res instanceof StreamCOWEntry) {
-                            StreamCOWEntry ce = (StreamCOWEntry) res;
-                            log.trace("Read[{}]: encountered COW entry for {}@{}", streamID, ce.getOriginalStream(),
-                                    ce.getFollowUntil());
-                            streamContexts.add(new StreamContext(ce.getOriginalStream(), ce.getFollowUntil()));
-                        } else {
-                            return result;
-                        }
-                    }
-                } else {
-                    throw new RuntimeException("Unsupported replication mode for a read in StreamView");
-                }
-            }
-        }
+        return getReplicationMode().getStreamViewDelegate().read(this, maxGlobal);
     }
 
     public synchronized ILogData[] readTo(long pos) {
-        if (runtime.getLayoutView().getLayout().getSegments().get(
-                runtime.getLayoutView().getLayout().getSegments().size() - 1)
-                .getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
-            long latestToken = pos;
-            boolean max = false;
-            if (pos == Long.MAX_VALUE) {
-                max = true;
-                latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0).getToken();
-                log.trace("Linearization point set to {}", latestToken);
-            }
-            ArrayList<ILogData> al = new ArrayList<>();
-            log.debug("Stream[{}] pointer[{}], readTo {}", streamID, getCurrentContext().logPointer.get(), latestToken);
-            while (getCurrentContext().logPointer.get() <= latestToken) {
-                ILogData r = read(pos);
-                if (r != null && (max || r.getGlobalAddress() <= pos)) {
-                    al.add(r);
-                } else {
-                    break;
-                }
-            }
-            return al.toArray(new ILogData[al.size()]);
-        } else if (runtime.getLayoutView().getLayout().getSegments().get(
-                runtime.getLayoutView().getLayout().getSegments().size() - 1)
-                .getReplicationMode() == Layout.ReplicationMode.REPLEX) {
-            // pos is a global address, but we want the local stream address..
-            long latestToken = pos;
-
-            latestToken = runtime.getSequencerView().nextToken(Collections.singleton(streamID), 0)
-                    .getStreamAddresses().get(streamID);
-            log.trace("Linearization point set to {}", latestToken);
-
-            if (latestToken < getCurrentContext().logPointer.get())
-                return (new ArrayList<LogData>()).toArray(new ILogData[0]);
-
-            //if (getCurrentContext().logPointer.get() != 0 && latestToken == getCurrentContext().logPointer.get())
-            //    return (new ArrayList<LogData>()).toArray(new LogData[0]);
-            // We can do a bulk read
-            Map<Long, LogData> readResult = runtime.getAddressSpaceView().read(streamID, getCurrentContext().logPointer.get(),
-                    latestToken - getCurrentContext().logPointer.get() + 1);
-            getCurrentContext().logPointer.addAndGet(latestToken - getCurrentContext().logPointer.get() + 1);
-            ArrayList<LogData> al = new ArrayList<>();
-            for (Long addr : readResult.keySet()) {
-                // Now we effectively copy the logic from the read() function above.
-                if (readResult.get(addr) == null) {
-                    continue;
-                }
-
-                if (readResult.get(addr).getType() == DataType.EMPTY) {
-                    if (addr <= latestToken) {
-                        // If it's a hole, fill it and don't return it
-                        LogData retry;
-                        while (true) {
-                            log.debug("Replex readTO[{}]: hole detected at {} (token at {}), attempting fill.", streamID, addr, latestToken);
-                            try {
-                                runtime.getAddressSpaceView().fillStreamHole(streamID, addr);
-                            } catch (OverwriteException oe) {
-                                //ignore overwrite.
-                            }
-                            retry = runtime.getAddressSpaceView().read(streamID, addr, 1L).get(addr);
-                            if (retry.getType() != DataType.EMPTY)
-                                break;
-                        }
-                        if (retry.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES) == null)
-                            continue;
-                        Set<UUID> streams = ((Map<UUID, Long>) retry.getMetadataMap().get(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES)).keySet();
-                        if (streams != null && streams.contains(getCurrentContext().contextID)) {
-                            log.trace("Read[{}]: valid entry at {}", streamID, retry);
-                            Object res = retry.getPayload(runtime);
-                            if (res instanceof StreamCOWEntry) {
-                                StreamCOWEntry ce = (StreamCOWEntry) res;
-                                log.trace("Read[{}]: encountered COW entry for {}@{}", streamID, ce.getOriginalStream(),
-                                        ce.getFollowUntil());
-                                streamContexts.add(new StreamContext(ce.getOriginalStream(), ce.getFollowUntil()));
-                            } else {
-                                al.add(retry);
-                            }
-                        }
-                    } else {
-                        getCurrentContext().logPointer.decrementAndGet();
-                    }
-                    continue;
-                }
-                al.add(readResult.get(addr));
-            }
-            return al.toArray(new LogData[al.size()]);
-        }
-        return (new ArrayList<LogData>()).toArray(new LogData[0]);
+        return getReplicationMode().getStreamViewDelegate().readTo(this, pos);
     }
 
     /**
@@ -481,7 +252,7 @@ public class StreamView implements AutoCloseable {
         NavigableSet<Long> currentBackpointerList
                 = new ConcurrentSkipListSet<>();
 
-        public StreamContext(UUID contextID, long maxAddress) {
+        StreamContext(UUID contextID, long maxAddress) {
             this.contextID = contextID;
             this.maxAddress = maxAddress;
             this.logPointer = new AtomicLong(0);

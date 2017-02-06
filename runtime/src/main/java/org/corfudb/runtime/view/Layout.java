@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
@@ -319,16 +318,59 @@ public class Layout implements Cloneable {
     }
 
     public enum ReplicationMode {
-        CHAIN_REPLICATION,
-        QUORUM_REPLICATION,
-        REPLEX,
-        NO_REPLICATION
+        CHAIN_REPLICATION {
+            @Override
+            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
+                return new ChainReplicationView(l, ls);
+            }
+
+            @Override
+            public IStreamViewDelegate getStreamViewDelegate() {
+                return ChainReplicationStreamViewDelegate.DelegateHolder.delegate;
+            }
+        },
+        QUORUM_REPLICATION {
+            @Override
+            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
+                return new QuorumReplicationView(l, ls);
+            }
+
+            @Override
+            public IStreamViewDelegate getStreamViewDelegate() {
+                return QuorumReplicationStreamViewDelegate.DelegateHolder.delegate;
+            }
+        },
+        REPLEX {
+            @Override
+            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
+                return new ReplexReplicationView(l, ls);
+            }
+
+            @Override
+            public IStreamViewDelegate getStreamViewDelegate() {
+                return ReplexReplicationStreamViewDelegate.DelegateHolder.delegate;
+            }
+        },
+        NO_REPLICATION {
+            @Override
+            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
+                throw new UnsupportedOperationException("Replication view used without a replication mode");
+            }
+
+            @Override
+            public IStreamViewDelegate getStreamViewDelegate() {
+                throw new UnsupportedOperationException("Stream view used without a replication mode");
+            }
+        };
+
+        public abstract AbstractReplicationView  getReplicationView(Layout l, Layout.LayoutSegment ls);
+        public abstract IStreamViewDelegate getStreamViewDelegate();
     }
 
     @Data
     @Getter
     @Setter
-    public static class LayoutSegment {
+    public static class  LayoutSegment {
         /**
          * The replication mode of the segment.
          */

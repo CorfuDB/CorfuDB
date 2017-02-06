@@ -126,17 +126,9 @@ public class StreamsView {
         TokenResponse tokenResponse = null;
         while (true) {
             if (conflictInfo != null) {
-                long token;
-                if (overwrite) {
-                    TokenResponse temp =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, true, false, conflictInfo);
-                    token = temp.getToken();
-                    tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
-                } else {
-                    tokenResponse =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, false, false, conflictInfo);
-                    token = tokenResponse.getToken();
-                }
+                tokenResponse =
+                        runtime.getSequencerView().nextToken(streamIDs, 1, conflictInfo);
+                long token = tokenResponse.getToken();
                 log.trace("Write[{}]: acquired token = {}, global addr: {}", streamIDs, tokenResponse, token);
                 if (acquisitionCallback != null) {
                     if (!acquisitionCallback.apply(tokenResponse)) {
@@ -176,21 +168,9 @@ public class StreamsView {
                     log.debug("Overwrite occurred at {}, retrying.", token);
                 }
             } else {
-                long token;
-                if (replexOverwrite) {
-                    tokenResponse =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, false, true);
-                    token = tokenResponse.getToken();
-                } else if (overwrite) {
-                    TokenResponse temp =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, true, false);
-                    token = temp.getToken();
-                    tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
-                } else {
-                    tokenResponse =
-                            runtime.getSequencerView().nextToken(streamIDs, 1);
-                    token = tokenResponse.getToken();
-                }
+                tokenResponse =
+                        runtime.getSequencerView().nextToken(streamIDs, 1);
+                long token = tokenResponse.getToken();
                 log.trace("Write[{}]: acquired token = {}, global addr: {}", streamIDs, tokenResponse, token);
                 if (acquisitionCallback != null) {
                     if (!acquisitionCallback.apply(tokenResponse)) {
