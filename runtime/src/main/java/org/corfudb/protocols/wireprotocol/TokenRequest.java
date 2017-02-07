@@ -40,19 +40,10 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
     /** The streams which are written to by this token request. */
     final Set<UUID> streams;
 
-    /* True if the Replex protocol encountered an overwrite at the global log layer. */
-    @Deprecated
-    final Boolean overwrite = false; // todo : deprecate
-
-    /* True if the Replex protocol encountered an overwrite at the local stream layer. */
-    @Deprecated
-    final Boolean replexOverwrite = false; // todo: deprecate
-
     /* used for transaction resolution. */
     final TxResolutionInfo txnResolution;
 
     public TokenRequest(Long numTokens, Set<UUID> streams,
-                        Boolean overwrite, Boolean replexOverwrite,
                         TxResolutionInfo conflictInfo) {
         reqType = TK_TX;
         this.numTokens = numTokens;
@@ -60,7 +51,7 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
         txnResolution = conflictInfo;
     }
 
-    public TokenRequest(Long numTokens, Set<UUID> streams, Boolean overwrite, Boolean replexOverwrite) {
+    public TokenRequest(Long numTokens, Set<UUID> streams) {
         if (numTokens == 0)
             this.reqType = TK_QUERY;
         else if (streams == null || streams.size() == 0)

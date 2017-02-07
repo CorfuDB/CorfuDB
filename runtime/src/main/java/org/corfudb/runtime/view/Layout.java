@@ -7,6 +7,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.stream.BackpointerStreamView;
+import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.runtime.view.stream.QuorumStreamView;
+import org.corfudb.runtime.view.stream.ReplexStreamView;
 import org.corfudb.util.CFUtils;
 
 import java.util.HashSet;
@@ -336,11 +340,56 @@ public class Layout implements Cloneable {
     }
 
     public enum ReplicationMode {
-        CHAIN_REPLICATION,
-        QUORUM_REPLICATION,
-        REPLEX,
-        NO_REPLICATION
+        CHAIN_REPLICATION {
+            @Override
+            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
+                return new ChainReplicationView(l, ls);
+            }
+
+            @Override
+            public IStreamView  getStreamView(CorfuRuntime r, UUID streamId) {
+                return new BackpointerStreamView(r, streamId);
+            }
+        },
+        QUORUM_REPLICATION {
+            @Override
+            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
+                return new QuorumReplicationView(l, ls);
+            }
+
+            @Override
+            public IStreamView getStreamView(CorfuRuntime r, UUID streamId) {
+                return new QuorumStreamView(r, streamId);
+            }
+        },
+        REPLEX {
+            @Override
+            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
+                return new ReplexReplicationView(l, ls);
+            }
+
+            @Override
+            public IStreamView  getStreamView(CorfuRuntime r, UUID streamId) {
+                return new ReplexStreamView(r, streamId);
+            }
+        },
+        NO_REPLICATION {
+            @Override
+            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
+                throw new UnsupportedOperationException("Replication view used without a replication mode");
+            }
+
+            @Override
+            public IStreamView getStreamView(CorfuRuntime r, UUID streamId) {
+                throw new UnsupportedOperationException("Stream view used without a replication mode");
+            }
+        };
+
+        public abstract AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls);
+
+        public abstract IStreamView getStreamView(CorfuRuntime r, UUID streamId);
     }
+
 
     @Data
     @Getter

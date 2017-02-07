@@ -13,6 +13,9 @@ public class OutrankedException extends Exception {
     @Getter
     Layout layout;
 
+    public OutrankedException() {
+    }
+
     public OutrankedException(long newRank) {
         super("Higher rank " + newRank + " encountered, layout = null");
         this.newRank = newRank;

@@ -8,10 +8,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.*;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.corfudb.runtime.exceptions.OutOfSpaceException;
-import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.ReplexOverwriteException;
+import org.corfudb.runtime.exceptions.*;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.invoke.MethodHandles;
@@ -117,7 +114,7 @@ public class LogUnitClient implements IClient {
     private static Object handleOutranked(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
             throws Exception
     {
-        throw new Exception("rank");
+        throw new OutrankedException();
     }
 
     /** Handle an ERROR_NOENTRY message.
@@ -173,15 +170,34 @@ public class LogUnitClient implements IClient {
      */
     public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
                                             Object writeObject, Map<UUID, Long> backpointerMap) {
+        return write(WriteMode.NORMAL, address, streams, rank, writeObject, backpointerMap);
+    }
+
+    /**
+     * Asynchronously write to the logging unit.
+     *
+     * @param writeMode      The write mode, usually NORMAL, but it can vary for the different replication methods
+     * @param address        The address to write to.
+     * @param streams        The streams, if any, that this write belongs to.
+     * @param rank           The rank of this write (used for quorum
+     *                       replication).
+     * @param writeObject    The object, pre-serialization, to write.
+     * @param backpointerMap The map of backpointers to write.
+     * @return A CompletableFuture which will complete with the WriteResult once the
+     * write completes.
+     */
+    public CompletableFuture<Boolean> write(WriteMode writeMode, long address, Set<UUID> streams, long rank,
+                                            Object writeObject, Map<UUID, Long> backpointerMap) {
         ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
         Serializers.CORFU.serialize(writeObject, payload);
-        WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, payload);
+        WriteRequest wr = new WriteRequest(writeMode, null, payload);
         wr.setStreams(streams);
         wr.setRank(rank);
         wr.setBackpointerMap(backpointerMap);
         wr.setGlobalAddress(address);
         return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
     }
+
 
     /**
      * Asynchronously write to the logging unit.
@@ -258,13 +274,32 @@ public class LogUnitClient implements IClient {
      * @param address The address to fill a hole at.
      */
     public CompletableFuture<Boolean> fillHole(long address) {
-        return router.sendMessageAndGetCompletable(
-                CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(null, address)));
+        return this.fillHole(FillHoleMode.NORMAL, null, address);
     }
 
+
+
+    /**
+     * Fill a hole at a given address.
+     *
+     * @param streamID The ID of the corfu stream
+     * @param address The address to fill a hole at.
+     */
     public CompletableFuture<Boolean> fillHole(UUID streamID, long address) {
+        return this.fillHole(FillHoleMode.NORMAL, streamID, address);
+    }
+
+
+    /**
+     * Fill a hole at a given address.
+     *
+     * @param mode - the FillHoleMode, usually NORMAL, but the other replication methods might override it
+     * @param streamID The ID of the corfu stream
+     * @param address The address to fill a hole at.
+     */
+    public CompletableFuture<Boolean> fillHole(FillHoleMode mode, UUID streamID, long address) {
         return router.sendMessageAndGetCompletable(
-                CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(streamID, address)));
+                CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(mode, streamID, address)));
     }
 
     /**
@@ -274,6 +309,7 @@ public class LogUnitClient implements IClient {
     public CompletableFuture<Boolean> flush() {
         return router.sendMessageAndGetCompletable(CorfuMsgType.FLUSH_LOGUNIT.msg());
     }
+
 
 
     /**
