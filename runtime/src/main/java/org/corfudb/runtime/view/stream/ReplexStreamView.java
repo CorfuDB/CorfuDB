@@ -104,11 +104,7 @@ public class ReplexStreamView extends
                 // of the overwrite.
                 tokenResponse = runtime.getSequencerView()
                         .nextToken(Collections.singleton(ID),
-                              1,
-                                // If this is a normal overwrite
-                                !(oe instanceof ReplexOverwriteException),
-                                // If this is a Replex overwrite
-                                oe instanceof ReplexOverwriteException);
+                              1);
             }
         }
     }

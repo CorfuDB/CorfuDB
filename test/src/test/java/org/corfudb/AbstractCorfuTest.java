@@ -48,6 +48,8 @@ public class AbstractCorfuTest {
 
     public Map<Integer, TestThread> threadsMap = new ConcurrentHashMap<>();
 
+    /** Lambdas for the each state of the state machine
+     */
     public ArrayList<IntConsumer> testSM = null;
 
     public static final CorfuTestParameters PARAMETERS =
@@ -238,16 +240,19 @@ public class AbstractCorfuTest {
 
     @Before
     public void setupScheduledThreads() {
-        scheduledThreads = new HashSet<>();
+        scheduledThreads = ConcurrentHashMap.newKeySet();
     }
 
 
     @After
     public void cleanupScheduledThreads() {
-        assertThat(scheduledThreads)
-                .hasSize(0)
-                .as("Test ended but there are still threads scheduled!");
-        scheduledThreads.clear();
+        try {
+            assertThat(scheduledThreads)
+                    .as("Test ended but there are still threads scheduled!")
+                    .hasSize(0);
+        } finally {
+            scheduledThreads.clear();
+        }
     }
 
     /** Clean the per test temporary directory (PARAMETERS.TEST_TEMP_DIR)
@@ -355,8 +360,9 @@ public class AbstractCorfuTest {
 
         try {
             for (Future f : finishedSet) {
-                assertThat(f.isDone())
-                        .isTrue().as("Ensure that all scheduled threads are completed");
+                assertThat(f.isDone()).
+                    as("Ensure that all scheduled threads are completed")
+                        .isTrue();
                 f.get();
             }
         } catch (ExecutionException ee) {
@@ -460,16 +466,17 @@ public class AbstractCorfuTest {
     {
         // do not invoke putIfAbsent without checking first
         // the second to putIfAbsent gets evaluated, causing a thread to be created and be left orphan.
-        if (! threadsMap.containsKey(threadNum))
+        if (! threadsMap.containsKey(threadNum)) {
             threadsMap.putIfAbsent(threadNum, new TestThread(threadNum));
+        }
         return (T) threadsMap.get(threadNum).run(e);
     }
 
     // Not the best factoring, but we need to throw an exception whenever
     // one has not been caught. (becuase the user)
-    static volatile Exception lastException;
+    private volatile Exception lastException;
 
-    public static class AssertableObject<T> {
+    public class AssertableObject<T> {
 
         T obj;
         Exception ex;
