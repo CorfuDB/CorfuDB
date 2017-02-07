@@ -78,7 +78,7 @@ public class QuorumReplicationView extends AbstractReplicationView {
             for (int i=0; i<numUnits; i++) {
                 futures[i]=getLayout().getLogUnitClient(address, i).read(address);
         }
-        ReadResponse readResponse = CFUtils.getUninterruptibly(QuorumFutureFactory.getFirstWinsFuture(futures));
+        ReadResponse readResponse = CFUtils.getUninterruptibly(QuorumFutureFactory.getQuorumFuture(futures));
         Map<Long, LogData> rs = readResponse.getReadSet();
         return rs.get(address);
     }
