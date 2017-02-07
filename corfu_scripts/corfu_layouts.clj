@@ -81,7 +81,8 @@ Options:
                                              (try
                                                (.get (.bootstrapLayout (get-layout-client) new-layout))
                                                (catch Exception e
-                                               (println server":" (.getMessage e))))
+                                                 (println server":" (.getMessage e))
+                                                 (throw e)))
                                              ))
                                          (install-layout new-layout)
                                          (println "New layout installed!")
