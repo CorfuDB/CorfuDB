@@ -4,6 +4,7 @@
  */
 package org.corfudb.runtime.view;
 
+import org.corfudb.AbstractCorfuTest;
 import org.junit.Test;
 
 import java.util.concurrent.*;
@@ -11,23 +12,24 @@ import java.util.concurrent.*;
 import static org.junit.Assert.*;
 
 /**
+ * Tests the futures used in the quorum replication
  * Created by Konstantin Spirov on 2/6/2017.
  */
-public class QuorumFutureFactoryTest {
+public class QuorumFutureFactoryTest extends AbstractCorfuTest {
 
     @Test
     public void testSingleFutureIncompleteComplete() throws Exception {
         CompletableFuture<Object> f1 = new CompletableFuture<>();
         Future<Object> result = QuorumFutureFactory.getQuorumFuture(f1);
         try {
-            result.get(10, TimeUnit.MILLISECONDS);
+            result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (TimeoutException e) {
             // expected
         }
         assertFalse(result.isDone());
         f1.complete("ok");
-        Object value = result.get(100, TimeUnit.MILLISECONDS);
+        Object value = result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
         assertEquals("ok", value);
         assertTrue(result.isDone());
     }
@@ -49,20 +51,20 @@ public class QuorumFutureFactoryTest {
         CompletableFuture<Object> f2 = new CompletableFuture<>();
         Future<Object> result = QuorumFutureFactory.getQuorumFuture(f1, f2);
         try {
-            result.get(100, TimeUnit.MILLISECONDS);
+            result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (TimeoutException e) {
             // expected
         }
         f2.complete("ok");
         try {
-            result.get(100, TimeUnit.MILLISECONDS);
+            result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (TimeoutException e) {
             // expected
         }
         f1.complete("ok");
-        Object value = result.get(100, TimeUnit.MILLISECONDS);
+        Object value = result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
         assertEquals("ok", value);
     }
 
@@ -73,23 +75,23 @@ public class QuorumFutureFactoryTest {
         CompletableFuture<Object> f3 = new CompletableFuture<>();
         Future<Object> result = QuorumFutureFactory.getQuorumFuture(f1, f2, f3);
         try {
-            result.get(100, TimeUnit.MILLISECONDS);
+            result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (TimeoutException e) {
             // expected
         }
         f2.complete("ok");
         try {
-            result.get(100, TimeUnit.MILLISECONDS);
+            result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (TimeoutException e) {
             // expected
         }
         f3.complete("ok");
-        Object value = result.get(100, TimeUnit.MILLISECONDS);
+        Object value = result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
         assertEquals("ok", value);
         f1.complete("ok");
-        value = result.get(10, TimeUnit.MILLISECONDS);
+        value = result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
         assertEquals("ok", value);
     }
 
@@ -101,13 +103,13 @@ public class QuorumFutureFactoryTest {
         CompletableFuture<Object> f3 = new CompletableFuture<>();
         Future<Object> result = QuorumFutureFactory.getFirstWinsFuture(f1, f2, f3);
         try {
-            result.get(100, TimeUnit.MILLISECONDS);
+            result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (TimeoutException e) {
             // expected
         }
         f2.complete("ok");
-        Object value = result.get(100, TimeUnit.MILLISECONDS);
+        Object value = result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
         assertEquals("ok", value);
     }
 
@@ -118,7 +120,7 @@ public class QuorumFutureFactoryTest {
         Future<Object> result = QuorumFutureFactory.getQuorumFuture(f1);
         f1.completeExceptionally(new NullPointerException());
         try {
-            Object value = result.get(100, TimeUnit.MILLISECONDS);
+            Object value = result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (ExecutionException e) {
             // expected behaviour
@@ -131,7 +133,7 @@ public class QuorumFutureFactoryTest {
         CompletableFuture<Object> f1 = new CompletableFuture<>();
         Future<Object> result = QuorumFutureFactory.getQuorumFuture(f1);
         f1.cancel(true);
-        Object value = result.get(100, TimeUnit.MILLISECONDS);
+        Object value = result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
         assertTrue(result.isCancelled());
         assertTrue(result.isDone());
         assertNull(value);
@@ -145,14 +147,14 @@ public class QuorumFutureFactoryTest {
         Future<Object> result = QuorumFutureFactory.getQuorumFuture(f1, f2);
         f1.cancel(true);
         try {
-            result.get(10, TimeUnit.MILLISECONDS);
+            result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (TimeoutException e) {
             // expected
         }
         f2.completeExceptionally(new NullPointerException());
         try {
-            Object value = result.get(10, TimeUnit.MILLISECONDS);
+            Object value = result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (ExecutionException e) {
             // expected behaviour
