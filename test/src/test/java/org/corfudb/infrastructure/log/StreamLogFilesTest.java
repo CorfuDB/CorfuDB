@@ -3,26 +3,21 @@ package org.corfudb.infrastructure.log;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
-import static org.corfudb.infrastructure.log.StreamLogFiles.getPendingTrimsFilePath;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 
 import java.io.File;
-import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
-import java.util.HashSet;
-import java.util.Set;
 
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.format.Types.TrimEntry;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -206,14 +201,40 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void testTrimUnknownAddress() throws Exception {
-        String logDir = getDirPath();
+    public void testSameAddressTrim() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+
+        // Trim an unwritten address
         LogAddress logAddress = new LogAddress(0L, null);
         log.trim(logAddress);
-        // Verify that the unknown address trim is not persisted
-        StreamLogFiles.SegmentHandle sh = log.getSegmentHandleForAddress(new LogAddress(0L, null));
+
+        // Verify that the unwritten address trim is not persisted
+        StreamLogFiles.SegmentHandle sh = log.getSegmentHandleForAddress(logAddress);
         assertThat(sh.getPendingTrims().size()).isEqualTo(0);
+
+        // Write to the same address
+        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+
+        log.append(logAddress, new LogData(DataType.DATA, b));
+
+        // Verify that the address has been written
+        assertThat(log.read(logAddress)).isNotNull();
+
+        // Trim the address
+        log.trim(logAddress);
+        sh = log.getSegmentHandleForAddress(logAddress);
+        assertThat(sh.getPendingTrims().contains(logAddress.address)).isTrue();
+
+        // Write to a trimmed address
+        assertThatThrownBy(() -> log.append(logAddress, new LogData(DataType.DATA, b)))
+                .isInstanceOf(OverwriteException.class);
+
+        // Read trimmed address
+        assertThatThrownBy(() -> log.read(logAddress))
+                .isInstanceOf(RuntimeException.class)
+                .hasCauseInstanceOf(TrimmedException.class);
     }
 
     private void writeToLog(StreamLog log, Long addr) {
@@ -227,7 +248,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     @Test
     public void testTrim() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
-
         final int logChunk = StreamLogFiles.RECORDS_PER_LOG_FILE / 2;
 
         // Write to the addresses then trim the addresses that span two log files
@@ -270,6 +290,18 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         for (long x = logChunk; x < logChunk * 2; x++) {
             assertThat(sh.getKnownAddresses().contains(x)).isTrue();
+        }
+
+        // Verify that the trimmed addresses cannot be written to or read from after compaction
+        for (long x = 0; x < logChunk; x++) {
+            LogAddress logAddress = new LogAddress(x, null);
+            assertThatThrownBy(() -> log.read(logAddress))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasCauseInstanceOf(TrimmedException.class);
+
+            final long address = x;
+            assertThatThrownBy(() -> writeToLog(log, address))
+                    .isInstanceOf(OverwriteException.class);
         }
     }
 }

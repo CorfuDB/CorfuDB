@@ -54,14 +54,7 @@ public class InMemoryStreamLog implements StreamLog {
 
     @Override
     public synchronized void trim(LogAddress address) {
-        if(address.getStream() == null) {
-            logCache.put(address.address, null);
-        } else {
-            Map<Long, LogData> stream = streamCache.get(address.getStream());
-            if(stream != null){
-                stream.put(address.address, null);
-            }
-        }
+        trimmed.add(address);
     }
 
     @Override
@@ -101,6 +94,16 @@ public class InMemoryStreamLog implements StreamLog {
 
     @Override
     public void compact() {
-        // No-op
+        for (LogAddress logAddress : trimmed) {
+
+            if(logAddress.getStream() == null) {
+                logCache.remove(logAddress.address);
+            } else {
+                Map<Long, LogData> stream = streamCache.get(logAddress.getStream());
+                if(stream != null){
+                    stream.remove(logAddress.address);
+                }
+            }
+        }
     }
 }
