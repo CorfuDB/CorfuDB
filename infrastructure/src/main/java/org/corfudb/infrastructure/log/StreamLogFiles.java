@@ -53,28 +53,14 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 
 
 /**
  * This class implements the StreamLog by persisting the stream log as records in multiple files.
  * This StreamLog implementation can detect log file corruption, if checksum is enabled, otherwise
  * the checksum field will be ignored.
- * <p>
- * StreamLogFiles:
- * Header LogRecords
- * <p>
- * Header: {@LogFileHeader}
- * <p>
- * LogRecords: LogRecord || LogRecord LogRecords
- * <p>
- * LogRecord: {
- * delimiter 2 bytes
- * checksum 4 bytes
- * address 8 bytes
- * LogData size 4 bytes
- * LogData
- * }
- * <p>
+ *
  * Created by maithem on 10/28/16.
  */
 
@@ -175,16 +161,16 @@ public class StreamLogFiles implements StreamLog {
     }
 
     @Override
-    public void trim(LogAddress address) {
-        SegmentHandle handle = getSegmentHandleForAddress(address);
-        if (!handle.getKnownAddresses().contains(address.getAddress()) ||
-                handle.getPendingTrims().contains(address.getAddress())) {
+    public void trim(LogAddress logAddress) {
+        SegmentHandle handle = getSegmentHandleForAddress(logAddress);
+        if (!handle.getKnownAddresses().contains(logAddress.getAddress()) ||
+                handle.getPendingTrims().contains(logAddress.getAddress())) {
             return;
         }
 
         TrimEntry entry = TrimEntry.newBuilder()
-                .setChecksum(getChecksum(address.getAddress()))
-                .setAddress(address.getAddress())
+                .setChecksum(getChecksum(logAddress.getAddress()))
+                .setAddress(logAddress.getAddress())
                 .build();
 
         // TODO(Maithem) possibly move this to SegmentHandle. Do we need to close and flush?
@@ -193,10 +179,10 @@ public class StreamLogFiles implements StreamLog {
         try {
             entry.writeDelimitedTo(outputStream);
             outputStream.flush();
-            handle.pendingTrims.add(address.getAddress());
+            handle.pendingTrims.add(logAddress.getAddress());
             channelsToSync.add(handle.getPendingTrimChannel());
         } catch (IOException e) {
-            log.warn("Exception while writing a trim entry {} : {}", address.toString(), e.toString());
+            log.warn("Exception while writing a trim entry {} : {}", logAddress.toString(), e.toString());
         }
     }
 
@@ -717,13 +703,20 @@ public class StreamLogFiles implements StreamLog {
     @Override
     public LogData read(LogAddress logAddress) {
         try {
-            return readRecord(getSegmentHandleForAddress(logAddress), logAddress.address);
+            SegmentHandle sh = getSegmentHandleForAddress(logAddress);
+            if(sh.getPendingTrims().contains(logAddress.getAddress())){
+                throw new TrimmedException();
+            }
+            return readRecord(sh,logAddress.address);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
-
+    /**
+     *  A SegmentHandle is a range view of consecutive addresses in the log. It contains
+     *  the address space along with metadata like addresses that are trimmed and pending trims.
+     */
     @Data
     class SegmentHandle {
         @NonNull
