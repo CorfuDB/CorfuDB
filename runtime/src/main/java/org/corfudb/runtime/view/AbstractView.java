@@ -3,6 +3,7 @@ package org.corfudb.runtime.view;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -75,6 +76,13 @@ public abstract class AbstractView {
                         Thread.sleep(runtime.retryRate * 1000);
                     } catch (InterruptedException ie) {
                     }
+                } else if (re instanceof WrongEpochException){
+                    WrongEpochException we = (WrongEpochException) re;
+                    log.warn("Got a wrong epoch exception, updating epoch to {} and invalidate view",
+                        we.getCorrectEpoch());
+                    Long newEpoch = (we.getCorrectEpoch());
+                    runtime.nodeRouters.values().forEach(x -> x.setEpoch(newEpoch));
+                    runtime.invalidateLayout();
                 } else {
                     throw re;
                 }
