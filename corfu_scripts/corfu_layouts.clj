@@ -76,16 +76,17 @@ Options:
                                        ; (1) make sure all layout servers are bootstrapped
                                        ; (2) install layout on all servers
                                        (do
-                                         (doseq [server (.getLayoutServers new-layout)]
-                                         (do (get-router server localcmd)
-                                             (try
-                                               (.get (.bootstrapLayout (get-layout-client) new-layout))
-                                               (catch Exception e
-                                               (println server":" (.getMessage e))))
-                                             ))
+                                         (doseq [server (into [] (remove (set (.getLayoutServers layout)) (.getLayoutServers new-layout)))]
+                                                (do (get-router server localcmd)
+                                                    (try
+                                                      (.get (.bootstrapLayout (get-layout-client) new-layout))
+                                                      (catch Exception e
+                                                        (println server ":" (.getMessage e))
+                                                        (throw e)))
+                                                    ))
                                          (install-layout new-layout)
                                          (println "New layout installed!")
-                                       )
+                                         )
                                    )
                                 )
                             )
