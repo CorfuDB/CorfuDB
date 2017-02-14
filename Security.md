@@ -162,7 +162,7 @@ $ export SERVER_JVMFLAGS="-Djava.security.auth.login.config=test/src/test/resour
 
 For example:
 ```bash
-$ bin/corfu_server -m -s -e -u test/src/test/resources/security/s1.jks -f test/src/test/resources/security/storepass -r test/src/test/resources/security/s1.jks -w test/src/test/resources/security/storepass -g -o test/src/test/resources/security/username -j test/src/test/resources/security/userpass 9000
+$ bin/corfu_server -m -s -e -u test/src/test/resources/security/s1.jks -f test/src/test/resources/security/storepass -r test/src/test/resources/security/s1.jks -w test/src/test/resources/security/storepass -g -o test/src/test/resources/security/username1 -j test/src/test/resources/security/userpass1 9000
 ```
 
 Please note: TLS is a prerequisite for SASL Plain Text Authentication.
