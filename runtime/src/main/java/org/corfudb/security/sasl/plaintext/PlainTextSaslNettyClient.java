@@ -3,6 +3,7 @@ package org.corfudb.security.sasl.plaintext;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelDuplexHandler;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
@@ -16,6 +17,7 @@ import javax.security.sasl.SaslClient;
  * as per:
  * https://tools.ietf.org/html/rfc4616
  */
+@Slf4j
 public class PlainTextSaslNettyClient extends ChannelDuplexHandler {
 
     private SaslClient saslClient;
@@ -37,6 +39,7 @@ public class PlainTextSaslNettyClient extends ChannelDuplexHandler {
             try {
                 response = saslClient.evaluateChallenge(null);
             } catch (SaslException se) {
+                log.error("SaslException {}", se.toString());
                 break;
             }
         }

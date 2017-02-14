@@ -8,6 +8,8 @@ import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * Created by sneginhal on 01/31/2017.
  * This is the server side of SASL Plain Text authentication.
@@ -16,6 +18,7 @@ import javax.security.sasl.SaslServer;
  * expects the username/password from the remote end as per:
  * https://tools.ietf.org/html/rfc4616
  */
+@Slf4j
 public class PlainTextSaslNettyServer extends SimpleChannelInboundHandler<ByteBuf> {
 
     private SaslServer saslServer;
@@ -41,6 +44,7 @@ public class PlainTextSaslNettyServer extends SimpleChannelInboundHandler<ByteBu
             try {
                 byte[] challenge = saslServer.evaluateResponse(msg);
             } catch (SaslException se) {
+                log.error("SaslException {}", se.toString());
                 break;
             }
         }

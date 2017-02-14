@@ -1,5 +1,7 @@
 package org.corfudb.security.sasl.plaintext;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.Map;
@@ -20,6 +22,7 @@ import javax.security.sasl.SaslServerFactory;
  * https://tools.ietf.org/html/rfc4616
  * https://tools.ietf.org/html/rfc4422
  */
+@Slf4j
 public class PlainTextSaslServer implements SaslServer {
 
     public static final String MECHANISM = "PLAIN";
@@ -58,8 +61,9 @@ public class PlainTextSaslServer implements SaslServer {
                 new PlainTextCallbackHandler(authcid, passwd));
             lc.login();
         } catch (LoginException le) {
-            throw new SaslException("Login Failed");
+            throw new SaslException("Login attempt by '" + authcid + "' failed");
         }
+        log.debug("Login by {} is successful", authcid);
 
         authenticated = true;
     }
