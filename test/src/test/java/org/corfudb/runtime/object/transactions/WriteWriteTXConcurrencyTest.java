@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.fail;
 /**
  * Created by dmalkhi on 12/13/16.
  */
-public class WriteWriteTXConcurrenctTest extends TXConflictScenarios {
+public class WriteWriteTXConcurrencyTest extends TXConflictScenarios {
 
     // override {@link AbstractObjectTest ::TXBegin() } in order to set write-write isolation level
     @Override
@@ -61,49 +61,6 @@ public class WriteWriteTXConcurrenctTest extends TXConflictScenarios {
 
         t(0, () -> TXEnd());
 
-        assertThat(valA.get()).isEqualTo(valB.get());
-    }
-
-    @Test
-    //unchecked
-    public void simpleWWTest2() {
-
-        //Instantiate a Corfu Stream named "A" dedicated to an SMRmap object.
-        SMRMap<String, Integer> map = ( SMRMap<String, Integer>)
-                instantiateCorfuObject(
-                        new TypeToken<SMRMap<String, Integer> >() { },
-                        "A" + System.currentTimeMillis() );
-
-        AtomicInteger
-                valA = new AtomicInteger(0),
-                valB = new AtomicInteger(0);
-        final Thread t1, t2;
-
-        t2 = new Thread(() -> {
-            Integer ga  = map.get("a");
-            if (ga != null) valA.set(ga);
-
-            Integer gb  = map.get("b");
-            if (gb != null) valB.set(gb);
-        });
-
-        t1 = new Thread(() -> {
-            TXBegin();
-
-            map.put("a", 1);
-            map.put("b", 1);
-            t2.start();
-            TXEnd();
-        });
-
-        t1.start();
-
-        try {
-            t1.join();
-            t2.join();
-        } catch (InterruptedException ie) {
-
-        }
         assertThat(valA.get()).isEqualTo(valB.get());
     }
 

@@ -28,6 +28,7 @@ public abstract class AbstractReplicationView {
 
     @Getter
     public final Layout layout;
+
     @Getter
     public final Layout.LayoutSegment segment;
 
@@ -59,9 +60,9 @@ public abstract class AbstractReplicationView {
     /**
      * Write the given object to an address and streams, using the replication method given.
      *
-     * @param address An address to write to.
+     * @param address An address to append to.
      * @param stream  The streams which will belong on this entry.
-     * @param data    The data to write.
+     * @param data    The data to append.
      */
     public void write(long address, Set<UUID> stream, Object data)
             throws OverwriteException {
@@ -71,10 +72,10 @@ public abstract class AbstractReplicationView {
     /**
      * Write the given object to an address and streams, using the replication method given.
      *
-     * @param address        An address to write to.
+     * @param address        An address to append to.
      * @param stream         The streams which will belong on this entry.
-     * @param data           The data to write.
-     * @param backpointerMap The map of backpointers to write.
+     * @param data           The data to append.
+     * @param backpointerMap The map of backpointers to append.
      * @return The number of bytes that was remotely written.
      */
     public int write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,

@@ -94,6 +94,12 @@ public class CorfuRuntime {
     @Getter
     private volatile boolean isShutdown = false;
 
+    private boolean tlsEnabled = false;
+    private String keyStore;
+    private String ksPasswordFile;
+    private String trustStore;
+    private String tsPasswordFile;
+
     /**
      * When set, overrides the default getRouterFunction. Used by the testing
      * framework to ensure the default routers used are for testing.
@@ -118,7 +124,8 @@ public class CorfuRuntime {
         String host = address.split(":")[0];
         Integer port = Integer.parseInt(address.split(":")[1]);
         // Generate a new router, start it and add it to the table.
-        NettyClientRouter router = new NettyClientRouter(host, port);
+        NettyClientRouter router = new NettyClientRouter(host, port, tlsEnabled, keyStore,
+            ksPasswordFile, trustStore, tsPasswordFile);
         log.debug("Connecting to new router {}:{}", host, port);
         try {
             router.addClient(new LayoutClient())
@@ -138,6 +145,25 @@ public class CorfuRuntime {
         nodeRouters = new ConcurrentHashMap<>();
         retryRate = 5;
         log.debug("Corfu runtime version {} initialized.", getVersionString());
+    }
+
+    /**
+     * Parse a configuration string and get a CorfuRuntime.
+     *
+     * @param configurationString The configuration string to parse.
+     */
+    public CorfuRuntime(String configurationString) {
+        this();
+        this.parseConfigurationString(configurationString);
+    }
+
+    public void enableTls(String keyStore, String ksPasswordFile, String trustStore,
+        String tsPasswordFile) {
+        this.keyStore = keyStore;
+        this.ksPasswordFile = ksPasswordFile;
+        this.trustStore = trustStore;
+        this.tsPasswordFile = tsPasswordFile;
+        this.tlsEnabled = true;
     }
 
     /**
@@ -174,16 +200,6 @@ public class CorfuRuntime {
             // Pthreads, namely the Netty client-side worker threads.
             nodeRouters = new ConcurrentHashMap<>();
         }
-    }
-
-    /**
-     * Parse a configuration string and get a CorfuRuntime.
-     *
-     * @param configurationString The configuration string to parse.
-     */
-    public CorfuRuntime(String configurationString) {
-        this();
-        this.parseConfigurationString(configurationString);
     }
 
     /**

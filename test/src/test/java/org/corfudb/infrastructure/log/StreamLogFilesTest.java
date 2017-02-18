@@ -31,7 +31,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
     @Test
     public void testWriteReadWithChecksum() {
-        // Enable checksum, then write and read the same entry
+        // Enable checksum, then append and read the same entry
         StreamLog log = new StreamLogFiles(getDirPath(), false);
         ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
         byte[] streamEntry = "Payload".getBytes();
@@ -40,7 +40,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.append(address0, new LogData(DataType.DATA, b));
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
 
-        // Disable checksum, then write and read then same entry
+        // Disable checksum, then append and read then same entry
         // An overwrite exception should occur, since we are writing the
         // same entry.
         final StreamLog newLog = new StreamLogFiles(getDirPath(), true);

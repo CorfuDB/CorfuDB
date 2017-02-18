@@ -6,15 +6,22 @@
 
 (def usage "corfu_management_bootstrap, to bootstrap Corfu Management Server.
 Usage:
-  corfu_management_bootstrap -c <config> -l <layout>
+  corfu_management_bootstrap -c <config> -l <layout> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>]]
 Options:
-  -l <layout>, --layout <layout>              Layout.
-  -c <config>, --config <config>              Configuration string to use.
+  -l <layout>, --layout <layout>                                                         Layout.
+  -c <config>, --config <config>                                                         Configuration string to use.
+  -e, --enable-tls                                                                       Enable TLS.
+  -u <keystore>, --keystore=<keystore>                                                   Path to the key store.
+  -f <keystore_password_file>, --keystore-password-file=<keystore_password_file>         Path to the file containing the key store password.
+  -r <truststore>, --truststore=<truststore>                                             Path to the trust store.
+  -w <truststore_password_file>, --truststore-password-file=<truststore_password_file>   Path to the file containing the trust store password.
   -h, --help     Show this screen.
 ")
 
+(def localcmd (.. (new Docopt usage) (parse *args)))
+
 (defn build-layout [endpoint layout] (do
-                                       (get-router endpoint)
+                                       (get-router endpoint localcmd)
                                        (let [q (.. (get-management-client) (bootstrapManagement (Layout/fromJSONString (str layout))))]
                                             (.. q (get))
                                             )
@@ -25,8 +32,4 @@ Options:
                                           (build-layout endpoint (str (slurp layout)))
                                           ))
 
-(def localcmd (.. (new Docopt usage) (parse *args)))
-
-(cond
-  (.. localcmd (get "--config")) (bootstrap-node (.. localcmd (get "--config")) (.. localcmd (get "--layout")))
-  :else (println "Incorrect usage: corfu_management_bootstrap --help for help"))
+(bootstrap-node (.. localcmd (get "--config")) (.. localcmd (get "--layout")))

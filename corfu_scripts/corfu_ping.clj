@@ -5,8 +5,13 @@
 
 (def usage "corfu_ping, ping Corfu servers.
 Usage:
-  corfu_ping [<endpoint>...]
+  corfu_ping [<endpoint>...] [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>]]
 Options:
+  -e, --enable-tls                                                                       Enable TLS.
+  -u <keystore>, --keystore=<keystore>                                                   Path to the key store.
+  -f <keystore_password_file>, --keystore-password-file=<keystore_password_file>         Path to the file containing the key store password.
+  -r <truststore>, --truststore=<truststore>                                             Path to the trust store.
+  -w <truststore_password_file>, --truststore-password-file=<truststore_password_file>   Path to the file containing the trust store password.
   -h, --help     Show this screen.
 ")
 
@@ -22,7 +27,7 @@ Options:
 (doseq [endpoint (.toArray (.. localcmd (get "<endpoint>")))]
   (do
      (println (format "PING %s" endpoint))
-     (get-router endpoint)
+     (get-router endpoint localcmd)
      (let [ping (time-expression (.. (get-base-client) (pingSync)))]
        (if (:result ping) (println (format "ACK time=%.3fms" (/ (:time ping) 1000000.0)))
            (println (format "NACK timeout=%.3fms" (/ (:time ping) 1000000.0)))

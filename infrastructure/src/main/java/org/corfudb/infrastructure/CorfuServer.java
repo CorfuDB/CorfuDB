@@ -13,6 +13,9 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 import lombok.Getter;
@@ -20,15 +23,27 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.TlsUtils;
 import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.UnrecoverableKeyException;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ThreadFactory;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import javax.net.ssl.SSLEngine;
 
 import static org.fusesource.jansi.Ansi.Color.*;
 import static org.fusesource.jansi.Ansi.ansi;
@@ -61,6 +76,12 @@ public class CorfuServer {
 
     public static boolean serverRunning = false;
 
+    private static SslContext sslContext;
+
+    private static String[] enabledTlsProtocols;
+
+    private static String[] enabledTlsCipherSuites;
+
     /**
      * This string defines the command line arguments,
      * in the docopt DSL (see http://docopt.org) for the executable.
@@ -76,29 +97,38 @@ public class CorfuServer {
             "Corfu Server, the server for the Corfu Infrastructure.\n"
                     + "\n"
                     + "Usage:\n"
-                    + "\tcorfu_server (-l <path>|-m) [-nsQ] [-a <address>] [-t <token>] [-c <size>] [-k seconds] [-d <level>] [-p <seconds>] [-M <address>:<port>] <port>\n"
+                    + "\tcorfu_server (-l <path>|-m) [-nsQ] [-a <address>] [-t <token>] [-c <size>] [-k seconds] [-d <level>] [-p <seconds>] [-M <address>:<port>] [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-x <ciphers>] [-z <tls-protocols>]] <port>\n"
                     + "\n"
                     + "Options:\n"
-                    + " -l <path>, --log-path=<path>            Set the path to the storage file for the log unit.\n"
-                    + " -s, --single                            Deploy a single-node configuration.\n"
-                    + "                                         The server will be bootstrapped with a simple one-unit layout.\n"
-                    + " -a <address>, --address=<address>       IP address to advertise to external clients [default: localhost].\n"
-                    + " -m, --memory                            Run the unit in-memory (non-persistent).\n"
-                    + "                                         Data will be lost when the server exits!\n"
-                    + " -c <size>, --max-cache=<size>           The size of the in-memory cache to serve requests from -\n"
-                    + "                                         If there is no log, then this is the max size of the log unit\n"
-                    + "                                         evicted entries will be auto-trimmed. [default: 1000000000].\n"
-                    + " -t <token>, --initial-token=<token>     The first token the sequencer will issue, or -1 to recover\n"
-                    + "                                         from the log. [default: -1].\n"
-                    + " -p <seconds>, --compact=<seconds>       The rate the log unit should compact entries (find the,\n"
-                    + "                                         contiguous tail) in seconds [default: 60].\n"
-                    + " -d <level>, --log-level=<level>         Set the logging level, valid levels are: \n"
-                    + "                                         ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].\n"
-                    + " -Q, --quickcheck-test-mode              Run in QuickCheck test mode\n"
-                    + " -M <address>:<port>, --management-server=<address>:<port>     Layout endpoint to seed Management Server\n"
-                    + " -n, --no-verify                         Disable checksum computation and verification.\n"
-                    + " -h, --help  Show this screen\n"
-                    + " --version  Show version\n";
+                    + " -l <path>, --log-path=<path>                                                           Set the path to the storage file for the log unit.\n"
+                    + " -s, --single                                                                           Deploy a single-node configuration.\n"
+                    + "                                                                                        The server will be bootstrapped with a simple one-unit layout.\n"
+                    + " -a <address>, --address=<address>                                                      IP address to advertise to external clients [default: localhost].\n"
+                    + " -m, --memory                                                                           Run the unit in-memory (non-persistent).\n"
+                    + "                                                                                        Data will be lost when the server exits!\n"
+                    + " -c <size>, --max-cache=<size>                                                          The size of the in-memory cache to serve requests from -\n"
+                    + "                                                                                        If there is no log, then this is the max size of the log unit\n"
+                    + "                                                                                        evicted entries will be auto-trimmed. [default: 1000000000].\n"
+                    + " -t <token>, --initial-token=<token>                                                    The first token the sequencer will issue, or -1 to recover\n"
+                    + "                                                                                        from the log. [default: -1].\n"
+                    + " -p <seconds>, --compact=<seconds>                                                      The rate the log unit should compact entries (find the,\n"
+                    + "                                                                                        contiguous tail) in seconds [default: 60].\n"
+                    + " -d <level>, --log-level=<level>                                                        Set the logging level, valid levels are: \n"
+                    + "                                                                                        ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].\n"
+                    + " -Q, --quickcheck-test-mode                                                             Run in QuickCheck test mode\n"
+                    + " -M <address>:<port>, --management-server=<address>:<port>                              Layout endpoint to seed Management Server\n"
+                    + " -n, --no-verify                                                                        Disable checksum computation and verification.\n"
+                    + " -e, --enable-tls                                                                       Enable TLS.\n"
+                    + " -u <keystore>, --keystore=<keystore>                                                   Path to the key store.\n"
+                    + " -f <keystore_password_file>, --keystore-password-file=<keystore_password_file>         Path to the file containing the key store password.\n"
+                    + " -r <truststore>, --truststore=<truststore>                                             Path to the trust store.\n"
+                    + " -w <truststore_password_file>, --truststore-password-file=<truststore_password_file>   Path to the file containing the trust store password.\n"
+                    + " -x <ciphers>, --tls-ciphers=<ciphers>                                                  Comma separated list of TLS ciphers to use.\n"
+                    + "                                                                                        [default: TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256].\n"
+                    + " -z <tls-protocols>, --tls-protocols=<tls-protocols>                                    Comma separated list of TLS protocols to use.\n"
+                    + "                                                                                        [default: TLSv1.1,TLSv1.2].\n"
+                    + " -h, --help                                                                             Show this screen\n"
+                    + " --version                                                                              Show version\n";
 
     public static void printLogo() {
         System.out.println(ansi().fg(WHITE).a("▄████████  ▄██████▄     ▄████████    ▄████████ ███    █▄").reset());
@@ -183,6 +213,54 @@ public class CorfuServer {
         addManagementServer();
         router.baseServer.setOptionsMap(opts);
 
+        // Setup SSL if needed
+        Boolean tlsEnabled = (Boolean) opts.get("--enable-tls");
+        if (tlsEnabled) {
+            // Get the TLS cipher suites to enable
+            String ciphs = (String) opts.get("--tls-ciphers");
+            if (ciphs != null) {
+                List<String> ciphers = Pattern.compile(",")
+                    .splitAsStream(ciphs)
+                    .map(String::trim)
+                    .collect(Collectors.toList());
+                enabledTlsCipherSuites = ciphers.toArray(new String[ciphers.size()]);
+            }
+
+            // Get the TLS protocols to enable
+            String protos = (String) opts.get("--tls-protocols");
+            if (protos != null) {
+                List<String> protocols = Pattern.compile(",")
+                    .splitAsStream(protos)
+                    .map(String::trim)
+                    .collect(Collectors.toList());
+                enabledTlsProtocols = protocols.toArray(new String[protocols.size()]);
+            }
+
+            try {
+                sslContext =
+                        TlsUtils.enableTls(TlsUtils.SslContextType.SERVER_CONTEXT,
+                                (String) opts.get("--keystore-password-file"), e -> {
+                                    log.error("Could not read the key store password file.");
+                                    System.exit(1);
+                                },
+                                (String) opts.get("--keystore"), e -> {
+                                    log.error("Could not load keys from the key store.");
+                                    System.exit(1);
+                                },
+                                (String) opts.get("--truststore-password-file"), e -> {
+                                    log.error("Could not read the trust store password file.");
+                                    System.exit(1);
+                                },
+                                (String) opts.get("--truststore"), e -> {
+                                    log.error("Could not load keys from the trust store.");
+                                    System.exit(1);
+                                });
+            } catch (Exception ex) {
+                log.error("Could not build the SSL context");
+                System.exit(1);
+            }
+        }
+
         // Create the event loops responsible for servicing inbound messages.
         EventLoopGroup bossGroup;
         EventLoopGroup workerGroup;
@@ -235,6 +313,13 @@ public class CorfuServer {
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         public void initChannel(io.netty.channel.socket.SocketChannel ch) throws Exception {
+                            if (tlsEnabled) {
+                                SSLEngine engine = sslContext.newEngine(ch.alloc());
+                                engine.setEnabledCipherSuites(enabledTlsCipherSuites);
+                                engine.setEnabledProtocols(enabledTlsProtocols);
+                                engine.setNeedClientAuth(true);
+                                ch.pipeline().addLast("ssl", new SslHandler(engine));
+                            }
                             ch.pipeline().addLast(new LengthFieldPrepender(4));
                             ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
                             ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());

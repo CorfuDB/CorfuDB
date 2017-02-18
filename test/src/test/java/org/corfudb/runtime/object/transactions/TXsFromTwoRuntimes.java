@@ -5,14 +5,8 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuSharedCounter;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-import org.corfudb.runtime.view.StreamView;
-import org.corfudb.runtime.view.StreamsView;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.concurrent.Semaphore;
 
 import static org.assertj.core.api.Assertions.assertThat;

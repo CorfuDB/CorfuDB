@@ -354,7 +354,7 @@ public class Layout implements Cloneable {
         }
 
         List<LayoutStripe> replexes; // A list of replexes. Each LayoutStripe is a replex, because it is just a list of
-                                     // servers. Select one node from each LayoutStripe (replex) to write to.
+                                     // servers. Select one node from each LayoutStripe (replex) to append to.
                                      // For now, there is only 1 replex, which are the stream homes.
 
         public int getNumberOfStripes() { return stripes.size(); }

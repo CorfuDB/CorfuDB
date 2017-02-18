@@ -4,7 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
-import org.corfudb.runtime.view.StreamView;
+import org.corfudb.runtime.view.stream.IStreamView;
 
 import java.util.*;
 import java.util.concurrent.locks.StampedLock;
@@ -44,7 +44,7 @@ public class VersionLockedObject<T> {
     /** The stream view this object is backed by.
      *
      */
-    private StreamView sv;
+    private IStreamView sv;
 
     /** If the object reflects optimistic updates, the
      * context which made those updates.
@@ -86,7 +86,7 @@ public class VersionLockedObject<T> {
     /** The undo target map for this object. */
     private final Map<String, IUndoFunction<T>> undoFunctionMap;
 
-    public VersionLockedObject(T obj, long version, StreamView sv,
+    public VersionLockedObject(T obj, long version, IStreamView sv,
                   Map<String, ICorfuSMRUpcallTarget<T>> upcallTargets,
                   Map<String, IUndoRecordFunction<T>> undoRecordTargets,
                   Map<String, IUndoFunction<T>> undoTargets)
@@ -125,9 +125,6 @@ public class VersionLockedObject<T> {
      *
      */
     public void optimisticCommitUnsafe(long version) {
-        log.trace("optimisticCommit --version={} stream logPopinter={}",
-                version, sv.getLogPointer()
-        );
         // TODO: validate the caller actually has a write lock.
         // TODO: merge the optimistic undo log into the undo log
         optimisticUndoLog.clear();
@@ -136,7 +133,7 @@ public class VersionLockedObject<T> {
         this.version = version;
         // TODO: fix the stream view pointer seek, for now
         // read will read the tx commit entry.
-        sv.read();
+        sv.next();
         modifyingContext = null;
     }
 
@@ -286,7 +283,7 @@ public class VersionLockedObject<T> {
                 lock.unlock(ts);
             }
         } catch (ConcurrentModificationException cme) {
-            // throw by read function to force a write lock...
+            // throw by read function to force a append lock...
         }
         // reading failed, retry with a full lock
         ts = lock.writeLock();
@@ -335,7 +332,7 @@ public class VersionLockedObject<T> {
         this.modifyingContext = context;
     }
 
-    public StreamView getStreamViewUnsafe() {
+    public IStreamView getStreamViewUnsafe() {
         return sv;
     }
 

@@ -5,11 +5,16 @@
 
 (def usage "corfu_as, work with a Corfu address space.
 Usage:
-  corfu_as [-i <stream-id>] [-c <config>] read <address>
-  corfu_as [-i <stream-id>] [-c <config>] write <address>
+  corfu_as [-i <stream-id>] [-c <config>] [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>]] read <address>
+  corfu_as [-i <stream-id>] [-c <config>] [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>]] write <address>
 Options:
-  -i <stream-id>, --stream-id <stream-id>     ID or name of the stream to work with.
-  -c <config>, --config <config>              Configuration string to use.
+  -i <stream-id>, --stream-id <stream-id>                                                ID or name of the stream to work with.
+  -c <config>, --config <config>                                                         Configuration string to use.
+  -e, --enable-tls                                                                       Enable TLS.
+  -u <keystore>, --keystore=<keystore>                                                   Path to the key store.
+  -f <keystore_password_file>, --keystore-password-file=<keystore_password_file>         Path to the file containing the key store password.
+  -r <truststore>, --truststore=<truststore>                                             Path to the trust store.
+  -w <truststore_password_file>, --truststore-password-file=<truststore_password_file>   Path to the file containing the trust store password.
   -h, --help     Show this screen.
 ")
 
@@ -32,7 +37,7 @@ Options:
 
 (def localcmd (.. (new Docopt usage) (parse *args)))
 
-(get-runtime (.. localcmd (get "--config")))
+(get-runtime (.. localcmd (get "--config")) localcmd)
 (connect-runtime)
 
 (def stream
