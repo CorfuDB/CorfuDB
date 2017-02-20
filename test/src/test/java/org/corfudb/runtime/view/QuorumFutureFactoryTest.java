@@ -5,6 +5,7 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.junit.Test;
 
 import java.util.concurrent.*;
@@ -19,8 +20,8 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
 
     @Test
     public void testSingleFutureIncompleteComplete() throws Exception {
-        CompletableFuture<Object> f1 = new CompletableFuture<>();
-        Future<Object> result = QuorumFutureFactory.getQuorumFuture(f1);
+        CompletableFuture<String> f1 = new CompletableFuture<>();
+        Future<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1);
         try {
             result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
@@ -36,8 +37,8 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
 
     @Test
     public void testInfiniteGet() throws Exception {
-        CompletableFuture<Object> f1 = new CompletableFuture<>();
-        Future<Object> result = QuorumFutureFactory.getQuorumFuture(f1);
+        CompletableFuture<String> f1 = new CompletableFuture<>();
+        Future<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1);
         f1.complete("ok");
         Object value = result.get();
         assertEquals("ok", value);
@@ -47,18 +48,18 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
 
     @Test
     public void test2FuturesIncompleteComplete() throws Exception {
-        CompletableFuture<Object> f1 = new CompletableFuture<>();
-        CompletableFuture<Object> f2 = new CompletableFuture<>();
-        Future<Object> result = QuorumFutureFactory.getQuorumFuture(f1, f2);
+        CompletableFuture<String> f1 = new CompletableFuture<>();
+        CompletableFuture<String> f2 = new CompletableFuture<>();
+        Future<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1, f2);
         try {
-            result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
+            result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (TimeoutException e) {
             // expected
         }
         f2.complete("ok");
         try {
-            result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
+            result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (TimeoutException e) {
             // expected
@@ -70,19 +71,19 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
 
     @Test
     public void test3FuturesIncompleteComplete() throws Exception {
-        CompletableFuture<Object> f1 = new CompletableFuture<>();
-        CompletableFuture<Object> f2 = new CompletableFuture<>();
-        CompletableFuture<Object> f3 = new CompletableFuture<>();
-        Future<Object> result = QuorumFutureFactory.getQuorumFuture(f1, f2, f3);
+        CompletableFuture<String> f1 = new CompletableFuture<>();
+        CompletableFuture<String> f2 = new CompletableFuture<>();
+        CompletableFuture<String> f3 = new CompletableFuture<>();
+        QuorumFutureFactory.CompositeFuture<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1, f2, f3);
         try {
-            result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
+            result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (TimeoutException e) {
             // expected
         }
         f2.complete("ok");
         try {
-            result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
+            result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (TimeoutException e) {
             // expected
@@ -93,17 +94,18 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
         f1.complete("ok");
         value = result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
         assertEquals("ok", value);
+        assertFalse(result.isConflict());
     }
 
 
     @Test
     public void test3FuturesWithFirstWinnerIncompleteComplete() throws Exception {
-        CompletableFuture<Object> f1 = new CompletableFuture<>();
-        CompletableFuture<Object> f2 = new CompletableFuture<>();
-        CompletableFuture<Object> f3 = new CompletableFuture<>();
-        Future<Object> result = QuorumFutureFactory.getFirstWinsFuture(f1, f2, f3);
+        CompletableFuture<String> f1 = new CompletableFuture<>();
+        CompletableFuture<String> f2 = new CompletableFuture<>();
+        CompletableFuture<String> f3 = new CompletableFuture<>();
+        Future<String> result = QuorumFutureFactory.getFirstWinsFuture(String::compareTo, f1, f2, f3);
         try {
-            result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
+            result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (TimeoutException e) {
             // expected
@@ -116,11 +118,11 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
 
     @Test
     public void testException() throws Exception {
-        CompletableFuture<Object> f1 = new CompletableFuture<>();
-        Future<Object> result = QuorumFutureFactory.getQuorumFuture(f1);
+        CompletableFuture<String> f1 = new CompletableFuture<>();
+        Future<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1);
         f1.completeExceptionally(new NullPointerException());
         try {
-            Object value = result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
+            Object value = result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
         } catch (ExecutionException e) {
             // expected behaviour
@@ -130,28 +132,30 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
 
     @Test
     public void testCanceledFromInside() throws Exception {
-        CompletableFuture<Object> f1 = new CompletableFuture<>();
-        Future<Object> result = QuorumFutureFactory.getQuorumFuture(f1);
+        CompletableFuture<String> f1 = new CompletableFuture<>();
+        QuorumFutureFactory.CompositeFuture<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1);
         f1.cancel(true);
-        Object value = result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
+        try {
+            Object value = result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
+            fail();
+        } catch (ExecutionException e) {
+            assertTrue(e.getCause() instanceof QuorumUnreachableException);
+            assertEquals(0, ((QuorumUnreachableException)e.getCause()).getReachable());
+            assertEquals(1, ((QuorumUnreachableException)e.getCause()).getRequired());
+        }
         assertTrue(result.isCancelled());
         assertTrue(result.isDone());
-        assertNull(value);
+        assertFalse(result.isConflict());
+        assertNull(result.getThrowable());
     }
 
 
     @Test
     public void testCanceledPlusException() throws Exception {
-        CompletableFuture<Object> f1 = new CompletableFuture<>();
-        CompletableFuture<Object> f2 = new CompletableFuture<>();
-        Future<Object> result = QuorumFutureFactory.getQuorumFuture(f1, f2);
+        CompletableFuture<String> f1 = new CompletableFuture<>();
+        CompletableFuture<String> f2 = new CompletableFuture<>();
+        QuorumFutureFactory.CompositeFuture<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1, f2);
         f1.cancel(true);
-        try {
-            result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
-            fail();
-        } catch (TimeoutException e) {
-            // expected
-        }
         f2.completeExceptionally(new NullPointerException());
         try {
             Object value = result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
@@ -161,9 +165,54 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
         }
         assertTrue(result.isCancelled());
         assertTrue(result.isDone());
+        assertEquals(result.getThrowable().getClass(), NullPointerException.class);
     }
 
 
+    @Test
+    public void test3FuturesCompleteWithResolvedConflict() throws Exception {
+        CompletableFuture<String> f1 = new CompletableFuture<>();
+        CompletableFuture<String> f2 = new CompletableFuture<>();
+        CompletableFuture<String> f3 = new CompletableFuture<>();
+        QuorumFutureFactory.CompositeFuture<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1, f2, f3);
+        f2.complete("ok");
+        try {
+            result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
+            fail();
+        } catch (TimeoutException e) {
+            // expected
+        }
+        f3.complete("not-ok");
+        try {
+            Object value = result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            // expected
+        }
+        f1.complete("ok");
+        Object value = result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
+        assertEquals("ok", value);
+        assertTrue(result.isConflict());
+    }
 
+
+    @Test
+    public void test3FuturesCompleteWithUnresolvedConflict() throws Exception {
+        CompletableFuture<String> f1 = new CompletableFuture<>();
+        CompletableFuture<String> f2 = new CompletableFuture<>();
+        CompletableFuture<String> f3 = new CompletableFuture<>();
+        QuorumFutureFactory.CompositeFuture<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1, f2, f3);
+        f2.complete("ok");
+        f3.complete("not-ok");
+        f1.complete("1/3 split brain");
+        try {
+            Object value = result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
+            fail();
+        } catch (ExecutionException e) {
+            assertTrue(e.getCause() instanceof QuorumUnreachableException);
+            assertEquals(1, ((QuorumUnreachableException) e.getCause()).getReachable());
+            assertEquals(2, ((QuorumUnreachableException) e.getCause()).getRequired());
+        }
+        assertTrue(result.isConflict());
+    }
 
 }

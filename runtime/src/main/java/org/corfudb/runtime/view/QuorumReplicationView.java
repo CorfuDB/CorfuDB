@@ -58,7 +58,7 @@ public class QuorumReplicationView extends AbstractReplicationView {
                 // sending the message to all logging units and ignoring the exception.
                 futures[i] = getLayout().getLogUnitClient(address, i).write(address, stream, 0L, data, backpointerMap);
             }
-            Boolean result = CFUtils.getUninterruptibly(QuorumFutureFactory.getQuorumFuture(futures));
+            Boolean result = CFUtils.getUninterruptibly(QuorumFutureFactory.getQuorumFuture(Boolean::compareTo, futures));
             log.trace("Write[{}]: {}", address, result);
         }
         return payloadBytes;
@@ -73,12 +73,12 @@ public class QuorumReplicationView extends AbstractReplicationView {
     @Override
     public LogData read(long address) {
         int numUnits = getLayout().getSegmentLength(address);
-        log.trace("Read[{}]: chain {}/{}", address, numUnits, numUnits);
+        log.trace("Read[{}]: quorum {}/{}", address, numUnits, numUnits);
         CompletableFuture<ReadResponse>[] futures = new CompletableFuture[numUnits];
             for (int i=0; i<numUnits; i++) {
                 futures[i]=getLayout().getLogUnitClient(address, i).read(address);
         }
-        ReadResponse readResponse = CFUtils.getUninterruptibly(QuorumFutureFactory.getQuorumFuture(futures));
+        ReadResponse readResponse = CFUtils.getUninterruptibly(QuorumFutureFactory.getQuorumFuture(new ReadResponseComparator(), futures));
         Map<Long, LogData> rs = readResponse.getReadSet();
         return rs.get(address);
     }
@@ -109,9 +109,21 @@ public class QuorumReplicationView extends AbstractReplicationView {
             futures[i]=getLayout().getLogUnitClient(address, i).fillHole(address);
         }
         // In quorum, we write asynchronously to every unit in the chain and wait n/2+1 to complete
-        Boolean result = CFUtils.getUninterruptibly(QuorumFutureFactory.getQuorumFuture(futures));
+        Boolean result = CFUtils.getUninterruptibly(QuorumFutureFactory.getQuorumFuture(Boolean::compareTo, futures));
         log.trace("fillHole[{}]: {}", address, result);
     }
 
 
+    private class ReadResponseComparator implements Comparator<ReadResponse> {
+        @Override
+        // This comparator is slow, but QuorumFutureFactory will use it only in case of conflicts
+        public int compare(ReadResponse o1, ReadResponse o2) {
+            try(AutoCloseableByteBuf b1 = new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer());
+                AutoCloseableByteBuf b2 = new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
+                o1.doSerialize(b1);
+                o2.doSerialize(b2);
+                return b1.compareTo(b2);
+            }
+        }
+    }
 }
