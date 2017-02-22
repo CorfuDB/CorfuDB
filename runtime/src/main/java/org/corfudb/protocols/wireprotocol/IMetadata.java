@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
  */
 public interface IMetadata {
 
+
     public static Map<Byte, LogUnitMetadataType> metadataTypeMap =
             Arrays.<LogUnitMetadataType>stream(LogUnitMetadataType.values())
                     .collect(Collectors.toMap(LogUnitMetadataType::asByte, Function.identity()));
@@ -78,8 +79,28 @@ public interface IMetadata {
      * @param rank The rank of this append.
      */
     default void setRank(long rank) {
+        if (rank>=0 && getRank()<0) {
+            throw new IllegalStateException("Cannot set rank when the overwrite is permitted");
+        }
         getMetadataMap().put(IMetadata.LogUnitMetadataType.RANK, rank);
     }
+
+    /**
+     * Force overwrite for this append by using a special rank. If there is duplicate entity, it will be marked for trimming.
+     * No rank should be set to the metadata after this method is used.
+     */
+    default void forceOverwrite() {
+        setRank(-1);
+    }
+
+    /**
+     * @return Whether the overwrite for this append is forced or not.
+     */
+    default boolean isOverwriteForced() {
+        return getRank()==-1l;
+    }
+
+
 
     /**
      * Get the logical stream addresses that belong to this append.

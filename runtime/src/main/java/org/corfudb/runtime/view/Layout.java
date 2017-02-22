@@ -9,6 +9,7 @@ import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.runtime.view.stream.QuorumStreamView;
 import org.corfudb.runtime.view.stream.ReplexStreamView;
 import org.corfudb.util.CFUtils;
 
@@ -340,8 +341,8 @@ public class Layout implements Cloneable {
             }
 
             @Override
-            public IStreamView  getStreamView(CorfuRuntime r, UUID streamId) {
-                return new BackpointerStreamView(r, streamId);
+            public IStreamView getStreamView(CorfuRuntime r, UUID streamId) {
+                return new QuorumStreamView(r, streamId);
             }
         },
         REPLEX {

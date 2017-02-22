@@ -49,11 +49,12 @@ public enum CorfuMsgType {
     READ_REQUEST(31, new TypeToken<CorfuPayloadMsg<ReadRequest>>() {}),
     READ_RESPONSE(32, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
     TRIM(33, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
-    FILL_HOLE(34, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
+    FILL_HOLE(34, new TypeToken<CorfuPayloadMsg<FillHoleRequest>>() {}),
     FORCE_GC(35, TypeToken.of(CorfuMsg.class)),
     GC_INTERVAL(36, new TypeToken<CorfuPayloadMsg<Long>>() {}),
     FORCE_COMPACT(37, TypeToken.of(CorfuMsg.class)),
     COMMIT(40, new TypeToken<CorfuPayloadMsg<CommitRequest>>() {}),
+
 
     WRITE_OK(50, TypeToken.of(CorfuMsg.class)),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),
@@ -75,6 +76,9 @@ public enum CorfuMsgType {
     MANAGEMENT_START_FAILURE_HANDLER(73, TypeToken.of(CorfuMsg.class), true),
     MANAGEMENT_FAILURE_DETECTED(74, new TypeToken<CorfuPayloadMsg<FailureDetectorMsg>>(){}, true),
     HEARTBEAT_REQUEST(75, TypeToken.of(CorfuMsg.class), true),
+
+
+
     HEARTBEAT_RESPONSE(76, new TypeToken<CorfuPayloadMsg<byte[]>>(){}, true);
 
 

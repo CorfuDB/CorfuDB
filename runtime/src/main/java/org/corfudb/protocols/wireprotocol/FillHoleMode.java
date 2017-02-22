@@ -12,15 +12,12 @@ import java.util.stream.Collectors;
  * Created by mwei on 8/9/16.
  */
 @RequiredArgsConstructor
-public enum WriteMode implements ICorfuPayload<WriteMode> {
-    NORMAL((byte) 0),
-    REPLEX_GLOBAL((byte) 1),
-    REPLEX_HYBRID((byte) 2),
-    REPLEX_STREAM((byte) 3),
-    QUORUM_STEADY((byte) 4),
-    QUORUM_PHASE1((byte) 5),
-    QUORUM_PHASE2((byte) 6),
-    QUORUM_FORCE_OVERWRITE((byte) 7);
+public enum FillHoleMode implements ICorfuPayload<FillHoleMode> {
+    NORMAL((byte)0),
+    QUORUM_STEADY((byte)4),
+    QUORUM_PHASE1((byte)5),
+    QUORUM_PHASE2((byte)6),
+    QUORUM_FORCE_OVERWRITE((byte)7);
 
     final int val;
 
@@ -33,7 +30,7 @@ public enum WriteMode implements ICorfuPayload<WriteMode> {
         buf.writeByte(asByte());
     }
 
-    static Map<Byte, WriteMode> typeMap =
-            Arrays.stream(WriteMode.values())
-                    .collect(Collectors.toMap(WriteMode::asByte, Function.identity()));
+    static Map<Byte, FillHoleMode> typeMap =
+            Arrays.stream(FillHoleMode.values())
+                    .collect(Collectors.toMap(FillHoleMode::asByte, Function.identity()));
 }
