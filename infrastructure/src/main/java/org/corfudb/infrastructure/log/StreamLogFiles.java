@@ -270,8 +270,10 @@ public class StreamLogFiles implements StreamLog {
 
         Metadata headerMetadata = Metadata.parseFrom(headerMetadataBuf.array());
 
-        fc.position(fc.position() + headerMetadata.getLength());
-        ByteBuffer o = ByteBuffer.allocate((int) logFileSize - (int) fc.position());
+        long initialPosition = fc.position() + headerMetadata.getLength();
+        fc.position(initialPosition);
+
+        ByteBuffer o = ByteBuffer.allocate((int)(logFileSize - fc.position()));
         fc.read(o);
         fc.close();
         o.flip();
@@ -283,8 +285,7 @@ public class StreamLogFiles implements StreamLog {
             if (magic != RECORD_DELIMITER) {
                 return null;
             }
-
-            long filePosition = fc.position();
+            long filePosition = initialPosition+o.position();
 
             byte[] metadataBuf = new byte[METADATA_SIZE];
             o.get(metadataBuf);
