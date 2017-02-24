@@ -29,8 +29,10 @@ import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
+import org.corfudb.security.sasl.SaslUtils;
+import org.corfudb.security.tls.TlsUtils;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.TlsUtils;
 
 import java.io.FileInputStream;
 import java.nio.file.Files;
@@ -149,22 +151,29 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
     private Bootstrap b;
 
-    private static Boolean tlsEnabled = false;
+    private Boolean tlsEnabled = false;
 
-    private static SslContext sslContext;
+    private SslContext sslContext;
+
+    private Boolean saslPlainTextEnabled = false;
+
+    private String saslPlainTextUsernameFile;
+
+    private String saslPlainTextPasswordFile;
 
     public NettyClientRouter(String endpoint) {
         this(endpoint.split(":")[0], Integer.parseInt(endpoint.split(":")[1]),
-            false, null, null, null, null);
+            false, null, null, null, null, false, null, null);
     }
 
     public NettyClientRouter(String host, Integer port) {
-        this(host, port, false, null, null, null, null);
+        this(host, port, false, null, null, null, null, false, null, null);
     }
 
     public NettyClientRouter(String host, Integer port, Boolean tls,
         String keyStore, String ksPasswordFile, String trustStore,
-        String tsPasswordFile) {
+        String tsPasswordFile, Boolean saslPlainText, String usernameFile,
+        String passwordFile) {
         this.host = host;
         this.port = port;
 
@@ -200,6 +209,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                                         "store: " + e.getClass().getSimpleName(), e);
                             });
             this.tlsEnabled = true;
+        }
+
+        if (saslPlainText) {
+            saslPlainTextUsernameFile = usernameFile;
+            saslPlainTextPasswordFile = passwordFile;
+            saslPlainTextEnabled = true;
         }
 
         addClient(new BaseClient());
@@ -293,6 +308,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                     }
                     ch.pipeline().addLast(new LengthFieldPrepender(4));
                     ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
+                    if (saslPlainTextEnabled) {
+                        PlainTextSaslNettyClient saslNettyClient =
+                            SaslUtils.enableSaslPlainText(saslPlainTextUsernameFile, saslPlainTextPasswordFile);
+                        ch.pipeline().addLast("sasl/plain-text", saslNettyClient);
+                    }
                     ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
                     ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
                     ch.pipeline().addLast(ee, router);

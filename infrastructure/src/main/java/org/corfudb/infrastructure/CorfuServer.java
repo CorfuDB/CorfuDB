@@ -22,8 +22,9 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
+import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
+import org.corfudb.security.tls.TlsUtils;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.TlsUtils;
 import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
@@ -97,7 +98,7 @@ public class CorfuServer {
             "Corfu Server, the server for the Corfu Infrastructure.\n"
                     + "\n"
                     + "Usage:\n"
-                    + "\tcorfu_server (-l <path>|-m) [-nsQ] [-a <address>] [-t <token>] [-c <size>] [-k seconds] [-d <level>] [-p <seconds>] [-M <address>:<port>] [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-x <ciphers>] [-z <tls-protocols>]] <port>\n"
+                    + "\tcorfu_server (-l <path>|-m) [-nsQ] [-a <address>] [-t <token>] [-c <size>] [-k seconds] [-d <level>] [-p <seconds>] [-M <address>:<port>] [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] [-x <ciphers>] [-z <tls-protocols>]] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                                           Set the path to the storage file for the log unit.\n"
@@ -121,8 +122,12 @@ public class CorfuServer {
                     + " -e, --enable-tls                                                                       Enable TLS.\n"
                     + " -u <keystore>, --keystore=<keystore>                                                   Path to the key store.\n"
                     + " -f <keystore_password_file>, --keystore-password-file=<keystore_password_file>         Path to the file containing the key store password.\n"
+                    + " -b, --enable-tls-mutual-auth                                                           Enable TLS mutual authentication.\n"
                     + " -r <truststore>, --truststore=<truststore>                                             Path to the trust store.\n"
                     + " -w <truststore_password_file>, --truststore-password-file=<truststore_password_file>   Path to the file containing the trust store password.\n"
+                    + " -g, --enable-sasl-plain-text-auth                                                      Enable SASL Plain Text Authentication.\n"
+                    + " -o <username_file>, --sasl-plain-text-username-file=<username_file>                    Path to the file containing the username for SASL Plain Text Authentication.\n"
+                    + " -j <password_file>, --sasl-plain-text-password-file=<password_file>                    Path to the file containing the password for SASL Plain Text Authentication.\n"
                     + " -x <ciphers>, --tls-ciphers=<ciphers>                                                  Comma separated list of TLS ciphers to use.\n"
                     + "                                                                                        [default: TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256].\n"
                     + " -z <tls-protocols>, --tls-protocols=<tls-protocols>                                    Comma separated list of TLS protocols to use.\n"
@@ -215,6 +220,7 @@ public class CorfuServer {
 
         // Setup SSL if needed
         Boolean tlsEnabled = (Boolean) opts.get("--enable-tls");
+        Boolean tlsMutualAuthEnabled = (Boolean) opts.get("--enable-tls-mutual-auth");
         if (tlsEnabled) {
             // Get the TLS cipher suites to enable
             String ciphs = (String) opts.get("--tls-ciphers");
@@ -239,20 +245,20 @@ public class CorfuServer {
             try {
                 sslContext =
                         TlsUtils.enableTls(TlsUtils.SslContextType.SERVER_CONTEXT,
-                                (String) opts.get("--keystore-password-file"), e -> {
-                                    log.error("Could not read the key store password file.");
-                                    System.exit(1);
-                                },
                                 (String) opts.get("--keystore"), e -> {
                                     log.error("Could not load keys from the key store.");
                                     System.exit(1);
                                 },
-                                (String) opts.get("--truststore-password-file"), e -> {
-                                    log.error("Could not read the trust store password file.");
+                                (String) opts.get("--keystore-password-file"), e -> {
+                                    log.error("Could not read the key store password file.");
                                     System.exit(1);
                                 },
                                 (String) opts.get("--truststore"), e -> {
                                     log.error("Could not load keys from the trust store.");
+                                    System.exit(1);
+                                },
+                                (String) opts.get("--truststore-password-file"), e -> {
+                                    log.error("Could not read the trust store password file.");
                                     System.exit(1);
                                 });
             } catch (Exception ex) {
@@ -260,6 +266,8 @@ public class CorfuServer {
                 System.exit(1);
             }
         }
+
+        Boolean saslPlainTextAuth = (Boolean) opts.get("--enable-sasl-plain-text-auth");
 
         // Create the event loops responsible for servicing inbound messages.
         EventLoopGroup bossGroup;
@@ -317,11 +325,16 @@ public class CorfuServer {
                                 SSLEngine engine = sslContext.newEngine(ch.alloc());
                                 engine.setEnabledCipherSuites(enabledTlsCipherSuites);
                                 engine.setEnabledProtocols(enabledTlsProtocols);
-                                engine.setNeedClientAuth(true);
+                                if (tlsMutualAuthEnabled) {
+                                    engine.setNeedClientAuth(true);
+                                }
                                 ch.pipeline().addLast("ssl", new SslHandler(engine));
                             }
                             ch.pipeline().addLast(new LengthFieldPrepender(4));
                             ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4));
+                            if (saslPlainTextAuth) {
+                                ch.pipeline().addLast("sasl/plain-text", new PlainTextSaslNettyServer());
+                            }
                             ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
                             ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
                             ch.pipeline().addLast(ee, router);
