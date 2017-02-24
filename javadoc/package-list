@@ -12,6 +12,9 @@ org.corfudb.runtime.object.transactions
 org.corfudb.runtime.view
 org.corfudb.runtime.view.stream
 org.corfudb.samples
+org.corfudb.security.sasl
+org.corfudb.security.sasl.plaintext
+org.corfudb.security.tls
 org.corfudb.shell
 org.corfudb.util
 org.corfudb.util.retry
