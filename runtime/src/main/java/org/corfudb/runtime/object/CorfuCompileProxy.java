@@ -195,7 +195,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     public void syncObjectUnsafe(VersionLockedObject<T> underlyingObject,
                                       long timestamp) {
-        Arrays.stream(underlyingObject.getStreamViewUnsafe().readTo(timestamp))
+        underlyingObject.getStreamViewUnsafe().remainingUpTo(timestamp).stream()
             // Turn this into a flat stream of SMR entries
             .filter(m -> m.getType() == DataType.DATA)
             .filter(m -> m.getPayload(rt) instanceof ISMRConsumable)
@@ -259,7 +259,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // If we aren't in a transaction, we can just write the modification.
         // We need to add the acquired token into the pending upcall list.
         SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
-        long address = underlyingObject.getStreamViewUnsafe().acquireAndWrite(smrEntry, t -> {
+        long address = underlyingObject.getStreamViewUnsafe().append(smrEntry, t -> {
                 pendingUpcalls.add(t.getToken());
                 return true;
             }, t -> {

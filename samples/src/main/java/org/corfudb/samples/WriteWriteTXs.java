@@ -87,7 +87,9 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
         // start NUM_THREADS threads and trigger activity in each
         for (int t = 0; t < NUM_THREADS; t++) {
             final int threadNum = t;
-            tList.add(new Thread(() -> mixedReadWriteLoad2(threadNum, READ_PERCENT)));
+            //disabled.
+          //  tList.add(new Thread(() -> mixedReadWriteLoad2(threadNum,
+          //          READ_PERCENT)));
             tList.get(t).start();
         }
 
@@ -226,6 +228,9 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
      *
      * @param readPrecent ratio of reads (to 100)
      */
+    // This sample is currently not working, because snapshots for non read-only
+    // transactions don't work.
+    /*
     void mixedReadWriteLoad2(int threadNum, int readPrecent) {
         System.out.print("running mixedRWload2..");
         long startt = System.currentTimeMillis();
@@ -235,7 +240,7 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
         long snapTime = getCorfuRuntime()
                 .getStreamsView()
                 .get(getCorfuRuntime().getStreamID("A"))
-                .check();
+                .;
 
         for (int i = 0; i < NUM_BATCHES; i++) synchronized (map1) {
             System.out.print(".");
@@ -288,5 +293,6 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
         System.out.println(threadNum
                 + ":   #aborts/#TXs: " + aborts.get() + "/" + numTasks);
     }
+    */
 
 }

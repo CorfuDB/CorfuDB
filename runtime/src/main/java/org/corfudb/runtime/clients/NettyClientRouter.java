@@ -120,7 +120,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     /**
      * The currently registered channel.
      */
-    public Channel channel;
+    public Channel channel = null;
     /**
      * The worker group for this router.
      */
@@ -322,17 +322,26 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             try {
                 connectChannel(b, c);
             } catch (Exception e) {
+
+                try {
+                    // shutdown EventLoopGroup
+                    workerGroup.shutdownGracefully().sync();
+                } catch (InterruptedException ie) {
+
+                }
                 throw new NetworkException(e.getClass().getSimpleName() +
-                        " connecting to endpoint", host + ":" + port, e);
+                        " connecting to endpoint failed", host + ":" + port, e);
             }
         }
     }
 
-    synchronized void connectChannel(Bootstrap b, long c) {
+    synchronized void connectChannel(Bootstrap b, long c)
+    throws InterruptedException {
         ChannelFuture cf = b.connect(host, port);
         cf.syncUninterruptibly();
         if (!cf.awaitUninterruptibly(timeoutConnect)) {
-            throw new NetworkException(c + " Timeout connecting to endpoint", host + ":" + port);
+            cf.channel().close();   // close port
+            throw new NetworkException(c + " Timeout connectChannel to endpoint", host + ":" + port);
         }
         channel = cf.channel();
         channel.closeFuture().addListener((r) -> {

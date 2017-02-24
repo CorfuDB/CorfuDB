@@ -3,7 +3,7 @@ package org.corfudb.integration;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.StreamView;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -41,25 +41,25 @@ public class StreamIT {
 
         UUID streamId = CorfuRuntime.getStreamID(Integer.toString(rand.nextInt()));
 
-        StreamView s1 = rt.getStreamsView().get(streamId);
+        IStreamView s1 = rt.getStreamsView().get(streamId);
 
         // Verify that the stream is empty
-        assertThat(s1.check()).isEqualTo(-1);
+        assertThat(s1.hasNext())
+                .isFalse();
 
-
-        // Generate and write random data
+        // Generate and append random data
         int entrySize = Integer.valueOf(properties.getProperty("largeEntrySize"));
         final int numEntries = 100;
         byte[][] data = new byte[numEntries][entrySize];
 
         for(int x = 0; x < numEntries; x++) {
             rand.nextBytes(data[x]);
-            s1.write(data[x]);
+            s1.append(data[x]);
         }
 
         // Read back the data and verify it is correct
         for(int x = 0; x < numEntries; x++) {
-            ILogData entry = s1.read(x);
+            ILogData entry = s1.nextUpTo(x);
             byte[] tmp = (byte[]) entry.getPayload(rt);
 
             assertThat(tmp).isEqualTo(data[x]);

@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
 import java.util.concurrent.CountDownLatch;
@@ -72,7 +73,7 @@ public class LayoutViewTest extends AbstractViewTest {
 
         r.invalidateLayout();
 
-        r.getStreamsView().get(CorfuRuntime.getStreamID("hi")).check();
+        r.getStreamsView().get(CorfuRuntime.getStreamID("hi")).hasNext();
     }
 
     /**
@@ -153,8 +154,8 @@ public class LayoutViewTest extends AbstractViewTest {
         t.start();
 
         // verify writes and reads happen before and after the reconfiguration
-        StreamView sv = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
-        // This write will happen before the reconfiguration while the read for this write
+        IStreamView sv = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
+        // This append will happen before the reconfiguration while the read for this append
         // will happen after reconfiguration
         writeAndReadStream(corfuRuntime, sv, startReconfigurationLatch, layoutReconfiguredLatch);
         // Write and read after reconfiguration.
@@ -162,13 +163,13 @@ public class LayoutViewTest extends AbstractViewTest {
         t.join();
     }
 
-    private void writeAndReadStream(CorfuRuntime corfuRuntime, StreamView sv, CountDownLatch startReconfigurationLatch, CountDownLatch layoutReconfiguredLatch) throws InterruptedException {
+    private void writeAndReadStream(CorfuRuntime corfuRuntime, IStreamView sv, CountDownLatch startReconfigurationLatch, CountDownLatch layoutReconfiguredLatch) throws InterruptedException {
         byte[] testPayload = "hello world".getBytes();
-        sv.write(testPayload);
+        sv.append(testPayload);
         startReconfigurationLatch.countDown();
         layoutReconfiguredLatch.await();
-        assertThat(sv.read().getPayload(corfuRuntime)).isEqualTo("hello world".getBytes());
-        assertThat(sv.read()).isEqualTo(null);
+        assertThat(sv.next().getPayload(corfuRuntime)).isEqualTo("hello world".getBytes());
+        assertThat(sv.next()).isEqualTo(null);
     }
 
 }

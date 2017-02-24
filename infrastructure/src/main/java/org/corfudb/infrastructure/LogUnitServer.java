@@ -57,7 +57,7 @@ import static org.corfudb.infrastructure.ServerContext.SMALL_INTERVAL;
  * <p>
  * All reads and writes go through a cache. For persistence, every 10,000 log entries are written to individual
  * files (logs), which are represented as FileHandles. Each FileHandle contains a pointer to the tail of the file, a
- * memory-mapped file channel, and a set of addresses known to be in the file. To write an entry, the pointer to the
+ * memory-mapped file channel, and a set of addresses known to be in the file. To append an entry, the pointer to the
  * tail is first extended to the length of the entry, and the entry is added to the set of known addresses. A header
  * is written, which consists of the ASCII characters LE, followed by a set of flags, the log unit address, the size
  * of the entry, then the metadata size, metadata and finally the entry itself. When the entry is complete, a written
@@ -151,7 +151,8 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("log write: global: {}, streams: {}, backpointers: {}", msg.getPayload().getGlobalAddress(),
+        log.debug("log write: global: {}, streams: {}, backpointers: {}", msg
+                        .getPayload().getGlobalAddress(),
                 msg.getPayload().getStreamAddresses(), msg.getPayload().getData().getBackpointerMap());
         // clear any commit record (or set initially to false).
         msg.getPayload().clearCommit();
@@ -207,7 +208,9 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.READ_REQUEST)
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("log read: {} {}", msg.getPayload().getStreamID(), msg.getPayload().getRange());
+        log.trace("log read: {} {}", msg.getPayload().getStreamID()  == null
+                        ? "global" : msg.getPayload().getStreamID(),
+                msg.getPayload().getRange());
         ReadResponse rr = new ReadResponse();
         try {
             for (Long l = msg.getPayload().getRange().lowerEndpoint();
@@ -264,7 +267,7 @@ public class LogUnitServer extends AbstractServer {
      * @param logAddress The address to retrieve the entry from.
      * @return The log unit entry to retrieve into the cache.
      * This function should not care about trimmed addresses, as that is handled in
-     * the read() and write(). Any address that cannot be retrieved should be returned as
+     * the read() and append(). Any address that cannot be retrieved should be returned as
      * unwritten (null).
      */
     public synchronized LogData handleRetrieval(LogAddress logAddress) {

@@ -19,7 +19,7 @@ public interface ICorfuSMRProxyInternal<T> extends ICorfuSMRProxy<T> {
     /** Sync the object forward. At the end of the call, the version
      * locked object will be at the version given in the timestamp.
      *
-     * Unsafe, so ensure the write lock has been taken on the object
+     * Unsafe, so ensure the append lock has been taken on the object
      * before calling.
      * @param object        The object to sync forward.
      * @param timestamp     The timestamp to sync it to.
@@ -28,7 +28,7 @@ public interface ICorfuSMRProxyInternal<T> extends ICorfuSMRProxy<T> {
 
     /** Reset the object to it's original initialized state.
      *
-     * Unsafe, so ensure the write lock has been taken on the object
+     * Unsafe, so ensure the append lock has been taken on the object
      * before calling.
      * @param object        The object to sync forward.
      */

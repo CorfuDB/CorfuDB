@@ -164,7 +164,8 @@ public class LogUnitClient implements IClient {
      *
      * @param address        The address to write to.
      * @param streams        The streams, if any, that this write belongs to.
-     * @param rank           The rank of this write (used for quorum replication).
+     * @param rank           The rank of this write (used for quorum
+     *                       replication).
      * @param writeObject    The object, pre-serialization, to write.
      * @param backpointerMap The map of backpointers to write.
      * @return A CompletableFuture which will complete with the WriteResult once the
@@ -187,7 +188,8 @@ public class LogUnitClient implements IClient {
      *
      * @param address        The address to write to.
      * @param streams        The streams, if any, that this write belongs to.
-     * @param rank           The rank of this write (used for quorum replication).
+     * @param rank           The rank of this write (used for quorum
+     *                       replication).
      * @param buffer         The object, post-serialization, to write.
      * @param backpointerMap The map of backpointers to write.
      * @return A CompletableFuture which will complete with the WriteResult once the

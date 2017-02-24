@@ -4,7 +4,7 @@ import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.StreamView;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
 import java.util.Map;
@@ -90,11 +90,7 @@ public class CompileProxyTest extends AbstractViewTest {
         // track the raw stream updates caused by the execution so far
         ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = (ICorfuSMR<CorfuSharedCounter>) sharedCounter;
         ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
-        StreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
-
-        // check that stream received 'concurrency' number of updates
-        assertThat(objStream.check())
-                .isEqualTo(concurrency);
+        IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
         int beforeSync, afterSync;
 
@@ -157,7 +153,7 @@ public class CompileProxyTest extends AbstractViewTest {
      * the test interleaves reads and writes to a shared counter.
      *
      * The test uses the interleaving engine to interleave numTasks*threads state machines.
-     * A simple state-machine is built. It randomly chooses to either read or write the counter.
+     * A simple state-machine is built. It randomly chooses to either read or append the counter.
      * On a read, the last written value is expected.
      *
      * @throws Exception
@@ -181,7 +177,7 @@ public class CompileProxyTest extends AbstractViewTest {
         assertThat(sharedCounter.getValue())
                 .isEqualTo(lastUpdate.get());
 
-        // only one step: randomly choose between read/write of the shared counter
+        // only one step: randomly choose between read/append of the shared counter
         addTestStep ((task_num) -> {
             if (r.nextBoolean()) {
                 sharedCounter.setValue(task_num);
@@ -196,11 +192,11 @@ public class CompileProxyTest extends AbstractViewTest {
     }
 
     /**
-     * the test is similar to the interleaved read/write above to a shared counter.
-     * in addition to checking read/write values, it tracks the raw stream state between updates and syncs.
+     * the test is similar to the interleaved read/append above to a shared counter.
+     * in addition to checking read/append values, it tracks the raw stream state between updates and syncs.
      *
      * The test uses the interleaving engine to interleave numTasks*threads state machines.
-     * A simple state-machine is built. It randomly chooses to either read or write the counter.
+     * A simple state-machine is built. It randomly chooses to either read or append the counter.
      * On a read, the last written value is expected.
      *
      * @throws Exception
@@ -218,7 +214,7 @@ public class CompileProxyTest extends AbstractViewTest {
 
         ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = (ICorfuSMR<CorfuSharedCounter>)  sharedCounter;
         ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
-        StreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
+        IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
         int numTasks = PARAMETERS.NUM_ITERATIONS_LOW;
         Random r = new Random(PARAMETERS.SEED);
@@ -236,12 +232,8 @@ public class CompileProxyTest extends AbstractViewTest {
 
         // build a state-machine:
 
-        // only one step: randomly choose between read/write of the shared counter
+        // only one step: randomly choose between read/append of the shared counter
         addTestStep((task_num) -> {
-
-            // check that stream has the expected number of entries: number of updates - 1
-            assertThat(objStream.check())
-                    .isEqualTo(lastUpdateStreamPosition.get());
 
             if (r.nextBoolean()) {
                 sharedCounter.setValue(task_num);
@@ -400,7 +392,7 @@ public class CompileProxyTest extends AbstractViewTest {
         // for tracking raw stream status
         ICorfuSMR<CorfuCompoundObj> compiledCorfuCompound = (ICorfuSMR<CorfuCompoundObj>) sharedCorfuCompound;
         ICorfuSMRProxyInternal<CorfuCompoundObj> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuCompoundObj>) compiledCorfuCompound.getCorfuSMRProxy();
-        StreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
+        IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
         // initialization
         sharedCorfuCompound.set(sharedCorfuCompound.new Inner("E" + 0, "F" + 0), 0);
@@ -414,10 +406,6 @@ public class CompileProxyTest extends AbstractViewTest {
         // step 1: update the shared compound to task-specific value
         addTestStep((task_num) -> {
             sharedCorfuCompound.set(sharedCorfuCompound.new Inner("C" + task_num, "D" + task_num), task_num);
-
-            // check that the raw-stream offset reflects that 'task_num' updates have been made
-            assertThat(objStream.check())
-                    .isEqualTo(task_num+1);
         });
 
         // step 2: check the unsync'ed in-memory object state
