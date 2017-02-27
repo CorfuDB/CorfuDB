@@ -97,23 +97,11 @@ public interface IStreamView extends Iterator<ILogData> {
      *  will return an empty list. If there  are holes present in the log,
      *  they will be filled.
      *
-     *  Note: the default implementation is thread-safe only if the
-     *  implementation of read is synchronized.
-     *
      * @param maxGlobal The maximum global address to read up to.
      * @return          The next entries in the stream, or an empty list,
      *                  if no entries are available.
      */
-    default List<ILogData> remainingUpTo(long maxGlobal) {
-        synchronized (this) {
-            final List<ILogData> dataList = new ArrayList<>();
-            ILogData thisData;
-            while ((thisData = nextUpTo(maxGlobal)) != null) {
-                dataList.add(thisData);
-            }
-            return dataList;
-        }
-    }
+    List<ILogData> remainingUpTo(long maxGlobal);
 
     /** Returns whether or not there are potentially more entries in this
      * stream - this function may return true even if there are no entries
