@@ -288,6 +288,11 @@ public class ManagementServer extends AbstractServer {
                     (String) opts.get("--keystore-password-file"),
                     (String) opts.get("--truststore"),
                     (String) opts.get("--truststore-password-file"));
+                if ((Boolean) opts.get("--enable-sasl-plain-text-auth")) {
+                    corfuRuntime.enableSaslPlainText(
+                        (String) opts.get("--sasl-plain-text-username-file"),
+                        (String) opts.get("--sasl-plain-text-password-file"));
+                }
             }
             // Runtime can be set up either using the layout or the bootstrapEndpoint address.
             if (latestLayout != null)

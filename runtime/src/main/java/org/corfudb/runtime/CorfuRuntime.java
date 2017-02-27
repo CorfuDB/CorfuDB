@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.view.AddressSpaceView;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
  * Created by mwei on 12/9/15.
  */
 @Slf4j
+@Accessors(chain = true)
 public class CorfuRuntime {
 
     /**
@@ -82,11 +84,20 @@ public class CorfuRuntime {
      */
     @Getter
     public int maxCacheSize = 100_000_000;
+
     /**
      * Whether or not to disable backpointers.
      */
     @Getter
     public boolean backpointersDisabled = false;
+
+    /**
+     * If hole filling is disabled.
+     */
+    @Getter
+    @Setter
+    public boolean holeFillingDisabled = false;
+
     /**
      * Notifies that the runtime is no longer used
      * and async retries to fetch the layout can be stopped.
@@ -99,6 +110,10 @@ public class CorfuRuntime {
     private String ksPasswordFile;
     private String trustStore;
     private String tsPasswordFile;
+
+    private boolean saslPlainTextEnabled = false;
+    private String usernameFile;
+    private String passwordFile;
 
     /**
      * When set, overrides the default getRouterFunction. Used by the testing
@@ -124,8 +139,9 @@ public class CorfuRuntime {
         String host = address.split(":")[0];
         Integer port = Integer.parseInt(address.split(":")[1]);
         // Generate a new router, start it and add it to the table.
-        NettyClientRouter router = new NettyClientRouter(host, port, tlsEnabled, keyStore,
-            ksPasswordFile, trustStore, tsPasswordFile);
+        NettyClientRouter router = new NettyClientRouter(host, port,
+            tlsEnabled, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
+            saslPlainTextEnabled, usernameFile, passwordFile);
         log.debug("Connecting to new router {}:{}", host, port);
         try {
             router.addClient(new LayoutClient())
@@ -157,15 +173,22 @@ public class CorfuRuntime {
         this.parseConfigurationString(configurationString);
     }
 
-    public void enableTls(String keyStore, String ksPasswordFile, String trustStore,
+    public CorfuRuntime enableTls(String keyStore, String ksPasswordFile, String trustStore,
         String tsPasswordFile) {
         this.keyStore = keyStore;
         this.ksPasswordFile = ksPasswordFile;
         this.trustStore = trustStore;
         this.tsPasswordFile = tsPasswordFile;
         this.tlsEnabled = true;
+        return this;
     }
 
+    public CorfuRuntime enableSaslPlainText(String usernameFile, String passwordFile) {
+        this.usernameFile = usernameFile;
+        this.passwordFile = passwordFile;
+        this.saslPlainTextEnabled = true;
+        return this;
+    }
     /**
      * Shuts down the CorfuRuntime.
      * Stops async tasks from fetching the layout.

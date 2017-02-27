@@ -5,13 +5,16 @@
 
 (def usage "corfu_ping, ping Corfu servers.
 Usage:
-  corfu_ping [<endpoint>...] [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>]]
+  corfu_ping [<endpoint>...] [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]]
 Options:
   -e, --enable-tls                                                                       Enable TLS.
   -u <keystore>, --keystore=<keystore>                                                   Path to the key store.
   -f <keystore_password_file>, --keystore-password-file=<keystore_password_file>         Path to the file containing the key store password.
   -r <truststore>, --truststore=<truststore>                                             Path to the trust store.
   -w <truststore_password_file>, --truststore-password-file=<truststore_password_file>   Path to the file containing the trust store password.
+  -g, --enable-sasl-plain-text-auth                                                      Enable SASL Plain Text Authentication.
+  -o <username_file>, --sasl-plain-text-username-file=<username_file>                    Path to the file containing the username for SASL Plain Text Authentication.
+  -j <password_file>, --sasl-plain-text-password-file=<password_file>                    Path to the file containing the password for SASL Plain Text Authentication.
   -h, --help     Show this screen.
 ")
 
