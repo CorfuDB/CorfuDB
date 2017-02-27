@@ -267,6 +267,14 @@ public class LogUnitClient implements IClient {
                 CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(streamID, address)));
     }
 
+    /**
+     * Flush the log unit server's current pending writes.
+     * @return A Completable future which will complete once the flush is successful.
+     */
+    public CompletableFuture<Boolean> flush() {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.FLUSH_LOGUNIT.msg());
+    }
+
 
     /**
      * Force the garbage collector to begin garbage collection.

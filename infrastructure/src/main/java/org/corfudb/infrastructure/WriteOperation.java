@@ -15,6 +15,18 @@ public class WriteOperation {
     private final LogAddress logAddress;
     private final LogData logData;
     private final CompletableFuture future;
+    private final Boolean flush;
+
+    public WriteOperation(LogAddress logAddress, LogData logData, CompletableFuture future, Boolean flush) {
+        this.logAddress = logAddress;
+        this.logData = logData;
+        this.future = future;
+        this.flush = flush;
+    }
+
+    public WriteOperation(LogAddress logAddress, LogData logData, CompletableFuture future) {
+        this(logAddress, logData, future, false);
+    }
 
     public static WriteOperation SHUTDOWN = new WriteOperation(null, null, null);
 }
