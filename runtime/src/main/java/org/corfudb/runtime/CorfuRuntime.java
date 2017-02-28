@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.view.AddressSpaceView;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
  * Created by mwei on 12/9/15.
  */
 @Slf4j
+@Accessors(chain = true)
 public class CorfuRuntime {
 
     /**
@@ -82,11 +84,20 @@ public class CorfuRuntime {
      */
     @Getter
     public int maxCacheSize = 100_000_000;
+
     /**
      * Whether or not to disable backpointers.
      */
     @Getter
     public boolean backpointersDisabled = false;
+
+    /**
+     * If hole filling is disabled.
+     */
+    @Getter
+    @Setter
+    public boolean holeFillingDisabled = false;
+
     /**
      * Notifies that the runtime is no longer used
      * and async retries to fetch the layout can be stopped.
