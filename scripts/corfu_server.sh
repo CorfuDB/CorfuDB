@@ -19,7 +19,7 @@ DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
 if ls "${DIR}"/../target/*.jar > /dev/null 2>&1; then
   # echo "Running from development source"
-  CLASSPATH=("${DIR}"/../infrastructure/target/infrastructure-*-shaded.jar)
+  CLASSPATH=("${DIR}"/../infrastructure/target/nsx-corfu-*-shaded.jar)
 else
   CLASSPATH=("${CORFUDB_PREFIX}"/share/corfu/lib/*.jar)
 fi
