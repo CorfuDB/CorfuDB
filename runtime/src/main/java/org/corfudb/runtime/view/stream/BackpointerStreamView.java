@@ -193,6 +193,21 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     }
                 }
 
+                // If hole filling is disabled, we will retry forever.
+                if (runtime.isHoleFillingDisabled()) {
+                    int i = 0; // For exponential backoff.
+                    while (currentEntry.getType() == DataType.EMPTY) {
+                        currentEntry =
+                                runtime.getAddressSpaceView().read(currentRead);
+                        try {
+                            Thread.sleep(1 << i);
+                            i++;
+                        } catch (InterruptedException ie) {
+                            throw new RuntimeException(ie);
+                        }
+                    }
+                }
+
                 // If we STILL don't have the data, now we need to do a hole
                 // fill.
                 if (currentEntry.getType() == DataType.EMPTY) {
