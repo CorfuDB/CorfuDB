@@ -251,6 +251,18 @@ public class SequencerServer extends AbstractServer {
     }
 
     /**
+     * Service an incoming request to reset the sequencer.
+     */
+    @ServerHandler(type=CorfuMsgType.RESET_SEQUENCER, opTimer=metricsPrefix + "reset")
+    public synchronized void resetServer(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r,
+                                         boolean isMetricsEnabled) {
+        long initialToken = msg.getPayload();
+        globalLogTail.set(initialToken);
+        log.info("Sequencer reset with token = {}", initialToken);
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+    /**
      * Service an incoming token request.
      */
     @ServerHandler(type=CorfuMsgType.TOKEN_REQ, opTimer=metricsPrefix + "token-req")

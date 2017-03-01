@@ -1,15 +1,11 @@
 package org.corfudb.runtime.clients;
 
-import com.google.common.collect.ImmutableSet;
 import io.netty.channel.ChannelHandlerContext;
-import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.*;
 
 import java.lang.invoke.MethodHandles;
-import java.util.Collections;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -49,4 +45,12 @@ public class SequencerClient implements IClient {
                 CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs, conflictInfo)));
     }
 
+    /**
+     * Resets the sequencer with the specified initialToken
+     * @param initialToken  Token Number which the sequencer starts distributing.
+     * @return A CompletableFuture which completes once the sequencer is reset.
+     */
+    public CompletableFuture<Boolean> reset(Long initialToken) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.RESET_SEQUENCER.payloadMsg(initialToken));
+    }
 }

@@ -1,6 +1,10 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.PurgeFailurePolicy;
+import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.ManagementClient;
@@ -104,15 +108,25 @@ public class ManagementViewTest extends AbstractViewTest {
      * Scenario with 3 nodes: SERVERS.PORT_0, SERVERS.PORT_1 and SERVERS.PORT_2.
      * We fail SERVERS.PORT_1 and then wait for one of the other two servers to
      * handle this failure, propose a new layout and we assert on the epoch change.
+     * The failure is handled by removing the failed node.
      *
      * @throws Exception
      */
     @Test
-    public void handleSingleNodeFailure()
+    public void removeSingleNodeFailure()
             throws Exception{
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
+
+        // Creating server contexts with PurgeFailurePolicies.
+        ServerContext sc0 = new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(SERVERS.PORT_0)).setPort(SERVERS.PORT_0).build();
+        ServerContext sc1 = new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(SERVERS.PORT_1)).setPort(SERVERS.PORT_1).build();
+        ServerContext sc2 = new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(SERVERS.PORT_2)).setPort(SERVERS.PORT_2).build();
+        sc0.setFailureHandlerPolicy(new PurgeFailurePolicy());
+        sc1.setFailureHandlerPolicy(new PurgeFailurePolicy());
+        sc2.setFailureHandlerPolicy(new PurgeFailurePolicy());
+
+        addServer(SERVERS.PORT_0, sc0);
+        addServer(SERVERS.PORT_1, sc1);
+        addServer(SERVERS.PORT_2, sc2);
 
         Layout l = new TestLayoutBuilder()
                 .setEpoch(1L)
