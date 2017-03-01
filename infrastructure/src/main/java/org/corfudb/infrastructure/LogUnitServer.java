@@ -147,6 +147,15 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
+     * Flush the pending writes of the log unit server.
+     * Blocks until the batchWriter is flushed.
+     */
+    public void flush() {
+        log.info("Flushing Log Unit Server BatchWriter.");
+        batchWriter.flushPendingWrites();
+    }
+
+    /**
      * Service an incoming write request.
      */
     @ServerHandler(type = CorfuMsgType.WRITE)
@@ -258,6 +267,12 @@ public class LogUnitServer extends AbstractServer {
     private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         trimMap.compute(msg.getPayload().getStream(), (key, prev) ->
                 prev == null ? msg.getPayload().getPrefix() : Math.max(prev, msg.getPayload().getPrefix()));
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+    @ServerHandler(type = CorfuMsgType.FLUSH_LOGUNIT)
+    private void flushRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        flush();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 

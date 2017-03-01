@@ -76,7 +76,7 @@ public class BatchWriter <K, V> implements CacheWriter<K, V>, AutoCloseable {
                 } else {
                     currOp = writeQueue.poll();
 
-                    if (currOp == null || processed == BATCH_SIZE || currOp == WriteOperation.SHUTDOWN) {
+                    if (currOp == null || processed == BATCH_SIZE || currOp.getFlush() || currOp == WriteOperation.SHUTDOWN) {
                         streamLog.sync();
                         log.trace("Sync'd {} writes", processed);
 
@@ -103,6 +103,22 @@ public class BatchWriter <K, V> implements CacheWriter<K, V>, AutoCloseable {
                     continue;
                 }
 
+                if (currOp.getFlush()) {
+                    log.trace("Flushing all pending writes");
+                    if (currOp.getLogAddress() == null && currOp.getLogData() == null) {
+                        currOp.getFuture().complete(null);
+                    } else {
+                        try {
+                            streamLog.append(currOp.getLogAddress(), currOp.getLogData());
+                            currOp.getFuture().complete(null);
+                        } catch (OverwriteException e) {
+                            currOp.getFuture().completeExceptionally(new OverwriteException());
+                        }
+                    }
+                    lastOp = currOp;
+                    continue;
+                }
+
                 try {
                     streamLog.append(currOp.getLogAddress(), currOp.getLogData());
                     ack.add(currOp.getFuture());
@@ -115,6 +131,30 @@ public class BatchWriter <K, V> implements CacheWriter<K, V>, AutoCloseable {
             }
         } catch (Exception e) {
             log.error("Caught exception in the write processor {}", e);
+        }
+    }
+
+    /**
+     * Issues a flush message to the writeQueue and waits for it to be processed.
+     */
+    void flushPendingWrites() {
+        CompletableFuture cf = new CompletableFuture();
+        WriteOperation flushOperation = new WriteOperation(null, null, cf, true);
+        writeQueue.add(flushOperation);
+        // Wait for flush to complete.
+        // Periodically check if a shutdown trigger is invoked to avoid deadlock.
+        while (true) {
+            try {
+                cf.get(1000, TimeUnit.MILLISECONDS);
+                break;
+            } catch (ExecutionException e) {
+                log.error("Exception while flushing queue: {}", e.getMessage());
+                break;
+            } catch (TimeoutException | InterruptedException e) {
+                if (writerService.isShutdown()) {
+                    break;
+                }
+            }
         }
     }
 
