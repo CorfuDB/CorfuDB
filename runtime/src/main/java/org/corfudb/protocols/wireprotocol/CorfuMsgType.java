@@ -54,6 +54,7 @@ public enum CorfuMsgType {
     GC_INTERVAL(36, new TypeToken<CorfuPayloadMsg<Long>>() {}),
     FORCE_COMPACT(37, TypeToken.of(CorfuMsg.class)),
     COMMIT(40, new TypeToken<CorfuPayloadMsg<CommitRequest>>() {}),
+    FLUSH_LOGUNIT(41, TypeToken.of(CorfuMsg.class)),
 
     WRITE_OK(50, TypeToken.of(CorfuMsg.class)),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),

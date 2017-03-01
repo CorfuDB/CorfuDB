@@ -77,6 +77,7 @@ public class Layout implements Cloneable {
 
     /**
      * Move each server in the system to the epoch of this layout.
+     * Flushes the current state of each server.
      *
      * @throws WrongEpochException If any server is in a higher epoch.
      */
@@ -88,6 +89,22 @@ public class Layout implements Cloneable {
                 .map(runtime::getRouter)
                 .map(x -> x.getClient(BaseClient.class))
                 .forEach(x -> CFUtils.getUninterruptibly(x.setRemoteEpoch(epoch)));
+        flushServers();
+    }
+
+    /**
+     *  Flushes all the servers.
+     */
+    public void flushServers() {
+        // TODO: Flush Sequencer servers
+        getSegments().forEach(
+                layoutSegment -> layoutSegment.getStripes().forEach(
+                        layoutStripe -> layoutStripe.getLogServers().stream()
+                                .map(runtime::getRouter)
+                                .map(x -> x.getClient(LogUnitClient.class))
+                                .forEach(x -> CFUtils.getUninterruptibly(x.flush()))
+                )
+        );
     }
 
     /**
