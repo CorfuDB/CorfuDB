@@ -164,14 +164,27 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
             // Simple failure detector: Is there a change in health?
             for (int i = 0; i < historyServers.length; i++) {
                 // TODO: Be a bit smarter than 'more than 2 failures in a row'
+                // The count remains within the interval 0 <= failureCount <= failedPollLimit(3)
                 is_up = !(historyPollFailures[i] >= failedPollLimit);
-                if (is_up != historyStatus.get(historyServers[i])) {
+                // Toggle if server was up and now not responding
+                if (!is_up) {
                     log.debug("Change of status: " + historyServers[i] + " " +
                             historyStatus.get(historyServers[i]) + " -> " + is_up);
                     status_change.put(historyServers[i], is_up);
-
-                    // Resetting the failure counter.
-                    historyPollFailures[i] = 0;
+                    historyStatus.put(historyServers[i], is_up);
+                    historyPollFailures[i]--;
+                } else if (!historyStatus.get(historyServers[i])) {
+                    // If server was down but now responsive so wait till reaches lower watermark (0).
+                    if (historyPollFailures[i] > 0) {
+                        if (--historyPollFailures[i] == 0) {
+                            log.debug("Change of status: " + historyServers[i] + " " +
+                                    historyStatus.get(historyServers[i]) + " -> " + true);
+                            historyStatus.put(historyServers[i], true);
+                        } else {
+                            // Server still down
+                            status_change.put(historyServers[i], false);
+                        }
+                    }
                 }
             }
 

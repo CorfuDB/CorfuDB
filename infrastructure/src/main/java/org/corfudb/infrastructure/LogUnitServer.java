@@ -144,6 +144,15 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
+     * Service an incoming request for maximum global address the log unit server has written.
+     * This value is not persisted and only maintained in memory.
+     */
+    @ServerHandler(type = CorfuMsgType.TAIL_REQUEST, opTimer = metricsPrefix + "tailReq")
+    public void handleTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+        r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(batchWriter.getMaxAddressGlobalTail()));
+    }
+
+    /**
      * Service an incoming write request.
      */
     @ServerHandler(type = CorfuMsgType.WRITE, opTimer = metricsPrefix + "write")

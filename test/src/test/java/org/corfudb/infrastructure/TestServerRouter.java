@@ -13,13 +13,10 @@ import org.corfudb.runtime.clients.TestChannelContext;
 import org.corfudb.runtime.clients.TestRule;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 12/13/15.
@@ -125,11 +122,15 @@ public class TestServerRouter implements IServerRouter {
 
     public void sendServerMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
         AbstractServer as = handlerMap.get(msg.getMsgType());
-        if (as != null) {
-            as.handleMessage(msg, ctx, this);
-        }
-        else {
-            log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
+        if (validateEpoch(msg, ctx)) {
+            if (as != null) {
+                as.handleMessage(msg, ctx, this);
+            }
+            else {
+                log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
+            }
+        } else {
+            log.trace("Message with wrong epoch {}, expected {}", msg.getEpoch(), serverEpoch);
         }
     }
 

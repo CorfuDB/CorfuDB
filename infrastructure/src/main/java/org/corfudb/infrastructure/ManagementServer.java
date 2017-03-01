@@ -19,6 +19,7 @@ import org.corfudb.runtime.view.Layout;
 import java.lang.invoke.MethodHandles;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.*;
 
@@ -368,21 +369,39 @@ public class ManagementServer extends AbstractServer {
 
         // Get the server status from the policy and check for failures.
         Map map = failureDetectorPolicy.getServerStatus();
-        if (!map.isEmpty()) {
-            log.info("Failures detected. Failed nodes : {}", map.toString());
-            // If map not empty, failures present. Trigger handler.
-            // Check if handler has been initiated.
-            if (!startFailureHandler) {
-                log.warn("Failure Handler not yet initiated .");
-                return;
+
+        try {
+            if (!map.isEmpty()) {
+                log.info("Failures detected. Failed nodes : {}", map.toString());
+                // If map not empty, failures present. Trigger handler.
+                // Check if handler has been initiated.
+                if (!startFailureHandler) {
+                    log.warn("Failure Handler not yet initiated .");
+                    return;
+                }
+                // Check if this failure has already been recognized.
+                if (!latestLayout.getUnresponsiveServers().isEmpty()) {
+                    for (String server : latestLayout.getUnresponsiveServers()) {
+                        if (!map.containsKey(server)) {
+                            corfuRuntime.getRouter(getLocalEndpoint()).getClient(ManagementClient.class).handleFailure(map).get();
+                            return;
+                        }
+                    }
+                    log.debug("Failure already taken care of.");
+                } else {
+                    corfuRuntime.getRouter(getLocalEndpoint()).getClient(ManagementClient.class).handleFailure(map).get();
+                }
+            } else {
+                // We can safely mark the unresponsive server as normal now.
+                if (!latestLayout.getUnresponsiveServers().isEmpty()) {
+                    log.info("Received response from unresponsive server");
+                    corfuRuntime.getRouter(getLocalEndpoint()).getClient(ManagementClient.class).handleFailure(new HashMap<String, Boolean>()).get();
+                }
+                log.debug("No failures present.");
             }
-            try {
-                corfuRuntime.getRouter(getLocalEndpoint()).getClient(ManagementClient.class).handleFailure(map);
-            } catch (Exception e) {
-                log.error("Exception invoking failure handler : {}", e);
-            }
-        } else {
-            log.debug("No failures present.");
+
+        } catch (Exception e) {
+            log.error("Exception invoking failure handler : {}", e);
         }
     }
 

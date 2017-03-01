@@ -2,10 +2,15 @@ package org.corfudb.runtime.view;
 
 import org.corfudb.infrastructure.ManagementServer;
 import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.PurgeFailurePolicy;
+import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -94,15 +99,25 @@ public class ManagementViewTest extends AbstractViewTest {
      * Scenario with 3 nodes: SERVERS.PORT_0, SERVERS.PORT_1 and SERVERS.PORT_2.
      * We fail SERVERS.PORT_1 and then wait for one of the other two servers to
      * handle this failure, propose a new layout and we assert on the epoch change.
+     * The failure is handled by removing the failed node.
      *
      * @throws Exception
      */
     @Test
-    public void handleSingleNodeFailure()
+    public void removeSingleNodeFailure()
             throws Exception{
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
+
+        // Creating server contexts with PurgeFailurePolicies.
+        ServerContext sc0 = new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(SERVERS.PORT_0)).setPort(SERVERS.PORT_0).build();
+        ServerContext sc1 = new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(SERVERS.PORT_1)).setPort(SERVERS.PORT_1).build();
+        ServerContext sc2 = new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(SERVERS.PORT_2)).setPort(SERVERS.PORT_2).build();
+        sc0.setFailureHandlerPolicy(new PurgeFailurePolicy());
+        sc1.setFailureHandlerPolicy(new PurgeFailurePolicy());
+        sc2.setFailureHandlerPolicy(new PurgeFailurePolicy());
+
+        addServer(SERVERS.PORT_0, sc0);
+        addServer(SERVERS.PORT_1, sc1);
+        addServer(SERVERS.PORT_2, sc2);
 
         Layout l = new TestLayoutBuilder()
                 .setEpoch(1L)
@@ -157,5 +172,115 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(l2.getEpoch()).isEqualTo(2L);
         assertThat(l2.getLayoutServers().size()).isEqualTo(2);
         assertThat(l2.getLayoutServers().contains(SERVERS.ENDPOINT_1)).isFalse();
+    }
+
+    /**
+     * Scenario with 3 nodes: SERVERS.PORT_0, SERVERS.PORT_1 and SERVERS.PORT_2.
+     * We fail SERVERS.PORT_1 and then wait for one of the other two servers to
+     * handle this failure, propose a new layout and we assert on the epoch change.
+     * The failure is handled by ConserveFailureHandlerPolicy.
+     * No nodes are removed from the layout, but are marked unresponsive.
+     * A sequencer failover takes place where the next working sequencer is reset
+     * and made the primary.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testSequencerFailover() throws Exception {
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        addServer(SERVERS.PORT_2);
+
+        Layout l = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_2)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_2)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        bootstrapAllServers(l);
+
+        CorfuRuntime corfuRuntime = getRuntime(l).connect();
+        // Initiating all failure handlers.
+        for (String server: l.getAllServers()) {
+            corfuRuntime.getRouter(server).getClient(ManagementClient.class).initiateFailureHandler().get();
+        }
+
+        // Setting aggressive timeouts
+        List<Integer> serverPorts = new ArrayList<> ();
+        serverPorts.add(SERVERS.PORT_0);
+        serverPorts.add(SERVERS.PORT_1);
+        serverPorts.add(SERVERS.PORT_2);
+        List<String> routerEndpoints = new ArrayList<> ();
+        routerEndpoints.add(SERVERS.ENDPOINT_0);
+        routerEndpoints.add(SERVERS.ENDPOINT_1);
+        routerEndpoints.add(SERVERS.ENDPOINT_2);
+        serverPorts.forEach(serverPort -> {
+            routerEndpoints.forEach(routerEndpoint -> {
+                getManagementServer(serverPort).getCorfuRuntime().getRouter(routerEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+                getManagementServer(serverPort).getCorfuRuntime().getRouter(routerEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+                getManagementServer(serverPort).getCorfuRuntime().getRouter(routerEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            });
+        });
+
+        final long beforeFailure = 5L;
+        final long afterFailure = 10L;
+
+        IStreamView sv = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
+        byte[] testPayload = "hello world".getBytes();
+        sv.append(testPayload);
+        sv.append(testPayload);
+        sv.append(testPayload);
+        sv.append(testPayload);
+        sv.append(testPayload);
+
+        assertThat(getSequencer(SERVERS.PORT_1).getGlobalLogTail().get()).isEqualTo(beforeFailure);
+        assertThat(getSequencer(SERVERS.PORT_0).getGlobalLogTail().get()).isEqualTo(0L);
+
+        getManagementServer(SERVERS.PORT_1).shutdown();
+        addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
+
+        while (corfuRuntime.getLayoutView().getLayout().getEpoch() == l.getEpoch()) {
+            corfuRuntime.invalidateLayout();
+            Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        }
+
+        assertThat(getSequencer(SERVERS.PORT_0).getGlobalLogTail().get()).isEqualTo(beforeFailure);
+
+        sv.append(testPayload);
+        sv.append(testPayload);
+        sv.append(testPayload);
+        sv.append(testPayload);
+        sv.append(testPayload);
+
+        Layout expectedLayout = new TestLayoutBuilder()
+                .setEpoch(2L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_2)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_2)
+                .addToSegment()
+                .addToLayout()
+                .addUnresponsiveServer(SERVERS.PORT_1)
+                .build();
+
+        assertThat(getSequencer(SERVERS.PORT_0).getGlobalLogTail().get()).isEqualTo(afterFailure);
+        assertThat(corfuRuntime.getLayoutView().getLayout()).isEqualTo(expectedLayout);
+        assertThat(getSequencer(SERVERS.PORT_2).getGlobalLogTail().get()).isEqualTo(0L);
+
     }
 }
