@@ -87,11 +87,11 @@ public class LogUnitServerQuorumReplicationTest extends AbstractServerTest {
 
     @Test
     public void checkPhase1DataWithHigherRank() {
-        WriteRequest oldE = getWriteRequest(WriteMode.NORMAL.QUORUM_PHASE1, DataType.DATA_PROPOSED,  "1", 2);
+        WriteRequest oldE = getWriteRequest(WriteMode.NORMAL.QUORUM_PHASE1, DataType.DATA_PROPOSED,  "1", 1);
         sendMessage(CorfuMsgType.WRITE.payloadMsg(oldE));
         assertThat(s).containsDataAtAddress(0l);
         assertThat(s).matchesDataAtAddress(0, "1".getBytes());
-        WriteRequest newE = getWriteRequest(WriteMode.NORMAL.QUORUM_PHASE1, DataType.DATA_PROPOSED, "2", 3);
+        WriteRequest newE = getWriteRequest(WriteMode.NORMAL.QUORUM_PHASE1, DataType.DATA_PROPOSED, "2", 2);
         sendMessage(CorfuMsgType.WRITE.payloadMsg(newE));
         assertThat(s).containsDataAtAddress(0l);
         assertThat(s).matchesDataAtAddress(0, "2".getBytes());
@@ -174,11 +174,11 @@ public class LogUnitServerQuorumReplicationTest extends AbstractServerTest {
 
     @Test
     public void checkPhase2FromPhase1WithHigherRank() {
-        WriteRequest oldE = getWriteRequest(WriteMode.NORMAL.QUORUM_PHASE1, DataType.DATA_PROPOSED,  "1", 2);
+        WriteRequest oldE = getWriteRequest(WriteMode.NORMAL.QUORUM_PHASE1, DataType.DATA_PROPOSED,  "1", 1);
         sendMessage(CorfuMsgType.WRITE.payloadMsg(oldE));
         assertThat(s).containsDataAtAddress(0l);
         assertThat(s).matchesDataAtAddress(0, "1".getBytes());
-        WriteRequest newE = getWriteRequest(WriteMode.NORMAL.QUORUM_PHASE2, DataType.DATA_PROPOSED, "2", 3);
+        WriteRequest newE = getWriteRequest(WriteMode.NORMAL.QUORUM_PHASE2, DataType.DATA_PROPOSED, "2", 2);
         sendMessage(CorfuMsgType.WRITE.payloadMsg(newE));
         assertThat(s).containsDataAtAddress(0l);
         assertThat(s).matchesDataAtAddress(0, "2".getBytes());
