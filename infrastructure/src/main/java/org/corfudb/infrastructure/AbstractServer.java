@@ -6,9 +6,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
-import java.time.Duration;
-import java.util.concurrent.TimeUnit;
-
 /**
  * Created by mwei on 12/4/15.
  */
