@@ -27,8 +27,6 @@ class LogUnitServerQuorumReplicationDelegate {
     private final PrefixBasedLocalLocks locks = new PrefixBasedLocalLocks();
     private final LogUnitServer server;
 
-    private Cache<LogAddress, LogData> localCache = CacheBuilder.newBuilder().
-            concurrencyLevel(4).expireAfterWrite(5, MINUTES).build();
 
     public static final LogData PROPOSED_HOLE = new LogData(DataType.HOLE_PROPOSED);
     public static final LogData FORCED_HOLE = new LogData(DataType.HOLE);
@@ -54,6 +52,9 @@ class LogUnitServerQuorumReplicationDelegate {
     }
 
 
+
+
+
     void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("log quorum write: global: {}, streams: {}, backpointers: {}", msg
                         .getPayload().getGlobalAddress(),
@@ -69,7 +70,7 @@ class LogUnitServerQuorumReplicationDelegate {
                 return;
             }
             long msgRank = msg.getPayload().getData().getRank();
-            LogData previous = readLogData(addr);
+            LogData previous = server.dataCache.get(addr);
             if (previous != null) {
                 if (!previous.getType().isProposal()) {
                     r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg()); // no overwrite permitted
@@ -85,10 +86,10 @@ class LogUnitServerQuorumReplicationDelegate {
                         r.sendResponse(ctx, msg, CorfuMsgType.ERROR_RANK.msg());
                         return;
                     }
-                    localCache.put(addr, msg.getPayload().getData()); // for phase 1 - write only to the memory cache
+                    server.dataCache.put(addr, msg.getPayload().getData()); // for phase 1 - write only to the memory cache
                     return;
                 } else { // Phase 2 or regular write
-                    if (previous.getRank()>msgRank || (previous.getRank()>msgRank && !phase1Matches)) {
+                    if (previous.getRank()>msgRank || (previous.getRank()==msgRank && !phase1Matches)) {
                         r.sendResponse(ctx, msg, CorfuMsgType.ERROR_RANK.msg());
                         return;
                     }
@@ -114,7 +115,7 @@ class LogUnitServerQuorumReplicationDelegate {
                 r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
                 return;
             }
-            LogData previous = readLogData(addr);
+            LogData previous = server.dataCache.get(addr);
             if (previous != null) {
                 if (!previous.getType().isProposal()) {
                     r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg()); // no overwrite permitted
@@ -130,7 +131,7 @@ class LogUnitServerQuorumReplicationDelegate {
                         r.sendResponse(ctx, msg, CorfuMsgType.ERROR_RANK.msg());
                         return;
                     }
-                    localCache.put(addr, PROPOSED_HOLE); // for phase 1 - write only to the local cache
+                    server.dataCache.put(addr, PROPOSED_HOLE); // for phase 1 - write only to the local cache
                     return;
                 } else { // Phase 2 or regular write
                     if (previous.getRank()>LogData.HOLE.getRank() || !phase1Matches) {
@@ -147,12 +148,5 @@ class LogUnitServerQuorumReplicationDelegate {
     }
 
 
-    private LogData readLogData(LogAddress addr) {
-        LogData res = localCache.getIfPresent(addr);
-        if (res != null) {
-            return res;
-        }
-        return server.dataCache.get(addr);
-    }
 
 }

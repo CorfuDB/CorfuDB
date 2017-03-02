@@ -206,7 +206,7 @@ public class LogUnitServer extends AbstractServer {
                  l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
                 LogAddress logAddress = new LogAddress(l, msg.getPayload().getStreamID());
                 LogData e = dataCache.get(logAddress);
-                if (e == null) {
+                if (e == null || e.getType().isProposal()) {
                     rr.put(l, LogData.EMPTY);
                 } else if (e.getType() == DataType.HOLE) {
                     rr.put(l, LogData.HOLE);

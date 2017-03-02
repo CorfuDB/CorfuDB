@@ -5,6 +5,8 @@ enum DataType {
     EMPTY = 1;
     HOLE = 2;
     TRIMMED = 3;
+    DATA_PROPOSED = 4;
+    HOLE_PROPOSED = 5;
 }
 
 message LogEntry {

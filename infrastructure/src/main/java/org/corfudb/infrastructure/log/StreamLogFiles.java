@@ -279,13 +279,13 @@ public class StreamLogFiles implements StreamLog {
         o.flip();
 
         while (o.hasRemaining()) {
+            long filePosition = initialPosition+o.position();
 
             short magic = o.getShort();
 
             if (magic != RECORD_DELIMITER) {
                 return null;
             }
-            long filePosition = initialPosition+o.position();
 
             byte[] metadataBuf = new byte[METADATA_SIZE];
             o.get(metadataBuf);
@@ -498,10 +498,20 @@ public class StreamLogFiles implements StreamLog {
                 writeRecord(fh, logAddress.address, entry);
                 fh.getKnownAddresses().put(logAddress.address, filePos);
             } else {
+                boolean canOverwite = false;
                 if (entry.isOverwriteForced()) {
+                    canOverwite = true;
+                } else if (entry.getType().isProposal()) {
+                    LogData old = readRecord(fh, logAddress.getAddress());
+                    if (old.getType().isProposal()) {
+                        canOverwite = true;
+                    }
+                }
+                if (canOverwite) {
                     long posToTrim = fh.getKnownAddresses().get(logAddress.address);
                     writeRecord(fh, logAddress.address, entry);
                     fh.getTrimmedFilePositions().add(posToTrim);
+                    addTrimmedPosition(fh, posToTrim);
                     fh.getKnownAddresses().put(logAddress.address, filePos);
                 } else {
                     throw new OverwriteException();
