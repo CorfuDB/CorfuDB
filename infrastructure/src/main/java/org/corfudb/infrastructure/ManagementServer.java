@@ -45,6 +45,8 @@ public class ManagementServer extends AbstractServer {
     private static final String PREFIX_LAYOUT = "M_LAYOUT";
     private static final String KEY_LAYOUT = "M_CURRENT";
 
+    private static final String metricsPrefix = "corfu.server.management-server.";
+
     private CorfuRuntime corfuRuntime;
     /**
      * Policy to be used to detect failures.
@@ -193,8 +195,9 @@ public class ManagementServer extends AbstractServer {
      * @param ctx
      * @param r
      */
-    @ServerHandler(type = CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST)
-    public synchronized void handleManagementBootstrap(CorfuPayloadMsg<Layout> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST, opTimer = metricsPrefix + "bootstrap-request")
+    public synchronized void handleManagementBootstrap(CorfuPayloadMsg<Layout> msg, ChannelHandlerContext ctx, IServerRouter r,
+                                                       boolean isMetricsEnabled) {
         if (latestLayout != null) {
             // We are already bootstrapped, bootstrap again is not allowed.
             log.warn("Got a request to bootstrap a server which is already bootstrapped, rejecting!");
@@ -214,8 +217,9 @@ public class ManagementServer extends AbstractServer {
      * @param ctx
      * @param r
      */
-    @ServerHandler(type = CorfuMsgType.MANAGEMENT_START_FAILURE_HANDLER)
-    public synchronized void initiateFailureHandler(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.MANAGEMENT_START_FAILURE_HANDLER, opTimer = metricsPrefix + "start-failure-handler")
+    public synchronized void initiateFailureHandler(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r,
+                                                    boolean isMetricsEnabled) {
         if (isShutdown()) {
             log.warn("Management Server received {} but is shutdown.", msg.getMsgType().toString());
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
@@ -241,8 +245,9 @@ public class ManagementServer extends AbstractServer {
      * @param ctx
      * @param r
      */
-    @ServerHandler(type = CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)
-    public synchronized void handleFailureDetectedMsg(CorfuPayloadMsg<FailureDetectorMsg> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.MANAGEMENT_FAILURE_DETECTED, opTimer = metricsPrefix + "failure-detected")
+    public synchronized void handleFailureDetectedMsg(CorfuPayloadMsg<FailureDetectorMsg> msg, ChannelHandlerContext ctx, IServerRouter r,
+                                                      boolean isMetricsEnabled) {
         if (isShutdown()) {
             log.warn("Management Server received {} but is shutdown.", msg.getMsgType().toString());
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
@@ -266,8 +271,9 @@ public class ManagementServer extends AbstractServer {
      * @param ctx
      * @param r
      */
-    @ServerHandler(type = CorfuMsgType.HEARTBEAT_REQUEST)
-    public void handleHearbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.HEARTBEAT_REQUEST, opTimer = metricsPrefix + "heartbeat-request")
+    public void handleHearbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r,
+                                      boolean isMetricsEnabled) {
         // Currently builds a default instance of the model.
         // TODO: Collect metrics from Layout, Sequencer and LogUnit Servers.
         NodeMetrics nodeMetrics = NodeMetrics.getDefaultInstance();

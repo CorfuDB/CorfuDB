@@ -60,6 +60,17 @@ public class MetricsUtils {
     }
 
     /**
+     * Check if the metricsReportingSetup() function has been called
+     * on 'metrics' before now.
+     *
+     * @param metrics
+     * @return True if metricsReportingSetup() function has been called earlier
+     */
+    public static boolean isMetricsReportingSetUp(MetricRegistry metrics) {
+        return metrics.getNames().contains(mpTrigger);
+    }
+
+    /**
      * Start metrics reporting via the Dropwizard 'CsvReporter' file writer.
      * Reporting can be turned on and off via the properties file described
      * in loadPropertiesFile()'s docs.  The report interval and report

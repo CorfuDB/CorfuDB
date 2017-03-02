@@ -5,10 +5,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
-import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
-import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
@@ -21,7 +19,6 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
 import static org.corfudb.util.MetricsUtils.addCacheGauges;
@@ -126,8 +123,7 @@ public class SequencerServer extends AbstractServer {
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
 
-    @Getter
-    static private Timer timerSeqReq;
+    private static final String metricsPrefix = "corfu.server.sequencer.";
     static private Counter counterTokenSum;
     static private Counter counterToken0;
 
@@ -143,11 +139,9 @@ public class SequencerServer extends AbstractServer {
         }
 
         MetricRegistry metrics = serverContext.getMetrics();
-        String mpSeq = "corfu.server.sequencer.";
-        timerSeqReq = metrics.timer(mpSeq + "token-req");
-        counterTokenSum = metrics.counter(mpSeq + "token-sum");
-        counterToken0 = metrics.counter(mpSeq + "token-query");
-        addCacheGauges(metrics, mpSeq + "conflict.cache.", conflictToGlobalTailCache);
+        counterTokenSum = metrics.counter(metricsPrefix + "token-sum");
+        counterToken0 = metrics.counter(metricsPrefix + "token-query");
+        addCacheGauges(metrics, metricsPrefix + "conflict.cache.", conflictToGlobalTailCache);
     }
 
     /** Get the conflict hash code for a stream ID and conflict param.
@@ -253,9 +247,10 @@ public class SequencerServer extends AbstractServer {
     /**
      * Service an incoming token request.
      */
-    @ServerHandler(type=CorfuMsgType.TOKEN_REQ)
+    @ServerHandler(type=CorfuMsgType.TOKEN_REQ, opTimer=metricsPrefix + "token-req")
     public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
-                                          ChannelHandlerContext ctx, IServerRouter r) {
+                                          ChannelHandlerContext ctx, IServerRouter r,
+                                          boolean isMetricsEnabled) {
         TokenRequest req = msg.getPayload();
 
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();

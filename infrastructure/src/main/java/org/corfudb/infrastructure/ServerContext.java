@@ -3,13 +3,13 @@ package org.corfudb.infrastructure;
 import com.codahale.metrics.MetricRegistry;
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.MetricsUtils;
 
 import java.time.Duration;
 import java.util.Map;
 
 import static org.corfudb.util.MetricsUtils.addJVMMetrics;
+import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
 /**
  * Server Context:
@@ -71,7 +71,7 @@ public class ServerContext {
         // Metrics setup & reporting configuration
         String mp = "corfu.server.";
         synchronized (metrics) {
-            if (metrics.getNames().isEmpty()) {
+            if (! isMetricsReportingSetUp(metrics)) {
                 addJVMMetrics(metrics, mp);
                 MetricsUtils.addCacheGauges(metrics, mp + "datastore.cache.", dataStore.getCache());
                 MetricsUtils.metricsReportingSetup(metrics);

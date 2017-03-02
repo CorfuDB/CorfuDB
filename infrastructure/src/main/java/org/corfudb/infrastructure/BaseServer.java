@@ -1,12 +1,10 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Timer;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
@@ -29,12 +27,7 @@ public class BaseServer extends AbstractServer {
     private final CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
 
-    @Getter
-    @Setter
-    private static Timer timerPing = new Timer();
-    @Getter
-    @Setter
-    private static Timer timerVersionRequest = new Timer();
+    private static final String metricsPrefix = "corfu.server.base.";
 
     /** Respond to a ping message.
      *
@@ -42,8 +35,8 @@ public class BaseServer extends AbstractServer {
      * @param ctx   The channel context
      * @param r     The server router.
      */
-    @ServerHandler(type=CorfuMsgType.PING)
-    private static void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type=CorfuMsgType.PING, opTimer=metricsPrefix + "ping")
+    private static void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
         r.sendResponse(ctx, msg, CorfuMsgType.PONG.msg());
     }
 
@@ -53,8 +46,8 @@ public class BaseServer extends AbstractServer {
      * @param ctx   The channel context
      * @param r     The server router.
      */
-    @ServerHandler(type=CorfuMsgType.VERSION_REQUEST)
-    private void getVersion(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type=CorfuMsgType.VERSION_REQUEST, opTimer=metricsPrefix + "version-request")
+    private void getVersion(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
         VersionInfo vi = new VersionInfo(optionsMap);
         r.sendResponse(ctx, msg, new JSONPayloadMsg<>(vi, CorfuMsgType.VERSION_RESPONSE));
     }
@@ -68,7 +61,7 @@ public class BaseServer extends AbstractServer {
      * @param r     The server router.
      */
     @ServerHandler(type=CorfuMsgType.RESET)
-    private static void doReset(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private static void doReset(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
         log.warn("Remote reset requested from client " + msg.getClientID());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         Utils.sleepUninterruptibly(500); // Sleep, to make sure that all channels are flushed...
