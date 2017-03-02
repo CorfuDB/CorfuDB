@@ -6,6 +6,9 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+
 /**
  * Created by mwei on 12/4/15.
  */
@@ -37,12 +40,6 @@ public abstract class AbstractServer {
         if (!getHandler().handle(msg, ctx, r)) {
             log.warn("Received unhandled message type {}" , msg.getMsgType());
         }
-    }
-
-    /**
-     * Flushes the current state of the server when an epoch is sealed.
-     */
-    public void flush() {
     }
 
     /**
