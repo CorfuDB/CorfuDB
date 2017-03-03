@@ -6,15 +6,18 @@ import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.*;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.util.CFUtils;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Stream;
 
 /**
@@ -46,6 +49,11 @@ public class Layout implements Cloneable {
     @Getter
     List<LayoutSegment> segments;
     /**
+     * A list of unresponsive nodes in the layout.
+     */
+    @Getter
+    List<String> unresponsiveServers;
+    /**
      * The epoch of this layout.
      */
     @Getter
@@ -61,11 +69,16 @@ public class Layout implements Cloneable {
 
     transient ConcurrentHashMap<LayoutSegment, AbstractReplicationView> replicationViewCache;
 
-    public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments, long epoch) {
+    public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments, List<String> unresponsiveServers, long epoch) {
         this.layoutServers = layoutServers;
         this.sequencers = sequencers;
         this.segments = segments;
+        this.unresponsiveServers = unresponsiveServers;
         this.epoch = epoch;
+    }
+
+    public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments, long epoch) {
+        this(layoutServers, sequencers, segments, new ArrayList<String>(), epoch);
     }
 
     /**
@@ -81,13 +94,38 @@ public class Layout implements Cloneable {
      * @throws WrongEpochException If any server is in a higher epoch.
      */
     public void moveServersToEpoch()
-            throws WrongEpochException {
+            throws WrongEpochException, QuorumUnreachableException {
         log.debug("Requested move of servers to new epoch {} servers are {}", epoch, getAllServers());
         // Collect a list of all servers in the system.
-        getAllServers().stream()
+
+        // Seal layout servers
+        CompletableFuture<Boolean>[] layoutSealFutures = getLayoutServers().stream()
                 .map(runtime::getRouter)
                 .map(x -> x.getClient(BaseClient.class))
-                .forEach(x -> CFUtils.getUninterruptibly(x.setRemoteEpoch(epoch)));
+                .map(x -> x.setRemoteEpoch(epoch))
+                .toArray(CompletableFuture[]::new);
+
+        Boolean success = false;
+        QuorumFutureFactory.CompositeFuture<Boolean> quorumFuture =
+                QuorumFutureFactory.getQuorumFuture(Boolean::compareTo, layoutSealFutures);
+        try {
+            success = quorumFuture.get();
+        } catch (ExecutionException | InterruptedException e) {
+            if (e.getCause() instanceof QuorumUnreachableException) {
+                throw (QuorumUnreachableException) e.getCause();
+            }
+        }
+        int reachableServers = (int) Arrays.stream(layoutSealFutures)
+                .filter(booleanCompletableFuture -> !booleanCompletableFuture.isCompletedExceptionally()).count();
+
+        if (!success) throw new QuorumUnreachableException(reachableServers, layoutSealFutures.length);
+
+        // Seal Log Unit Servers
+        for (LayoutSegment layoutSegment : getSegments()) {
+
+            layoutSegment.getReplicationMode().sealSegment(layoutSegment, epoch, runtime);
+
+        }
     }
 
     /**
@@ -319,10 +357,81 @@ public class Layout implements Cloneable {
     }
 
     public enum ReplicationMode {
-        CHAIN_REPLICATION,
-        QUORUM_REPLICATION,
-        REPLEX,
-        NO_REPLICATION
+        CHAIN_REPLICATION {
+
+            @Override
+            public Boolean sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime)
+                    throws QuorumUnreachableException {
+
+                Boolean success;
+
+                for (LayoutStripe layoutStripe : layoutSegment.getStripes()) {
+                    success = false;
+                    CompletableFuture<Boolean>[] logUnitSeaFutures = layoutStripe.getLogServers().stream()
+                            .map(runtime::getRouter)
+                            .map(x -> x.getClient(BaseClient.class))
+                            .map(x -> x.setRemoteEpoch(sealEpoch))
+                            .toArray(CompletableFuture[]::new);
+
+                    QuorumFutureFactory.CompositeFuture<Boolean> quorumFuture =
+                            QuorumFutureFactory.getFirstWinsFuture(Boolean::compareTo, logUnitSeaFutures);
+                    try {
+                        success = quorumFuture.get();
+                    } catch (ExecutionException | InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    if (!success) throw new QuorumUnreachableException(0, logUnitSeaFutures.length);
+                }
+                return true;
+            }
+        },
+        QUORUM_REPLICATION {
+            @Override
+            public Boolean sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime)
+                    throws QuorumUnreachableException {
+
+                Boolean success;
+
+                for (LayoutStripe layoutStripe : layoutSegment.getStripes()) {
+                    success = false;
+                    CompletableFuture<Boolean>[] logUnitSeaFutures = layoutStripe.getLogServers().stream()
+                            .map(runtime::getRouter)
+                            .map(x -> x.getClient(BaseClient.class))
+                            .map(x -> x.setRemoteEpoch(sealEpoch))
+                            .toArray(CompletableFuture[]::new);
+
+                    QuorumFutureFactory.CompositeFuture<Boolean> quorumFuture =
+                            QuorumFutureFactory.getQuorumFuture(Boolean::compareTo, logUnitSeaFutures);
+                    try {
+                        success = quorumFuture.get();
+                    } catch (ExecutionException | InterruptedException e) {
+                        if (e.getCause() instanceof QuorumUnreachableException) {
+                            throw (QuorumUnreachableException) e.getCause();
+                        }
+                    }
+
+                    int reachableServers = (int) Arrays.stream(logUnitSeaFutures)
+                            .filter(booleanCompletableFuture -> !booleanCompletableFuture.isCompletedExceptionally()).count();
+
+                    if (!success) throw new QuorumUnreachableException(reachableServers, logUnitSeaFutures.length);
+                }
+                return true;
+            }
+        },
+        REPLEX {
+            @Override
+            public Boolean sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime) {
+                throw new UnsupportedOperationException("unsupported seal");
+            }
+        },
+        NO_REPLICATION {
+            @Override
+            public Boolean sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime) {
+                throw new UnsupportedOperationException("unsupported seal");
+            }
+        };
+
+        public abstract Boolean sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime) throws QuorumUnreachableException;
     }
 
     @Data
