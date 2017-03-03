@@ -3,14 +3,17 @@ package org.corfudb.runtime.view.stream;
 import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 
-import java.util.NavigableSet;
-import java.util.TreeSet;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 /** The abstract queued stream view implements a stream backed by a read queue.
  *
@@ -78,6 +81,58 @@ public abstract class AbstractQueuedStreamView extends
         return null;
     }
 
+    /** {@inheritDoc}
+     *
+     * In the queued implementation, we just read all entries in the read queue
+     * in parallel. If there is any entry which changes the context, we cut the
+     * list off there.
+     * */
+    @Override
+    protected List<ILogData> getNextEntries(QueuedStreamContext context, long maxGlobal,
+                                            Function<ILogData, Boolean> contextCheckFn) {
+        // If we have no entries to read, fill the read queue.
+        // Return if the queue is still empty.
+        if (context.readQueue.isEmpty() &&
+                !fillReadQueue(maxGlobal, context)) {
+            return Collections.emptyList();
+        }
+
+        // If the lowest element is greater than maxGlobal, there's nothing
+        // to return.
+        if (context.readQueue.first() > maxGlobal) {
+            return Collections.emptyList();
+        }
+
+        List<ILogData> read = context.readQueue.parallelStream()
+                .filter(x -> x  <= maxGlobal)
+                .map(this::read)
+                .collect(Collectors.toList());
+
+        // Do any entries change the context?
+        if (read.stream().anyMatch(x -> contextCheckFn.apply(x))) {
+            // now we have to find the entry that changed the context...
+            int entryIndex = IntStream.range(0, read.size())
+                    .filter(index -> contextCheckFn.apply(read.get(index)))
+                    .findAny()
+                    .getAsInt();
+
+            // remove all entries after this index.
+            read.subList(entryIndex + 1, read.size()).clear();
+
+            // now fix the readQueue.
+            for (int i = 0; i <= entryIndex; i++) {
+                context.readQueue.pollFirst();
+            }
+        }
+        else {
+            context.readQueue.clear();
+        }
+
+        return read.stream().filter(x -> x.getType() == DataType.DATA)
+                .filter(x -> x.containsStream(context.id))
+                .collect(Collectors.toList());
+    }
+
     /**
      * Retrieve the data at the given address which was previously
      * inserted into the read queue.
@@ -102,6 +157,7 @@ public abstract class AbstractQueuedStreamView extends
      */
     abstract protected boolean fillReadQueue(final long maxGlobal,
                                           final QueuedStreamContext context);
+
 
     /** {@inheritDoc}
      *
