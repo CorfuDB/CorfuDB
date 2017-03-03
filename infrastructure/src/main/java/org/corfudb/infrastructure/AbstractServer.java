@@ -40,12 +40,6 @@ public abstract class AbstractServer {
     }
 
     /**
-     * Flushes the current state of the server when an epoch is sealed.
-     */
-    public void flush() {
-    }
-
-    /**
      * Shutdown the server.
      */
     public void shutdown() {
