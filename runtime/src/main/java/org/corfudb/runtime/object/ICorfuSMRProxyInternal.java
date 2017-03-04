@@ -24,7 +24,7 @@ public interface ICorfuSMRProxyInternal<T> extends ICorfuSMRProxy<T> {
      * @param object        The object to sync forward.
      * @param timestamp     The timestamp to sync it to.
      */
-    void syncObjectUnsafe(VersionLockedObject<T> object, long timestamp);
+    long syncObjectUnsafe(VersionLockedObject<T> object, long timestamp);
 
     /** Reset the object to it's original initialized state.
      *

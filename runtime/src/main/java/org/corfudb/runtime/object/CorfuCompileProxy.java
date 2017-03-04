@@ -193,7 +193,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * @param underlyingObject  The object to update.
      * @param timestamp         The timestamp to update the object to.
      */
-    public void syncObjectUnsafe(VersionLockedObject<T> underlyingObject,
+    public long syncObjectUnsafe(VersionLockedObject<T> underlyingObject,
                                       long timestamp) {
         underlyingObject.getStreamViewUnsafe().remainingUpTo(timestamp).stream()
             // Turn this into a flat stream of SMR entries
@@ -227,6 +227,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                         }
                     });
             });
+        return underlyingObject.getVersionUnsafe();
     }
 
     @Override
