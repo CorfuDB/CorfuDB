@@ -5,6 +5,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 
 import java.util.*;
 import java.util.concurrent.locks.StampedLock;
@@ -21,9 +22,6 @@ import java.util.function.BiFunction;
 @Slf4j
 public class VersionLockedObject<T> {
 
-    // maybe this shouldn't be constant.
-    static final int MAX_UNDO_SIZE = 50;
-
     /**
      * The actual underlying object.
      */
@@ -33,7 +31,6 @@ public class VersionLockedObject<T> {
      *
      */
     long version;
-    long globalVersion;
 
     /** A lock, which controls access to modifications to
      * the object. Any access to unsafe methods should
@@ -54,12 +51,12 @@ public class VersionLockedObject<T> {
     /** An undo log, which records undo entries for the object.
      *
      */
-    private Deque<SMREntry> undoLog;
+    private final Deque<SMREntry> undoLog;
 
     /** An optimistic undo log, which records undo entries for
      * optimistic changes to the object.
      */
-    private Deque<SMREntry> optimisticUndoLog;
+    private final Deque<SMREntry> optimisticUndoLog;
 
     /** True, if the object is optimistically modified.
      *
@@ -167,6 +164,84 @@ public class VersionLockedObject<T> {
         modifyingContext = null;
     }
 
+    /** Roll the object back to the supplied version if possible.
+     * This function may roll back to a point prior to the requested version.
+     * Otherwise, throws a NoRollbackException.
+     *
+     * Unsafe, requires that the caller has acquired a write lock.
+     *
+     * @param  version              The version to rollback to.
+     * @throws NoRollbackException  If the object cannot be rolled back to
+     *                              the supplied version.
+     */
+    public void rollbackUnsafe(long version) {
+        // If we're already at or before the given version, there's
+        // nothing to do
+        if (this.version <= version) {
+            return;
+        }
+
+        // If we don't have an undo log, we can't roll back.
+        if (undoLog.size() == 0) {
+            throw new NoRollbackException();
+        }
+
+        while (undoLog.size() > 0) {
+            SMREntry undoRecord = undoLog.pollFirst();
+
+            // Make sure the record is undoable.
+            // This should never happen, but if
+            // for some reason the undo log contains an
+            // undoable entry, clear the log and throw an
+            // exception.
+            if (!undoRecord.isUndoable()) {
+                undoLog.clear();
+                throw new NoRollbackException();
+            }
+
+            // Apply the undo record.
+            undoFunctionMap.get(undoRecord.getSMRMethod())
+                    .doUndo(object, undoRecord.getUndoRecord(),
+                                    undoRecord.getSMRArguments());
+
+            this.version = undoRecord.getEntry().getGlobalAddress();
+
+
+            // check if we rolled back to the requested version
+            if (this.version <= version) {
+                return;
+            }
+        }
+
+        throw new NoRollbackException();
+    }
+
+    /** Calculate the number of undo records we need to keep,
+     * possibly cleaning up the undo log, and return whether
+     * we need to keep this undo record.
+     *
+     * @return  True, if an undo record is needed in the undo log,
+     *          False otherwise.
+     */
+    public boolean needUndoRecordUnsafe() {
+        // Now get the oldest transaction in the context set.
+        long oldestVersion = TransactionalContext.getOldestSnapshot();
+
+        // If there are no active transactions, or all active transactions
+        // are after this object's version, we can just drop everything.
+        if (oldestVersion == -1L || oldestVersion > version) {
+            undoLog.clear();
+            return false;
+        }
+
+        // remove anything older than the oldest version we need
+        while (undoLog.size() > 0 &&
+                undoLog.getLast().getEntry().getGlobalAddress() < oldestVersion) {
+            undoLog.pollLast();
+        }
+
+        return true;
+    }
 
     /** Apply an SMR update to the object, possibly optimistically,
      * if set.
@@ -188,17 +263,41 @@ public class VersionLockedObject<T> {
                     undoRecordFunctionMap
                             .get(entry.getSMRMethod());
             if (undoRecordTarget != null) {
-                entry.setUndoRecord(undoRecordTarget
-                        .getUndoRecord(object, entry.getSMRArguments()));
-                entry.setUndoable(true);
-                if (isOptimistic && optimisticallyUndoable) {
+                // calculate the undo record if it doesn't exist.
+                if (!entry.isUndoable()) {
+                    entry.setUndoRecord(undoRecordTarget
+                            .getUndoRecord(object, entry.getSMRArguments()));
+                    entry.setUndoable(true);
+                }
+                // If this is a standard mutation record
+                // and (1) we are not in optimistic mode
+                // (2) the undoLog is not empty OR
+                // the undoLog is empty and we need to
+                // generate undo records add an undo
+                // record to the log.
+                if (!isOptimistic && (!undoLog.isEmpty() ||
+                        needUndoRecordUnsafe())) {
+                    undoLog.addFirst(entry);
+                }
+                // If we're in optimistic mode, add us to the
+                // optimistic undo log. (If there's a point. If
+                // the object isn't optimistically undoable anymore
+                // there's no point.)
+                else if (isOptimistic && optimisticallyUndoable) {
                     optimisticUndoLog.addFirst(entry);
                 }
             } else {
+                // We can't generate an undo record, so clear the
+                // optimistic undo log, and mark that the object is
+                // no longer optimistically undoable if we
+                // are in optimistic mode.
+                optimisticUndoLog.clear();
                 if (isOptimistic) {
                     optimisticallyUndoable = false;
                 }
             }
+            // If we're in optimistic mode, mark that the object
+            // was optimistically modified.
             if (isOptimistic) {
                 optimisticallyModified = true;
                 optimisticVersionIncrementUnsafe();
@@ -315,14 +414,6 @@ public class VersionLockedObject<T> {
         this.version = version;
     }
 
-    public long getGlobalVersionUnsafe() {
-        return globalVersion;
-    }
-
-    public void setGlobalVersionUnsafe(long globalVersion) {
-        this.globalVersion = globalVersion;
-    }
-
     public AbstractTransactionalContext getModifyingContextUnsafe() {
         return this.modifyingContext;
     }
@@ -344,7 +435,12 @@ public class VersionLockedObject<T> {
         return optimisticallyModified;
     }
 
+    /** Reset the stream view backing this object.
+     * This function also resets the undo log, since it's based
+     * on the current position in the stream view.
+     */
     public void resetStreamViewUnsafe() {
         sv.reset();
+        undoLog.clear();
     }
 }

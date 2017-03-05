@@ -86,9 +86,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // If the version of this object is ahead of what we expected,
             // we need to rollback...
             if (object.getVersionUnsafe() > getSnapshotTimestamp()) {
-                // We don't yet support version rollback, but we would
-                // perform that here when we do.
-                throw new NoRollbackException();
+                object.rollbackUnsafe(getSnapshotTimestamp());
             }
         } catch (NoRollbackException nre) {
             // Couldn't roll back the object, so we'll have
@@ -361,7 +359,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     private OptimisticTransactionalContext getRootContext() {
         AbstractTransactionalContext atc = TransactionalContext.getRootContext();
-        if (!(atc instanceof OptimisticTransactionalContext)) {
+        if (atc != null && !(atc instanceof OptimisticTransactionalContext)) {
             throw new RuntimeException("Attempted to nest two different transactional context types");
         }
         return (OptimisticTransactionalContext)atc;
