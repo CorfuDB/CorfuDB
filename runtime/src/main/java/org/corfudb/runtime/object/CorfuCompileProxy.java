@@ -207,17 +207,10 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                     .forEachOrdered(l -> {
                         try {
                             Object res = underlyingObject.applyUpdateUnsafe(l, false);
-
-                            Long streamAddress = logData.getStreamAddress(streamID);
-                            if (streamAddress != null) {
-                                underlyingObject.setVersionUnsafe(streamAddress);
-                            } else {
-                                underlyingObject.setVersionUnsafe(logData.getGlobalAddress());
-                            }
-                            underlyingObject.setGlobalVersionUnsafe(logData.getGlobalAddress());
+                            underlyingObject.setVersionUnsafe(logData.getGlobalAddress());
 
                             if (pendingUpcalls.contains(logData.getGlobalAddress())) {
-                                upcallResults.put(underlyingObject.getGlobalVersionUnsafe(), res == null ?
+                                upcallResults.put(underlyingObject.getVersionUnsafe(), res == null ?
                                         NullValue.NULL_VALUE : res);
                                 pendingUpcalls.remove(logData.getGlobalAddress());
                             }

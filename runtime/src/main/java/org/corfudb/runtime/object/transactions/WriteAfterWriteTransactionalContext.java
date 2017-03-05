@@ -36,8 +36,8 @@ public class WriteAfterWriteTransactionalContext
         super(builder);
     }
 
-    @Override // from OptimisticTransactionalContext
-    long commitTransactionNoReleaseLock() throws TransactionAbortedException {
+    @Override
+    public long commitTransaction() throws TransactionAbortedException {
 
 
         // If the transaction is nested, fold the transaction.
