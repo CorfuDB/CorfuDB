@@ -284,6 +284,7 @@ public class TestClientRouter implements IClientRouter {
         CompletableFuture<T> cf;
         if ((cf = (CompletableFuture<T>) outstandingRequests.get(requestID)) != null) {
             cf.complete(completion);
+            outstandingRequests.remove(requestID);
         } else {
             log.warn("Attempted to complete request {}, but request not outstanding!", requestID);
         }
@@ -299,6 +300,7 @@ public class TestClientRouter implements IClientRouter {
         CompletableFuture cf;
         if ((cf = outstandingRequests.get(requestID)) != null) {
             cf.completeExceptionally(cause);
+            outstandingRequests.remove(requestID);
         } else {
             log.warn("Attempted to exceptionally complete request {}, but request not outstanding!", requestID);
         }

@@ -56,14 +56,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     private final Set<ICorfuSMRProxyInternal> modifiedProxies =
             new HashSet<>();
 
-    /** micro-transaction lock.
-     * used in order to allow tranasctions a certain uniterrupted period of
-     * time to commit
-     */
-    @Getter
-    private final Lock mTxLock = new ReentrantLock();
-
-
     OptimisticTransactionalContext(TransactionBuilder builder) {
         super(builder);
     }
@@ -83,25 +75,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         final UUID streamID = proxy.getStreamID();
 
         try {
-            OptimisticTransactionalContext oCtxt = (OptimisticTransactionalContext)
+            AbstractTransactionalContext modifyingContext =
                     object.getModifyingContextUnsafe();
 
             // If we don't own this object, roll it back
-            // to avoid interrupting short-lived micro TX, grab the lock
-            if (oCtxt != null && oCtxt != this) {
-                /**
-                 *  comment this block out to increase concurrency, but also,
-                 *  potential contention
-                 *  */
-                try {
-                    oCtxt.getMTxLock().tryLock(
-                            TransactionalContext.mTxDuration.toMillis(), TimeUnit.MILLISECONDS);
-                } catch (InterruptedException ie) {
-                    // it's ok, just means that we move on without the lock
-                    log.debug("tx at {} proceeds without lock");
-                }
-                /**
-                 *  to here */
+            if (modifyingContext != null && modifyingContext != this) {
                 object.optimisticRollbackUnsafe();
             }
 
@@ -267,23 +245,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @Override
     @SuppressWarnings("unchecked")
     public long commitTransaction() throws TransactionAbortedException {
-        long ret = commitTransactionNoReleaseLock();
-
-        // now unlock this transaction's contention lock
-        try {
-            getMTxLock().unlock();
-        } catch (IllegalMonitorStateException me) {
-            log.error("transaction fails to unlock its own contention lock");
-        }
-
-        return ret;
-    }
-
-    long commitTransactionNoReleaseLock() throws TransactionAbortedException {
-        log.debug("attempt to commit optimistic tx from snapshot {}", getSnapshotTimestamp());
-
-
-        // If the transaction is nested, fold the transaction.
         if (TransactionalContext.isInNestedTransaction()) {
             getParentContext().addTransaction(this);
             commitAddress = AbstractTransactionalContext.FOLDED_ADDRESS;
@@ -411,18 +372,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @Override
     public synchronized long obtainSnapshotTimestamp() {
-        /** obtain micro-transaction lock */
-        /* */
-        try {
-            getMTxLock().tryLock(
-                    TransactionalContext.mTxDuration.toMillis(), TimeUnit.MILLISECONDS);
-        } catch (InterruptedException ie) {
-            // it's ok, just means that we move on without the lock
-            log.debug("tx at {} proceeds without lock");
-        }
-        /* */
-
-
         final AbstractTransactionalContext atc = getRootContext();
         if (atc != null && atc != this) {
             // If we're in a nested transaction, the first read timestamp

@@ -18,11 +18,6 @@ import java.util.concurrent.ConcurrentSkipListSet;
  */
 @Slf4j
 public class TransactionalContext {
-    /** MicroTransaction support:
-     * allow short-lived transactions to run without contention for this
-     * duration
-     */
-    public static final Duration mTxDuration = Duration.ofMillis(1);
 
     /** A thread local stack containing all transaction contexts
      * for a given thread.
