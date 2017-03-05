@@ -3,12 +3,7 @@ package org.corfudb.util;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.function.Function;
 
 /**
@@ -30,7 +25,7 @@ public class CFUtils {
             B extends Throwable,
             C extends Throwable,
             D extends Throwable>
-    T getUninterruptibly(CompletableFuture<T> future,
+    T getUninterruptibly(Future<T> future,
                          Class<A> throwableA,
                          Class<B> throwableB,
                          Class<C> throwableC,
@@ -63,7 +58,7 @@ public class CFUtils {
             A extends Throwable,
             B extends Throwable,
             C extends Throwable>
-    T getUninterruptibly(CompletableFuture<T> future,
+    T getUninterruptibly(Future<T> future,
                          Class<A> throwableA,
                          Class<B> throwableB,
                          Class<C> throwableC)
@@ -74,7 +69,7 @@ public class CFUtils {
     public static <T,
             A extends Throwable,
             B extends Throwable>
-    T getUninterruptibly(CompletableFuture<T> future,
+    T getUninterruptibly(Future<T> future,
                          Class<A> throwableA,
                          Class<B> throwableB)
             throws A, B {
@@ -83,14 +78,14 @@ public class CFUtils {
 
     public static <T,
             A extends Throwable>
-    T getUninterruptibly(CompletableFuture<T> future,
+    T getUninterruptibly(Future<T> future,
                          Class<A> throwableA)
             throws A {
         return getUninterruptibly(future, throwableA, RuntimeException.class, RuntimeException.class, RuntimeException.class);
     }
 
     public static <T>
-    T getUninterruptibly(CompletableFuture<T> future) {
+    T getUninterruptibly(Future<T> future) {
         return getUninterruptibly(future, RuntimeException.class, RuntimeException.class, RuntimeException.class, RuntimeException.class);
     }
 

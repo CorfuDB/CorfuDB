@@ -30,18 +30,7 @@ import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogFiles;
-import org.corfudb.protocols.wireprotocol.CommitRequest;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.DataType;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.ReadRequest;
-import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.TrimRequest;
-import org.corfudb.protocols.wireprotocol.WriteMode;
-import org.corfudb.protocols.wireprotocol.WriteRequest;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.util.Utils;
@@ -105,12 +94,16 @@ public class LogUnitServer extends AbstractServer {
      * This cache services requests for data at various addresses. In a memory implementation,
      * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
      */
-    private final LoadingCache<LogAddress, LogData> dataCache;
+    final LoadingCache<LogAddress, LogData> dataCache;
     private final long maxCacheSize;
 
     private final StreamLog streamLog;
 
     private final BatchWriter<LogAddress, LogData> batchWriter;
+
+    private LogUnitServerQuorumReplicationDelegate quorumDelegate = new LogUnitServerQuorumReplicationDelegate(this);
+    private LogUnitServerReplexReplicationDelegate replexDelegate = new LogUnitServerReplexReplicationDelegate(this);
+
 
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
@@ -151,28 +144,24 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        if (quorumDelegate.isWriteMessageRecognized(msg)) {
+            quorumDelegate.write(msg, ctx, r);
+            return;
+        }
+        if (replexDelegate.isWriteMessageRecognized(msg)) {
+            replexDelegate.write(msg, ctx, r);
+            return;
+        }
         log.debug("log write: global: {}, streams: {}, backpointers: {}", msg
                         .getPayload().getGlobalAddress(),
                 msg.getPayload().getStreamAddresses(), msg.getPayload().getData().getBackpointerMap());
         // clear any commit record (or set initially to false).
         msg.getPayload().clearCommit();
-        try {
-            if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
-                dataCache.put(new LogAddress(msg.getPayload().getGlobalAddress(), null), msg.getPayload().getData());
-                r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-                return;
-            } else {
-                for (UUID streamID : msg.getPayload().getStreamAddresses().keySet()) {
-                    dataCache.put(new LogAddress(msg.getPayload().getStreamAddresses().get(streamID), streamID),
-                            msg.getPayload().getData());
-                }
-                r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-            }
+        try  {
+            dataCache.put(new LogAddress(msg.getPayload().getGlobalAddress(), null), msg.getPayload().getData());
+            r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
         } catch (OverwriteException ex) {
-            if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM)
-                r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
-            else
-                r.sendResponse(ctx, msg, CorfuMsgType.ERROR_REPLEX_OVERWRITE.msg());
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
         }
     }
 
@@ -217,7 +206,7 @@ public class LogUnitServer extends AbstractServer {
                  l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
                 LogAddress logAddress = new LogAddress(l, msg.getPayload().getStreamID());
                 LogData e = dataCache.get(logAddress);
-                if (e == null) {
+                if (e == null || e.getType().isProposal()) {
                     rr.put(l, LogData.EMPTY);
                 } else if (e.getType() == DataType.HOLE) {
                     rr.put(l, LogData.HOLE);
@@ -244,11 +233,14 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @ServerHandler(type = CorfuMsgType.FILL_HOLE)
-    private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private void fillHole(CorfuPayloadMsg<FillHoleRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        if (quorumDelegate.isFillHoleMessageRecognized(msg)) {
+            quorumDelegate.fillHole(msg, ctx, r);
+            return;
+        }
         try {
             dataCache.put(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()), LogData.HOLE);
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-
         } catch (OverwriteException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
         }
