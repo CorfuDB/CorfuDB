@@ -35,30 +35,14 @@ import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 
 import lombok.extern.slf4j.Slf4j;
 
-import net.bytebuddy.agent.ByteBuddyAgent;
-import net.bytebuddy.description.type.TypeDescription;
-import net.bytebuddy.dynamic.ClassFileLocator;
-
 
 /**
  * Created by crossbach on 5/22/15.
  */
 @Slf4j
 public class Utils {
-    private static final Instrumentation instrumentation = ByteBuddyAgent.install();
     private static Printer printer = new Textifier();
     private static TraceMethodVisitor mp = new TraceMethodVisitor(printer);
-
-    public static byte[] getByteCodeOf(Class<?> c) {
-        try {
-            ClassFileLocator locator = ClassFileLocator.AgentBased.of(instrumentation, c);
-            TypeDescription.ForLoadedType desc = new TypeDescription.ForLoadedType(c);
-            ClassFileLocator.Resolution resolution = locator.locate(desc.getName());
-            return resolution.resolve();
-        } catch (IOException ie) {
-            throw new RuntimeException("Couldn't get byte code " + ie.toString(), ie);
-        }
-    }
 
     public static String printByteCode(byte[] bytes) {
         ClassReader cr = new ClassReader(bytes);

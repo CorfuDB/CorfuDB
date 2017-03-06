@@ -176,6 +176,24 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .doesNotContainEntry("k", "v4");
     }
 
+    /** This test makes sure that a write-only transaction properly
+     * commits its updates, even if there are no accesses
+     * during the transaction.
+     */
+    @Test
+    public void writeOnlyTransactionCommitsInMemory() {
+        // Write twice to the transaction without a read
+        TXBegin();
+        write("k", "v1");
+        write("k", "v2");
+        TXEnd();
+
+        // Make sure the object correctly reflects the value
+        // of the most recent write.
+        assertThat(getMap())
+                .containsEntry("k", "v2");
+    }
+
     @Override
     protected void TXBegin() {
         getRuntime().getObjectsView().TXBuild()
