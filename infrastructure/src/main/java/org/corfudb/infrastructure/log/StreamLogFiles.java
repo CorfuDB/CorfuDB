@@ -1,8 +1,6 @@
 package org.corfudb.infrastructure.log;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
@@ -93,10 +91,9 @@ public class StreamLogFiles implements StreamLog {
             Collection<File> files = FileUtils.listFiles(dir, extension, true);
 
             for (File file : files) {
-                try {
-                    FileInputStream fIn = new FileInputStream(file);
-                    FileChannel fc = fIn.getChannel();
+                try (FileInputStream fIn = new FileInputStream(file)){
 
+                    FileChannel fc = fIn.getChannel();
 
                     ByteBuffer metadataBuf = ByteBuffer.allocate(METADATA_SIZE);
                     fc.read(metadataBuf);
@@ -210,6 +207,37 @@ public class StreamLogFiles implements StreamLog {
         return set;
     }
 
+    private boolean isTrimmed(FileHandle fh, long filePosition) {
+        return fh.trimmedFilePositions.contains(filePosition);
+    }
+
+
+    private void readTrimmedPositions(FileHandle fh) throws IOException {
+        synchronized (fh.lock) {
+            File f = new File(fh.getTrimFileName());
+            if (f.exists()) {
+                try (DataInputStream is = new DataInputStream(new BufferedInputStream(new FileInputStream(fh.getTrimFileName())))) {
+                    while (is.available() > 4) {
+                        fh.trimmedFilePositions.add(is.readLong());
+                    }
+                }
+            }
+        }
+    }
+
+    private void addTrimmedPosition(FileHandle fh, long position) throws IOException {
+        synchronized (fh.lock) {
+            File f = new File(fh.getTrimFileName());
+            if (!f.exists()) {
+                f.getParentFile().mkdirs();
+            }
+            try (DataOutputStream os = new DataOutputStream(new FileOutputStream(f.getAbsolutePath(), f.exists()))) {
+                os.writeLong(position);
+            }
+            fh.trimmedFilePositions.add(position);
+        }
+    }
+
     /**
      * Find a log entry in a file.
      *
@@ -242,13 +270,16 @@ public class StreamLogFiles implements StreamLog {
 
         Metadata headerMetadata = Metadata.parseFrom(headerMetadataBuf.array());
 
-        fc.position(fc.position() + headerMetadata.getLength());
-        ByteBuffer o = ByteBuffer.allocate((int) logFileSize - (int) fc.position());
+        long initialPosition = fc.position() + headerMetadata.getLength();
+        fc.position(initialPosition);
+
+        ByteBuffer o = ByteBuffer.allocate((int)(logFileSize - fc.position()));
         fc.read(o);
         fc.close();
         o.flip();
 
         while (o.hasRemaining()) {
+            long filePosition = initialPosition+o.position();
 
             short magic = o.getShort();
 
@@ -275,13 +306,15 @@ public class StreamLogFiles implements StreamLog {
                     }
                 }
 
-                if (address == -1) {
+                if (isTrimmed(fh, filePosition)) {
+                    log.debug("Trim at {} hit, reading (size={}), position {}.", address, metadata.getLength(), filePosition);
+                } else if (address == -1) {
                     //Todo(Maithem) : maybe we can move this to getChannelForAddress
-                    fh.knownAddresses.add(entry.getGlobalAddress());
+                    fh.knownAddresses.put(entry.getGlobalAddress(), filePosition);
                 } else if (entry.getGlobalAddress() != address) {
                     log.trace("Read address {}, not match {}, skipping. (remain={})", entry.getGlobalAddress(), address);
                 } else {
-                    log.debug("Entry at {} hit, reading (size={}).", address, metadata.getLength());
+                    log.debug("Entry at {} hit, reading (size={}), position {}.", address, metadata.getLength(), filePosition);
 
                     return getLogData(entry);
                 }
@@ -291,6 +324,8 @@ public class StreamLogFiles implements StreamLog {
         }
         return null;
     }
+
+
 
     private FileChannel getChannel(String filePath, boolean readOnly) throws IOException {
         try {
@@ -337,7 +372,6 @@ public class StreamLogFiles implements StreamLog {
 
             try {
                 FileChannel fc = getChannel(a, false);
-
                 boolean verify = true;
 
                 if (noVerify) {
@@ -346,9 +380,10 @@ public class StreamLogFiles implements StreamLog {
 
                 writeHeader(fc, VERSION, verify);
                 log.trace("Opened new log file at {}", a);
-                FileHandle fh = new FileHandle(fc, a);
+                FileHandle fh = new FileHandle(fc, a, a+".trm");
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
+                readTrimmedPositions(fh);
                 readRecord(fh, -1);
                 return fh;
             } catch (IOException e) {
@@ -458,11 +493,29 @@ public class StreamLogFiles implements StreamLog {
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
             FileHandle fh = getFileHandleForAddress(logAddress);
-            if (!fh.getKnownAddresses().contains(logAddress.address)) {
+            long filePos = fh.channel.position();
+            if (!fh.getKnownAddresses().containsKey(logAddress.address)) {
                 writeRecord(fh, logAddress.address, entry);
-                fh.getKnownAddresses().add(logAddress.address);
+                fh.getKnownAddresses().put(logAddress.address, filePos);
             } else {
-                throw new OverwriteException();
+                boolean canOverwite = false;
+                if (entry.isOverwriteForced()) {
+                    canOverwite = true;
+                } else if (entry.getType().isProposal()) {
+                    LogData old = readRecord(fh, logAddress.getAddress());
+                    if (old.getType().isProposal()) {
+                        canOverwite = true;
+                    }
+                }
+                if (canOverwite) {
+                    long posToTrim = fh.getKnownAddresses().get(logAddress.address);
+                    writeRecord(fh, logAddress.address, entry);
+                    fh.getTrimmedFilePositions().add(posToTrim);
+                    addTrimmedPosition(fh, posToTrim);
+                    fh.getKnownAddresses().put(logAddress.address, filePos);
+                } else {
+                    throw new OverwriteException();
+                }
             }
             log.trace("Disk_write[{}]: Written to disk.", logAddress);
         } catch (IOException e) {
@@ -487,7 +540,10 @@ public class StreamLogFiles implements StreamLog {
         private FileChannel channel;
         @NonNull
         private String fileName;
-        private Set<Long> knownAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        @NonNull
+        private String trimFileName;
+        private Map<Long, Long> knownAddresses = new ConcurrentHashMap();
+        private Set<Long> trimmedFilePositions = ConcurrentHashMap.newKeySet();
         private final Lock lock = new ReentrantLock();
     }
 
