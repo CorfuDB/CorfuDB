@@ -6,7 +6,9 @@
         </encoder>
     </appender>
 
-    <root level="TRACE">
+    <logger name="org.corfudb.runtime.object" level="ERROR"/>
+
+    <root level="ERROR">
         <!---appender-ref ref="STDOUT" /-->
     </root>
 </configuration>
