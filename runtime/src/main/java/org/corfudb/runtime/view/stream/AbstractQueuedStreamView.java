@@ -90,10 +90,9 @@ public abstract class AbstractQueuedStreamView extends
     @Override
     protected List<ILogData> getNextEntries(QueuedStreamContext context, long maxGlobal,
                                             Function<ILogData, Boolean> contextCheckFn) {
-        // If we have no entries to read, fill the read queue.
-        // Return if the queue is still empty.
-        if (context.readQueue.isEmpty() &&
-                !fillReadQueue(maxGlobal, context)) {
+        // We always have to fill to the read queue to ensure we read up to
+        // max global.
+        if (!fillReadQueue(maxGlobal, context)) {
             return Collections.emptyList();
         }
 
@@ -103,34 +102,35 @@ public abstract class AbstractQueuedStreamView extends
             return Collections.emptyList();
         }
 
-        List<ILogData> read = context.readQueue.parallelStream()
-                .filter(x -> x  <= maxGlobal)
-                .map(this::read)
-                .collect(Collectors.toList());
+        // The list to store read results in
+        List<ILogData> read = new ArrayList<>();
 
-        // Do any entries change the context?
-        if (read.stream().anyMatch(x -> contextCheckFn.apply(x))) {
-            // now we have to find the entry that changed the context...
-            int entryIndex = IntStream.range(0, read.size())
-                    .filter(index -> contextCheckFn.apply(read.get(index)))
-                    .findAny()
-                    .getAsInt();
+        // While we have data and haven't exceeded maxGlobal
+        while (context.readQueue.size() > 0 &&
+                context.readQueue.first() <= maxGlobal) {
 
-            // remove all entries after this index.
-            read.subList(entryIndex + 1, read.size()).clear();
+            // Do the read, removing the request from the queue
+            long readAddress = context.readQueue.pollFirst();
+            ILogData data = read(readAddress);
 
-            // now fix the readQueue.
-            for (int i = 0; i <= entryIndex; i++) {
-                context.readQueue.pollFirst();
+            // Add to the read list if the entry is part of this
+            // stream and contains data
+            if (data.getType() == DataType.DATA &&
+                    data.containsStream(context.id)) {
+                read.add(data);
+            }
+
+            // Update the pointer.
+            context.globalPointer = readAddress;
+
+            // If the context changed, return
+            if (contextCheckFn.apply(data)) {
+                return read;
             }
         }
-        else {
-            context.readQueue.clear();
-        }
 
-        return read.stream().filter(x -> x.getType() == DataType.DATA)
-                .filter(x -> x.containsStream(context.id))
-                .collect(Collectors.toList());
+        // Return the list of entries read.
+        return read;
     }
 
     /**
