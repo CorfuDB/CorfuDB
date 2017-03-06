@@ -143,13 +143,9 @@ public class StreamTest extends AbstractObjectTest {
                     int r2 = rand.nextInt(numTasks);
                     int r3 = rand.nextInt(numTasks);
                     int accumulator = 0;
-                    try {
-                        accumulator += map1.get("m1" + r1);
-                        accumulator += map2.get("m2" + r2);
-                        accumulator += map3.get("m3" + r3);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
+                    accumulator += map1.get("m1" + r1);
+                    accumulator += map2.get("m2" + r2);
+                    accumulator += map3.get("m3" + r3);
 
                     // perform random put()'s with probability '1 - readPercent/100'
                     if (rand.nextInt(MAX_PERCENT) >= readPrecent) {

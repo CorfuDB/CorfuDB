@@ -7,6 +7,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListSet;
@@ -72,6 +73,11 @@ public abstract class AbstractQueuedStreamView extends
             final long thisRead = context.readQueue.pollFirst();
             ILogData ld = read(thisRead);
             if (ld.containsStream(context.id)) {
+                if (context.maxResolution < thisRead)
+                {
+                    context.resolvedQueue.add(thisRead);
+                    context.maxResolution = thisRead;
+                }
                 return ld;
             }
         }
@@ -117,6 +123,13 @@ public abstract class AbstractQueuedStreamView extends
             // stream and contains data
             if (data.getType() == DataType.DATA &&
                     data.containsStream(context.id)) {
+
+                if (context.maxResolution < readAddress)
+                {
+                    context.resolvedQueue.add(readAddress);
+                    context.maxResolution = readAddress;
+                }
+
                 read.add(data);
             }
 
@@ -167,6 +180,16 @@ public abstract class AbstractQueuedStreamView extends
     @ToString
     static class QueuedStreamContext extends AbstractStreamContext {
 
+
+        /** A queue of addresses which have already been resolved. */
+        final NavigableSet<Long> resolvedQueue
+                = new TreeSet<>();
+
+        /** The maximum global address which we have resolved this
+         * stream to.
+         */
+        long maxResolution = Address.NEVER_READ;
+
         /**
          * A priority queue of potential addresses to be read from.
          */
@@ -180,6 +203,14 @@ public abstract class AbstractQueuedStreamView extends
          */
         public QueuedStreamContext(UUID id, long maxGlobalAddress) {
             super(id, maxGlobalAddress);
+        }
+
+
+        /** {@inheritDoc} */
+        @Override
+        void reset() {
+            super.reset();
+            readQueue.clear();
         }
     }
 
