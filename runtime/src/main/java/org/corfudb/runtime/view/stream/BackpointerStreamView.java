@@ -214,10 +214,13 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     try {
                         runtime.getAddressSpaceView().fillHole(currentRead);
                         // If we reached here, our hole fill was successful.
+                        currentEntry = LogData.HOLE;
                     } catch (OverwriteException oe) {
                         // If we reached here, this means the remote client
                         // must have successfully completed the write and
                         // we can continue.
+                        currentEntry =
+                                runtime.getAddressSpaceView().read(currentRead);
                     }
                 }
 
@@ -226,9 +229,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             }
 
             // If the entry contains this context's stream,
-            // and it is less than max read, we add it to the read queue.
-            if (currentEntry.containsStream(context.id) &&
-                    currentRead <= maxAddress) {
+            // we add it to the read queue.
+            if (currentEntry.containsStream(context.id)) {
                 context.readQueue.add(currentRead);
             }
 
