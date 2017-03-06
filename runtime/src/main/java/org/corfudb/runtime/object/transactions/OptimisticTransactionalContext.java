@@ -101,11 +101,17 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // or if the version is older than what we need
         OptimisticTransactionalContext oCtxt = (OptimisticTransactionalContext)
                 object.getModifyingContextUnsafe();
-        long snapshotOfThisStream =  streamSnapshots.computeIfAbsent(proxy,
-                k -> k.syncObjectUnsafe(k.getUnderlyingObject(), getSnapshotTimestamp()));
+
         if (oCtxt == null || oCtxt != this &&
-                proxy.getUnderlyingObject().getVersionUnsafe() < snapshotOfThisStream) {
-            proxy.syncObjectUnsafe(object, snapshotOfThisStream);
+                proxy.getUnderlyingObject().getVersionUnsafe() < getSnapshotTimestamp()) {
+
+            // Cache version number of the object at global snapshot
+            long snapshotOfThisStream =  streamSnapshots.computeIfAbsent(proxy,
+                    k -> k.syncObjectUnsafe(k.getUnderlyingObject(), getSnapshotTimestamp()));
+
+            if (proxy.getUnderlyingObject().getVersionUnsafe() < snapshotOfThisStream) {
+                proxy.syncObjectUnsafe(object, snapshotOfThisStream);
+            }
         }
 
 

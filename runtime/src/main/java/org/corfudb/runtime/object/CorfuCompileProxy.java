@@ -192,6 +192,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * this function...
      * @param underlyingObject  The object to update.
      * @param timestamp         The timestamp to update the object to.
+     * @return The version number of the object after sync.
      */
     public long syncObjectUnsafe(VersionLockedObject<T> underlyingObject,
                                       long timestamp) {
