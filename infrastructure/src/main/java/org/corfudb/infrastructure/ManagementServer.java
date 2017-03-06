@@ -368,7 +368,7 @@ public class ManagementServer extends AbstractServer {
 
         // Get the server status from the policy and check for failures.
         Map map = failureDetectorPolicy.getServerStatus();
-        if (!map.isEmpty()) {
+        if (map != null) {
             log.info("Failures detected. Failed nodes : {}", map.toString());
             // If map not empty, failures present. Trigger handler.
             // Check if handler has been initiated.

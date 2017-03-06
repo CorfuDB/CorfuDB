@@ -82,7 +82,7 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
         // A little more than responseTimeout for periodicPolling
         Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
         Map<String, Boolean> result = failureDetectorPolicy.getServerStatus();
-        assertThat(result.isEmpty()).isEqualTo(true);
+        assertThat(result).isNull();
 
     }
 

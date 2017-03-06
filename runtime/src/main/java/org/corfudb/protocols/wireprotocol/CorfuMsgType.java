@@ -18,7 +18,7 @@ import java.lang.reflect.Constructor;
 @AllArgsConstructor
 public enum CorfuMsgType {
     // Base Messages
-    PING(0, TypeToken.of(CorfuMsg.class), true),
+    PING(0, TypeToken.of(CorfuMsg.class)),
     PONG(1, TypeToken.of(CorfuMsg.class), true),
     RESET(2, TypeToken.of(CorfuMsg.class), true),
     SET_EPOCH(3, new TypeToken<CorfuPayloadMsg<Long>>() {}, true),

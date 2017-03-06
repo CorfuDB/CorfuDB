@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.Arrays;
@@ -33,6 +34,7 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
      * polling history
      */
     private int[] historyPollFailures = null;
+    private long[] historyPollEpochExceptions = null;
     private int historyPollCount = 0;
     private HashMap<String, Boolean> historyStatus = null;
 
@@ -88,6 +90,7 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
             historyServers = allServers;
             historyRouters = new IClientRouter[allServers.length];
             historyPollFailures = new int[allServers.length];
+            historyPollEpochExceptions = new long[allServers.length];
             for (int i = 0; i < allServers.length; i++) {
                 if (!historyStatus.containsKey(allServers[i])) {
                     historyStatus.put(allServers[i], true);  // Assume it's up until we think it isn't.
@@ -98,6 +101,7 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
                 historyRouters[i].setTimeoutResponse(timeoutResponse);
                 historyRouters[i].start();
                 historyPollFailures[i] = 0;
+                historyPollEpochExceptions[i] = -1;
             }
             historyPollCount = 0;
         } else {
@@ -127,6 +131,10 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
                 try {
                     CompletableFuture<Boolean> cf = historyRouters[ii].getClient(BaseClient.class).ping();
                     cf.exceptionally(e -> {
+                        // If Wrong epoch exception is received, mark server as failed.
+                        if (e.getCause() instanceof WrongEpochException) {
+                            historyPollEpochExceptions[ii] = ((WrongEpochException) e.getCause()).getCorrectEpoch();
+                        }
                         log.debug(historyServers[ii] + " exception " + e);
                         historyPollFailures[ii]++;
                         return false;
@@ -158,6 +166,7 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
     public HashMap<String, Boolean> getServerStatus() {
 
         HashMap<String, Boolean> status_change = new HashMap<>();
+        long newCorrectEpoch = -1;
         if (historyPollCount > 3) {
             Boolean is_up;
 
@@ -173,8 +182,15 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
                     // Resetting the failure counter.
                     historyPollFailures[i] = 0;
                 }
+                if (historyPollEpochExceptions[i] != -1) {
+                    newCorrectEpoch = newCorrectEpoch < historyPollEpochExceptions[i] ? historyPollEpochExceptions[i] : newCorrectEpoch;
+                    // Reset epoch exception value.
+                    historyPollEpochExceptions[i] = -1;
+                }
             }
-
+        }
+        if (newCorrectEpoch == -1 && status_change.isEmpty()) {
+            return null;
         }
         return status_change;
     }
