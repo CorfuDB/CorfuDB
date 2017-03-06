@@ -92,7 +92,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 // overwritten.
                 tokenResponse = runtime.getSequencerView()
                         .nextToken(Collections.singleton(ID),
-                             1, true, false);
+                             1);
             }
         }
     }
