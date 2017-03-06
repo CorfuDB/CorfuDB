@@ -32,7 +32,7 @@ public class InMemoryStreamLog implements StreamLog {
     @Override
     public synchronized void append(LogAddress logAddress, LogData entry) {
         if (logAddress.getStream() == null) {
-            if(logCache.containsKey(logAddress.address)) {
+            if(logCache.containsKey(logAddress.address) &&!entry.isOverwriteForced()) {
                 throw new OverwriteException();
             }
             logCache.put(logAddress.address, entry);
@@ -44,7 +44,7 @@ public class InMemoryStreamLog implements StreamLog {
                 streamCache.put(logAddress.getStream(), stream);
             }
 
-            if(stream.containsKey(logAddress.address)) {
+            if(stream.containsKey(logAddress.address)  && !entry.isOverwriteForced()) {
                 throw new OverwriteException();
             } else {
                 stream.put(logAddress.address, entry);
