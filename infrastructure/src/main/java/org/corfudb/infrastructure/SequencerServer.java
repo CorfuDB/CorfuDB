@@ -106,7 +106,11 @@ public class SequencerServer extends AbstractServer {
             conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
             .removalListener((Integer K, Long V, RemovalCause cause) -> {
-                maxConflictWildcard = Math.max(V, maxConflictWildcard);
+                if (!RemovalCause.REPLACED.equals(cause)) {
+                    log.trace("Updating maxConflictWildcard. Old value = '{}', new value = '{}', conflictParam = '{}'. Removal cause = '{}'",
+                            maxConflictWildcard, V, K, cause);
+                    maxConflictWildcard = Math.max(V, maxConflictWildcard);
+                }
             })
             .build();
 

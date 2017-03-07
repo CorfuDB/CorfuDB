@@ -9,6 +9,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.lang.reflect.Constructor;
@@ -230,7 +231,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             object.setObjectUnsafe(getNewInstance());
             object.clearOptimisticVersionUnsafe();
             object.resetStreamViewUnsafe();
-            object.version = 0L;
+            object.version = Address.NEVER_READ;
         } catch (InstantiationException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }

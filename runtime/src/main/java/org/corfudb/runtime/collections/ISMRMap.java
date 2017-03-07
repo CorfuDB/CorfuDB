@@ -54,7 +54,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      */
     @Accessor
     @Override
-    boolean containsKey(Object key);
+    boolean containsKey(@ConflictParameter Object key);
 
     /**
      * Returns <tt>true</tt> if this map maps one or more keys to the
@@ -156,7 +156,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      *                                       or value prevents it from being stored in this map
      */
     @Mutator(name = "put", noUpcall = true)
-    default void blindPut(K key, V value) {
+    default void blindPut(@ConflictParameter K key, V value) {
         put(key, value);
     }
 
@@ -283,7 +283,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      * @throws UnsupportedOperationException if the <tt>clear</tt> operation
      *                                       is not supported by this map
      */
-    @Mutator(name="clear")
+    @Mutator(name="clear", reset=true)
     @Override
     void clear();
 
