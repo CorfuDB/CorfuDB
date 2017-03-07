@@ -3,11 +3,7 @@ package org.corfudb.infrastructure;
 import java.io.File;
 import java.lang.invoke.MethodHandles;
 import java.util.Map;
-import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,7 +20,6 @@ import io.netty.channel.ChannelHandlerContext;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.LogAddress;
@@ -99,8 +94,6 @@ public class LogUnitServer extends AbstractServer {
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
 
-    private final ConcurrentHashMap<UUID, Long> trimMap;
-
     /**
      * This cache services requests for data at various addresses. In a memory implementation,
      * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
@@ -140,10 +133,6 @@ public class LogUnitServer extends AbstractServer {
                 .removalListener(this::handleEviction)
                 .writer(batchWriter)
                 .build(this::handleRetrieval);
-
-        // Trim map is set to empty on start
-        // TODO: persist trim map - this is optional since trim is just a hint.
-        trimMap = new ConcurrentHashMap<>();
     }
 
     /**
@@ -256,8 +245,8 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.TRIM)
     private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        trimMap.compute(msg.getPayload().getStream(), (key, prev) ->
-                prev == null ? msg.getPayload().getPrefix() : Math.max(prev, msg.getPayload().getPrefix()));
+        batchWriter.trim(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()));
+        //TODO(Maithem): should we return an error if the write fails
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
@@ -280,65 +269,6 @@ public class LogUnitServer extends AbstractServer {
     public synchronized void handleEviction(LogAddress address, LogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
         streamLog.release(address, entry);
-    }
-
-
-    public void runGC() {
-        Thread.currentThread().setName("LogUnit-GC");
-        val retry = IRetry.build(IntervalAndSentinelRetry.class, this::handleGC)
-                .setOptions(x -> x.setSentinelReference(running))
-                .setOptions(x -> x.setRetryInterval(SMALL_INTERVAL.toMillis()));
-
-        gcRetry = (IntervalAndSentinelRetry) retry;
-
-        retry.runForever();
-    }
-
-    @SuppressWarnings("unchecked")
-    public boolean handleGC() {
-        log.info("Garbage collector starting...");
-        long freedEntries = 0;
-
-        /* Pick a non-compacted region or just scan the cache */
-        Map<LogAddress, LogData> map = dataCache.asMap();
-        SortedSet<LogAddress> addresses = new TreeSet<>(map.keySet());
-        for (LogAddress address : addresses) {
-            LogData buffer = dataCache.getIfPresent(address);
-            if (buffer != null) {
-                Set<UUID> streams = buffer.getStreams();
-                // this is a normal entry
-                if (streams.size() > 0) {
-                    boolean trimmable = true;
-                    for (java.util.UUID stream : streams) {
-                        Long trimMark = trimMap.getOrDefault(stream, null);
-                        // if the stream has not been trimmed, or has not been trimmed to this point
-                        if (trimMark == null || address.getAddress() > trimMark) {
-                            trimmable = false;
-                            break;
-                        }
-                        // it is not trimmable.
-                    }
-                    if (trimmable) {
-                        log.trace("Trimming entry at {}", address);
-                        trimEntry(address.getAddress(), streams, buffer);
-                        freedEntries++;
-                    }
-                } else {
-                    //this is an entry which belongs in all streams
-                }
-            }
-        }
-
-        log.info("Garbage collection pass complete. Freed {} entries", freedEntries);
-        return true;
-    }
-
-    public void trimEntry(long address, Set<java.util.UUID> streams, LogData entry) {
-        // Add this entry to the trimmed range map.
-        //trimRange.add(Range.closed(address, address));
-        // Invalidate this entry from the cache. This will cause the CacheLoader to free the entry from the disk
-        // assuming the entry is back by disk
-        dataCache.invalidate(address);
     }
 
     /**

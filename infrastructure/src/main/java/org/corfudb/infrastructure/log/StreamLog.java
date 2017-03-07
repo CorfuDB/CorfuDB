@@ -21,10 +21,21 @@ public interface StreamLog {
 
     /**
      * Given an address, read the corresponding stream entry.
-     * @param address
+     * @param logAddress
      * @return Stream entry if it exists, otherwise return null
      */
-    LogData read(LogAddress address);
+    LogData read(LogAddress logAddress);
+
+    /**
+     * Mark a StreamLog address as trimmed.
+     * @param logAddress
+     */
+    void trim(LogAddress logAddress);
+
+    /**
+     * Remove all trimmed addresses from the StreamLog.
+     */
+    void compact();
 
     /**
      * Sync the stream log file to secondary storage.
@@ -39,7 +50,7 @@ public interface StreamLog {
     /**
      * unmap/release the memory for entry
      *
-     * @param address
+     * @param logAddress
      */
-    void release(LogAddress address, LogData entry);
+    void release(LogAddress logAddress, LogData entry);
 }
