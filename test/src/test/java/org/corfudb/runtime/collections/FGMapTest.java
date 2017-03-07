@@ -317,6 +317,7 @@ public class FGMapTest extends AbstractViewTest {
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_records;
             for (int i = base; i < base + num_records; i++) {
+                System.out.println(threadNumber + ":" + i);
                 testMap.clear();
                 assertThat(testMap)
                         .isEmpty();

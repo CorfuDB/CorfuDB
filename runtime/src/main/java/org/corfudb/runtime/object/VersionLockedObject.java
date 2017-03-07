@@ -294,12 +294,12 @@ public class VersionLockedObject<T> {
 
         // Here we maintain the optimistic undo-log
         if (isOptimistic) {
+            optimisticallyModified = true;
             if (undoRecordTarget == null) {
                 optimisticUndoLog.clear();
                 optimisticallyUndoable = false;
             } else if (optimisticallyUndoable) {
                 optimisticUndoLog.addFirst(entry);
-                optimisticallyModified = true;
                 optimisticVersionIncrementUnsafe();
             }
         }
