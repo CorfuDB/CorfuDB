@@ -333,6 +333,7 @@ public class TestClientRouter implements IClientRouter {
         message.serialize(oBuf);
         oBuf.resetReaderIndex();
         CorfuMsg msg = CorfuMsg.deserialize(oBuf);
+        oBuf.release();
         return msg;
     }
 
