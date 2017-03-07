@@ -358,64 +358,17 @@ public class Layout implements Cloneable {
 
     public enum ReplicationMode {
         CHAIN_REPLICATION {
-
             @Override
             public Boolean sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime)
                     throws QuorumUnreachableException {
-
-                Boolean success;
-
-                for (LayoutStripe layoutStripe : layoutSegment.getStripes()) {
-                    success = false;
-                    CompletableFuture<Boolean>[] logUnitSeaFutures = layoutStripe.getLogServers().stream()
-                            .map(runtime::getRouter)
-                            .map(x -> x.getClient(BaseClient.class))
-                            .map(x -> x.setRemoteEpoch(sealEpoch))
-                            .toArray(CompletableFuture[]::new);
-
-                    QuorumFutureFactory.CompositeFuture<Boolean> quorumFuture =
-                            QuorumFutureFactory.getFirstWinsFuture(Boolean::compareTo, logUnitSeaFutures);
-                    try {
-                        success = quorumFuture.get();
-                    } catch (ExecutionException | InterruptedException e) {
-                        log.error("Seal Segment future exception : {}", e);
-                    }
-                    if (!success) throw new QuorumUnreachableException(0, logUnitSeaFutures.length);
-                }
-                return true;
+                return new SealChainReplication().sealLayoutSegment(runtime, layoutSegment, sealEpoch);
             }
         },
         QUORUM_REPLICATION {
             @Override
             public Boolean sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime)
                     throws QuorumUnreachableException {
-
-                Boolean success;
-
-                for (LayoutStripe layoutStripe : layoutSegment.getStripes()) {
-                    success = false;
-                    CompletableFuture<Boolean>[] logUnitSeaFutures = layoutStripe.getLogServers().stream()
-                            .map(runtime::getRouter)
-                            .map(x -> x.getClient(BaseClient.class))
-                            .map(x -> x.setRemoteEpoch(sealEpoch))
-                            .toArray(CompletableFuture[]::new);
-
-                    QuorumFutureFactory.CompositeFuture<Boolean> quorumFuture =
-                            QuorumFutureFactory.getQuorumFuture(Boolean::compareTo, logUnitSeaFutures);
-                    try {
-                        success = quorumFuture.get();
-                    } catch (ExecutionException | InterruptedException e) {
-                        if (e.getCause() instanceof QuorumUnreachableException) {
-                            throw (QuorumUnreachableException) e.getCause();
-                        }
-                    }
-
-                    int reachableServers = (int) Arrays.stream(logUnitSeaFutures)
-                            .filter(booleanCompletableFuture -> !booleanCompletableFuture.isCompletedExceptionally()).count();
-
-                    if (!success) throw new QuorumUnreachableException(reachableServers, logUnitSeaFutures.length);
-                }
-                return true;
+                return new SealQuorumReplication().sealLayoutSegment(runtime, layoutSegment, sealEpoch);
             }
         },
         REPLEX {
@@ -431,6 +384,9 @@ public class Layout implements Cloneable {
             }
         };
 
+        /**
+         * Seals the layout segment.
+         */
         public abstract Boolean sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime) throws QuorumUnreachableException;
     }
 
