@@ -257,7 +257,7 @@ public class ManagementServer extends AbstractServer {
         try {
             failureHandlerDispatcher.dispatchHandler(failureHandlerPolicy, (Layout) latestLayout.clone(), getCorfuRuntime(), msg.getPayload().getNodes().keySet());
         } catch (CloneNotSupportedException e) {
-            e.printStackTrace();
+            log.error("Failure Handler could not clone layout: {}", e);
         }
     }
 

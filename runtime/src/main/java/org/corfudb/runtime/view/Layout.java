@@ -378,7 +378,7 @@ public class Layout implements Cloneable {
                     try {
                         success = quorumFuture.get();
                     } catch (ExecutionException | InterruptedException e) {
-                        e.printStackTrace();
+                        log.error("Seal Segment future exception : {}", e);
                     }
                     if (!success) throw new QuorumUnreachableException(0, logUnitSeaFutures.length);
                 }
