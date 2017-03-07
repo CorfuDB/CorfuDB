@@ -114,6 +114,9 @@ public class VersionLockedObject<T> {
 
     public void clearOptimisticVersionUnsafe() {
         this.optimisticVersion = 0;
+        this.optimisticallyUndoable = true;
+        this.optimisticallyModified = false;
+        modifyingContext = null;
     }
 
     public void optimisticVersionIncrementUnsafe() {
@@ -127,14 +130,12 @@ public class VersionLockedObject<T> {
         // TODO: validate the caller actually has a write lock.
         // TODO: merge the optimistic undo log into the undo log
         optimisticUndoLog.clear();
-        optimisticVersion = 0;
-        optimisticallyModified = false;
-        optimisticallyUndoable = true;
+        clearOptimisticVersionUnsafe();
+
         this.version = version;
         // TODO: fix the stream view pointer seek, for now
         // read will read the tx commit entry.
         sv.next();
-        modifyingContext = null;
     }
 
     /** Rollback any optimistic changes, if possible.
@@ -172,16 +173,11 @@ public class VersionLockedObject<T> {
             optimisticVersion--;
         };
 
-        // this should be zero already
+        // todo: throw NoRollbackException?? this should be zero already
         if (optimisticVersion > 0 || optimisticUndoLog.size() > 0)
             log.warn("rollback did not empty the optimistic undo sz={} version={}", optimisticUndoLog.size(), optimisticVersion);
 
-        // todo: the following two statements should not be necessary
-        optimisticUndoLog.clear();
-        optimisticVersion = 0;
-
-        optimisticallyModified = false;
-        modifyingContext = null;
+        clearOptimisticVersionUnsafe();
     }
 
     /** Roll the object back to the supplied version if possible.
