@@ -104,7 +104,6 @@ public class SequencerServer extends AbstractServer {
 
     private final long maxConflictCacheSize = 10_000;
     private long maxConflictWildcard = -1L;
-    @Getter
     private final Cache<Integer, Long>
             conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
@@ -253,13 +252,12 @@ public class SequencerServer extends AbstractServer {
                                           boolean isMetricsEnabled) {
         TokenRequest req = msg.getPayload();
 
-        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         if (req.getReqType() == TokenRequest.TK_QUERY) {
-            MetricsUtils.incConditionalCounter(isEnabled, counterToken0, 1);
+            MetricsUtils.incConditionalCounter(isMetricsEnabled, counterToken0, 1);
             handleTokenQuery(msg, ctx, r);
             return;
         } else {
-            MetricsUtils.incConditionalCounter(isEnabled, counterTokenSum, req.getNumTokens());
+            MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTokenSum, req.getNumTokens());
         }
 
         // for raw log implementation, simply extend the global log tail and return the global-log token
