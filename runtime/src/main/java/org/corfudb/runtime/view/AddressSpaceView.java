@@ -86,30 +86,6 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
-     * Learn about a stream for the first time.
-     * This method will dump all learned stream entries into the stream.
-     *
-     * @param streamID The ID of a stream.
-     * @return The long
-     */
-    private Set<Long> getStream(UUID streamID) {
-        /* TODO : implement in both backpointer and Replex cases */
-        throw new UnsupportedOperationException("unsupported");
-    }
-
-    /**
-     * Learn about a stream for the first time, bypassing the cache.
-     * This method will dump all learned stream entries into the stream.
-     *
-     * @param streamID The ID of a stream.
-     * @return The long
-     */
-    private Map<Long, ILogUnitEntry> fetchStream(UUID streamID) {
-        /* TODO : implement in both backpointer and Replex cases */
-        throw new UnsupportedOperationException("unsupported");
-    }
-
-    /**
      * Write the given object to an address and streams.
      *
      * @param address        An address to write to.
@@ -181,20 +157,6 @@ public class AddressSpaceView extends AbstractView {
             return readCache.getAll(Utils.discretizeRangeSet(addresses));
         }
         return this.cacheFetch(Utils.discretizeRangeSet(addresses));
-    }
-
-    /**
-     * Do a bulk read of the stream.
-     *
-     * @param stream The stream to download.
-     * @return A result.
-     */
-    public Map<Long, LogData> readPrefix(UUID stream) {
-        return layoutHelper(l -> AbstractReplicationView
-                        .getReplicationView(l, l.getSegments().get(l.getSegments().size() - 1).getReplicationMode(),
-                                l.getSegments().get(l.getSegments().size() - 1))
-                        .readPrefix(stream)
-        );
     }
 
 
