@@ -13,9 +13,11 @@ import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
 /**
- * A version locked object. The version locked object contains a
- * the state of an object as well as a history of modifications to
- * the object, which can be optimistic.
+ * The version locked object keeps track of where -- in the history of updates -- is the current state of the underying object.
+ *
+ * it maintains a shallow undo-log, back to the earliest open-transaction's snapshot.
+ * it also maintains an optimistic undo-log, for the current open-transaction, if any.
+ *
  * <p>
  * Created by mwei on 11/13/16.
  */
@@ -112,6 +114,9 @@ public class VersionLockedObject<T> {
 
     public void clearOptimisticVersionUnsafe() {
         this.optimisticVersion = 0;
+        this.optimisticallyUndoable = true;
+        this.optimisticallyModified = false;
+        modifyingContext = null;
     }
 
     public void optimisticVersionIncrementUnsafe() {
@@ -125,13 +130,12 @@ public class VersionLockedObject<T> {
         // TODO: validate the caller actually has a write lock.
         // TODO: merge the optimistic undo log into the undo log
         optimisticUndoLog.clear();
-        optimisticVersion = 0;
-        optimisticallyModified = false;
+        clearOptimisticVersionUnsafe();
+
         this.version = version;
         // TODO: fix the stream view pointer seek, for now
         // read will read the tx commit entry.
         sv.next();
-        modifyingContext = null;
     }
 
     /** Rollback any optimistic changes, if possible.
@@ -147,21 +151,33 @@ public class VersionLockedObject<T> {
         if (!optimisticallyUndoable) {
             throw new NoRollbackException();
         }
+
         // The undo log is a stack, where the last entry applied
         // is at the front, which is the same order stream() returns
         // entries.
-        optimisticUndoLog.stream()
-                .forEachOrdered(x -> {
-                    if (!x.isUndoable()) {
-                        throw new NoRollbackException(x);
-                    }
-                    undoFunctionMap.get(x.getSMRMethod())
-                            .doUndo(object, x.getUndoRecord(), x.getSMRArguments());
-                });
-        optimisticUndoLog.clear();
-        optimisticallyModified = false;
-        optimisticVersion = 0;
-        modifyingContext = null;
+        while (optimisticUndoLog.size() > 0) {
+
+            // first, check if the current entry is undo-able
+            SMREntry x = optimisticUndoLog.peekFirst();
+            if (!x.isUndoable()) {
+                optimisticallyUndoable = false;
+                throw new NoRollbackException(x);
+            }
+
+            // now, actually remove the undo entry and apply the undo
+            optimisticUndoLog.pollFirst();
+            undoFunctionMap.get(x.getSMRMethod())
+                    .doUndo(object, x.getUndoRecord(), x.getSMRArguments());
+
+            // update the version immediately, in case this while-loop gets aborted in the middle
+            optimisticVersion--;
+        };
+
+        // todo: throw NoRollbackException?? this should be zero already
+        if (optimisticVersion > 0 || optimisticUndoLog.size() > 0)
+            log.warn("rollback did not empty the optimistic undo sz={} version={}", optimisticUndoLog.size(), optimisticVersion);
+
+        clearOptimisticVersionUnsafe();
     }
 
     /** Roll the object back to the supplied version if possible.
@@ -251,62 +267,50 @@ public class VersionLockedObject<T> {
      */
     public Object applyUpdateUnsafe(SMREntry entry, boolean isOptimistic) {
         // TODO: validate the caller actually has a write lock.
-        try {
-            ICorfuSMRUpcallTarget<T> target =
-                    upcallTargetMap
-                            .get(entry.getSMRMethod());
-            if (target == null) {
-                throw new Exception("Unknown upcall " + entry.getSMRMethod());
+
+        ICorfuSMRUpcallTarget<T> target = upcallTargetMap.get(entry.getSMRMethod());
+        if (target == null) {
+            throw new RuntimeException("Unknown upcall " + entry.getSMRMethod());
+        }
+
+        // generate an undo record
+        IUndoRecordFunction<T> undoRecordTarget =
+                undoRecordFunctionMap
+                        .get(entry.getSMRMethod());
+        if (undoRecordTarget == null)
+            log.debug("undo not available {}", entry);
+        if (undoRecordTarget != null) {
+            // calculate the undo record if it doesn't exist.
+            if (!entry.isUndoable()) {
+                entry.setUndoRecord(undoRecordTarget
+                        .getUndoRecord(object, entry.getSMRArguments()));
+                entry.setUndoable(true);
             }
-            // Can we generate an undo record?
-            IUndoRecordFunction<T> undoRecordTarget =
-                    undoRecordFunctionMap
-                            .get(entry.getSMRMethod());
-            if (undoRecordTarget != null) {
-                // calculate the undo record if it doesn't exist.
-                if (!entry.isUndoable()) {
-                    entry.setUndoRecord(undoRecordTarget
-                            .getUndoRecord(object, entry.getSMRArguments()));
-                    entry.setUndoable(true);
-                }
-                // If this is a standard mutation record
-                // and (1) we are not in optimistic mode
-                // (2) the undoLog is not empty OR
-                // the undoLog is empty and we need to
-                // generate undo records add an undo
-                // record to the log.
-                if (!isOptimistic && (!undoLog.isEmpty() ||
-                        needUndoRecordUnsafe())) {
-                    undoLog.addFirst(entry);
-                }
-                // If we're in optimistic mode, add us to the
-                // optimistic undo log. (If there's a point. If
-                // the object isn't optimistically undoable anymore
-                // there's no point.)
-                else if (isOptimistic && optimisticallyUndoable) {
-                    optimisticUndoLog.addFirst(entry);
-                }
-            } else {
-                // We can't generate an undo record, so clear the
-                // optimistic undo log, and mark that the object is
-                // no longer optimistically undoable if we
-                // are in optimistic mode.
+        }
+
+        // Here we maintain the optimistic undo-log
+        if (isOptimistic) {
+            optimisticallyModified = true;
+            if (undoRecordTarget == null) {
                 optimisticUndoLog.clear();
-                if (isOptimistic) {
-                    optimisticallyUndoable = false;
-                }
-            }
-            // If we're in optimistic mode, mark that the object
-            // was optimistically modified.
-            if (isOptimistic) {
-                optimisticallyModified = true;
+                optimisticallyUndoable = false;
+            } else if (optimisticallyUndoable) {
+                optimisticUndoLog.addFirst(entry);
                 optimisticVersionIncrementUnsafe();
             }
-            return target.upcall(object, entry.getSMRArguments());
-        } catch (Exception e) {
-            log.error("Error: Couldn't execute upcall due to {}", e);
-            throw new RuntimeException(e);
         }
+
+        // Here we maintain the normal undo-log
+        else {
+            if (undoRecordTarget == null) {
+                undoLog.clear();
+            } else if (!undoLog.isEmpty() || needUndoRecordUnsafe()) {
+                undoLog.addFirst(entry);
+            }
+        }
+
+        // now invoke the upcall
+        return target.upcall(object, entry.getSMRArguments());
     }
 
     /** Execute the given function under a write lock, not returning

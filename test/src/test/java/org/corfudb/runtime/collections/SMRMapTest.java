@@ -466,17 +466,23 @@ public class SMRMapTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .open();
 
-        getRuntime().getObjectsView().TXBegin();
         testMap.clear();
+        testMap.put("z", "z");
+        assertThat(testMap.size())
+                .isEqualTo(1);
+
+
+        getRuntime().getObjectsView().TXBegin();
         assertThat(testMap.put("a", "a"))
                 .isNull();
         assertThat(testMap.put("a", "b"))
                 .isEqualTo("a");
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
+        testMap.clear();
         getRuntime().getObjectsView().TXAbort();
         assertThat(testMap.size())
-                .isEqualTo(0);
+                .isEqualTo(1);
     }
 
     @Test

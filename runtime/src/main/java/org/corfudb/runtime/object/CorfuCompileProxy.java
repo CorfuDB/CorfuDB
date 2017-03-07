@@ -209,11 +209,15 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                         try {
                             Object res = underlyingObject.applyUpdateUnsafe(l, false);
                             underlyingObject.setVersionUnsafe(logData.getGlobalAddress());
+                            log.debug("apply {} to {}", logData.getGlobalAddress(), streamID.getLeastSignificantBits());
 
                             if (pendingUpcalls.contains(logData.getGlobalAddress())) {
+                                log.debug("upcall result for {}", logData.getGlobalAddress());
                                 upcallResults.put(underlyingObject.getVersionUnsafe(), res == null ?
                                         NullValue.NULL_VALUE : res);
                                 pendingUpcalls.remove(logData.getGlobalAddress());
+                            } else {
+                                log.debug("no thread waiting for {}", logData.getGlobalAddress());
                             }
                         } catch (Exception e) {
                             log.error("Error: Couldn't execute upcall due to {}", e);
@@ -258,9 +262,10 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 return true;
             }, t -> {
                 pendingUpcalls.remove(t.getToken());
+                log.debug("update {} failed", t.getToken());
                 return true;
             });
-        log.trace("Update {} written to {}", smrUpdateFunction, address);
+        log.trace("Update {} written to {} on {}", smrUpdateFunction, address, streamID.getLeastSignificantBits());
         return address;
     }
 
@@ -281,6 +286,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // Check first if we have the upcall, if we do
         // we can service the request right away.
         if (upcallResults.containsKey(timestamp)) {
+            log.debug("upcall {} ready", timestamp);
             R ret = (R) upcallResults.get(timestamp);
             upcallResults.remove(timestamp);
             return ret == NullValue.NULL_VALUE ? null : ret;
@@ -292,6 +298,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         if (underlyingObject.isWriteLocked()) {
             underlyingObject.waitOnLock();
             if (upcallResults.containsKey(timestamp)) {
+                log.debug("now upcall {} ready", timestamp);
                 R ret = (R) upcallResults.get(timestamp);
                 upcallResults.remove(timestamp);
                 return ret == NullValue.NULL_VALUE ? null : ret;
@@ -304,6 +311,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 (v, obj) -> syncObjectUnsafe(underlyingObject, timestamp));
 
         if (upcallResults.containsKey(timestamp)) {
+            log.debug("finally upcall {} ready", timestamp);
             R ret = (R) upcallResults.get(timestamp);
             upcallResults.remove(timestamp);
             return ret == NullValue.NULL_VALUE ? null : ret;
