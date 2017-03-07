@@ -127,6 +127,7 @@ public class VersionLockedObject<T> {
         optimisticUndoLog.clear();
         optimisticVersion = 0;
         optimisticallyModified = false;
+        optimisticallyUndoable = true;
         this.version = version;
         // TODO: fix the stream view pointer seek, for now
         // read will read the tx commit entry.
