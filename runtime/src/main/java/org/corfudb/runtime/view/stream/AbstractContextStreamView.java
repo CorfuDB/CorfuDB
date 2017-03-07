@@ -2,11 +2,9 @@ package org.corfudb.runtime.view.stream;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 
@@ -49,28 +47,31 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      */
     final NavigableSet<T> streamContexts;
 
-    /** A function which creates a base context, representing the original
-     * stream.
+    /** A function which creates a context, given the stream ID and max global.
      */
-    final BiFunction<UUID, Long, T> baseContextFactory;
+    final BiFunction<UUID, Long, T> contextFactory;
+
+    /** The base context, which is always preserved. */
+    final T baseContext;
 
     /** Create a new abstract context stream view.
      *
      * @param runtime               The runtime.
      * @param id                    The id of the stream.
-     * @param baseContextFactory    A function which generates a context,
+     * @param contextFactory        A function which generates a context,
      *                              given the stream id and a maximum global
      *                              address.
      */
     public AbstractContextStreamView(final CorfuRuntime runtime,
                                      final UUID id,
                                      final BiFunction<UUID, Long, T>
-                                             baseContextFactory) {
+                                             contextFactory) {
         this.ID = id;
         this.runtime = runtime;
-        this.streamContexts = new ConcurrentSkipListSet<>();
-        this.baseContextFactory = baseContextFactory;
-        this.streamContexts.add(baseContextFactory.apply(id, Address.MAX));
+        this.streamContexts = new TreeSet<>();
+        this.contextFactory = contextFactory;
+        this.baseContext = contextFactory.apply(id, Address.MAX);
+        this.streamContexts.add(baseContext);
     }
 
     /**
@@ -78,7 +79,8 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      */
     public synchronized void reset() {
         this.streamContexts.clear();
-        this.streamContexts.add(baseContextFactory.apply(ID, Address.MAX));
+        baseContext.reset();
+        this.streamContexts.add(baseContext);
     }
 
     /**
@@ -273,7 +275,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             if (payload instanceof StreamCOWEntry) {
                 StreamCOWEntry ce = (StreamCOWEntry) payload;
                 streamContexts
-                        .add(baseContextFactory.apply(ce.getOriginalStream(),
+                        .add(contextFactory.apply(ce.getOriginalStream(),
                                 ce.getFollowUntil()));
                 return true;
             }
