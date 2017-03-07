@@ -367,8 +367,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
     synchronized void connectChannel(Bootstrap b, long c) {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
-        Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerConnect);
-        try {
+        try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerConnect)) {
             ChannelFuture cf = b.connect(host, port);
             cf.syncUninterruptibly();
             if (!cf.awaitUninterruptibly(timeoutConnect)) {
@@ -377,8 +376,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 throw new NetworkException(c + " Timeout connecting to endpoint", host + ":" + port);
             }
             channel = cf.channel();
-        } finally {
-            MetricsUtils.stopConditionalContext(context);
         }
         channel.closeFuture().addListener((r) -> {
             connected_p = false;

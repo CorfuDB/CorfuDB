@@ -131,12 +131,9 @@ public class CorfuMsgHandler {
                         // stored in 'h' and insert it into the handlerMap.
                         handlerMap.put(a.type(),
                                 (CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) -> {
-                                    Timer.Context timerCxt = MetricsUtils.getConditionalContext(
-                                            t != null && isMetricsEnabled, t);
-                                    try {
+                                    try (Timer.Context timerCxt = MetricsUtils.getConditionalContext(
+                                            t != null && isMetricsEnabled, t)) {
                                         h.handle(msg, ctx, r, isMetricsEnabled);
-                                    } finally {
-                                        MetricsUtils.stopConditionalContext(timerCxt);
                                     }
                         });
                     } catch (Throwable e) {
