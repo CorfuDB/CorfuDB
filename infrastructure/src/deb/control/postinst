@@ -8,3 +8,5 @@ for filename in /usr/share/corfu/bin/*; do
         ln -s /usr/share/corfu/scripts/cmdlet.sh /usr/local/bin/$BASENAME
     fi
 done
+
+update-rc.d corfu-server defaults

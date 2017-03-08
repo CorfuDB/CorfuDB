@@ -3,3 +3,5 @@
 for filename in /usr/share/corfu/bin/*; do
     rm /usr/local/bin/$(basename "$filename")
 done
+
+update-rc.d -f corfu-server remove
