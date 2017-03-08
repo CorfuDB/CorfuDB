@@ -167,7 +167,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // If everything is available in the resolved
         // queue, use it
-        if (context.maxResolution > maxAddress) {
+        if (context.maxResolution > maxAddress &&
+                context.minResolution < context.globalPointer) {
             return fillFromResolved(maxGlobal, context);
         }
 
@@ -183,7 +184,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // If everything is available in the resolved
         // queue, use it
-        if (context.maxResolution > latestToken) {
+        if (context.maxResolution > latestToken &&
+                context.minResolution < context.globalPointer) {
             return fillFromResolved(latestToken, context);
         }
 
@@ -264,7 +266,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             // If everything left is available in the resolved
             // queue, use it
-            if (context.maxResolution > currentRead) {
+            if (context.maxResolution > currentRead &&
+                    context.minResolution < context.globalPointer) {
                 return fillFromResolved(latestToken, context);
             }
 

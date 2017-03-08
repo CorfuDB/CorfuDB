@@ -91,7 +91,6 @@ public class WriteAfterWriteTransactionalContext
         completionFuture.complete(true);
         commitAddress = address;
 
-        // Update all proxies, committing the new address.
         tryCommitAllProxies();
 
         return address;

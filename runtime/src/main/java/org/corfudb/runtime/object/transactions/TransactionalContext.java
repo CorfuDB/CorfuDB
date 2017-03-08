@@ -26,25 +26,6 @@ public class TransactionalContext {
             threadTransactionStack = ThreadLocal.withInitial(
             LinkedList<AbstractTransactionalContext>::new);
 
-    /** A navigable set (priority queue) of contexts. The minimum context
-     * indicates how far we should try to keep the undo log up to.
-     */
-    private static final NavigableSet<AbstractTransactionalContext> contextSet =
-            new ConcurrentSkipListSet<>();
-
-    /** Return the oldest snapshot active in the system, or -1L if
-     * there are no active snapshots. */
-    public static long getOldestSnapshot() {
-        if (contextSet.isEmpty()) {
-            return -1L;
-        }
-        try {
-            return contextSet.first().getSnapshotTimestamp();
-        } catch (NoSuchElementException nse) {
-            return -1L;
-        }
-    }
-
     /** Whether or not the current thread is in a nested transaction.
      *
      * @return  True, if the current thread is in a nested transaction.
@@ -95,7 +76,6 @@ public class TransactionalContext {
      */
     public static AbstractTransactionalContext newContext(AbstractTransactionalContext context) {
         getTransactionStack().addFirst(context);
-        contextSet.add(context);
         return context;
     }
 
@@ -105,7 +85,6 @@ public class TransactionalContext {
      */
     public static AbstractTransactionalContext removeContext() {
         AbstractTransactionalContext r = getTransactionStack().pollFirst();
-        contextSet.remove(r);
         if (getTransactionStack().isEmpty()) {
             synchronized (getTransactionStack())
             {

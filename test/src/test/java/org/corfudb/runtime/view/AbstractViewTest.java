@@ -108,8 +108,8 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     @Before
     public void resetTests() {
         testServerMap.clear();
-        runtime.parseConfigurationString(getDefaultConfigurationString())
-                .setCacheDisabled(true); // Disable cache during unit tests to fully stress the system.
+        runtime.parseConfigurationString(getDefaultConfigurationString());
+       //         .setCacheDisabled(true); // Disable cache during unit tests to fully stress the system.
         runtime.getAddressSpaceView().resetCaches();
     }
 

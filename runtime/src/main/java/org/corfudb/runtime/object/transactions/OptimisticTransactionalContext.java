@@ -12,20 +12,13 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.view.Address;
 
-import java.util.Collections;
-import java.util.ConcurrentModificationException;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.*;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
@@ -59,6 +52,14 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     private final Set<ICorfuSMRProxyInternal> modifiedProxies =
             new HashSet<>();
 
+    /** List of parent transactions at creation time. Used during
+     * optimistic rollback by other threads to access write sets.
+      */
+    private final List<AbstractTransactionalContext> parentTransactions =
+            TransactionalContext.getTransactionStack().stream()
+                    .collect(Collectors.toList());
+
+
     OptimisticTransactionalContext(TransactionBuilder builder) {
         super(builder);
     }
@@ -83,14 +84,14 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
             // If we don't own this object, roll it back
             if (object.isOptimisticallyModifiedUnsafe() &&
-                    modifyingContext != null && modifyingContext != this) {
-                object.optimisticRollbackUnsafe();
+                    modifyingContext != this) {
+                modifyingContext.optimisticRollback(proxy);
             }
 
             // If the version of this object is ahead of what we expected,
             // we need to rollback...
             if (object.getVersionUnsafe() > getSnapshotTimestamp()) {
-                object.rollbackUnsafe(getSnapshotTimestamp());
+                object.rollbackObjectUnsafe(getSnapshotTimestamp());
             }
         } catch (NoRollbackException nre) {
             // Couldn't roll back the object, so we'll have
@@ -102,7 +103,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // next, if the version is older than what we need
         // sync.
         if (object.getVersionUnsafe() < getSnapshotTimestamp()) {
-            proxy.syncObjectUnsafe(proxy.getUnderlyingObject(), getSnapshotTimestamp());
+            proxy.getUnderlyingObject().syncObjectUnsafe(getSnapshotTimestamp());
         }
 
         // Take ownership of the object.
@@ -124,12 +125,12 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
         // Apply all the updates from the optimistic version to the end
         // of the list of all updates for this thread.
-        IntStream.range(object.getOptimisticVersionUnsafe(), allUpdates.size())
+        IntStream.range(0, allUpdates.size())
                 .mapToObj(allUpdates::get)
                 .forEachOrdered(wrapper -> {
                     SMREntry entry  = wrapper.getEntry();
                     Object res = proxy.getUnderlyingObject()
-                            .applyUpdateUnsafe(entry, true);
+                            .applyUpdateUnsafe(entry, Address.OPTIMISTIC);
                     wrapper.setUpcallResult(res);
                 });
     }
@@ -150,7 +151,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             return proxy.getUnderlyingObject().optimisticallyReadAndRetry((v, o) -> {
                 // to ensure snapshot isolation, we should only read from
                 // the first read timestamp.
-                if (v == getSnapshotTimestamp() && objectIsOptimisticallyUpToDateUnsafe(proxy))
+                if (v == getSnapshotTimestamp() && // never true
+                        proxy.getUnderlyingObject().getModifyingContextUnsafe() == null &&
+                        writeSet.get(proxy.getStreamID()) == null) // until we have optimistic IStreamView
                 {
                     return accessFunction.access(o);
                 }
@@ -218,6 +221,50 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         return writeSet.get(proxy.getStreamID()).getValue().size() - 1;
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public <T> void optimisticRollback(ICorfuSMRProxyInternal<T> proxy) {
+        // If there are no updates in our writeset or the parents, we can just
+        // return
+        if (writeSet.get(proxy.getStreamID()) == null &&
+                parentTransactions.stream()
+                .map(x -> x.getWriteSet().get(proxy.getStreamID()))
+                .allMatch(x -> x == null)) {
+            return;
+        }
+
+        // Next, check if all our entries have undo information.
+        if (writeSet.get(proxy.getStreamID()) != null &&
+                writeSet.get(proxy.getStreamID())
+                .getValue().stream().anyMatch(x -> !x.getEntry().isUndoable())) {
+            throw new NoRollbackException();
+        }
+
+        // Next, check any parent entries as well.
+        if (parentTransactions.stream()
+                .map(x -> x.getWriteSet().get(proxy.getStreamID()).getValue())
+                .flatMap(x -> x != null ? x.stream() : Stream.empty())
+                .anyMatch(x -> !x.getEntry().isUndoable())) {
+            throw new NoRollbackException();
+        }
+
+        // Ok, all entries have undo information so let's undo
+        if (writeSet.get(proxy.getStreamID()) != null) {
+            writeSet.get(proxy.getStreamID())
+                    .getValue().stream().forEachOrdered(x -> proxy.getUnderlyingObject()
+                    .applyUndoRecordUnsafe(x.getEntry()));
+        }
+
+        // Same with parent entries
+        parentTransactions.stream()
+                .map(x -> x.getWriteSet().get(proxy.getStreamID()).getValue())
+                .flatMap(x -> x == null ? Stream.empty() : x.stream())
+                .forEachOrdered(x -> proxy.getUnderlyingObject()
+                        .applyUndoRecordUnsafe(x.getEntry()));
+
+        proxy.getUnderlyingObject().clearOptimisticallyModifiedUnsafe();
+    }
+
     /**
      * Commit a transaction into this transaction by merging the read/write
      * sets.
@@ -235,9 +282,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // "commit" the optimistic writes (for each proxy we touched)
         // by updating the modifying context (as long as the context
         // is still the same).
-        updateAllProxies(x ->
-                x.getUnderlyingObject()
-                    .setTXContextUnsafe(this));
     }
 
     /** Commit the transaction. If it is the last transaction in the stack,
@@ -303,37 +347,27 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         super.commitTransaction();
         commitAddress = address;
 
-        // Update all proxies, committing the new address.
         tryCommitAllProxies();
 
         return address;
     }
-
 
     /** Try to commit the optimistic updates to each proxy. */
     protected void tryCommitAllProxies() {
         // First, get the committed entry
         // in order to get the backpointers
         // and the underlying SMREntries.
-        final ILogData committedEntry = this.builder.getRuntime()
+        ILogData committedEntry = this.builder.getRuntime()
                 .getAddressSpaceView().read(commitAddress);
-
-        if (committedEntry.getType() == DataType.EMPTY) {
-            return;
-        }
 
         updateAllProxies(x -> {
             // If some other client updated this object, sync
             // it forward to grab those updates
-            if (x.getVersion() !=
-                    committedEntry
-                            .getBackpointer(x.getStreamID())) {
-                x.syncObjectUnsafe(x.getUnderlyingObject(),
+            x.getUnderlyingObject().syncObjectUnsafe(
                         commitAddress-1);
-            }
             // Clear tne optimistic update flag
             x.getUnderlyingObject()
-                    .clearOptimisticUpdatesUnsafe();
+                    .clearOptimisticallyModifiedUnsafe();
             // Also, be nice and transfer the undo
             // log from the optimistic updates
             // for this to work the write sets better
@@ -343,7 +377,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             List<SMREntry> entryWrites =
                     ((ISMRConsumable) committedEntry
                             .getPayload(this.getBuilder().runtime))
-                            .getSMRUpdates(x.getStreamID());
+                    .getSMRUpdates(x.getStreamID());
             if (committedWrites.size() ==
                     entryWrites.size()) {
                 IntStream.range(0, committedWrites.size())
@@ -356,8 +390,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                             }
                         });
             }
-            x.getUnderlyingObject()
-                    .setVersionUnsafe(commitAddress);
+            // and move the stream pointer to "skip" this commit entry
+            x.getUnderlyingObject().seek(commitAddress + 1);
         });
 
     }
@@ -379,34 +413,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             }
         });
     }
-
-    /** Determine whether a proxy's object is optimistically "up to date".
-     *
-     * An object is optimistically up to date if
-     *
-     * (1) There are no writes in any transaction's write set and there
-     * are no optimistic writes on the object.
-     *
-     * (2) There are optimistic writes on the object and the number of
-     * optimistic writes is equal to the number of writes in the transactions
-     * write set, and the optimistic writes were OUR modifications.
-     *
-     * @param proxy     The proxy containing the object to check.
-     * @param <T>       The underlying type of the object for the proxy.
-     * @return          True, if the object is optimistically up to date.
-     *                  False otherwise.
-     */
-    private <T> boolean objectIsOptimisticallyUpToDateUnsafe(ICorfuSMRProxyInternal<T> proxy) {
-        long numOptimisticModifications = TransactionalContext.getTransactionStack()
-                .stream().flatMap(x -> x.getWriteSetEntryList(proxy.getStreamID()).stream()).count();
-
-        return (numOptimisticModifications == 0 &&
-                !proxy.getUnderlyingObject().isOptimisticallyModifiedUnsafe()) ||
-                (proxy.getUnderlyingObject().getModifyingContextUnsafe() == this &&
-                        proxy.getUnderlyingObject().getOptimisticVersionUnsafe() == numOptimisticModifications);
-    }
-
-
 
     /** Get the root context (the first context of a nested txn)
      * which must be an optimistic transactional context.

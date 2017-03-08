@@ -87,6 +87,25 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      * {@inheritDoc}
      */
     @Override
+    public synchronized void seek(long globalAddress) {
+        // pop any stream context which has a max address
+        // less than the global address
+        while (this.streamContexts.size() > 1) {
+            if (this.streamContexts.first().maxGlobalAddress <
+                    globalAddress)
+            {
+                this.streamContexts.pollFirst();
+            }
+        }
+
+        // now request a seek on the context
+        this.streamContexts.first().seek(globalAddress);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
     public void close() {}
 
     /**
@@ -147,6 +166,10 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
 
         // Nothing read, nothing to process.
         if (entries.size() == 0) {
+            // We've resolved up to maxGlobal, so remember it. (if it wasn't max)
+            if (maxGlobal != Address.MAX) {
+                getCurrentContext().globalPointer = maxGlobal;
+            }
             return entries;
         }
 
@@ -168,8 +191,12 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             entries.addAll(remainingUpTo(maxGlobal));
         }
 
-        // Otherwise update the pointer with the last entry
-        updatePointer(entries.get(entries.size() - 1));
+        // Otherwise update the pointer
+        if (maxGlobal != Address.MAX) {
+            getCurrentContext().globalPointer = maxGlobal;
+        } else {
+            updatePointer(entries.get(entries.size() - 1));
+        }
 
         // And return the entries.
         return entries;
@@ -274,18 +301,33 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             // If this is a COW entry, we update the context as well.
             if (payload instanceof StreamCOWEntry) {
                 StreamCOWEntry ce = (StreamCOWEntry) payload;
-                streamContexts
-                        .add(contextFactory.apply(ce.getOriginalStream(),
-                                ce.getFollowUntil()));
+                pushNewContext(ce.getOriginalStream(),
+                                ce.getFollowUntil());
                 return true;
             }
         }
         return false;
     }
 
-    /** Get the current context. */
+    /** Get the current context.
+     *
+     * Should never throw a NoSuchElement exception because streamContexts should
+     * always at least have one element.
+     *
+     * */
     protected T getCurrentContext() {
         return streamContexts.first();
     }
 
+    /** Add a new context. */
+    protected void pushNewContext(UUID id, long maxGlobal) {
+        streamContexts.add(contextFactory.apply(id, maxGlobal));
+    }
+
+    protected void popContext() {
+        if (streamContexts.size() <= 1) {
+            throw new RuntimeException("Attempted to pop context with less than 1 context remaining!");
+        }
+        streamContexts.pollFirst();
+    }
 }
