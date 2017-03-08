@@ -48,7 +48,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                     // it's the right version.
                     if (v == getSnapshotTimestamp() &&
                             !proxy.getUnderlyingObject().isOptimisticallyModifiedUnsafe()) {
-                        return accessFunction.access(o);
+                        return accessFunction.access(o.getObjectUnsafe());
                     }
                     throw new ConcurrentModificationException();
                 },
@@ -57,32 +57,11 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                     // it's the right version. (Another writer modified it to this state).
                     if (v == getSnapshotTimestamp() &&
                             !proxy.getUnderlyingObject().isOptimisticallyModifiedUnsafe()) {
-                        return accessFunction.access(o);
-                    }
-                    // Otherwise, we need to roll forward or backward.
-                    // First undo any optimistic changes.
-                    if (proxy.getUnderlyingObject().isOptimisticallyModifiedUnsafe()) {
-                        try {
-                            if (this.builder.getRuntime().getParameters().isOptimisticUndoDisabled()) {
-                                throw new NoRollbackException();
-                            }
-                            proxy.getUnderlyingObject().optimisticRollbackUnsafe();
-                        } catch (NoRollbackException nre) {
-                            // guess our only option is to start from scratch.
-                            proxy.getUnderlyingObject().resetUnsafe();
-                        }
-                    }
-                    // Next check the version, if it is ahead, try undo
-                    // We don't support this yet, so we just reset
-                    if (proxy.getVersion() > getSnapshotTimestamp()) {
-                        proxy.getUnderlyingObject().resetUnsafe();
+                        return accessFunction.access(o.getObjectUnsafe());
                     }
 
-                    // Now we sync forward if we are behind
-                    if (proxy.getVersion() < getSnapshotTimestamp()) {
-                        proxy.syncObjectUnsafe(proxy.getUnderlyingObject(),
-                                getSnapshotTimestamp());
-                    }
+                    proxy.getUnderlyingObject()
+                                .syncObjectUnsafe(getSnapshotTimestamp());
 
                     // Now we do the access
                     return accessFunction.access(proxy.getUnderlyingObject()

@@ -182,7 +182,6 @@ public class ObjectsView extends AbstractView {
         if (context == null) {
             log.warn("Attempted to abort a transaction, but no transaction active!");
         } else {
-            log.trace("Aborting transactional context {}.", context.getTransactionID());
             context.abortTransaction();
             TransactionalContext.removeContext();
         }
@@ -213,9 +212,8 @@ public class ObjectsView extends AbstractView {
             return AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
         } else {
             long totalTime = System.currentTimeMillis() - context.getStartTime();
-            log.trace("Exiting (committing) transactional context {} (time={} ms).",
-                    context.getTransactionID(), totalTime);
-
+            log.trace("TXCommit[{}] time={} ms",
+                    context, totalTime);
                 try {
                     return TransactionalContext.getCurrentContext().commitTransaction();
                 } finally {
