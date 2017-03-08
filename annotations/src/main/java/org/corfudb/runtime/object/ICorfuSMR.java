@@ -34,7 +34,7 @@ public interface ICorfuSMR<T> {
     Map<String, IUndoRecordFunction<T>> getCorfuUndoRecordMap();
 
     /** Get a set of strings (function names) which result in a reset
-     * of the objhect.
+     * of the object.
      * @return  The set of strings that cause a reset on the object.
      */
     Set<String> getCorfuResetSet();

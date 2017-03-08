@@ -26,14 +26,6 @@ public interface ICorfuSMRProxyInternal<T> extends ICorfuSMRProxy<T> {
      */
     void syncObjectUnsafe(VersionLockedObject<T> object, long timestamp);
 
-    /** Reset the object to it's original initialized state.
-     *
-     * Unsafe, so ensure the append lock has been taken on the object
-     * before calling.
-     * @param object        The object to sync forward.
-     */
-    void resetObjectUnsafe(VersionLockedObject<T> object);
-
     /** Get a map of SMR upcall targets from method strings.
      * @return              The SMR upcall map for this proxy. */
     Map<String, ICorfuSMRUpcallTarget<T>> getUpcallTargetMap();

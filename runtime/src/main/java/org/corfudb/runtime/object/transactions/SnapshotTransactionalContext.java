@@ -66,13 +66,13 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                             proxy.getUnderlyingObject().optimisticRollbackUnsafe();
                         } catch (NoRollbackException nre) {
                             // guess our only option is to start from scratch.
-                            proxy.resetObjectUnsafe(proxy.getUnderlyingObject());
+                            proxy.getUnderlyingObject().resetUnsafe();
                         }
                     }
                     // Next check the version, if it is ahead, try undo
                     // We don't support this yet, so we just reset
                     if (proxy.getVersion() > getSnapshotTimestamp()) {
-                        proxy.resetObjectUnsafe(proxy.getUnderlyingObject());
+                        proxy.getUnderlyingObject().resetUnsafe();
                     }
 
                     // Now we sync forward if we are behind

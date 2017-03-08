@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 
@@ -61,16 +62,6 @@ public class VersionLockedObject<T> {
      */
     private final Deque<SMREntry> optimisticUndoLog;
 
-    /** True, if the object is optimistically modified.
-     *
-     */
-    private boolean optimisticallyModified;
-
-    /** True, if optimistic changes to this object can be undone.
-     *
-     */
-    private boolean optimisticallyUndoable;
-
     /** The number of optimistic changes made to this object.
      *
      */
@@ -103,11 +94,6 @@ public class VersionLockedObject<T> {
         this.undoLog = new LinkedList<>();
         this.optimisticUndoLog = new LinkedList<>();
 
-        this.optimisticallyUndoable = true;
-        this.optimisticallyModified = false;
-
-        this.optimisticVersion = 0;
-
         this.upcallTargetMap = upcallTargets;
         this.undoRecordFunctionMap = undoRecordTargets;
         this.undoFunctionMap = undoTargets;
@@ -123,25 +109,21 @@ public class VersionLockedObject<T> {
         return this.optimisticVersion;
     }
 
-    public void clearOptimisticVersionUnsafe() {
-        this.optimisticVersion = 0;
-        this.optimisticallyUndoable = true;
-        this.optimisticallyModified = false;
+    /** Clears all data about applied optimistic updates,
+     * including the optimistic undo log.
+     */
+    protected void clearOptimisticUpdatesUnsafe() {
+        optimisticUndoLog.clear();
+        optimisticVersion = 0;
         modifyingContext = null;
-    }
-
-    public void optimisticVersionIncrementUnsafe() {
-        this.optimisticVersion++;
     }
 
     /** Commits all optimistic changes as a new version.
      *
      */
     public void optimisticCommitUnsafe(long version) {
-        // TODO: validate the caller actually has a write lock.
         // TODO: merge the optimistic undo log into the undo log
-        optimisticUndoLog.clear();
-        clearOptimisticVersionUnsafe();
+        clearOptimisticUpdatesUnsafe();
 
         this.version = version;
         // TODO: fix the stream view pointer seek, for now
@@ -153,27 +135,14 @@ public class VersionLockedObject<T> {
      *  Unsafe, requires that the caller has acquired a write lock.
      */
     public void optimisticRollbackUnsafe() {
-        // TODO: validate the caller actually has a write lock.
-        if (!optimisticallyModified) {
-            log.debug("nothing to roll");
-            return;
-        }
-        if (!optimisticallyUndoable) {
+        if (!isOptimisticallyUndoableUnsafe()) {
             throw new NoRollbackException();
         }
 
         optimisticUndoLog.stream()
-                .forEachOrdered(x -> {
-                    if (!x.isUndoable()) {
-                        throw new NoRollbackException(x);
-                    }
-                    applyUndoRecord(x);
-                });
+                .forEachOrdered(this::applyUndoRecord);
 
-        optimisticUndoLog.clear();
-        optimisticallyModified = false;
-        optimisticVersion = 0;
-        modifyingContext = null;
+        clearOptimisticUpdatesUnsafe();
     }
 
     /** Roll the object back to the supplied version if possible.
@@ -201,16 +170,6 @@ public class VersionLockedObject<T> {
         while (undoLog.size() > 0) {
             SMREntry undoRecord = undoLog.pollFirst();
 
-            // Make sure the record is undoable.
-            // This should never happen, but if
-            // for some reason the undo log contains a
-            // non-undoable entry, clear the log and throw an
-            // exception.
-            if (!undoRecord.isUndoable()) {
-                undoLog.clear();
-                throw new NoRollbackException();
-            }
-
             applyUndoRecord(undoRecord);
             this.version = undoRecord.getEntry().getGlobalAddress();
 
@@ -235,6 +194,7 @@ public class VersionLockedObject<T> {
         if (undoFunction != null) {
             undoFunction.doUndo(object, record.getUndoRecord(),
                     record.getSMRArguments());
+            return;
         }
         // If this is a reset, undo by restoring the
         // previous state.
@@ -243,10 +203,13 @@ public class VersionLockedObject<T> {
             // clear the undo record, since it is now
             // consumed (the object may change)
             record.setUndoRecord(null);
+            return;
         }
         // Otherwise we don't know how to undo,
-        // throw an exception
-        throw new NoRollbackException();
+        // throw a runtime exception, because
+        // this is a bug, undoRecords we don't know
+        // how to process shouldn't be in the log.
+        throw new RuntimeException("Unknown undo record in undo log");
     }
 
     /** Calculate the number of undo records we need to keep,
@@ -283,8 +246,6 @@ public class VersionLockedObject<T> {
      * @return              The upcall result, if available.
      */
     public Object applyUpdateUnsafe(SMREntry entry, boolean isOptimistic) {
-        // TODO: validate the caller actually has a write lock.
-
         ICorfuSMRUpcallTarget<T> target = upcallTargetMap.get(entry.getSMRMethod());
         if (target == null) {
             throw new RuntimeException("Unknown upcall " + entry.getSMRMethod());
@@ -325,9 +286,8 @@ public class VersionLockedObject<T> {
             // optimistic undo log. (If there's a point. If
             // the object isn't optimistically undoable anymore
             // there's no point.)
-            else if (isOptimistic && optimisticallyUndoable) {
+            else if (isOptimistic && isOptimisticallyUndoableUnsafe()) {
                 optimisticUndoLog.addFirst(entry);
-                optimisticVersionIncrementUnsafe();
             }
         }
         else {
@@ -337,16 +297,14 @@ public class VersionLockedObject<T> {
             // are in optimistic mode.
             if (isOptimistic) {
                 optimisticUndoLog.clear();
-                optimisticallyUndoable = false;
             } else {
                 undoLog.clear();
             }
         }
 
-        // if optimistic, mark that this object is now optimistically
-        // modified.
+        // if optimistic, update the optimistic version.
         if (isOptimistic) {
-            optimisticallyModified = true;
+            optimisticVersion++;
         }
 
         // now invoke the upcall
@@ -472,11 +430,11 @@ public class VersionLockedObject<T> {
     }
 
     public boolean isOptimisticallyUndoableUnsafe() {
-        return optimisticallyUndoable;
+        return optimisticUndoLog.size() == optimisticVersion;
     }
 
     public boolean isOptimisticallyModifiedUnsafe() {
-        return optimisticallyModified;
+        return optimisticVersion != 0;
     }
 
     /** Reset the stream view backing this object.
@@ -486,5 +444,13 @@ public class VersionLockedObject<T> {
     public void resetStreamViewUnsafe() {
         sv.reset();
         undoLog.clear();
+    }
+
+    /** Reset this object to the uninitialized state. */
+    public void resetUnsafe() {
+        object = newObjectFn.get();
+        clearOptimisticUpdatesUnsafe();
+        resetStreamViewUnsafe();
+        version = Address.NEVER_READ;
     }
 }

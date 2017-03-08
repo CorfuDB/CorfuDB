@@ -236,15 +236,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             });
     }
 
-    // TODO: move to version locked object.
-    @Override
-    public void resetObjectUnsafe(VersionLockedObject<T> object) {
-        object.setObjectUnsafe(getNewInstance());
-        object.clearOptimisticVersionUnsafe();
-        object.resetStreamViewUnsafe();
-        object.version = Address.NEVER_READ;
-    }
-
     /**
      * {@inheritDoc}
      */
