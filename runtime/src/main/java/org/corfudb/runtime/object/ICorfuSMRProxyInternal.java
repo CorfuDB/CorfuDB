@@ -1,5 +1,7 @@
 package org.corfudb.runtime.object;
 
+import org.corfudb.runtime.exceptions.NoRollbackException;
+
 import java.util.Map;
 
 /** An internal interface to the SMR Proxy.
@@ -15,26 +17,4 @@ public interface ICorfuSMRProxyInternal<T> extends ICorfuSMRProxy<T> {
     /** Directly get the state of the object the proxy is managing,
      * without causing a sync. */
     VersionLockedObject<T> getUnderlyingObject();
-
-    /** Sync the object forward. At the end of the call, the version
-     * locked object will be at the version given in the timestamp.
-     *
-     * Unsafe, so ensure the append lock has been taken on the object
-     * before calling.
-     * @param object        The object to sync forward.
-     * @param timestamp     The timestamp to sync it to.
-     */
-    void syncObjectUnsafe(VersionLockedObject<T> object, long timestamp);
-
-    /** Get a map of SMR upcall targets from method strings.
-     * @return              The SMR upcall map for this proxy. */
-    Map<String, ICorfuSMRUpcallTarget<T>> getUpcallTargetMap();
-
-    /** Get a map of UndoRecord targets from method strings.
-     * @return              The UndoRecord map for this proxy. */
-    Map<String, IUndoRecordFunction<T>> getUndoRecordTargetMap();
-
-    /** Get a map of Undo targets from strings.
-     * @return              The Undo map for this proxy.*/
-    Map<String, IUndoFunction<T>> getUndoTargetMap();
 }

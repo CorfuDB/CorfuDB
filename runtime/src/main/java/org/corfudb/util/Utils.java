@@ -337,4 +337,13 @@ public class Utils {
             }
         }
     }
+
+    /** Generates a human readable UUID string (4 hex chars)
+     * using time_mid
+     * @param id    The UUID to parse
+     * @return      A human readable UUID string
+     */
+    public static String toReadableID(UUID id) {
+        return Long.toHexString((id.getLeastSignificantBits()) & 0xFFFF);
+    }
 }

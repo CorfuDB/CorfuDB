@@ -34,7 +34,7 @@ public abstract class AbstractStreamContext implements
     /**
      * Generate a new stream context given the id of the stream and the
      * maximum address to read to.
-     * @param id            The id of the stream.
+     * @param id                  The id of the stream.
      * @param maxGlobalAddress    The maximum address to read up to.
      */
     public AbstractStreamContext(final UUID id,
@@ -47,6 +47,17 @@ public abstract class AbstractStreamContext implements
     /** Reset the stream context. */
     void reset() {
         globalPointer = Address.NEVER_READ;
+    }
+
+    /** Move the pointer for the context to the given global address,
+     * updating any structures if necessary.
+     * @param globalAddress     The address to seek to.
+     */
+    void seek(long globalAddress) {
+        // by default we just need to update the pointer.
+        // we subtract by one, since the NEXT read will
+        // have to include globalAddress.
+        globalPointer = globalAddress - 1;
     }
 
     /**

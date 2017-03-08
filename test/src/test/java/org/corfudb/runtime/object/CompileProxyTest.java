@@ -90,7 +90,7 @@ public class CompileProxyTest extends AbstractViewTest {
         // track the raw stream updates caused by the execution so far
         ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = (ICorfuSMR<CorfuSharedCounter>) sharedCounter;
         ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
-        IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
+        //IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
         int beforeSync, afterSync;
 
@@ -100,7 +100,8 @@ public class CompileProxyTest extends AbstractViewTest {
 
         // sync with the stream entry by entry
         for (int timestamp = 1; timestamp <= concurrency; timestamp++) {
-            proxy_CORFUSMR.syncObjectUnsafe(proxy_CORFUSMR.getUnderlyingObject(), timestamp);
+            proxy_CORFUSMR.getUnderlyingObject()
+                    .syncObjectUnsafe(timestamp);
             assertThat((afterSync = proxy_CORFUSMR.getUnderlyingObject().object.getValue()))
                     .isBetween(0, concurrency);
             assertThat(beforeSync)
@@ -214,7 +215,7 @@ public class CompileProxyTest extends AbstractViewTest {
 
         ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = (ICorfuSMR<CorfuSharedCounter>)  sharedCounter;
         ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
-        IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
+      //  IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
         int numTasks = PARAMETERS.NUM_ITERATIONS_LOW;
         Random r = new Random(PARAMETERS.SEED);
@@ -392,7 +393,7 @@ public class CompileProxyTest extends AbstractViewTest {
         // for tracking raw stream status
         ICorfuSMR<CorfuCompoundObj> compiledCorfuCompound = (ICorfuSMR<CorfuCompoundObj>) sharedCorfuCompound;
         ICorfuSMRProxyInternal<CorfuCompoundObj> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuCompoundObj>) compiledCorfuCompound.getCorfuSMRProxy();
-        IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
+       // IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
         // initialization
         sharedCorfuCompound.set(sharedCorfuCompound.new Inner("E" + 0, "F" + 0), 0);

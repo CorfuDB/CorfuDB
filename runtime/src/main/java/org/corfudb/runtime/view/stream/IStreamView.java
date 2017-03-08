@@ -1,10 +1,15 @@
 package org.corfudb.runtime.view.stream;
 
+import lombok.Data;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.view.Address;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -28,6 +33,46 @@ public interface IStreamView extends Iterator<ILogData> {
      * start from the beginning of this stream.
      */
     void reset();
+
+    /** Seek to the requested maxGlobal address. The next read will
+     * begin at the given global address, inclusive.
+     * @param globalAddress
+     */
+    void seek(long globalAddress);
+
+    /** An enum representing search directions. */
+    @RequiredArgsConstructor
+    enum SearchDirection {
+        /** Search forward. */
+        FORWARD(false, true),
+        /** Search forward, including address given. */
+        FORWARD_INCLUSIVE(true, true),
+        /** Search backwards. */
+        REVERSE(false, false),
+        /** Search backwards, including address given. */
+        REVERSE_INCLUSIVE(true, false);
+
+        /** Whether the address given should be included
+         * in the search.
+         */
+        @Getter
+        final boolean inclusive;
+
+        /** True if the search is forward, false otherwise. */
+        @Getter
+        final boolean forward;
+    }
+
+    /** Find the global address of the next entry in this stream,
+     * in the direction given.
+     *
+     * @param globalAddress     The global address to start searching from.
+     * @param direction         The direction to search.
+     * @return                  The global address of the next entry in the
+     *                          stream, or Address.NOT_FOUND if no entry
+     *                          was found.
+     */
+    long find(long globalAddress, SearchDirection direction);
 
     /** Append an object to the stream, returning the global address
      * it was written at.
@@ -65,9 +110,27 @@ public interface IStreamView extends Iterator<ILogData> {
      * @return  The next entry in the stream, or NULL, if no entries are
      *          available.
      */
+    @Nullable
     default ILogData next() {
         return nextUpTo(Long.MAX_VALUE);
     }
+
+    /** Retrieve the previous entry in the stream. If there are no previous entries,
+     * NULL will be returned.
+     * @return  The previous entry in the stream, or NULL, if no entries are
+     *           available.
+     */
+    @Nullable
+    ILogData previous();
+
+    /** Retrieve the current entry in the stream, which was the entry previously
+     * returned by a call to next() or previous(). If the stream was never read
+     * from, NULL will be returned.
+     *
+     * @return The current entry in the stream.
+     */
+    @Nullable
+    ILogData current();
 
     /** Retrieve the next entry from this stream, up to the address given or the
      *  tail of the stream. If there are no entries present, this function
@@ -77,6 +140,7 @@ public interface IStreamView extends Iterator<ILogData> {
      * @return          The next entry in the stream, or NULL, if no entries
      *                  are available.
      */
+    @Nullable
     ILogData nextUpTo(long maxGlobal);
 
     /** Retrieve all of the entries from this stream, up to the tail of this
@@ -90,6 +154,7 @@ public interface IStreamView extends Iterator<ILogData> {
      * @return          The next entries in the stream, or an empty list,
      *                  if no entries are available.
      */
+    @Nonnull
     default List<ILogData> remaining() { return remainingUpTo(Address.MAX); }
 
     /** Retrieve all of the entries from this stream, up to the address given or
@@ -110,4 +175,11 @@ public interface IStreamView extends Iterator<ILogData> {
      * @return      True, if there are potentially more entries in the stream.
      */
     boolean hasNext();
+
+    /** Get the current position of the pointer in this stream (global address).
+     *
+     * @return          The position of the pointer in this stream (global address),
+     *                  or Address.NEVER_READ.
+     */
+    long getCurrentGlobalPosition();
 }

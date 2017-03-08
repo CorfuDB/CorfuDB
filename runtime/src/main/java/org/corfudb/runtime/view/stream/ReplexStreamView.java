@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.stream;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
@@ -45,6 +46,55 @@ public class ReplexStreamView extends
     public ReplexStreamView(final CorfuRuntime runtime,
                                  final UUID streamID) {
         super(runtime, streamID, ReplexStreamContext::new);
+    }
+
+    /** {@inheritDoc}
+     *
+     * This is problematic in Replex since we need to translate
+     * from stream addresses to global addresses. We create
+     * a temporary context to do the search.
+     * */
+    @Override
+    public synchronized long find(long globalAddress, SearchDirection direction) {
+        pushNewContext(getCurrentContext().id,
+                getCurrentContext().maxGlobalAddress-1);
+
+        Long foundAddress = null;
+        // See if we can find the element.
+        ILogData data;
+
+        ILogData prev = null;
+        while ((data = nextUpTo(globalAddress + 1)) != null) {
+            if (data.getGlobalAddress() >= globalAddress)
+            {
+                if (direction.isInclusive() &&
+                        data.getGlobalAddress() == globalAddress) {
+                    foundAddress = globalAddress;
+                }
+                else if (!direction.isForward()) {
+                    if (prev == null) {
+                        foundAddress = globalAddress;
+                    } else {
+                        foundAddress = prev.getGlobalAddress();
+                    }
+                }
+                else {
+                    foundAddress = data.getGlobalAddress();
+                    if (!direction.isInclusive() && foundAddress == globalAddress) {
+                        data = nextUpTo(Address.MAX);
+                        if (data != null) {
+                            foundAddress = data.getGlobalAddress();
+                        } else {
+                            foundAddress = null;
+                        }
+                    }
+                }
+                break;
+            }
+            prev = data;
+        }
+        popContext();
+        return foundAddress == null ? Address.NOT_FOUND : foundAddress;
     }
 
     /** {@inheritDoc}
@@ -109,6 +159,39 @@ public class ReplexStreamView extends
         }
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public ILogData previous() {
+        // Deal with any requested seek
+        doPendingSeek(getCurrentContext(), Address.MAX);
+
+        // If never read or only one entry, return null
+        if (getCurrentContext().streamPointer == Address.NEVER_READ ||
+                getCurrentContext().streamPointer == 0)
+        return null;
+
+        // Move the stream pointer backwards and return the "next"
+        // entry, which is actually the previous.
+        getCurrentContext().streamPointer -= 2;
+        ILogData data = next();
+        getCurrentContext().globalPointer = data.getGlobalAddress();
+        return data;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public ILogData current() {
+        if (getCurrentContext().streamPointer > Address.NEVER_READ) {
+            getCurrentContext().streamPointer--;
+        }
+        return next();
+    }
+
+    @Override
+    public long getCurrentGlobalPosition() {
+        return 0;
+    }
+
     /** Update the known maximum stream address, given the context.
      *
      * @param context   The context to use.
@@ -117,6 +200,34 @@ public class ReplexStreamView extends
         context.knownStreamMax = runtime.getSequencerView()
                 .nextToken(Collections.singleton(context.id), 0)
                 .getStreamAddresses().get(context.id);
+    }
+
+    /** Resolve any pending seek that was queued.
+     *
+     * @param context       The context to seek in
+     * @param maxGlobal     The maxGlobal to process to
+     */
+    private void doPendingSeek(final ReplexStreamContext context,
+                               long maxGlobal) {
+        // If there's a pending seek, resolve the correct global address
+        if (context.pendingSeek != Address.NEVER_READ) {
+            long pendingSeek = context.pendingSeek;
+            context.pendingSeek = Address.NEVER_READ;
+            // This is a low performance implementation that
+            // will seek from the beginning.
+            context.streamPointer = Address.NEVER_READ;
+            while (true) {
+                ILogData data = getNextEntry(context, maxGlobal);
+                if (data == null || data.getType() != DataType.DATA) {
+                    break;
+                }
+                if (data.getGlobalAddress() >= pendingSeek) {
+                    context.globalPointer = data.getGlobalAddress();
+                    break;
+                }
+            }
+            context.streamPointer = Math.max(Address.NEVER_READ, context.streamPointer-1);
+        }
     }
 
     /** {@inheritDoc}
@@ -128,6 +239,9 @@ public class ReplexStreamView extends
     @Override
     protected LogData getNextEntry(final ReplexStreamContext context,
                                    long maxGlobal) {
+        // Deal with any requested seek
+        doPendingSeek(context, maxGlobal);
+
         // If we are at (or greater than, which shouldn't occur...) the known
         // stream maximum, we need to check if theres a new stream maximum.
         if (context.streamPointer >= context.knownStreamMax) {
@@ -181,6 +295,7 @@ public class ReplexStreamView extends
                     return null;
                 }
                 context.streamPointer++;
+                context.globalPointer = ld.getGlobalAddress();
                 return ld;
             }
 
@@ -224,8 +339,18 @@ public class ReplexStreamView extends
          */
         long streamPointer;
 
+        /** A pointer to the current position in the stream which
+         * uses the global address.
+         */
+        long globalPointer;
+
         /** The largest known stream address we know was issued. */
         long knownStreamMax;
+
+        /** A pending seek, if requested, or Address.NEVER_READ
+         * if there is no pending seek.
+         */
+        long pendingSeek;
 
         /** Create a new stream context with the given ID and maximum address
          * to read to.
@@ -236,6 +361,37 @@ public class ReplexStreamView extends
             super(id, maxGlobalAddress);
             streamPointer = Address.NEVER_READ;
             knownStreamMax = Address.NEVER_READ;
+            pendingSeek = Address.NEVER_READ;
+            globalPointer = Address.NEVER_READ;
         }
+
+        @Override
+        void reset() {
+            super.reset();
+            streamPointer = Address.NEVER_READ;
+            knownStreamMax = Address.NEVER_READ;
+            pendingSeek = Address.NEVER_READ;
+            globalPointer = Address.NEVER_READ;
+        }
+
+        /**
+         * {@inheritDoc}
+         * In replex, seek is problematic because the interface takes
+         * global addresses, but the implementation only knows
+         * about stream addresses.
+         *
+         * So we take the current stream pointer and seek until
+         * we hit the global address. In the future, this could
+         * be optimized using a cache, potentially.
+         *
+         * In this function, we just mark pendingSeek so it can be
+         * resolved on the next read.
+         */
+        @Override
+        void seek(long globalAddress) {
+            pendingSeek = globalAddress;
+            super.seek(globalAddress);
+        }
+
     }
 }
