@@ -6,6 +6,8 @@
         </encoder>
     </appender>
 
+    <logger name="org.corfudb.runtime.object" level="DEBUG"/>
+
     <root level="TRACE">
         <!---appender-ref ref="STDOUT" /-->
     </root>
