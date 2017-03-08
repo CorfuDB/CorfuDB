@@ -37,7 +37,6 @@ public class FailureHandlerDispatcher {
             currentLayout.setRuntime(corfuRuntime);
             sealEpoch(currentLayout);
             // Attempts to update all the layout servers with the modified layout.
-            newLayout.setEpoch(newLayout.getEpoch() + 1);
             corfuRuntime.getLayoutView().updateLayout(newLayout, newLayout.getEpoch());
 
             // Check if our proposed layout got selected and committed.

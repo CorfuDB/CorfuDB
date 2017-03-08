@@ -8,16 +8,15 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.util.CFUtils;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.UUID;
-import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.stream.Stream;
 
 /**
@@ -96,35 +95,19 @@ public class Layout implements Cloneable {
     public void moveServersToEpoch()
             throws WrongEpochException, QuorumUnreachableException {
         log.debug("Requested move of servers to new epoch {} servers are {}", epoch, getAllServers());
-        // Collect a list of all servers in the system.
+
+        List<CompletableFuture<Boolean>> sealCompletableFutureList = new ArrayList<>();
 
         // Seal layout servers
-        CompletableFuture<Boolean>[] layoutSealFutures = getLayoutServers().stream()
-                .map(runtime::getRouter)
-                .map(x -> x.getClient(BaseClient.class))
-                .map(x -> x.setRemoteEpoch(epoch))
-                .toArray(CompletableFuture[]::new);
-
-        Boolean success = false;
-        QuorumFutureFactory.CompositeFuture<Boolean> quorumFuture =
-                QuorumFutureFactory.getQuorumFuture(Boolean::compareTo, layoutSealFutures);
-        try {
-            success = quorumFuture.get();
-        } catch (ExecutionException | InterruptedException e) {
-            if (e.getCause() instanceof QuorumUnreachableException) {
-                throw (QuorumUnreachableException) e.getCause();
-            }
-        }
-        int reachableServers = (int) Arrays.stream(layoutSealFutures)
-                .filter(booleanCompletableFuture -> !booleanCompletableFuture.isCompletedExceptionally()).count();
-
-        if (!success) throw new QuorumUnreachableException(reachableServers, layoutSealFutures.length);
+        sealCompletableFutureList.add(new SealLayoutServers().asyncSealLayoutServers(runtime, this, epoch));
 
         // Seal Log Unit Servers
         for (LayoutSegment layoutSegment : getSegments()) {
+            sealCompletableFutureList.add(layoutSegment.getReplicationMode().sealSegment(layoutSegment, epoch, runtime));
+        }
 
-            layoutSegment.getReplicationMode().sealSegment(layoutSegment, epoch, runtime);
-
+        for (CompletableFuture cf : sealCompletableFutureList) {
+            CFUtils.getUninterruptibly(cf, QuorumUnreachableException.class);
         }
     }
 
@@ -359,27 +342,28 @@ public class Layout implements Cloneable {
     public enum ReplicationMode {
         CHAIN_REPLICATION {
             @Override
-            public Boolean sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime)
+            public CompletableFuture<Boolean> sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime)
                     throws QuorumUnreachableException {
-                return new SealChainReplication().sealLayoutSegment(runtime, layoutSegment, sealEpoch);
+                return new SealChainReplication().asyncSealLayoutSegment(runtime, layoutSegment, sealEpoch);
             }
         },
         QUORUM_REPLICATION {
             @Override
-            public Boolean sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime)
+            public CompletableFuture<Boolean> sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime)
                     throws QuorumUnreachableException {
-                return new SealQuorumReplication().sealLayoutSegment(runtime, layoutSegment, sealEpoch);
+                //TODO: Take care of log unit servers which were not sealed.
+                return new SealQuorumReplication().asyncSealLayoutSegment(runtime, layoutSegment, sealEpoch);
             }
         },
         REPLEX {
             @Override
-            public Boolean sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime) {
+            public CompletableFuture<Boolean> sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime) {
                 throw new UnsupportedOperationException("unsupported seal");
             }
         },
         NO_REPLICATION {
             @Override
-            public Boolean sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime) {
+            public CompletableFuture<Boolean> sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime) {
                 throw new UnsupportedOperationException("unsupported seal");
             }
         };
@@ -387,7 +371,7 @@ public class Layout implements Cloneable {
         /**
          * Seals the layout segment.
          */
-        public abstract Boolean sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime) throws QuorumUnreachableException;
+        public abstract CompletableFuture<Boolean> sealSegment(LayoutSegment layoutSegment, long sealEpoch, CorfuRuntime runtime) throws QuorumUnreachableException;
     }
 
     @Data

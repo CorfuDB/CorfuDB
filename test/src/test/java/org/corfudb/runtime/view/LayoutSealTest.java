@@ -128,31 +128,6 @@ public class LayoutSealTest extends AbstractViewTest {
 
     /**
      * Scenario: 5 Servers.
-     * ENDPOINT_1 and ENDPOINT_3 failed and attempted to seal.
-     * LayoutServers quorum is possible,    -   Seal passes
-     * Stripe 1: 1 failed, 2 responses.     -   Seal passes
-     * Stripe 2: 1 failed, 1 responses.     -   Seal passes
-     * Seal passes.
-     */
-    @Test
-    public void successfulChainSealWithMaxFailures() {
-        Layout l = getLayout(Layout.ReplicationMode.CHAIN_REPLICATION);
-
-        addClientRule(l.getRuntime(), SERVERS.ENDPOINT_1, new TestRule().drop().always());
-        addClientRule(l.getRuntime(), SERVERS.ENDPOINT_3, new TestRule().drop().always());
-
-        l.setEpoch(l.getEpoch() + 1);
-        try {
-            l.moveServersToEpoch();
-        } catch (QuorumUnreachableException e) {
-            e.printStackTrace();
-        }
-        assertLayoutEpochs(2, 1, 2);
-        assertServerRouterEpochs(2, 1, 2, 1, 2);
-    }
-
-    /**
-     * Scenario: 5 Servers.
      * ENDPOINT_1, ENDPOINT_3 and ENDPOINT_3 failed and attempted to seal.
      * LayoutServers quorum is possible,    -   Seal passes
      * Stripe 1: 1 failed, 2 responses.     -   Seal passes
