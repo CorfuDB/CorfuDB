@@ -30,4 +30,10 @@ public @interface MutatorAccessor {
      * @return The name of the undoRecord function.
      */
     String undoRecordFunction() default "";
+
+    /** Whether this mutator resets the state of this object. Typically used
+     * for methods like clear().
+     * @return True, if the mutator resets the object.
+     */
+    boolean reset() default false;
 }

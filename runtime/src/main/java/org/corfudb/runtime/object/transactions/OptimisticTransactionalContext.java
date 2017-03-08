@@ -79,7 +79,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     object.getModifyingContextUnsafe();
 
             // If we don't own this object, roll it back
-            if (modifyingContext != null && modifyingContext != this) {
+            if (object.isOptimisticallyModifiedUnsafe() &&
+                    modifyingContext != null && modifyingContext != this) {
                 object.optimisticRollbackUnsafe();
             }
 
@@ -92,7 +93,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // Couldn't roll back the object, so we'll have
             // to start from scratch.
             // TODO: create a copy instead
-            proxy.resetObjectUnsafe(object);
+            object.resetUnsafe();
         }
 
         // next, if the version is older than what we need

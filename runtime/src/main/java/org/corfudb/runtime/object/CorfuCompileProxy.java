@@ -76,6 +76,13 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Getter
     final Map<String, IUndoRecordFunction<T>> undoRecordTargetMap;
 
+
+    /** The reset set contains a list of methods which reset the object,
+     * using their SMRMethod string.
+     */
+    @Getter
+    final Set<String> resetSet;
+
     /** The arguments this proxy was created with.
      *
      */
@@ -115,7 +122,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                              ISerializer serializer,
                              Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
                              Map<String, IUndoFunction<T>> undoTargetMap,
-                             Map<String, IUndoRecordFunction<T>> undoRecordTargetMap
+                             Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
+                             Set<String> resetSet
                              ) {
         this.rt = rt;
         this.streamID = streamID;
@@ -126,6 +134,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         this.upcallTargetMap = upcallTargetMap;
         this.undoTargetMap = undoTargetMap;
         this.undoRecordTargetMap = undoRecordTargetMap;
+        this.resetSet = resetSet;
 
         this.pendingUpcalls = new ConcurrentSet<>();
         this.upcallResults = new ConcurrentHashMap<>();
@@ -253,18 +262,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                         }
                     });
             });
-    }
-
-    @Override
-    public void resetObjectUnsafe(VersionLockedObject<T> object) {
-        try {
-            object.setObjectUnsafe(getNewInstance());
-            object.clearOptimisticVersionUnsafe();
-            object.resetStreamViewUnsafe();
-            object.version = Address.NEVER_READ;
-        } catch (InstantiationException | IllegalAccessException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     /**
@@ -452,11 +449,11 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @SuppressWarnings("unchecked")
     private VersionLockedObject<T> getNewVersionLockedObject() {
         try {
-            return new VersionLockedObject<T>(getNewInstance(),
+            return new VersionLockedObject<T>(this::getNewInstance,
                     -1L,
                     rt.getStreamsView().get(streamID),
                     getUpcallTargetMap(), getUndoRecordTargetMap(),
-                    getUndoTargetMap());
+                    getUndoTargetMap(), getResetSet());
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -465,30 +462,31 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     /** Get a new instance of the real underlying object.
      *
      * @return An instance of the real underlying object
-     * @throws InstantiationException   If the object cannot be instantiated
-     * @throws IllegalAccessException   If for some reason the object class was not public
      */
     @SuppressWarnings("unchecked")
-    private T getNewInstance()
-            throws InstantiationException, IllegalAccessException {
-        T ret = null;
-        if (args == null || args.length == 0) {
-            ret = type.newInstance();
-        } else {
-            // This loop is not ideal, but the easiest way to get around Java boxing,
-            // which results in primitive constructors not matching.
-            for (Constructor<?> constructor : type.getDeclaredConstructors()) {
-                try {
-                    ret = (T) constructor.newInstance(args);
-                    break;
-                } catch (Exception e) {
-                    // just keep trying until one works.
+    private T getNewInstance() {
+        try {
+            T ret = null;
+            if (args == null || args.length == 0) {
+                ret = type.newInstance();
+            } else {
+                // This loop is not ideal, but the easiest way to get around Java boxing,
+                // which results in primitive constructors not matching.
+                for (Constructor<?> constructor : type.getDeclaredConstructors()) {
+                    try {
+                        ret = (T) constructor.newInstance(args);
+                        break;
+                    } catch (Exception e) {
+                        // just keep trying until one works.
+                    }
                 }
             }
+            if (ret instanceof ICorfuSMRProxyWrapper) {
+                ((ICorfuSMRProxyWrapper<T>) ret).setProxy$CORFUSMR(this);
+            }
+            return ret;
+        } catch (InstantiationException | IllegalAccessException e) {
+            throw new RuntimeException(e);
         }
-        if (ret instanceof ICorfuSMRProxyWrapper) {
-            ((ICorfuSMRProxyWrapper<T>) ret).setProxy$CORFUSMR(this);
-        }
-        return ret;
     }
 }
