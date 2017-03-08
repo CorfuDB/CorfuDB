@@ -198,4 +198,62 @@ public class UndoTest extends AbstractObjectTest {
         });
 
     }
+
+    /**
+     * Check that rollbackUnsafe can rollback on context switch
+     *
+     * <p>
+     * Verify that if we have two threads with different snapshot we can
+     * Undo the log upon context switch.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void CanUndoDifferentVersion()
+        throws Exception {
+        Map<Integer, String> testMap = getRuntime()
+                .getObjectsView()
+                .build()
+                .setStreamName("test")
+                .setTypeToken(new TypeToken<SMRMap<Integer, String>>() {
+                })
+                .open();
+
+        final String normalValue = "z";
+        final int mapSize = 10 * PARAMETERS.NUM_ITERATIONS_LARGE;
+
+        // populate the map with many elements
+        for (int i = 0; i < mapSize; i++)
+            testMap.put(i, normalValue);
+
+        // t0 is starting a transaction and reading the map
+        // t0 snapshot is at version x (object is at version x)
+        t(0, () -> getRuntime().getObjectsView().TXBegin());
+        t(0, () -> testMap.size());
+
+        // External non-transactional put in the map
+        // After puts, Underlying object is at version x+2
+        testMap.put(mapSize + 1, "k");
+        testMap.put(mapSize + 2, "l");
+
+        // t1 starts a transaction and read the map
+        // t1 snapshot is at x+2 (object is at version x+2)
+        t(1, () -> getRuntime().getObjectsView().TXBegin());
+        t(1, () -> testMap.size());
+
+        // Context switch from t1 -> t0 and read the map
+        // The underlying object should use the undoLog to get back at version x
+        // This should be really short
+        long startTime, endTime;
+        startTime = System.currentTimeMillis();
+        t(0, () -> testMap.size());
+        endTime = System.currentTimeMillis();
+
+        if (!testStatus.equals("")) {
+            testStatus += ";";
+        }
+        testStatus += "undo rebuild time=" +
+                String.format("%.0f", (float)(endTime-startTime))
+                + "ms";
+    }
 }
