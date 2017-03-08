@@ -1,5 +1,8 @@
 package org.corfudb.runtime.object;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import io.netty.util.internal.ConcurrentSet;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +13,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.lang.reflect.Constructor;
@@ -93,6 +97,20 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     Map<Long, Object> upcallResults;
 
+    /**
+     * Metrics: meter (counter), histogram
+     */
+    private MetricRegistry metrics = CorfuRuntime.getMetrics();
+    private String mpObj = CorfuRuntime.getMpObj();
+    private Timer timerAccess = metrics.timer(mpObj + "access");
+    private Timer timerLogWrite = metrics.timer(mpObj + "log-write");
+    private Timer timerTxn = metrics.timer(mpObj + "txn");
+    private Timer timerUpcall = metrics.timer(mpObj + "upcall");
+    private Counter counterAccessOptimistic = metrics.counter(mpObj + "access-optimistic");
+    private Counter counterAccessLocked = metrics.counter(mpObj + "access-locked");
+    private Counter counterTxnRetry1 = metrics.counter(mpObj + "txn-first-retry");
+    private Counter counterTxnRetryN = metrics.counter(mpObj + "txn-extra-retries");
+
     public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
                              ISerializer serializer,
                              Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
@@ -121,6 +139,14 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
                         Object[] conflictObject) {
+        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
+        try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerAccess)){
+            return accessInner(accessMethod, conflictObject, isEnabled);
+        }
+    }
+
+    private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
+                              Object[] conflictObject, boolean isMetricsEnabled) {
         if (TransactionalContext.isInTransaction()) {
             return TransactionalContext.getCurrentContext()
                     .access(this, accessMethod, conflictObject);
@@ -139,11 +165,13 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             // at least that of the linearized read requested.
             if (ver >= timestamp
                     && !underlyingObject.isOptimisticallyModifiedUnsafe()) {
+                MetricsUtils.incConditionalCounter(isMetricsEnabled, counterAccessOptimistic, 1);
                 return accessMethod.access(underlyingObject.getObjectUnsafe());
             }
             // We don't have the right version, so we need to write
             // throwing this exception causes us to take a write lock.
-                 log.debug("access needs to sync forward up to timestamp {}", timestamp);
+            MetricsUtils.incConditionalCounter(isMetricsEnabled, counterAccessLocked, 1);
+            log.debug("access needs to sync forward up to timestamp {}", timestamp);
             throw new ConcurrentModificationException();
         },
             //  The read did not acquire the right version, so we
@@ -245,6 +273,13 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public long logUpdate(String smrUpdateFunction, Object[] conflictObject,
                           Object... args) {
+        try (Timer.Context context = MetricsUtils.getConditionalContext(timerLogWrite)) {
+            return logUpdateInner(smrUpdateFunction, conflictObject, args);
+        }
+    }
+
+    private long logUpdateInner(String smrUpdateFunction, Object[] conflictObject,
+                                Object... args) {
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (TransactionalContext.isInTransaction()) {
@@ -275,7 +310,12 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     @SuppressWarnings("unchecked")
     public <R> R getUpcallResult(long timestamp, Object[] conflictObject) {
+        try (Timer.Context context = MetricsUtils.getConditionalContext(timerUpcall);) {
+            return getUpcallResultInner(timestamp, conflictObject);
+        }
+    }
 
+    private <R> R getUpcallResultInner(long timestamp, Object[] conflictObject) {
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (TransactionalContext.isInTransaction()) {
@@ -345,7 +385,15 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Override
     public <R> R TXExecute(Supplier<R> txFunction) {
+        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
+        try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerTxn)) {
+            return TXExecuteInner(txFunction, isEnabled);
+        }
+    }
+
+    private <R> R TXExecuteInner(Supplier<R> txFunction, boolean isMetricsEnabled) {
         long sleepTime = 1L;
+        int retries = 1;
         while (true) {
             try {
                 rt.getObjectsView().TXBegin();
@@ -353,10 +401,15 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 rt.getObjectsView().TXEnd();
                 return ret;
             } catch (Exception e) {
+                if (retries == 1) {
+                    MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTxnRetry1, 1);
+                }
+                MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTxnRetryN, 1);
                 log.debug("Transactional function aborted due to {}, retrying after {} msec", e, sleepTime);
                 try {Thread.sleep(sleepTime); }
                 catch (Exception ex) {}
                 sleepTime = min(sleepTime * 2L, 1000L);
+                retries++;
             }
         }
     }

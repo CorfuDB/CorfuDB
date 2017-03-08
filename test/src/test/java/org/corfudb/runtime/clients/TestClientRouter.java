@@ -90,18 +90,23 @@ public class TestClientRouter implements IClientRouter {
 
     public List<TestRule> rules;
 
-    /**
-     * The optional address for this router, if set.
-     */
-    @Getter
-    @Setter
-    public String address;
-
     /** The server router endpoint this client should route to. */
     TestServerRouter serverRouter;
 
     /** A mock channel context for this connection. */
     TestChannelContext channelContext;
+
+    /**
+     * The test host that this router is routing requests for.
+     */
+    @Getter
+    String host = "testServer";
+
+    /**
+     * The test port that this router is routing requests for.
+     */
+    @Getter
+    Integer port;
 
     public TestClientRouter(TestServerRouter serverRouter) {
         clientList = new ArrayList<>();
@@ -112,6 +117,7 @@ public class TestClientRouter implements IClientRouter {
         rules = new ArrayList<>();
         this.serverRouter = serverRouter;
         channelContext = new TestChannelContext(this::handleMessage);
+        port = serverRouter.getPort();
     }
 
     private void handleMessage(Object o) {

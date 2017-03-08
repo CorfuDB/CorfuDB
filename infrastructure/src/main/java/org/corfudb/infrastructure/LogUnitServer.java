@@ -13,6 +13,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -44,6 +45,7 @@ import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
@@ -112,6 +114,8 @@ public class LogUnitServer extends AbstractServer {
 
     private final BatchWriter<LogAddress, LogData> batchWriter;
 
+    private static final String metricsPrefix = "corfu.server.logunit.";
+
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
@@ -139,20 +143,25 @@ public class LogUnitServer extends AbstractServer {
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
                 .writer(batchWriter)
+                .recordStats()
                 .build(this::handleRetrieval);
 
         // Trim map is set to empty on start
         // TODO: persist trim map - this is optional since trim is just a hint.
         trimMap = new ConcurrentHashMap<>();
+
+        MetricRegistry metrics = serverContext.getMetrics();
+        MetricsUtils.addCacheGauges(metrics, metricsPrefix + "cache.", dataCache);
     }
 
     /**
      * Service an incoming write request.
      */
-    @ServerHandler(type = CorfuMsgType.WRITE)
-    public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.WRITE, opTimer = metricsPrefix + "write")
+    public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
+                      boolean isMetricsEnabled) {
         log.debug("log write: global: {}, streams: {}, backpointers: {}", msg
-                        .getPayload().getGlobalAddress(),
+                .getPayload().getGlobalAddress(),
                 msg.getPayload().getStreamAddresses(), msg.getPayload().getData().getBackpointerMap());
         // clear any commit record (or set initially to false).
         msg.getPayload().clearCommit();
@@ -179,8 +188,9 @@ public class LogUnitServer extends AbstractServer {
     /**
      * Service an incoming commit request.
      */
-    @ServerHandler(type = CorfuMsgType.COMMIT)
-    public void commit(CorfuPayloadMsg<CommitRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.COMMIT, opTimer = metricsPrefix + "commit")
+    public void commit(CorfuPayloadMsg<CommitRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
+                       boolean isMetricsEnabled) {
         Map<UUID, Long> streamAddresses = msg.getPayload().getStreams();
         if (streamAddresses == null) {
             // Then this is a commit bit for the global log.
@@ -206,8 +216,9 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-    @ServerHandler(type = CorfuMsgType.READ_REQUEST)
-    private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.READ_REQUEST, opTimer = metricsPrefix + "read")
+    private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
+                      boolean isMetricsEnabled) {
         log.trace("log read: {} {}", msg.getPayload().getStreamID()  == null
                         ? "global" : msg.getPayload().getStreamID(),
                 msg.getPayload().getRange());
@@ -231,20 +242,23 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.GC_INTERVAL)
-    private void setGcInterval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.GC_INTERVAL, opTimer = metricsPrefix + "gc-interval")
+    private void setGcInterval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r,
+                               boolean isMetricsEnabled) {
         gcRetry.setRetryInterval(msg.getPayload());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-    @ServerHandler(type = CorfuMsgType.FORCE_GC)
-    private void forceGc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.FORCE_GC, opTimer = metricsPrefix + "force-gc")
+    private void forceGc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r,
+                         boolean isMetricsEnabled) {
         gcThread.interrupt();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-    @ServerHandler(type = CorfuMsgType.FILL_HOLE)
-    private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.FILL_HOLE, opTimer = metricsPrefix + "fill-hole")
+    private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
+                          boolean isMetricsEnabled) {
         try {
             dataCache.put(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()), LogData.HOLE);
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
@@ -254,8 +268,9 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.TRIM)
-    private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.TRIM, opTimer = metricsPrefix + "trim")
+    private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
+                      boolean isMetricsEnabled) {
         trimMap.compute(msg.getPayload().getStream(), (key, prev) ->
                 prev == null ? msg.getPayload().getPrefix() : Math.max(prev, msg.getPayload().getPrefix()));
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
