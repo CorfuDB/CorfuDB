@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.codahale.metrics.Gauge;
 import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
@@ -62,6 +63,13 @@ public class AddressSpaceView extends AbstractView {
         } else {
             log.debug("Read cache already built, re-using existing read cache.");
         }
+
+        final String pfx = String.format("%s0x%x.cache.", runtime.getMpASV(), this.hashCode());
+        runtime.getMetrics().register(pfx + "cache-size", (Gauge<Long>) () -> readCache.estimatedSize());
+        runtime.getMetrics().register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
+        runtime.getMetrics().register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
+        runtime.getMetrics().register(pfx + "hits", (Gauge<Long>) () -> readCache.stats().hitCount());
+        runtime.getMetrics().register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
     }
 
     /**
@@ -71,6 +79,7 @@ public class AddressSpaceView extends AbstractView {
         readCache = Caffeine.<Long, ILogData>newBuilder()
                 .<Long, ILogData>weigher((k, v) -> v.getSizeEstimate())
                 .maximumWeight(runtime.getMaxCacheSize())
+                .recordStats()
                 .build(new CacheLoader<Long, ILogData>() {
                     @Override
                     public ILogData load(Long aLong) throws Exception {

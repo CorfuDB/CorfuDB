@@ -113,6 +113,16 @@ public interface IClientRouter {
     void stop(boolean shutdown_p);
 
     /**
+     * The host that this router is routing requests for.
+     */
+    String getHost();
+
+    /**
+     * The port that this router is routing requests for.
+     */
+    Integer getPort();
+
+    /**
      * Get the current epoch.
      */
     long getEpoch();
