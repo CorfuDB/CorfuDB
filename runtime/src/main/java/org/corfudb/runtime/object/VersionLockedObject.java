@@ -223,8 +223,8 @@ public class VersionLockedObject<T> {
             // After undoing the record, we should get back to the previous version
             // We use the backpointerMap to get the previous entry version
             // If none found, throw NoRollbackException.
-            this.version = undoRecord.getEntry().getBackpointerMap().values().stream().
-                    findFirst().orElseThrow(NoRollbackException::new);
+            this.version = Optional.ofNullable(undoRecord.getEntry().getBackpointer(sv.getID()))
+                    .orElseThrow(NoRollbackException::new);
 
 
             // check if we rolled back to the requested version
