@@ -56,10 +56,10 @@ public class FailureHandlerDispatcher {
      * Seals the epoch
      * Set local epoch and then attempt to move all servers to new epoch
      *
-     * @param currentLayout Current layout to be sealed
+     * @param layout Layout to be sealed
      */
-    private void sealEpoch(Layout currentLayout) throws QuorumUnreachableException {
-        currentLayout.setEpoch(currentLayout.getEpoch() + 1);
-        currentLayout.moveServersToEpoch();
+    private void sealEpoch(Layout layout) throws QuorumUnreachableException {
+        layout.setEpoch(layout.getEpoch() + 1);
+        layout.moveServersToEpoch();
     }
 }
