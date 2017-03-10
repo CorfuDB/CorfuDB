@@ -202,7 +202,7 @@ public class VersionLockedObject<T> {
             object = (T) record.getUndoRecord();
             // clear the undo record, since it is now
             // consumed (the object may change)
-            record.setUndoRecord(null);
+            record.clearUndoRecord();
             return;
         }
         // Otherwise we don't know how to undo,
@@ -271,7 +271,7 @@ public class VersionLockedObject<T> {
         }
 
         // Do we have an undo record now?
-        if (entry.getUndoRecord() != null) {
+        if (entry.isUndoable()) {
             // If this is a standard mutation record
             // and (1) we are not in optimistic mode
             // (2) the undoLog is not empty OR
