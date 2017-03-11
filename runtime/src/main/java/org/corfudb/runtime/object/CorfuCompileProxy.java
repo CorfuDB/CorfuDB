@@ -315,6 +315,66 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void sync() {
+        // Linearize this read against a timestamp
+        final long timestamp =
+                rt.getSequencerView()
+                        .nextToken(Collections.singleton(streamID), 0).getToken();
+
+        // Acquire locks and perform read.
+        underlyingObject.optimisticallyReadThenReadLockThenWriteOnFail(
+                (ver,o) -> {
+                    // If not in a transaction, check if the version is
+                    // at least that of the linearized read requested.
+                    if (ver >= timestamp
+                            && !underlyingObject.isOptimisticallyModifiedUnsafe()) {
+                        return null;
+                    }
+                    // We don't have the right version, so we need to write
+                    // throwing this exception causes us to take a write lock.
+                    throw new ConcurrentModificationException();
+                },
+                //  The read did not acquire the right version, so we
+                //  have now acquired a write lock.
+                (ver, o) -> {
+                    // In the off chance that someone updated the version
+                    // for us.
+                    if (ver >= timestamp
+                            && !underlyingObject.isOptimisticallyModifiedUnsafe()) {
+                        return null;
+                    }
+
+                    // Now we sync forward while we have the lock, if the object
+                    // was not optimistically modified
+                    if (!underlyingObject.isOptimisticallyModifiedUnsafe()) {
+                        syncObjectUnsafe(underlyingObject, timestamp);
+                        return null;
+                    }
+                    // Otherwise, we rollback any optimistic changes, if they
+                    // are undoable, and then sync the object before accessing
+                    // the object.
+                    else if (underlyingObject.isOptimisticallyUndoableUnsafe()){
+                        try {
+                            underlyingObject.optimisticRollbackUnsafe();
+                            syncObjectUnsafe(underlyingObject, timestamp);
+                            return null;
+                        } catch (NoRollbackException nre) {
+                            // We couldn't roll back, so we'll have to
+                            // resort to generating a new object.
+                        }
+                    }
+
+                    // As a last resort, we'll reset...
+                    underlyingObject.resetUnsafe();
+                    syncObjectUnsafe(underlyingObject, timestamp);
+                    return null;
+                });
+    }
+
     private <R> R getUpcallResultInner(long timestamp, Object[] conflictObject) {
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
