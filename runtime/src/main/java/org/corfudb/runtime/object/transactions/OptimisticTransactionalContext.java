@@ -325,7 +325,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         updateAllProxies(x -> {
             // If some other client updated this object, sync
             // it forward to grab those updates
-            if (getSnapshotTimestamp() !=
+            if (getSnapshotTimestamp() <
                     committedEntry
                             .getBackpointer(x.getStreamID())) {
                 x.syncObjectUnsafe(x.getUnderlyingObject(),
