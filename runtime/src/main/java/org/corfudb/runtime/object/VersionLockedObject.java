@@ -112,7 +112,7 @@ public class VersionLockedObject<T> {
     /** Clears all data about applied optimistic updates,
      * including the optimistic undo log.
      */
-    protected void clearOptimisticUpdatesUnsafe() {
+    public void clearOptimisticUpdatesUnsafe() {
         optimisticUndoLog.clear();
         optimisticVersion = 0;
         modifyingContext = null;
