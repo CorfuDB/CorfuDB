@@ -3,7 +3,11 @@
  * with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  */
 package org.corfudb.infrastructure.log;
-import java.util.HashMap;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
@@ -13,7 +17,11 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  */
 public class MultiReadWriteLock {
 
+    // all used locks
     private HashMap<Long, ReentrantReadWriteLock> locks = new HashMap<>();
+
+    // lock references per thread
+    private final ThreadLocal<LinkedList<LockMetadata>> threadLockReferences = new ThreadLocal<>();
 
     /**
      * Acquire a read lock. The recommended use of this method is in try-with-resources statement.
@@ -21,12 +29,21 @@ public class MultiReadWriteLock {
      * @return A closable that will free the allocations for this lock if necessary
      */
     public AutoCloseableLock acquireReadLock(final Long address) {
+        registerLockReference(address, false);
         ReentrantReadWriteLock lock = constructLockFor(address);
         final ReentrantReadWriteLock.ReadLock readLock = lock.readLock();
         readLock.lock();
+        AtomicBoolean closed = new AtomicBoolean(false);
         return () -> {
-            readLock.unlock();
-            clearEventuallyLockFor(address);
+            if (!closed.get()) {
+                try {
+                    readLock.unlock();
+                    clearEventuallyLockFor(address);
+                } finally {
+                    closed.set(true);
+                    deregisterLockReference(address, false);
+                }
+            }
         };
     }
 
@@ -37,12 +54,21 @@ public class MultiReadWriteLock {
      * @return A closable that will free the allocations for this lock if necessary
      */
     public AutoCloseableLock acquireWriteLock(final Long address) {
+        registerLockReference(address, true);
         ReentrantReadWriteLock lock = constructLockFor(address);
         final ReentrantReadWriteLock.WriteLock writeLock = lock.writeLock();
         writeLock.lock();
+        AtomicBoolean closed = new AtomicBoolean(false);
         return () -> {
-            writeLock.unlock();
-            clearEventuallyLockFor(address);
+            if (!closed.get()) {
+                try {
+                    writeLock.unlock();
+                    clearEventuallyLockFor(address);
+                } finally {
+                    closed.set(true);
+                    deregisterLockReference(address, true);
+                }
+            }
         };
     }
 
@@ -68,8 +94,48 @@ public class MultiReadWriteLock {
         }
     }
 
+
+
+    private void registerLockReference(long address, boolean writeLock) {
+        LinkedList<LockMetadata> threadLocks = threadLockReferences.get();
+        if (threadLocks==null) {
+            threadLocks = new LinkedList<>();
+            threadLockReferences.set(threadLocks);
+        } else {
+            LockMetadata last = threadLocks.getLast();
+            if (last.getAddress()>address) {
+                throw new IllegalStateException("Wrong lock acquisition order "+last.getAddress()+" > "+address);
+            }
+            if (writeLock) {
+                if (last.getAddress()==address && !last.isWriteLock()) {
+                    throw new IllegalStateException("Write lock in the scope of read lock for "+address);
+                }
+            }
+        }
+        threadLocks.add(new LockMetadata(address, writeLock));
+    }
+
+    private void deregisterLockReference(long address, boolean writeLock) {
+        LinkedList<LockMetadata> threadLocks = threadLockReferences.get();
+        LockMetadata last = threadLocks.removeLast();
+        if (last.getAddress() != address || last.writeLock != writeLock) {
+            throw new IllegalStateException("Wrong unlocking order");
+        }
+        if (threadLocks.isEmpty()) {
+            threadLockReferences.set(null);
+        }
+    }
+
+    @Data
+    @AllArgsConstructor
+    private class LockMetadata {
+        private long address;
+        private boolean writeLock;
+    }
+
     public interface AutoCloseableLock extends AutoCloseable {
         @Override
         void close();
+
     }
 }

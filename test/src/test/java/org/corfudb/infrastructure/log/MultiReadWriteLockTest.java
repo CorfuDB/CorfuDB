@@ -91,5 +91,94 @@ public class MultiReadWriteLockTest extends AbstractCorfuTest {
 
 
 
+    @Test
+    public void testWriteLockNotPermittedInReadLock()  {
+        MultiReadWriteLock locks = new MultiReadWriteLock();
+        try (MultiReadWriteLock.AutoCloseableLock ignored1 = locks.acquireReadLock(1l)) {
+            try (MultiReadWriteLock.AutoCloseableLock ignored2 = locks.acquireWriteLock(1l)) {
+            }
+            fail();
+        } catch (IllegalStateException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void testIncorrectLockOrder()  {
+        MultiReadWriteLock locks = new MultiReadWriteLock();
+        try (MultiReadWriteLock.AutoCloseableLock ignored1 = locks.acquireReadLock(2l)) {
+            try (MultiReadWriteLock.AutoCloseableLock ignored2 = locks.acquireWriteLock(1l)) {
+            }
+            fail();
+        } catch (IllegalStateException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void testCorrectLockOrder()  {
+        MultiReadWriteLock locks = new MultiReadWriteLock();
+        try (MultiReadWriteLock.AutoCloseableLock ignored1 = locks.acquireReadLock(1l)) {
+            try (MultiReadWriteLock.AutoCloseableLock ignored2 = locks.acquireWriteLock(2l)) {
+            }
+        }
+        // no RuntimeException as expected
+    }
+
+    @Test
+    public void testLockCorrectlyDeregistered()  {
+        MultiReadWriteLock locks = new MultiReadWriteLock();
+        try (MultiReadWriteLock.AutoCloseableLock ignored1 = locks.acquireReadLock(2l)) {
+        }
+        try (MultiReadWriteLock.AutoCloseableLock ignored2 = locks.acquireWriteLock(1l)) {
+        }
+        // let's nest
+        try (MultiReadWriteLock.AutoCloseableLock ignored0 = locks.acquireReadLock(0l)) {
+            try (MultiReadWriteLock.AutoCloseableLock ignored1 = locks.acquireReadLock(2l)) {
+            }
+            try (MultiReadWriteLock.AutoCloseableLock ignored2 = locks.acquireWriteLock(1l)) {
+            }
+        }
+        // no RuntimeException as expected
+    }
+
+    @Test
+    public void testLockCloseIsIdempotent()  {
+        MultiReadWriteLock locks = new MultiReadWriteLock();
+        MultiReadWriteLock.AutoCloseableLock ignored1 = locks.acquireWriteLock(2l);
+        ignored1.close();
+        ignored1.close();
+        MultiReadWriteLock.AutoCloseableLock ignored2 = locks.acquireReadLock(1l);
+        ignored2.close();
+        ignored2.close();
+    }
+
+    @Test
+    public void testWrongUnlocksOrderCatched()  {
+        MultiReadWriteLock locks = new MultiReadWriteLock();
+        MultiReadWriteLock.AutoCloseableLock ignored1 = locks.acquireWriteLock(1l);
+        MultiReadWriteLock.AutoCloseableLock ignored2 = locks.acquireReadLock(2l);
+        try {
+            ignored1.close();
+            fail();
+        } catch (IllegalStateException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void testWrongUnlocksTypeCatched()  {
+        MultiReadWriteLock locks = new MultiReadWriteLock();
+        MultiReadWriteLock.AutoCloseableLock ignored1 = locks.acquireWriteLock(1l);
+        MultiReadWriteLock.AutoCloseableLock ignored2 = locks.acquireReadLock(1l);
+        try {
+            ignored1.close();
+            fail();
+        } catch (IllegalStateException e) {
+            // expected
+        }
+    }
+
+
 
 }
