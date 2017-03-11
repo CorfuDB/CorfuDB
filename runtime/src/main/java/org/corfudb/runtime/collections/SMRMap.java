@@ -3,6 +3,7 @@ package org.corfudb.runtime.collections;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.InterfaceOverride;
 import org.corfudb.annotations.TransactionalMethod;
@@ -21,6 +22,7 @@ import java.util.function.Function;
 /**
  * Created by mwei on 1/7/16.
  */
+@Slf4j
 @CorfuObject
 public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
 
@@ -472,6 +474,7 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
     @Override
     @TransactionalMethod
     public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
+
         Objects.requireNonNull(mappingFunction);
         V v;
         if ((v = get(key)) == null) {
@@ -607,10 +610,12 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
     @Override
     @TransactionalMethod
     public V compute(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
+
         Objects.requireNonNull(remappingFunction);
         V oldValue = get(key);
 
         V newValue = remappingFunction.apply(key, oldValue);
+
         if (newValue == null) {
             // delete mapping
             if (oldValue != null || containsKey(key)) {
