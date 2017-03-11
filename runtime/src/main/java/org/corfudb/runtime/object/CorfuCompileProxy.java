@@ -277,6 +277,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
     private long logUpdateInner(String smrUpdateFunction, Object[] conflictObject,
                                 Object... args) {
+        log.trace("logUpdate method={} conflictObj={} args={}",
+                smrUpdateFunction, conflictObject, args);
+
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (TransactionalContext.isInTransaction()) {
