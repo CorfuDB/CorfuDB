@@ -92,9 +92,7 @@ public class WriteAfterWriteTransactionalContext
         commitAddress = address;
 
         // Update all proxies, committing the new address.
-        updateAllProxies(x ->
-                x.getUnderlyingObject()
-                        .optimisticCommitUnsafe(commitAddress));
+        tryCommitAllProxies();
 
         return address;
     }
