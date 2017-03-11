@@ -3,7 +3,6 @@ package org.corfudb.runtime.collections;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.InterfaceOverride;
 import org.corfudb.annotations.TransactionalMethod;
@@ -22,7 +21,6 @@ import java.util.function.Function;
 /**
  * Created by mwei on 1/7/16.
  */
-@Slf4j
 @CorfuObject
 public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
 
