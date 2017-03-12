@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -18,7 +19,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class MultiReadWriteLock {
 
     // all used locks
-    private HashMap<Long, ReentrantReadWriteLock> locks = new HashMap<>();
+    private ConcurrentHashMap<Long, LockReference> locks = new ConcurrentHashMap<>();
 
     // lock references per thread
     private final ThreadLocal<LinkedList<LockMetadata>> threadLockReferences = new ThreadLocal<>();
@@ -73,25 +74,28 @@ public class MultiReadWriteLock {
     }
 
     private ReentrantReadWriteLock constructLockFor(Long name) {
-        synchronized (locks) {
-            ReentrantReadWriteLock lock = locks.get(name);
-            if (lock == null) {
-                lock = new ReentrantReadWriteLock();
-                locks.put(name, lock);
+        return locks.compute(name, (key, ref) -> {
+                if (ref == null) {
+                    ref = new LockReference(new ReentrantReadWriteLock());
+                }
+                ref.referenceCount++;
+                return ref;
             }
-            return lock;
-        }
+        ).getLock();
     }
 
     private void clearEventuallyLockFor(Long name) {
-        synchronized (locks) {
-            ReentrantReadWriteLock lock = locks.get(name);
-            if (lock == null)
-                throw new IllegalStateException("Lock is wrongly used " + lock);
-            if (!lock.isWriteLocked() && lock.getReadLockCount() == 0) {
-                locks.remove(lock);
+        locks.compute(name, (aLong, ref) -> {
+            if (ref == null) {
+                throw new IllegalStateException("Lock is wrongly used " + ref+" "+System.identityHashCode(Thread.currentThread()));
             }
-        }
+            ref.referenceCount--;
+            if (ref.getReferenceCount()==0) {
+                return null;
+            } else {
+                return ref;
+            }
+        });
     }
 
 
@@ -131,6 +135,15 @@ public class MultiReadWriteLock {
     private class LockMetadata {
         private long address;
         private boolean writeLock;
+    }
+
+    @Data
+    private class LockReference {
+        public LockReference(ReentrantReadWriteLock lock) {
+            this.lock = lock;
+        }
+        private ReentrantReadWriteLock lock;
+        private int referenceCount;
     }
 
     public interface AutoCloseableLock extends AutoCloseable {
