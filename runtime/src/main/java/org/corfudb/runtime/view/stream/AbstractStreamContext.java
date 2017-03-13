@@ -44,6 +44,11 @@ public abstract class AbstractStreamContext implements
         this.globalPointer = Address.NEVER_READ;
     }
 
+    /** Reset the stream context. */
+    void reset() {
+        globalPointer = Address.NEVER_READ;
+    }
+
     /**
      * {@inheritDoc}
      */

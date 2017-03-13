@@ -3,16 +3,13 @@ package org.corfudb.infrastructure;
 import java.io.File;
 import java.lang.invoke.MethodHandles;
 import java.util.Map;
-import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -24,7 +21,6 @@ import io.netty.channel.ChannelHandlerContext;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import lombok.val;
 
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.LogAddress;
@@ -44,6 +40,7 @@ import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
@@ -99,8 +96,6 @@ public class LogUnitServer extends AbstractServer {
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
 
-    private final ConcurrentHashMap<UUID, Long> trimMap;
-
     /**
      * This cache services requests for data at various addresses. In a memory implementation,
      * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
@@ -111,6 +106,8 @@ public class LogUnitServer extends AbstractServer {
     private final StreamLog streamLog;
 
     private final BatchWriter<LogAddress, LogData> batchWriter;
+
+    private static final String metricsPrefix = "corfu.server.logunit.";
 
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
@@ -139,20 +136,21 @@ public class LogUnitServer extends AbstractServer {
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
                 .writer(batchWriter)
+                .recordStats()
                 .build(this::handleRetrieval);
 
-        // Trim map is set to empty on start
-        // TODO: persist trim map - this is optional since trim is just a hint.
-        trimMap = new ConcurrentHashMap<>();
+        MetricRegistry metrics = serverContext.getMetrics();
+        MetricsUtils.addCacheGauges(metrics, metricsPrefix + "cache.", dataCache);
     }
 
     /**
      * Service an incoming write request.
      */
-    @ServerHandler(type = CorfuMsgType.WRITE)
-    public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.WRITE, opTimer = metricsPrefix + "write")
+    public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
+                      boolean isMetricsEnabled) {
         log.debug("log write: global: {}, streams: {}, backpointers: {}", msg
-                        .getPayload().getGlobalAddress(),
+                .getPayload().getGlobalAddress(),
                 msg.getPayload().getStreamAddresses(), msg.getPayload().getData().getBackpointerMap());
         // clear any commit record (or set initially to false).
         msg.getPayload().clearCommit();
@@ -179,8 +177,9 @@ public class LogUnitServer extends AbstractServer {
     /**
      * Service an incoming commit request.
      */
-    @ServerHandler(type = CorfuMsgType.COMMIT)
-    public void commit(CorfuPayloadMsg<CommitRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.COMMIT, opTimer = metricsPrefix + "commit")
+    public void commit(CorfuPayloadMsg<CommitRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
+                       boolean isMetricsEnabled) {
         Map<UUID, Long> streamAddresses = msg.getPayload().getStreams();
         if (streamAddresses == null) {
             // Then this is a commit bit for the global log.
@@ -206,8 +205,9 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-    @ServerHandler(type = CorfuMsgType.READ_REQUEST)
-    private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.READ_REQUEST, opTimer = metricsPrefix + "read")
+    private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
+                      boolean isMetricsEnabled) {
         log.trace("log read: {} {}", msg.getPayload().getStreamID()  == null
                         ? "global" : msg.getPayload().getStreamID(),
                 msg.getPayload().getRange());
@@ -231,20 +231,23 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.GC_INTERVAL)
-    private void setGcInterval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.GC_INTERVAL, opTimer = metricsPrefix + "gc-interval")
+    private void setGcInterval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r,
+                               boolean isMetricsEnabled) {
         gcRetry.setRetryInterval(msg.getPayload());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-    @ServerHandler(type = CorfuMsgType.FORCE_GC)
-    private void forceGc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.FORCE_GC, opTimer = metricsPrefix + "force-gc")
+    private void forceGc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r,
+                         boolean isMetricsEnabled) {
         gcThread.interrupt();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-    @ServerHandler(type = CorfuMsgType.FILL_HOLE)
-    private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.FILL_HOLE, opTimer = metricsPrefix + "fill-hole")
+    private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
+                          boolean isMetricsEnabled) {
         try {
             dataCache.put(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()), LogData.HOLE);
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
@@ -256,8 +259,8 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.TRIM)
     private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        trimMap.compute(msg.getPayload().getStream(), (key, prev) ->
-                prev == null ? msg.getPayload().getPrefix() : Math.max(prev, msg.getPayload().getPrefix()));
+        batchWriter.trim(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()));
+        //TODO(Maithem): should we return an error if the write fails
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
@@ -277,68 +280,9 @@ public class LogUnitServer extends AbstractServer {
     }
 
 
-    public synchronized void handleEviction(LogAddress address, LogData entry, RemovalCause cause) {
-        log.trace("Eviction[{}]: {}", address, cause);
-        streamLog.release(address, entry);
-    }
-
-
-    public void runGC() {
-        Thread.currentThread().setName("LogUnit-GC");
-        val retry = IRetry.build(IntervalAndSentinelRetry.class, this::handleGC)
-                .setOptions(x -> x.setSentinelReference(running))
-                .setOptions(x -> x.setRetryInterval(SMALL_INTERVAL.toMillis()));
-
-        gcRetry = (IntervalAndSentinelRetry) retry;
-
-        retry.runForever();
-    }
-
-    @SuppressWarnings("unchecked")
-    public boolean handleGC() {
-        log.info("Garbage collector starting...");
-        long freedEntries = 0;
-
-        /* Pick a non-compacted region or just scan the cache */
-        Map<LogAddress, LogData> map = dataCache.asMap();
-        SortedSet<LogAddress> addresses = new TreeSet<>(map.keySet());
-        for (LogAddress address : addresses) {
-            LogData buffer = dataCache.getIfPresent(address);
-            if (buffer != null) {
-                Set<UUID> streams = buffer.getStreams();
-                // this is a normal entry
-                if (streams.size() > 0) {
-                    boolean trimmable = true;
-                    for (java.util.UUID stream : streams) {
-                        Long trimMark = trimMap.getOrDefault(stream, null);
-                        // if the stream has not been trimmed, or has not been trimmed to this point
-                        if (trimMark == null || address.getAddress() > trimMark) {
-                            trimmable = false;
-                            break;
-                        }
-                        // it is not trimmable.
-                    }
-                    if (trimmable) {
-                        log.trace("Trimming entry at {}", address);
-                        trimEntry(address.getAddress(), streams, buffer);
-                        freedEntries++;
-                    }
-                } else {
-                    //this is an entry which belongs in all streams
-                }
-            }
-        }
-
-        log.info("Garbage collection pass complete. Freed {} entries", freedEntries);
-        return true;
-    }
-
-    public void trimEntry(long address, Set<java.util.UUID> streams, LogData entry) {
-        // Add this entry to the trimmed range map.
-        //trimRange.add(Range.closed(address, address));
-        // Invalidate this entry from the cache. This will cause the CacheLoader to free the entry from the disk
-        // assuming the entry is back by disk
-        dataCache.invalidate(address);
+    public synchronized void handleEviction(LogAddress logAddress, LogData entry, RemovalCause cause) {
+        log.trace("Eviction[{}]: {}", logAddress, cause);
+        streamLog.release(logAddress, entry);
     }
 
     /**

@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.codahale.metrics.Gauge;
 import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
@@ -62,6 +63,13 @@ public class AddressSpaceView extends AbstractView {
         } else {
             log.debug("Read cache already built, re-using existing read cache.");
         }
+
+        final String pfx = String.format("%s0x%x.cache.", runtime.getMpASV(), this.hashCode());
+        runtime.getMetrics().register(pfx + "cache-size", (Gauge<Long>) () -> readCache.estimatedSize());
+        runtime.getMetrics().register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
+        runtime.getMetrics().register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
+        runtime.getMetrics().register(pfx + "hits", (Gauge<Long>) () -> readCache.stats().hitCount());
+        runtime.getMetrics().register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
     }
 
     /**
@@ -71,6 +79,7 @@ public class AddressSpaceView extends AbstractView {
         readCache = Caffeine.<Long, ILogData>newBuilder()
                 .<Long, ILogData>weigher((k, v) -> v.getSizeEstimate())
                 .maximumWeight(runtime.getMaxCacheSize())
+                .recordStats()
                 .build(new CacheLoader<Long, ILogData>() {
                     @Override
                     public ILogData load(Long aLong) throws Exception {
@@ -83,30 +92,6 @@ public class AddressSpaceView extends AbstractView {
                         return cacheFetch((Iterable<Long>) keys);
                     }
                 });
-    }
-
-    /**
-     * Learn about a stream for the first time.
-     * This method will dump all learned stream entries into the stream.
-     *
-     * @param streamID The ID of a stream.
-     * @return The long
-     */
-    private Set<Long> getStream(UUID streamID) {
-        /* TODO : implement in both backpointer and Replex cases */
-        throw new UnsupportedOperationException("unsupported");
-    }
-
-    /**
-     * Learn about a stream for the first time, bypassing the cache.
-     * This method will dump all learned stream entries into the stream.
-     *
-     * @param streamID The ID of a stream.
-     * @return The long
-     */
-    private Map<Long, ILogUnitEntry> fetchStream(UUID streamID) {
-        /* TODO : implement in both backpointer and Replex cases */
-        throw new UnsupportedOperationException("unsupported");
     }
 
     /**
@@ -181,20 +166,6 @@ public class AddressSpaceView extends AbstractView {
             return readCache.getAll(Utils.discretizeRangeSet(addresses));
         }
         return this.cacheFetch(Utils.discretizeRangeSet(addresses));
-    }
-
-    /**
-     * Do a bulk read of the stream.
-     *
-     * @param stream The stream to download.
-     * @return A result.
-     */
-    public Map<Long, LogData> readPrefix(UUID stream) {
-        return layoutHelper(l -> AbstractReplicationView
-                        .getReplicationView(l, l.getSegments().get(l.getSegments().size() - 1).getReplicationMode(),
-                                l.getSegments().get(l.getSegments().size() - 1))
-                        .readPrefix(stream)
-        );
     }
 
 
