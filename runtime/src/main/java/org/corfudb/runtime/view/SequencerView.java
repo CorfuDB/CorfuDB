@@ -1,23 +1,34 @@
 package org.corfudb.runtime.view;
 
+import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.AccessLevel;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.util.CFUtils;
 
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
 
 /**
  * Created by mwei on 12/10/15.
  */
+
 public class SequencerView extends AbstractView {
+
+    // TODO the failover sequencer should be a separate class as specified
+    // in https://github.com/CorfuDB/CorfuDB/wiki/Quorum-Replication
+    @Setter(AccessLevel.PACKAGE)
+    @Getter(AccessLevel.PACKAGE)
+    private boolean failover = false;
 
     public SequencerView(CorfuRuntime runtime) {
         super(runtime);
     }
+
 
     /**
      * Return the next token in the sequence for a particular stream.
@@ -34,14 +45,9 @@ public class SequencerView extends AbstractView {
         return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).nextToken(streamIDs, numTokens)));
     }
 
-    public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens, boolean overwrite, boolean replexOverwrite) {
-        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).nextToken(
-                streamIDs, numTokens, overwrite, replexOverwrite)));
-    }
 
-    public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens, boolean overwrite, boolean replexOverwrite,
-                                   TxResolutionInfo conflictInfo) {
+    public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens, TxResolutionInfo conflictInfo) {
         return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).nextToken(
-                streamIDs, numTokens, overwrite, replexOverwrite, conflictInfo)));
+                streamIDs, numTokens, conflictInfo)));
     }
 }
