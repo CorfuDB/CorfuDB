@@ -16,12 +16,12 @@ import static org.junit.Assert.*;
  * Tests the futures used in the quorum replication
  * Created by Konstantin Spirov on 2/6/2017.
  */
-public class QuorumFutureFactoryTest extends AbstractCorfuTest {
+public class QuorumFuturesFactoryTest extends AbstractCorfuTest {
 
     @Test
     public void testSingleFutureIncompleteComplete() throws Exception {
         CompletableFuture<String> f1 = new CompletableFuture<>();
-        Future<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1);
+        Future<String> result = QuorumFuturesFactory.getQuorumFuture(String::compareTo, f1);
         try {
             result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
@@ -38,7 +38,7 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
     @Test
     public void testInfiniteGet() throws Exception {
         CompletableFuture<String> f1 = new CompletableFuture<>();
-        Future<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1);
+        Future<String> result = QuorumFuturesFactory.getQuorumFuture(String::compareTo, f1);
         f1.complete("ok");
         Object value = result.get();
         assertEquals("ok", value);
@@ -50,7 +50,7 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
     public void test2FuturesIncompleteComplete() throws Exception {
         CompletableFuture<String> f1 = new CompletableFuture<>();
         CompletableFuture<String> f2 = new CompletableFuture<>();
-        Future<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1, f2);
+        Future<String> result = QuorumFuturesFactory.getQuorumFuture(String::compareTo, f1, f2);
         try {
             result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
@@ -74,7 +74,7 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
         CompletableFuture<String> f1 = new CompletableFuture<>();
         CompletableFuture<String> f2 = new CompletableFuture<>();
         CompletableFuture<String> f3 = new CompletableFuture<>();
-        QuorumFutureFactory.CompositeFuture<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1, f2, f3);
+        QuorumFuturesFactory.CompositeFuture<String> result = QuorumFuturesFactory.getQuorumFuture(String::compareTo, f1, f2, f3);
         try {
             result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
@@ -103,7 +103,7 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
         CompletableFuture<String> f1 = new CompletableFuture<>();
         CompletableFuture<String> f2 = new CompletableFuture<>();
         CompletableFuture<String> f3 = new CompletableFuture<>();
-        Future<String> result = QuorumFutureFactory.getFirstWinsFuture(String::compareTo, f1, f2, f3);
+        Future<String> result = QuorumFuturesFactory.getFirstWinsFuture(String::compareTo, f1, f2, f3);
         try {
             result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
             fail();
@@ -119,7 +119,7 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
     @Test
     public void testException() throws Exception {
         CompletableFuture<String> f1 = new CompletableFuture<>();
-        Future<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1);
+        Future<String> result = QuorumFuturesFactory.getQuorumFuture(String::compareTo, f1);
         f1.completeExceptionally(new NullPointerException());
         try {
             Object value = result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
@@ -133,7 +133,7 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
     @Test
     public void testCanceledFromInside() throws Exception {
         CompletableFuture<String> f1 = new CompletableFuture<>();
-        QuorumFutureFactory.CompositeFuture<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1);
+        QuorumFuturesFactory.CompositeFuture<String> result = QuorumFuturesFactory.getQuorumFuture(String::compareTo, f1);
         f1.cancel(true);
         try {
             Object value = result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
@@ -154,7 +154,7 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
     public void testCanceledPlusException() throws Exception {
         CompletableFuture<String> f1 = new CompletableFuture<>();
         CompletableFuture<String> f2 = new CompletableFuture<>();
-        QuorumFutureFactory.CompositeFuture<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1, f2);
+        QuorumFuturesFactory.CompositeFuture<String> result = QuorumFuturesFactory.getQuorumFuture(String::compareTo, f1, f2);
         f1.cancel(true);
         f2.completeExceptionally(new NullPointerException());
         try {
@@ -174,7 +174,7 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
         CompletableFuture<String> f1 = new CompletableFuture<>();
         CompletableFuture<String> f2 = new CompletableFuture<>();
         CompletableFuture<String> f3 = new CompletableFuture<>();
-        QuorumFutureFactory.CompositeFuture<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1, f2, f3);
+        QuorumFuturesFactory.CompositeFuture<String> result = QuorumFuturesFactory.getQuorumFuture(String::compareTo, f1, f2, f3);
         f2.complete("ok");
         try {
             result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
@@ -200,7 +200,7 @@ public class QuorumFutureFactoryTest extends AbstractCorfuTest {
         CompletableFuture<String> f1 = new CompletableFuture<>();
         CompletableFuture<String> f2 = new CompletableFuture<>();
         CompletableFuture<String> f3 = new CompletableFuture<>();
-        QuorumFutureFactory.CompositeFuture<String> result = QuorumFutureFactory.getQuorumFuture(String::compareTo, f1, f2, f3);
+        QuorumFuturesFactory.CompositeFuture<String> result = QuorumFuturesFactory.getQuorumFuture(String::compareTo, f1, f2, f3);
         f2.complete("ok");
         f3.complete("not-ok");
         f1.complete("1/3 split brain");
