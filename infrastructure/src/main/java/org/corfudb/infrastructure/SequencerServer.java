@@ -1,15 +1,17 @@
 package org.corfudb.infrastructure;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
-import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
@@ -17,9 +19,9 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
+import static org.corfudb.util.MetricsUtils.addCacheGauges;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -106,14 +108,23 @@ public class SequencerServer extends AbstractServer {
             conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
             .removalListener((Integer K, Long V, RemovalCause cause) -> {
-                maxConflictWildcard = Math.max(V, maxConflictWildcard);
+                if (!RemovalCause.REPLACED.equals(cause)) {
+                    log.trace("Updating maxConflictWildcard. Old value = '{}', new value = '{}', conflictParam = '{}'. Removal cause = '{}'",
+                            maxConflictWildcard, V, K, cause);
+                    maxConflictWildcard = Math.max(V, maxConflictWildcard);
+                }
             })
+            .recordStats()
             .build();
 
     /** Handler for this server */
     @Getter
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
+
+    private static final String metricsPrefix = "corfu.server.sequencer.";
+    static private Counter counterTokenSum;
+    static private Counter counterToken0;
 
     public SequencerServer(ServerContext serverContext) {
         this.serverContext = serverContext;
@@ -125,6 +136,11 @@ public class SequencerServer extends AbstractServer {
         } else {
             globalLogTail.set(initialToken);
         }
+
+        MetricRegistry metrics = serverContext.getMetrics();
+        counterTokenSum = metrics.counter(metricsPrefix + "token-sum");
+        counterToken0 = metrics.counter(metricsPrefix + "token-query");
+        addCacheGauges(metrics, metricsPrefix + "conflict.cache.", conflictToGlobalTailCache);
     }
 
     /** Get the conflict hash code for a stream ID and conflict param.
@@ -230,14 +246,18 @@ public class SequencerServer extends AbstractServer {
     /**
      * Service an incoming token request.
      */
-    @ServerHandler(type=CorfuMsgType.TOKEN_REQ)
+    @ServerHandler(type=CorfuMsgType.TOKEN_REQ, opTimer=metricsPrefix + "token-req")
     public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
-                                          ChannelHandlerContext ctx, IServerRouter r) {
+                                          ChannelHandlerContext ctx, IServerRouter r,
+                                          boolean isMetricsEnabled) {
         TokenRequest req = msg.getPayload();
 
         if (req.getReqType() == TokenRequest.TK_QUERY) {
+            MetricsUtils.incConditionalCounter(isMetricsEnabled, counterToken0, 1);
             handleTokenQuery(msg, ctx, r);
             return;
+        } else {
+            MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTokenSum, req.getNumTokens());
         }
 
         // for raw log implementation, simply extend the global log tail and return the global-log token

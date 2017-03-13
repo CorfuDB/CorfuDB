@@ -11,10 +11,18 @@ import java.util.concurrent.CompletableFuture;
  */
 
 @Data
-public class WriteOperation {
+public class BatchWriterOperation {
+    public enum Type {
+        SHUTDOWN,
+        WRITE,
+        TRIM
+    }
+
+    private final Type type;
     private final LogAddress logAddress;
     private final LogData logData;
     private final CompletableFuture future;
+    private Exception exception;
 
-    public static WriteOperation SHUTDOWN = new WriteOperation(null, null, null);
+    public static BatchWriterOperation SHUTDOWN = new BatchWriterOperation(Type.SHUTDOWN,null, null, null);
 }

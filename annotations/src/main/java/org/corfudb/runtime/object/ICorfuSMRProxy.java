@@ -40,6 +40,11 @@ public interface ICorfuSMRProxy<T> {
      */
     <R> R getUpcallResult(long timestamp, Object[] conflictObject);
 
+    /**
+     * Update the proxy to the latest committed version.
+     */
+    void sync();
+
     /** Get the ID of the stream this proxy is subscribed to.
      *
      * @return  The UUID of the stream this proxy is subscribed to.
