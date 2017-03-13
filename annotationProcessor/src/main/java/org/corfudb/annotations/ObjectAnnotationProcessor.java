@@ -1,6 +1,7 @@
 package org.corfudb.annotations;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.squareup.javapoet.*;
 import org.corfudb.runtime.object.*;
 
@@ -15,6 +16,7 @@ import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -370,8 +372,12 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     if (mutator != null || mutatorAccessor != null) {
                         ms.addStatement(
                                 (mutatorAccessor != null ? "long address" + CORFUSMR_FIELD + " = " : "") +
-                                "proxy" + CORFUSMR_FIELD + ".logUpdate($S,$L$L$L)",
+                                "proxy" + CORFUSMR_FIELD + ".logUpdate($S,$L,$L$L$L)",
                                 getSMRFunctionName(smrMethod),
+                                // Don't need upcall result for mutators
+                                mutator != null ? "false" :
+                                // or mutatorAccessors which return void.
+                                smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ? "false" : "true",
                                 m.hasConflictAnnotations ? conflictField : "null",
                                 smrMethod.getParameters().size() > 0 ? "," : "",
                                 smrMethod.getParameters().stream()
@@ -382,7 +388,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
 
                     // If an accessor (or not annotated), return the object by doing the underlying call.
                     if (mutatorAccessor != null) {
-                        // If the return to the mutatorAcessor is void, we don't need
+                        // If the return to the mutatorAccessor is void, we don't need
                         // to do anything...
                         if (!smrMethod.getReturnType().getKind().equals(TypeKind.VOID)) {
                             ms.addStatement("return (" +
@@ -460,6 +466,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         addUpcallMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
         addUndoRecordMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
         addUndoMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
+        addResetSet(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
 
         typeSpecBuilder
                 .addSuperinterfaces(interfacesToAdd);
@@ -473,6 +480,41 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 .build();
 
         javaFile.writeTo(filer);
+    }
+
+    /** Add the reset set and the getter for the set.
+     *
+     * @param typeSpecBuilder   The typespec builder to add the reset set to
+     * @param originalName      The name of the original base type (without $CORFUSMR)
+     * @param interfacesToAdd   A list of interfaces to add for instrumentation.
+     * @param methodSet         The set of methods to add for instrumentation.
+     */
+    private void addResetSet(TypeSpec.Builder typeSpecBuilder, TypeName originalName,
+                             Set<TypeName> interfacesToAdd, Set<SMRMethodInfo> methodSet) {
+        // Generate the initializer for the reset set.
+        String resetString = methodSet.stream()
+                .filter(x -> x.method.getAnnotation(Mutator.class) != null
+                        && x.method.getAnnotation(Mutator.class).reset()||
+                        x.method.getAnnotation(MutatorAccessor.class) != null
+                                && x.method.getAnnotation(MutatorAccessor.class).reset())
+                .map(x -> "\n.add(\"" + getSMRFunctionName(x.method) + "\")")
+                .collect(Collectors.joining());
+
+        FieldSpec resetSet = FieldSpec.builder(ParameterizedTypeName.get(ClassName.get(Set.class),
+                ClassName.get(String.class)), "resetSet" + CORFUSMR_FIELD, Modifier.FINAL, Modifier.PUBLIC)
+                .initializer("new $T()$L.build()",
+                        ParameterizedTypeName.get(ClassName.get(ImmutableSet.Builder.class),
+                                ClassName.get(String.class)), resetString)
+                .build();
+
+        typeSpecBuilder.addField(resetSet);
+        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getCorfuResetSet")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(Set.class),
+                        ClassName.get(String.class)))
+                .addStatement("return $L", "resetSet" + CORFUSMR_FIELD)
+                .build());
+
     }
 
     private void addUpcallMap(TypeSpec.Builder typeSpecBuilder, TypeName originalName,

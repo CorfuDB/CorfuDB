@@ -1,5 +1,6 @@
 package org.corfudb.runtime;
 
+import com.codahale.metrics.MetricRegistry;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -12,6 +13,7 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Version;
 
 import java.util.*;
@@ -116,6 +118,21 @@ public class CorfuRuntime {
     private String passwordFile;
 
     /**
+     * Metrics: meter (counter), histogram
+     */
+    static private final String mp = "corfu.runtime.";
+    @Getter
+    static private final String mpASV = mp + "as-view.";
+    @Getter
+    static private final String mpLUC = mp + "log-unit-client.";
+    @Getter
+    static private final String mpCR = mp + "client-router.";
+    @Getter
+    static private final String mpObj = mp + "object.";
+    @Getter
+    static public final MetricRegistry metrics = new MetricRegistry();
+
+    /**
      * When set, overrides the default getRouterFunction. Used by the testing
      * framework to ensure the default routers used are for testing.
      */
@@ -160,6 +177,12 @@ public class CorfuRuntime {
         layoutServers = new ArrayList<>();
         nodeRouters = new ConcurrentHashMap<>();
         retryRate = 5;
+        synchronized (metrics) {
+            if (metrics.getNames().isEmpty()) {
+                MetricsUtils.addJVMMetrics(metrics, mp);
+                MetricsUtils.metricsReportingSetup(metrics);
+            }
+        }
         log.debug("Corfu runtime version {} initialized.", getVersionString());
     }
 

@@ -44,3 +44,8 @@ message NodeMetrics {
     optional bool sequencerServerStatus = 3;
     optional bool logunitServerStatus = 4;
 }
+
+message TrimEntry {
+    optional int32 checksum = 1;
+    optional int64 address = 2;
+}

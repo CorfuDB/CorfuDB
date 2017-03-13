@@ -41,11 +41,12 @@ public class TestServerRouter implements IServerRouter {
     @Setter
     long serverEpoch;
 
+    @Getter
+    int port = 0;
+
     public TestServerRouter() {
         reset();
     }
-    @Getter
-    int port;
 
     public TestServerRouter(int port) {
         reset();

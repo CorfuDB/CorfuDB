@@ -40,6 +40,7 @@ public interface ILogData extends IMetadata {
      * Return the backpointer for a particular stream.
      */
     default Long getBackpointer(UUID streamID) {
+        if (getBackpointerMap() == null) return null;
         return getBackpointerMap().get(streamID);
     }
 

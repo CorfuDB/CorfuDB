@@ -2,7 +2,10 @@ package org.corfudb.runtime.object.transactions;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -79,7 +82,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     object.getModifyingContextUnsafe();
 
             // If we don't own this object, roll it back
-            if (modifyingContext != null && modifyingContext != this) {
+            if (object.isOptimisticallyModifiedUnsafe() &&
+                    modifyingContext != null && modifyingContext != this) {
                 object.optimisticRollbackUnsafe();
             }
 
@@ -92,7 +96,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // Couldn't roll back the object, so we'll have
             // to start from scratch.
             // TODO: create a copy instead
-            proxy.resetObjectUnsafe(object);
+            object.resetUnsafe();
         }
 
         // next, if the version is older than what we need
@@ -300,11 +304,62 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         commitAddress = address;
 
         // Update all proxies, committing the new address.
-        updateAllProxies(x ->
-                x.getUnderlyingObject()
-                        .optimisticCommitUnsafe(commitAddress));
+        tryCommitAllProxies();
 
         return address;
+    }
+
+
+    /** Try to commit the optimistic updates to each proxy. */
+    protected void tryCommitAllProxies() {
+        // First, get the committed entry
+        // in order to get the backpointers
+        // and the underlying SMREntries.
+        final ILogData committedEntry = this.builder.getRuntime()
+                .getAddressSpaceView().read(commitAddress);
+
+        if (committedEntry.getType() == DataType.EMPTY) {
+            return;
+        }
+
+        updateAllProxies(x -> {
+            // If some other client updated this object, sync
+            // it forward to grab those updates
+            if (x.getVersion() !=
+                    committedEntry
+                            .getBackpointer(x.getStreamID())) {
+                x.syncObjectUnsafe(x.getUnderlyingObject(),
+                        commitAddress-1);
+            }
+            // Clear tne optimistic update flag
+            x.getUnderlyingObject()
+                    .clearOptimisticUpdatesUnsafe();
+            // Also, be nice and transfer the undo
+            // log from the optimistic updates
+            // for this to work the write sets better
+            // be the same
+            List<WriteSetEntry> committedWrites =
+                    getWriteSetEntryList(x.getStreamID());
+            List<SMREntry> entryWrites =
+                    ((ISMRConsumable) committedEntry
+                            .getPayload(this.getBuilder().runtime))
+                            .getSMRUpdates(x.getStreamID());
+            if (committedWrites.size() ==
+                    entryWrites.size()) {
+                IntStream.range(0, committedWrites.size())
+                        .forEach(i -> {
+                            if (committedWrites.get(i)
+                                    .getEntry().isUndoable()) {
+                                entryWrites.get(i)
+                                        .setUndoRecord(committedWrites.get(i)
+                                                .getEntry().getUndoRecord());
+                            }
+                        });
+            }
+            x.getUnderlyingObject()
+                    .setVersionUnsafe(commitAddress);
+        });
+
     }
 
     @SuppressWarnings("unchecked")

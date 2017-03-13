@@ -15,6 +15,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
@@ -221,6 +222,29 @@ public class ObjectsView extends AbstractView {
                     TransactionalContext.removeContext();
                 }
         }
+    }
+
+    /** Given a Corfu object, syncs the object to the most up to date version.
+     * If the object is not a Corfu object, this function won't do anything.
+     * @param object    The Corfu object to sync.
+     */
+    public void syncObject(Object object) {
+        if (object instanceof ICorfuSMR<?>) {
+            ICorfuSMR<?> corfuObject = (ICorfuSMR<?>) object;
+            corfuObject.getCorfuSMRProxy().sync();
+        }
+    }
+
+    /** Given a list of Corfu objects, syncs the objects to the most up to date
+     * version, possibly in parallel.
+     * @param objects   A list of Corfu objects to sync.
+     */
+    public void syncObject(Object... objects) {
+        Arrays.stream(objects)
+                .parallel()
+                .filter(x -> x instanceof ICorfuSMR<?>)
+                .map(x -> (ICorfuSMR<?>) x)
+                .forEach(x -> x.getCorfuSMRProxy().sync());
     }
 
     @Data

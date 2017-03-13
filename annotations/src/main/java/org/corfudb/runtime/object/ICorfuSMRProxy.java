@@ -21,14 +21,17 @@ public interface ICorfuSMRProxy<T> {
     /**
      * Record an SMR function to the log before returning.
      * @param smrUpdateFunction     The name of the function to record.
+     * @param keepUpcallResult      Whether or not we need to keep the
+     *                              result to the upcall, for a subsequent
+     *                              call to getUpcallResult.
      * @param conflictObject        Fine-grained conflict information, if
      *                              available.
      * @param args                  The arguments to the function.
      *
      * @return  The address in the log the SMR function was recorded at.
      */
-    long logUpdate(String smrUpdateFunction, Object[] conflictObject,
-                   Object... args);
+    long logUpdate(String smrUpdateFunction, boolean keepUpcallResult,
+                   Object[] conflictObject, Object... args);
 
     /**
      * Return the result of an upcall at the given timestamp.
@@ -39,6 +42,11 @@ public interface ICorfuSMRProxy<T> {
      * @return                      The result of the upcall.
      */
     <R> R getUpcallResult(long timestamp, Object[] conflictObject);
+
+    /**
+     * Update the proxy to the latest committed version.
+     */
+    void sync();
 
     /** Get the ID of the stream this proxy is subscribed to.
      *

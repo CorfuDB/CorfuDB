@@ -40,20 +40,7 @@ public abstract class AbstractReplicationView {
     public static AbstractReplicationView getReplicationView(Layout l, Layout.ReplicationMode mode, Layout.LayoutSegment ls) {
         if (l.replicationViewCache == null) { l.replicationViewCache = new ConcurrentHashMap<>(); } //super hacky
         return l.replicationViewCache.computeIfAbsent(ls, x -> {
-            // TODO: really broken software engineering here... refactor!
-            switch (ls.getReplicationMode()) {
-                case CHAIN_REPLICATION:
-                    return new ChainReplicationView(l, ls);
-                case QUORUM_REPLICATION:
-                    log.warn("Quorum replication is not yet supported!");
-                    break;
-                case REPLEX:
-                    return new ReplexReplicationView(l, ls);
-                default:
-                    log.error("Unknown replication mode {} selected.", mode);
-                    break;
-            }
-            return null;
+            return mode.getReplicationView(l, ls);
         });
     }
 
@@ -135,5 +122,7 @@ public abstract class AbstractReplicationView {
     public void fillStreamHole(UUID stream, long address) throws OverwriteException {
         throw new UnsupportedOperationException("This replication view doesn't support filling stream holes");
     }
+
+
 
 }
