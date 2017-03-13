@@ -1,9 +1,5 @@
 package org.corfudb.runtime.view;
 
-import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.AccessLevel;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
@@ -19,16 +15,9 @@ import java.util.UUID;
 
 public class SequencerView extends AbstractView {
 
-    // TODO the failover sequencer should be a separate class as specified
-    // in https://github.com/CorfuDB/CorfuDB/wiki/Quorum-Replication
-    @Setter(AccessLevel.PACKAGE)
-    @Getter(AccessLevel.PACKAGE)
-    private boolean failover = false;
-
     public SequencerView(CorfuRuntime runtime) {
         super(runtime);
     }
-
 
     /**
      * Return the next token in the sequence for a particular stream.
