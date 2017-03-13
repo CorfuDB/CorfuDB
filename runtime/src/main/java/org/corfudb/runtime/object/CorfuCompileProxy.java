@@ -268,15 +268,15 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * {@inheritDoc}
      */
     @Override
-    public long logUpdate(String smrUpdateFunction, Object[] conflictObject,
-                          Object... args) {
+    public long logUpdate(String smrUpdateFunction, final boolean keepUpcallResult,
+                          Object[] conflictObject, Object... args) {
         try (Timer.Context context = MetricsUtils.getConditionalContext(timerLogWrite)) {
-            return logUpdateInner(smrUpdateFunction, conflictObject, args);
+            return logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args);
         }
     }
 
-    private long logUpdateInner(String smrUpdateFunction, Object[] conflictObject,
-                                Object... args) {
+    private long logUpdateInner(String smrUpdateFunction, final boolean keepUpcallResult,
+                                Object[] conflictObject, Object... args) {
         log.trace("logUpdate method={} conflictObj={} args={}",
                 smrUpdateFunction, conflictObject, args);
 
@@ -293,10 +293,14 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // We need to add the acquired token into the pending upcall list.
         SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
         long address = underlyingObject.getStreamViewUnsafe().append(smrEntry, t -> {
-                pendingUpcalls.add(t.getToken());
+                if (keepUpcallResult) {
+                    pendingUpcalls.add(t.getToken());
+                }
                 return true;
             }, t -> {
-                pendingUpcalls.remove(t.getToken());
+                if (keepUpcallResult) {
+                    pendingUpcalls.remove(t.getToken());
+                }
                 log.debug("update {} failed", t.getToken());
                 return true;
             });
