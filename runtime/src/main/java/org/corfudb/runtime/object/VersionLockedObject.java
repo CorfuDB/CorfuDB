@@ -5,6 +5,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.AbstractContextStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 

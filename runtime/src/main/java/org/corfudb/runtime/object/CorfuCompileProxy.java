@@ -203,7 +203,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             // Otherwise, we rollback any optimistic changes, if they
             // are undoable, and then sync the object before accessing
             // the object.
-            else if (underlyingObject.isOptimisticallyUndoableUnsafe()){
+            else if (!rt.getParameters().isOptimisticUndoDisabled() &&
+                    underlyingObject.isOptimisticallyUndoableUnsafe()){
                 try {
                     underlyingObject.optimisticRollbackUnsafe();
                     syncObjectUnsafe(underlyingObject, timestamp);
@@ -361,7 +362,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                     // Otherwise, we rollback any optimistic changes, if they
                     // are undoable, and then sync the object before accessing
                     // the object.
-                    else if (underlyingObject.isOptimisticallyUndoableUnsafe()){
+                    else if (!rt.getParameters().isOptimisticUndoDisabled() &&
+                            underlyingObject.isOptimisticallyUndoableUnsafe()){
                         try {
                             underlyingObject.optimisticRollbackUnsafe();
                             syncObjectUnsafe(underlyingObject, timestamp);

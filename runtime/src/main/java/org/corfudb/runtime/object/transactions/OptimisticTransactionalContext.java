@@ -90,6 +90,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // If the version of this object is ahead of what we expected,
             // we need to rollback...
             if (object.getVersionUnsafe() > getSnapshotTimestamp()) {
+                if (this.builder.getRuntime().getParameters().isOptimisticUndoDisabled()) {
+                    throw new NoRollbackException();
+                }
                 object.rollbackUnsafe(getSnapshotTimestamp());
             }
         } catch (NoRollbackException nre) {
@@ -102,6 +105,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // next, if the version is older than what we need
         // sync.
         if (object.getVersionUnsafe() < getSnapshotTimestamp()) {
+            if (this.builder.getRuntime().getParameters().isUndoDisabled()) {
+                throw new NoRollbackException();
+            }
             proxy.syncObjectUnsafe(proxy.getUnderlyingObject(), getSnapshotTimestamp());
         }
 
