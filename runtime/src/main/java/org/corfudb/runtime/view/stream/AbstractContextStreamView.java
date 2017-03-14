@@ -7,6 +7,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.Utils;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListSet;
@@ -329,5 +330,10 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             throw new RuntimeException("Attempted to pop context with less than 1 context remaining!");
         }
         streamContexts.pollFirst();
+    }
+
+    @Override
+    public String toString() {
+        return Utils.toReadableID(baseContext.id) + "@" + getCurrentContext().globalPointer;
     }
 }

@@ -300,9 +300,4 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         log.debug("Read_Fill_Queue[{}] Filled queue with {}", this, context.readQueue);
         return !context.readQueue.isEmpty();
     }
-
-    @Override
-    public String toString() {
-        return Utils.toReadableID(baseContext.id) + "@" + getCurrentContext().globalPointer;
-    }
 }
