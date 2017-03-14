@@ -168,6 +168,17 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // write
         // lock.
         return proxy.getUnderlyingObject().write((v, o) -> {
+            // Swap ourselves to be the active optimistic stream.
+            if (proxy.getUnderlyingObject().getOptimisticStreamUnsafe() == null ||
+                    !proxy.getUnderlyingObject().getOptimisticStreamUnsafe()
+                            .isStreamForThisTransaction()) {
+                // If there is an optimistic stream, we need to undo
+                proxy.getUnderlyingObject()
+                        .setOptimisticStreamUnsafe(
+                                new WriteSetSMRStream(
+                                        TransactionalContext.getTransactionStack().stream()
+                                        .collect(Collectors.toList()), proxy.getStreamID()));
+            }
             syncUnsafe(proxy);
             // We might have ended up with a _different_ object
             return accessFunction.access(proxy.getUnderlyingObject()
