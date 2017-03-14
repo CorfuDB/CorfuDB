@@ -268,15 +268,18 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * {@inheritDoc}
      */
     @Override
-    public long logUpdate(String smrUpdateFunction, Object[] conflictObject,
-                          Object... args) {
+    public long logUpdate(String smrUpdateFunction, final boolean keepUpcallResult,
+                          Object[] conflictObject, Object... args) {
         try (Timer.Context context = MetricsUtils.getConditionalContext(timerLogWrite)) {
-            return logUpdateInner(smrUpdateFunction, conflictObject, args);
+            return logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args);
         }
     }
 
-    private long logUpdateInner(String smrUpdateFunction, Object[] conflictObject,
-                                Object... args) {
+    private long logUpdateInner(String smrUpdateFunction, final boolean keepUpcallResult,
+                                Object[] conflictObject, Object... args) {
+        log.trace("logUpdate method={} conflictObj={} args={}",
+                smrUpdateFunction, conflictObject, args);
+
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (TransactionalContext.isInTransaction()) {
@@ -290,10 +293,14 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // We need to add the acquired token into the pending upcall list.
         SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
         long address = underlyingObject.getStreamViewUnsafe().append(smrEntry, t -> {
-                pendingUpcalls.add(t.getToken());
+                if (keepUpcallResult) {
+                    pendingUpcalls.add(t.getToken());
+                }
                 return true;
             }, t -> {
-                pendingUpcalls.remove(t.getToken());
+                if (keepUpcallResult) {
+                    pendingUpcalls.remove(t.getToken());
+                }
                 log.debug("update {} failed", t.getToken());
                 return true;
             });
@@ -310,6 +317,66 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         try (Timer.Context context = MetricsUtils.getConditionalContext(timerUpcall);) {
             return getUpcallResultInner(timestamp, conflictObject);
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void sync() {
+        // Linearize this read against a timestamp
+        final long timestamp =
+                rt.getSequencerView()
+                        .nextToken(Collections.singleton(streamID), 0).getToken();
+
+        // Acquire locks and perform read.
+        underlyingObject.optimisticallyReadThenReadLockThenWriteOnFail(
+                (ver,o) -> {
+                    // If not in a transaction, check if the version is
+                    // at least that of the linearized read requested.
+                    if (ver >= timestamp
+                            && !underlyingObject.isOptimisticallyModifiedUnsafe()) {
+                        return null;
+                    }
+                    // We don't have the right version, so we need to write
+                    // throwing this exception causes us to take a write lock.
+                    throw new ConcurrentModificationException();
+                },
+                //  The read did not acquire the right version, so we
+                //  have now acquired a write lock.
+                (ver, o) -> {
+                    // In the off chance that someone updated the version
+                    // for us.
+                    if (ver >= timestamp
+                            && !underlyingObject.isOptimisticallyModifiedUnsafe()) {
+                        return null;
+                    }
+
+                    // Now we sync forward while we have the lock, if the object
+                    // was not optimistically modified
+                    if (!underlyingObject.isOptimisticallyModifiedUnsafe()) {
+                        syncObjectUnsafe(underlyingObject, timestamp);
+                        return null;
+                    }
+                    // Otherwise, we rollback any optimistic changes, if they
+                    // are undoable, and then sync the object before accessing
+                    // the object.
+                    else if (underlyingObject.isOptimisticallyUndoableUnsafe()){
+                        try {
+                            underlyingObject.optimisticRollbackUnsafe();
+                            syncObjectUnsafe(underlyingObject, timestamp);
+                            return null;
+                        } catch (NoRollbackException nre) {
+                            // We couldn't roll back, so we'll have to
+                            // resort to generating a new object.
+                        }
+                    }
+
+                    // As a last resort, we'll reset...
+                    underlyingObject.resetUnsafe();
+                    syncObjectUnsafe(underlyingObject, timestamp);
+                    return null;
+                });
     }
 
     private <R> R getUpcallResultInner(long timestamp, Object[] conflictObject) {

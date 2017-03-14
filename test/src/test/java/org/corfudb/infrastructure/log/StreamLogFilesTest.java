@@ -6,6 +6,7 @@ import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+
 import java.io.File;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
@@ -16,6 +17,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -44,8 +46,10 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // An overwrite exception should occur, since we are writing the
         // same entry.
         final StreamLog newLog = new StreamLogFiles(getDirPath(), true);
-        assertThatThrownBy(() -> { newLog
-                .append(address0, new LogData(DataType.DATA, b)); })
+        assertThatThrownBy(() -> {
+            newLog
+                    .append(address0, new LogData(DataType.DATA, b));
+        })
                 .isInstanceOf(OverwriteException.class);
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
     }
@@ -188,11 +192,116 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.append(new LogAddress(seg1, null), new LogData(DataType.DATA, b));
         log.append(new LogAddress(seg2, null), new LogData(DataType.DATA, b));
         log.append(new LogAddress(seg3, null), new LogData(DataType.DATA, b));
-        
+
         assertThat(log.getChannelsToSync().size()).isEqualTo(3);
 
         log.sync();
 
         assertThat(log.getChannelsToSync().size()).isEqualTo(0);
+    }
+
+    @Test
+    public void testSameAddressTrim() throws Exception {
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+
+        // Trim an unwritten address
+        LogAddress logAddress = new LogAddress(0L, null);
+        log.trim(logAddress);
+
+        // Verify that the unwritten address trim is not persisted
+        StreamLogFiles.SegmentHandle sh = log.getSegmentHandleForAddress(logAddress);
+        assertThat(sh.getPendingTrims().size()).isEqualTo(0);
+
+        // Write to the same address
+        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+
+        log.append(logAddress, new LogData(DataType.DATA, b));
+
+        // Verify that the address has been written
+        assertThat(log.read(logAddress)).isNotNull();
+
+        // Trim the address
+        log.trim(logAddress);
+        sh = log.getSegmentHandleForAddress(logAddress);
+        assertThat(sh.getPendingTrims().contains(logAddress.address)).isTrue();
+
+        // Write to a trimmed address
+        assertThatThrownBy(() -> log.append(logAddress, new LogData(DataType.DATA, b)))
+                .isInstanceOf(OverwriteException.class);
+
+        // Read trimmed address
+        assertThatThrownBy(() -> log.read(logAddress))
+                .isInstanceOf(RuntimeException.class)
+                .hasCauseInstanceOf(TrimmedException.class);
+    }
+
+    private void writeToLog(StreamLog log, Long addr) {
+        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        LogAddress address = new LogAddress(addr, null);
+        log.append(address, new LogData(DataType.DATA, b));
+    }
+
+    @Test
+    public void testTrim() throws Exception {
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        final int logChunk = StreamLogFiles.RECORDS_PER_LOG_FILE / 2;
+
+        // Write to the addresses then trim the addresses that span two log files
+        for (long x = 0; x < logChunk; x++) {
+            writeToLog(log, x);
+        }
+
+        // Verify that an incomplete log segment isn't compacted
+        for (long x = 0; x < logChunk; x++) {
+            LogAddress logAddress = new LogAddress(x, null);
+            log.trim(logAddress);
+        }
+
+        log.compact();
+
+        StreamLogFiles.SegmentHandle sh = log.getSegmentHandleForAddress(new LogAddress((long) logChunk, null));
+
+        assertThat(logChunk).isGreaterThan(StreamLogFiles.TRIM_THRESHOLD);
+        assertThat(sh.getPendingTrims().size()).isEqualTo(logChunk);
+        assertThat(sh.getTrimmedAddresses().size()).isEqualTo(0);
+
+        // Fill the rest of the log segment and compact
+        for (long x = logChunk; x < logChunk * 2; x++) {
+            writeToLog(log, x);
+        }
+
+        // Verify the pending trims are compacted after the log segment has filled
+        File file = new File(sh.getFileName());
+        long sizeBeforeCompact = file.length();
+        log.compact();
+        file = new File(sh.getFileName());
+        long sizeAfterCompact = file.length();
+
+        assertThat(sizeAfterCompact).isLessThan(sizeBeforeCompact);
+
+        // Reload the segment handler and check that the first half of the segment has been trimmed
+        sh = log.getSegmentHandleForAddress(new LogAddress((long) logChunk, null));
+        assertThat(sh.getTrimmedAddresses().size()).isEqualTo(logChunk);
+        assertThat(sh.getKnownAddresses().size()).isEqualTo(logChunk);
+
+        for (long x = logChunk; x < logChunk * 2; x++) {
+            assertThat(sh.getKnownAddresses().contains(x)).isTrue();
+        }
+
+        // Verify that the trimmed addresses cannot be written to or read from after compaction
+        for (long x = 0; x < logChunk; x++) {
+            LogAddress logAddress = new LogAddress(x, null);
+            assertThatThrownBy(() -> log.read(logAddress))
+                    .isInstanceOf(RuntimeException.class)
+                    .hasCauseInstanceOf(TrimmedException.class);
+
+            final long address = x;
+            assertThatThrownBy(() -> writeToLog(log, address))
+                    .isInstanceOf(OverwriteException.class);
+        }
     }
 }

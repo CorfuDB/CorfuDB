@@ -101,8 +101,8 @@ public class SealServersHelper {
      */
     public static void waitForQuorum(CompletableFuture<Boolean>[] completableFutures) throws QuorumUnreachableException {
         Boolean success = false;
-        QuorumFutureFactory.CompositeFuture<Boolean> quorumFuture =
-                QuorumFutureFactory.getQuorumFuture(Boolean::compareTo, completableFutures);
+        QuorumFuturesFactory.CompositeFuture<Boolean> quorumFuture =
+                QuorumFuturesFactory.getQuorumFuture(Boolean::compareTo, completableFutures);
         try {
             success = quorumFuture.get();
         } catch (ExecutionException | InterruptedException e) {

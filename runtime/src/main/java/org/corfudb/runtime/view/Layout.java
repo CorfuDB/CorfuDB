@@ -8,6 +8,9 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.stream.BackpointerStreamView;
+import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.runtime.view.stream.ReplexStreamView;
 
 import java.util.Map;
 import java.util.HashSet;
@@ -339,6 +342,16 @@ public class Layout implements Cloneable {
                     throws QuorumUnreachableException {
                 SealServersHelper.waitForChainSegmentSeal(layoutSegment, completableFutureMap);
             }
+
+            @Override
+            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
+                return new ChainReplicationView(l, ls);
+            }
+
+            @Override
+            public IStreamView  getStreamView(CorfuRuntime r, UUID streamId) {
+                return new BackpointerStreamView(r, streamId);
+            }
         },
         QUORUM_REPLICATION {
             @Override
@@ -348,6 +361,16 @@ public class Layout implements Cloneable {
                 //TODO: Take care of log unit servers which were not sealed.
                 SealServersHelper.waitForQuorumSegmentSeal(layoutSegment, completableFutureMap);
             }
+
+            @Override
+            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
+                throw new UnsupportedOperationException("Not implemented yet");
+            }
+
+            @Override
+            public IStreamView getStreamView(CorfuRuntime r, UUID streamId) {
+                throw new UnsupportedOperationException("Not implemented yet");
+            }
         },
         REPLEX {
             @Override
@@ -355,6 +378,16 @@ public class Layout implements Cloneable {
                                             Map<String, CompletableFuture<Boolean>> completableFutureMap)
                     throws QuorumUnreachableException {
                 throw new UnsupportedOperationException("unsupported seal");
+            }
+
+            @Override
+            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
+                return new ReplexReplicationView(l, ls);
+            }
+
+            @Override
+            public IStreamView  getStreamView(CorfuRuntime r, UUID streamId) {
+                return new ReplexStreamView(r, streamId);
             }
         },
         NO_REPLICATION {
@@ -364,6 +397,16 @@ public class Layout implements Cloneable {
                     throws QuorumUnreachableException {
                 throw new UnsupportedOperationException("unsupported seal");
             }
+
+            @Override
+            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
+                throw new UnsupportedOperationException("Replication view used without a replication mode");
+            }
+
+            @Override
+            public IStreamView getStreamView(CorfuRuntime r, UUID streamId) {
+                throw new UnsupportedOperationException("Stream view used without a replication mode");
+            }
         };
 
         /**
@@ -372,7 +415,12 @@ public class Layout implements Cloneable {
         public abstract void validateSegmentSeal(LayoutSegment layoutSegment,
                                                  Map<String, CompletableFuture<Boolean>> completableFutureMap)
                 throws QuorumUnreachableException;
+
+        public abstract AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls);
+
+        public abstract IStreamView getStreamView(CorfuRuntime r, UUID streamId);
     }
+
 
     @Data
     @Getter

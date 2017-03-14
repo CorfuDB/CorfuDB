@@ -40,17 +40,26 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
      *
      */
     @Getter
-    @Setter
     public transient Object undoRecord;
 
-    /** Return whether or not this method can be undo.
-     *
-     * @return  True, if the entry has the record necessary
-     *          for undo, false otherwise.
+    /** A flag indicating whether an undo record is present. Necessary
+     * because undo records may be NULL.
      */
-    public boolean isUndoable() {
-        return  undoRecord != null;
+    @Getter
+    public boolean undoable;
+
+    /** Set the undo record for this entry. */
+    public void setUndoRecord(Object object) {
+        this.undoRecord = object;
+        undoable = true;
     }
+
+    /** Clear the undo record for this entry. */
+    public void clearUndoRecord() {
+        this.undoRecord = null;
+        undoable = false;
+    }
+
 
     public SMREntry(String SMRMethod, @NonNull Object[] SMRArguments, ISerializer serializer) {
         super(LogEntryType.SMR);

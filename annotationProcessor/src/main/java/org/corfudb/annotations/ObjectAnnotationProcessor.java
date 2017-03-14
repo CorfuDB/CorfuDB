@@ -372,8 +372,12 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     if (mutator != null || mutatorAccessor != null) {
                         ms.addStatement(
                                 (mutatorAccessor != null ? "long address" + CORFUSMR_FIELD + " = " : "") +
-                                "proxy" + CORFUSMR_FIELD + ".logUpdate($S,$L$L$L)",
+                                "proxy" + CORFUSMR_FIELD + ".logUpdate($S,$L,$L$L$L)",
                                 getSMRFunctionName(smrMethod),
+                                // Don't need upcall result for mutators
+                                mutator != null ? "false" :
+                                // or mutatorAccessors which return void.
+                                smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ? "false" : "true",
                                 m.hasConflictAnnotations ? conflictField : "null",
                                 smrMethod.getParameters().size() > 0 ? "," : "",
                                 smrMethod.getParameters().stream()
@@ -384,7 +388,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
 
                     // If an accessor (or not annotated), return the object by doing the underlying call.
                     if (mutatorAccessor != null) {
-                        // If the return to the mutatorAcessor is void, we don't need
+                        // If the return to the mutatorAccessor is void, we don't need
                         // to do anything...
                         if (!smrMethod.getReturnType().getKind().equals(TypeKind.VOID)) {
                             ms.addStatement("return (" +
