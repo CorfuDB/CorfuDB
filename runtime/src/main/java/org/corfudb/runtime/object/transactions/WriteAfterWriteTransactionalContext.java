@@ -34,6 +34,7 @@ public class WriteAfterWriteTransactionalContext
 
     WriteAfterWriteTransactionalContext(TransactionBuilder builder) {
         super(builder);
+        getSnapshotTimestamp();
     }
 
     @Override

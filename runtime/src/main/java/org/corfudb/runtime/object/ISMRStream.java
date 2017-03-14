@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.view.Address;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -49,4 +50,11 @@ public interface ISMRStream {
     long append(SMREntry entry,
                 Function<TokenResponse, Boolean> acquisitionCallback,
                 Function<TokenResponse, Boolean> deacquisitionCallback);
+
+    /** Get the UUID for this stream (optional operation).
+     * @return  The UUID for this stream.
+     */
+    default UUID getID() {
+        return new UUID(0L, 0L);
+    }
 }

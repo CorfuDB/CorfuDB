@@ -5,6 +5,7 @@ import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.Utils;
 
 import java.util.*;
 import java.util.function.Function;
@@ -172,10 +173,20 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             return fillFromResolved(maxGlobal, context);
         }
 
-        // First, we fetch the current token (backpointer) from the sequencer.
-        final long latestToken = runtime.getSequencerView()
-                .nextToken(Collections.singleton(context.id), 0)
-                .getToken();
+        Long latestToken = null;
+
+        // If the max has bveen resolved, use it.
+        if (maxGlobal != Address.MAX) {
+            latestToken = context.resolvedQueue.ceiling(maxGlobal);
+        }
+
+        // If we don't have a larger token in resolved, or the request was for
+        // a linearized read, fetch the token from the sequencer.
+        if (latestToken == null || maxGlobal == Address.MAX) {
+            latestToken = runtime.getSequencerView()
+                    .nextToken(Collections.singleton(context.id), 0)
+                    .getToken();
+        }
 
         // If the backpointer was unwritten, return, there is nothing to do
         if (latestToken == Address.NEVER_READ) {
@@ -197,6 +208,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         while (currentRead > context.globalPointer &&
                 currentRead != Address.NEVER_READ) {
+            log.trace("Read_Fill_Queue[{}] Read {}", this, currentRead);
             // Read the entry in question.
             ILogData currentEntry =
                     runtime.getAddressSpaceView().read(currentRead);
@@ -275,6 +287,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // If we have a backpointer, we'll use that for our next read.
             if (!runtime.backpointersDisabled &&
                     currentEntry.hasBackpointer(context.id)) {
+                log.trace("Read_Fill_Queue[{}] Backpointer {}->{}", this,
+                        currentRead, currentEntry.getBackpointer(context.id));
                 currentRead = currentEntry.getBackpointer(context.id);
             }
             // Otherwise, our next read is the previous entry.
@@ -283,6 +297,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             }
         }
 
+        log.debug("Read_Fill_Queue[{}] Filled queue with {}", this, context.readQueue);
         return !context.readQueue.isEmpty();
+    }
+
+    @Override
+    public String toString() {
+        return Utils.toReadableID(baseContext.id) + "@" + getCurrentContext().globalPointer;
     }
 }

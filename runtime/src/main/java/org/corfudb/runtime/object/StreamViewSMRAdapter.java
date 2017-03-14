@@ -10,6 +10,7 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -100,6 +101,12 @@ public class StreamViewSMRAdapter implements ISMRStream {
                 Function<TokenResponse, Boolean> acquisitionCallback,
                 Function<TokenResponse, Boolean> deacquisitionCallback) {
         return streamView.append(entry, acquisitionCallback, deacquisitionCallback);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public UUID getID() {
+        return streamView.getID();
     }
 
 }

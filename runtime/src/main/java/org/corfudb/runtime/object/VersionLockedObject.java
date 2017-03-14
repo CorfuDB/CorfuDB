@@ -7,6 +7,7 @@ import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.Utils;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -118,6 +119,9 @@ public class VersionLockedObject<T> {
       * @param record   The record to undo.
      */
     public void applyUndoRecordUnsafe(SMREntry record) {
+        log.trace("Undo[{}] of {}@{} ({})", this, record.getSMRMethod(),
+                record.getEntry() != null ? record.getEntry().getGlobalAddress() : "OPT",
+                record.getUndoRecord());
         IUndoFunction<T> undoFunction =
                 undoFunctionMap.get(record.getSMRMethod());
         // If the undo function exists, apply it.
@@ -150,6 +154,10 @@ public class VersionLockedObject<T> {
      * @return              The upcall result, if available.
      */
     public Object applyUpdateUnsafe(SMREntry entry, long timestamp) {
+        log.trace("Apply[{}] of {}@{} ({})", this, entry.getSMRMethod(),
+                entry.getEntry() != null ? entry.getEntry().getGlobalAddress() : "OPT",
+                entry.getSMRArguments());
+
         ICorfuSMRUpcallTarget<T> target = upcallTargetMap.get(entry.getSMRMethod());
         if (target == null) {
             throw new RuntimeException("Unknown upcall " + entry.getSMRMethod());
@@ -196,6 +204,7 @@ public class VersionLockedObject<T> {
     public void rollbackObjectUnsafe(long rollbackVersion) {
         // If we're already at or before the given version, there's
         // nothing to do
+        log.trace("Rollback[{}] to {}", this, rollbackVersion);
         if (getVersionUnsafe() <= rollbackVersion) {
             return;
         }
@@ -218,6 +227,7 @@ public class VersionLockedObject<T> {
             entries = smrStream.previous();
 
             if (getVersionUnsafe() <= rollbackVersion) {
+                log.trace("Rollback[{}] completed");
                 return;
             }
         }
@@ -414,7 +424,7 @@ public class VersionLockedObject<T> {
      */
     @Override
     public String toString() {
-        return object.getClass().getSimpleName() + "@"
+        return object.getClass().getSimpleName() + "[" + Utils.toReadableID(smrStream.getID()) + "]@"
                 + (getVersionUnsafe() == Address.NEVER_READ ? "NR" : getVersionUnsafe())
                 + (optimisticallyModified ? "+" : "");
     }
