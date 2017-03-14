@@ -63,7 +63,8 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                     // First undo any optimistic changes.
                     if (proxy.getUnderlyingObject().isOptimisticallyModifiedUnsafe()) {
                         try {
-                            proxy.getUnderlyingObject().optimisticRollbackUnsafe();
+                            proxy.getUnderlyingObject().getModifyingContextUnsafe()
+                                    .optimisticRollback(proxy);
                         } catch (NoRollbackException nre) {
                             // guess our only option is to start from scratch.
                             proxy.getUnderlyingObject().resetUnsafe();
@@ -77,8 +78,8 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
 
                     // Now we sync forward if we are behind
                     if (proxy.getVersion() < getSnapshotTimestamp()) {
-                        proxy.syncObjectUnsafe(proxy.getUnderlyingObject(),
-                                getSnapshotTimestamp());
+                        proxy.getUnderlyingObject()
+                                .syncObjectUnsafe(getSnapshotTimestamp());
                     }
 
                     // Now we do the access

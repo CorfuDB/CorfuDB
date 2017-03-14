@@ -34,6 +34,7 @@ public class WriteAfterWriteTransactionalContext
 
     WriteAfterWriteTransactionalContext(TransactionBuilder builder) {
         super(builder);
+        getSnapshotTimestamp();
     }
 
     @Override
@@ -91,7 +92,6 @@ public class WriteAfterWriteTransactionalContext
         completionFuture.complete(true);
         commitAddress = address;
 
-        // Update all proxies, committing the new address.
         tryCommitAllProxies();
 
         return address;

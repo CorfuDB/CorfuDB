@@ -9,10 +9,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NoRollbackException;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -87,23 +90,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      *
      */
     final Object[] args;
-
-    /** A list of upcalls pending in the system. The proxy keeps this
-     * set so it can remember to save the upcalls for pending requests.
-     */
-    Set<Long> pendingUpcalls;
-
-    // This enum is necessary because null cannot be inserted
-    // into a ConcurrentHashMap.
-    enum NullValue {
-        NULL_VALUE
-    }
-
-    /** A list of upcall results, keyed by the address they were
-     * requested.
-     */
-    Map<Long, Object> upcallResults;
-
     /**
      * Metrics: meter (counter), histogram
      */
@@ -135,9 +121,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         this.undoTargetMap = undoTargetMap;
         this.undoRecordTargetMap = undoRecordTargetMap;
         this.resetSet = resetSet;
-
-        this.pendingUpcalls = new ConcurrentSet<>();
-        this.upcallResults = new ConcurrentHashMap<>();
 
         underlyingObject = getNewVersionLockedObject();
     }
@@ -180,7 +163,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             // We don't have the right version, so we need to write
             // throwing this exception causes us to take a write lock.
             MetricsUtils.incConditionalCounter(isMetricsEnabled, counterAccessLocked, 1);
-            log.debug("access needs to sync forward up to timestamp {}", timestamp);
+            log.debug("access needs to sync forward from {} up to timestamp {}", ver, timestamp);
             throw new ConcurrentModificationException();
         },
             //  The read did not acquire the right version, so we
@@ -196,17 +179,17 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             // Now we sync forward while we have the lock, if the object
             // was not optimistically modified
             if (!underlyingObject.isOptimisticallyModifiedUnsafe()) {
-                syncObjectUnsafe(underlyingObject, timestamp);
+                underlyingObject.syncObjectUnsafe(timestamp);
                 return accessMethod.access(underlyingObject.getObjectUnsafe());
-
             }
             // Otherwise, we rollback any optimistic changes, if they
             // are undoable, and then sync the object before accessing
             // the object.
-            else if (underlyingObject.isOptimisticallyUndoableUnsafe()){
+            else if (underlyingObject.getModifyingContextUnsafe() != null){
                 try {
-                    underlyingObject.optimisticRollbackUnsafe();
-                    syncObjectUnsafe(underlyingObject, timestamp);
+                    underlyingObject.getModifyingContextUnsafe()
+                        .optimisticRollback(this);
+                    underlyingObject.syncObjectUnsafe(timestamp);
                     // do the access
                     R ret = accessMethod
                             .access(underlyingObject.getObjectUnsafe());
@@ -219,49 +202,10 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
             // As a last resort, we'll have to generate a new object
             // and replay. The object will be disposed.
-            VersionLockedObject<T> temp = getNewVersionLockedObject();
-            syncObjectUnsafe(temp, timestamp);
-            return accessMethod.access(temp.getObjectUnsafe());
+            underlyingObject.resetUnsafe();
+            underlyingObject.syncObjectUnsafe(timestamp);
+            return accessMethod.access(underlyingObject.getObjectUnsafe());
         });
-    }
-
-
-    /** Update the object. Ensure that you have the write lock before calling
-     * this function...
-     * @param underlyingObject  The object to update.
-     * @param timestamp         The timestamp to update the object to.
-     */
-    public void syncObjectUnsafe(VersionLockedObject<T> underlyingObject,
-                                      long timestamp) {
-        underlyingObject.getStreamViewUnsafe().remainingUpTo(timestamp).stream()
-            // Turn this into a flat stream of SMR entries
-            .filter(m -> m.getType() == DataType.DATA)
-            .filter(m -> m.getPayload(rt) instanceof ISMRConsumable)
-            .forEach(logData -> {
-                ((ISMRConsumable)logData.getPayload(rt)).getSMRUpdates(getStreamID()).stream()
-                    .map(c -> c.getSMRUpdates(streamID))
-                    .flatMap(List::stream)
-                    // Apply each entry, in order into the underlyingObject.
-                    .forEachOrdered(l -> {
-                        try {
-                            Object res = underlyingObject.applyUpdateUnsafe(l, false);
-                            underlyingObject.setVersionUnsafe(logData.getGlobalAddress());
-                            log.debug("apply {} to {}", logData.getGlobalAddress(), streamID.getLeastSignificantBits());
-
-                            if (pendingUpcalls.contains(logData.getGlobalAddress())) {
-                                log.debug("upcall result for {}", logData.getGlobalAddress());
-                                upcallResults.put(underlyingObject.getVersionUnsafe(), res == null ?
-                                        NullValue.NULL_VALUE : res);
-                                pendingUpcalls.remove(logData.getGlobalAddress());
-                            } else {
-                                log.debug("no thread waiting for {}", logData.getGlobalAddress());
-                            }
-                        } catch (Exception e) {
-                            log.error("Error: Couldn't execute upcall due to {}", e);
-                            throw new RuntimeException(e);
-                        }
-                    });
-            });
     }
 
     /**
@@ -292,18 +236,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // If we aren't in a transaction, we can just write the modification.
         // We need to add the acquired token into the pending upcall list.
         SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
-        long address = underlyingObject.getStreamViewUnsafe().append(smrEntry, t -> {
-                if (keepUpcallResult) {
-                    pendingUpcalls.add(t.getToken());
-                }
-                return true;
-            }, t -> {
-                if (keepUpcallResult) {
-                    pendingUpcalls.remove(t.getToken());
-                }
-                log.debug("update {} failed", t.getToken());
-                return true;
-            });
+        long address = underlyingObject.logUpdate(smrEntry, keepUpcallResult);
         log.trace("Update {} written to {} on {}", smrUpdateFunction, address, streamID.getLeastSignificantBits());
         return address;
     }
@@ -355,16 +288,15 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                     // Now we sync forward while we have the lock, if the object
                     // was not optimistically modified
                     if (!underlyingObject.isOptimisticallyModifiedUnsafe()) {
-                        syncObjectUnsafe(underlyingObject, timestamp);
+                        underlyingObject.syncObjectUnsafe(timestamp);
                         return null;
                     }
                     // Otherwise, we rollback any optimistic changes, if they
                     // are undoable, and then sync the object before accessing
                     // the object.
-                    else if (underlyingObject.isOptimisticallyUndoableUnsafe()){
+                    else if (underlyingObject.isOptimisticallyModifiedUnsafe()){
                         try {
-                            underlyingObject.optimisticRollbackUnsafe();
-                            syncObjectUnsafe(underlyingObject, timestamp);
+                            underlyingObject.syncObjectUnsafe(timestamp);
                             return null;
                         } catch (NoRollbackException nre) {
                             // We couldn't roll back, so we'll have to
@@ -374,7 +306,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
                     // As a last resort, we'll reset...
                     underlyingObject.resetUnsafe();
-                    syncObjectUnsafe(underlyingObject, timestamp);
+                    underlyingObject.syncObjectUnsafe(timestamp);
                     return null;
                 });
     }
@@ -389,36 +321,36 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
         // Check first if we have the upcall, if we do
         // we can service the request right away.
-        if (upcallResults.containsKey(timestamp)) {
+        if (underlyingObject.upcallResults.containsKey(timestamp)) {
             log.debug("upcall {} ready", timestamp);
-            R ret = (R) upcallResults.get(timestamp);
-            upcallResults.remove(timestamp);
-            return ret == NullValue.NULL_VALUE ? null : ret;
+            R ret = (R) underlyingObject.upcallResults.get(timestamp);
+            underlyingObject.upcallResults.remove(timestamp);
+            return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
         }
 
         // if someone took a writelock on the object, we
         // should just wait for it, since the object will
-        // have are upcall after...
+        // have our upcall after...
         if (underlyingObject.isWriteLocked()) {
             underlyingObject.waitOnLock();
-            if (upcallResults.containsKey(timestamp)) {
+            if (underlyingObject.upcallResults.containsKey(timestamp)) {
                 log.debug("now upcall {} ready", timestamp);
-                R ret = (R) upcallResults.get(timestamp);
-                upcallResults.remove(timestamp);
-                return ret == NullValue.NULL_VALUE ? null : ret;
+                R ret = (R) underlyingObject.upcallResults.get(timestamp);
+                underlyingObject.upcallResults.remove(timestamp);
+                return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
             }
         }
 
         // Otherwise we need to sync the object by taking
         // the correct locks.
         underlyingObject.writeReturnVoid(
-                (v, obj) -> syncObjectUnsafe(underlyingObject, timestamp));
+                (v, obj) -> underlyingObject.syncObjectUnsafe(timestamp));
 
-        if (upcallResults.containsKey(timestamp)) {
+        if (underlyingObject.upcallResults.containsKey(timestamp)) {
             log.debug("finally upcall {} ready", timestamp);
-            R ret = (R) upcallResults.get(timestamp);
-            upcallResults.remove(timestamp);
-            return ret == NullValue.NULL_VALUE ? null : ret;
+            R ret = (R) underlyingObject.upcallResults.get(timestamp);
+            underlyingObject.upcallResults.remove(timestamp);
+            return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
         }
 
         // The version is already ahead, but we don't have the result.
@@ -464,7 +396,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 R ret = txFunction.get();
                 rt.getObjectsView().TXEnd();
                 return ret;
-            } catch (Exception e) {
+            } catch (TransactionAbortedException e) {
                 if (retries == 1) {
                     MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTxnRetry1, 1);
                 }
@@ -517,8 +449,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     private VersionLockedObject<T> getNewVersionLockedObject() {
         try {
             return new VersionLockedObject<T>(this::getNewInstance,
-                    -1L,
-                    rt.getStreamsView().get(streamID),
+                    new StreamViewSMRAdapter(rt, rt.getStreamsView().get(streamID)),
                     getUpcallTargetMap(), getUndoRecordTargetMap(),
                     getUndoTargetMap(), getResetSet());
         } catch (Exception e) {

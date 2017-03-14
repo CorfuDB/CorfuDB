@@ -11,6 +11,8 @@ import org.corfudb.runtime.object.*;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 /**
@@ -157,6 +159,13 @@ public abstract class AbstractTransactionalContext implements
                               SMREntry updateEntry,
                               Object[] conflictObject);
 
+    /** Rollback any optimistic updates which were done by this context
+     *  on this proxy. */
+    public <T> void optimisticRollback(ICorfuSMRProxyInternal<T> proxy) {
+        // The default implementation assumes there is always nothing
+        // to rollback, and does nothing.
+    }
+
     /** Add a given transaction to this transactional context, merging
      * the read and write sets.
      * @param tc    The transactional context to merge.
@@ -212,7 +221,9 @@ public abstract class AbstractTransactionalContext implements
 
         // create an entry for this streamID
         writeSet.computeIfAbsent(proxy.getStreamID(),
-                u -> new AbstractMap.SimpleEntry<>(new HashSet<>(), new ArrayList<>() )
+                // TODO: CoW arrayList necessary because of possible concurrent modification
+                // SMR stream should fix this.
+                u -> new AbstractMap.SimpleEntry<>(new HashSet<>(), new CopyOnWriteArrayList<>())
         );
 
         // add the SMRentry to the list of updates for this stream
