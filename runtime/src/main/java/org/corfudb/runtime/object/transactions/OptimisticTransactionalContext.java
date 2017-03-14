@@ -13,14 +13,7 @@ import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
 
-import java.util.Collections;
-import java.util.ConcurrentModificationException;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -58,6 +51,13 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @Getter
     private final Set<ICorfuSMRProxyInternal> modifiedProxies =
             new HashSet<>();
+
+    /** Keep the version (at global snapshot time)
+     *  of each accessed object.
+     */
+    private final Map<ICorfuSMRProxyInternal, Long> streamSnapshots =
+            new HashMap<>();
+
 
     OptimisticTransactionalContext(TransactionBuilder builder) {
         super(builder);
@@ -99,11 +99,23 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             object.resetUnsafe();
         }
 
-        // next, if the version is older than what we need
-        // sync.
-        if (object.getVersionUnsafe() < getSnapshotTimestamp()) {
-            proxy.syncObjectUnsafe(proxy.getUnderlyingObject(), getSnapshotTimestamp());
+        // Sync only if we never read the object in this transaction
+        // or if the version is older than what we need
+        OptimisticTransactionalContext oCtxt = (OptimisticTransactionalContext)
+                object.getModifyingContextUnsafe();
+
+        if (oCtxt == null || oCtxt != this &&
+                proxy.getUnderlyingObject().getVersionUnsafe() < getSnapshotTimestamp()) {
+
+            // Cache version number of the object at global snapshot
+            long snapshotOfThisStream =  streamSnapshots.computeIfAbsent(proxy,
+                    k -> k.syncObjectUnsafe(k.getUnderlyingObject(), getSnapshotTimestamp()));
+
+            if (proxy.getUnderlyingObject().getVersionUnsafe() < snapshotOfThisStream) {
+                proxy.syncObjectUnsafe(object, snapshotOfThisStream);
+            }
         }
+
 
         // Take ownership of the object.
         object.setTXContextUnsafe(this);

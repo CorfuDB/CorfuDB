@@ -24,7 +24,7 @@ public interface ICorfuSMRProxyInternal<T> extends ICorfuSMRProxy<T> {
      * @param object        The object to sync forward.
      * @param timestamp     The timestamp to sync it to.
      */
-    void syncObjectUnsafe(VersionLockedObject<T> object, long timestamp);
+    long syncObjectUnsafe(VersionLockedObject<T> object, long timestamp);
 
     /** Get a map of SMR upcall targets from method strings.
      * @return              The SMR upcall map for this proxy. */
