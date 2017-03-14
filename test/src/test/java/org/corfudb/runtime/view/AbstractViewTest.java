@@ -289,6 +289,16 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtimeRouterMap.get(r).values().forEach(x -> x.rules.add(rule));
     }
 
+    /** Add a rule to a particular router in a particular runtime.
+     *
+     * @param r                     The runtime to install the rule to
+     * @param clientRouterEndpoint  The Client router endpoint to install the rule to
+     * @param rule                  The rule to install.
+     */
+    public void addClientRule(CorfuRuntime r, String clientRouterEndpoint, TestRule rule) {
+        runtimeRouterMap.get(r).get(clientRouterEndpoint).rules.add(rule);
+    }
+
     /** Clear rules for a particular server.
      *
      * @param port  The port of the server to clear rules for.

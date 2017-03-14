@@ -33,6 +33,7 @@ public class PurgeFailurePolicy implements IFailureHandlerPolicy {
                 .removeLogunitServers(failedNodes)
                 .build();
         newLayout.setRuntime(corfuRuntime);
+        newLayout.setEpoch(newLayout.getEpoch() + 1);
         return newLayout;
     }
 }
