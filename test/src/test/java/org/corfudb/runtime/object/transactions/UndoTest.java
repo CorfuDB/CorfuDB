@@ -283,10 +283,22 @@ public class UndoTest extends AbstractObjectTest {
 
         // t1 starts transaction.
         // snapshot should include all the keys inserted above
-        t(t1, () -> WWTXBegin());
+        t(t1, () -> {
+            WWTXBegin();
+            maps.get(0).size(); // size() is called to make the TX obtains a snapshot at this point,
+                                // and does not wait to lazily obtain it later, when it reads for
+                                // the first time
+        });
+
 
         // t2 starts transaction.
-        t(t2, () -> WWTXBegin());
+        t(t2, () -> {
+            WWTXBegin();
+            maps.get(0).size(); // size() is called to make the TX obtains a snapshot at this point,
+                                // and does not wait to lazily obtain it later, when it reads for
+                                // the first time
+        });
+
 
         // t3 modifies everything
         t(t3, () -> crossStream(maps, specialValue));
@@ -369,10 +381,21 @@ public class UndoTest extends AbstractObjectTest {
 
         // t1 starts transaction.
         // snapshot should include all the keys inserted above
-        t(t1, () -> WWTXBegin());
+        t(t1, () -> {
+            WWTXBegin();
+            maps.get(0).size(); // size() is called to make the TX obtains a snapshot at this point,
+                                // and does not wait to lazily obtain it later, when it reads for
+                                // the first time
+        });
 
         // t2 starts transaction.
-        t(t2, () -> WWTXBegin());
+        t(t2, () -> {
+            WWTXBegin();
+            maps.get(0).size(); // size() is called to make the TX obtains a snapshot at this point,
+                                // and does not wait to lazily obtain it later, when it reads for
+                                // the first time
+        });
+
 
         // t3 modifies everything
         t(t3, () -> crossStream(maps, specialValue));
