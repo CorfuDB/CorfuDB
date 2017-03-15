@@ -289,7 +289,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(sh.getKnownAddresses().size()).isEqualTo(logChunk);
 
         for (long x = logChunk; x < logChunk * 2; x++) {
-            assertThat(sh.getKnownAddresses().contains(x)).isTrue();
+            assertThat(sh.getKnownAddresses().containsKey(x)).isTrue();
         }
 
         // Verify that the trimmed addresses cannot be written to or read from after compaction
@@ -304,4 +304,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
                     .isInstanceOf(OverwriteException.class);
         }
     }
+
+
 }

@@ -4,7 +4,11 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.DataInputStream;
+import java.io.BufferedInputStream;
 import java.io.OutputStream;
+import java.io.DataOutputStream;
+import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
@@ -99,10 +103,9 @@ public class StreamLogFiles implements StreamLog {
             Collection<File> files = FileUtils.listFiles(dir, extension, true);
 
             for (File file : files) {
-                try {
-                    FileInputStream fIn = new FileInputStream(file);
-                    FileChannel fc = fIn.getChannel();
+                try (FileInputStream fIn = new FileInputStream(file)){
 
+                    FileChannel fc = fIn.getChannel();
 
                     ByteBuffer metadataBuf = ByteBuffer.allocate(METADATA_SIZE);
                     fc.read(metadataBuf);
@@ -163,7 +166,7 @@ public class StreamLogFiles implements StreamLog {
     @Override
     public void trim(LogAddress logAddress) {
         SegmentHandle handle = getSegmentHandleForAddress(logAddress);
-        if (!handle.getKnownAddresses().contains(logAddress.getAddress()) ||
+        if (!handle.getKnownAddresses().containsKey(logAddress.getAddress()) ||
                 handle.getPendingTrims().contains(logAddress.getAddress())) {
             return;
         }
@@ -388,6 +391,37 @@ public class StreamLogFiles implements StreamLog {
         return set;
     }
 
+    private boolean isOverwritten(SegmentHandle fh, long filePosition) {
+        return fh.overwrittenFilePositions.contains(filePosition);
+    }
+
+
+    private void readOverwrittenPositions(SegmentHandle fh) throws IOException {
+        synchronized (fh.lock) {
+            File f = new File(fh.getOverwriteFileName());
+            if (f.exists()) {
+                try (DataInputStream is = new DataInputStream(new BufferedInputStream(new FileInputStream(fh.getOverwriteFileName())))) {
+                    while (is.available() > 4) {
+                        fh.overwrittenFilePositions.add(is.readLong());
+                    }
+                }
+            }
+        }
+    }
+
+    private void addOverwrittenPosition(SegmentHandle fh, long position) throws IOException {
+        synchronized (fh.lock) {
+            File f = new File(fh.getOverwriteFileName());
+            if (!f.exists()) {
+                f.getParentFile().mkdirs();
+            }
+            try (DataOutputStream os = new DataOutputStream(new FileOutputStream(f.getAbsolutePath(), f.exists()))) {
+                os.writeLong(position);
+            }
+            fh.overwrittenFilePositions.add(position);
+        }
+    }
+
     /**
      * Find a log entry in a file.
      *
@@ -420,13 +454,16 @@ public class StreamLogFiles implements StreamLog {
 
         Metadata headerMetadata = Metadata.parseFrom(headerMetadataBuf.array());
 
-        fc.position(fc.position() + headerMetadata.getLength());
-        ByteBuffer o = ByteBuffer.allocate((int) logFileSize - (int) fc.position());
+        long initialPosition = fc.position() + headerMetadata.getLength();
+        fc.position(initialPosition);
+
+        ByteBuffer o = ByteBuffer.allocate((int)(logFileSize - fc.position()));
         fc.read(o);
         fc.close();
         o.flip();
 
         while (o.hasRemaining()) {
+            long filePosition = initialPosition+o.position();
 
             short magic = o.getShort();
 
@@ -453,13 +490,15 @@ public class StreamLogFiles implements StreamLog {
                     }
                 }
 
-                if (address == -1) {
+                if (isOverwritten(fh, filePosition)) {
+                    log.debug("Overwritten at {} hit, reading (size={}), position {}.", address, metadata.getLength(), filePosition);
+                } else if (address == -1) {
                     //Todo(Maithem) : maybe we can move this to getChannelForAddress
-                    fh.knownAddresses.add(entry.getGlobalAddress());
+                    fh.knownAddresses.put(entry.getGlobalAddress(), filePosition);
                 } else if (entry.getGlobalAddress() != address) {
                     log.trace("Read address {}, not match {}, skipping. (remain={})", entry.getGlobalAddress(), address);
                 } else {
-                    log.debug("Entry at {} hit, reading (size={}).", address, metadata.getLength());
+                    log.debug("Entry at {} hit, reading (size={}), position {}.", address, metadata.getLength(), filePosition);
 
                     return getLogData(entry);
                 }
@@ -527,9 +566,10 @@ public class StreamLogFiles implements StreamLog {
 
                 writeHeader(fc1, VERSION, verify);
                 log.trace("Opened new log file at {}", a);
-                SegmentHandle sh = new SegmentHandle(fc1, fc2, fc3, a);
+                SegmentHandle sh = new SegmentHandle(fc1, fc2, fc3, a, a+".overwrite");
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
+                readOverwrittenPositions(sh);
                 readRecord(sh, -1);
                 loadTrimAddresses(sh);
                 return sh;
@@ -685,13 +725,23 @@ public class StreamLogFiles implements StreamLog {
         try {
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
+
             SegmentHandle fh = getSegmentHandleForAddress(logAddress);
-            if (fh.getKnownAddresses().contains(logAddress.address) ||
+            long filePos = fh.logChannel.position();
+            if (fh.getKnownAddresses().containsKey(logAddress.address) ||
                     fh.getTrimmedAddresses().contains(logAddress.address)) {
-                throw new OverwriteException();
+                if (entry.isOverwriteForced()) {
+                    long posToTrim = fh.getKnownAddresses().get(logAddress.address);
+                    writeRecord(fh, logAddress.address, entry);
+                    fh.getOverwrittenFilePositions().add(posToTrim);
+                    addOverwrittenPosition(fh, posToTrim);
+                    fh.getKnownAddresses().put(logAddress.address, filePos);
+                } else {
+                    throw new OverwriteException();
+                }
             } else {
                 writeRecord(fh, logAddress.address, entry);
-                fh.getKnownAddresses().add(logAddress.address);
+                fh.getKnownAddresses().put(logAddress.address, filePos);
             }
             log.trace("Disk_write[{}]: Written to disk.", logAddress);
         } catch (IOException e) {
@@ -727,9 +777,12 @@ public class StreamLogFiles implements StreamLog {
         private FileChannel pendingTrimChannel;
         @NonNull
         private String fileName;
-        private Set<Long> knownAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        @NonNull
+        private String overwriteFileName;
+        private Map<Long, Long> knownAddresses = new ConcurrentHashMap();
         private Set<Long> trimmedAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
         private Set<Long> pendingTrims = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        private Set<Long> overwrittenFilePositions = ConcurrentHashMap.newKeySet();
         private final Lock lock = new ReentrantLock();
 
         public void close() {
