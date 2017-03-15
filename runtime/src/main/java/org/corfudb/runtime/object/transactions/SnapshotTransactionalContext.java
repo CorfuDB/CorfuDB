@@ -63,6 +63,9 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                     // First undo any optimistic changes.
                     if (proxy.getUnderlyingObject().isOptimisticallyModifiedUnsafe()) {
                         try {
+                            if (this.builder.getRuntime().getParameters().isOptimisticUndoDisabled()) {
+                                throw new NoRollbackException();
+                            }
                             proxy.getUnderlyingObject().optimisticRollbackUnsafe();
                         } catch (NoRollbackException nre) {
                             // guess our only option is to start from scratch.
