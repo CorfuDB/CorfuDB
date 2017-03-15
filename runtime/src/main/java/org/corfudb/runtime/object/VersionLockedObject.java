@@ -123,6 +123,9 @@ public class VersionLockedObject<T> {
      *
      */
     public void optimisticCommitUnsafe(long version) {
+        log.debug("TX commits on object {} at timestamp {}", sv.getID()
+                .getLeastSignificantBits(), version);
+
         // TODO: merge the optimistic undo log into the undo log
         clearOptimisticUpdatesUnsafe();
 
@@ -136,6 +139,9 @@ public class VersionLockedObject<T> {
      *  Unsafe, requires that the caller has acquired a write lock.
      */
     public void optimisticRollbackUnsafe() {
+        log.debug("optimistic TX rollback on object {}",
+                sv.getID().getLeastSignificantBits());
+
         if (!isOptimisticallyUndoableUnsafe()) {
             throw new NoRollbackException();
         }
@@ -162,6 +168,10 @@ public class VersionLockedObject<T> {
         if (this.version <= version) {
             return;
         }
+
+        log.debug("rollback object {} to timestamp {}", sv.getID()
+                .getLeastSignificantBits(), version);
+
 
         // If we don't have an undo log, we can't roll back.
         if (undoLog.size() == 0) {

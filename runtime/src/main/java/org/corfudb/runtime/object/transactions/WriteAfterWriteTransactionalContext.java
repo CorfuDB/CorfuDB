@@ -50,6 +50,10 @@ public class WriteAfterWriteTransactionalContext
         // If the write set is empty, we're done and just return
         // NOWRITE_ADDRESS.
         if (writeSet.keySet().isEmpty()) {
+            log.debug("write-write TX commit snapshot ts={} write-set empty, " +
+                    "no log " +
+                    "write", getSnapshotTimestamp());
+
             return NOWRITE_ADDRESS;
         }
 
@@ -81,6 +85,9 @@ public class WriteAfterWriteTransactionalContext
                                 collectWriteConflictParams(),
                                 collectWriteConflictParams())
                 );
+        log.debug("write-write TX commit at timestamp={} on streams=({})",
+                address, affectedStreams);
+
 
         if (address == -1L) {
             log.debug("Transaction aborted due to sequencer rejecting request");
