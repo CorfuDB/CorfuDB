@@ -16,7 +16,8 @@ public enum DataType implements ICorfuPayload<DataType> {
     DATA(0),
     EMPTY(1),
     HOLE(2),
-    TRIMMED(3);
+    TRIMMED(3),
+    PROPOSAL(4);
 
     final int val;
 

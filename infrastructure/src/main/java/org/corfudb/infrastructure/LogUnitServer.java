@@ -124,7 +124,7 @@ public class LogUnitServer extends AbstractServer {
             String logdir = opts.get("--log-path") + File.separator + "log";
             File dir = new File(logdir);
             if (!dir.exists()) {
-                dir.mkdir();
+                dir.mkdirs();
             }
             streamLog = new StreamLogFiles(logdir, (Boolean) opts.get("--no-verify"));
         }

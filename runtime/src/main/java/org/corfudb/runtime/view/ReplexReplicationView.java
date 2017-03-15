@@ -72,7 +72,7 @@ public class ReplexReplicationView extends AbstractReplicationView {
                 log.trace("Write, Global[{}]: chain {}/{}", address, i + 1, numUnits);
                 CFUtils.getUninterruptibly(
                         getLayout().getLogUnitClient(address, i)
-                                .write(getLayout().getLocalAddress(address), stream, 0L, b, Collections.emptyMap()), OverwriteException.class);
+                                .write(getLayout().getLocalAddress(address), stream, null, b, Collections.emptyMap()), OverwriteException.class);
             }
 
             // Write to the secondary / stream index units. To reduce the amount of network traffic, aggregate all

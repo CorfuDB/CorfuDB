@@ -1,0 +1,193 @@
+/**
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance
+ * with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+ */
+package org.corfudb.infrastructure.log;
+
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+
+import java.io.File;
+
+import org.corfudb.AbstractCorfuTest;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.util.serializer.Serializers;
+import org.junit.Ignore;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+
+/**
+ * Created by Konstantin Spirov on 3/15/2017.
+ */
+public class SteamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
+
+    private static final int RECORDS_TO_WRITE = 10;
+    @Test
+    @Ignore // compact on ranked address space not activated yet
+    public void testCompact() throws Exception {
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+
+        LogAddress address = new LogAddress(0l, null);
+        for (long x = 0; x < RECORDS_TO_WRITE; x++) {
+            writeToLog(log, address, DataType.DATA, "Payload", x);
+        }
+        LogData value1 = log.read(address);
+        long size1 = new File(log.getSegmentHandleForAddress(address).getFileName()).length();
+        log.compact();
+        LogData value2 = log.read(address);
+        long size2 = new File(log.getSegmentHandleForAddress(address).getFileName()).length();
+        assertEquals(value1.getRank(), value2.getRank());
+        assertNotEquals(size2, size1);
+    }
+
+    @Test
+    public void testHigherRank() {
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        LogAddress address = new LogAddress(0l, null);
+        writeToLog(log, address, DataType.DATA, "v-1", 1);
+        LogData value1 = log.read(address);
+        assertTrue(new String(value1.getData()).contains("v-1"));
+        writeToLog(log, address, DataType.DATA, "v-2", 2);
+        LogData value2 = log.read(address);
+        assertTrue(new String(value2.getData()).contains("v-2"));
+        log.close();
+    }
+
+    @Test
+    public void testLowerRank() {
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        LogAddress address = new LogAddress(0l, null);
+        writeToLog(log, address, DataType.DATA, "v-1", 2);
+        LogData value1 = log.read(address);
+        assertTrue(new String(value1.getData()).contains("v-1"));
+        try {
+            writeToLog(log, address, DataType.DATA, "v-2", 1);
+            fail();
+        } catch (OverwriteException e) {
+            // expected
+        }
+        LogData value2 = log.read(address);
+        assertTrue(new String(value2.getData()).contains("v-1"));
+        log.close();
+    }
+
+    @Test
+    public void testHigherRankAgainstProposal() {
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        LogAddress address = new LogAddress(0l, null);
+        writeToLog(log, address, DataType.PROPOSAL, "v-1", 1);
+        LogData value1 = log.read(address);
+        assertTrue(new String(value1.getData()).contains("v-1"));
+        writeToLog(log, address, DataType.DATA, "v-2", 2);
+        LogData value2 = log.read(address);
+        assertTrue(new String(value2.getData()).contains("v-2"));
+        log.close();
+    }
+
+    @Test
+    public void testLowerRankAgainstProposal() {
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        LogAddress address = new LogAddress(0l, null);
+        writeToLog(log, address, DataType.PROPOSAL, "v-1", 2);
+        LogData value1 = log.read(address);
+        assertTrue(new String(value1.getData()).contains("v-1"));
+        try {
+            writeToLog(log, address, DataType.DATA, "v-2", 1);
+            fail();
+        } catch (OverwriteException e) {
+            // expected
+        }
+        LogData value2 = log.read(address);
+        assertTrue(new String(value2.getData()).contains("v-1"));
+        log.close();
+    }
+
+    @Test
+    public void testProposalWithHigherRankAgainstData() {
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        LogAddress address = new LogAddress(0l, null);
+        writeToLog(log, address, DataType.DATA, "v-1", 1);
+        LogData value1 = log.read(address);
+        assertTrue(new String(value1.getData()).contains("v-1"));
+        try {
+            writeToLog(log, address, DataType.PROPOSAL, "v-2", 2);
+            fail();
+        } catch (OverwriteException e) {
+            // expected
+        }
+        LogData value2 = log.read(address);
+        assertTrue(new String(value2.getData()).contains("v-1"));
+        log.close();
+    }
+
+    @Test
+    public void testProposalWithLowerRankAgainstData() {
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        LogAddress address = new LogAddress(0l, null);
+        writeToLog(log, address, DataType.DATA, "v-1", 2);
+        LogData value1 = log.read(address);
+        assertTrue(new String(value1.getData()).contains("v-1"));
+        try {
+            writeToLog(log, address, DataType.PROPOSAL, "v-2", 1);
+            fail();
+        } catch (OverwriteException e) {
+            // expected
+        }
+        LogData value2 = log.read(address);
+        assertTrue(new String(value2.getData()).contains("v-1"));
+        log.close();
+    }
+
+
+
+    @Test
+    public void testProposalsHigherRank() {
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        LogAddress address = new LogAddress(0l, null);
+        writeToLog(log, address, DataType.PROPOSAL, "v-1", 1);
+        LogData value1 = log.read(address);
+        assertTrue(new String(value1.getData()).contains("v-1"));
+        writeToLog(log, address, DataType.PROPOSAL, "v-2", 2);
+        LogData value2 = log.read(address);
+        assertTrue(new String(value2.getData()).contains("v-2"));
+        log.close();
+    }
+
+    @Test
+    public void testProposalsLowerRank() {
+        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        LogAddress address = new LogAddress(0l, null);
+        writeToLog(log, address, DataType.PROPOSAL, "v-1", 2);
+        LogData value1 = log.read(address);
+        assertTrue(new String(value1.getData()).contains("v-1"));
+        try {
+            writeToLog(log, address, DataType.PROPOSAL, "v-2", 1);
+            fail();
+        } catch (OverwriteException e) {
+            // expected
+        }
+        LogData value2 = log.read(address);
+        assertTrue(new String(value2.getData()).contains("v-1"));
+        log.close();
+    }
+
+    private void writeToLog(StreamLog log, LogAddress address, DataType dataType, String payload, long rank) {
+        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        byte[] streamEntry = payload.getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        LogData data = new LogData(dataType, b);
+        data.setRank(new IMetadata.DataRank(rank));
+        log.append(address, data);
+    }
+
+    private String getDirPath() {
+        return PARAMETERS.TEST_TEMP_DIR + File.separator;
+    }
+
+}

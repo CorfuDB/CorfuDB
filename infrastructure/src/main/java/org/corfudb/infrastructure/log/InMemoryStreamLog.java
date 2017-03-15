@@ -17,7 +17,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
  *
  * Created by maithem on 7/21/16.
  */
-public class InMemoryStreamLog implements StreamLog {
+public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressSpace {
 
     private Map<Long, LogData> logCache;
     private Map<UUID, Map<Long, LogData>> streamCache;
@@ -33,7 +33,9 @@ public class InMemoryStreamLog implements StreamLog {
     public synchronized void append(LogAddress logAddress, LogData entry) {
         if (logAddress.getStream() == null) {
             if(logCache.containsKey(logAddress.address)) {
-                throw new OverwriteException();
+                if (entry.getRank()==null || isAppendPermitted(logAddress, entry).orElse(Boolean.FALSE)) {
+                    throw new OverwriteException();
+                }
             }
             logCache.put(logAddress.address, entry);
         } else {
@@ -45,10 +47,12 @@ public class InMemoryStreamLog implements StreamLog {
             }
 
             if(stream.containsKey(logAddress.address)) {
-                throw new OverwriteException();
-            } else {
-                stream.put(logAddress.address, entry);
+                if (entry.getRank()==null || isAppendPermitted(logAddress, entry).orElse(Boolean.FALSE)) {
+                    throw new OverwriteException();
+                }
             }
+            stream.put(logAddress.address, entry);
+
         }
     }
 

@@ -1,19 +1,17 @@
 package org.corfudb.protocols.wireprotocol;
 
+import com.esotericsoftware.kryo.NotNull;
 import com.google.common.reflect.TypeToken;
-import lombok.Data;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
+import lombok.*;
 
+import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -22,7 +20,7 @@ import java.util.stream.Collectors;
  */
 public interface IMetadata {
 
-    public static Map<Byte, LogUnitMetadataType> metadataTypeMap =
+    Map<Byte, LogUnitMetadataType> metadataTypeMap =
             Arrays.<LogUnitMetadataType>stream(LogUnitMetadataType.values())
                     .collect(Collectors.toMap(LogUnitMetadataType::asByte, Function.identity()));
 
@@ -67,9 +65,10 @@ public interface IMetadata {
      * @return The rank of this append.
      */
     @SuppressWarnings("unchecked")
-    default Long getRank() {
-        return (Long) getMetadataMap().getOrDefault(IMetadata.LogUnitMetadataType.RANK,
-                0L);
+    @Nullable
+    default DataRank getRank() {
+        return (DataRank) getMetadataMap().getOrDefault(IMetadata.LogUnitMetadataType.RANK,
+                null);
     }
 
     /**
@@ -77,7 +76,7 @@ public interface IMetadata {
      *
      * @param rank The rank of this append.
      */
-    default void setRank(long rank) {
+    default void setRank(@Nullable DataRank rank) {
         getMetadataMap().put(IMetadata.LogUnitMetadataType.RANK, rank);
     }
 
@@ -163,4 +162,28 @@ public interface IMetadata {
                 Arrays.<LogUnitMetadataType>stream(LogUnitMetadataType.values())
                         .collect(Collectors.toMap(LogUnitMetadataType::asByte, Function.identity()));
     }
+
+    @Value
+    @AllArgsConstructor
+    class DataRank implements Comparable<DataRank> {
+        public long rank;
+        @NotNull
+        public UUID uuid;
+
+        public DataRank(long rank) {
+            this(rank, UUID.randomUUID());
+        }
+
+        @Override
+        public int compareTo(DataRank o) {
+            int rankCompared = Long.compare(this.rank, o.rank);
+            if (rankCompared==0) {
+                return uuid.compareTo(o.getUuid());
+            } else {
+                return rankCompared;
+            }
+        }
+    }
+
+    
 }
