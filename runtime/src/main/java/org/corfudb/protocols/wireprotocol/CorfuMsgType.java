@@ -63,6 +63,9 @@ public enum CorfuMsgType {
     ERROR_NOENTRY(55, TypeToken.of(CorfuMsg.class)),
     ERROR_REPLEX_OVERWRITE(56, TypeToken.of(CorfuMsg.class)),
     ERROR_DATA_CORRUPTION(57, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
+    ERROR_DATA_OUTRANKED(58, TypeToken.of(CorfuMsg.class)),
+    ERROR_VALUE_ADOPTED(59,new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
+
 
     // EXTRA CODES
     LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), true),

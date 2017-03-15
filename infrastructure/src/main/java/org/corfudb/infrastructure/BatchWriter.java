@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 
 import javax.annotation.Nonnull;
@@ -48,8 +49,8 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
             cf.get();
         } catch (Exception e) {
             log.trace("Write Exception {}", e);
-            if (e.getCause() instanceof OverwriteException) {
-                throw new OverwriteException();
+            if (e.getCause() instanceof RuntimeException) {
+                throw (RuntimeException)e.getCause();
             } else {
                 throw new RuntimeException(e);
             }
@@ -122,8 +123,8 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                         streamLog.append(currOp.getLogAddress(), currOp.getLogData());
                         currOp.setException(null);
                         res.add(currOp);
-                    } catch (OverwriteException e) {
-                        currOp.setException(new OverwriteException());
+                    } catch (OverwriteException | DataOutrankedException e) {
+                        currOp.setException(e);
                         res.add(currOp);
                     } catch (Exception e) {
                         currOp.setException(e);
