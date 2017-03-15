@@ -76,7 +76,7 @@ public class ChainReplicationView extends AbstractReplicationView {
                 // in the chain.
                 CFUtils.getUninterruptibly(
                         getLayout().getLogUnitClient(address, i)
-                                .write(address, stream, 0L, data, backpointerMap), OverwriteException.class);
+                                .write(address, stream, null, data, backpointerMap), OverwriteException.class);
             }
         }
         return payloadBytes;

@@ -177,7 +177,7 @@ public class LogUnitClient implements IClient {
      * @return A CompletableFuture which will complete with the WriteResult once the
      * write completes.
      */
-    public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
+    public CompletableFuture<Boolean> write(long address, Set<UUID> streams, IMetadata.DataRank rank,
                                             Object writeObject, Map<UUID, Long> backpointerMap) {
         Timer.Context context = getTimerContext("writeObject");
         ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
@@ -203,7 +203,7 @@ public class LogUnitClient implements IClient {
      * @return A CompletableFuture which will complete with the WriteResult once the
      * write completes.
      */
-    public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
+    public CompletableFuture<Boolean> write(long address, Set<UUID> streams, IMetadata.DataRank rank,
                                             ByteBuf buffer, Map<UUID, Long> backpointerMap) {
         Timer.Context context = getTimerContext("writeByteBuf");
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, buffer);
