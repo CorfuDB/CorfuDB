@@ -3,11 +3,13 @@ package org.corfudb.runtime.object.transactions;
 import com.google.common.collect.ImmutableMap;
 import lombok.Getter;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.*;
+import org.corfudb.util.Utils;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -21,6 +23,7 @@ import java.util.stream.Collectors;
  *
  * Created by mwei on 4/4/16.
  */
+@Slf4j
 public abstract class AbstractTransactionalContext implements
         Comparable<AbstractTransactionalContext> {
 
@@ -119,6 +122,7 @@ public abstract class AbstractTransactionalContext implements
         this.builder = builder;
         this.startTime = System.currentTimeMillis();
         this.parentContext = TransactionalContext.getCurrentContext();
+        log.debug("TXBegin[{}]", this);
     }
 
     /** Access the state of the object.
@@ -184,6 +188,7 @@ public abstract class AbstractTransactionalContext implements
     /** Forcefully abort the transaction.
      */
     public void abortTransaction() {
+        log.debug("TXAbort[{}]", this);
         commitAddress = ABORTED_ADDRESS;
         completionFuture
                 .completeExceptionally(new TransactionAbortedException());
@@ -318,5 +323,10 @@ public abstract class AbstractTransactionalContext implements
     public int compareTo(AbstractTransactionalContext o) {
         return Long.compare(this.getSnapshotTimestamp(), o
                 .getSnapshotTimestamp());
+    }
+
+    @Override
+    public String toString() {
+        return "TX[" + Utils.toReadableID(transactionID) + "]";
     }
 }

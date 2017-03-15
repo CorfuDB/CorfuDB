@@ -1,18 +1,21 @@
 package org.corfudb.runtime.object.transactions;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.object.ISMRStream;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.Utils;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Created by mwei on 3/13/17.
  */
+@Slf4j
 public class WriteSetSMRStream implements ISMRStream {
 
     List<AbstractTransactionalContext> contexts;
@@ -45,10 +48,52 @@ public class WriteSetSMRStream implements ISMRStream {
                     .equals(TransactionalContext.getRootContext());
     }
 
+    void mergeTransaction() {
+        contexts.remove(contexts.size()-1);
+        if (currentContext == contexts.size()) {
+            // recalculate the pos based on the write pointer
+            long readPos = Address.NEVER_READ;
+            for (int i = 0; i < contexts.size(); i++) {
+                readPos += contexts.get(i).getWriteSetEntryList(id).size();
+                if (readPos >= writePos) {
+                    currentContextPos = contexts.get(i).getWriteSetEntryList(id).size()
+                                        - (writePos - readPos) - 1;
+                }
+            }
+            currentContext--;
+        }
+    }
+
     @Override
     public List<SMREntry> remainingUpTo(long maxGlobal) {
+        // Check for any new contexts
+        if (TransactionalContext.getTransactionStack().size() >
+                contexts.size()) {
+            contexts = TransactionalContext.getTransactionStackAsList();
+            log.warn("added ctxs now {}", contexts.size());
+        } else if (TransactionalContext.getTransactionStack().size() <
+                contexts.size()) {
+            mergeTransaction();
+            log.warn("removed ctxs now {}", contexts.size());
+        }
+        List<SMREntry> entryList = new LinkedList<>();
 
-        return null;
+
+        for (int i = currentContext; i < contexts.size(); i++) {
+            final List<WriteSetEntry> writeSet = contexts.get(i)
+                    .getWriteSetEntryList(id);
+            long readContextStart = i == currentContext ? currentContextPos + 1: 0;
+            for (long j = readContextStart; j < writeSet.size(); j++) {
+                entryList.add(writeSet.get((int) j).entry);
+                writePos++;
+            }
+            if (writeSet.size() > 0) {
+                currentContext = i;
+                currentContextPos = writeSet.size() - 1;
+                log.warn("remaining read {} ctx {} pos {}", writePos, i, currentContextPos);
+            }
+        }
+        return entryList;
     }
 
     @Override
@@ -56,31 +101,35 @@ public class WriteSetSMRStream implements ISMRStream {
         if (writePos == Address.NEVER_READ) {
             return null;
         }
+        log.warn("Current[{}] wpos{} pos {} ctx {}", this, writePos, currentContextPos, currentContext);
         return Collections.singletonList(contexts.get(currentContext)
                 .getWriteSet().get(id)
-                .getValue().get((int)(writePos - currentContextPos))
+                .getValue().get((int)(currentContextPos))
                             .getEntry());
     }
 
     @Override
     public List<SMREntry> previous() {
-        if (writePos == Address.NEVER_READ) {
+        log.warn("Previous[{}] wpos {}, pos {} ctx {}", this, writePos, currentContextPos, currentContext);
+        writePos--;
+
+        if (writePos <= Address.NEVER_READ) {
+            writePos = Address.NEVER_READ;
             return null;
         }
 
-        writePos--;
-
+        currentContextPos--;
         // Pop the context if we're at the beginning of it
-        if (currentContextPos == 0) {
+        if (currentContextPos <= Address.NEVER_READ) {
             if (currentContext == 0) {
-                throw new RuntimeException("Attempted to pop first context");
+                throw new RuntimeException("Attempted to pop first context (pos=" + pos() + ")");
             }
             else {
                 currentContext--;
             }
 
             currentContextPos = contexts.get(currentContext)
-                    .getWriteSet().get(id).getValue().size();
+                    .getWriteSet().get(id).getValue().size() - 1;
         }
         return current();
     }
@@ -94,12 +143,12 @@ public class WriteSetSMRStream implements ISMRStream {
     public void reset() {
         writePos = Address.NEVER_READ;
         currentContext = 0;
-        currentContextPos = 0;
+        currentContextPos = Address.NEVER_READ;
     }
 
     @Override
     public void seek(long globalAddress) {
-        writePos = globalAddress;
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -112,5 +161,10 @@ public class WriteSetSMRStream implements ISMRStream {
     @Override
     public UUID getID() {
         return id;
+    }
+
+    @Override
+    public String toString() {
+        return "WSSMRStream[" + Utils.toReadableID(getID()) +"]";
     }
 }

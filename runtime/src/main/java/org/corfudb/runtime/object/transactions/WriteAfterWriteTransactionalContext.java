@@ -92,7 +92,7 @@ public class WriteAfterWriteTransactionalContext
         completionFuture.complete(true);
         commitAddress = address;
 
-        tryCommitAllProxies();
+        //tryCommitAllProxies();
 
         return address;
     }

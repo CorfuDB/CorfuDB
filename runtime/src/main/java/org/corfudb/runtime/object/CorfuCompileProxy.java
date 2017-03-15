@@ -17,6 +17,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.lang.reflect.Constructor;
@@ -148,7 +149,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         final long timestamp =
                 rt.getSequencerView()
                 .nextToken(Collections.singleton(streamID), 0).getToken();
-        log.debug("access [{}] at ts {}", getStreamID(), timestamp);
+        log.trace("Access[{}] Linearized to {}", this, timestamp);
 
         // Acquire locks and perform read.
         return underlyingObject.optimisticallyReadThenReadLockThenWriteOnFail(
@@ -158,12 +159,12 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             if (ver >= timestamp
                     && !underlyingObject.isOptimisticallyModifiedUnsafe()) {
                 MetricsUtils.incConditionalCounter(isMetricsEnabled, counterAccessOptimistic, 1);
+                log.trace("Access [{}] Direct (optimistic-readlock) access at {}", this, ver);
                 return accessMethod.access(underlyingObject.getObjectUnsafe());
             }
             // We don't have the right version, so we need to write
             // throwing this exception causes us to take a write lock.
             MetricsUtils.incConditionalCounter(isMetricsEnabled, counterAccessLocked, 1);
-            log.debug("access needs to sync forward from {} up to timestamp {}", ver, timestamp);
             throw new ConcurrentModificationException();
         },
             //  The read did not acquire the right version, so we
@@ -173,37 +174,14 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             // for us.
             if (ver >= timestamp
                     && !underlyingObject.isOptimisticallyModifiedUnsafe()) {
+                log.trace("Access [{}] Direct (writelock) access at {}", this, ver);
                 return accessMethod.access(underlyingObject.getObjectUnsafe());
             }
 
-            // Now we sync forward while we have the lock, if the object
-            // was not optimistically modified
-            if (!underlyingObject.isOptimisticallyModifiedUnsafe()) {
-                underlyingObject.syncObjectUnsafe(timestamp);
-                return accessMethod.access(underlyingObject.getObjectUnsafe());
-            }
-            // Otherwise, we rollback any optimistic changes, if they
-            // are undoable, and then sync the object before accessing
-            // the object.
-            else if (underlyingObject.getModifyingContextUnsafe() != null){
-                try {
-                    underlyingObject.getModifyingContextUnsafe()
-                        .optimisticRollback(this);
-                    underlyingObject.syncObjectUnsafe(timestamp);
-                    // do the access
-                    R ret = accessMethod
-                            .access(underlyingObject.getObjectUnsafe());
-                    return ret;
-                } catch (NoRollbackException nre) {
-                    // We couldn't roll back, so we'll have to
-                    // resort to generating a new object.
-                }
-            }
-
-            // As a last resort, we'll have to generate a new object
-            // and replay. The object will be disposed.
-            underlyingObject.resetUnsafe();
+            // Now we sync forward while we have the lock, since we don't have
+            // the right version still.
             underlyingObject.syncObjectUnsafe(timestamp);
+            log.trace("Access [{}] Sync'd (writelock) access at {}", this, ver);
             return accessMethod.access(underlyingObject.getObjectUnsafe());
         });
     }
@@ -221,9 +199,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
     private long logUpdateInner(String smrUpdateFunction, final boolean keepUpcallResult,
                                 Object[] conflictObject, Object... args) {
-        log.trace("logUpdate stream={} method={} conflictObj={} args={}",
-                getStreamID().getLeastSignificantBits(), smrUpdateFunction, conflictObject, args);
-
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (TransactionalContext.isInTransaction()) {
@@ -233,6 +208,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                     .logUpdate(this, entry, conflictObject);
         }
 
+
+        log.trace("LogUpdate[{}] {} ({}) conflictObj={}",
+                this, smrUpdateFunction, args, conflictObject);
         // If we aren't in a transaction, we can just write the modification.
         // We need to add the acquired token into the pending upcall list.
         SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
@@ -344,7 +322,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // Otherwise we need to sync the object by taking
         // the correct locks.
         underlyingObject.writeReturnVoid(
-                (v, obj) -> underlyingObject.syncObjectUnsafe(timestamp));
+                (v, obj) -> {
+                    underlyingObject.clearOptimisticallyModifiedUnsafe(); // TODO OPT rollback
+                    underlyingObject.syncObjectUnsafe(timestamp);});
 
         if (underlyingObject.upcallResults.containsKey(timestamp)) {
             log.debug("finally upcall {} ready", timestamp);
@@ -486,5 +466,10 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         } catch (InstantiationException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public String toString() {
+        return type.getSimpleName() + "[" + Utils.toReadableID(streamID) + "]";
     }
 }

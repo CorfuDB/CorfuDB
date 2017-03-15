@@ -344,6 +344,6 @@ public class Utils {
      * @return      A human readable UUID string
      */
     public static String toReadableID(UUID id) {
-        return Long.toHexString((id.getMostSignificantBits() >> 16) & 0xFFFF);
+        return Long.toHexString((id.getLeastSignificantBits()) & 0xFFFF);
     }
 }
