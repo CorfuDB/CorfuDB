@@ -10,6 +10,7 @@ import org.corfudb.runtime.view.Layout;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Simple Polling policy.
@@ -37,13 +38,7 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
     private long[] historyPollEpochExceptions = null;
     private int historyPollCount = 0;
     private HashMap<String, Boolean> historyStatus = null;
-
-    /**
-     * Retry timeouts
-     */
-    long timeoutConnect = 50;
-    long timeoutRetry = 200;
-    long timeoutResponse = 1000;
+    private CompletableFuture[] pollCompletableFutures = null;
 
     /**
      * Failed Poll Limit.
@@ -91,14 +86,12 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
             historyRouters = new IClientRouter[allServers.length];
             historyPollFailures = new int[allServers.length];
             historyPollEpochExceptions = new long[allServers.length];
+            pollCompletableFutures = new CompletableFuture[allServers.length];
             for (int i = 0; i < allServers.length; i++) {
                 if (!historyStatus.containsKey(allServers[i])) {
                     historyStatus.put(allServers[i], true);  // Assume it's up until we think it isn't.
                 }
                 historyRouters[i] = corfuRuntime.getRouterFunction.apply(allServers[i]);
-                historyRouters[i].setTimeoutConnect(timeoutConnect);
-                historyRouters[i].setTimeoutRetry(timeoutRetry);
-                historyRouters[i].setTimeoutResponse(timeoutResponse);
                 historyRouters[i].start();
                 historyPollFailures[i] = 0;
                 historyPollEpochExceptions[i] = -1;
@@ -120,34 +113,15 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
         // eventually notice changes to historyPollFailures.
         for (int i = 0; i < historyRouters.length; i++) {
             int ii = i;  // Intermediate var just for the sake of having a final for use inside the lambda below
-            CompletableFuture.runAsync(() -> {
-                // Any changes that we make to historyPollFailures here can possibly
-                // race with other async CFs that were launched in earlier/later CFs.
-                // We don't care if an increment gets clobbered by another increment:
-                //     being off by one isn't a big problem.
-                // We don't care if a reset to zero gets clobbered by an increment:
-                //     if the endpoint is really pingable, then a later reset to zero
-                //     will succeed, probably.
+            pollCompletableFutures[ii] = CompletableFuture.runAsync(() -> {
                 try {
-                    CompletableFuture<Boolean> cf = historyRouters[ii].getClient(BaseClient.class).ping();
-                    cf.exceptionally(e -> {
-                        // If Wrong epoch exception is received, mark server as failed.
-                        if (e.getCause() instanceof WrongEpochException) {
-                            historyPollEpochExceptions[ii] = ((WrongEpochException) e.getCause()).getCorrectEpoch();
-                        }
-                        log.debug(historyServers[ii] + " exception " + e);
-                        historyPollFailures[ii]++;
-                        return false;
-                    });
-                    cf.thenAccept((pingResult) -> {
-                        if (pingResult) {
-                            historyPollFailures[ii] = 0;
-                        } else {
-                            historyPollFailures[ii]++;
-                        }
-                    });
-
-                } catch (Exception e) {
+                    boolean pingResult = historyRouters[ii].getClient(BaseClient.class).ping().get();
+                    historyPollFailures[ii] = pingResult ? 0 : historyPollFailures[ii] + 1;
+                } catch (Exception e ) {
+                    // If Wrong epoch exception is received, mark server as failed.
+                    if (e.getCause() instanceof WrongEpochException) {
+                        historyPollEpochExceptions[ii] = ((WrongEpochException) e.getCause()).getCorrectEpoch();
+                    }
                     log.debug("Ping failed for " + historyServers[ii] + " with " + e);
                     historyPollFailures[ii]++;
                 }
@@ -173,6 +147,14 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
             // Simple failure detector: Is there a change in health?
             for (int i = 0; i < historyServers.length; i++) {
                 // TODO: Be a bit smarter than 'more than 2 failures in a row'
+
+                // Block until we complete the previous polling round.
+                try {
+                    pollCompletableFutures[i].get();
+                } catch (InterruptedException | ExecutionException e) {
+                    log.error("Error in polling task for server {} : {}", historyServers[i], e);
+                }
+
                 is_up = !(historyPollFailures[i] >= failedPollLimit);
                 if (is_up != historyStatus.get(historyServers[i])) {
                     log.debug("Change of status: " + historyServers[i] + " " +

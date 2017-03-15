@@ -257,12 +257,13 @@ public class ManagementServer extends AbstractServer {
         if (!checkBootstrap(msg, ctx, r)) { return; }
 
         log.info("Received Failures : {}", msg.getPayload().getNodes());
-        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
         FailureHandlerDispatcher failureHandlerDispatcher = new FailureHandlerDispatcher();
         try {
             failureHandlerDispatcher.dispatchHandler(failureHandlerPolicy, (Layout) latestLayout.clone(), getCorfuRuntime(), msg.getPayload().getNodes().keySet());
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
         } catch (CloneNotSupportedException e) {
             log.error("Failure Handler could not clone layout: {}", e);
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
         }
     }
 
@@ -377,7 +378,7 @@ public class ManagementServer extends AbstractServer {
                 return;
             }
             try {
-                corfuRuntime.getRouter(getLocalEndpoint()).getClient(ManagementClient.class).handleFailure(map);
+                corfuRuntime.getRouter(getLocalEndpoint()).getClient(ManagementClient.class).handleFailure(map).get();
             } catch (Exception e) {
                 log.error("Exception invoking failure handler : {}", e);
             }
