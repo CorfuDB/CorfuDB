@@ -79,6 +79,29 @@ public class LogUnitClientTest extends AbstractClientTest {
     }
 
     @Test
+    public void canReadWriteRanked()
+            throws Exception {
+        byte[] testString = "hello world".getBytes();
+        IMetadata.DataRank rank = new IMetadata.DataRank(1);
+        client.write(0, Collections.<UUID>emptySet(), rank, testString, Collections.emptyMap()).get();
+        LogData r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+        assertThat(r.getPayload(new CorfuRuntime()))
+                .isEqualTo(testString);
+        client.write(0, Collections.<UUID>emptySet(), rank, testString, Collections.emptyMap()).get();
+        // no error - we are idempotent
+        byte[] testString2 = "hello world 2".getBytes();
+        client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(2), testString2, Collections.emptyMap()).get();
+        r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+        assertThat(r.getPayload(new CorfuRuntime()))
+                .isEqualTo(testString2);
+    }
+
+
+    @Test
     public void overwriteThrowsException()
             throws Exception {
         byte[] testString = "hello world".getBytes();

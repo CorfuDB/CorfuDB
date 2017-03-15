@@ -67,7 +67,7 @@ public interface IMetadata {
     @SuppressWarnings("unchecked")
     @Nullable
     default DataRank getRank() {
-        return (DataRank) getMetadataMap().getOrDefault(IMetadata.LogUnitMetadataType.RANK,
+        return (DataRank) getMetadataMap().getOrDefault(LogUnitMetadataType.RANK,
                 null);
     }
 
@@ -77,7 +77,14 @@ public interface IMetadata {
      * @param rank The rank of this append.
      */
     default void setRank(@Nullable DataRank rank) {
-        getMetadataMap().put(IMetadata.LogUnitMetadataType.RANK, rank);
+        EnumMap<LogUnitMetadataType, Object> map = getMetadataMap();
+        if (rank != null) {
+            map.put(LogUnitMetadataType.RANK, rank);
+        } else {
+            if (map.containsKey(LogUnitMetadataType.RANK)) {
+                map.remove(LogUnitMetadataType.RANK);
+            }
+        }
     }
 
     /**
@@ -144,7 +151,7 @@ public interface IMetadata {
     @RequiredArgsConstructor
     public enum LogUnitMetadataType implements ITypedEnum {
         STREAM(0, new TypeToken<Set<UUID>>() {}),
-        RANK(1, TypeToken.of(Long.class)),
+        RANK(1, TypeToken.of(DataRank.class)),
         STREAM_ADDRESSES(2, new TypeToken<Map<UUID, Long>>() {}),
         BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {}),
         GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
