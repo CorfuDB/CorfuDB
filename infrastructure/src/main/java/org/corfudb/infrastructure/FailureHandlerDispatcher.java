@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OutrankedException;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.Set;
@@ -33,7 +34,8 @@ public class FailureHandlerDispatcher {
             // Generates a new layout by removing the failed nodes from the existing layout
             Layout newLayout = failureHandlerPolicy.generateLayout(currentLayout, corfuRuntime, failedServers);
             // Seals and increments the epoch.
-            sealEpoch(newLayout);
+            currentLayout.setRuntime(corfuRuntime);
+            sealEpoch(currentLayout);
             // Attempts to update all the layout servers with the modified layout.
             corfuRuntime.getLayoutView().updateLayout(newLayout, newLayout.getEpoch());
 
@@ -54,9 +56,9 @@ public class FailureHandlerDispatcher {
      * Seals the epoch
      * Set local epoch and then attempt to move all servers to new epoch
      *
-     * @param layout Current layout to be sealed
+     * @param layout Layout to be sealed
      */
-    private void sealEpoch(Layout layout) {
+    private void sealEpoch(Layout layout) throws QuorumUnreachableException {
         layout.setEpoch(layout.getEpoch() + 1);
         layout.moveServersToEpoch();
     }

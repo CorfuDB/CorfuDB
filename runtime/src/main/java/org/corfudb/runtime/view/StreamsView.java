@@ -39,13 +39,13 @@ public class StreamsView {
      * @return A view
      */
     public IStreamView get(UUID stream) {
-        // Todo(Maithem): we should have a mechanism for proper exclusion of a set of ids reserved by the system
-        if (runtime.getLayoutView().getLayout().getSegments().get(
+        return getReplicationMode().getStreamView(runtime, stream);
+    }
+
+    private Layout.ReplicationMode getReplicationMode() {
+        return runtime.getLayoutView().getLayout().getSegments().get(
                 runtime.getLayoutView().getLayout().getSegments().size() - 1)
-                .getReplicationMode() == Layout.ReplicationMode.REPLEX) {
-            return new ReplexStreamView(runtime, stream);
-        }
-        return new BackpointerStreamView(runtime, stream);
+                .getReplicationMode();
     }
 
     /**
@@ -126,7 +126,6 @@ public class StreamsView {
                                 Function<TokenResponse, Boolean> acquisitionCallback,
                                 Function<TokenResponse, Boolean> deacquisitionCallback,
                                 TxResolutionInfo conflictInfo) {
-        boolean replexOverwrite = false;
         boolean overwrite = false;
         TokenResponse tokenResponse = null;
         while (true) {
@@ -134,12 +133,12 @@ public class StreamsView {
                 long token;
                 if (overwrite) {
                     TokenResponse temp =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, true, false, conflictInfo);
+                            runtime.getSequencerView().nextToken(streamIDs, 1, conflictInfo);
                     token = temp.getToken();
                     tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
                 } else {
                     tokenResponse =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, false, false, conflictInfo);
+                            runtime.getSequencerView().nextToken(streamIDs, 1,  conflictInfo);
                     token = tokenResponse.getToken();
                 }
                 log.trace("Write[{}]: acquired token = {}, global addr: {}", streamIDs, tokenResponse, token);
@@ -169,26 +168,20 @@ public class StreamsView {
                         log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                         return -1L;
                     }
-                    replexOverwrite = true;
                     overwrite = false;
                 } catch (OverwriteException oe) {
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                         log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                         return -1L;
                     }
-                    replexOverwrite = false;
                     overwrite = true;
                     log.debug("Overwrite occurred at {}, retrying.", token);
                 }
             } else {
                 long token;
-                if (replexOverwrite) {
-                    tokenResponse =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, false, true);
-                    token = tokenResponse.getToken();
-                } else if (overwrite) {
+                if (overwrite) {
                     TokenResponse temp =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, true, false);
+                            runtime.getSequencerView().nextToken(streamIDs, 1);
                     token = temp.getToken();
                     tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
                 } else {
@@ -219,14 +212,12 @@ public class StreamsView {
                         log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                         return -1L;
                     }
-                    replexOverwrite = true;
                     overwrite = false;
                 } catch (OverwriteException oe) {
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                         log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                         return -1L;
                     }
-                    replexOverwrite = false;
                     overwrite = true;
                     log.debug("Overwrite occurred at {}, retrying.", token);
                 }

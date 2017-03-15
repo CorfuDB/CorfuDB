@@ -77,6 +77,10 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         final VersionLockedObject<T> object = proxy.getUnderlyingObject();
         final UUID streamID = proxy.getStreamID();
 
+        log.debug("TX needs to synchronize object={} to TX timestamp={}",
+                streamID
+                .getLeastSignificantBits(), getSnapshotTimestamp());
+
         try {
             AbstractTransactionalContext modifyingContext =
                     object.getModifyingContextUnsafe();
@@ -90,6 +94,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // If the version of this object is ahead of what we expected,
             // we need to rollback...
             if (object.getVersionUnsafe() > getSnapshotTimestamp()) {
+                if (this.builder.getRuntime().getParameters().isOptimisticUndoDisabled()) {
+                    throw new NoRollbackException();
+                }
                 object.rollbackUnsafe(getSnapshotTimestamp());
             }
         } catch (NoRollbackException nre) {
@@ -102,6 +109,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // next, if the version is older than what we need
         // sync.
         if (object.getVersionUnsafe() < getSnapshotTimestamp()) {
+            if (this.builder.getRuntime().getParameters().isUndoDisabled()) {
+                throw new NoRollbackException();
+            }
             proxy.syncObjectUnsafe(proxy.getUnderlyingObject(), getSnapshotTimestamp());
         }
 
@@ -140,6 +150,12 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     public <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
                            ICorfuSMRAccess<R, T> accessFunction,
                            Object[] conflictObject) {
+
+        log.debug("access method={} on object={} within optimistic TX whose " +
+                        "snapshot " +
+                        "timestamp=()",
+                accessFunction, proxy.getStreamID().getLeastSignificantBits()
+                , getSnapshotTimestamp());
 
         // First, we add this access to the read set
         addToReadSet(proxy, conflictObject);
@@ -211,6 +227,12 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                               SMREntry updateEntry,
                               Object[] conflictObjects) {
 
+        log.debug("mutation method={} on object={} within optimistic TX whose" +
+                        " snapshot " +
+                        "timestamp=()",
+                updateEntry.getSMRMethod(), proxy.getStreamID().getLeastSignificantBits()
+                , getSnapshotTimestamp());
+
         // Insert the modification into writeSet.
         addToWriteSet(proxy, updateEntry, conflictObjects);
 
@@ -258,6 +280,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // If the write set is empty, we're done and just return
         // NOWRITE_ADDRESS.
         if (writeSet.isEmpty()) {
+            log.debug("optimistic TX commit snapshot ts={} write-set empty, " +
+                    "no log " +
+                    "write", getSnapshotTimestamp());
             return NOWRITE_ADDRESS;
         }
 
@@ -293,6 +318,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                         // streamID's
                         new TxResolutionInfo(getSnapshotTimestamp(), getReadSet(), collectWriteConflictParams())
                 );
+        log.debug("optimistic TX commit at timestamp={} on streams=({})",
+                address, affectedStreams);
 
         if (address == -1L) {
             log.debug("Transaction aborted due to sequencer rejecting request");
@@ -325,7 +352,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         updateAllProxies(x -> {
             // If some other client updated this object, sync
             // it forward to grab those updates
-            if (getSnapshotTimestamp() <
+            if (x.getVersion() !=
                     committedEntry
                             .getBackpointer(x.getStreamID())) {
                 x.syncObjectUnsafe(x.getUnderlyingObject(),
@@ -437,7 +464,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // ourselves against.
             long currentTail = builder.runtime
                     .getSequencerView().nextToken(Collections.emptySet(), 0).getToken();
-            log.trace("Set first read timestamp for tx {} to {}", transactionID, currentTail);
+            log.debug("Set first read timestamp for tx {} to {}",
+                    transactionID, currentTail);
             return currentTail;
         }
     }

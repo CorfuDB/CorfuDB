@@ -203,7 +203,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             // Otherwise, we rollback any optimistic changes, if they
             // are undoable, and then sync the object before accessing
             // the object.
-            else if (underlyingObject.isOptimisticallyUndoableUnsafe()){
+            else if (!rt.getParameters().isOptimisticUndoDisabled() &&
+                    underlyingObject.isOptimisticallyUndoableUnsafe()){
                 try {
                     underlyingObject.optimisticRollbackUnsafe();
                     syncObjectUnsafe(underlyingObject, timestamp);
@@ -219,6 +220,10 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
             // As a last resort, we'll have to generate a new object
             // and replay. The object will be disposed.
+            log.debug("need to generate completely new copy of {} for " +
+                    "timestamp {}", getStreamID().getLeastSignificantBits(),
+                    timestamp);
+
             VersionLockedObject<T> temp = getNewVersionLockedObject();
             syncObjectUnsafe(temp, timestamp);
             return accessMethod.access(temp.getObjectUnsafe());
@@ -233,6 +238,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     public void syncObjectUnsafe(VersionLockedObject<T> underlyingObject,
                                       long timestamp) {
+        log.debug("going to sync object {} to timestamp={}", getStreamID()
+                .getLeastSignificantBits(), timestamp);
+
         underlyingObject.getStreamViewUnsafe().remainingUpTo(timestamp).stream()
             // Turn this into a flat stream of SMR entries
             .filter(m -> m.getType() == DataType.DATA)
@@ -268,17 +276,18 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * {@inheritDoc}
      */
     @Override
-    public long logUpdate(String smrUpdateFunction, Object[] conflictObject,
-                          Object... args) {
+    public long logUpdate(String smrUpdateFunction, final boolean keepUpcallResult,
+                          Object[] conflictObject, Object... args) {
         try (Timer.Context context = MetricsUtils.getConditionalContext(timerLogWrite)) {
-            return logUpdateInner(smrUpdateFunction, conflictObject, args);
+            return logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args);
         }
     }
 
-    private long logUpdateInner(String smrUpdateFunction, Object[] conflictObject,
-                                Object... args) {
-        log.trace("logUpdate method={} conflictObj={} args={}",
-                smrUpdateFunction, conflictObject, args);
+    private long logUpdateInner(String smrUpdateFunction, final boolean keepUpcallResult,
+                                Object[] conflictObject, Object... args) {
+        log.debug("generating logUpdate stream={} method={} conflictObj={} " +
+                        "args={}",
+                getStreamID().getLeastSignificantBits(), smrUpdateFunction, conflictObject, args);
 
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
@@ -293,10 +302,14 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // We need to add the acquired token into the pending upcall list.
         SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
         long address = underlyingObject.getStreamViewUnsafe().append(smrEntry, t -> {
-                pendingUpcalls.add(t.getToken());
+                if (keepUpcallResult) {
+                    pendingUpcalls.add(t.getToken());
+                }
                 return true;
             }, t -> {
-                pendingUpcalls.remove(t.getToken());
+                if (keepUpcallResult) {
+                    pendingUpcalls.remove(t.getToken());
+                }
                 log.debug("update {} failed", t.getToken());
                 return true;
             });
@@ -324,6 +337,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         final long timestamp =
                 rt.getSequencerView()
                         .nextToken(Collections.singleton(streamID), 0).getToken();
+
+        log.debug("sync this object {} to timestamp={}", getStreamID()
+                .getLeastSignificantBits(), timestamp);
 
         // Acquire locks and perform read.
         underlyingObject.optimisticallyReadThenReadLockThenWriteOnFail(
@@ -357,7 +373,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                     // Otherwise, we rollback any optimistic changes, if they
                     // are undoable, and then sync the object before accessing
                     // the object.
-                    else if (underlyingObject.isOptimisticallyUndoableUnsafe()){
+                    else if (!rt.getParameters().isOptimisticUndoDisabled() &&
+                            underlyingObject.isOptimisticallyUndoableUnsafe()){
                         try {
                             underlyingObject.optimisticRollbackUnsafe();
                             syncObjectUnsafe(underlyingObject, timestamp);

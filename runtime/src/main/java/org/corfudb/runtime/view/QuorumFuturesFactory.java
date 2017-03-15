@@ -19,7 +19,7 @@ import java.util.concurrent.*;
  * Created by Konstantin Spirov on 2/3/2017.
  */
 @Slf4j
-class QuorumFutureFactory {
+class QuorumFuturesFactory {
 
     /**
      * Get a thread safe future that will complete only when n/2+1 futures complete or if there is no hope
