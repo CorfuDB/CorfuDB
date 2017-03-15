@@ -166,7 +166,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 .build();
 
         // TODO(Maithem) possibly move this to SegmentHandle. Do we need to close and flush?
-        try (OutputStream outputStream = Channels.newOutputStream(handle.getPendingTrimChannel())) {
+        OutputStream outputStream = Channels.newOutputStream(handle.getPendingTrimChannel());
+        try {
             entry.writeDelimitedTo(outputStream);
             outputStream.flush();
             handle.pendingTrims.add(logAddress.getAddress());
@@ -245,8 +246,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 entry.writeDelimitedTo(outputStream);
             }
             outputStream.flush();
+            fc2.force(true);
         }
-        fc2.force(true);
         fc2.close();
 
         Files.move(Paths.get(filePath + ".copy"), Paths.get(filePath), StandardCopyOption.ATOMIC_MOVE);
