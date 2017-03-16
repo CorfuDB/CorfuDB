@@ -179,46 +179,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     /** {@inheritDoc} */
     @Override
     public <T> void optimisticRollback(ICorfuSMRProxyInternal<T> proxy) {
-        // If there are no updates in our writeset or the parents, we can just
-        // return
-        if (writeSet.get(proxy.getStreamID()) == null &&
-                parentTransactions.stream()
-                .map(x -> x.getWriteSet().get(proxy.getStreamID()))
-                .allMatch(x -> x == null)) {
-            return;
-        }
-
-        // Next, check if all our entries have undo information.
-        if (writeSet.get(proxy.getStreamID()) != null &&
-                writeSet.get(proxy.getStreamID())
-                .getValue().stream().anyMatch(x -> !x.getEntry().isUndoable())) {
-            throw new NoRollbackException();
-        }
-
-        // Next, check any parent entries as well.
-        if (parentTransactions.stream()
-                .map(x -> x.getWriteSet().get(proxy.getStreamID()).getValue())
-                .flatMap(x -> x != null ? x.stream() : Stream.empty())
-                .anyMatch(x -> !x.getEntry().isUndoable())) {
-            throw new NoRollbackException();
-        }
-
-        // Ok, all entries have undo information so let's undo
-        if (writeSet.get(proxy.getStreamID()) != null) {
-            writeSet.get(proxy.getStreamID())
-                    .getValue().stream().forEachOrdered(x -> proxy.getUnderlyingObject()
-                    .applyUndoRecordUnsafe(x.getEntry()));
-        }
-
-        // Same with parent entries
-        parentTransactions.stream()
-                .map(x -> x.getWriteSet().get(proxy.getStreamID()).getValue())
-                .flatMap(x -> x == null ? Stream.empty() : x.stream())
-                .forEachOrdered(x -> proxy.getUnderlyingObject()
-                        .applyUndoRecordUnsafe(x.getEntry()));
-
-        proxy.getUnderlyingObject().clearOptimisticStreamUnsafe();
-        proxy.getUnderlyingObject().clearOptimisticallyModifiedUnsafe();
     }
 
     /**
@@ -303,7 +263,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         super.commitTransaction();
         commitAddress = address;
 
-       // tryCommitAllProxies();
+        tryCommitAllProxies();
 
         return address;
     }
@@ -317,13 +277,12 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 .getAddressSpaceView().read(commitAddress);
 
         updateAllProxies(x -> {
+            // Commit all the optimistic updates
+            x.getUnderlyingObject().optimisticCommitUnsafe();
             // If some other client updated this object, sync
             // it forward to grab those updates
             x.getUnderlyingObject().syncObjectUnsafe(
                         commitAddress-1);
-            // Clear tne optimistic update flag
-            x.getUnderlyingObject()
-                    .clearOptimisticallyModifiedUnsafe();
             // Also, be nice and transfer the undo
             // log from the optimistic updates
             // for this to work the write sets better

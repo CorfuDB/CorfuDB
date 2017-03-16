@@ -342,7 +342,7 @@ public class VersionLockedObject<T> {
         return optimisticStream;
     }
 
-    public void clearOptimisticStreamUnsafe() {
+    public void optimisticCommitUnsafe() {
         optimisticStream = null;
     }
 
