@@ -197,7 +197,7 @@ public class VersionLockedObject<T> {
     public void rollbackObjectUnsafe(long rollbackVersion) {
         log.trace("Rollback[{}] to {}", this, rollbackVersion);
         rollbackStreamUnsafe(smrStream, rollbackVersion);
-        log.trace("Rollback[{}] completed");
+        log.trace("Rollback[{}] completed", this);
     }
 
     protected void rollbackStreamUnsafe(ISMRStream stream, long rollbackVersion) {
@@ -277,7 +277,25 @@ public class VersionLockedObject<T> {
                 optimisticStream.isStreamForThisTransaction()) {
             // If there are no updates, ensure we are at the right snapshot
             if (optimisticStream.pos() == Address.NEVER_READ) {
+                final WriteSetSMRStream currentOptimisticStream =
+                        optimisticStream;
+                // It's necessary to roll back optimistic updates before
+                // doing a sync of the regular log
+                optimisticRollbackUnsafe();
+                // If we are too far ahead, roll back to the past
+                if (getVersionUnsafe() > timestamp) {
+                    try {
+                        rollbackObjectUnsafe(timestamp);
+                    } catch (NoRollbackException nre) {
+                        resetUnsafe();
+                    }
+                }
+                // Now sync the regular log
                 syncStreamUnsafe(smrStream, timestamp);
+                // It's possible that due to reset,
+                // the optimistic stream is no longer
+                // present. Restore it.
+                optimisticStream = currentOptimisticStream;
             }
             syncStreamUnsafe(optimisticStream, Address.OPTIMISTIC);
         } else {

@@ -141,6 +141,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                                         TransactionalContext.getTransactionStackAsList(),
                                         proxy.getStreamID()));
             }
+            log.trace("Upcall[{}] {} requires sync", this, timestamp);
             proxy.getUnderlyingObject().syncObjectUnsafe(getSnapshotTimestamp());
             WriteSetEntry wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
             if (wrapper2 != null && wrapper2.getEntry().isHaveUpcallResult()){
