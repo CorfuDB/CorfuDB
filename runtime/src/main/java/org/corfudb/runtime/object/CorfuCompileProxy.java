@@ -159,7 +159,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             if (ver >= timestamp
                     && !o.isOptimisticallyModifiedUnsafe()) {
                 MetricsUtils.incConditionalCounter(isMetricsEnabled, counterAccessOptimistic, 1);
-                log.trace("Access [{}] Direct (optimistic-readlock) access at {}", this, ver);
+                log.trace("Access [{}] Direct (readlock) access at {}", this, ver);
                 return accessMethod.access(o.getObjectUnsafe());
             }
             // We don't have the right version, so we need to write

@@ -11,6 +11,7 @@ import org.corfudb.util.Utils;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -423,7 +424,12 @@ public class VersionLockedObject<T> {
             }
         }
         // Optimistic reading failed, retry with a full lock
-        ts = lock.readLock();
+        try {
+            ts = lock.tryReadLock(1, TimeUnit.SECONDS);
+        } catch (InterruptedException ie) {
+            log.debug("ReadLock[{}] Timed out, retrying with write lock");
+            throw new ConcurrentModificationException();
+        }
         try {
             try {
                 return readFunction.apply(getVersionUnsafe(), this);

@@ -68,32 +68,25 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
         // Next, we check if the write set has any
         // outstanding modifications.
-        try {
-            return proxy.getUnderlyingObject().optimisticallyReadAndRetry((v, o) -> {
-                if ((writeSet.get(proxy.getStreamID()) == null && // No updates
-                        v == getSnapshotTimestamp() && // And at the correct timestamp
-                    !o.isOptimisticallyModifiedUnsafe()))
-                {
-                    log.trace("Access [{}] Direct (optimistic-readlock) access", this);
-                    return accessFunction.access(o.getObjectUnsafe());
-                }
-                throw new ConcurrentModificationException();
-            });
-        } catch (ConcurrentModificationException cme) {
-            // It turned out version was wrong, so we're going to have to do
-            // some work.
-        }
+            return proxy.getUnderlyingObject().optimisticallyReadThenReadLockThenWriteOnFail((v, o) -> {
+                        if ((writeSet.get(proxy.getStreamID()) == null && // No updates
+                                v == getSnapshotTimestamp() && // And at the correct timestamp
+                                !o.isOptimisticallyModifiedUnsafe())) {
+                            log.trace("Access [{}] Direct (readlock) access", this);
+                            return accessFunction.access(o.getObjectUnsafe());
+                        }
+                        throw new ConcurrentModificationException();
+                    },
+                    (v, o) -> {
+                        // Swap ourselves to be the active optimistic stream.
+                        setAsOptimisticStream(o);
+                        o.syncObjectUnsafe(getSnapshotTimestamp());
 
-        // Now we're going to do some work to modify the object, so take the
-        // write lock.
-        return proxy.getUnderlyingObject().write((v, o) -> {
-            // Swap ourselves to be the active optimistic stream.
-            setAsOptimisticStream(o);
-            o.syncObjectUnsafe(getSnapshotTimestamp());
+                        log.trace("Access [{}] Sync'd (writelock) access", this);
+                        return accessFunction.access(o.getObjectUnsafe());
+                    }
+            );
 
-            log.trace("Access [{}] Sync'd (writelock) access", this);
-            return accessFunction.access(o.getObjectUnsafe());
-        });
     }
 
     /** {@inheritDoc}

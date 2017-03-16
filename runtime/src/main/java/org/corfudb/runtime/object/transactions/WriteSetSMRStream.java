@@ -70,11 +70,9 @@ public class WriteSetSMRStream implements ISMRStream {
         if (TransactionalContext.getTransactionStack().size() >
                 contexts.size()) {
             contexts = TransactionalContext.getTransactionStackAsList();
-            log.warn("added ctxs now {}", contexts.size());
         } else if (TransactionalContext.getTransactionStack().size() <
                 contexts.size()) {
             mergeTransaction();
-            log.warn("removed ctxs now {}", contexts.size());
         }
         List<SMREntry> entryList = new LinkedList<>();
 
@@ -90,7 +88,6 @@ public class WriteSetSMRStream implements ISMRStream {
             if (writeSet.size() > 0) {
                 currentContext = i;
                 currentContextPos = writeSet.size() - 1;
-                log.warn("remaining read {} ctx {} pos {}", writePos, i, currentContextPos);
             }
         }
         return entryList;
@@ -101,7 +98,6 @@ public class WriteSetSMRStream implements ISMRStream {
         if (writePos == Address.NEVER_READ) {
             return null;
         }
-        log.warn("Current[{}] wpos{} pos {} ctx {}", this, writePos, currentContextPos, currentContext);
         return Collections.singletonList(contexts.get(currentContext)
                 .getWriteSet().get(id)
                 .getValue().get((int)(currentContextPos)));
@@ -109,7 +105,6 @@ public class WriteSetSMRStream implements ISMRStream {
 
     @Override
     public List<SMREntry> previous() {
-        log.warn("Previous[{}] wpos {}, pos {} ctx {}", this, writePos, currentContextPos, currentContext);
         writePos--;
 
         if (writePos <= Address.NEVER_READ) {
