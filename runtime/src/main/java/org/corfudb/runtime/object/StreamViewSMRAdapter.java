@@ -15,6 +15,15 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
+ * StreamViewSMRAdapter wraps a stream and implements the ISMRStream API over
+ * it.
+ *
+ * This is a relatively thin wrapper. For example, an underlying stream returns
+ * from current() a LogData entry. StreamViewSMRAdapter verifies that the
+ * entry contains data (otherwise, return null), and that the payload is of type
+ * ISMRConsumable (otherwise, again return null).  Since the underlying log supports multi-stream entries,
+ * it collects and returns the SMREntries related to the current stream.
+ *
  * Created by mwei on 3/10/17.
  */
 public class StreamViewSMRAdapter implements ISMRStream {
