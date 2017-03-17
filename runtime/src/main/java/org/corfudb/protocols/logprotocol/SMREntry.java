@@ -48,6 +48,20 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     @Getter
     public boolean undoable;
 
+    /** The upcall result, if present. */
+    @Getter
+    public transient Object upcallResult;
+
+    /** If there is an upcall result for this modification. */
+    @Getter
+    public transient boolean haveUpcallResult = false;
+
+    /** Set the upcall result for this entry. */
+    public void setUpcallResult(Object result) {
+        upcallResult = result;
+        haveUpcallResult = true;
+    }
+
     /** Set the undo record for this entry. */
     public void setUndoRecord(Object object) {
         this.undoRecord = object;

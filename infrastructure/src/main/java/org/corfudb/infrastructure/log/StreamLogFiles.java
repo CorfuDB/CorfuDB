@@ -60,7 +60,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
  * This class implements the StreamLog by persisting the stream log as records in multiple files.
  * This StreamLog implementation can detect log file corruption, if checksum is enabled, otherwise
  * the checksum field will be ignored.
- * <p>
+ *
  * Created by maithem on 10/28/16.
  */
 
@@ -163,7 +163,7 @@ public class StreamLogFiles implements StreamLog {
     @Override
     public void trim(LogAddress logAddress) {
         SegmentHandle handle = getSegmentHandleForAddress(logAddress);
-        if (!handle.getKnownAddresses().containsKey(logAddress.getAddress()) ||
+        if (!handle.getKnownAddresses().contains(logAddress.getAddress()) ||
                 handle.getPendingTrims().contains(logAddress.getAddress())) {
             return;
         }
@@ -345,23 +345,11 @@ public class StreamLogFiles implements StreamLog {
         fc.force(true);
     }
 
-    static private Metadata getMetadata(AbstractMessage message) {
-        return Metadata.newBuilder()
+    static private ByteBuffer getByteBufferWithMetaData(AbstractMessage message) {
+        Metadata metadata = Metadata.newBuilder()
                 .setChecksum(getChecksum(message.toByteArray()))
                 .setLength(message.getSerializedSize())
                 .build();
-    }
-
-    static private ByteBuffer getByteBuffer(Metadata metadata, AbstractMessage message) {
-        ByteBuffer buf = ByteBuffer.allocate(metadata.getSerializedSize() + message.getSerializedSize());
-        buf.put(metadata.toByteArray());
-        buf.put(message.toByteArray());
-        buf.flip();
-        return buf;
-    }
-
-    static private ByteBuffer getByteBufferWithMetaData(AbstractMessage message) {
-        Metadata metadata = getMetadata(message);
 
         ByteBuffer buf = ByteBuffer.allocate(metadata.getSerializedSize() + message.getSerializedSize());
         buf.put(metadata.toByteArray());
@@ -401,22 +389,28 @@ public class StreamLogFiles implements StreamLog {
     }
 
     /**
-     * Reads an address space from a log file into a SegmentHandle
+     * Find a log entry in a file.
      *
-     * @param sh
+     * @param fh      The file handle to use.
+     * @param address The address of the entry.
+     * @return The log unit entry at that address, or NULL if there was no entry.
      */
-    private void readAddressSpace(SegmentHandle sh) throws IOException {
+    private LogData readRecord(SegmentHandle fh, long address)
+            throws IOException {
+
+        // A channel lock is required to read the file size because the channel size can change
+        // when it is written to, so when we read the size we need to guarantee that the size only
+        // includes fully written records.
         long logFileSize;
 
-        synchronized (sh.lock) {
-            logFileSize = sh.logChannel.size();
+        synchronized (fh.lock) {
+            logFileSize = fh.logChannel.size();
         }
 
-        FileChannel fc = getChannel(sh.fileName, true);
+        FileChannel fc = getChannel(fh.fileName, true);
 
         if (fc == null) {
-            log.trace("Can't read address space, {} doesn't exist", sh.fileName);
-            return;
+            return null;
         }
 
         // Skip the header
@@ -427,7 +421,6 @@ public class StreamLogFiles implements StreamLog {
         Metadata headerMetadata = Metadata.parseFrom(headerMetadataBuf.array());
 
         fc.position(fc.position() + headerMetadata.getLength());
-        long channelOffset = fc.position();
         ByteBuffer o = ByteBuffer.allocate((int) logFileSize - (int) fc.position());
         fc.read(o);
         fc.close();
@@ -436,15 +429,13 @@ public class StreamLogFiles implements StreamLog {
         while (o.hasRemaining()) {
 
             short magic = o.getShort();
-            channelOffset += Short.BYTES;
 
             if (magic != RECORD_DELIMITER) {
-                return;
+                return null;
             }
 
             byte[] metadataBuf = new byte[METADATA_SIZE];
             o.get(metadataBuf);
-            channelOffset += METADATA_SIZE;
 
             try {
                 Metadata metadata = Metadata.parseFrom(metadataBuf);
@@ -457,47 +448,26 @@ public class StreamLogFiles implements StreamLog {
 
                 if (!noVerify) {
                     if (metadata.getChecksum() != getChecksum(entry.toByteArray())) {
-                        log.error("Checksum mismatch detected while trying to read file {}", sh.fileName);
+                        log.error("Checksum mismatch detected while trying to read address {}", address);
                         throw new DataCorruptionException();
                     }
                 }
 
-                sh.knownAddresses.put(entry.getGlobalAddress(),
-                        new AddressMetaData(metadata.getChecksum(), metadata.getLength(), channelOffset));
+                if (address == -1) {
+                    //Todo(Maithem) : maybe we can move this to getChannelForAddress
+                    fh.knownAddresses.add(entry.getGlobalAddress());
+                } else if (entry.getGlobalAddress() != address) {
+                    log.trace("Read address {}, not match {}, skipping. (remain={})", entry.getGlobalAddress(), address);
+                } else {
+                    log.debug("Entry at {} hit, reading (size={}).", address, metadata.getLength());
 
-                channelOffset += metadata.getLength();
-
+                    return getLogData(entry);
+                }
             } catch (InvalidProtocolBufferException e) {
                 throw new DataCorruptionException();
             }
         }
-    }
-
-    /**
-     * Read a log entry in a file.
-     *
-     * @param sh      The file handle to use.
-     * @param address The address of the entry.
-     * @return The log unit entry at that address, or NULL if there was no entry.
-     */
-    private LogData  readRecord(SegmentHandle sh, long address)
-            throws IOException {
-
-        FileChannel fc = getChannel(sh.fileName, true);
-        AddressMetaData metaData = sh.getKnownAddresses().get(address);
-        if (metaData == null) {
-            return null;
-        }
-
-        fc.position(metaData.offset);
-
-        try {
-            ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
-            fc.read(entryBuf);
-            return getLogData(LogEntry.parseFrom(entryBuf.array()));
-        } catch (InvalidProtocolBufferException e) {
-            throw new DataCorruptionException();
-        }
+        return null;
     }
 
     private FileChannel getChannel(String filePath, boolean readOnly) throws IOException {
@@ -530,7 +500,7 @@ public class StreamLogFiles implements StreamLog {
      * @return The FileChannel for that address.
      */
     @VisibleForTesting
-    synchronized SegmentHandle getSegmentHandleForAddress(LogAddress logAddress) {
+     synchronized SegmentHandle getSegmentHandleForAddress(LogAddress logAddress) {
         String filePath = logDir + File.separator;
         long segment = logAddress.address / RECORDS_PER_LOG_FILE;
 
@@ -546,7 +516,7 @@ public class StreamLogFiles implements StreamLog {
 
             try {
                 FileChannel fc1 = getChannel(a, false);
-                FileChannel fc2 = getChannel(getTrimmedFilePath(a), false);
+                FileChannel fc2 = getChannel(getTrimmedFilePath(a) , false);
                 FileChannel fc3 = getChannel(getPendingTrimsFilePath(a), false);
 
                 boolean verify = true;
@@ -560,7 +530,7 @@ public class StreamLogFiles implements StreamLog {
                 SegmentHandle sh = new SegmentHandle(fc1, fc2, fc3, a);
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
-                readAddressSpace(sh);
+                readRecord(sh, -1);
                 loadTrimAddresses(sh);
                 return sh;
             } catch (IOException e) {
@@ -580,7 +550,7 @@ public class StreamLogFiles implements StreamLog {
             pendingTrimSize = sh.getPendingTrimChannel().size();
         }
 
-        FileChannel fcTrimmed = getChannel(getTrimmedFilePath(sh.getFileName()), true);
+        FileChannel fcTrimmed = getChannel(getTrimmedFilePath(sh.getFileName() ), true);
         FileChannel fcPending = getChannel(getPendingTrimsFilePath(sh.getFileName()), true);
 
         if (fcTrimmed == null) {
@@ -690,13 +660,11 @@ public class StreamLogFiles implements StreamLog {
      * @param fh      The file handle to use.
      * @param address The address of the entry.
      * @param entry   The LogUnitEntry to append.
-     * @return Returns metadata for the written record
      */
-    private AddressMetaData writeRecord(SegmentHandle fh, long address, LogData entry) throws IOException {
+    private void writeRecord(SegmentHandle fh, long address, LogData entry) throws IOException {
         LogEntry logEntry = getLogEntry(address, entry);
-        Metadata metadata = getMetadata(logEntry);
 
-        ByteBuffer record = getByteBuffer(metadata, logEntry);
+        ByteBuffer record = getByteBufferWithMetaData(logEntry);
 
         ByteBuffer recordBuf = ByteBuffer.allocate(Short.BYTES // Delimiter
                 + record.capacity());
@@ -705,15 +673,10 @@ public class StreamLogFiles implements StreamLog {
         recordBuf.put(record.array());
         recordBuf.flip();
 
-        long channelOffset;
-
         synchronized (fh.lock) {
-            channelOffset = fh.logChannel.position() + Short.BYTES + METADATA_SIZE;
             fh.logChannel.write(recordBuf);
             channelsToSync.add(fh.logChannel);
         }
-
-        return new AddressMetaData(metadata.getChecksum(), metadata.getLength(), channelOffset);
     }
 
     @Override
@@ -723,12 +686,12 @@ public class StreamLogFiles implements StreamLog {
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
             SegmentHandle fh = getSegmentHandleForAddress(logAddress);
-            if (fh.getKnownAddresses().containsKey(logAddress.address) ||
+            if (fh.getKnownAddresses().contains(logAddress.address) ||
                     fh.getTrimmedAddresses().contains(logAddress.address)) {
                 throw new OverwriteException();
             } else {
-                AddressMetaData addressMetaData = writeRecord(fh, logAddress.address, entry);
-                fh.getKnownAddresses().put(logAddress.address, addressMetaData);
+                writeRecord(fh, logAddress.address, entry);
+                fh.getKnownAddresses().add(logAddress.address);
             }
             log.trace("Disk_write[{}]: Written to disk.", logAddress);
         } catch (IOException e) {
@@ -741,18 +704,18 @@ public class StreamLogFiles implements StreamLog {
     public LogData read(LogAddress logAddress) {
         try {
             SegmentHandle sh = getSegmentHandleForAddress(logAddress);
-            if (sh.getPendingTrims().contains(logAddress.getAddress())) {
+            if(sh.getPendingTrims().contains(logAddress.getAddress())){
                 throw new TrimmedException();
             }
-            return readRecord(sh, logAddress.address);
+            return readRecord(sh,logAddress.address);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
     /**
-     * A SegmentHandle is a range view of consecutive addresses in the log. It contains
-     * the address space along with metadata like addresses that are trimmed and pending trims.
+     *  A SegmentHandle is a range view of consecutive addresses in the log. It contains
+     *  the address space along with metadata like addresses that are trimmed and pending trims.
      */
     @Data
     class SegmentHandle {
@@ -764,7 +727,7 @@ public class StreamLogFiles implements StreamLog {
         private FileChannel pendingTrimChannel;
         @NonNull
         private String fileName;
-        private Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap();
+        private Set<Long> knownAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
         private Set<Long> trimmedAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
         private Set<Long> pendingTrims = Collections.newSetFromMap(new ConcurrentHashMap<>());
         private final Lock lock = new ReentrantLock();
