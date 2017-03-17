@@ -181,8 +181,9 @@ public abstract class AbstractQueuedStreamView extends
      */
     @Override
     public synchronized long find(long globalAddress, SearchDirection direction) {
+        final QueuedStreamContext context = getCurrentContext();
         // First, check if we have resolved up to the given address
-        if (getCurrentContext().maxResolution < globalAddress) {
+        if (context.maxResolution < globalAddress) {
             // If not we need to read to that position
             // to resolve all the addresses.
             remainingUpTo(globalAddress + 1);
@@ -191,16 +192,16 @@ public abstract class AbstractQueuedStreamView extends
         // Now we can do the search.
         // First, check for inclusive searches.
         if (direction.isInclusive() &&
-                getCurrentContext().resolvedQueue.contains(globalAddress)) {
+                context.resolvedQueue.contains(globalAddress)) {
             return globalAddress;
         }
         // Next, check all elements excluding
         // in the correct direction.
         Long result;
         if (direction.isForward()) {
-            result = getCurrentContext().resolvedQueue.higher(globalAddress);
+            result = context.resolvedQueue.higher(globalAddress);
         }  else {
-            result = getCurrentContext().resolvedQueue.lower(globalAddress);
+            result = context.resolvedQueue.lower(globalAddress);
         }
 
         // Convert the address to never read if there was no result.
@@ -210,48 +211,53 @@ public abstract class AbstractQueuedStreamView extends
     /** {@inheritDoc} */
     @Override
     public synchronized ILogData previous() {
-        log.warn("previous() max={} min={}",getCurrentContext().maxResolution, getCurrentContext().minResolution);
+        final QueuedStreamContext context = getCurrentContext();
+        log.trace("Previous[{}] max={} min={}", this,
+                context.maxResolution,
+                context.minResolution);
         // If never read, there would be no pointer to the previous entry.
-        if (getCurrentContext().globalPointer == Address.NEVER_READ) {
+        if (context.globalPointer == Address.NEVER_READ) {
             return null;
         }
 
         // Otherwise, the previous entry should be resolved, so get
         // one less than the current.
-        Long prevAddress = getCurrentContext()
-                .resolvedQueue.lower(getCurrentContext().globalPointer);
+        Long prevAddress = context
+                .resolvedQueue.lower(context.globalPointer);
         // If the pointer is before our min resolution, we need to resolve
         // to get the correct previous entry.
-        if (prevAddress == null && getCurrentContext().minResolution
-                != Address.NEVER_READ || prevAddress <= getCurrentContext().minResolution) {
-            long oldPointer = getCurrentContext().globalPointer;
-            getCurrentContext().globalPointer = prevAddress == null ? Address.NEVER_READ :
+        if (prevAddress == null && context.minResolution
+                != Address.NEVER_READ || prevAddress <= context.minResolution) {
+            long oldPointer = context.globalPointer;
+            context.globalPointer = prevAddress == null ? Address.NEVER_READ :
                                                 prevAddress - 1L;
-            remainingUpTo(getCurrentContext().minResolution);
-            getCurrentContext().minResolution = Address.NEVER_READ;
-            getCurrentContext().globalPointer = oldPointer;
-            prevAddress = getCurrentContext()
-                    .resolvedQueue.lower(getCurrentContext().globalPointer);
-            log.warn("updated queue {}", getCurrentContext().resolvedQueue);
+            remainingUpTo(context.minResolution);
+            context.minResolution = Address.NEVER_READ;
+            context.globalPointer = oldPointer;
+            prevAddress = context
+                    .resolvedQueue.lower(context.globalPointer);
+            log.trace("Previous[}] updated queue {}", this, context.resolvedQueue);
         }
         // If still null, we're done.
         if (prevAddress == null) {
             return null;
         }
         // Add the current pointer back into the read queue
-        getCurrentContext().readQueue.add(getCurrentContext().globalPointer);
+        context.readQueue.add(getCurrentContext().globalPointer);
         // Update the global pointer
-        getCurrentContext().globalPointer = prevAddress;
+        context.globalPointer = prevAddress;
         return read(prevAddress);
     }
 
    /** {@inheritDoc} */
     @Override
     public synchronized ILogData current() {
-        if (getCurrentContext().globalPointer == Address.NEVER_READ) {
+        final QueuedStreamContext context = getCurrentContext();
+
+        if (context.globalPointer == Address.NEVER_READ) {
             return null;
         }
-        return read(getCurrentContext().globalPointer);
+        return read(context.globalPointer);
     }
 
     /** {@inheritDoc} */
@@ -310,7 +316,7 @@ public abstract class AbstractQueuedStreamView extends
         /** {@inheritDoc} */
         @Override
         void seek(long globalAddress) {
-            log.warn("seek({}), min={} max={}", globalAddress, minResolution, maxResolution);
+            log.trace("Seek[{}]({}), min={} max={}", this,  globalAddress, minResolution, maxResolution);
             // Update minResolution if necessary
             if (globalAddress >= maxResolution) {
                 log.warn("set min res to {}" , globalAddress);
