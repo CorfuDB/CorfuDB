@@ -79,7 +79,15 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     },
                     (v, o) -> {
                         // Swap ourselves to be the active optimistic stream.
+                        // Inside setAsOptimisticStream, if there are
+                        // currently optimistic updates on the object, we
+                        // roll them back.  Then, we set this context as  the
+                        // object's new optimistic context.
                         setAsOptimisticStream(o);
+
+                        // inside syncObjectUnsafe, depending on the object
+                        // version, we may need to undo or redo
+                        // committed changes, or apply forward committed changes.
                         o.syncObjectUnsafe(getSnapshotTimestamp());
 
                         log.trace("Access [{}] Sync'd (writelock) access", this);
