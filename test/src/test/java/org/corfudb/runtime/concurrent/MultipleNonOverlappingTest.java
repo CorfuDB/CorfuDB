@@ -1,5 +1,6 @@
 package org.corfudb.runtime.concurrent;
 
+import com.sun.source.tree.AssertTree;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.AbstractObjectTest;
@@ -10,6 +11,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class MultipleNonOverlappingTest extends AbstractObjectTest {
@@ -33,7 +35,7 @@ public class MultipleNonOverlappingTest extends AbstractObjectTest {
      *   4) Repeat the above steps FINAL_SUM number of times.
      */
     @Test
-    public void testStress() {
+    public void testStress() throws Exception {
 
         String mapName = "testMap";
         Map<Long, Long> testMap = instantiateCorfuObject(SMRMap.class, mapName);
@@ -45,39 +47,80 @@ public class MultipleNonOverlappingTest extends AbstractObjectTest {
         final int THREAD_NUM = 5;
 
         final int FINAL_SUM = OBJECT_NUM;
-        final int STEP = FINAL_SUM / THREAD_NUM;
+        final int STEP = OBJECT_NUM / THREAD_NUM;
 
-        Assert.assertTrue(OBJECT_NUM % THREAD_NUM == 0);
-        Assert.assertEquals(STEP * THREAD_NUM, FINAL_SUM);
-
-        ArrayList<Thread> threadArray = new ArrayList();
-
-        /**
-         * 1) Clear the thread array.
-         * 2) Create THREAD_NUM number of threads.
-         * 3) Start the threads concurrently and wait for them to finish.
-         */
+        // test all objects advance in lock-step to FINAL_SUM
         for (int i = 0; i < FINAL_SUM; i++) {
-            threadArray.clear();
 
             for (int j = 0; j < OBJECT_NUM; j += STEP) {
-                threadArray.add(new Thread(new NonOverlappingWriter(i + 1, j, j + STEP, VAL)));
+                NonOverlappingWriter n = new NonOverlappingWriter(i + 1, j, j + STEP, VAL);
+                scheduleConcurrently(t -> { n.dowork();});
+                executeScheduled(THREAD_NUM, PARAMETERS.TIMEOUT_NORMAL);
             }
 
-            startAndJoinThreads(threadArray);
         }
 
         Assert.assertEquals(testMap.size(), FINAL_SUM);
         for (Long value : testMap.values()) {
             Assert.assertEquals((long) FINAL_SUM, (long) value);
         }
+
+    }
+
+    /**
+     * Same as above, but two maps, not advancing at the same pace
+     * @throws Exception
+     */
+    @Test
+    public void testStress2() throws Exception {
+
+        String mapName1 = "testMapA";
+        Map<Long, Long> testMap1 = instantiateCorfuObject(SMRMap.class, mapName1);
+        String mapName2 = "testMapB";
+        Map<Long, Long> testMap2 = instantiateCorfuObject(SMRMap.class, mapName2);
+
+
+        final int VAL = 1;
+
+        // You can fine tune the below parameters. OBJECT_NUM has to be a multiple of THREAD_NUM.
+        final int OBJECT_NUM = 20;
+        final int THREAD_NUM = 5;
+
+        final int FINAL_SUM1 = OBJECT_NUM;
+        final int FINAL_SUM2 = OBJECT_NUM/2+1;
+        final int STEP = OBJECT_NUM / THREAD_NUM;
+
+        // test all objects advance in lock-step to FINAL_SUM
+        for (int i = 0; i < FINAL_SUM1; i++) {
+
+            for (int j = 0; j < OBJECT_NUM; j += STEP) {
+                NonOverlappingWriter n = new NonOverlappingWriter(i + 1, j, j + STEP, VAL);
+                scheduleConcurrently(t -> { n.dowork2();});
+                executeScheduled(THREAD_NUM, PARAMETERS.TIMEOUT_NORMAL);
+            }
+
+        }
+
+        Assert.assertEquals(testMap2.size(), FINAL_SUM1);
+        for (long i = 0; i < OBJECT_NUM; i++) {
+            log.debug("final testmap1.get({}) = {}", i, testMap1.get(i));
+            log.debug("final testmap2.get({}) = {}", i, testMap2.get(i));
+            if (i % 2 == 0)
+                Assert.assertEquals((long)testMap2.get(i), (long) FINAL_SUM2);
+            else
+                Assert.assertEquals((long)testMap2.get(i), (long) FINAL_SUM1);
+        }
+
     }
 
 
-    public class NonOverlappingWriter implements Runnable {
+    public class NonOverlappingWriter {
 
-        String mapName = "testMap";
-        Map<Long, Long> testMap = instantiateCorfuObject(SMRMap.class, mapName);
+        String mapName1 = "testMapA";
+        Map<Long, Long> testMap1 = instantiateCorfuObject(SMRMap.class, mapName1);
+        String mapName2 = "testMapB";
+        Map<Long, Long> testMap2 = instantiateCorfuObject(SMRMap.class, mapName2);
+
 
         int start;
         int end;
@@ -94,9 +137,18 @@ public class MultipleNonOverlappingTest extends AbstractObjectTest {
         /**
          * Updates objects between index start and index end.
          */
-        public void run() {
+        public void dowork() {
             for (int i = start; i < end; i++) {
                 simpleCreateImpl(i, val);
+            }
+        }
+
+        /**
+         * Updates objects between index start and index end.
+         */
+        public void dowork2() {
+            for (int i = start; i < end; i++) {
+                duoCreateImpl(i, val);
             }
         }
 
@@ -110,47 +162,74 @@ public class MultipleNonOverlappingTest extends AbstractObjectTest {
 
             TXBegin();
 
-            if (!testMap.containsKey(idx)) {
-                if (expectedSum-1 > 0)
+            if (!testMap1.containsKey(idx)) {
+                if (expectedSum - 1 > 0)
                     log.debug("OBJ FAIL {} doesn't exist expected={}",
                             idx, expectedSum);
                 log.debug("OBJ {} PUT {}", idx, val);
-                testMap.put(idx, val);
+                testMap1.put(idx, val);
             } else {
                 log.debug("OBJ {} GET", idx);
-                Long value = testMap.get(idx);
-                if (value != (expectedSum-1))
+                Long value = testMap1.get(idx);
+                if (value != (expectedSum - 1))
                     log.debug("OBJ FAIL {} value={} expected={}", idx, value,
-                            expectedSum-1);
+                            expectedSum - 1);
                 log.debug("OBJ {} PUT {}+{}", idx, value, val);
-                testMap.put(idx, value + val);
+                testMap1.put(idx, value + val);
+            }
+
+            TXEnd();
+        }
+
+        /**
+         * Does the actual work.
+         *
+         * @param idx SMRMap key index to update
+         * @param val how much to increment the value by.
+         */
+        private void duoCreateImpl(long idx, long val) {
+
+            TXBegin();
+
+            if (!testMap1.containsKey(idx)) {
+                if (expectedSum - 1 > 0)
+                    log.debug("OBJ FAIL {} doesn't exist expected={}",
+                            idx, expectedSum);
+                log.debug("OBJ {} PUT {}", idx, val);
+                testMap1.put(idx, val);
+                testMap2.put(idx, val);
+            } else {
+                log.debug("OBJ {} GET", idx);
+                Long value = testMap1.get(idx);
+                if (value != (expectedSum - 1))
+                    log.debug("OBJ FAIL {} value={} expected={}", idx, value,
+                            expectedSum - 1);
+                log.debug("OBJ {} PUT {}+{}", idx, value, val);
+                testMap1.put(idx, value + val);
+
+                // in map 2, on even rounds, do this on for every other entry
+                log.debug("OBJ2 {} GET", idx);
+                Long value2 = testMap2.get(idx);
+                if (idx % 2 == 0) {
+                    if (value2 != (expectedSum/2))
+                        log.debug("OBJ2 FAIL {} value={} expected={}", idx, value2,
+                                expectedSum/2);
+                    if (expectedSum % 2 == 0) {
+                        log.debug("OBJ2 {} PUT {}+{}", idx, value2, val);
+                        testMap2.put(idx, value2 + val);
+                    }
+                } else {
+                    if (value2 != (expectedSum - 1))
+                        log.debug("OBJ2 FAIL {} value={} expected={}", idx, value2,
+                                expectedSum - 1);
+                    log.debug("OBJ2 {} PUT {}+{}", idx, value2, val);
+                    testMap2.put(idx, value2 + val);
+                }
             }
 
             TXEnd();
         }
     }
-
-
-    /**
-     * Concurrently start the provided collection of threads and wait for them to finish.
-     *
-     * @param array of threads.
-     */
-    private void startAndJoinThreads(Collection<Thread> array) {
-        // Start the threads.
-        array.forEach(t -> t.start());
-
-        // Wait for them to finish.
-        try {
-            for (Thread t : array) {
-                t.join();
-            }
-
-        } catch (InterruptedException e) {
-            Assert.fail("A thread should not be interrupted: " + e);
-        }
-    }
-
 
     /**
      * A helper function that starts a transaction using Write-Write conflict resolution.
