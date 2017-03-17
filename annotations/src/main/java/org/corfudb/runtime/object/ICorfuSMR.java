@@ -25,6 +25,10 @@ public interface ICorfuSMR<T> {
      * @return The SMR upcall map. */
     Map<String, ICorfuSMRUpcallTarget<T>> getCorfuSMRUpcallMap();
 
+    /** Get a map of method names to conflict object extractor methods.
+     * @return The conflict object methods map. */
+    Map<String, ICorfuSMRUpcallTarget<T>> getSMRConflictExtractorMap();
+
     /** Get a map from strings (function names) to undo methods.
      * @return The undo map. */
     Map<String, IUndoFunction<T>> getCorfuUndoMap();
