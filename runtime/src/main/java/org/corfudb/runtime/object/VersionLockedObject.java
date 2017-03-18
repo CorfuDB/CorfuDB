@@ -390,24 +390,6 @@ public class VersionLockedObject<T> {
         return lock.tryOptimisticRead() == 0;
     }
 
-    public <R> R optimisticallyReadAndRetry(BiFunction<Long, VersionLockedObject<T>, R> readFunction) {
-        long ts = lock.tryOptimisticRead();
-        if (ts != 0) {
-            R ret = readFunction.apply(getVersionUnsafe(), this);
-            if (lock.validate(ts)) {
-                return ret;
-            }
-        }
-
-        // Optimistic reading failed, retry with a full lock
-        ts = lock.readLock();
-        try {
-            return readFunction.apply(getVersionUnsafe(), this);
-        } finally {
-            lock.unlockRead(ts);
-        }
-    }
-
     public <R> R optimisticallyReadThenReadLockThenWriteOnFail
             (BiFunction<Long, VersionLockedObject<T>, R> readFunction,
              BiFunction<Long, VersionLockedObject<T>, R> retryWriteFunction
@@ -426,16 +408,14 @@ public class VersionLockedObject<T> {
         // Optimistic reading failed, retry with a full lock
         try {
             ts = lock.tryReadLock(1, TimeUnit.SECONDS);
+                try {
+                    return readFunction.apply(getVersionUnsafe(), this);
+                } finally {
+                    lock.unlock(ts);
+                }
         } catch (InterruptedException ie) {
             log.debug("ReadLock[{}] Timed out, retrying with write lock");
             throw new ConcurrentModificationException();
-        }
-        try {
-            try {
-                return readFunction.apply(getVersionUnsafe(), this);
-            } finally {
-                lock.unlock(ts);
-            }
         } catch (ConcurrentModificationException cme) {
             // throw by read function to force a append lock...
         }

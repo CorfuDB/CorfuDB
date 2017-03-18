@@ -243,7 +243,7 @@ public abstract class AbstractQueuedStreamView extends
             return null;
         }
         // Add the current pointer back into the read queue
-        context.readQueue.add(getCurrentContext().globalPointer);
+        context.readQueue.add(context.globalPointer);
         // Update the global pointer
         context.globalPointer = prevAddress;
         return read(prevAddress);
