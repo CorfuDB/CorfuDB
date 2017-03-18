@@ -21,12 +21,6 @@ import java.util.function.Function;
 @Slf4j
 public class BackpointerStreamView extends AbstractQueuedStreamView {
 
-    /**
-     * The number of retries before attempting a hole fill.
-     * TODO: this constant should come from the runtime.
-     */
-    final int NUM_RETRIES = 25;
-
     /** Create a new backpointer stream view.
      *
      * @param runtime   The runtime to use for accessing the log.
@@ -221,7 +215,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 // to fill if a client has actually failed, which should
                 // be a relatively rare event.
 
-                for (int i = 0; i < NUM_RETRIES; i++) {
+                for (int i = 0; i < runtime.getParameters().getHoleFillRetry(); i++) {
                     currentEntry =
                             runtime.getAddressSpaceView().read(currentRead);
                     if (currentEntry.getType() != DataType.EMPTY) {

@@ -75,6 +75,9 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         // Force all new CorfuRuntimes to override the getRouterFn
         CorfuRuntime.overrideGetRouterFunction = this::getRouterFunction;
         runtime = new CorfuRuntime(getDefaultEndpoint());
+        // Default number of times to read before hole filling to 0
+        // (most aggressive, to surface concurrency issues).
+        runtime.getParameters().setHoleFillRetry(0);
     }
 
     /** Function for obtaining a router, given a runtime and an endpoint.

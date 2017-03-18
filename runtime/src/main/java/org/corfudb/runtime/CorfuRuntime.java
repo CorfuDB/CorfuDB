@@ -40,6 +40,9 @@ public class CorfuRuntime {
 
         /** True, if optimistic undo logging is disabled. */
         boolean optimisticUndoDisabled = false;
+
+        /** Number of times to attempt to read before hole filling. */
+        int holeFillRetry = 10;
     }
 
     @Getter

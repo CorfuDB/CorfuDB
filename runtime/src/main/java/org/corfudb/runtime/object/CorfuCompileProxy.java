@@ -238,8 +238,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 rt.getSequencerView()
                         .nextToken(Collections.singleton(streamID), 0).getToken();
 
-        log.debug("sync this object {} to timestamp={}", getStreamID()
-                .getLeastSignificantBits(), timestamp);
+        log.debug("Sync[{}] {}", this, timestamp);
 
         // Acquire locks and perform read.
         underlyingObject.writeReturnVoid((v,o) -> o.syncObjectUnsafe(timestamp));
