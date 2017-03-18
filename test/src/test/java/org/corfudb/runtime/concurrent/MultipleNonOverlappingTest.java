@@ -1,6 +1,5 @@
 package org.corfudb.runtime.concurrent;
 
-import com.sun.source.tree.AssertTree;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.AbstractObjectTest;
