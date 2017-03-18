@@ -9,6 +9,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 
+import javax.annotation.Nonnull;
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.function.Function;
@@ -119,32 +120,44 @@ public abstract class AbstractQueuedStreamView extends
             return Collections.emptyList();
         }
 
+        // Select everything in the read queue between
+        // the start and maxGlobal
+        NavigableSet<Long> readSet =
+                context.readQueue.headSet(maxGlobal, true);
+
+        List<Long> toRead = readSet.stream()
+                .collect(Collectors.toList());
+
         // The list to store read results in
-        List<ILogData> read = new ArrayList<>();
+        List<ILogData> read = readAll(toRead).stream()
+                .filter(x -> x.getType() == DataType.DATA)
+                .filter(x -> x.containsStream(context.id))
+                .collect(Collectors.toList());
 
-        // While we have data and haven't exceeded maxGlobal
-        while (context.readQueue.size() > 0 &&
-                context.readQueue.first() <= maxGlobal) {
+        // If any entries change the context,
+        // don't return anything greater than
+        // that entry
+        Optional<ILogData> contextEntry = read.stream()
+                .filter(contextCheckFn::apply).findFirst();
+        if (contextEntry.isPresent()) {
+            log.trace("getNextEntries[{}] context switch @ {}", this, contextEntry.get().getGlobalAddress());
+            int idx = read.indexOf(contextEntry.get());
+            read = read.subList(0, idx + 1);
+            readSet.headSet(contextEntry.get().getGlobalAddress(), true).clear();
+        } else {
+            // Clear the entries which were read
+            readSet.clear();
+        }
 
-            // Do the read, removing the request from the queue
-            long readAddress = context.readQueue.pollFirst();
-            ILogData data = read(readAddress);
+        // Transfer the addresses of the read entries to the resolved queue
+        read.stream()
+                .map(x -> x.getGlobalAddress())
+                .forEach(x -> addToResolvedQueue(context, x));
 
-            // Add to the read list if the entry is part of this
-            // stream and contains data
-            if (data.getType() == DataType.DATA &&
-                    data.containsStream(context.id)) {
-                addToResolvedQueue(context, readAddress);
-                read.add(data);
-            }
-
-            // Update the pointer.
-            context.globalPointer = readAddress;
-
-            // If the context changed, return
-            if (contextCheckFn.apply(data)) {
-                return read;
-            }
+        // Update the global pointer
+        if (read.size() > 0) {
+            context.globalPointer = read.get(read.size() - 1)
+                    .getGlobalAddress();
         }
 
         // Return the list of entries read.
@@ -157,7 +170,20 @@ public abstract class AbstractQueuedStreamView extends
      *
      * @param address       The address to read.
      */
-    abstract protected @NonNull ILogData read(final long address);
+    abstract protected @Nonnull ILogData read(final long address);
+
+    /**
+     * Given a list of addresses, retrieve the data as a list in the same
+     * order of the addresses given in the list.
+     * @param addresses     The addresses to read.
+     * @return              A list of ILogData in the same order as the
+     *                      addresses given.
+     */
+    protected @Nonnull List<ILogData> readAll(@Nonnull final List<Long> addresses) {
+        return addresses.parallelStream()
+                        .map(this::read)
+                        .collect(Collectors.toList());
+    }
 
     /**
      * Fill the read queue for the current context. This method is called

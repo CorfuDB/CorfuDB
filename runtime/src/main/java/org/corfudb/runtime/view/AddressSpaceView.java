@@ -26,6 +26,7 @@ import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -173,6 +174,13 @@ public class AddressSpaceView extends AbstractView {
         return this.cacheFetch(Utils.discretizeRangeSet(addresses));
     }
 
+    public Map<Long, ILogData> read(List<Long> addresses) {
+
+        if (!runtime.isCacheDisabled()) {
+            return readCache.getAll(addresses);
+        }
+        return this.cacheFetch(addresses);
+    }
 
     /**
      * Fetch an address for insertion into the cache.

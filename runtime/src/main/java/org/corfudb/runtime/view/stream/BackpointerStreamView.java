@@ -5,8 +5,11 @@ import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
+
+import javax.annotation.Nonnull;
 import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /** A view of a stream implemented with backpointers.
  *
@@ -102,6 +105,16 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     @Override
     protected ILogData read(final long address) {
             return runtime.getAddressSpaceView().read(address);
+    }
+
+    @Nonnull
+    @Override
+    protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
+        Map<Long, ILogData> dataMap =
+            runtime.getAddressSpaceView().read(addresses);
+        return addresses.stream()
+                .map(x -> dataMap.get(x))
+                .collect(Collectors.toList());
     }
 
     /**
