@@ -140,7 +140,12 @@ public class AddressSpaceView extends AbstractView {
      */
     public ILogData read(long address) {
         if (!runtime.isCacheDisabled()) {
-            return readCache.get(address);
+            ILogData data = readCache.get(address);
+            if (data == null) {
+                data = new InMemoryLogData(DataType.EMPTY);
+                data.setGlobalAddress(address);
+            }
+            return data;
         }
         return fetch(address);
     }
@@ -180,13 +185,7 @@ public class AddressSpaceView extends AbstractView {
         log.trace("Cache miss @ {}, fetching.", address);
         LogData result = fetch(address);
         if (result.getType() == DataType.EMPTY) {
-            //schedule an eviction
-            CompletableFuture.runAsync(() -> {
-                log.trace("Evicting empty entry at {}.", address);
-                CFUtils.runAfter(emptyDuration, () -> {
-                    readCache.invalidate(address);
-                });
-            });
+            return null;
         }
         return result;
     }
