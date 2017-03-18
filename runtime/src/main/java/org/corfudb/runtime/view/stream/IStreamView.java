@@ -8,6 +8,8 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.view.Address;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -108,6 +110,7 @@ public interface IStreamView extends Iterator<ILogData> {
      * @return  The next entry in the stream, or NULL, if no entries are
      *          available.
      */
+    @Nullable
     default ILogData next() {
         return nextUpTo(Long.MAX_VALUE);
     }
@@ -117,6 +120,7 @@ public interface IStreamView extends Iterator<ILogData> {
      * @return  The previous entry in the stream, or NULL, if no entries are
      *           available.
      */
+    @Nullable
     ILogData previous();
 
     /** Retrieve the current entry in the stream, which was the entry previously
@@ -125,6 +129,7 @@ public interface IStreamView extends Iterator<ILogData> {
      *
      * @return The current entry in the stream.
      */
+    @Nullable
     ILogData current();
 
     /** Retrieve the next entry from this stream, up to the address given or the
@@ -135,6 +140,7 @@ public interface IStreamView extends Iterator<ILogData> {
      * @return          The next entry in the stream, or NULL, if no entries
      *                  are available.
      */
+    @Nullable
     ILogData nextUpTo(long maxGlobal);
 
     /** Retrieve all of the entries from this stream, up to the tail of this
@@ -148,6 +154,7 @@ public interface IStreamView extends Iterator<ILogData> {
      * @return          The next entries in the stream, or an empty list,
      *                  if no entries are available.
      */
+    @Nonnull
     default List<ILogData> remaining() { return remainingUpTo(Address.MAX); }
 
     /** Retrieve all of the entries from this stream, up to the address given or

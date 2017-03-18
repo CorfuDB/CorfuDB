@@ -205,7 +205,7 @@ public abstract class AbstractQueuedStreamView extends
         }
 
         // Convert the address to never read if there was no result.
-        return result == null ? Address.NEVER_READ : result;
+        return result == null ? Address.NOT_FOUND : result;
     }
 
     /** {@inheritDoc} */
@@ -226,8 +226,8 @@ public abstract class AbstractQueuedStreamView extends
                 .resolvedQueue.lower(context.globalPointer);
         // If the pointer is before our min resolution, we need to resolve
         // to get the correct previous entry.
-        if (prevAddress == null && context.minResolution
-                != Address.NEVER_READ || prevAddress <= context.minResolution) {
+        if (prevAddress == null && context.minResolution != Address.NEVER_READ
+                || prevAddress != null && prevAddress <= context.minResolution) {
             long oldPointer = context.globalPointer;
             context.globalPointer = prevAddress == null ? Address.NEVER_READ :
                                                 prevAddress - 1L;
@@ -316,6 +316,9 @@ public abstract class AbstractQueuedStreamView extends
         /** {@inheritDoc} */
         @Override
         void seek(long globalAddress) {
+            if (globalAddress < Address.NEVER_READ) {
+                throw new IllegalArgumentException("globalAddress must be >= Address.NEVER_READ");
+            }
             log.trace("Seek[{}]({}), min={} max={}", this,  globalAddress, minResolution, maxResolution);
             // Update minResolution if necessary
             if (globalAddress >= maxResolution) {

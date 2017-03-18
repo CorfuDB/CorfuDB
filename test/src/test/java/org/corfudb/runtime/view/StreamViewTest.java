@@ -182,6 +182,21 @@ public class StreamViewTest extends AbstractViewTest {
         assertThat(svA.find(C_GLOBAL,
                 IStreamView.SearchDirection.REVERSE_INCLUSIVE))
                 .isEqualTo(C_GLOBAL);
+
+        // From existing to existing:
+        // Should find entry "b"
+        assertThat(svB.find(D_GLOBAL,
+                IStreamView.SearchDirection.REVERSE))
+                .isEqualTo(B_GLOBAL);
+        // Should find entry "d"
+        assertThat(svB.find(B_GLOBAL,
+                IStreamView.SearchDirection.FORWARD))
+                .isEqualTo(D_GLOBAL);
+
+        // Bounds:
+        assertThat(svB.find(D_GLOBAL,
+                IStreamView.SearchDirection.FORWARD))
+                .isEqualTo(Address.NOT_FOUND);
     }
 
     @Test

@@ -264,15 +264,11 @@ public class VersionLockedObject<T> {
     public void syncObjectUnsafe(long timestamp) {
         // If there is an optimistic stream attached,
         // and it belongs to this thread use that
-        if (optimisticStream != null &&
-                optimisticStream.isStreamForThisTransaction()) {
+        if (optimisticallyOwnedByThreadUnsafe()) {
             // If there are no updates, ensure we are at the right snapshot
             if (optimisticStream.pos() == Address.NEVER_READ) {
                 final WriteSetSMRStream currentOptimisticStream =
                         optimisticStream;
-                // It's necessary to roll back optimistic updates before
-                // doing a sync of the regular log
-                optimisticRollbackUnsafe();
                 // If we are too far ahead, roll back to the past
                 if (getVersionUnsafe() > timestamp) {
                     try {

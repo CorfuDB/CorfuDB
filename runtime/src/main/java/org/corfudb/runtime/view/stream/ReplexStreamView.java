@@ -62,6 +62,7 @@ public class ReplexStreamView extends
         Long foundAddress = null;
         // See if we can find the element.
         ILogData data;
+
         ILogData prev = null;
         while ((data = nextUpTo(globalAddress + 1)) != null) {
             if (data.getGlobalAddress() >= globalAddress)
@@ -79,6 +80,14 @@ public class ReplexStreamView extends
                 }
                 else {
                     foundAddress = data.getGlobalAddress();
+                    if (!direction.isInclusive() && foundAddress == globalAddress) {
+                        data = nextUpTo(Address.MAX);
+                        if (data != null) {
+                            foundAddress = data.getGlobalAddress();
+                        } else {
+                            foundAddress = null;
+                        }
+                    }
                 }
                 break;
             }

@@ -36,7 +36,7 @@ public class MultipleNonOverlappingTest extends AbstractObjectTest {
     @Test
     public void testStress() throws Exception {
 
-        String mapName = "testMap";
+        String mapName = "testMapA";
         Map<Long, Long> testMap = instantiateCorfuObject(SMRMap.class, mapName);
 
         final int VAL = 1;

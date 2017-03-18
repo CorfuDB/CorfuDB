@@ -5,8 +5,6 @@ import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.Utils;
-
 import java.util.*;
 import java.util.function.Function;
 
