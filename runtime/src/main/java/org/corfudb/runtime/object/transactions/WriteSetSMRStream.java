@@ -14,6 +14,45 @@ import java.util.stream.IntStream;
 
 /**
  * Created by mwei on 3/13/17.
+ *
+ * SMRStreamAdapter wraps an optimistic transaction execution context, per
+ * object, with an SMRStream API.
+ *
+ * The main purpose of wrapping the write-set of optimistic transactions as an
+ * SMRStream is to provide the abstraction of a stream of SMREntries. The
+ * SMRStream maintains for us a position in the sequence. We can consume it
+ * in a forward direction, and scroll back to previously read entries.
+ *
+ * First, forget about nested transactions for now, and neglected the contexts
+ * stack; that is, assume the stack has size 1.
+ *
+ * A reminder from AbstractTransactionalContext about the write-set of a
+ * transaction:
+ * * A write-set is a key component of a transaction.
+ * * We collect the write-set as a map, organized by streams.
+ * * For each stream, we record a pair:
+ * *  - a set of conflict-parameters modified by this transaction on the
+ * *  stream,
+ * *  - a list of SMR updates by this transcation on the stream.
+ * *
+ *
+ * The implementation of the current() method looks at the write-set, picks
+ * the list of SMRentries corresponding to the current object id, and returns
+ * the entry in the list corredponding the the current SMRStream position.
+ *
+ * previous() decrements the current SMRStream position and returns the entry
+ * corresponding to it.
+ *
+ * RemainingUpTo() returns a list of entries.
+ *
+ * WriteSetSMRStream does not support the full API - neither append nor seek are
+ * supported.
+ *
+ * Enter nested transactions.
+ *
+ * WriteSetSMRStream maintains the abstractions also across nested transactions.
+ * It supports navigating forward/backward across the SMREntries in the entire transcation stack.
+ *
  */
 @Slf4j
 public class WriteSetSMRStream implements ISMRStream {
@@ -26,6 +65,7 @@ public class WriteSetSMRStream implements ISMRStream {
 
     long writePos;
 
+    // the specific stream-id for which this SMRstream wraps the write-set
     final UUID id;
 
     public WriteSetSMRStream(List<AbstractTransactionalContext> contexts,
