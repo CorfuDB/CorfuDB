@@ -25,7 +25,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
      * The number of retries before attempting a hole fill.
      * TODO: this constant should come from the runtime.
      */
-    final int NUM_RETRIES = 3;
+    final int NUM_RETRIES = 25;
 
     /** Create a new backpointer stream view.
      *

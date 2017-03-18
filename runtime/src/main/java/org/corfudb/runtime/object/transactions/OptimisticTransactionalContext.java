@@ -292,15 +292,13 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     protected void updateAllProxies(Consumer<ICorfuSMRProxyInternal> function) {
         getModifiedProxies().forEach(x -> {
             // If we are on the same thread, this will hold true.
-            if (x.getUnderlyingObject().getOptimisticStreamUnsafe() != null
-                    && x.getUnderlyingObject().getOptimisticStreamUnsafe()
-                    .isStreamForThisTransaction()) {
+            if (x.getUnderlyingObject()
+                    .optimisticallyOwnedByThreadUnsafe()) {
                 x.getUnderlyingObject().writeReturnVoid((v,o) -> {
                     // Make sure we're still the modifying thread
                     // even after getting the lock.
-                    if (x.getUnderlyingObject().getOptimisticStreamUnsafe() != null
-                            && x.getUnderlyingObject().getOptimisticStreamUnsafe()
-                            .isStreamForThisTransaction()) {
+                    if (x.getUnderlyingObject()
+                            .optimisticallyOwnedByThreadUnsafe()) {
                         function.accept(x);
                     }
                 });

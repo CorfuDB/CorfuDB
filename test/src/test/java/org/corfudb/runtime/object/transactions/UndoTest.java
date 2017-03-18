@@ -3,10 +3,13 @@ package org.corfudb.runtime.object.transactions;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -14,6 +17,49 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Created by dalia on 3/6/17.
  */
 public class UndoTest extends AbstractObjectTest {
+
+    @Test
+    public void ckCommitAtomicity() throws Exception {
+        String mapName1 = "testMapA";
+        Map<Long, Long> testMap1 = instantiateCorfuObject(SMRMap.class, mapName1);
+        CountDownLatch l1 = new CountDownLatch(1);
+        AtomicBoolean commitDone = new AtomicBoolean(false);
+        final int NTHREADS = 3;
+
+        scheduleConcurrently(t -> {
+            TXBegin();
+
+            // wait for all to start
+            l1.await();
+
+            // generate optimistic mutation
+            testMap1.put(1L, 1L);
+
+            System.out.println("commit..");
+            // wait for it to be undon
+            TXEnd();
+            System.out.println("committed");
+
+            // signal done
+            commitDone.set(true);
+
+            Assert.assertEquals((long)testMap1.get(1L), 1L);
+        });
+
+        // thread that keeps syncing with the tail of log
+        scheduleConcurrently(t -> {
+            // signal that thread has started
+            l1.countDown();
+
+            // keep updating the in-memory proxy from the log
+            int i = 0;
+            while (i++ < 1000 /*!commitDone.get() */){
+                testMap1.get(1L);
+            }
+        });
+
+        executeScheduled(NTHREADS, PARAMETERS.TIMEOUT_NORMAL);
+    }
 
     @Test
     public void ckCorrectUndo()
