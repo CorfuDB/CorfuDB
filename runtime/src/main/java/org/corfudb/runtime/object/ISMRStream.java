@@ -13,6 +13,13 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
+ * On top of a stream, an SMR object layer implements objects whose history of updates are backed by a stream.
+ *
+ * This class defines an API for supporting stream operations on the SMR layer.
+ * ISMRStream wraps a pure stream and provides a similar API: append, remainingTo, current, previous, pos and seek.
+ * Different from a stream, the entries returned from methods that obtain stream entries,
+ * like current, previous, are of type SMREntry.
+ *
  * Created by mwei on 3/13/17.
  */
 public interface ISMRStream {

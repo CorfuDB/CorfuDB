@@ -28,6 +28,25 @@ import java.util.function.Supplier;
 import static java.lang.Long.min;
 
 /**
+ * In the Corfu runtime, on top of a stream,
+ * an SMR object layer implements objects whose history of updates
+ * are backed by a stream.
+ *
+ * This class implements the methods that an in-memory corfu-object proxy carries
+ * in order to by in sync with a stream.
+ *
+ * We refer to the program's object as the -corfu object-,
+ * and to the internal object implementation as the -proxy-.
+ *
+ * If a Corfu object's method is an Accessor, it invokes the proxy's
+ * access() method.
+ *
+ * If a Corfu object's method is a Mutator or Accessor-Mutator, it invokes the
+ * proxy's logUpdate() method.
+ *
+ * Finally, if a Corfu object's method is an Accessor-Mutator,
+ * it obtains a result by invoking getUpcallResult().
+ *
  * Created by mwei on 11/11/16.
  */
 @Slf4j
