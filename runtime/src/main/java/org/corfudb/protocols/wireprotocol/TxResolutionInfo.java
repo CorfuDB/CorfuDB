@@ -14,7 +14,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     /* snapshot timestamp of the txn. */
     @Getter
     @Setter
-    final Long snapshotTimestamp;
+    Long snapshotTimestamp;
 
     @Getter
     final Map<UUID, Set<Integer>> conflictSet;

@@ -161,8 +161,6 @@ public class SMRMapTest extends AbstractViewTest {
     @Test
     public void loadsFollowedByGetsConcurrent()
             throws Exception {
-        r.setBackpointersDisabled(true);
-
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamID(UUID.randomUUID())

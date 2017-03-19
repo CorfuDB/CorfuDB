@@ -70,7 +70,9 @@ public class MultiObjectSMREntry extends LogEntry implements IDivisibleEntry, IS
 
     @Override
     public List<SMREntry> getSMRUpdates(UUID id) {
-        return entryMap.get(id).getUpdates();
+        MultiSMREntry entry = entryMap.get(id);
+        return entryMap.get(id) == null ? Collections.emptyList() :
+                entry.getUpdates();
     }
 
     /**

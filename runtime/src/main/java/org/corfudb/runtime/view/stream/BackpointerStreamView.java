@@ -6,8 +6,10 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
 
+import javax.annotation.Nonnull;
 import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /** A view of a stream implemented with backpointers.
  *
@@ -19,12 +21,6 @@ import java.util.function.Function;
  */
 @Slf4j
 public class BackpointerStreamView extends AbstractQueuedStreamView {
-
-    /**
-     * The number of retries before attempting a hole fill.
-     * TODO: this constant should come from the runtime.
-     */
-    final int NUM_RETRIES = 3;
 
     /** Create a new backpointer stream view.
      *
@@ -111,6 +107,16 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             return runtime.getAddressSpaceView().read(address);
     }
 
+    @Nonnull
+    @Override
+    protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
+        Map<Long, ILogData> dataMap =
+            runtime.getAddressSpaceView().read(addresses);
+        return addresses.stream()
+                .map(x -> dataMap.get(x))
+                .collect(Collectors.toList());
+    }
+
     /**
      * {@inheritDoc}
      *
@@ -167,14 +173,25 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // If everything is available in the resolved
         // queue, use it
-        if (context.maxResolution > maxAddress) {
+        if (context.maxResolution > maxAddress &&
+                context.minResolution < context.globalPointer) {
             return fillFromResolved(maxGlobal, context);
         }
 
-        // First, we fetch the current token (backpointer) from the sequencer.
-        final long latestToken = runtime.getSequencerView()
-                .nextToken(Collections.singleton(context.id), 0)
-                .getToken();
+        Long latestToken = null;
+
+        // If the max has bveen resolved, use it.
+        if (maxGlobal != Address.MAX) {
+            latestToken = context.resolvedQueue.ceiling(maxGlobal);
+        }
+
+        // If we don't have a larger token in resolved, or the request was for
+        // a linearized read, fetch the token from the sequencer.
+        if (latestToken == null || maxGlobal == Address.MAX) {
+            latestToken = runtime.getSequencerView()
+                    .nextToken(Collections.singleton(context.id), 0)
+                    .getToken();
+        }
 
         // If the backpointer was unwritten, return, there is nothing to do
         if (latestToken == Address.NEVER_READ) {
@@ -183,7 +200,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // If everything is available in the resolved
         // queue, use it
-        if (context.maxResolution > latestToken) {
+        if (context.maxResolution > latestToken &&
+                context.minResolution < context.globalPointer) {
             return fillFromResolved(latestToken, context);
         }
 
@@ -195,6 +213,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         while (currentRead > context.globalPointer &&
                 currentRead != Address.NEVER_READ) {
+            log.trace("Read_Fill_Queue[{}] Read {}", this, currentRead);
             // Read the entry in question.
             ILogData currentEntry =
                     runtime.getAddressSpaceView().read(currentRead);
@@ -207,7 +226,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 // to fill if a client has actually failed, which should
                 // be a relatively rare event.
 
-                for (int i = 0; i < NUM_RETRIES; i++) {
+                for (int i = 0; i < runtime.getParameters().getHoleFillRetry(); i++) {
                     currentEntry =
                             runtime.getAddressSpaceView().read(currentRead);
                     if (currentEntry.getType() != DataType.EMPTY) {
@@ -264,7 +283,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             // If everything left is available in the resolved
             // queue, use it
-            if (context.maxResolution > currentRead) {
+            if (context.maxResolution > currentRead &&
+                    context.minResolution < context.globalPointer) {
                 return fillFromResolved(latestToken, context);
             }
 
@@ -272,6 +292,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // If we have a backpointer, we'll use that for our next read.
             if (!runtime.backpointersDisabled &&
                     currentEntry.hasBackpointer(context.id)) {
+                log.trace("Read_Fill_Queue[{}] Backpointer {}->{}", this,
+                        currentRead, currentEntry.getBackpointer(context.id));
                 currentRead = currentEntry.getBackpointer(context.id);
             }
             // Otherwise, our next read is the previous entry.
@@ -280,6 +302,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             }
         }
 
+        log.debug("Read_Fill_Queue[{}] Filled queue with {}", this, context.readQueue);
         return !context.readQueue.isEmpty();
     }
 }

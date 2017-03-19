@@ -109,6 +109,134 @@ public class StreamViewTest extends AbstractViewTest {
     }
 
     @Test
+    public void canSeekOnStream()
+        throws Exception
+    {
+        CorfuRuntime r = getDefaultRuntime().connect();
+        IStreamView sv = r.getStreamsView().get(
+                CorfuRuntime.getStreamID("stream  A"));
+
+        // Append some entries
+        sv.append("a".getBytes());
+        sv.append("b".getBytes());
+        sv.append("c".getBytes());
+
+        // Try reading two entries
+        assertThat(sv.next().getPayload(r))
+                .isEqualTo("a".getBytes());
+        assertThat(sv.next().getPayload(r))
+                .isEqualTo("b".getBytes());
+
+        // Seeking to the beginning
+        sv.seek(0);
+        assertThat(sv.next().getPayload(r))
+                .isEqualTo("a".getBytes());
+
+        // Seeking to the end
+        sv.seek(2);
+        assertThat(sv.next().getPayload(r))
+                .isEqualTo("c".getBytes());
+
+        // Seeking to the middle
+        sv.seek(1);
+        assertThat(sv.next().getPayload(r))
+                .isEqualTo("b".getBytes());
+    }
+
+    @Test
+    public void canFindInStream()
+            throws Exception
+    {
+        CorfuRuntime r = getDefaultRuntime().connect();
+        IStreamView svA = r.getStreamsView().get(
+                CorfuRuntime.getStreamID("stream  A"));
+        IStreamView svB = r.getStreamsView().get(
+                CorfuRuntime.getStreamID("stream  B"));
+
+        // Append some entries
+        final long A_GLOBAL = 0;
+        svA.append("a".getBytes());
+        final long B_GLOBAL = 1;
+        svB.append("b".getBytes());
+        final long C_GLOBAL = 2;
+        svA.append("c".getBytes());
+        final long D_GLOBAL = 3;
+        svB.append("d".getBytes());
+        final long E_GLOBAL = 4;
+        svA.append("e".getBytes());
+
+        // See if we can find entries:
+        // Should find entry "c"
+        assertThat(svA.find(B_GLOBAL,
+                IStreamView.SearchDirection.FORWARD))
+                .isEqualTo(C_GLOBAL);
+        // Should find entry "a"
+        assertThat(svA.find(B_GLOBAL,
+                IStreamView.SearchDirection.REVERSE))
+                .isEqualTo(A_GLOBAL);
+        // Should find entry "e"
+        assertThat(svA.find(E_GLOBAL,
+                IStreamView.SearchDirection.FORWARD_INCLUSIVE))
+                .isEqualTo(E_GLOBAL);
+        // Should find entry "c"
+        assertThat(svA.find(C_GLOBAL,
+                IStreamView.SearchDirection.REVERSE_INCLUSIVE))
+                .isEqualTo(C_GLOBAL);
+
+        // From existing to existing:
+        // Should find entry "b"
+        assertThat(svB.find(D_GLOBAL,
+                IStreamView.SearchDirection.REVERSE))
+                .isEqualTo(B_GLOBAL);
+        // Should find entry "d"
+        assertThat(svB.find(B_GLOBAL,
+                IStreamView.SearchDirection.FORWARD))
+                .isEqualTo(D_GLOBAL);
+
+        // Bounds:
+        assertThat(svB.find(D_GLOBAL,
+                IStreamView.SearchDirection.FORWARD))
+                .isEqualTo(Address.NOT_FOUND);
+    }
+
+    @Test
+    public void canDoPreviousOnStream()
+            throws Exception
+    {
+        CorfuRuntime r = getDefaultRuntime().connect();
+        IStreamView sv = r.getStreamsView().get(
+                CorfuRuntime.getStreamID("stream  A"));
+
+        // Append some entries
+        sv.append("a".getBytes());
+        sv.append("b".getBytes());
+        sv.append("c".getBytes());
+
+        // Move backward should return null
+        assertThat(sv.previous())
+                .isNull();
+
+        // Move forward
+        sv.next(); // "a"
+        sv.next(); // "b"
+
+        // Should be now "a"
+        assertThat(sv.previous().getPayload(r))
+                .isEqualTo("a".getBytes());
+
+        // Move forward, should be now "b"
+        assertThat(sv.next().getPayload(r))
+                .isEqualTo("b".getBytes());
+
+        sv.next(); // "c"
+        sv.next(); // null
+
+        // Should be now "b"
+        assertThat(sv.previous().getPayload(r))
+                .isEqualTo("b".getBytes());
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     public void streamCanSurviveOverwriteException()
             throws Exception {
