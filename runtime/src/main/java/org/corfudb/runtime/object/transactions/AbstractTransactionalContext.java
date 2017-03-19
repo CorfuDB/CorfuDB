@@ -3,22 +3,45 @@ package org.corfudb.runtime.object.transactions;
 import com.google.common.collect.ImmutableMap;
 import lombok.Getter;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.*;
+import org.corfudb.util.Utils;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 /**
  * Represents a transactional context. Transactional contexts
  * manage per-thread transaction state.
  *
+ * Recall from {@link CorfuCompileProxy} that an SMR object layer implements objects whose history of updates
+ * are backed by a stream. If a Corfu object's method is an Accessor, it invokes the proxy's
+ * access() method. Likewise, if a Corfu object's method is a Mutator or Accessor-Mutator, it invokes the
+ * proxy's logUpdate() method.
+ *
+ * Within transactional context, these methods invoke the transacationalContect accessor/mutator helper.
+ *
+ * For example, OptimisticTransactionalContext.access() is responsible for
+ * sync'ing the proxy state to the snapshot version, adn then doing the access.
+ *
+ * logUpdate() within transactional context is
+ * responsible for updating the write-set.
+ *
+ * Finally, if a Corfu object's method is an Accessor-Mutator, then although the mutation is delayed,
+ * it needs to obtain the result by invoking getUpcallResult() on the optimistic stream.
+ * This is similar to the second stage of access(), accept working on the optimistic stream instead of the
+ * underlying stream.
+ *
  * Created by mwei on 4/4/16.
  */
+@Slf4j
 public abstract class AbstractTransactionalContext implements
         Comparable<AbstractTransactionalContext> {
 
@@ -99,7 +122,7 @@ public abstract class AbstractTransactionalContext implements
             <  UUID,                                                // stream ID
                     AbstractMap.SimpleEntry<                        // per-stream pair
                             Set<Integer>,                              // set of conflict-parameters
-                            List<WriteSetEntry>                     // list of updates
+                            List<SMREntry>                     // list of updates
                     >
             >
             writeSet = new HashMap<>();
@@ -117,6 +140,7 @@ public abstract class AbstractTransactionalContext implements
         this.builder = builder;
         this.startTime = System.currentTimeMillis();
         this.parentContext = TransactionalContext.getCurrentContext();
+        log.debug("TXBegin[{}]", this);
     }
 
     /** Access the state of the object.
@@ -175,6 +199,7 @@ public abstract class AbstractTransactionalContext implements
     /** Forcefully abort the transaction.
      */
     public void abortTransaction() {
+        log.debug("TXAbort[{}]", this);
         commitAddress = ABORTED_ADDRESS;
         completionFuture
                 .completeExceptionally(new TransactionAbortedException());
@@ -189,7 +214,10 @@ public abstract class AbstractTransactionalContext implements
      */
     public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects)
     {
-        readSet.computeIfAbsent(proxy.getStreamID(), k -> new HashSet<Integer>());
+        readSet.computeIfAbsent(proxy.getStreamID(), k -> {
+            log.trace("AddToResetSet[{}] {}", this, proxy);
+            return new HashSet<Integer>();
+        });
         if (conflictObjects != null) {
             Set<Integer> conflictParamSet = readSet.get(proxy.getStreamID());
             Arrays.asList(conflictObjects).stream()
@@ -209,14 +237,16 @@ public abstract class AbstractTransactionalContext implements
     }
 
     void addToWriteSet(ICorfuSMRProxy proxy, SMREntry updateEntry, Object[] conflictObjects) {
-
         // create an entry for this streamID
         writeSet.computeIfAbsent(proxy.getStreamID(),
-                u -> new AbstractMap.SimpleEntry<>(new HashSet<>(), new ArrayList<>() )
+                u -> {
+            log.trace("AddToWriteSet[{}] {}", this, proxy);
+            return new AbstractMap.SimpleEntry<>(new HashSet<>(), new ArrayList<>());
+        }
         );
 
         // add the SMRentry to the list of updates for this stream
-        writeSet.get(proxy.getStreamID()).getValue().add(new WriteSetEntry(updateEntry));
+        writeSet.get(proxy.getStreamID()).getValue().add(updateEntry);
 
         // add all the conflict params to the conflict-params set for this stream
         if (conflictObjects != null) {
@@ -244,7 +274,7 @@ public abstract class AbstractTransactionalContext implements
         return builder.build();
     }
 
-    void mergeWriteSetInto(Map<UUID, AbstractMap.SimpleEntry<Set<Integer>, List<WriteSetEntry>>> otherWSet) {
+    void mergeWriteSetInto(Map<UUID, AbstractMap.SimpleEntry<Set<Integer>, List<SMREntry>>> otherWSet) {
         otherWSet.entrySet().forEach(e-> {
             // create an entry for this streamID
             writeSet.computeIfAbsent(e.getKey(),                    // the streamID
@@ -281,7 +311,6 @@ public abstract class AbstractTransactionalContext implements
                         new MultiSMREntry(x.getValue()  // a pair
                                 .getValue()             // right component: a list of WriteSetEntry
                                 .stream()
-                                .map(WriteSetEntry::getEntry)
                                 .collect(Collectors.toList())))
                 );
         Map<UUID, MultiSMREntry> entryMap = builder.build();
@@ -294,7 +323,7 @@ public abstract class AbstractTransactionalContext implements
      * @param id    The stream to get a append set for.
      * @return      The append set for that stream, as an ordered list.
      */
-    List<WriteSetEntry> getWriteSetEntryList(UUID id) {
+    List<SMREntry> getWriteSetEntryList(UUID id) {
 
         return writeSet
                 .getOrDefault(id, new AbstractMap.SimpleEntry<>(Collections.emptySet(), Collections.emptyList()))
@@ -307,5 +336,10 @@ public abstract class AbstractTransactionalContext implements
     public int compareTo(AbstractTransactionalContext o) {
         return Long.compare(this.getSnapshotTimestamp(), o
                 .getSnapshotTimestamp());
+    }
+
+    @Override
+    public String toString() {
+        return "TX[" + Utils.toReadableID(transactionID) + "]";
     }
 }

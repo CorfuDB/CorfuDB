@@ -132,6 +132,11 @@ public class StreamsView {
             if (conflictInfo != null) {
                 long token;
                 if (overwrite) {
+
+                    // on retry, check for conflicts only from the previous
+                    // attempt position
+                    conflictInfo.setSnapshotTimestamp(tokenResponse.getToken());
+
                     TokenResponse temp =
                             runtime.getSequencerView().nextToken(streamIDs, 1, conflictInfo);
                     token = temp.getToken();

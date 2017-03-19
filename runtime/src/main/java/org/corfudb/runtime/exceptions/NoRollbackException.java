@@ -12,6 +12,6 @@ public class NoRollbackException extends RuntimeException {
     }
 
     public NoRollbackException (SMREntry entry) {
-        super("Can't roll back due to method" + entry.getSMRMethod());
+        super("Can't roll back due to " + entry.getSMRMethod() + "@" + entry.getEntry().getGlobalAddress());
     }
 }

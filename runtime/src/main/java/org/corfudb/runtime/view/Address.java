@@ -19,4 +19,14 @@ public class Address {
      * was rejected at the request of the client.
      */
     public static final long ABORTED = -2L;
+
+    /** Not found constant. Used to indicate that a search for an entry
+     * did not result in a entry.
+     */
+    public static final long NOT_FOUND = -3L;
+
+    /** Optimistic constant. Used to indicate that an update is
+     * optimistic.
+     */
+    public static final long OPTIMISTIC = -4L;
 }

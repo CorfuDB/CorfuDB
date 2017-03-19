@@ -26,6 +26,7 @@ import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -140,7 +141,12 @@ public class AddressSpaceView extends AbstractView {
      */
     public ILogData read(long address) {
         if (!runtime.isCacheDisabled()) {
-            return readCache.get(address);
+            ILogData data = readCache.get(address);
+            if (data == null) {
+                data = new InMemoryLogData(DataType.EMPTY);
+                data.setGlobalAddress(address);
+            }
+            return data;
         }
         return fetch(address);
     }
@@ -168,6 +174,13 @@ public class AddressSpaceView extends AbstractView {
         return this.cacheFetch(Utils.discretizeRangeSet(addresses));
     }
 
+    public Map<Long, ILogData> read(List<Long> addresses) {
+
+        if (!runtime.isCacheDisabled()) {
+            return readCache.getAll(addresses);
+        }
+        return this.cacheFetch(addresses);
+    }
 
     /**
      * Fetch an address for insertion into the cache.
@@ -180,13 +193,7 @@ public class AddressSpaceView extends AbstractView {
         log.trace("Cache miss @ {}, fetching.", address);
         LogData result = fetch(address);
         if (result.getType() == DataType.EMPTY) {
-            //schedule an eviction
-            CompletableFuture.runAsync(() -> {
-                log.trace("Evicting empty entry at {}.", address);
-                CFUtils.runAfter(emptyDuration, () -> {
-                    readCache.invalidate(address);
-                });
-            });
+            return null;
         }
         return result;
     }

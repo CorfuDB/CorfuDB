@@ -102,7 +102,7 @@ public class SequencerServer extends AbstractServer {
     private final ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
 
-    private final long maxConflictCacheSize = 10_000;
+    private final long maxConflictCacheSize = 1_000_000;
     private long maxConflictWildcard = -1L;
     private final Cache<Integer, Long>
             conflictToGlobalTailCache = Caffeine.newBuilder()
@@ -179,15 +179,16 @@ public class SequencerServer extends AbstractServer {
                 conflictParamSet.forEach(conflictParam -> {
                     int conflictKeyHash = getConflictHashCode(entry.getKey(),
                             conflictParam);
-                    Long v = conflictToGlobalTailCache.getIfPresent
-                            (conflictKeyHash);
-                    log.trace("txn resolution for conflictparam {}, last update {}",
-                            conflictKeyHash, v);
-                    if ((v != null && v > txData.getSnapshotTimestamp()) ||
-                            (maxConflictWildcard > txData.getSnapshotTimestamp()) ) {
-                        log.debug("Rejecting request due to update-timestamp " +
-                                        "> {} on conflictKeyPair {}",
+                    Long v = conflictToGlobalTailCache.get(conflictKeyHash, k -> maxConflictWildcard);
+                    log.trace("TX conflict resolution timestamp={} conflictKey={} ",
+                            v, conflictKeyHash);
+
+                    if (v > txData.getSnapshotTimestamp() ) {
+                        log.debug("TX abort timestamp={} conflictKey={}",
                                 txData.getSnapshotTimestamp(), conflictKeyHash);
+                        if (conflictToGlobalTailCache.getIfPresent(conflictKeyHash) == null)
+                            log.warn("TX abort due to conflictParam wildcard timestamp={} wildcard={} conflictKey={}",
+                                    txData.getSnapshotTimestamp(), maxConflictWildcard, conflictKeyHash);
                         commit.set(false);
                     }
                 });
