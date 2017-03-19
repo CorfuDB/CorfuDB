@@ -21,6 +21,24 @@ import java.util.stream.Collectors;
  * Represents a transactional context. Transactional contexts
  * manage per-thread transaction state.
  *
+ * Recall from {@link CorfuCompileProxy} that an SMR object layer implements objects whose history of updates
+ * are backed by a stream. If a Corfu object's method is an Accessor, it invokes the proxy's
+ * access() method. Likewise, if a Corfu object's method is a Mutator or Accessor-Mutator, it invokes the
+ * proxy's logUpdate() method.
+ *
+ * Within transactional context, these methods invoke the transacationalContect accessor/mutator helper.
+ *
+ * For example, OptimisticTransactionalContext.access() is responsible for
+ * sync'ing the proxy state to the snapshot version, adn then doing the access.
+ *
+ * logUpdate() within transactional context is
+ * responsible for updating the write-set.
+ *
+ * Finally, if a Corfu object's method is an Accessor-Mutator, then although the mutation is delayed,
+ * it needs to obtain the result by invoking getUpcallResult() on the optimistic stream.
+ * This is similar to the second stage of access(), accept working on the optimistic stream instead of the
+ * underlying stream.
+ *
  * Created by mwei on 4/4/16.
  */
 @Slf4j

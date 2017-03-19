@@ -57,7 +57,23 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         super(builder);
     }
 
-    /** {@inheritDoc}
+    /**
+     * Access within optimistic transactional context is implemented
+     * in via proxy.access() as follows:
+     *
+     * 1. First, we try to grab a read-lock on the proxy, and hope to "catch" the proxy in the
+     * snapshot version. If this succeeds, we invoke the corfu-object access method, and
+     * un-grab the read-lock.
+     *
+     * 2. Otherwise, we grab a write-lock on the proxy and bring it to the correct
+     * version
+     * - Inside proxy.setAsOptimisticStream, if there are currently optimistic
+     * updates on the proxy, we roll them back.  Then, we set this
+     * transactional context as the proxy's new optimistic context.
+     * - Then, inside proxy.syncObjectUnsafe, depending on the proxy version,
+     * we may need to undo or redo committed changes, or apply forward committed changes.
+     *
+     * {@inheritDoc}
      */
     @Override
     public <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
@@ -90,7 +106,19 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         );
     }
 
-    /** {@inheritDoc}
+    /**
+     * if a Corfu object's method is an Accessor-Mutator, then although the mutation is delayed,
+     * it needs to obtain the result by invoking getUpcallResult() on the optimistic stream.
+     *
+     * This is similar to the second stage of access(), accept working on the optimistic stream instead of the
+     * underlying stream.- grabs the write-lock on the proxy.
+     * - uses proxy.setAsOptimisticStream in order to set itself as the proxy optimistic context,
+     *   including rolling-back current optimistic changes, if any.
+     * - uses proxy.syncObjectUnsafe to bring the proxy to the desired version,
+     *   which includes applying optimistic updates of the current
+     *  transactional context.
+     *
+     * {@inheritDoc}
      */
     @Override
     public <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
