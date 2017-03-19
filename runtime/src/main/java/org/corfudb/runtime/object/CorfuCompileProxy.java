@@ -111,6 +111,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
                               Object[] conflictObject, boolean isMetricsEnabled) {
         if (TransactionalContext.isInTransaction()) {
+            log.trace("Access[{}] conflictObj={} @TX[{}]", this, conflictObject,
+                    Utils.toReadableID(TransactionalContext.getCurrentContext().getTransactionID()) );
             return TransactionalContext.getCurrentContext()
                     .access(this, accessMethod, conflictObject);
         }
@@ -119,7 +121,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         final long timestamp =
                 rt.getSequencerView()
                 .nextToken(Collections.singleton(streamID), 0).getToken();
-        log.trace("Access[{}] Linearized to {}", this, timestamp);
+        log.trace("Access[{}] conflictObj={} Linearized to {}", this, conflictObject, timestamp);
 
         // Perform underlying access
         return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp && !o.isOptimisticallyModifiedUnsafe(),
@@ -145,6 +147,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         if (TransactionalContext.isInTransaction()) {
             // We generate an entry to avoid exposing the serializer to the tx context.
             SMREntry entry = new SMREntry(smrUpdateFunction, args, serializer);
+            log.trace("LogUpdate[{}] {}({}) conflictObj={} @TX[{}]",
+                    this, smrUpdateFunction, args, conflictObject,
+                    Utils.toReadableID(TransactionalContext.getCurrentContext().getTransactionID()) );
             return TransactionalContext.getCurrentContext()
                     .logUpdate(this, entry, conflictObject);
         }
