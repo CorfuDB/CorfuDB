@@ -99,6 +99,8 @@ public class SequencerServer extends AbstractServer {
      */
     @Getter
     private final AtomicLong globalLogTail = new AtomicLong(0L);
+    private final AtomicLong globalLogStart = new AtomicLong(0L); // remember start point, if sequencer is started as failover sequencer
+
     private final ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
 
@@ -164,7 +166,15 @@ public class SequencerServer extends AbstractServer {
      *                if any conflict-param (or stream, if empty) in this set has a later timestamp than the snapshot, abort
      */
     public boolean txnCanCommit(TxResolutionInfo txData) {
-        log.trace("txn resolution, timestamp: {}, streams: {}", txData.getSnapshotTimestamp(), txData.getConflictSet());
+        long txSnapshotTimestamp = txData.getSnapshotTimestamp();
+
+        log.trace("txn resolution, timestamp: {}, streams: {}", txSnapshotTimestamp, txData.getConflictSet());
+
+        if (txSnapshotTimestamp < globalLogStart.get()-1) {
+            log.debug("txt aborted because snapshot version={} precedes the failover sequencer start timestamp={}",
+                    txSnapshotTimestamp, globalLogStart.get());
+            return false;
+        }
 
         AtomicBoolean commit = new AtomicBoolean(true);
         for (Map.Entry<UUID, Set<Integer>> entry : txData.getConflictSet().entrySet()) {
@@ -181,13 +191,12 @@ public class SequencerServer extends AbstractServer {
                             conflictParam);
                     Long v = conflictToGlobalTailCache.getIfPresent
                             (conflictKeyHash);
-                    log.trace("txn resolution for conflictparam {}, last update {}",
+                    log.debug("txn resolution for conflictparam {}, last update {}",
                             conflictKeyHash, v);
-                    if ((v != null && v > txData.getSnapshotTimestamp()) ||
-                            (maxConflictWildcard > txData.getSnapshotTimestamp()) ) {
+                    if ((v != null && v > txSnapshotTimestamp) || (maxConflictWildcard > txSnapshotTimestamp) ) {
                         log.debug("Rejecting request due to update-timestamp " +
                                         "> {} on conflictKeyPair {}",
-                                txData.getSnapshotTimestamp(), conflictKeyHash);
+                                txSnapshotTimestamp, conflictKeyHash);
                         commit.set(false);
                     }
                 });
@@ -200,9 +209,9 @@ public class SequencerServer extends AbstractServer {
                     if (v == null) {
                         return null;
                     } else {
-                        if (v > txData.getSnapshotTimestamp()) {
+                        if (v > txSnapshotTimestamp) {
                             log.debug("Rejecting request due to {} > {} on streams {}",
-                                    v, txData.getSnapshotTimestamp(), streamID);
+                                    v, txSnapshotTimestamp, streamID);
                             commit.set(false);
                         }
                     }
@@ -250,7 +259,27 @@ public class SequencerServer extends AbstractServer {
     public synchronized void resetServer(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r,
                                          boolean isMetricsEnabled) {
         long initialToken = msg.getPayload();
-        globalLogTail.set(initialToken);
+
+        //
+        // if the sequencer is reset, then we can't know when was
+        // the latest update to any stream or conflict parameter.
+        // hence, we want to conservatively abort any transaction with snapshot time
+        // preceding the reset-time of this sequencer.
+        //
+        // Therefore, we remember the new start tail.
+        // We empty the cache of conflict parameters.
+        // We set the wildcard to the new start tail.
+        //
+        // Note, this is correct, but conservative (may lead to false abort).
+        // It is necessary because we reset the sequencer.
+        //
+        if (initialToken > globalLogTail.get()) {
+            globalLogTail.set(initialToken);
+            globalLogStart.set(initialToken);
+            maxConflictWildcard = initialToken-1;
+            conflictToGlobalTailCache.invalidateAll();
+        }
+
         log.info("Sequencer reset with token = {}", initialToken);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
