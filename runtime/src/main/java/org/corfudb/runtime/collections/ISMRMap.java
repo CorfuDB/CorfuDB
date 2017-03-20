@@ -159,13 +159,25 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     /**
      * {@inheritDoc}
      *
-     * Conflicts: this operation currently conflicts with the entire map, until
-     * custom conflict parameter generation is introduced.
+     * Conflicts: this operation conflicts on any keys that are in the map given.
      */
-    @Mutator(name="putAll", undoFunction="undoPutAll", undoRecordFunction="undoPutAllRecord")
+    @Mutator(name="putAll", undoFunction="undoPutAll",
+            undoRecordFunction="undoPutAllRecord", conflictParameterFunction="putAllConflictFunction")
     @Override
     void putAll(Map<? extends K, ? extends V> m);
 
+
+    /** Generate the conflict parameters for putAll, given the arguments to the
+     * putAll operation.
+     * @param m                 The map for the putAll operation.
+     * @return                  An array of conflict parameters, which are the
+     *                          hash codes of the keys given.
+     */
+    default Object[] putAllConflictFunction(Map<? extends K, ? extends V> m) {
+        return m.keySet().stream()
+                .map(Object::hashCode)
+                .toArray(Object[]::new);
+    }
 
     /** Generate an undo record for putAll, given the previous state of the map
      * and the parameters to the putAll call.

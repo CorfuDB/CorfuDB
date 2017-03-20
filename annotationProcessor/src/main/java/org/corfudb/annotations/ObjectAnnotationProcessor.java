@@ -374,8 +374,27 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     }
 
                     // If there is conflict information, calculate the conflict set
+                    boolean hasConflictData = false;
                     final String conflictField = "conflictField" + CORFUSMR_FIELD;
-                    if (m.hasConflictAnnotations) {
+
+                    // Check if there is a conflictFunction
+                    String conflictFunction = "";
+                    if (accessor != null && !accessor.conflictParameterFunction().equals("")) {
+                        conflictFunction = accessor.conflictParameterFunction();
+                    }
+                    if (mutator != null && !mutator.conflictParameterFunction().equals("")) {
+                        conflictFunction = mutator.conflictParameterFunction();
+                    }
+                    if (mutatorAccessor != null && !mutatorAccessor.conflictParameterFunction().equals("")) {
+                        conflictFunction = mutatorAccessor.conflictParameterFunction();
+                    }
+
+                    if (!conflictFunction.equals("")) {
+                        hasConflictData = true;
+                        addConflictFieldFromFunctionToMethod(ms, conflictField, conflictFunction, smrMethod);
+                    }
+                    else if (m.hasConflictAnnotations) {
+                        hasConflictData = true;
                         addConflictFieldToMethod(ms, conflictField, smrMethod);
                     }
 
@@ -389,7 +408,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 mutator != null ? "false" :
                                 // or mutatorAccessors which return void.
                                 smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ? "false" : "true",
-                                m.hasConflictAnnotations ? conflictField : "null",
+                                hasConflictData ? conflictField : "null",
                                 smrMethod.getParameters().size() > 0 ? "," : "",
                                 smrMethod.getParameters().stream()
                                     .map(VariableElement::getSimpleName)
@@ -807,6 +826,23 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         .stream()
                         .filter(y -> y.getAnnotation(ConflictParameter.class)
                                 != null)
+                        .map(y -> y.getSimpleName())
+                        .collect(Collectors.joining(", ")));
+    }
+
+
+    /** Add a conflict field to the method.
+     *
+     * @param ms                The builder to add the field to.
+     * @param conflictField     The name of the field to add
+     * @param functionName      The function to call to obtain the parameters.
+     * @param smrMethod         The method element.
+     */
+    public void addConflictFieldFromFunctionToMethod(MethodSpec.Builder ms, String conflictField, String functionName,
+                                                     ExecutableElement smrMethod) {
+        ms.addStatement("$T $L = $L($L)", Object[].class, conflictField, functionName,
+                smrMethod.getParameters()
+                        .stream()
                         .map(y -> y.getSimpleName())
                         .collect(Collectors.joining(", ")));
     }
