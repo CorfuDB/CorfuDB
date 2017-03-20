@@ -54,9 +54,8 @@ public class MultipleNonOverlappingTest extends AbstractObjectTest {
             for (int j = 0; j < OBJECT_NUM; j += STEP) {
                 NonOverlappingWriter n = new NonOverlappingWriter(i + 1, j, j + STEP, VAL);
                 scheduleConcurrently(t -> { n.dowork();});
-                executeScheduled(THREAD_NUM, PARAMETERS.TIMEOUT_NORMAL);
             }
-
+            executeScheduled(THREAD_NUM, PARAMETERS.TIMEOUT_NORMAL);
         }
 
         Assert.assertEquals(testMap.size(), FINAL_SUM);
@@ -95,8 +94,8 @@ public class MultipleNonOverlappingTest extends AbstractObjectTest {
             for (int j = 0; j < OBJECT_NUM; j += STEP) {
                 NonOverlappingWriter n = new NonOverlappingWriter(i + 1, j, j + STEP, VAL);
                 scheduleConcurrently(t -> { n.dowork2();});
-                executeScheduled(THREAD_NUM, PARAMETERS.TIMEOUT_NORMAL);
             }
+            executeScheduled(THREAD_NUM, PARAMETERS.TIMEOUT_NORMAL);
 
         }
 
