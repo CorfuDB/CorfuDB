@@ -25,6 +25,8 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -174,8 +176,13 @@ public class AddressSpaceView extends AbstractView {
         return this.cacheFetch(Utils.discretizeRangeSet(addresses));
     }
 
-    public Map<Long, ILogData> read(List<Long> addresses) {
 
+    /**
+     * Read from a list of addresses
+     * @param addresses     The addresses to read from
+     * @return              A map from log addresses to data contained at that address.
+     */
+    public @Nonnull Map<Long, ILogData> read(@Nonnull List<Long> addresses) {
         if (!runtime.isCacheDisabled()) {
             return readCache.getAll(addresses);
         }
@@ -189,7 +196,7 @@ public class AddressSpaceView extends AbstractView {
      * @return A result to be cached. If the readresult is empty,
      * This entry will be scheduled to self invalidate.
      */
-    private LogData cacheFetch(long address) {
+    private @Nullable LogData cacheFetch(long address) {
         log.trace("Cache miss @ {}, fetching.", address);
         LogData result = fetch(address);
         if (result.getType() == DataType.EMPTY) {

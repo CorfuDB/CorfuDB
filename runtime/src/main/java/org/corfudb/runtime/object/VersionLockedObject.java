@@ -470,7 +470,7 @@ public class VersionLockedObject<T> {
         List<SMREntry> entries =  stream.current();
 
         while(entries != null) {
-            if (entries.stream().allMatch(x -> x.isUndoable())) {
+            if (entries.stream().allMatch(SMREntry::isUndoable)) {
                 // start from the end, process one at a time
                 ListIterator<SMREntry> it =
                         entries.listIterator(entries.size());
