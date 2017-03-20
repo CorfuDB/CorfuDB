@@ -3,7 +3,6 @@ package org.corfudb.infrastructure;
 import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.StreamLog;
@@ -34,12 +33,6 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
             .setDaemon(false)
             .setNameFormat("LogUnit-Write-Processor-%d")
             .build());
-
-    /**
-     * Maintain the max globalAddress we have written.
-     */
-    @Getter
-    private long maxAddressGlobalTail = 0L;
 
     public BatchWriter(StreamLog streamLog) {
         this.streamLog = streamLog;
@@ -130,8 +123,6 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                         streamLog.append(currOp.getLogAddress(), currOp.getLogData());
                         currOp.setException(null);
                         res.add(currOp);
-                        long globalAddress = currOp.getLogAddress().getAddress();
-                        maxAddressGlobalTail = maxAddressGlobalTail < globalAddress ? globalAddress : maxAddressGlobalTail;
                     } catch (OverwriteException e) {
                         currOp.setException(new OverwriteException());
                         res.add(currOp);

@@ -87,7 +87,8 @@ public class FailureHandlerDispatcher {
      * @param originalLayout Current layout to get the latest state of servers.
      * @param newLayout      New Layout to be reconfigured.
      */
-    private void reconfigureServers(CorfuRuntime runtime, Layout originalLayout, Layout newLayout) {
+    private void reconfigureServers(CorfuRuntime runtime, Layout originalLayout, Layout newLayout)
+            throws ExecutionException {
 
         // Reconfigure the primary Sequencer Server if changed.
         reconfigureSequencerServers(runtime, originalLayout, newLayout);
@@ -105,7 +106,8 @@ public class FailureHandlerDispatcher {
      * @param originalLayout    Current layout to get the latest state of servers.
      * @param newLayout         New Layout to be reconfigured.
      */
-    private void reconfigureSequencerServers(CorfuRuntime runtime, Layout originalLayout, Layout newLayout) {
+    private void reconfigureSequencerServers(CorfuRuntime runtime, Layout originalLayout, Layout newLayout)
+            throws ExecutionException {
 
         // Reconfigure Primary Sequencer if required
         if (!originalLayout.getSequencers().get(0).equals(newLayout.getSequencers().get(0))) {
@@ -128,8 +130,8 @@ public class FailureHandlerDispatcher {
             try {
                 // Configuring the new sequencer.
                 newLayout.getSequencer(0).reset(maxTokenRequested + 1).get();
-            } catch (InterruptedException | ExecutionException e) {
-                e.printStackTrace();
+            } catch (InterruptedException e) {
+                log.error("Sequencer Reset interrupted : {}", e);
             }
         }
     }
