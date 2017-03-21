@@ -54,7 +54,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             new HashSet<>();
 
     /** Temp var until we put write set proxies somewhere. */
-    private final Set<ICorfuSMRProxyInternal> writeProxies = new HashSet<>();
+    protected final Set<ICorfuSMRProxyInternal> writeProxies = new HashSet<>();
 
     OptimisticTransactionalContext(TransactionBuilder builder) {
         super(builder);
@@ -263,25 +263,27 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
         MultiObjectSMREntry entry = collectWriteSetEntries();
 
-        // for each modified proxy, attempt to condense the write sets
-        writeProxies.stream()
-                .forEach(x -> {
-                    if (writeSet.get(x.getStreamID()).getValue().size() >= 2) {
-                        ISerializer serializer = writeSet.get(x.getStreamID()).getValue().get(0).getSerializerType();
-                        if (x.getUnderlyingObject().getWrapperObject() instanceof ICoalescableObject) {
-                            entry.getEntryMap().get(x.getStreamID()).setSMRUpdates((List)
-                                    ((ICoalescableObject) x.getUnderlyingObject().getWrapperObject())
-                                    .coalesceUpdates((List)writeSet.get(x.getStreamID()).getValue(),
-                                            (method, args, isUndoable, undoRecord) -> {
-                                    SMREntry e = new SMREntry(method, args, serializer);
-                                    if (isUndoable) {
-                                        e.setUndoRecord(undoRecord);
-                                    }
-                                        return e;
-                                    }));
+        if (!builder.getRuntime().getParameters().isCoalesceDisabled()) {
+            // for each modified proxy, attempt to condense the write sets
+            writeProxies.stream()
+                    .forEach(x -> {
+                        if (writeSet.get(x.getStreamID()).getValue().size() >= 2) {
+                            ISerializer serializer = writeSet.get(x.getStreamID()).getValue().get(0).getSerializerType();
+                            if (x.getUnderlyingObject().getWrapperObject() instanceof ICoalescableObject) {
+                                entry.getEntryMap().get(x.getStreamID()).setSMRUpdates((List)
+                                        ((ICoalescableObject) x.getUnderlyingObject().getWrapperObject())
+                                                .coalesceUpdates((List) writeSet.get(x.getStreamID()).getValue(),
+                                                        (method, args, isUndoable, undoRecord) -> {
+                                                            SMREntry e = new SMREntry(method, args, serializer);
+                                                            if (isUndoable) {
+                                                                e.setUndoRecord(undoRecord);
+                                                            }
+                                                            return e;
+                                                        }));
+                            }
                         }
-                    }
-                });
+                    });
+        }
 
         // Now we obtain a conditional address from the sequencer.
         // This step currently happens all at once, and we get an

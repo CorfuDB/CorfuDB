@@ -43,6 +43,9 @@ public class CorfuRuntime {
 
         /** Number of times to attempt to read before hole filling. */
         int holeFillRetry = 10;
+
+        /** Whether or not coalescing, which condenses SMR entries in transactions, is enabled. */
+        boolean coalesceDisabled = false;
     }
 
     @Getter
