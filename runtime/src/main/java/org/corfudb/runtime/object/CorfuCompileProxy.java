@@ -98,11 +98,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
     public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
                              ISerializer serializer,
-                             Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
-                             Map<String, IUndoFunction<T>> undoTargetMap,
-                             Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
-                             Set<String> resetSet
-                             ) {
+                             ICorfuSMR<T> wrapperObject) {
         this.rt = rt;
         this.streamID = streamID;
         this.type = type;
@@ -111,8 +107,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().get(streamID)),
-                upcallTargetMap, undoRecordTargetMap,
-                undoTargetMap, resetSet);
+                wrapperObject);
     }
 
     /**

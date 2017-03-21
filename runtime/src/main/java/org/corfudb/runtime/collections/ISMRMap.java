@@ -2,12 +2,17 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.annotations.*;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.object.ICoalescableObject;
+import org.corfudb.runtime.object.ISMREntry;
+import org.corfudb.runtime.object.ISMREntryGenerator;
+
 import java.util.*;
 
 /**
  * Created by mwei on 1/9/16.
  */
-public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
+public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject, ICoalescableObject {
 
     /**
      * {@inheritDoc}
@@ -179,6 +184,10 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
                 .toArray(Object[]::new);
     }
 
+    enum UndoNullable {
+        NULL;
+    }
+
     /** Generate an undo record for putAll, given the previous state of the map
      * and the parameters to the putAll call.
      *
@@ -189,7 +198,8 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      */
     default Map<K,V> undoPutAllRecord(ISMRMap<K,V> previousState, Map<? extends K, ? extends V> m) {
         ImmutableMap.Builder<K,V> builder = ImmutableMap.builder();
-        m.keySet().forEach(k -> builder.put(k, previousState.get(k)));
+        m.keySet().forEach(k -> builder.put(k,
+                (previousState.get(k) == null ? (V) UndoNullable.NULL : previousState.get(k))));
         return builder.build();
     }
 
@@ -201,7 +211,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      */
     default void undoPutAll(ISMRMap<K,V> map, Map<K,V> undoRecord, Map<? extends K, ? extends V> m) {
         undoRecord.entrySet().forEach(e -> {
-                    if (e.getValue() == null) { map.remove(e.getKey()); }
+                    if (e.getValue() == UndoNullable.NULL) { map.remove(e.getKey()); }
                     else { map.put(e.getKey(), e.getValue()); }
                 });
     }
@@ -255,4 +265,87 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     @Accessor
     @Override
     Set<Entry<K, V>> entrySet();
+
+    @Override
+    default List<ISMREntry> coalesceUpdates(List<ISMREntry> updates, ISMREntryGenerator generator) {
+        // The coalesced entry can have three components: a clear call, and a list of put and remove calls.
+        List<ISMREntry> putCallsToMerge = new LinkedList<>();
+        List<ISMREntry> removeCallsToMerge = new LinkedList<>();
+
+        // Iterate through all the entries, starting from the end.
+        List<ISMREntry> newUpdates = new ArrayList<>();
+        ListIterator<ISMREntry> updateIterator = updates.listIterator(updates.size());
+        while (updateIterator.hasPrevious()) {
+            ISMREntry entry = updateIterator.previous();
+            // clear any undo information, since
+            // it will be wrong.
+            entry.clearUndoRecord();
+            if (entry.getSMRMethod().equals("clear")) {
+                // If this is a clear call, we can stop
+                // since nothing before this call is needed
+                // but we need to add the clear call itself
+                // as the first record.
+                newUpdates.add(0, entry);
+                break;
+            }
+            else if (entry.getSMRMethod().equals("put")) {
+                // If a remove entry doesn't already exist for this
+                // put, add it to the list of put calls.
+                if (!removeCallsToMerge.stream().anyMatch(x ->
+                        // argument 0 is the key for "remove" and "put"
+                        x.getSMRArguments()[0].equals(entry.getSMRArguments()[0]))) {
+                    putCallsToMerge.add(entry);
+                }
+            }
+            else if (entry.getSMRMethod().equals("putAll")) {
+                // same as above.
+                if (!removeCallsToMerge.stream().anyMatch(x ->
+                        ((Map<K,V>)entry.getSMRArguments()[0]).keySet().stream()
+                            .anyMatch(y ->  y.equals(x.getSMRArguments()[0])))) {
+                    putCallsToMerge.add(entry);
+                }
+            }
+            else if (entry.getSMRMethod().equals("remove")) {
+                // if the remove isn't remapped by a subsequent put
+                if (!putCallsToMerge.stream().anyMatch(x -> {
+                    if (x.getSMRMethod().equals("put")) {
+                        return x.getSMRArguments()[0].equals(entry.getSMRArguments()[0]);
+                    } else if (x.getSMRMethod().equals("putAll")) {
+                        return  ((Map<K,V>)x.getSMRArguments()[0]).keySet().stream()
+                                .anyMatch(y ->  y.equals(entry.getSMRArguments()[0]));
+                    }
+                    throw new RuntimeException("Attempted to coalesce an unknown SMR map call");
+                })) {
+                    removeCallsToMerge.add(entry);
+                }
+            }
+            else {
+                throw new RuntimeException("Attempted to coalesce an unknown SMR map call");
+            }
+        }
+
+        // Merge all the put calls by generating one large putAll call, unless there's only one entry.
+        if (putCallsToMerge.size() == 1) {
+            newUpdates.addAll(putCallsToMerge);
+        } else if (putCallsToMerge.size() > 1) {
+            Map<K,V> map = new HashMap();
+            // in reverse order (which would be from the EARLIEST puts to the latest puts)
+            // insert into merge map
+            ListIterator<ISMREntry> iterator = putCallsToMerge.listIterator(putCallsToMerge.size());
+            while (iterator.hasPrevious()) {
+                ISMREntry putEntry = iterator.previous();
+                if (putEntry.getSMRMethod().equals("put")) {
+                    map.put((K) putEntry.getSMRArguments()[0], (V)putEntry.getSMRArguments()[1]);
+                } else if (putEntry.getSMRMethod().equals("putAll")) {
+                    map.putAll((Map<K,V>) putEntry.getSMRArguments()[0]);
+                }
+            }
+            newUpdates.add(generator.generate("putAll", new Object[] {map},
+                    false, null));
+        }
+
+        // And just add all the remove calls, since we don't have removeAll (yet)
+        newUpdates.addAll(removeCallsToMerge);
+        return newUpdates;
+    }
 }
