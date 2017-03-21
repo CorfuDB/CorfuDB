@@ -85,7 +85,7 @@ public class TransactionalContext {
      * @return          The context which was added to the transaction stack.
      */
     public static AbstractTransactionalContext newContext(AbstractTransactionalContext context) {
-        log.trace("TX begin[{}]", Utils.toReadableID(context.transactionID));
+        log.trace("TX begin[{}]", context);
         getTransactionStack().addFirst(context);
         return context;
     }

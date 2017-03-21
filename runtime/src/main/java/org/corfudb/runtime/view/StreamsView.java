@@ -93,38 +93,10 @@ public class StreamsView {
      * @return The address this
      */
     public long write(Set<UUID> streamIDs, Object object) {
-        return acquireAndWrite(streamIDs, object, t -> true, t -> true);
-    }
-
-    public void writeAt(TokenResponse address, Set<UUID> streamIDs, Object object) throws OverwriteException {
-        Function<UUID, Object> partialEntryFunction =
-                object instanceof IDivisibleEntry ? ((IDivisibleEntry)object)::divideEntry : null;
-        runtime.getAddressSpaceView().write(address.getToken(), streamIDs,
-                object, address.getBackpointerMap(), address.getStreamAddresses(), partialEntryFunction);
-    }
-
-    /**
-     * Write an object to multiple streams, retuning the physical address it
-     * was written at.
-     * <p>
-     * Note: While the completion of this operation guarantees that the append
-     * has been persisted, it DOES NOT guarantee that the object has been
-     * written to the stream. For example, another client may have deleted
-     * the stream.
-     *
-     * @param object The object to append to the stream.
-     * @return The address this
-     */
-    public long acquireAndWrite(Set<UUID> streamIDs, Object object,
-                                Function<TokenResponse, Boolean> acquisitionCallback,
-                                Function<TokenResponse, Boolean> deacquisitionCallback) {
-        return acquireAndWrite(streamIDs, object,
-                acquisitionCallback, deacquisitionCallback,null);
+        return acquireAndWrite(streamIDs, object, null);
     }
 
     public long acquireAndWrite(Set<UUID> streamIDs, Object object,
-                                Function<TokenResponse, Boolean> acquisitionCallback,
-                                Function<TokenResponse, Boolean> deacquisitionCallback,
                                 TxResolutionInfo conflictInfo) {
         boolean overwrite = false;
         TokenResponse tokenResponse = null;
@@ -147,21 +119,7 @@ public class StreamsView {
                     token = tokenResponse.getToken();
                 }
                 log.trace("Write[{}]: acquired token = {}, global addr: {}", streamIDs, tokenResponse, token);
-                if (acquisitionCallback != null) {
-                    if (!acquisitionCallback.apply(tokenResponse)) {
-                        log.trace("Acquisition rejected token, hole filling acquired address.");
-                        try {
-                            runtime.getAddressSpaceView().fillHole(token);
-                        } catch (OverwriteException oe) {
-                            log.trace("Hole fill completed by remote client.");
-                        }
-                        return -1L;
-                    }
-                }
                 if (token == -1L) {
-                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
-                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
-                    }
                     return -1L;
                 }
                 try {
@@ -169,16 +127,8 @@ public class StreamsView {
                             object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
                     return token;
                 } catch (ReplexOverwriteException re) {
-                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
-                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
-                        return -1L;
-                    }
                     overwrite = false;
                 } catch (OverwriteException oe) {
-                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
-                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
-                        return -1L;
-                    }
                     overwrite = true;
                     log.debug("Overwrite occurred at {}, retrying.", token);
                 }
@@ -195,17 +145,6 @@ public class StreamsView {
                     token = tokenResponse.getToken();
                 }
                 log.trace("Write[{}]: acquired token = {}, global addr: {}", streamIDs, tokenResponse, token);
-                if (acquisitionCallback != null) {
-                    if (!acquisitionCallback.apply(tokenResponse)) {
-                        log.trace("Acquisition rejected token, hole filling acquired address.");
-                        try {
-                            runtime.getAddressSpaceView().fillHole(token);
-                        } catch (OverwriteException oe) {
-                            log.trace("Hole fill completed by remote client.");
-                        }
-                        return -1L;
-                    }
-                }
                 try {
                     Function<UUID, Object> partialEntryFunction =
                             object instanceof IDivisibleEntry ? ((IDivisibleEntry)object)::divideEntry : null;
@@ -213,22 +152,12 @@ public class StreamsView {
                             object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses(), partialEntryFunction);
                     return token;
                 } catch (ReplexOverwriteException re) {
-                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
-                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
-                        return -1L;
-                    }
                     overwrite = false;
                 } catch (OverwriteException oe) {
-                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
-                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
-                        return -1L;
-                    }
                     overwrite = true;
                     log.debug("Overwrite occurred at {}, retrying.", token);
                 }
             }
         }
     }
-
-
 }

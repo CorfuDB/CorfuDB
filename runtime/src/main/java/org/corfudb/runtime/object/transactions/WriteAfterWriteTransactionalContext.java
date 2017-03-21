@@ -40,68 +40,7 @@ public class WriteAfterWriteTransactionalContext
     @Override
     public long commitTransaction() throws TransactionAbortedException {
 
-
-        // If the transaction is nested, fold the transaction.
-        if (TransactionalContext.isInNestedTransaction()) {
-            getParentContext().addTransaction(this);
-            commitAddress = AbstractTransactionalContext.FOLDED_ADDRESS;
-            return commitAddress;
-        }
-
-        // If the write set is empty, we're done and just return
-        // NOWRITE_ADDRESS.
-        if (writeSet.keySet().isEmpty()) {
-            log.debug("write-write TX commit snapshot ts={} write-set empty, " +
-                    "no log " +
-                    "write", getSnapshotTimestamp());
-
-            return NOWRITE_ADDRESS;
-        }
-
-        Set<UUID> affectedStreams = new HashSet<>(writeSet.keySet());
-        if (this.builder.getRuntime().getObjectsView().isTransactionLogging()) {
-            affectedStreams.add(TRANSACTION_STREAM_ID);
-        }
-
-        // Now we obtain a conditional address from the sequencer.
-        // This step currently happens all at once, and we get an
-        // address of -1L if it is rejected.
-        long address = this.builder.runtime.getStreamsView()
-                .acquireAndWrite(
-
-                        // a set of stream-IDs that contains the affected streams
-                        affectedStreams,
-
-                        // a MultiObjectSMREntry that contains the update(s) to objects
-                        collectWriteSetEntries(),
-
-                        // nothing to do after successful acquisition and after deacquisition
-                        t->true, t->true,
-
-                        // TxResolution info:
-                        // 1. snapshot timestamp
-                        // 2. a map of conflict params, arranged by streamID's
-                        // 3. a map of write conflict-params, arranged by streamID's
-                        new TxResolutionInfo(getSnapshotTimestamp(),
-                                collectWriteConflictParams(),
-                                collectWriteConflictParams())
-                );
-        log.debug("write-write TX commit at timestamp={} on streams=({})",
-                address, affectedStreams);
-
-
-        if (address == -1L) {
-            log.debug("Transaction aborted due to sequencer rejecting request");
-            abortTransaction();
-            throw new TransactionAbortedException();
-        }
-
-        completionFuture.complete(true);
-        commitAddress = address;
-
-        tryCommitAllProxies();
-
-        return address;
+        return commitTXHelper(() -> collectWriteConflictParams());
     }
 
     @Override
