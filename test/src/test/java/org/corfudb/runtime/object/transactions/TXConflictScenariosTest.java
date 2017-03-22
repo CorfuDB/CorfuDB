@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.fail;
 /**
  * Created by dalia on 12/29/16.
  */
-public abstract class TXConflictScenarios extends AbstractTransactionContextTest {
+public abstract class TXConflictScenariosTest extends AbstractTransactionContextTest {
 
     /**
      * test concurrent transactions for opacity. This works as follows:
