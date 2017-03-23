@@ -123,8 +123,8 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                         streamLog.append(currOp.getLogAddress(), currOp.getLogData());
                         currOp.setException(null);
                         res.add(currOp);
-                    } catch (OverwriteException e) {
-                        currOp.setException(new OverwriteException());
+                    } catch (OverwriteException | DataOutrankedException e) {
+                        currOp.setException(e);
                         res.add(currOp);
                     } catch (Exception e) {
                         currOp.setException(e);

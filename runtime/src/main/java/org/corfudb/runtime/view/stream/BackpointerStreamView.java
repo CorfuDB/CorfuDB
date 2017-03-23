@@ -69,11 +69,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // to the client.
             try {
                 runtime.getAddressSpaceView()
-                        .write(tokenResponse.getToken(),
+                        .epochedWrite(tokenResponse.getToken(),
                                 Collections.singleton(ID),
                                 object,
                                 tokenResponse.getBackpointerMap(),
-                                tokenResponse.getStreamAddresses());
+                                tokenResponse.getStreamAddresses(),
+                                tokenResponse.getEpoch());
                 // The write completed successfully, so we return this
                 // address to the client.
                 return tokenResponse.getToken();

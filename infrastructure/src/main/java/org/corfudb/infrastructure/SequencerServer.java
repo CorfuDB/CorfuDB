@@ -15,8 +15,12 @@ import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -256,7 +260,7 @@ public class SequencerServer extends AbstractServer {
         long responseGlobalTail = (req.getStreams().size() == 0) ? globalLogTail.get() - 1 : maxStreamGlobalTails;
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                 new TokenResponse(TokenType.NORMAL,
-                        responseGlobalTail, Collections.emptyMap(), responseStreamTails.build())));
+                        responseGlobalTail, Collections.emptyMap(), responseStreamTails.build(), -1L)));
     }
 
     /**
@@ -312,7 +316,8 @@ public class SequencerServer extends AbstractServer {
         if (req.getReqType() == TokenRequest.TK_RAW) {
             r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                     new TokenResponse(TokenType.NORMAL,
-                            globalLogTail.getAndAdd(req.getNumTokens()), Collections.emptyMap(), Collections.emptyMap())));
+                            globalLogTail.getAndAdd(req.getNumTokens()), Collections.emptyMap(), Collections.emptyMap(),
+                            -1L)));
             return;
         }
 
@@ -326,7 +331,7 @@ public class SequencerServer extends AbstractServer {
                 // If the txn aborts, then DO NOT hand out a token.
                 r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                         new TokenResponse(tokenType,
-                                -1L, Collections.emptyMap(), Collections.emptyMap())));
+                                -1L, Collections.emptyMap(), Collections.emptyMap(), -1L)));
                 return;
             }
         }
@@ -395,6 +400,7 @@ public class SequencerServer extends AbstractServer {
                 new TokenResponse(TokenType.NORMAL,
                         currentTail,
                         backPointerMap.build(),
-                        requestStreamTokens.build())));
+                        requestStreamTokens.build(),
+                        -1L)));
     }
 }

@@ -27,6 +27,9 @@ public class TokenResponse implements ICorfuPayload<TokenResponse> {
     /** The map of local stream addresses. */
     final Map<UUID, Long> streamAddresses;
 
+    /** The epoch while receiving this token response. */
+    long epoch;
+
     public TokenResponse(ByteBuf buf) {
         respType = TokenType.values()[ICorfuPayload.fromBuffer(buf, Byte.class)];
         token = ICorfuPayload.fromBuffer(buf, Long.class);

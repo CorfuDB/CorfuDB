@@ -7,30 +7,25 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.PooledByteBufAllocator;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.ILogUnitEntry;
 import org.corfudb.protocols.wireprotocol.InMemoryLogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.util.CFUtils;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.Utils;
-import org.corfudb.util.serializer.Serializers;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
@@ -102,14 +97,24 @@ public class AddressSpaceView extends AbstractView {
      * @param stream         The streams which will belong on this entry.
      * @param data           The data to write.
      * @param backpointerMap
+     * @param epoch          To verify that the token is acquired in the same epoch as the write.
      */
-    public void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
-                      Map<UUID, Long> streamAddresses)
+    public void epochedWrite(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
+                             Map<UUID, Long> streamAddresses, long epoch)
             throws OverwriteException {
-        write(address, stream, data, backpointerMap, streamAddresses, null);
+        epochedWrite(address, stream, data, backpointerMap, streamAddresses, null, epoch);
     }
 
-    public void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
+    public void epochedWrite(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
+                             Map<UUID, Long> streamAddresses, Function<UUID, Object> partialEntryFunction, long epoch)
+            throws OverwriteException {
+        if (epoch != runtime.getLayoutView().getLayout().getEpoch()) {
+            throw new WrongEpochException(runtime.getLayoutView().getLayout().getEpoch());
+        }
+        write(address, stream, data, backpointerMap, streamAddresses, partialEntryFunction);
+    }
+
+    private void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
                       Map<UUID, Long> streamAddresses, Function<UUID, Object> partialEntryFunction)
             throws OverwriteException {
         int numBytes = layoutHelper(l -> AbstractReplicationView.getReplicationView(l, l.getReplicationMode(address),

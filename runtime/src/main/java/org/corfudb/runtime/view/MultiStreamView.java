@@ -13,7 +13,6 @@ import org.corfudb.runtime.exceptions.ReplexOverwriteException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.runtime.view.stream.ReplexStreamView;
 
 import java.util.Collections;
 import java.util.Set;
@@ -73,8 +72,9 @@ public class MultiStreamView {
             }
             StreamCOWEntry entry = new StreamCOWEntry(source, timestamp);
             try {
-                runtime.getAddressSpaceView().write(tokenResponse.getToken(), Collections.singleton(destination),
-                        entry, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                runtime.getAddressSpaceView().epochedWrite(tokenResponse.getToken(), Collections.singleton(destination),
+                        entry, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses(),
+                        tokenResponse.getEpoch());
                 written = true;
             } catch (OverwriteException oe) {
                 log.debug("hole fill during COW entry append, retrying...");
@@ -102,8 +102,9 @@ public class MultiStreamView {
     public void writeAt(TokenResponse address, Set<UUID> streamIDs, Object object) throws OverwriteException {
         Function<UUID, Object> partialEntryFunction =
                 object instanceof IDivisibleEntry ? ((IDivisibleEntry)object)::divideEntry : null;
-        runtime.getAddressSpaceView().write(address.getToken(), streamIDs,
-                object, address.getBackpointerMap(), address.getStreamAddresses(), partialEntryFunction);
+        runtime.getAddressSpaceView().epochedWrite(address.getToken(), streamIDs,
+                object, address.getBackpointerMap(), address.getStreamAddresses(), partialEntryFunction,
+                address.getEpoch());
     }
 
     /**
@@ -145,7 +146,8 @@ public class MultiStreamView {
                     TokenResponse temp =
                             runtime.getSequencerView().nextToken(streamIDs, 1, conflictInfo);
                     token = temp.getToken();
-                    tokenResponse = new TokenResponse(temp.getRespType(), token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                    tokenResponse = new TokenResponse(temp.getRespType(), token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses(),
+                            temp.getEpoch());
                 } else {
                     tokenResponse =
                             runtime.getSequencerView().nextToken(streamIDs, 1,  conflictInfo);
@@ -184,8 +186,9 @@ public class MultiStreamView {
                     return -1L;
                 }
                 try {
-                    runtime.getAddressSpaceView().write(token, streamIDs,
-                            object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                    runtime.getAddressSpaceView().epochedWrite(token, streamIDs,
+                            object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses(),
+                            tokenResponse.getEpoch());
                     return token;
                 } catch (ReplexOverwriteException re) {
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
@@ -207,7 +210,8 @@ public class MultiStreamView {
                     TokenResponse temp =
                             runtime.getSequencerView().nextToken(streamIDs, 1);
                     token = temp.getToken();
-                    tokenResponse = new TokenResponse(temp.getRespType(), token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                    tokenResponse = new TokenResponse(temp.getRespType(), token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses(),
+                            temp.getEpoch());
                 } else {
                     tokenResponse =
                             runtime.getSequencerView().nextToken(streamIDs, 1);
@@ -228,8 +232,9 @@ public class MultiStreamView {
                 try {
                     Function<UUID, Object> partialEntryFunction =
                             object instanceof IDivisibleEntry ? ((IDivisibleEntry)object)::divideEntry : null;
-                    runtime.getAddressSpaceView().write(token, streamIDs,
-                            object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses(), partialEntryFunction);
+                    runtime.getAddressSpaceView().epochedWrite(token, streamIDs,
+                            object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses(), partialEntryFunction,
+                            tokenResponse.getEpoch());
                     return token;
                 } catch (ReplexOverwriteException re) {
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {

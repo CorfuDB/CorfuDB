@@ -8,13 +8,10 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.ReplexOverwriteException;
 import org.corfudb.runtime.view.Address;
 
 import java.util.Collections;
-import java.util.NavigableSet;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.function.Function;
 
 /** A view of a stream implemented using Replex.
@@ -131,11 +128,12 @@ public class ReplexStreamView extends
             // to the client.
             try {
                 runtime.getAddressSpaceView()
-                        .write(tokenResponse.getToken(),
+                        .epochedWrite(tokenResponse.getToken(),
                                 Collections.singleton(ID),
                                 object,
                                 tokenResponse.getBackpointerMap(),
-                                tokenResponse.getStreamAddresses());
+                                tokenResponse.getStreamAddresses(),
+                                tokenResponse.getEpoch());
                 // The write completed successfully, so we return this
                 // address to the client.
                 return tokenResponse.getToken();
