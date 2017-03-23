@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Created by dmalkhi on 3/17/17.
  */
 @Slf4j
-public class StreamSeekAtomicity extends AbstractObjectTest  {
+public class StreamSeekAtomicityTest extends AbstractObjectTest  {
 
     protected int numIterations = PARAMETERS.NUM_ITERATIONS_MODERATE;
 

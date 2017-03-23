@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Created by dalia on 1/6/17.
  */
-public class TXsFromTwoRuntimes extends AbstractObjectTest {
+public class TXsFromTwoRuntimesTest extends AbstractObjectTest {
 
     @Test
     public void staggeredTXsConflict() throws Exception {
