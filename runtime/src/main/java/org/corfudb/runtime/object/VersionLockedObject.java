@@ -146,9 +146,21 @@ public class VersionLockedObject<T> {
         if (ts != 0) {
             if (directAccessCheckFunction.apply(this)) {
                 log.trace("Access [{}] Direct (optimistic-read) access at {}", this, getVersionUnsafe());
-                R ret = accessFunction.apply(object);
-                if (lock.validate(ts)) {
-                    return ret;
+                try {
+                    R ret = accessFunction.apply(object);
+                    if (lock.validate(ts)) {
+                        return ret;
+                    }
+                } catch (Exception e) {
+                    // If we have an exception, we didn't get a chance to validate the the lock.
+                    // If it's still valid, then we should re-throw the exception since it was
+                    // on a correct view of the object.
+                    if (lock.validate(ts)) {
+                        throw e;
+                    }
+                    // Otherwise, it is not on a correct view of the object (the object was
+                    // modified) and we should try again by upgrading the lock.
+                    log.trace("Access [{}] Direct (optimistic-read) exception, upgrading lock", this);
                 }
             }
         }
