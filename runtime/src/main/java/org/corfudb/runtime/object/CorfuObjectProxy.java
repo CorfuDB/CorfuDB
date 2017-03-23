@@ -108,7 +108,6 @@ public class CorfuObjectProxy<P> {
         }
         Object res;
         TransactionalMethod tm = method.getAnnotation(TransactionalMethod.class);
-            /*
         if (false) {
             // 1) Find the annotated streams function
             // case A: takes no arguments.
@@ -142,8 +141,8 @@ public class CorfuObjectProxy<P> {
                 log.debug("Wrote TX to log@{}", txAddr);
                 return null;
             }
+
         } else {
-        */
             try {
                 runtime.getObjectsView().TXBegin();
                 res = originalCall.call();
@@ -153,7 +152,7 @@ public class CorfuObjectProxy<P> {
                 res = handleTransactionalMethod(originalCall, method, arguments, obj);
             }
             return res;
-        /* } */
+        }
     }
 
     synchronized public void sync(P obj, long maxPos) {

@@ -210,11 +210,12 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @Override
     @SuppressWarnings("unchecked")
     public long commitTransaction() throws TransactionAbortedException {
+        log.debug("TX[{}] request optimistic commit", this);
 
-        return commitTXHelper(() -> getReadSet());
+        return getConflictSetAndCommit(() -> getReadSet());
     }
 
-    public long commitTXHelper(Supplier<Map<UUID, Set<Integer>>>
+    public long getConflictSetAndCommit(Supplier<Map<UUID, Set<Integer>>>
                                        computeConflictSet) {
 
         if (TransactionalContext.isInNestedTransaction()) {
@@ -249,12 +250,16 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                         // a MultiObjectSMREntry that contains the update(s) to objects
                         collectWriteSetEntries(),
 
+                        // nothing to do after successful acquisition and after deacquisition
+                        t->true, t->true,
+
                         // TxResolution info:
                         // 1. snapshot timestamp
                         // 2. a map of conflict params, arranged by streamID's
                         // 3. a map of write conflict-params, arranged by
                         // streamID's
-                        new TxResolutionInfo(getSnapshotTimestamp(),
+                        new TxResolutionInfo(getTransactionID(),
+                                getSnapshotTimestamp(),
                                 computeConflictSet.get(),
                                 collectWriteConflictParams())
                 );
