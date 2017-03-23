@@ -130,8 +130,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
                               Object[] conflictObject, boolean isMetricsEnabled) {
         if (TransactionalContext.isInTransaction()) {
-            log.debug("Object Access[{}] conflictObj={} @TX[{}]", this, conflictObject,
-                    TransactionalContext.getCurrentContext() );
             return TransactionalContext.getCurrentContext()
                     .access(this, accessMethod, conflictObject);
         }
@@ -140,7 +138,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         final long timestamp =
                 rt.getSequencerView()
                 .nextToken(Collections.singleton(streamID), 0).getToken();
-        log.debug("Object Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
+        log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
         // Perform underlying access
         return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp && !o.isOptimisticallyModifiedUnsafe(),
@@ -166,9 +164,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         if (TransactionalContext.isInTransaction()) {
             // We generate an entry to avoid exposing the serializer to the tx context.
             SMREntry entry = new SMREntry(smrUpdateFunction, args, serializer);
-            log.debug("Object Update[{}] {}({}) conflictObj={} @TX[{}]",
-                    this, smrUpdateFunction, args, conflictObject,
-                    TransactionalContext.getCurrentContext() );
             return TransactionalContext.getCurrentContext()
                     .logUpdate(this, entry, conflictObject);
         }
@@ -178,7 +173,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // We need to add the acquired token into the pending upcall list.
         SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
         long address = underlyingObject.logUpdate(smrEntry, keepUpcallResult);
-        log.trace("Object Update[{}] {}@{} ({}) conflictObj={}",
+        log.trace("Update[{}] {}@{} ({}) conflictObj={}",
                 this, smrUpdateFunction, address, args, conflictObject);
         return address;
     }
@@ -204,7 +199,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 rt.getSequencerView()
                         .nextToken(Collections.singleton(streamID), 0).getToken();
 
-        log.debug("Object Sync[{}] {}", this, timestamp);
+        log.debug("Sync[{}] {}", this, timestamp);
 
         // Acquire locks and perform read.
         underlyingObject.update(o -> {
