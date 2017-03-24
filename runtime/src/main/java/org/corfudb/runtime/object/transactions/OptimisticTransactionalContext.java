@@ -55,6 +55,12 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
     OptimisticTransactionalContext(TransactionBuilder builder) {
         super(builder);
+
+        // When starting a nested transaction, the child transaction inherits the write set of its parent.
+        // This will ensure that any access to the objects will reflect parent optimistic updates.
+        if (getParentContext() != null) {
+            writeSet.putAll(getParentContext().writeSet);
+        }
     }
 
     /**
@@ -147,14 +153,26 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         });
     }
 
+    /** Set the correct optimistic stream for this transaction (if not already).
+     *
+     * If the Optimistic stream doesn't reflect the current transaction context,
+     * we create the correct WriteSetSMRStream and pick the latest context as the
+     * current context.
+     * @param object        Underlying object under transaction
+     * @param <T>           Type of the underlying object
+     */
     <T> void setAsOptimisticStream(VersionLockedObject<T> object) {
         if (object.getOptimisticStreamUnsafe() == null ||
                 !object.getOptimisticStreamUnsafe()
                         .isStreamForThisTransaction()) {
-            object.setOptimisticStreamUnsafe(
-                            new WriteSetSMRStream(
-                                    TransactionalContext.getTransactionStackAsList(),
-                                    object.getID()));
+            WriteSetSMRStream newSMRStream = new WriteSetSMRStream(
+                    TransactionalContext.getTransactionStackAsList(),
+                    object.getID());
+
+            // Current context will be the latest in the list of context
+            // (Correspond to the top context in the context stack)
+            newSMRStream.currentContext = newSMRStream.contexts.size() - 1;
+            object.setOptimisticStreamUnsafe(newSMRStream);
         }
     }
 

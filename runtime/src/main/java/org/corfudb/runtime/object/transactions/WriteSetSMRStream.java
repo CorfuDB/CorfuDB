@@ -84,8 +84,8 @@ public class WriteSetSMRStream implements ISMRStream {
      *          False otherwise.
      */
     public boolean isStreamForThisTransaction() {
-            return contexts.get(0)
-                    .equals(TransactionalContext.getRootContext());
+        return contexts.get(currentContext)
+                .equals(TransactionalContext.getCurrentContext());
     }
 
     void mergeTransaction() {
