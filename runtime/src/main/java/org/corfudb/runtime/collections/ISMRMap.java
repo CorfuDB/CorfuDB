@@ -154,9 +154,9 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      * @throws IllegalArgumentException      if some property of the specified key
      *                                       or value prevents it from being stored in this map
      */
-    @Mutator(name = "put", noUpcall = true)
-    default void blindPut(@ConflictParameter K key, V value) {
-        put(key, value);
+    @MutatorAccessor(name = "put", noUpcall = true)
+    default V blindPut(@ConflictParameter K key, V value) {
+        return put(key, value);
     }
 
     /** Generate an undo record for a put, given the previous state of the map

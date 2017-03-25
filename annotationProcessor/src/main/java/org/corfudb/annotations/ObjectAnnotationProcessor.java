@@ -3,6 +3,7 @@ package org.corfudb.annotations;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.squareup.javapoet.*;
+import org.apache.commons.lang.StringUtils;
 import org.corfudb.runtime.object.*;
 
 import javax.annotation.processing.*;
@@ -102,6 +103,11 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         }
     }
 
+    String paramsToString(List<? extends VariableElement> args) {
+        List<String> argsList = args.stream().map(x -> x.asType().toString()).collect(Collectors.toList());
+        return StringUtils.join(argsList, ",");
+    }
+
     /** Return a SMR function name, extracting it from the annotations if available.
      *
      * @param smrMethod     The ExecutableElement to extract the name from.
@@ -110,9 +116,12 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
     public String getSMRFunctionName(ExecutableElement smrMethod) {
         MutatorAccessor mutatorAccessor = smrMethod.getAnnotation(MutatorAccessor.class);
         Mutator mutator = smrMethod.getAnnotation(Mutator.class);
-        return  (mutator != null && !mutator.name().equals("")) ? mutator.name() :
+        String name = (mutator != null && !mutator.name().equals("")) ? mutator.name() :
                 (mutatorAccessor != null && !mutatorAccessor.name().equals("")) ?
                 mutatorAccessor.name() : smrMethod.getSimpleName().toString();
+
+        String signature = String.format("(%s)%s(%s)", smrMethod.getReturnType().toString(), name, paramsToString(smrMethod.getParameters()));
+        return signature;
     }
 
     /** Class to hold data about SMR Methods. */
@@ -493,11 +502,28 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         javaFile.writeTo(filer);
     }
 
-    // Mutator methods that specify a name in their annotation and require upcalls cannot
-    // be overridden. This method checks for possible conflicts.
+    /**
+     * Consider the method annotation name when checking for overload conflicts. A conflict is when
+     * two methods have the same name, same return type and same parameters, or if they have the same
+     * name, parameters and different return types.
+     * @param allMethods all methods
+     * @param possibleConflictMethods possible methods that can cause overload conflicts
+     */
     void checkOverrideConflicts(Set<SMRMethodInfo> allMethods, Set<SMRMethodInfo> possibleConflictMethods) {
 
         for(SMRMethodInfo annotatedMethod : possibleConflictMethods) {
+
+            boolean needsUpCall = true;
+            if(annotatedMethod.method.getAnnotation(Mutator.class) != null){
+                needsUpCall = !annotatedMethod.method.getAnnotation(Mutator.class).noUpcall();
+            } else if(annotatedMethod.method.getAnnotation(MutatorAccessor.class) != null) {
+                needsUpCall = !annotatedMethod.method.getAnnotation(MutatorAccessor.class).noUpcall();
+            }
+
+            // TODO(Maithem): Methods that don't need upcalls need to be checked so that they map to valid methods
+            // that do have upcalls
+            if(!needsUpCall) continue;
+
             Set<SMRMethodInfo> setDiff = new HashSet<>(allMethods);
             setDiff.remove(annotatedMethod);
 
@@ -510,7 +536,8 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 annotationString = annotatedMethod.method.getAnnotation(MutatorAccessor.class).name();
             }
 
-            for(SMRMethodInfo smrMethodInfo : setDiff) {
+            for (SMRMethodInfo smrMethodInfo : setDiff) {
+
                 String methodName = smrMethodInfo.method.getSimpleName().toString();
                 TypeMirror returnType = smrMethodInfo.method.getReturnType();
                 List<? extends VariableElement> parameters = smrMethodInfo.method.getParameters();
@@ -522,15 +549,15 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 boolean equalReturnTypes = returnType.equals(annotatedMethod.method.getReturnType());
                 boolean equalParameters = checkParams(parameters, annotatedMethod.method.getParameters());
 
-                if(methodName.equals(annotationString)
+                if (methodName.equals(annotationString)
                         && ((equalParameters && equalReturnTypes)
-                        || (equalParameters && !equalReturnTypes))){
-                        messager.printMessage(Diagnostic.Kind.ERROR,
-                                "Error overloading with annotation name "
-                                        + smrMethodInfo.method.toString() + " and " + annotatedMethod.method.toString());
-                    }
+                        || (equalParameters && !equalReturnTypes))) {
+                    messager.printMessage(Diagnostic.Kind.ERROR,
+                            "Error overloading with annotation name "
+                                    + smrMethodInfo.method.toString() + " and " + annotatedMethod.method.toString());
                 }
             }
+        }
     }
 
     boolean checkParams(List<? extends VariableElement> a, List<? extends VariableElement> b) {
@@ -583,7 +610,8 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
 
         // Generate the upcall string and associated map.
         String upcallString = methodSet.stream()
-                .filter(x -> x.method.getAnnotation(MutatorAccessor.class) != null ||
+                .filter(x -> (x.method.getAnnotation(MutatorAccessor.class) != null &&
+                        !x.method.getAnnotation(MutatorAccessor.class).noUpcall())||
                         (x.method.getAnnotation(Mutator.class) != null &&
                                 !x.method.getAnnotation(Mutator.class).noUpcall()))
                 .map(x -> "\n.put(\"" + getSMRFunctionName(x.method) + "\", " +

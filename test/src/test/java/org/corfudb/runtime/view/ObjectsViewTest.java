@@ -152,7 +152,7 @@ public class ObjectsViewTest extends AbstractViewTest {
 
         SMREntry smrEntry = entryMap.getUpdates().get(0);
         Object[] args = smrEntry.getSMRArguments();
-        assertThat(smrEntry.getSMRMethod()).isEqualTo("put");
+        assertThat(smrEntry.getSMRMethod()).isEqualTo("(V)put(K,V)");
         assertThat((String) args[0]).isEqualTo("k");
         assertThat((String) args[1]).isEqualTo("v2");
     }
