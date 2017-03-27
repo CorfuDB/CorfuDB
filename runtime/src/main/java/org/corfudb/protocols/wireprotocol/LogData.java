@@ -93,6 +93,10 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
     }
 
+    public void setDeserializedData(Object object) {
+        this.payload.set(object);
+    }
+
     public LogData(ByteBuf buf, EnumMap<LogUnitMetadataType, Object> metadataMap) {
         this.type = DataType.DATA;
         this.data = byteArrayFromBuf(buf);

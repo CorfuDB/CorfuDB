@@ -59,6 +59,7 @@ public class ChainReplicationView extends AbstractReplicationView {
             Serializers.CORFU.serialize(data, b);
 
             LogData ld = new LogData(DataType.DATA, b);
+            ld.setDeserializedData(data);
             ld.setBackpointerMap(backpointerMap);
             ld.setStreams(stream);
             ld.setGlobalAddress(address);
