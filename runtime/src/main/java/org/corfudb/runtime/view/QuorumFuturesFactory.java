@@ -4,9 +4,7 @@
  */
 package org.corfudb.runtime.view;
 
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Ordering;
-import com.google.common.collect.TreeMultimap;
+import com.google.common.collect.*;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 
@@ -39,6 +37,28 @@ class QuorumFuturesFactory {
         return new CompositeFuture<R>(comparator, futures.length/2+1, futures);
     }
 
+
+    /**
+     * Get a thread safe future that will complete only when n/2+1 futures complete or if there is no hope
+     * (if n/2+1 futures are canceled or have conflicting value).
+     *
+     * The future returned does not block explicitly, it aggregates the futures and delegates the blocking.
+     *
+     * In case of normal execution, any of the compete futures can be used to return the result.
+     * In case of termination, the cancel flag will be updated and if any of the futures threw an exception,
+     * ExecutionException will be thrown,  otherwise the future will return null
+     *
+     * @param comparator Any comparator consistent with equals that is able to distinguish the results
+     * @param futures The N futures
+     * @param failFastThrowables list of exceptions that will cause the future to complete immediately.
+     * @return The composite future
+     */
+
+    static <R> CompositeFuture<R> getQuorumFuture(Comparator<R> comparator, CompletableFuture<R>[] futures, Class... failFastThrowables) {
+        return new CompositeFuture(comparator, futures.length/2+1, futures, failFastThrowables);
+    }
+
+
     /**
      * Get a thread safe future that will complete only when a single futures complete.
      *
@@ -57,16 +77,19 @@ class QuorumFuturesFactory {
     }
 
 
+
     public static class CompositeFuture<R> implements Future<R> {
         private final Comparator<R> comparator;
         private final int quorum;
         private final CompletableFuture<R>[] futures;
+        private final Set<Class> failFastThrowables;
+        private final Set<Throwable> throwables = ConcurrentHashMap.newKeySet();
         private volatile boolean done = false;
         private volatile boolean canceled = false;
         private volatile boolean conflict = false;
-        private volatile Throwable throwable;
 
-        private CompositeFuture(Comparator<R> comparator, int quorum, CompletableFuture<R>... futures) {
+        private CompositeFuture(Comparator<R> comparator,  int quorum, CompletableFuture<R>[] futures,  Class... failFastThrowables) {
+            this.failFastThrowables =  ImmutableSet.copyOf(failFastThrowables);
             this.comparator = comparator;
             this.quorum = quorum;
             this.futures = futures;
@@ -83,9 +106,7 @@ class QuorumFuturesFactory {
             if (!infinite) {
                 until = System.nanoTime() + unit.toNanos(timeout);
             }
-
             while (infinite || System.nanoTime() < until) {
-                Integer lastExceptionIndex = null;
                 int numIncompleteFutures = 0;
                 CompletableFuture aggregatedFuture = null; // block until some future completes
                 for (int i = 0; i < futures.length; i++) {
@@ -100,7 +121,16 @@ class QuorumFuturesFactory {
                     } else {
                         if (c.isCancelled()) {
                         } else if (c.isCompletedExceptionally()) {
-                            lastExceptionIndex = i;
+                            try {
+                                futures[i].get(); // this will throw the ExecutionException
+                            } catch (ExecutionException e) {
+                                Throwable t = e.getCause();
+                                throwables.add(t);
+                                if (failFastThrowables.contains(t.getClass())) {
+                                    done = canceled = true;
+                                    throw e;
+                                }
+                            }
                         } else {
                             R value = c.get();
                             Set<Integer> indexes = indexesByValue.get(value);
@@ -125,14 +155,6 @@ class QuorumFuturesFactory {
                 boolean noMoreHope = numIncompleteFutures+greatestNumCompleteFutures < quorum;
                 if (noMoreHope) {
                     done = canceled = true;
-                    if (lastExceptionIndex != null) {
-                        try {
-                            futures[lastExceptionIndex].get(); // this will throw the ExecutionException
-                        } catch (ExecutionException e) {
-                            throwable = e.getCause();
-                            throw e;
-                        }
-                    }
                     throw new ExecutionException(
                             new QuorumUnreachableException(greatestNumCompleteFutures, quorum));
                 }
@@ -186,7 +208,10 @@ class QuorumFuturesFactory {
             return conflict;
         }
 
-        public Throwable getThrowable() {return throwable;}
+        public Set<Throwable> getThrowables() {
+            return ImmutableSet.copyOf(throwables);
+        }
+
     }
 
 
