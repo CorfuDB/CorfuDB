@@ -15,7 +15,9 @@ ROLENAME="Corfu Infrastructure Server"
 PIDFILE=/var/run/corfu.pid
 PREFIX=/usr/local/bin
 PORT=9000
-OPTS="-l /var/corfu $PORT"
+# WARNING: -s => single node corfu, need to revert this change later.
+# OPTS="-l /var/corfu $PORT"
+OPTS="-s -l /var/corfu $PORT"
 LOGFILE="/var/log/corfu.$PORT.log"
 . /lib/lsb/init-functions
 
