@@ -164,7 +164,9 @@ public class SequencerServer extends AbstractServer {
      *                if any conflict-param (or stream, if empty) in this set has a later timestamp than the snapshot, abort
      */
     public boolean txnCanCommit(TxResolutionInfo txData) {
-        log.trace("txn resolution, timestamp: {}, streams: {}", txData.getSnapshotTimestamp(), txData.getConflictSet());
+        log.trace("txn[{}] resolution req snapshot version={}, conflicts={}",
+                txData.getTXid(),
+                txData.getSnapshotTimestamp(), txData.getConflictSet());
 
         AtomicBoolean commit = new AtomicBoolean(true);
         for (Map.Entry<UUID, Set<Integer>> entry : txData.getConflictSet().entrySet()) {
@@ -179,16 +181,29 @@ public class SequencerServer extends AbstractServer {
                 conflictParamSet.forEach(conflictParam -> {
                     int conflictKeyHash = getConflictHashCode(entry.getKey(),
                             conflictParam);
-                    Long v = conflictToGlobalTailCache.get(conflictKeyHash, k -> maxConflictWildcard);
-                    log.trace("TX conflict resolution timestamp={} conflictKey={} ",
-                            v, conflictKeyHash);
+                    Long v = conflictToGlobalTailCache.getIfPresent(conflictKeyHash);
 
-                    if (v > txData.getSnapshotTimestamp() ) {
-                        log.debug("TX abort timestamp={} conflictKey={}",
-                                txData.getSnapshotTimestamp(), conflictKeyHash);
-                        if (conflictToGlobalTailCache.getIfPresent(conflictKeyHash) == null)
-                            log.warn("TX abort due to conflictParam wildcard timestamp={} wildcard={} conflictKey={}",
-                                    txData.getSnapshotTimestamp(), maxConflictWildcard, conflictKeyHash);
+                    log.trace("TX[{}] ck for conflict on key=[{}] snapshot version=[{}] update version=[{}]",
+                            txData.getTXid(),
+                            conflictParam,
+                            txData.getSnapshotTimestamp(),
+                            v);
+
+                    if (v != null && v > txData.getSnapshotTimestamp() ) {
+                        log.debug("TX[{}] ABORT due to conflict on key=[{}] snapshot version=[{}] update version=[{}]",
+                                txData.getTXid(),
+                                conflictParam,
+                                txData.getSnapshotTimestamp(),
+                                v);
+                        commit.set(false);
+                    }
+
+                    if (v == null && maxConflictWildcard > txData.getSnapshotTimestamp() ) {
+                        log.warn("TX[{}] ABORT due to WILDCARD conflict on key=[{}] snapshot version=[{}] wildcard=[{}]",
+                                txData.getTXid(),
+                                conflictParam,
+                                txData.getSnapshotTimestamp(),
+                                maxConflictWildcard);
                         commit.set(false);
                     }
                 });
@@ -200,12 +215,14 @@ public class SequencerServer extends AbstractServer {
                 streamTailToGlobalTailMap.compute(streamID, (k, v) -> {
                     if (v == null) {
                         return null;
-                    } else {
-                        if (v > txData.getSnapshotTimestamp()) {
-                            log.debug("Rejecting request due to {} > {} on streams {}",
-                                    v, txData.getSnapshotTimestamp(), streamID);
-                            commit.set(false);
-                        }
+                    }
+                    if (v > txData.getSnapshotTimestamp()) {
+                        log.debug("TX[{}] ABORT due to conflict on stream=[{}] snapshot version=[{}] stream=tail=[{}]",
+                                txData.getTXid(),
+                                Utils.toReadableID(streamID),
+                                txData.getSnapshotTimestamp(),
+                                v);
+                        commit.set(false);
                     }
                     return v;
                 });
@@ -338,7 +355,7 @@ public class SequencerServer extends AbstractServer {
                                                     .getKey(), conflictParam),
                                             newTail - 1)));
 
-        log.debug("token {} backpointers {} stream-tokens {}", currentTail, backPointerMap.build(), requestStreamTokens.build());
+        log.trace("token {} backpointers {} stream-tokens {}", currentTail, backPointerMap.build(), requestStreamTokens.build());
         // return the token response with the new global tail, new streams tails, and the streams backpointers
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                 new TokenResponse(currentTail,

@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.fail;
 /**
  * Created by dmalkhi on 12/13/16.
  */
-public class WriteWriteTXConcurrencyTest extends TXConflictScenarios {
+public class WriteWriteTXConcurrencyTest extends TXConflictScenariosTest {
 
     // override {@link AbstractObjectTest ::TXBegin() } in order to set write-write isolation level
     @Override
