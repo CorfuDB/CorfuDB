@@ -9,6 +9,8 @@ import org.corfudb.runtime.view.Layout;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -137,9 +139,11 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
      * @return A map of failed server nodes and their status.
      */
     @Override
-    public HashMap<String, Boolean> getServerStatus() {
+    public PollReport getServerStatus() {
 
-        HashMap<String, Boolean> status_change = new HashMap<>();
+        Set<String> failingNodes = new HashSet<>();
+        HashMap<String, Long> outOfPhaseEpochNodes = new HashMap<>();
+
         long newCorrectEpoch = -1;
         if (historyPollCount > 3) {
             Boolean is_up;
@@ -155,25 +159,38 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
                     log.error("Error in polling task for server {} : {}", historyServers[i], e);
                 }
 
+                // The count remains within the interval 0 <= failureCount <= failedPollLimit(3)
                 is_up = !(historyPollFailures[i] >= failedPollLimit);
-                if (is_up != historyStatus.get(historyServers[i])) {
+                // Toggle if server was up and now not responding
+                if (!is_up) {
                     log.debug("Change of status: " + historyServers[i] + " " +
                             historyStatus.get(historyServers[i]) + " -> " + is_up);
-                    status_change.put(historyServers[i], is_up);
-
-                    // Resetting the failure counter.
-                    historyPollFailures[i] = 0;
+                    failingNodes.add(historyServers[i]);
+                    historyStatus.put(historyServers[i], is_up);
+                    historyPollFailures[i]--;
+                } else if (!historyStatus.get(historyServers[i])) {
+                    // If server was down but now responsive so wait till reaches lower watermark (0).
+                    if (historyPollFailures[i] > 0) {
+                        if (--historyPollFailures[i] == 0) {
+                            log.debug("Change of status: " + historyServers[i] + " " +
+                                    historyStatus.get(historyServers[i]) + " -> " + true);
+                            historyStatus.put(historyServers[i], true);
+                        } else {
+                            // Server still down
+                            failingNodes.add(historyServers[i]);
+                        }
+                    }
                 }
                 if (historyPollEpochExceptions[i] != -1) {
-                    newCorrectEpoch = newCorrectEpoch < historyPollEpochExceptions[i] ? historyPollEpochExceptions[i] : newCorrectEpoch;
+                    outOfPhaseEpochNodes.put(historyServers[i], historyPollEpochExceptions[i]);
                     // Reset epoch exception value.
                     historyPollEpochExceptions[i] = -1;
                 }
             }
         }
-        if (newCorrectEpoch == -1 && status_change.isEmpty()) {
-            return null;
-        }
-        return status_change;
+        return new PollReport.PollReportBuilder()
+                .setFailingNodes(failingNodes)
+                .setOutOfPhaseEpochNodes(outOfPhaseEpochNodes)
+                .build();
     }
 }

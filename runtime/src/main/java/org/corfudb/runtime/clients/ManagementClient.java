@@ -12,7 +12,6 @@ import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
 
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -83,7 +82,7 @@ public class ManagementClient implements IClient {
      * @param nodes The failed nodes map to be handled.
      * @return A future which will be return TRUE if completed successfully else returns FALSE.
      */
-    public CompletableFuture<Boolean> handleFailure(Map nodes) {
+    public CompletableFuture<Boolean> handleFailure(Set nodes) {
         return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(new FailureDetectorMsg(nodes)));
     }
 

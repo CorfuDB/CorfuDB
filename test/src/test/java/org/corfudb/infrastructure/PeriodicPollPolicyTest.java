@@ -7,8 +7,8 @@ import org.corfudb.runtime.view.Layout;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -79,8 +79,8 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
 
         // A little more than responseTimeout for periodicPolling
         Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
-        Map<String, Boolean> result = failureDetectorPolicy.getServerStatus();
-        assertThat(result).isNull();
+        PollReport result = failureDetectorPolicy.getServerStatus();
+        assertThat(result.getIsFailurePresent()).isFalse();
 
     }
 
@@ -99,10 +99,10 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
         addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
         addServerRule(SERVERS.PORT_2, new TestRule().always().drop());
 
-        Map<String, Boolean> expectedResult = new HashMap<>();
-        expectedResult.put(getEndpoint(SERVERS.PORT_0), false);
-        expectedResult.put(getEndpoint(SERVERS.PORT_1), false);
-        expectedResult.put(getEndpoint(SERVERS.PORT_2), false);
+        Set<String> expectedResult = new HashSet<>();
+        expectedResult.add(getEndpoint(SERVERS.PORT_0));
+        expectedResult.add(getEndpoint(SERVERS.PORT_1));
+        expectedResult.add(getEndpoint(SERVERS.PORT_2));
 
         pollAndMatchExpectedResult(expectedResult);
 
@@ -120,7 +120,7 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
 
     }
 
-    private void pollAndMatchExpectedResult(Map<String, Boolean> expectedResult)
+    private void pollAndMatchExpectedResult(Set<String> expectedResult)
             throws InterruptedException {
 
         final int pollsToDeclareFailure = 10;
@@ -129,11 +129,11 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
             Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
 
-        Map<String, Boolean> actualResult = new HashMap<>();
+        Set<String> actualResult = new HashSet<>();
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LARGE; i++) {
-            Map<String, Boolean> tempMap = failureDetectorPolicy.getServerStatus();
-            if (tempMap != null) {
-                tempMap.forEach(actualResult::putIfAbsent);
+            Set<String> tempResult = failureDetectorPolicy.getServerStatus().getFailingNodes();
+            if (tempResult != null) {
+                tempResult.forEach(actualResult::add);
             }
             Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
             if (actualResult.equals(expectedResult)) break;

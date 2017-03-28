@@ -20,7 +20,11 @@ import java.lang.invoke.MethodHandles;
 
 import java.util.Collections;
 import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Future;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Instantiates and performs failure detection and handling asynchronously.
@@ -259,7 +263,7 @@ public class ManagementServer extends AbstractServer {
         log.info("Received Failures : {}", msg.getPayload().getNodes());
         FailureHandlerDispatcher failureHandlerDispatcher = new FailureHandlerDispatcher();
         try {
-            failureHandlerDispatcher.dispatchHandler(failureHandlerPolicy, (Layout) latestLayout.clone(), getCorfuRuntime(), msg.getPayload().getNodes().keySet());
+            failureHandlerDispatcher.dispatchHandler(failureHandlerPolicy, (Layout) latestLayout.clone(), getCorfuRuntime(), msg.getPayload().getNodes());
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
         } catch (CloneNotSupportedException e) {
             log.error("Failure Handler could not clone layout: {}", e);
@@ -368,22 +372,68 @@ public class ManagementServer extends AbstractServer {
         failureDetectorPolicy.executePolicy(latestLayout, corfuRuntime);
 
         // Get the server status from the policy and check for failures.
-        Map map = failureDetectorPolicy.getServerStatus();
-        if (map != null) {
-            log.info("Failures detected. Failed nodes : {}", map.toString());
-            // If map not empty, failures present. Trigger handler.
-            // Check if handler has been initiated.
-            if (!startFailureHandler) {
-                log.warn("Failure Handler not yet initiated .");
-                return;
+        PollReport pollReport = failureDetectorPolicy.getServerStatus();
+
+        // Analyze the poll report and trigger failure handler if needed.
+        analyzePollReportAndTriggerHandler(pollReport);
+
+    }
+
+    /**
+     * Analyzes the poll report and triggers the failure handler if status change
+     * of node detected.
+     * <p>
+     * @param pollReport Poll report obtained from failure detection policy.
+     */
+    private void analyzePollReportAndTriggerHandler(PollReport pollReport) {
+
+        // Check if handler has been initiated.
+        if (!startFailureHandler) {
+            log.warn("Failure Handler not yet initiated: {}", pollReport.toString());
+            return;
+        }
+
+        final ManagementClient localManagementClient = corfuRuntime.getRouter(getLocalEndpoint()).getClient(ManagementClient.class);
+
+        try {
+            if (!pollReport.getIsFailurePresent()) {
+                // CASE 1:
+                // No Failures detected by polling policy.
+                // We can check if we have unresponsive servers marked in the layout and
+                // un-mark them as they respond to polling now.
+                if (!latestLayout.getUnresponsiveServers().isEmpty()) {
+                    log.info("Received response from unresponsive server");
+                    localManagementClient.handleFailure(pollReport.getFailingNodes()).get();
+                    return;
+                }
+                log.debug("No failures present.");
+
+            } else if (!pollReport.getFailingNodes().isEmpty() && !latestLayout.getUnresponsiveServers().isEmpty()) {
+                // CASE 2:
+                // Failures detected - unresponsive servers.
+                // We check if these servers are the same set of servers which are marked as
+                // unresponsive in the layout. If yes take no action. Else trigger handler.
+                log.info("Failures detected. Failed nodes : {}", pollReport.toString());
+                // Check if this failure has already been recognized.
+                for (String failedServer : pollReport.getFailingNodes()) {
+                    if (!latestLayout.getUnresponsiveServers().contains(failedServer)) {
+                        localManagementClient.handleFailure(pollReport.getFailingNodes()).get();
+                        return;
+                    }
+                }
+                log.debug("Failure already taken care of.");
+
+            } else {
+                // CASE 3:
+                // Failures detected but not marked in the layout or
+                // some servers have been partially sealed to new epoch or stuck on
+                // the previous epoch.
+                localManagementClient.handleFailure(pollReport.getFailingNodes()).get();
+                // TODO: Only re-sealing needed if server stuck on a previous epoch.
             }
-            try {
-                corfuRuntime.getRouter(getLocalEndpoint()).getClient(ManagementClient.class).handleFailure(map).get();
-            } catch (Exception e) {
-                log.error("Exception invoking failure handler : {}", e);
-            }
-        } else {
-            log.debug("No failures present.");
+
+        } catch (Exception e) {
+            log.error("Exception invoking failure handler : {}", e);
         }
     }
 
