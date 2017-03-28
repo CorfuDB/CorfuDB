@@ -183,6 +183,7 @@ public class LogUnitClient implements IClient {
         ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
         Serializers.CORFU.serialize(writeObject, payload);
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, payload);
+        wr.setDeserializedData(writeObject);
         wr.setStreams(streams);
         wr.setRank(rank);
         wr.setBackpointerMap(backpointerMap);
@@ -204,9 +205,11 @@ public class LogUnitClient implements IClient {
      * write completes.
      */
     public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
-                                            ByteBuf buffer, Map<UUID, Long> backpointerMap) {
+                                            ByteBuf buffer, Object writeObject,
+                                            Map<UUID, Long> backpointerMap) {
         Timer.Context context = getTimerContext("writeByteBuf");
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, buffer);
+        wr.setDeserializedData(writeObject);
         wr.setStreams(streams);
         wr.setRank(rank);
         wr.setBackpointerMap(backpointerMap);

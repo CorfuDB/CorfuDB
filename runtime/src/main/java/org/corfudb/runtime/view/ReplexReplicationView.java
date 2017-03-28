@@ -57,6 +57,7 @@ public class ReplexReplicationView extends AbstractReplicationView {
             // Need this for txns to work, in particular, TXEntry.java requires this info.
             // We don't set the backpointers, to trigger using Replex to do reads.
             LogData ld = new LogData(DataType.DATA, b);
+            ld.setDeserializedData(data);
             ld.setGlobalAddress(address);
             ld.setLogicalAddresses(streamAddresses);
 
@@ -72,7 +73,8 @@ public class ReplexReplicationView extends AbstractReplicationView {
                 log.trace("Write, Global[{}]: chain {}/{}", address, i + 1, numUnits);
                 CFUtils.getUninterruptibly(
                         getLayout().getLogUnitClient(address, i)
-                                .write(getLayout().getLocalAddress(address), stream, 0L, b, Collections.emptyMap()), OverwriteException.class);
+                                .write(getLayout().getLocalAddress(address), stream, 0L, b, data,
+                                        Collections.emptyMap()), OverwriteException.class);
             }
 
             // Write to the secondary / stream index units. To reduce the amount of network traffic, aggregate all

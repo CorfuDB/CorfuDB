@@ -28,10 +28,15 @@ public class WriteRequest implements ICorfuPayload<WriteRequest>, IMetadata {
         data = ICorfuPayload.fromBuffer(buf, LogData.class);
     }
 
-    public WriteRequest(WriteMode writeMode, Map<UUID, Long> streamAddresses, ByteBuf buf) {
+    public WriteRequest(WriteMode writeMode, Map<UUID, Long> streamAddresses,
+                        ByteBuf buf) {
         this.writeMode = writeMode;
         this.streamAddresses = streamAddresses;
         this.data = new LogData(DataType.DATA, buf);
+    }
+
+    public void setDeserializedData(Object object) {
+        this.data.setDeserializedData(object);
     }
 
     @Override
