@@ -1,6 +1,12 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.net.HostAndPort;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.vrg.rapid.monitoring.ILinkFailureDetector;
+import com.vrg.rapid.pb.LinkStatus;
+import com.vrg.rapid.pb.ProbeMessage;
+import com.vrg.rapid.pb.ProbeResponse;
 import io.netty.channel.ChannelHandlerContext;
 
 import lombok.Getter;
@@ -16,6 +22,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
 
+import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 
 import java.util.Collections;
@@ -25,6 +32,13 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.*;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
+
+import com.vrg.rapid.Cluster;
+import com.vrg.rapid.ClusterEvents;
+import com.vrg.rapid.NodeStatusChange;
 
 /**
  * Instantiates and performs failure detection and handling asynchronously.
@@ -88,6 +102,10 @@ public class ManagementServer extends AbstractServer {
      * Future for periodic failure detection task.
      */
     private Future failureDetectorFuture = null;
+
+    private boolean isRapidSetUp = false;
+    private Cluster cluster;
+    private ILinkFailureDetector iLinkFailureDetector;
 
     public ManagementServer(ServerContext serverContext) {
 
@@ -281,12 +299,18 @@ public class ManagementServer extends AbstractServer {
      * @param r
      */
     @ServerHandler(type = CorfuMsgType.HEARTBEAT_REQUEST, opTimer = metricsPrefix + "heartbeat-request")
-    public void handleHearbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r,
+    public void handleHearbeatRequest(CorfuPayloadMsg<byte[]> msg, ChannelHandlerContext ctx, IServerRouter r,
                                       boolean isMetricsEnabled) {
         // Currently builds a default instance of the model.
         // TODO: Collect metrics from Layout, Sequencer and LogUnit Servers.
-        NodeMetrics nodeMetrics = NodeMetrics.getDefaultInstance();
-        r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.HEARTBEAT_RESPONSE, nodeMetrics.toByteArray()));
+        try {
+            ProbeMessage probeMessage = ProbeMessage.parseFrom(msg.getPayload());
+            iLinkFailureDetector.handleProbeMessage(probeMessage, null);
+        } catch (InvalidProtocolBufferException e) {
+            e.printStackTrace();
+        }
+        ProbeResponse probeResponse = ProbeResponse.getDefaultInstance();
+        r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.HEARTBEAT_RESPONSE, probeResponse.toByteArray()));
     }
 
     /**
@@ -368,14 +392,23 @@ public class ManagementServer extends AbstractServer {
         // Fetch the latest layout view through the runtime.
         safeUpdateLayout(corfuRuntime.getLayoutView().getLayout());
 
-        // Execute the failure detection policy once.
-        failureDetectorPolicy.executePolicy(latestLayout, corfuRuntime);
+        if (!isRapidSetUp) {
+            try {
+                rapidSetUp();
+                isRapidSetUp = true;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
 
-        // Get the server status from the policy and check for failures.
-        PollReport pollReport = failureDetectorPolicy.getServerStatus();
-
-        // Analyze the poll report and trigger failure handler if needed.
-        analyzePollReportAndTriggerHandler(pollReport);
+//        // Execute the failure detection policy once.
+//        failureDetectorPolicy.executePolicy(latestLayout, corfuRuntime);
+//
+//        // Get the server status from the policy and check for failures.
+//        PollReport pollReport = failureDetectorPolicy.getServerStatus();
+//
+//        // Analyze the poll report and trigger failure handler if needed.
+//        analyzePollReportAndTriggerHandler(pollReport);
 
     }
 
@@ -438,6 +471,61 @@ public class ManagementServer extends AbstractServer {
         }
     }
 
+    private void rapidSetUp()
+            throws IOException, InterruptedException {
+
+        List<String> allServers = new ArrayList<>(latestLayout.getAllServers());
+        iLinkFailureDetector = new RapidPollingPolicy(getLocalEndpoint(), latestLayout, getCorfuRuntime());
+        String rapidLocalAddress = getLocalEndpoint().replace('9', '8');
+
+        if (allServers.get(0).equals(getLocalEndpoint())) {
+            cluster = new Cluster.Builder(HostAndPort.fromString(rapidLocalAddress))
+                    .setLinkFailureDetector(iLinkFailureDetector)
+                    .start();
+        } else {
+            String seed = allServers.get(0).replace('9', '8');
+            cluster = new Cluster.Builder(HostAndPort.fromString(rapidLocalAddress))
+                    .setLinkFailureDetector(iLinkFailureDetector)
+                    .join(HostAndPort.fromString(seed));
+        }
+        // Registering callbacks.
+        cluster.registerSubscription(ClusterEvents.VIEW_CHANGE_PROPOSAL, this::onViewChangeProposal);
+        cluster.registerSubscription(ClusterEvents.VIEW_CHANGE, this::onViewChange);
+        cluster.registerSubscription(ClusterEvents.VIEW_CHANGE_ONE_STEP_FAILED, this::onViewChangeOneStepFailed);
+        cluster.registerSubscription(ClusterEvents.KICKED, this::onKicked);
+    }
+
+    private void onViewChangeProposal(final List<NodeStatusChange> viewChangeProposal) {
+        log.info("View Changed Proposal received by Rapid. : {}", viewChangeProposal);
+        //TODO: Abort View Change if proposal cannot be handled.
+    }
+
+    private void onViewChange(final List<NodeStatusChange> viewChange) {
+        log.info("View Changed by Rapid. : {}", viewChange);
+        try {
+            Set<String> set = viewChange.stream()
+                    .filter(nodeStatusChange -> nodeStatusChange.getStatus().equals(LinkStatus.DOWN))
+                    .map(nodeStatusChange -> nodeStatusChange.getHostAndPort().toString())
+                    .map(serverAddress -> serverAddress.replace('8', '9'))
+                    .collect(Collectors.toSet());
+            if (!set.isEmpty()) {
+                corfuRuntime.getRouter(getLocalEndpoint()).getClient(ManagementClient.class).handleFailure(set);
+            }
+        } catch (Exception e) {
+            log.error("Exception invoking failure handler : {}", e);
+        }
+    }
+
+    private void onViewChangeOneStepFailed(final List<NodeStatusChange> viewChangeProposal) {
+        log.info("View Changed Failed by Rapid. : {}", viewChangeProposal);
+        //TODO: Handle failure by Corfu's paxos.
+    }
+
+    private void onKicked(final List<NodeStatusChange> viewChangeProposal) {
+        log.info("Node kicked out by Rapid. : {}", viewChangeProposal);
+        //TODO: Handle graceful shutdown or rejoin cluster. (Policy ?)
+    }
+
     /**
      * Management Server shutdown:
      * Shuts down the fault detector service.
@@ -453,7 +541,7 @@ public class ManagementServer extends AbstractServer {
         }
 
         try {
-            failureDetectorService.awaitTermination(serverContext.SHUTDOWN_TIMER.getSeconds(), TimeUnit.SECONDS);
+            failureDetectorService.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(), TimeUnit.SECONDS);
         } catch (InterruptedException ie) {
             log.debug("failureDetectorService awaitTermination interrupted : {}", ie);
         }

@@ -3,7 +3,6 @@ package org.corfudb.infrastructure;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.Layout;
 
@@ -49,15 +48,7 @@ public class FailureHandlerDispatcher {
             reconfigureServers(corfuRuntime, currentLayout, newLayout);
 
             // Attempts to update all the layout servers with the modified layout.
-            try {
-                corfuRuntime.getLayoutView().updateLayout(newLayout, prepareRank);
-                prepareRank++;
-            } catch (OutrankedException oe) {
-                // Update rank since outranked.
-                log.error("Conflict in updating layout by failureHandlerDispatcher: {}", oe);
-                // Update rank to be able to outrank other competition and complete paxos.
-                prepareRank = oe.getNewRank() + 1;
-            }
+            corfuRuntime.getLayoutView().committed(newLayout.getEpoch(), newLayout);
 
             // Check if our proposed layout got selected and committed.
             corfuRuntime.invalidateLayout();

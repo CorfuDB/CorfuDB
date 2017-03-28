@@ -101,7 +101,7 @@ public class ManagementClient implements IClient {
      * @return A future which will return the node health metrics of
      * the node which was requested for the heartbeat.
      */
-    public CompletableFuture<byte[]> sendHeartbeatRequest() {
-        return router.sendMessageAndGetCompletable(CorfuMsgType.HEARTBEAT_REQUEST.msg());
+    public CompletableFuture<byte[]> sendHeartbeatRequest(byte[] probeMessage) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.HEARTBEAT_REQUEST.payloadMsg(probeMessage));
     }
 }
