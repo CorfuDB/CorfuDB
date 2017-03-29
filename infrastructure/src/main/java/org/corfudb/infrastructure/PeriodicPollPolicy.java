@@ -13,6 +13,8 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Simple Polling policy.
@@ -41,6 +43,7 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
     private int historyPollCount = 0;
     private HashMap<String, Boolean> historyStatus = null;
     private CompletableFuture[] pollCompletableFutures = null;
+    private final int pollTaskTimeout = 5000;
 
     /**
      * Failed Poll Limit.
@@ -144,7 +147,6 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
         Set<String> failingNodes = new HashSet<>();
         HashMap<String, Long> outOfPhaseEpochNodes = new HashMap<>();
 
-        long newCorrectEpoch = -1;
         if (historyPollCount > 3) {
             Boolean is_up;
 
@@ -154,9 +156,12 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
 
                 // Block until we complete the previous polling round.
                 try {
-                    pollCompletableFutures[i].get();
-                } catch (InterruptedException | ExecutionException e) {
+                    pollCompletableFutures[i].get(pollTaskTimeout, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException | ExecutionException | TimeoutException e) {
                     log.error("Error in polling task for server {} : {}", historyServers[i], e);
+                    pollCompletableFutures[i].cancel(true);
+                    // Assuming server is unresponsive if ping task stuck or interrupted or throws exception.
+                    historyPollFailures[i]++;
                 }
 
                 // The count remains within the interval 0 <= failureCount <= failedPollLimit(3)
