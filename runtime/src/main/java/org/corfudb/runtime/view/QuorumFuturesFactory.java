@@ -208,6 +208,10 @@ class QuorumFuturesFactory {
             return conflict;
         }
 
+        /**
+         * Returns a set of Throwable classes from all futures that completed in any exceptional fashion.
+         * @return Read-only set containing the Throwable classes
+         */
         public Set<Throwable> getThrowables() {
             return ImmutableSet.copyOf(throwables);
         }
