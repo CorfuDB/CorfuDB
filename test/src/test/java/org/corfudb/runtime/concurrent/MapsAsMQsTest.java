@@ -15,7 +15,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * Created by dalia on 3/18/17.
  */
 @Slf4j
-public class MapsAsMQs extends AbstractObjectTest {
+public class MapsAsMQsTest extends AbstractObjectTest {
 
     protected int numIterations = PARAMETERS.NUM_ITERATIONS_MODERATE;
 

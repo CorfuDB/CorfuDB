@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure;
 
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -9,8 +7,8 @@ import org.corfudb.runtime.view.Layout;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,20 +46,20 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
                 .addToSegment()
                 .addToLayout()
                 .build();
-
-        // Bootstrapping only the layout servers.
-        // Failure-correction/updateLayout will cause test to give a non-deterministic output.
-
-        getLayoutServer(SERVERS.PORT_0).handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)),
-                null, getServerRouter(SERVERS.PORT_0));
-        getLayoutServer(SERVERS.PORT_1).handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)),
-                null, getServerRouter(SERVERS.PORT_1));
-        getLayoutServer(SERVERS.PORT_2).handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)),
-                null, getServerRouter(SERVERS.PORT_2));
+        bootstrapAllServers(layout);
+        getManagementServer(SERVERS.PORT_0).shutdown();
+        getManagementServer(SERVERS.PORT_1).shutdown();
+        getManagementServer(SERVERS.PORT_2).shutdown();
 
         corfuRuntime = new CorfuRuntime();
         layout.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
         corfuRuntime.connect();
+
+        layout.getAllServers().forEach(serverEndpoint -> {
+            corfuRuntime.getRouter(serverEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            corfuRuntime.getRouter(serverEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            corfuRuntime.getRouter(serverEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        });
 
         failureDetectorPolicy = new PeriodicPollPolicy();
     }
@@ -81,8 +79,8 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
 
         // A little more than responseTimeout for periodicPolling
         Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
-        Map<String, Boolean> result = failureDetectorPolicy.getServerStatus();
-        assertThat(result.isEmpty()).isEqualTo(true);
+        PollReport result = failureDetectorPolicy.getServerStatus();
+        assertThat(result.getIsFailurePresent()).isFalse();
 
     }
 
@@ -101,24 +99,12 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
         addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
         addServerRule(SERVERS.PORT_2, new TestRule().always().drop());
 
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
-            failureDetectorPolicy.executePolicy(layout, corfuRuntime);
-            Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-        }
+        Set<String> expectedResult = new HashSet<>();
+        expectedResult.add(getEndpoint(SERVERS.PORT_0));
+        expectedResult.add(getEndpoint(SERVERS.PORT_1));
+        expectedResult.add(getEndpoint(SERVERS.PORT_2));
 
-        Map<String, Boolean> expectedResult = new HashMap<>();
-        expectedResult.put(getEndpoint(SERVERS.PORT_0), false);
-        expectedResult.put(getEndpoint(SERVERS.PORT_1), false);
-        expectedResult.put(getEndpoint(SERVERS.PORT_2), false);
-
-        Map<String, Boolean> actualResult = new HashMap<>();
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LARGE; i++) {
-            failureDetectorPolicy.getServerStatus().forEach(actualResult::putIfAbsent);
-            Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
-            if (actualResult.equals(expectedResult)) break;
-        }
-
-        assertThat(actualResult).isEqualTo(expectedResult);
+        pollAndMatchExpectedResult(expectedResult);
 
         /*
          * Restarting the server SERVERS.PORT_0. Pings should work normally now.
@@ -127,23 +113,31 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
          */
 
         clearServerRules(SERVERS.PORT_0);
+        // Has only SERVERS.PORT_1 & SERVERS.PORT_2
+        expectedResult.remove(getEndpoint(SERVERS.PORT_0));
 
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
+        pollAndMatchExpectedResult(expectedResult);
+
+    }
+
+    private void pollAndMatchExpectedResult(Set<String> expectedResult)
+            throws InterruptedException {
+
+        final int pollsToDeclareFailure = 10;
+        for (int i = 0; i < pollsToDeclareFailure; i++) {
             failureDetectorPolicy.executePolicy(layout, corfuRuntime);
             Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
 
-        expectedResult.remove(getEndpoint(SERVERS.PORT_0));
-
-        actualResult = new HashMap<>();
+        Set<String> actualResult = new HashSet<>();
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LARGE; i++) {
-            failureDetectorPolicy.getServerStatus().forEach(actualResult::putIfAbsent);
+            Set<String> tempResult = failureDetectorPolicy.getServerStatus().getFailingNodes();
+            if (tempResult != null) {
+                tempResult.forEach(actualResult::add);
+            }
             Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
             if (actualResult.equals(expectedResult)) break;
         }
-
-        // Has only SERVERS.PORT_1 & SERVERS.PORT_2
         assertThat(actualResult).isEqualTo(expectedResult);
-
     }
 }

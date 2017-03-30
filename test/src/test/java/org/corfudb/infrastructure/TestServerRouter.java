@@ -125,11 +125,15 @@ public class TestServerRouter implements IServerRouter {
 
     public void sendServerMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
         AbstractServer as = handlerMap.get(msg.getMsgType());
-        if (as != null) {
-            as.handleMessage(msg, ctx, this);
-        }
-        else {
-            log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
+        if (validateEpoch(msg, ctx)) {
+            if (as != null) {
+                as.handleMessage(msg, ctx, this);
+            }
+            else {
+                log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
+            }
+        } else {
+            log.trace("Message with wrong epoch {}, expected {}", msg.getEpoch(), serverEpoch);
         }
     }
 

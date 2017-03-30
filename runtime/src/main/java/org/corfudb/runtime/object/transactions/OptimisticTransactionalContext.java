@@ -16,6 +16,7 @@ import org.corfudb.runtime.view.Address;
 
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -85,6 +86,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     public <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
                            ICorfuSMRAccess<R, T> accessFunction,
                            Object[] conflictObject) {
+        log.debug("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
         // First, we add this access to the read set
         addToReadSet(proxy, conflictObject);
 
@@ -187,8 +189,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
                               SMREntry updateEntry,
                               Object[] conflictObjects) {
-        log.trace("LogUpdate[{}] {} ({}) conflictObj={}",
-                this, updateEntry.getSMRMethod(),
+        log.trace("LogUpdate[{},{}] {} ({}) conflictObj={}",
+                this, proxy, updateEntry.getSMRMethod(),
                 updateEntry.getSMRArguments(), conflictObjects);
 
         // Insert the modification into writeSet.
@@ -227,6 +229,14 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @Override
     @SuppressWarnings("unchecked")
     public long commitTransaction() throws TransactionAbortedException {
+        log.debug("TX[{}] request optimistic commit", this);
+
+        return getConflictSetAndCommit(() -> getReadSet());
+    }
+
+    public long getConflictSetAndCommit(Supplier<Map<UUID, Set<Integer>>>
+                                       computeConflictSet) {
+
         if (TransactionalContext.isInNestedTransaction()) {
             getParentContext().addTransaction(this);
             commitAddress = AbstractTransactionalContext.FOLDED_ADDRESS;
@@ -240,10 +250,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             log.trace("Commit[{}] Read-only commit (no write)", this);
             return NOWRITE_ADDRESS;
         }
-
-        //TODO(Maithem): Since the actualy stream write doesn't happen in the parent class,
-        // we end up duplicating the same code for transaction logging for each type of transaction.
-        // This is superfluous, find a better way to factor this piece of code.
 
         // Write to the transaction stream if transaction logging is enabled
         Set<UUID> affectedStreams = new HashSet<>(writeSet.keySet());
@@ -271,7 +277,10 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                         // 2. a map of conflict params, arranged by streamID's
                         // 3. a map of write conflict-params, arranged by
                         // streamID's
-                        new TxResolutionInfo(getSnapshotTimestamp(), getReadSet(), collectWriteConflictParams())
+                        new TxResolutionInfo(getTransactionID(),
+                                getSnapshotTimestamp(),
+                                computeConflictSet.get(),
+                                collectWriteConflictParams())
                 );
         log.trace("Commit[{}] Acquire address {}", this, address);
 

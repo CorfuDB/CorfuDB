@@ -4,10 +4,14 @@
  */
 package org.corfudb.runtime.view;
 
+import org.apache.maven.wagon.ConnectionException;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.junit.Test;
 
+import java.util.IllegalFormatCodePointException;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.concurrent.*;
 
 import static org.junit.Assert.*;
@@ -98,6 +102,9 @@ public class QuorumFuturesFactoryTest extends AbstractCorfuTest {
     }
 
 
+
+
+
     @Test
     public void test3FuturesWithFirstWinnerIncompleteComplete() throws Exception {
         CompletableFuture<String> f1 = new CompletableFuture<>();
@@ -119,7 +126,40 @@ public class QuorumFuturesFactoryTest extends AbstractCorfuTest {
     @Test
     public void testException() throws Exception {
         CompletableFuture<String> f1 = new CompletableFuture<>();
-        Future<String> result = QuorumFuturesFactory.getQuorumFuture(String::compareTo, f1);
+        CompletableFuture<String> f2 = new CompletableFuture<>();
+        CompletableFuture<String> f3 = new CompletableFuture<>();
+        QuorumFuturesFactory.CompositeFuture<String> result = QuorumFuturesFactory.getQuorumFuture(String::compareTo, f1, f2, f3);
+        f1.completeExceptionally(new ConnectionException(""));
+        f3.complete("");
+        try {
+            Object value = result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
+            fail();
+        } catch (TimeoutException e) {
+            // expected behaviour
+        }
+        f2.completeExceptionally(new IllegalArgumentException());
+        try {
+            Object value = result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
+            fail();
+        } catch (ExecutionException e) {
+            // expected behaviour
+        }
+        assertTrue(result.isDone());
+        Set<Class> set = new LinkedHashSet<>();
+        for (Throwable t: result.getThrowables()) {
+            set.add(t.getClass());
+        }
+        assertTrue(set.contains(ConnectionException.class));
+        assertTrue(set.contains(IllegalArgumentException.class));
+    }
+
+    @Test
+    public void testFailFastExceptionSingle() throws Exception {
+        CompletableFuture<String> f1 = new CompletableFuture<>();
+        CompletableFuture<String> f2 = new CompletableFuture<>();
+        CompletableFuture<String> f3 = new CompletableFuture<>();
+        QuorumFuturesFactory.CompositeFuture<String> result = QuorumFuturesFactory.getQuorumFuture(String::compareTo,
+                new CompletableFuture[]{f1, f2, f3}, NullPointerException.class, IllegalAccessError.class);
         f1.completeExceptionally(new NullPointerException());
         try {
             Object value = result.get(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis(), TimeUnit.MILLISECONDS);
@@ -128,7 +168,13 @@ public class QuorumFuturesFactoryTest extends AbstractCorfuTest {
             // expected behaviour
         }
         assertTrue(result.isDone());
+        Set<Class> set = new LinkedHashSet<>();
+        for (Throwable t: result.getThrowables()) {
+            set.add(t.getClass());
+        }
+        assertTrue(set.contains(NullPointerException.class));
     }
+
 
     @Test
     public void testCanceledFromInside() throws Exception {
@@ -146,7 +192,7 @@ public class QuorumFuturesFactoryTest extends AbstractCorfuTest {
         assertTrue(result.isCancelled());
         assertTrue(result.isDone());
         assertFalse(result.isConflict());
-        assertNull(result.getThrowable());
+        assertTrue(result.getThrowables().isEmpty());
     }
 
 
@@ -165,7 +211,7 @@ public class QuorumFuturesFactoryTest extends AbstractCorfuTest {
         }
         assertTrue(result.isCancelled());
         assertTrue(result.isDone());
-        assertEquals(result.getThrowable().getClass(), NullPointerException.class);
+        assertEquals(result.getThrowables().iterator().next().getClass(), NullPointerException.class);
     }
 
 
