@@ -18,6 +18,11 @@ import java.util.Set;
 public class FailureHandlerDispatcher {
 
     /**
+     * Rank used to update layout.
+     */
+    private volatile long prepareRank = 1;
+
+    /**
      * Takes in the existing layout and a set of failed nodes.
      * It first generates a new layout by removing the failed nodes from the existing layout.
      * It then seals the epoch to prevent any client from accessing the stale layout.
@@ -33,20 +38,27 @@ public class FailureHandlerDispatcher {
 
             // Generates a new layout by removing the failed nodes from the existing layout
             Layout newLayout = failureHandlerPolicy.generateLayout(currentLayout, corfuRuntime, failedServers);
+
             // Seals and increments the epoch.
             currentLayout.setRuntime(corfuRuntime);
             sealEpoch(currentLayout);
+
             // Attempts to update all the layout servers with the modified layout.
-            corfuRuntime.getLayoutView().updateLayout(newLayout, newLayout.getEpoch());
+            try {
+                corfuRuntime.getLayoutView().updateLayout(newLayout, prepareRank);
+                prepareRank++;
+            } catch (OutrankedException oe) {
+                // Update rank since outranked.
+                log.error("Conflict in updating layout by failureHandlerDispatcher: {}", oe);
+                // Update rank to be able to outrank other competition and complete paxos.
+                prepareRank = oe.getNewRank() + 1;
+            }
 
             // Check if our proposed layout got selected and committed.
             corfuRuntime.invalidateLayout();
             if (corfuRuntime.getLayoutView().getLayout().equals(newLayout)) {
                 log.info("Failed node removed. New Layout committed = {}", newLayout);
             }
-
-        } catch (OutrankedException oe) {
-            log.error("Conflict in updating layout by failureHandlerDispatcher: {}", oe);
         } catch (Exception e) {
             log.error("Error: dispatchHandler: {}", e);
         }
