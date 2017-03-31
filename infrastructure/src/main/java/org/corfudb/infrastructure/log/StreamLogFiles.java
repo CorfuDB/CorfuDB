@@ -756,7 +756,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                     throw new OverwriteException();
                 } else {
                     // the method below might throw DataOutrankedException or ValueAdoptedException
-                    assertAppendPermitted(logAddress, entry);
+                    assertAppendPermittedUnsafe(logAddress, entry);
                     AddressMetaData addressMetaData = writeRecord(fh, logAddress.address, entry);
                     fh.getKnownAddresses().put(logAddress.address, addressMetaData);
                 }

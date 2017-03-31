@@ -57,7 +57,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             throw new OverwriteException();
         } else {
             // the method below might throw DataOutrankedException or ValueAdoptedException
-            assertAppendPermitted(logAddress, entry);
+            assertAppendPermittedUnsafe(logAddress, entry);
         }
     }
 

@@ -211,26 +211,28 @@ public class LogUnitClient implements IClient {
     }
 
     /**
-     * Asynchronously write a proposal to a logging unit with ranked address space. This proposal data keeps
-     * the rank to the log unit during the two phase recovery write in the quorum replication.
+     * Asynchronously write an empty payload to the logging unit with ranked address space.
+     * Used from the quorum replication when filling holes or during the first phase of the recovery write.
      *
      * @param address        The address to write to.
+     * @param type           The data type
      * @param streams        The streams, if any, that this write belongs to.
      * @param rank           The rank of this write]
-     *
      */
-    CompletableFuture<Boolean> writeProposal(long address, Set<UUID> streams, IMetadata.DataRank rank) {
+    public CompletableFuture<Boolean> writeEmptyData(long address, DataType type, Set<UUID> streams, IMetadata.DataRank rank) {
         Timer.Context context = getTimerContext("writeObject");
         LogEntry entry = new LogEntry(LogEntry.LogEntryType.NOP);
         ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
         Serializers.CORFU.serialize(entry, payload);
-        WriteRequest wr = new WriteRequest(WriteMode.NORMAL, DataType.RANK_ONLY,  null,  payload);
+        WriteRequest wr = new WriteRequest(WriteMode.NORMAL, type,  null,  payload);
         wr.setStreams(streams);
         wr.setRank(rank);
         wr.setGlobalAddress(address);
         CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
         return cf.thenApply(x -> { context.stop(); return x; });
     }
+
+
 
 
     /**
@@ -294,6 +296,7 @@ public class LogUnitClient implements IClient {
         Timer.Context context = getTimerContext("read");
         CompletableFuture<ReadResponse> cf = router.sendMessageAndGetCompletable(
                 CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address)));
+
         return cf.thenApply(x -> { context.stop(); return x; });
     }
 

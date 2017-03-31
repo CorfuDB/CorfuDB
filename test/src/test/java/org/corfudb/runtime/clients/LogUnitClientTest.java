@@ -143,7 +143,7 @@ public class LogUnitClientTest extends AbstractClientTest {
                 .isEqualTo(testString);
 
         try {
-            client.writeProposal(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(2)).get();
+            client.writeEmptyData(0, DataType.RANK_ONLY, Collections.<UUID>emptySet(), new IMetadata.DataRank(2)).get();
             fail();
         } catch (Exception e) {
             // expected
