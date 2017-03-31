@@ -1,10 +1,9 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.CorfuObject;
-import org.corfudb.annotations.InterfaceOverride;
 import org.corfudb.annotations.TransactionalMethod;
 
 import java.util.Collection;

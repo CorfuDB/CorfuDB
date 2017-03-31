@@ -4,11 +4,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Simple Polling policy.
@@ -33,15 +39,11 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
      * polling history
      */
     private int[] historyPollFailures = null;
+    private long[] historyPollEpochExceptions = null;
     private int historyPollCount = 0;
     private HashMap<String, Boolean> historyStatus = null;
-
-    /**
-     * Retry timeouts
-     */
-    long timeoutConnect = 50;
-    long timeoutRetry = 200;
-    long timeoutResponse = 1000;
+    private CompletableFuture[] pollCompletableFutures = null;
+    private final int pollTaskTimeout = 5000;
 
     /**
      * Failed Poll Limit.
@@ -88,16 +90,16 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
             historyServers = allServers;
             historyRouters = new IClientRouter[allServers.length];
             historyPollFailures = new int[allServers.length];
+            historyPollEpochExceptions = new long[allServers.length];
+            pollCompletableFutures = new CompletableFuture[allServers.length];
             for (int i = 0; i < allServers.length; i++) {
                 if (!historyStatus.containsKey(allServers[i])) {
                     historyStatus.put(allServers[i], true);  // Assume it's up until we think it isn't.
                 }
                 historyRouters[i] = corfuRuntime.getRouterFunction.apply(allServers[i]);
-                historyRouters[i].setTimeoutConnect(timeoutConnect);
-                historyRouters[i].setTimeoutRetry(timeoutRetry);
-                historyRouters[i].setTimeoutResponse(timeoutResponse);
                 historyRouters[i].start();
                 historyPollFailures[i] = 0;
+                historyPollEpochExceptions[i] = -1;
             }
             historyPollCount = 0;
         } else {
@@ -116,30 +118,15 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
         // eventually notice changes to historyPollFailures.
         for (int i = 0; i < historyRouters.length; i++) {
             int ii = i;  // Intermediate var just for the sake of having a final for use inside the lambda below
-            CompletableFuture.runAsync(() -> {
-                // Any changes that we make to historyPollFailures here can possibly
-                // race with other async CFs that were launched in earlier/later CFs.
-                // We don't care if an increment gets clobbered by another increment:
-                //     being off by one isn't a big problem.
-                // We don't care if a reset to zero gets clobbered by an increment:
-                //     if the endpoint is really pingable, then a later reset to zero
-                //     will succeed, probably.
+            pollCompletableFutures[ii] = CompletableFuture.runAsync(() -> {
                 try {
-                    CompletableFuture<Boolean> cf = historyRouters[ii].getClient(BaseClient.class).ping();
-                    cf.exceptionally(e -> {
-                        log.debug(historyServers[ii] + " exception " + e);
-                        historyPollFailures[ii]++;
-                        return false;
-                    });
-                    cf.thenAccept((pingResult) -> {
-                        if (pingResult) {
-                            historyPollFailures[ii] = 0;
-                        } else {
-                            historyPollFailures[ii]++;
-                        }
-                    });
-
-                } catch (Exception e) {
+                    boolean pingResult = historyRouters[ii].getClient(BaseClient.class).ping().get();
+                    historyPollFailures[ii] = pingResult ? 0 : historyPollFailures[ii] + 1;
+                } catch (Exception e ) {
+                    // If Wrong epoch exception is received, mark server as failed.
+                    if (e.getCause() instanceof WrongEpochException) {
+                        historyPollEpochExceptions[ii] = ((WrongEpochException) e.getCause()).getCorrectEpoch();
+                    }
                     log.debug("Ping failed for " + historyServers[ii] + " with " + e);
                     historyPollFailures[ii]++;
                 }
@@ -155,27 +142,60 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
      * @return A map of failed server nodes and their status.
      */
     @Override
-    public HashMap<String, Boolean> getServerStatus() {
+    public PollReport getServerStatus() {
 
-        HashMap<String, Boolean> status_change = new HashMap<>();
+        Set<String> failingNodes = new HashSet<>();
+        HashMap<String, Long> outOfPhaseEpochNodes = new HashMap<>();
+
         if (historyPollCount > 3) {
             Boolean is_up;
 
             // Simple failure detector: Is there a change in health?
             for (int i = 0; i < historyServers.length; i++) {
                 // TODO: Be a bit smarter than 'more than 2 failures in a row'
+
+                // Block until we complete the previous polling round.
+                try {
+                    pollCompletableFutures[i].get(pollTaskTimeout, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                    log.error("Error in polling task for server {} : {}", historyServers[i], e);
+                    pollCompletableFutures[i].cancel(true);
+                    // Assuming server is unresponsive if ping task stuck or interrupted or throws exception.
+                    historyPollFailures[i]++;
+                }
+
+                // The count remains within the interval 0 <= failureCount <= failedPollLimit(3)
                 is_up = !(historyPollFailures[i] >= failedPollLimit);
-                if (is_up != historyStatus.get(historyServers[i])) {
+                // Toggle if server was up and now not responding
+                if (!is_up) {
                     log.debug("Change of status: " + historyServers[i] + " " +
                             historyStatus.get(historyServers[i]) + " -> " + is_up);
-                    status_change.put(historyServers[i], is_up);
-
-                    // Resetting the failure counter.
-                    historyPollFailures[i] = 0;
+                    failingNodes.add(historyServers[i]);
+                    historyStatus.put(historyServers[i], is_up);
+                    historyPollFailures[i]--;
+                } else if (!historyStatus.get(historyServers[i])) {
+                    // If server was down but now responsive so wait till reaches lower watermark (0).
+                    if (historyPollFailures[i] > 0) {
+                        if (--historyPollFailures[i] == 0) {
+                            log.debug("Change of status: " + historyServers[i] + " " +
+                                    historyStatus.get(historyServers[i]) + " -> " + true);
+                            historyStatus.put(historyServers[i], true);
+                        } else {
+                            // Server still down
+                            failingNodes.add(historyServers[i]);
+                        }
+                    }
+                }
+                if (historyPollEpochExceptions[i] != -1) {
+                    outOfPhaseEpochNodes.put(historyServers[i], historyPollEpochExceptions[i]);
+                    // Reset epoch exception value.
+                    historyPollEpochExceptions[i] = -1;
                 }
             }
-
         }
-        return status_change;
+        return new PollReport.PollReportBuilder()
+                .setFailingNodes(failingNodes)
+                .setOutOfPhaseEpochNodes(outOfPhaseEpochNodes)
+                .build();
     }
 }

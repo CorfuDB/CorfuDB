@@ -56,14 +56,14 @@ public class LayoutSealTest extends AbstractViewTest {
         bootstrapAllServers(l);
         CorfuRuntime corfuRuntime = getRuntime(l).connect();
         l.setRuntime(corfuRuntime);
-        setAggressiveTimeouts();
+        setAggressiveTimeouts(l);
         return l;
     }
 
     /**
      * Sets aggressive timeouts for all test routers.
      */
-    public void setAggressiveTimeouts() {
+    public void setAggressiveTimeouts(Layout layout) {
         // Setting aggressive timeouts
         List<Integer> serverPorts = new ArrayList<>();
         serverPorts.add(SERVERS.PORT_0);
@@ -79,9 +79,9 @@ public class LayoutSealTest extends AbstractViewTest {
         routerEndpoints.add(SERVERS.ENDPOINT_4);
         serverPorts.forEach(serverPort -> {
             routerEndpoints.forEach(routerEndpoint -> {
-                getManagementServer(serverPort).getCorfuRuntime().getRouter(routerEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-                getManagementServer(serverPort).getCorfuRuntime().getRouter(routerEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-                getManagementServer(serverPort).getCorfuRuntime().getRouter(routerEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+                layout.getRuntime().getRouter(routerEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+                layout.getRuntime().getRouter(routerEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+                layout.getRuntime().getRouter(routerEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             });
         });
     }

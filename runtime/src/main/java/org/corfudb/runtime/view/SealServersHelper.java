@@ -1,6 +1,8 @@
 package org.corfudb.runtime.view;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.util.CFUtils;
 
@@ -17,6 +19,7 @@ import java.util.concurrent.TimeoutException;
  * <p>
  * Created by zlokhandwala on 3/10/17.
  */
+@Slf4j
 public class SealServersHelper {
 
     /**
@@ -29,7 +32,14 @@ public class SealServersHelper {
         Map<String, CompletableFuture<Boolean>> resultMap = new HashMap<>();
         // Seal layout servers
         layout.getAllServers().forEach(server -> {
-            CompletableFuture<Boolean> cf = layout.getRuntime().getRouter(server).getClient(BaseClient.class).setRemoteEpoch(layout.getEpoch());
+            BaseClient baseClient = layout.getRuntime().getRouter(server).getClient(BaseClient.class);
+            CompletableFuture<Boolean> cf = new CompletableFuture<>();
+            try {
+                cf = baseClient.setRemoteEpoch(layout.getEpoch());
+            } catch (NetworkException ne) {
+                cf.completeExceptionally(ne);
+                log.error("Remote seal SET_EPOCH failed for server {} with {}", server, ne);
+            }
             resultMap.put(server, cf);
         });
         return resultMap;
