@@ -113,17 +113,17 @@ public class ObjectsView extends AbstractView {
         try {
             // to be deprecated
             CorfuSMRObjectProxy<T> proxy = (CorfuSMRObjectProxy<T>) ((ICorfuSMRObject) obj).getProxy();
-            ObjectID oid = new ObjectID(destination, proxy.getOriginalClass(), null);
+            ObjectID oid = new ObjectID(destination, proxy.getOriginalClass());
             return (T) objectCache.computeIfAbsent(oid, x -> {
                 IStreamView sv = runtime.getStreamsView().copy(proxy.getSv().getID(),
                         destination, proxy.getTimestamp());
-                return CorfuProxyBuilder.getProxy(proxy.getOriginalClass(), null, sv, runtime,
+                return CorfuProxyBuilder.getProxy(proxy.getOriginalClass(), sv, runtime,
                         proxy.getSerializer(), Collections.emptySet());
             });
         } catch (Exception e) {
             // new code path
             ICorfuSMR<T> proxy = (ICorfuSMR<T>)obj;
-            ObjectID oid = new ObjectID(destination, proxy.getCorfuSMRProxy().getObjectType(), null);
+            ObjectID oid = new ObjectID(destination, proxy.getCorfuSMRProxy().getObjectType());
             return (T) objectCache.computeIfAbsent(oid, x -> {
                 IStreamView sv = runtime.getStreamsView().copy(proxy.getCorfuStreamID(),
                         destination, proxy.getCorfuSMRProxy().getVersion());
@@ -246,9 +246,8 @@ public class ObjectsView extends AbstractView {
     }
 
     @Data
-    public static class ObjectID<T, R> {
+    public static class ObjectID<T> {
         final UUID streamID;
         final Class<T> type;
-        final Class<R> overlay;
     }
 }
