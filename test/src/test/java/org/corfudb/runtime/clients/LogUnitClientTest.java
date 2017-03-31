@@ -11,9 +11,12 @@ import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.junit.Test;
 
 import java.io.File;
@@ -27,6 +30,9 @@ import java.util.concurrent.ExecutionException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.fail;
 
 /**
  * Created by mwei on 12/14/15.
@@ -70,7 +76,7 @@ public class LogUnitClientTest extends AbstractClientTest {
     public void canReadWrite()
             throws Exception {
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
+        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
         LogData r = client.read(0).get().getReadSet().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
@@ -79,11 +85,86 @@ public class LogUnitClientTest extends AbstractClientTest {
     }
 
     @Test
+    public void canReadWriteRanked()
+            throws Exception {
+        byte[] testString = "hello world".getBytes();
+
+        client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(1), testString, Collections.emptyMap()).get();
+        LogData r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+        assertThat(r.getPayload(new CorfuRuntime()))
+                .isEqualTo(testString);
+
+        byte[] testString2 = "hello world 2".getBytes();
+        client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(2), testString2, Collections.emptyMap()).get();
+        r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+        assertThat(r.getPayload(new CorfuRuntime()))
+                .isEqualTo(testString2);
+    }
+
+
+    @Test
+    public void cannotOutrank() throws ExecutionException, InterruptedException {
+        byte[] testString = "hello world".getBytes();
+
+        client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(2), testString, Collections.emptyMap()).get();
+        LogData r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+        assertThat(r.getPayload(new CorfuRuntime()))
+                .isEqualTo(testString);
+
+        byte[] testString2 = "hello world 2".getBytes();
+        try {
+            client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(1), testString2, Collections.emptyMap()).get();
+            fail();
+        } catch (ExecutionException e) {
+            // expected
+            assertEquals(DataOutrankedException.class, e.getCause().getClass());
+        }
+        r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+        assertThat(r.getPayload(new CorfuRuntime()))
+                .isEqualTo(testString);
+    }
+
+    @Test
+    public void valueCanBeAdopted() throws ExecutionException, InterruptedException {
+        byte[] testString = "hello world".getBytes();
+
+        client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(1), testString, Collections.emptyMap()).get();
+        LogData r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType()) .isEqualTo(DataType.DATA);
+        assertThat(r.getPayload(new CorfuRuntime()))
+                .isEqualTo(testString);
+
+        try {
+            client.writeEmptyData(0, DataType.RANK_ONLY, Collections.<UUID>emptySet(), new IMetadata.DataRank(2)).get();
+            fail();
+        } catch (Exception e) {
+            // expected
+            assertEquals(ValueAdoptedException.class, e.getCause().getClass());
+            ValueAdoptedException ex = (ValueAdoptedException)e.getCause();
+            ReadResponse read = ex.getReadResponse();
+            LogData log = read.getReadSet().get(0l);
+            assertThat(log.getType()).isEqualTo(DataType.DATA);
+            assertThat(log.getPayload(new CorfuRuntime())).isEqualTo(testString);;
+        }
+        r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType()).isEqualTo(DataType.DATA);
+        assertThat(r.getPayload(new CorfuRuntime())).isEqualTo(testString);
+    }
+
+    @Test
     public void overwriteThrowsException()
             throws Exception {
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
-        assertThatThrownBy(() -> client.write(0, Collections.<UUID>emptySet(), 0,
+        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
+        assertThatThrownBy(() -> client.write(0, Collections.<UUID>emptySet(), null,
                 testString, Collections.emptyMap()).get())
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(OverwriteException.class);
@@ -98,7 +179,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         assertThat(r.getType())
                 .isEqualTo(DataType.HOLE);
 
-        assertThatThrownBy(() -> client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get())
+        assertThatThrownBy(() -> client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get())
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(OverwriteException.class);
     }
@@ -107,7 +188,7 @@ public class LogUnitClientTest extends AbstractClientTest {
     public void holeFillCannotOverwrite()
             throws Exception {
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
+        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
 
         LogData r = client.read(0).get().getReadSet().get(0L);
         assertThat(r.getType())
@@ -125,7 +206,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         final long ADDRESS_1 = 1338L;
 
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), 0, testString,
+        client.write(0, Collections.<UUID>emptySet(), null, testString,
                 ImmutableMap.<UUID, Long>builder()
                         .put(CorfuRuntime.getStreamID("hello"), ADDRESS_0)
                         .put(CorfuRuntime.getStreamID("hello2"), ADDRESS_1)
@@ -142,7 +223,7 @@ public class LogUnitClientTest extends AbstractClientTest {
     public void canCommitWrite()
             throws Exception {
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
+        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
         client.writeCommit(null, 0, true).get();
         LogData r = client.read(0).get().getReadSet().get(0L);
         assertThat(r.getType())
@@ -167,7 +248,7 @@ public class LogUnitClientTest extends AbstractClientTest {
     @Test
     public void CorruptedDataReadThrowsException() throws Exception {
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), 0, testString, Collections.emptyMap()).get();
+        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
         LogData r = client.read(0).get().getReadSet().get(0L);
         // Verify that the data has been written correctly
         assertThat(r.getPayload(null)).isEqualTo(testString);
