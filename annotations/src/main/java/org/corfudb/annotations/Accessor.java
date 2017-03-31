@@ -14,4 +14,9 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 public @interface Accessor {
+    /** The name of the function used to generate conflict parameters, which
+     * will be used to generate conflict information.
+     * @return  The name of a conflict generation function.
+     */
+    String conflictParameterFunction() default "";
 }

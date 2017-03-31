@@ -68,4 +68,8 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
         // but replex erases this information.
         return updates;
     }
+
+    public void setSMRUpdates(List<SMREntry> newList) {
+        updates = newList;
+    }
 }

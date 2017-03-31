@@ -230,6 +230,34 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .containsEntry("k", "v2");
     }
 
+    /** This test makes sure that coalesable writes (lots of put operations)
+     * are properly coalesced.
+     */
+    @Test
+    public void coalescbleWrites() {
+        // Write a complex transaction to be coalesced.
+        TXBegin();
+        put("k1", "v1");
+        put("k2", "v1");
+        getMap().clear();
+        put("k1", "v2");
+        put("k2", "v2");
+        put("k1", "v3");
+        put("k2", "v3");
+        put("k1", "v4");
+        put("k2", "v4");
+        put("k3", "v4");
+        put("k4", "v4");
+        TXEnd();
+
+        // Make sure the map was correctly coalesced.
+        assertThat(getMap())
+                .containsEntry("k1", "v4")
+                .containsEntry("k2", "v4")
+                .containsEntry("k3", "v4")
+                .containsEntry("k4", "v4");
+    }
+
     @Override
     protected void TXBegin() {
         getRuntime().getObjectsView().TXBuild()

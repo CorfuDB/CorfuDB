@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import io.netty.util.internal.ConcurrentSet;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.NoRollbackException;
@@ -73,34 +74,20 @@ public class VersionLockedObject<T> {
      */
     private WriteSetSMRStream optimisticStream;
 
-    /** The upcall map for this object. */
-    private final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap;
-
-    /** The undo record function map for this object. */
-    private final Map<String, IUndoRecordFunction<T>> undoRecordFunctionMap;
-
-    /** The undo target map for this object. */
-    private final Map<String, IUndoFunction<T>> undoFunctionMap;
-
-    /** The reset set for this object. */
-    private final Set<String> resetSet;
+    /** The wrapper object making calls into this version locked object. */
+    @Getter
+    private final ICorfuSMR<T> wrapperObject;
 
     /** A function that generates a new instance of this object. */
     private final Supplier<T> newObjectFn;
 
     public VersionLockedObject(Supplier<T> newObjectFn,
                                StreamViewSMRAdapter smrStream,
-                  Map<String, ICorfuSMRUpcallTarget<T>> upcallTargets,
-                  Map<String, IUndoRecordFunction<T>> undoRecordTargets,
-                  Map<String, IUndoFunction<T>> undoTargets,
-                  Set<String> resetSet)
+                               ICorfuSMR<T> wrapperObject)
     {
         this.smrStream = smrStream;
 
-        this.upcallTargetMap = upcallTargets;
-        this.undoRecordFunctionMap = undoRecordTargets;
-        this.undoFunctionMap = undoTargets;
-        this.resetSet = resetSet;
+        this.wrapperObject = wrapperObject;
 
         this.newObjectFn = newObjectFn;
         this.object = newObjectFn.get();
@@ -391,7 +378,7 @@ public class VersionLockedObject<T> {
                 record.getEntry() != null ? record.getEntry().getGlobalAddress() : "OPT",
                 record.getUndoRecord());
         IUndoFunction<T> undoFunction =
-                undoFunctionMap.get(record.getSMRMethod());
+                wrapperObject.getCorfuUndoMap().get(record.getSMRMethod());
         // If the undo function exists, apply it.
         if (undoFunction != null) {
             undoFunction.doUndo(object, record.getUndoRecord(),
@@ -400,7 +387,7 @@ public class VersionLockedObject<T> {
         }
         // If this is a reset, undo by restoring the
         // previous state.
-        else if (resetSet.contains(record.getSMRMethod())) {
+        else if (wrapperObject.getCorfuResetSet().contains(record.getSMRMethod())) {
             object = (T) record.getUndoRecord();
             // clear the undo record, since it is now
             // consumed (the object may change)
@@ -423,7 +410,7 @@ public class VersionLockedObject<T> {
                 entry.getEntry() != null ? entry.getEntry().getGlobalAddress() : "OPT",
                 entry.getSMRArguments());
 
-        ICorfuSMRUpcallTarget<T> target = upcallTargetMap.get(entry.getSMRMethod());
+        ICorfuSMRUpcallTarget<T> target = wrapperObject.getCorfuSMRUpcallMap().get(entry.getSMRMethod());
         if (target == null) {
             throw new RuntimeException("Unknown upcall " + entry.getSMRMethod());
         }
@@ -432,13 +419,14 @@ public class VersionLockedObject<T> {
         if (!entry.isUndoable()) {
             // Can we generate an undo record?
             IUndoRecordFunction<T> undoRecordTarget =
-                    undoRecordFunctionMap
+                    wrapperObject.getCorfuUndoRecordMap()
                             .get(entry.getSMRMethod());
             if (undoRecordTarget != null) {
                 // calculate the undo record
                 entry.setUndoRecord(undoRecordTarget
                         .getUndoRecord(object, entry.getSMRArguments()));
-            } else if (resetSet.contains(entry.getSMRMethod())) {
+            } else if (wrapperObject.getCorfuResetSet()
+                    .contains(entry.getSMRMethod())) {
                 // This entry actually resets the object. So here
                 // we can safely get a new instance, and add the
                 // previous instance to the undo log.
@@ -470,7 +458,7 @@ public class VersionLockedObject<T> {
         List<SMREntry> entries =  stream.current();
 
         while(entries != null) {
-            if (entries.stream().allMatch(x -> x.isUndoable())) {
+            if (entries.stream().allMatch(SMREntry::isUndoable)) {
                 // start from the end, process one at a time
                 ListIterator<SMREntry> it =
                         entries.listIterator(entries.size());

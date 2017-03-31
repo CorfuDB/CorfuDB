@@ -3,6 +3,7 @@ package org.corfudb.protocols.logprotocol;
 import io.netty.buffer.ByteBuf;
 import lombok.*;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.ISMREntry;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -16,7 +17,7 @@ import java.util.UUID;
  */
 @ToString(callSuper = true)
 @NoArgsConstructor
-public class SMREntry extends LogEntry implements ISMRConsumable {
+public class SMREntry extends LogEntry implements ISMRConsumable, ISMREntry {
 
     /**
      * The name of the SMR method. Note that this is limited to the size of a short.

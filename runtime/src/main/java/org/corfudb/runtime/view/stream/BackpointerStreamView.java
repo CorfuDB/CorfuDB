@@ -107,9 +107,26 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             return runtime.getAddressSpaceView().read(address);
     }
 
+    /** {@inheritDoc}
+     *
+     * In the backpointer implementation, readAll will typically read a list
+     * of addresses previously read when building the read queue, so they
+     * should typically be in the cache already.
+     */
     @Nonnull
     @Override
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
+        // If there are no addresses to read, don't do additional work.
+        if (addresses.size() == 0) {
+            return Collections.emptyList();
+        }
+        // If there is only a single address, don't do work assoicated with
+        // doing a bulk read.
+        if (addresses.size() == 1) {
+            return Collections.singletonList(read(addresses.get(0)));
+        }
+        // Address space's read method returns a map of addresses to log data
+        // we need to transform that into a plain list.
         Map<Long, ILogData> dataMap =
             runtime.getAddressSpaceView().read(addresses);
         return addresses.stream()

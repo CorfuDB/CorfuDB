@@ -3,16 +3,16 @@ package org.corfudb.runtime.object.transactions;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuSMRAccess;
-import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.object.*;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.serializer.ISerializer;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -53,6 +53,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     private final Set<ICorfuSMRProxyInternal> modifiedProxies =
             new HashSet<>();
 
+    /** Temp var until we put write set proxies somewhere. */
+    protected final Set<ICorfuSMRProxyInternal> writeProxies = new HashSet<>();
 
     OptimisticTransactionalContext(TransactionBuilder builder) {
         super(builder);
@@ -196,6 +198,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // Insert the modification into writeSet.
         addToWriteSet(proxy, updateEntry, conflictObjects);
 
+        writeProxies.add(proxy);
+
         // Return the "address" of the update; used for retrieving results from operations via getUpcallRestult.
         return writeSet.get(proxy.getStreamID()).getValue().size() - 1;
     }
@@ -257,6 +261,30 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             affectedStreams.add(TRANSACTION_STREAM_ID);
         }
 
+        MultiObjectSMREntry entry = collectWriteSetEntries();
+
+        if (!builder.getRuntime().getParameters().isCoalesceDisabled()) {
+            // for each modified proxy, attempt to condense the write sets
+            writeProxies.stream()
+                    .forEach(x -> {
+                        if (writeSet.get(x.getStreamID()).getValue().size() >= 2) {
+                            ISerializer serializer = writeSet.get(x.getStreamID()).getValue().get(0).getSerializerType();
+                            if (x.getUnderlyingObject().getWrapperObject() instanceof ICoalescableObject) {
+                                entry.getEntryMap().get(x.getStreamID()).setSMRUpdates((List)
+                                        ((ICoalescableObject) x.getUnderlyingObject().getWrapperObject())
+                                                .coalesceUpdates((List) writeSet.get(x.getStreamID()).getValue(),
+                                                        (method, args, isUndoable, undoRecord) -> {
+                                                            SMREntry e = new SMREntry(method, args, serializer);
+                                                            if (isUndoable) {
+                                                                e.setUndoRecord(undoRecord);
+                                                            }
+                                                            return e;
+                                                        }));
+                            }
+                        }
+                    });
+        }
+
         // Now we obtain a conditional address from the sequencer.
         // This step currently happens all at once, and we get an
         // address of -1L if it is rejected.
@@ -267,7 +295,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                         affectedStreams,
 
                         // a MultiObjectSMREntry that contains the update(s) to objects
-                        collectWriteSetEntries(),
+                        entry,
 
                         // nothing to do after successful acquisition and after deacquisition
                         t->true, t->true,
