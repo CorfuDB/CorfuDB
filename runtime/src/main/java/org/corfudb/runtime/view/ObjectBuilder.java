@@ -10,7 +10,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.CorfuProxyBuilder;
 import org.corfudb.runtime.object.IObjectBuilder;
-import org.corfudb.runtime.object.ISMRInterface;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -30,9 +29,6 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
     final CorfuRuntime runtime;
 
     Class<T> type;
-
-    @Setter
-    Class<? extends ISMRInterface> overlay = null;
 
     @Setter
     UUID streamID;
@@ -99,7 +95,7 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
                             arguments, serializer);
                 }
                 else {
-                    ObjectsView.ObjectID<T, ?> oid = new ObjectsView.ObjectID(streamID, type, overlay);
+                    ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
                     return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
                         try {
                             return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
@@ -117,12 +113,12 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
 
         // CREATE_ONLY implies no cache
         if (options.contains(ObjectOpenOptions.NO_CACHE) || options.contains(ObjectOpenOptions.CREATE_ONLY)) {
-            return CorfuProxyBuilder.getProxy(type, overlay, sv, runtime, serializer, options, arguments);
+            return CorfuProxyBuilder.getProxy(type, sv, runtime, serializer, options, arguments);
         }
 
-        ObjectsView.ObjectID<T, ?> oid = new ObjectsView.ObjectID(streamID, type, overlay);
+        ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
         return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
-            return CorfuProxyBuilder.getProxy(type, overlay, sv, runtime, serializer, options, arguments);
+            return CorfuProxyBuilder.getProxy(type, sv, runtime, serializer, options, arguments);
         });
 
     }
