@@ -386,14 +386,14 @@ public class ManagementServer extends AbstractServer {
      */
     private void failureDetectorTask() {
 
-        CorfuRuntime corfuRuntime = getCorfuRuntime();
-        corfuRuntime.invalidateLayout();
-
-        // Fetch the latest layout view through the runtime.
-        safeUpdateLayout(corfuRuntime.getLayoutView().getLayout());
-
         if (!isRapidSetUp) {
             try {
+                CorfuRuntime corfuRuntime = getCorfuRuntime();
+                corfuRuntime.invalidateLayout();
+
+                // Fetch the latest layout view through the runtime.
+                safeUpdateLayout(corfuRuntime.getLayoutView().getLayout());
+
                 rapidSetUp();
                 isRapidSetUp = true;
             } catch (Exception e) {
@@ -501,6 +501,11 @@ public class ManagementServer extends AbstractServer {
     }
 
     private void onViewChange(final List<NodeStatusChange> viewChange) {
+
+        getCorfuRuntime().invalidateLayout();
+        // Fetch the latest layout view through the runtime.
+        safeUpdateLayout(getCorfuRuntime().getLayoutView().getLayout());
+
         log.info("View Changed by Rapid. : {}", viewChange);
         try {
             Set<String> set = viewChange.stream()
@@ -509,7 +514,8 @@ public class ManagementServer extends AbstractServer {
                     .map(serverAddress -> serverAddress.replace('8', '9'))
                     .collect(Collectors.toSet());
             if (!set.isEmpty()) {
-                corfuRuntime.getRouter(getLocalEndpoint()).getClient(ManagementClient.class).handleFailure(set);
+                corfuRuntime.getRouter(getLocalEndpoint()).getClient(ManagementClient.class).handleFailure(set).get();
+                getCorfuRuntime().invalidateLayout();
             }
         } catch (Exception e) {
             log.error("Exception invoking failure handler : {}", e);

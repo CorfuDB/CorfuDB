@@ -396,7 +396,9 @@ public class CorfuRuntime {
                         // Since the variable layoutServers is used only locally within the class it is acceptable
                         // (at least the code on 10/13/2016 does not have issues)
                         // but setEpoch of routers needs to be synchronized as those variables are not local.
-                        l.getAllServers().stream().map(getRouterFunction).forEach(x -> x.setEpoch(l.getEpoch()));
+                        l.getAllServers().stream()
+                                .filter(server -> !l.getUnresponsiveServers().contains(server))
+                                .map(getRouterFunction).forEach(x -> x.setEpoch(l.getEpoch()));
                         layoutServers = l.getLayoutServers();
                         layout = layoutFuture;
                         //FIXME Synchronization END

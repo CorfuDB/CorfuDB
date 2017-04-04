@@ -3,6 +3,8 @@ package org.corfudb.runtime.view;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -195,9 +197,19 @@ public class LayoutView extends AbstractView {
      */
     public void committed(long epoch, Layout layout)
             throws WrongEpochException {
-        CompletableFuture<Boolean>[] commitList = layout.getLayoutClientStream()
-                .map(x -> x.committed(epoch, layout))
-                .toArray(CompletableFuture[]::new);
+        CompletableFuture<Boolean>[] commitList = new CompletableFuture[layout.getLayoutServers().size()];
+        for (int i = 0; i < layout.getLayoutServers().size(); i++) {
+            try {
+                LayoutClient layoutClient = layout.getLayoutClient(i);
+                commitList[i] = layoutClient.committed(epoch, layout);
+            } catch (Exception e) {
+                commitList[i] = new CompletableFuture<Boolean>();
+                commitList[i].completeExceptionally(e);
+            }
+        }
+//        CompletableFuture<Boolean>[] commitList = layout.getLayoutClientStream()
+//                .map(x -> x.committed(epoch, layout))
+//                .toArray(CompletableFuture[]::new);
 
         int timeouts = 0;
         int responses = 0;
@@ -205,8 +217,8 @@ public class LayoutView extends AbstractView {
             // wait for someone to complete.
             try {
                 CFUtils.getUninterruptibly(CompletableFuture.anyOf(commitList),
-                        WrongEpochException.class, TimeoutException.class);
-            } catch (TimeoutException te) {
+                        WrongEpochException.class, TimeoutException.class, NetworkException.class);
+            } catch (TimeoutException | NetworkException e) {
                 timeouts++;
             }
             responses++;
