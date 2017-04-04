@@ -324,7 +324,7 @@ public class VersionLockedObject<T> {
      *          False otherwise.
      */
     public boolean optimisticallyOwnedByThreadUnsafe() {
-        return optimisticStream == null ? false : optimisticStream.isStreamForThisTransaction();
+        return optimisticStream == null ? false : optimisticStream.isStreamForThisThread();
     }
 
     /** Set the optimistic stream for this thread, rolling back
