@@ -212,6 +212,32 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .doesNotContainEntry("k", "v4");
     }
 
+    /**
+     * Check that on abortion of a nested transaction
+     * the modifications that happened within it are not
+     * leaked into the parent transaction.
+     */
+    @Test
+    public void nestedTransactionCanBeAborted() {
+        t(1, this::TXBegin);
+        t(1, () -> put("k", "v1"));
+        t(1, () -> get("k"))
+                        .assertResult()
+                        .isEqualTo("v1");
+        t(1, this::TXBegin);
+        t(1, () -> put("k", "v2"));
+        t(1, () -> get("k"))
+                        .assertResult()
+                        .isEqualTo("v2");
+        t(1, this::TXAbort);
+        t(1, () -> get("k"))
+                        .assertResult()
+                        .isEqualTo("v1");
+        t(1, this::TXEnd);
+        assertThat(getMap())
+                .containsEntry("k", "v1");
+    }
+
     /** This test makes sure that a write-only transaction properly
      * commits its updates, even if there are no accesses
      * during the transaction.
