@@ -15,6 +15,7 @@
         <module>annotationProcessor</module>
         <module>annotations</module>
         <module>samples</module>
+        <module>logReader</module>
     </modules>
 
     <packaging>pom</packaging>
