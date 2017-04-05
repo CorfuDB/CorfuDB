@@ -37,6 +37,7 @@ import org.corfudb.runtime.view.LayoutView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
+
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Version;
@@ -486,9 +487,8 @@ public class CorfuRuntime {
     private CompletableFuture<Layout> fetchLayout() {
         return CompletableFuture.<Layout>supplyAsync(() -> {
 
+            List<String> layoutServersCopy = new ArrayList<>(layoutServers);
             while (true) {
-                List<String> layoutServersCopy =  layoutServers.stream().collect(
-                        Collectors.toList());
                 Collections.shuffle(layoutServersCopy);
                 // Iterate through the layout servers, attempting to connect to one
                 for (String s : layoutServersCopy) {
@@ -525,12 +525,16 @@ public class CorfuRuntime {
                         // but setEpoch of routers needs to be synchronized as those variables are
                         // not local.
                         try {
-                            l.getAllServers().stream().map(getRouterFunction).forEach(x ->
-                                    x.setEpoch(l.getEpoch()));
+                            l.getAllServers().stream().map(getRouterFunction).forEach(x -> {
+                                x.setEpoch(l.getEpoch());
+                                x.setClusterId(l.getClusterId());
+                            });
                         } catch (NetworkException ne) {
-                            // We have already received the layout and there is no need to keep client waiting.
+                            // We have already received the layout and there is no need to keep
+                            // client waiting.
                             // NOTE: This is true assuming this happens only at router creation.
-                            // If not we also have to take care of setting the latest epoch on Client Router.
+                            // If not we also have to take care of setting the latest epoch on
+                            // Client Router.
                             log.warn("fetchLayout: Error getting router : {}", ne);
                         }
                         layoutServers = l.getLayoutServers();

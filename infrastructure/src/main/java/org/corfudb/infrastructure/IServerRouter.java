@@ -3,6 +3,8 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
+import java.util.UUID;
+
 /**
  * Created by mwei on 12/13/15.
  */
@@ -20,7 +22,17 @@ public interface IServerRouter {
     void setServerEpoch(long newEpoch);
 
     /**
-     * Register a server to route messages to.
+     * Get the cluster ID
+     */
+    UUID getClusterId();
+
+    /**
+     * Set the cluster ID
+     */
+    void setClusterId(UUID clusterId);
+
+    /**
+     * Register a server to route messages to
      * @param server    The server to route messages to
      */
     void addServer(AbstractServer server);

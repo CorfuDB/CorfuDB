@@ -191,7 +191,7 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(l2.getLayoutServers().contains(SERVERS.ENDPOINT_1)).isFalse();
     }
 
-    protected void getManagementTestLayout()
+    protected Layout getManagementTestLayout()
             throws Exception {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
@@ -235,6 +235,8 @@ public class ManagementViewTest extends AbstractViewTest {
                 getManagementServer(SERVERS.PORT_0).getCorfuRuntime(),
                 getManagementServer(SERVERS.PORT_1).getCorfuRuntime(),
                 getManagementServer(SERVERS.PORT_2).getCorfuRuntime());
+
+        return l;
     }
 
     /**
@@ -407,7 +409,7 @@ public class ManagementViewTest extends AbstractViewTest {
      */
     @Test
     public void testSequencerFailover() throws Exception {
-        getManagementTestLayout();
+        Layout originalLayout = getManagementTestLayout();
 
         final long beforeFailure = 5L;
         final long afterFailure = 10L;
@@ -442,6 +444,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // verify the failover layout
         //
         Layout expectedLayout = new TestLayoutBuilder()
+                .setClusterId(originalLayout.getClusterId())
                 .setEpoch(2L)
                 .addLayoutServer(SERVERS.PORT_0)
                 .addLayoutServer(SERVERS.PORT_1)

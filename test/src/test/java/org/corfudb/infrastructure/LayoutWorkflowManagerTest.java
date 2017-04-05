@@ -102,6 +102,7 @@ public class LayoutWorkflowManagerTest extends AbstractCorfuTest {
         // Deleting SERVERS.PORT_0 and SERVERS.PORT_4
         // Preparing new layout
         Layout expectedLayout = new TestLayoutBuilder()
+                .setClusterId(originalLayout.getClusterId())
                 .setEpoch(1L)
                 .addLayoutServer(SERVERS.PORT_1)
                 .addLayoutServer(SERVERS.PORT_2)
@@ -135,6 +136,7 @@ public class LayoutWorkflowManagerTest extends AbstractCorfuTest {
          */
 
         expectedLayout = new TestLayoutBuilder()
+                .setClusterId(originalLayout.getClusterId())
                 .setEpoch(1L)
                 .addLayoutServer(SERVERS.PORT_3)
                 .addSequencer(SERVERS.PORT_2)

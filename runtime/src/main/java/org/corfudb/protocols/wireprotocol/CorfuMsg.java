@@ -45,6 +45,10 @@ public class CorfuMsg {
     long epoch;
 
     /**
+     * The cluster id of this request/response
+     */
+    UUID clusterId;
+    /**
      * The underlying ByteBuf, if present.
      */
     ByteBuf buf;
@@ -66,7 +70,7 @@ public class CorfuMsg {
     }
 
     // The wire format of the NettyCorfuMessage message is below:
-    //    markerField(1) | client ID(8) | request ID(8) |  epoch(8)   |  type(1)  |
+    // markerField(1) | client ID(16) | request ID(8) |  epoch(8) | cluster ID(16) | type(1) |
 
     /**
      * Take the given bytebuffer and deserialize it into a message.
@@ -83,12 +87,14 @@ public class CorfuMsg {
         UUID clientId = new UUID(buffer.readLong(), buffer.readLong());
         long requestId = buffer.readLong();
         long epoch = buffer.readLong();
+        UUID clusterId = new UUID(buffer.readLong(), buffer.readLong());
         CorfuMsgType message = typeMap.get(buffer.readByte());
         CorfuMsg msg = message.getConstructor().construct();
 
         msg.clientID = clientId;
         msg.requestID = requestId;
         msg.epoch = epoch;
+        msg.clusterId = clusterId;
         msg.msgType = message;
         msg.fromBuffer(buffer);
         msg.buf = buffer;
@@ -111,6 +117,13 @@ public class CorfuMsg {
         }
         buffer.writeLong(requestID);
         buffer.writeLong(epoch);
+        if (clusterId == null) {
+            buffer.writeLong(0L);
+            buffer.writeLong(0L);
+        } else {
+            buffer.writeLong(clusterId.getMostSignificantBits());
+            buffer.writeLong(clusterId.getLeastSignificantBits());
+        }
         buffer.writeByte(msgType.asByte());
     }
 
@@ -129,6 +142,7 @@ public class CorfuMsg {
         this.clientID = msg.clientID;
         this.epoch = msg.epoch;
         this.requestID = msg.requestID;
+        this.clusterId = msg.clusterId;
     }
 
     /**

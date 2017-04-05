@@ -4,6 +4,7 @@ import com.codahale.metrics.MetricRegistry;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.UUID;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -34,6 +35,8 @@ public class ServerContext {
     private static final String KEY_TAIL_SEGMENT = "CURRENT";
     private static final String PREFIX_STARTING_ADDRESS = "STARTING_ADDRESS";
     private static final String KEY_STARTING_ADDRESS = "CURRENT";
+    private static final String PREFIX_CLUSTER_ID = "UUID";
+    private static final String KEY_CLUSTER_ID = "CLUSTER_ID";
 
     /**
      * various duration constants.
@@ -125,5 +128,17 @@ public class ServerContext {
 
     public void setStartingAddress(long startingAddress) {
         dataStore.put(Long.class, PREFIX_STARTING_ADDRESS, KEY_STARTING_ADDRESS, startingAddress);
+    }
+
+    /**
+     * The ID for this cluster.
+     */
+    public synchronized UUID getClusterId() {
+        return dataStore.get(UUID.class, PREFIX_CLUSTER_ID, KEY_CLUSTER_ID);
+    }
+
+    public synchronized  void setClusterId(UUID clusterId) {
+        dataStore.put(UUID.class, PREFIX_CLUSTER_ID, KEY_CLUSTER_ID, clusterId);
+        serverRouter.setClusterId(clusterId);
     }
 }

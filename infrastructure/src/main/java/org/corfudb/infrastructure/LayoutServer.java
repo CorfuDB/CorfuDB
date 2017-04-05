@@ -6,6 +6,7 @@ import java.lang.invoke.MethodHandles;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -99,6 +100,7 @@ public class LayoutServer extends AbstractServer {
 
     private void getSingleNodeLayout() {
         String localAddress = opts.get("--address") + ":" + opts.get("<port>");
+        UUID clusterId = getServerClusterID() == null ? UUID.randomUUID() : getServerClusterID();
         setCurrentLayout(new Layout(
                 Collections.singletonList(localAddress),
                 Collections.singletonList(localAddress),
@@ -112,7 +114,9 @@ public class LayoutServer extends AbstractServer {
                                 )
                         )
                 )),
-                0L
+                Collections.emptyList(),
+                0L,
+                clusterId
         ));
     }
 
@@ -274,6 +278,7 @@ public class LayoutServer extends AbstractServer {
         }
         Rank proposeRank = new Rank(msg.getPayload().getRank(), msg.getClientID());
         Rank phase1Rank = getPhase1Rank();
+        Layout proposeLayout = msg.getPayload().getLayout();
 
         long serverEpoch = getServerEpoch();
 
@@ -283,6 +288,13 @@ public class LayoutServer extends AbstractServer {
                     msg.getPayload().getEpoch(), serverEpoch, msg);
             return;
         }
+        if (!proposeLayout.getClusterId().equals(getServerClusterID())) {
+            r.sendResponse(ctx, msg, CorfuMsgType.WRONG_CLUSTER_ID.payloadMsg(getServerClusterID()));
+            log.trace("Incoming message with wrong clusterID, got {}, expected {}, message was: {}",
+                    proposeLayout.getClusterId(), getServerClusterID(), msg);
+            return;
+        }
+
         // This is a propose. If no prepare, reject.
         if (phase1Rank == null) {
             log.debug("Rejected phase 2 propose of rank={}, phase1Rank=none", proposeRank);
@@ -299,7 +311,6 @@ public class LayoutServer extends AbstractServer {
             return;
         }
         Rank phase2Rank = getPhase2Rank();
-        Layout proposeLayout = msg.getPayload().getLayout();
         // In addition, if the rank is equal to the current phase 2 rank (already accepted
         // message), reject.
         // This can happen in case of duplicate messages.
@@ -343,6 +354,10 @@ public class LayoutServer extends AbstractServer {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             return;
         }
+        if (!commitLayout.getClusterId().equals(getServerClusterID())) {
+            r.sendResponse(ctx, msg, CorfuMsgType.WRONG_CLUSTER_ID.payloadMsg(getServerClusterID()));
+            return;
+        }
 
         setCurrentLayout(commitLayout);
         setServerEpoch(msg.getPayload().getEpoch());
@@ -382,6 +397,8 @@ public class LayoutServer extends AbstractServer {
         serverContext.getDataStore().put(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT, layout);
         // set the layout in history as well
         setLayoutInHistory(layout);
+        // set the new cluster id
+        serverContext.setClusterId(getCurrentLayout().getClusterId());
     }
 
     public Rank getPhase1Rank() {
@@ -415,6 +432,10 @@ public class LayoutServer extends AbstractServer {
 
     private long getServerEpoch() {
         return serverContext.getServerEpoch();
+    }
+
+    private UUID getServerClusterID() {
+        return serverContext.getClusterId();
     }
 
     /**
