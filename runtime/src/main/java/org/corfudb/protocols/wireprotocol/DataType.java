@@ -19,7 +19,8 @@ public enum DataType implements ICorfuPayload<DataType> {
     EMPTY(1, false),
     HOLE(2, true),
     TRIMMED(3, false),
-    RANK_ONLY(4, true);
+    RANK_ONLY(4, true),
+    CHECKPOINT(5, true);
 
     final int val;
 

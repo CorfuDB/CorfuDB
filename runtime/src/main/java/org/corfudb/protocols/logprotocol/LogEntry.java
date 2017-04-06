@@ -118,7 +118,8 @@ public class LogEntry implements ICorfuSerializable {
         TX_LAMBDAREF(5, TXLambdaReferenceEntry.class),
         OPT_TX(6, MultiSMREntry.class),
         MULTIOBJSMR(7, MultiObjectSMREntry.class),
-        MULTISMR(8, MultiSMREntry.class);
+        MULTISMR(8, MultiSMREntry.class),
+        CHECKPOINT(9, CheckpointEntry.class);
 
         public final int type;
         public final Class<? extends LogEntry> entryType;
