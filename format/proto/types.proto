@@ -6,6 +6,7 @@ enum DataType {
     HOLE = 2;
     TRIMMED = 3;
     PROPOSAL = 4;
+    CHECKPOINT = 5;
 }
 
 
