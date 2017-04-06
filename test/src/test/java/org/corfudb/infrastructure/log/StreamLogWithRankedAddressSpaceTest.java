@@ -10,6 +10,7 @@ import io.netty.buffer.ByteBufAllocator;
 
 import java.io.File;
 
+import io.netty.buffer.Unpooled;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -197,7 +198,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     }
 
     private void writeToLog(StreamLog log, LogAddress address, DataType dataType, String payload, IMetadata.DataRank rank) {
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = payload.getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
         LogData data = new LogData(dataType, b);

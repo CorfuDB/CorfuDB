@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
@@ -147,7 +148,7 @@ public class TestServerRouter implements IServerRouter {
 
     public CorfuMsg simulateSerialization(CorfuMsg message) {
         /* simulate serialization/deserialization */
-        ByteBuf oBuf = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf oBuf = Unpooled.buffer();
         //Class<? extends CorfuMsg> type = message.getMsgType().messageType;
         //extra assert needed to simulate real Netty behavior
         //assertThat(message.getClass().getSimpleName()).isEqualTo(type.getSimpleName());
