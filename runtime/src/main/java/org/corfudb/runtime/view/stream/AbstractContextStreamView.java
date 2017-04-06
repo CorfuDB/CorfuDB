@@ -277,8 +277,8 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      * @param data  The entry to use to update the pointer.
      */
     protected void updatePointer(final ILogData data) {
-        // Update the global pointer, if it is data.
-        if (data.getType() == DataType.DATA) {
+        // Update the global pointer, if it is non-checkpoint data.
+        if (data.getType() == DataType.DATA && !data.hasCheckpointMetadata()) {
             getCurrentContext().globalPointer =
                     data.getGlobalAddress();
         }

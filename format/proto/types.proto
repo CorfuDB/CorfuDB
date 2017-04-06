@@ -8,6 +8,11 @@ enum DataType {
     PROPOSAL = 4;
 }
 
+enum CheckpointEntryType {
+    START = 0;
+    CONTINUATION = 1;
+    END = 2;
+}
 
 message DataRank {
     required int64 rank = 1;
@@ -23,6 +28,9 @@ message LogEntry {
     map<string, int64> logical_addresses = 7;
     map<string, int64> backpointers = 8;
     optional DataRank rank = 9;
+    optional CheckpointEntryType checkpointEntryType = 10;
+    optional int64 checkpointID_most_significant = 11;
+    optional int64 checkpointID_least_significant = 12;
 }
 
 message LogHeader {

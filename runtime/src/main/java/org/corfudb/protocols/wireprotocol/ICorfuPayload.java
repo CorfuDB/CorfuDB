@@ -3,6 +3,7 @@ package org.corfudb.protocols.wireprotocol;
 import com.google.common.collect.*;
 import com.google.common.reflect.TypeToken;
 import io.netty.buffer.ByteBuf;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.JSONUtils;
 
@@ -47,6 +48,8 @@ public interface ICorfuPayload<T> {
                 })
                 .put(IMetadata.DataRank.class, x ->
                         new IMetadata.DataRank(x.readLong(), new UUID(x.readLong(), x.readLong())))
+                .put(CheckpointEntry.CheckpointEntryType.class, x ->
+                    CheckpointEntry.CheckpointEntryType.typeMap.get(x.readByte()))
                 .put(UUID.class, x -> new UUID(x.readLong(), x.readLong()))
                 .put(byte[].class, x -> {
                     int length = x.readInt();
@@ -320,6 +323,8 @@ public interface ICorfuPayload<T> {
             buffer.writeLong(rank.getRank());
             buffer.writeLong(rank.getUuid().getMostSignificantBits());
             buffer.writeLong(rank.getUuid().getLeastSignificantBits());
+        } else if (payload instanceof CheckpointEntry.CheckpointEntryType) {
+            buffer.writeByte(((CheckpointEntry.CheckpointEntryType) payload).asByte());
         }
         else {
             throw new RuntimeException("Unknown class " + payload.getClass()
