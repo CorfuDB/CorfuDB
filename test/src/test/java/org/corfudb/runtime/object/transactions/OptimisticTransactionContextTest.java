@@ -47,6 +47,42 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                             .isNotEqualTo("v2");
     }
 
+    /** Ensure that, upon two consecutive nested transactions, the latest transaction can
+     * see optimistic updates from previous ones.
+     *
+     */
+    @Test
+    public void OptimisticStreamGetUpdatedCorrectlyWithNestedTransaction(){
+        t(1, this::TXBegin);
+        t(1, () -> put("k", "v0"));
+
+        // Start first nested transaction
+        t(1, this::TXBegin);
+        t(1, () -> get("k"))
+                            .assertResult()
+                            .isEqualTo("v0");
+        t(1, () -> put("k", "v1"));
+        t(1, this::TXEnd);
+        // End first nested transaction
+
+        // Start second nested transaction
+        t(1, this::TXBegin);
+        t(1, () -> get("k"))
+                            .assertResult()
+                            .isEqualTo("v1");
+        t(1, () -> put("k", "v2"));
+        t(1, this::TXEnd);
+        // End second nested transaction
+
+        t(1, () -> get("k"))
+                            .assertResult()
+                            .isEqualTo("v2");
+        t(1, this::TXEnd);
+        assertThat(getMap())
+                .containsEntry("k", "v2");
+
+    }
+
     /** Threads that start a transaction at the same time
      * (with the same timestamp) should cause one thread
      * to abort while the other succeeds.
@@ -174,6 +210,32 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         assertThat(getMap())
                 .containsEntry("k", "v3")
                 .doesNotContainEntry("k", "v4");
+    }
+
+    /**
+     * Check that on abortion of a nested transaction
+     * the modifications that happened within it are not
+     * leaked into the parent transaction.
+     */
+    @Test
+    public void nestedTransactionCanBeAborted() {
+        t(1, this::TXBegin);
+        t(1, () -> put("k", "v1"));
+        t(1, () -> get("k"))
+                        .assertResult()
+                        .isEqualTo("v1");
+        t(1, this::TXBegin);
+        t(1, () -> put("k", "v2"));
+        t(1, () -> get("k"))
+                        .assertResult()
+                        .isEqualTo("v2");
+        t(1, this::TXAbort);
+        t(1, () -> get("k"))
+                        .assertResult()
+                        .isEqualTo("v1");
+        t(1, this::TXEnd);
+        assertThat(getMap())
+                .containsEntry("k", "v1");
     }
 
     /** This test makes sure that a write-only transaction properly

@@ -90,8 +90,8 @@ public class CorfuProxyBuilder {
     }
 
     @SuppressWarnings("unchecked")
-    public static <T, R extends ISMRInterface> Class<? extends T>
-    getProxyClass(CorfuObjectProxy proxy, Class<T> type, Class<R> overlay) {
+    public static <T> Class<? extends T>
+    getProxyClass(CorfuObjectProxy proxy, Class<T> type) {
         if (type.isAnnotationPresent(CorfuObject.class)) {
             log.trace("Detected CorfuObject({}), instrumenting methods.", type);
             CorfuObject corfuAnnotation = type.getAnnotation(CorfuObject.class);
@@ -146,13 +146,6 @@ public class CorfuProxyBuilder {
                     .getLoaded();
             proxy.generatedClass = generatedClass;
             return generatedClass;
-        } else if (overlay != null) {
-            log.trace("Detected Overlay({}), instrumenting methods", overlay);
-        } else if (Arrays.stream(type.getInterfaces()).anyMatch(ISMRInterface.class::isAssignableFrom)) {
-            ISMRInterface[] iface = Arrays.stream(type.getInterfaces())
-                    .filter(ISMRInterface.class::isAssignableFrom)
-                    .toArray(ISMRInterface[]::new);
-            log.trace("Detected ISMRInterfaces({}), instrumenting methods", iface);
         } else {
             log.trace("{} is not an ICorfuSMRObject, no ISMRInterfaces and no overlay provided. " +
                     "Instrumenting all methods as mutatorAccessors but respecting annotations", type);
@@ -186,11 +179,10 @@ public class CorfuProxyBuilder {
             proxy.setGeneratedClass(generatedClass.getClass());
             return generatedClass;
         }
-        throw new UnsupportedOperationException("Not yet implemented.");
     }
 
-    public static <T, R extends ISMRInterface>
-    T getProxy(@NonNull Class<T> type, Class<R> overlay, @NonNull IStreamView sv, @NonNull CorfuRuntime runtime,
+    public static <T>
+    T getProxy(@NonNull Class<T> type, @NonNull IStreamView sv, @NonNull CorfuRuntime runtime,
                ISerializer serializer, Set<ObjectOpenOptions> options, Object... constructorArgs) {
         try {
             CorfuObjectProxy<T> proxy;
@@ -250,9 +242,9 @@ public class CorfuProxyBuilder {
             }
             T ret;
             if (constructorArgs == null || constructorArgs.length == 0) {
-                ret = getProxyClass(proxy, type, overlay).newInstance();
+                ret = getProxyClass(proxy, type).newInstance();
             } else {
-                ret = ReflectionUtils.newInstanceFromUnknownArgumentTypes(getProxyClass(proxy, type, overlay),
+                ret = ReflectionUtils.newInstanceFromUnknownArgumentTypes(getProxyClass(proxy, type),
                         constructorArgs);
             }
             if (proxy instanceof CorfuSMRObjectProxy) {

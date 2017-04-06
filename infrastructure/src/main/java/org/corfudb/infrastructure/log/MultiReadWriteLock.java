@@ -36,12 +36,11 @@ public class MultiReadWriteLock {
         readLock.lock();
         AtomicBoolean closed = new AtomicBoolean(false);
         return () -> {
-            if (!closed.get()) {
+            if (!closed.getAndSet(true)) {
                 try {
                     readLock.unlock();
                     clearEventuallyLockFor(address);
                 } finally {
-                    closed.set(true);
                     deregisterLockReference(address, false);
                 }
             }
@@ -61,12 +60,11 @@ public class MultiReadWriteLock {
         writeLock.lock();
         AtomicBoolean closed = new AtomicBoolean(false);
         return () -> {
-            if (!closed.get()) {
+            if (!closed.getAndSet(true)) {
                 try {
                     writeLock.unlock();
                     clearEventuallyLockFor(address);
                 } finally {
-                    closed.set(true);
                     deregisterLockReference(address, true);
                 }
             }

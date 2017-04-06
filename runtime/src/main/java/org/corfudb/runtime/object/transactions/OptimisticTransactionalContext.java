@@ -4,22 +4,17 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
-import org.corfudb.runtime.view.Address;
 
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
@@ -149,14 +144,27 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         });
     }
 
+    /** Set the correct optimistic stream for this transaction (if not already).
+     *
+     * If the Optimistic stream doesn't reflect the current transaction context,
+     * we create the correct WriteSetSMRStream and pick the latest context as the
+     * current context.
+     * @param object        Underlying object under transaction
+     * @param <T>           Type of the underlying object
+     */
     <T> void setAsOptimisticStream(VersionLockedObject<T> object) {
         if (object.getOptimisticStreamUnsafe() == null ||
                 !object.getOptimisticStreamUnsafe()
-                        .isStreamForThisTransaction()) {
-            object.setOptimisticStreamUnsafe(
-                            new WriteSetSMRStream(
-                                    TransactionalContext.getTransactionStackAsList(),
-                                    object.getID()));
+                        .isStreamCurrentContextThreadCurrentContext()) {
+            WriteSetSMRStream newSMRStream = new WriteSetSMRStream(
+                    TransactionalContext.getTransactionStackAsList(),
+                    object.getID());
+
+            // We are setting the current context to 0 on purpose, because
+            // it points to the root context of nested transactions. Upon sync forward
+            // the stream will replay every entries from all parent transactional context.
+            newSMRStream.currentContext = 0;
+            object.setOptimisticStreamUnsafe(newSMRStream);
         }
     }
 

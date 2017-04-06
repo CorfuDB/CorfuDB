@@ -2,7 +2,6 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.annotations.*;
-import org.corfudb.runtime.object.ISMRInterface;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;

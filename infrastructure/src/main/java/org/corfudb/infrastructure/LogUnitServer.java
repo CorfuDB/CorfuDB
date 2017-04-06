@@ -39,13 +39,13 @@ import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
-import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
-import static org.corfudb.infrastructure.ServerContext.SMALL_INTERVAL;
 
 /**
  * Created by mwei on 12/10/15.
@@ -124,7 +124,7 @@ public class LogUnitServer extends AbstractServer {
             String logdir = opts.get("--log-path") + File.separator + "log";
             File dir = new File(logdir);
             if (!dir.exists()) {
-                dir.mkdir();
+                dir.mkdirs();
             }
             streamLog = new StreamLogFiles(logdir, (Boolean) opts.get("--no-verify"));
         }
@@ -167,10 +167,15 @@ public class LogUnitServer extends AbstractServer {
                 r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
             }
         } catch (OverwriteException ex) {
-            if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM)
+            if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
                 r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
-            else
+            } else {
                 r.sendResponse(ctx, msg, CorfuMsgType.ERROR_REPLEX_OVERWRITE.msg());
+            }
+        } catch (DataOutrankedException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
+        } catch (ValueAdoptedException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_VALUE_ADOPTED.payloadMsg(e.getReadResponse()));
         }
     }
 
@@ -248,12 +253,18 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.FILL_HOLE, opTimer = metricsPrefix + "fill-hole")
     private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
                           boolean isMetricsEnabled) {
+        LogAddress l = new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream());
         try {
-            dataCache.put(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()), LogData.HOLE);
+            dataCache.put(l, LogData.HOLE);
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
 
         } catch (OverwriteException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
+        } catch (DataOutrankedException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
+        } catch (ValueAdoptedException e) {
+
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_VALUE_ADOPTED.payloadMsg(e.getReadResponse()));
         }
     }
 

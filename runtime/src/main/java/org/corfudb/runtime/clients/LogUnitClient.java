@@ -2,18 +2,15 @@ package org.corfudb.runtime.clients;
 
 import com.codahale.metrics.Timer;
 import com.google.common.collect.Range;
-import com.google.common.collect.RangeSet;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
+import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.corfudb.runtime.exceptions.OutOfSpaceException;
-import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.ReplexOverwriteException;
+import org.corfudb.runtime.exceptions.*;
 import org.corfudb.util.serializer.Serializers;
 
 import java.lang.invoke.MethodHandles;
@@ -82,6 +79,28 @@ public class LogUnitClient implements IClient {
             throws Exception
     {
         throw new OverwriteException();
+    }
+
+    /** Handle an ERROR_DATA_OUTRANKED message.
+     *
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     * @throws      OverwriteException
+     */
+    @ClientHandler(type=CorfuMsgType.ERROR_DATA_OUTRANKED)
+    private static Object handleDataOutranked(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception
+    {
+        throw new DataOutrankedException();
+    }
+
+
+
+    @ClientHandler(type=CorfuMsgType.ERROR_VALUE_ADOPTED)
+    private static Object handleValueAdoptedResponse(CorfuPayloadMsg<ReadResponse> msg,
+                                             ChannelHandlerContext ctx, IClientRouter r) {
+        throw new ValueAdoptedException(msg.getPayload());
     }
 
     /** Handle an ERROR_REPLEX_OVERWRITE message.
@@ -177,7 +196,7 @@ public class LogUnitClient implements IClient {
      * @return A CompletableFuture which will complete with the WriteResult once the
      * write completes.
      */
-    public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
+    public CompletableFuture<Boolean> write(long address, Set<UUID> streams, IMetadata.DataRank rank,
                                             Object writeObject, Map<UUID, Long> backpointerMap) {
         Timer.Context context = getTimerContext("writeObject");
         ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
@@ -192,6 +211,31 @@ public class LogUnitClient implements IClient {
     }
 
     /**
+     * Asynchronously write an empty payload to the logging unit with ranked address space.
+     * Used from the quorum replication when filling holes or during the first phase of the recovery write.
+     *
+     * @param address        The address to write to.
+     * @param type           The data type
+     * @param streams        The streams, if any, that this write belongs to.
+     * @param rank           The rank of this write]
+     */
+    public CompletableFuture<Boolean> writeEmptyData(long address, DataType type, Set<UUID> streams, IMetadata.DataRank rank) {
+        Timer.Context context = getTimerContext("writeObject");
+        LogEntry entry = new LogEntry(LogEntry.LogEntryType.NOP);
+        ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
+        Serializers.CORFU.serialize(entry, payload);
+        WriteRequest wr = new WriteRequest(WriteMode.NORMAL, type,  null,  payload);
+        wr.setStreams(streams);
+        wr.setRank(rank);
+        wr.setGlobalAddress(address);
+        CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
+        return cf.thenApply(x -> { context.stop(); return x; });
+    }
+
+
+
+
+    /**
      * Asynchronously write to the logging unit.
      *
      * @param address        The address to write to.
@@ -203,7 +247,7 @@ public class LogUnitClient implements IClient {
      * @return A CompletableFuture which will complete with the WriteResult once the
      * write completes.
      */
-    public CompletableFuture<Boolean> write(long address, Set<UUID> streams, long rank,
+    public CompletableFuture<Boolean> write(long address, Set<UUID> streams, IMetadata.DataRank rank,
                                             ByteBuf buffer, Map<UUID, Long> backpointerMap) {
         Timer.Context context = getTimerContext("writeByteBuf");
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, buffer);
@@ -252,6 +296,7 @@ public class LogUnitClient implements IClient {
         Timer.Context context = getTimerContext("read");
         CompletableFuture<ReadResponse> cf = router.sendMessageAndGetCompletable(
                 CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address)));
+
         return cf.thenApply(x -> { context.stop(); return x; });
     }
 

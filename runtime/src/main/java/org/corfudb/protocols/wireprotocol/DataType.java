@@ -1,6 +1,8 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
@@ -11,14 +13,19 @@ import java.util.stream.Collectors;
 /**
  * Created by mwei on 8/16/16.
  */
-@RequiredArgsConstructor
+@AllArgsConstructor
 public enum DataType implements ICorfuPayload<DataType> {
-    DATA(0),
-    EMPTY(1),
-    HOLE(2),
-    TRIMMED(3);
+    DATA(0, true),
+    EMPTY(1, false),
+    HOLE(2, true),
+    TRIMMED(3, false),
+    RANK_ONLY(4, true);
 
     final int val;
+
+    @Getter
+    private boolean metadataAware;
+
 
     byte asByte() {
         return (byte) val;

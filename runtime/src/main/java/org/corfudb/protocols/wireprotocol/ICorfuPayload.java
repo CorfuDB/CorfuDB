@@ -45,6 +45,8 @@ public interface ICorfuPayload<T> {
                     Layout layout = JSONUtils.parser.fromJson(str, Layout.class);
                     return layout;
                 })
+                .put(IMetadata.DataRank.class, x ->
+                        new IMetadata.DataRank(x.readLong(), new UUID(x.readLong(), x.readLong())))
                 .put(UUID.class, x -> new UUID(x.readLong(), x.readLong()))
                 .put(byte[].class, x -> {
                     int length = x.readInt();
@@ -308,16 +310,19 @@ public interface ICorfuPayload<T> {
             byte[] b = JSONUtils.parser.toJson(payload).getBytes();
             buffer.writeInt(b.length);
             buffer.writeBytes(b);
-
         }
         // and if its a bytebuf
         else if (payload instanceof ByteBuf) {
-
             ByteBuf b = ((ByteBuf) payload).slice();
             b.resetReaderIndex();
             int bytes = b.readableBytes();
             buffer.writeInt(bytes);
             buffer.writeBytes(b, bytes);
+        } else if (payload instanceof IMetadata.DataRank) {
+            IMetadata.DataRank rank = (IMetadata.DataRank)payload;
+            buffer.writeLong(rank.getRank());
+            buffer.writeLong(rank.getUuid().getMostSignificantBits());
+            buffer.writeLong(rank.getUuid().getLeastSignificantBits());
         }
         else {
             throw new RuntimeException("Unknown class " + payload.getClass()
