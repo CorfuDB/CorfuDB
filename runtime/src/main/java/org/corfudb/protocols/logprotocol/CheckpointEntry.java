@@ -76,7 +76,7 @@ public class CheckpointEntry extends LogEntry {
             String v = deserializeString(b);
             dict.put(k, v);
         }
-        int bulkLen = b.readShort();
+        int bulkLen = b.readInt();
         bulk = new byte[bulkLen];
         b.readBytes(bulk, 0, bulkLen);
     }
@@ -96,7 +96,7 @@ public class CheckpointEntry extends LogEntry {
                         serializeString(x.getValue(), b);
                     });
         }
-        b.writeLong(bulk == null ? 0 : bulk.length);
+        b.writeInt(bulk == null ? 0 : bulk.length);
         if (bulk != null) { b.writeBytes(bulk); }
     }
 
