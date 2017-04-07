@@ -162,6 +162,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     @Override
     protected boolean fillReadQueue(final long maxGlobal,
                                  final QueuedStreamContext context) {
+        boolean useCheckpoint = false;
+
         // The maximum address we will fill to.
         final long maxAddress =
                 Long.min(maxGlobal, context.maxGlobalAddress);
@@ -293,8 +295,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     }
                     if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
                         log.trace("Checkpoint: address {} is START", currentRead);
-                        System.err.printf("Checkpoint: address %d is START, TODO left off here\n", currentRead);
-                        // TODO: left off here!
+                        useCheckpoint = true;
                     }
                 } else {
                     context.readQueue.add(currentRead);
@@ -303,8 +304,11 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             // If everything left is available in the resolved
             // queue, use it
-            if (context.maxResolution > currentRead &&
-                    context.minResolution < context.globalPointer) {
+            if (useCheckpoint || (context.maxResolution > currentRead &&
+                                  context.minResolution < context.globalPointer)) {
+                if (useCheckpoint) {
+                    System.err.printf("TODO: left off here: replay checkpoint items\n");
+                }
                 return fillFromResolved(latestToken, context);
             }
 
