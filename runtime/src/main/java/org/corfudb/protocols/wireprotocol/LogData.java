@@ -5,7 +5,6 @@ import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.AutoCloseableByteBuf;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.EnumMap;
@@ -35,20 +34,17 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                 if (value == null) {
                     if (data == null) {
                         this.payload.set(null);
-                    }
-                    else {
-                        try (AutoCloseableByteBuf copyBuf =
-                                new AutoCloseableByteBuf(Unpooled.copiedBuffer(data))) {
-                            final Object actualValue =
-                                    Serializers.CORFU.deserialize(copyBuf, runtime);
-                            // TODO: Remove circular dependency on logentry.
-                            if (actualValue instanceof LogEntry) {
-                                ((LogEntry) actualValue).setEntry(this);
-                                ((LogEntry) actualValue).setRuntime(runtime);
-                            }
-                            value = actualValue == null ? this.payload : actualValue;
-                            this.payload.set(value);
+                    } else {
+                        ByteBuf copyBuf = Unpooled.copiedBuffer(data);
+                        final Object actualValue =
+                                Serializers.CORFU.deserialize(copyBuf, runtime);
+                        // TODO: Remove circular dependency on logentry.
+                        if (actualValue instanceof LogEntry) {
+                            ((LogEntry) actualValue).setEntry(this);
+                            ((LogEntry) actualValue).setRuntime(runtime);
                         }
+                        value = actualValue == null ? this.payload : actualValue;
+                        this.payload.set(value);
                     }
                 }
             }
@@ -71,7 +67,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         type = ICorfuPayload.fromBuffer(buf, DataType.class);
         if (type == DataType.DATA) {
             data = ICorfuPayload.fromBuffer(buf, byte[].class);
-        } else  {
+        } else {
             data = null;
         }
         if (type.isMetadataAware()) {
