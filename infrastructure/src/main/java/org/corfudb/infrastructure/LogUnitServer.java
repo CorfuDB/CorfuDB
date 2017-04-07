@@ -44,7 +44,6 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
-import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
 
 /**
@@ -81,7 +80,7 @@ public class LogUnitServer extends AbstractServer {
      * TODO: entire GC handling needs updating, currently not being activated
      */
     private final Thread gcThread = null;
-    private IntervalAndSentinelRetry gcRetry;
+    private Long gcRetryInterval;
     private AtomicBoolean running = new AtomicBoolean(true);
 
     /**
@@ -239,7 +238,7 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.GC_INTERVAL, opTimer = metricsPrefix + "gc-interval")
     private void setGcInterval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r,
                                boolean isMetricsEnabled) {
-        gcRetry.setRetryInterval(msg.getPayload());
+        gcRetryInterval = msg.getPayload();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 

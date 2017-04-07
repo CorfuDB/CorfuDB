@@ -8,5 +8,6 @@ public interface IRetryable<E extends Exception, F extends Exception, G extends 
     /**
      * Returns true on success, false will cause retry
      */
-    T retryFunction() throws Exception;
+    T retryFunction() throws  RetryNeededException, InterruptedException, E, F, G, H;
+
 }
