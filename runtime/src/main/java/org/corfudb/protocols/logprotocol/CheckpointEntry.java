@@ -7,9 +7,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Created by sfritchie on 4/6/17.
@@ -48,6 +51,10 @@ public class CheckpointEntry extends LogEntry {
         this.bulk = bulk;
     }
 
+    static final Map<Byte, CheckpointEntryType> typeMap =
+            Arrays.stream(CheckpointEntryType.values())
+                    .collect(Collectors.toMap(CheckpointEntryType::asByte, Function.identity()));
+
     /**
      * This function provides the remaining buffer. Child entries
      * should initialize their contents based on the buffer.
@@ -57,8 +64,7 @@ public class CheckpointEntry extends LogEntry {
     @Override
     void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
         super.deserializeBuffer(b, rt);
-        System.err.printf("\nHello, world! deserializeBuffer here!\n");
-        type = CheckpointEntryType.values()[b.readByte()];
+        type = typeMap.get(b.readByte());
         long cpidMSB = b.readLong();
         long cpidLSB = b.readLong();
         checkpointID = new UUID(cpidMSB, cpidLSB);
@@ -78,8 +84,7 @@ public class CheckpointEntry extends LogEntry {
     @Override
     public void serialize(ByteBuf b) {
         super.serialize(b);
-        System.err.printf("\nHello, world! serializeBuffer here!\n");
-        b.writeByte(type.ordinal()); // TODO avoid ordinal()?
+        b.writeByte(type.asByte());
         b.writeLong(checkpointID.getMostSignificantBits());
         b.writeLong(checkpointID.getLeastSignificantBits());
         serializeString(checkpointAuthorID, b);
