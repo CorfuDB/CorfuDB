@@ -1,0 +1,60 @@
+package org.corfudb.runtime.view.replication;
+
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.exceptions.HoleFillPolicyException;
+
+import javax.annotation.Nonnull;
+
+/**
+ * Created by mwei on 4/6/17.
+ */
+@Slf4j
+public abstract class AbstractReplicationProtocol implements IReplicationProtocol {
+
+    /** The hole fill policy to apply. */
+    final protected IHoleFillPolicy holeFillPolicy;
+
+    /** Build the replication protocol using the given hole filling policy.
+     *
+     * @param holeFillPolicy    The hole filling policy to be applied when
+     *                          a read returns uncommitted data.
+     */
+    public AbstractReplicationProtocol(IHoleFillPolicy holeFillPolicy)
+    {
+        this.holeFillPolicy = holeFillPolicy;
+    }
+
+    /** {@inheritDoc}
+     *
+     *  In the base implementation, we attempt to read data
+     *  using the peek method. If data is returned by peek,
+     *  we use it. Otherwise, we invoke the hole filling
+     *  protocol.
+     *
+     **/
+    @Nonnull
+    @Override
+    public ILogData read(long globalAddress) {
+        try {
+            return holeFillPolicy
+                .peekUntilHoleFillRequired(globalAddress, this::peek);
+        } catch (HoleFillPolicyException e) {
+            log.debug("HoleFill[{}] due to {}", e.getMessage());
+            holeFill(globalAddress);
+            return peek(globalAddress);
+        }
+    }
+
+    /**
+     * Write a special hole filling entry using the
+     * given address. When this call returns, either
+     * the hole filling write has been committed
+     * or the result of another client's write
+     * has committed (you WILL need to -read- the
+     * address to find out which write was adopted).
+     *
+     * @param globalAddress  The address to hole fill.
+     */
+    abstract protected void holeFill(long globalAddress);
+}
