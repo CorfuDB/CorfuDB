@@ -7,7 +7,9 @@ import org.corfudb.protocols.logprotocol.StreamData;
 import org.corfudb.protocols.logprotocol.StreamedLogData;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.AutoClosableByteBuf;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.serializer.Serializers;
 
@@ -34,12 +36,11 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                       @Nonnull Map<UUID, StreamData> entryMap) throws OverwriteException {
         int numUnits = layout.getSegmentLength(globalAddress);
 
-        ByteBuf b = Unpooled.buffer();
-        try {
+        try (AutoClosableByteBuf b = new AutoClosableByteBuf()) {
             // To reduce the overhead of serialization, we serialize only the
             // first time we write, saving when we go down the chain.
             StreamedLogData sld = new StreamedLogData(entryMap);
-            sld.getSerializedForm(Serializers.CORFU::serialize, b);
+            sld.getSerializedForm(Serializers.CORFU::serialize, b.getBuf());
 
             for (int i = 0; i < numUnits; i++) {
                 log.trace("Write[{}]: chain {}/{}", layout, i + 1, numUnits);
@@ -59,8 +60,6 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                     throw oe;
                 }
             }
-        } finally {
-            b.release();
         }
     }
 
@@ -111,7 +110,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         // it should have read to determine whether the
         // write was successful or not.
         if (ld == null) {
-            throw new RuntimeException();
+            throw new RecoveryException("Failed to read data during recovery at chain head.");
         }
         // now we go down the chain and write, ignoring any overwrite exception we get.
         for (int i = 1; i < numUnits; i++) {

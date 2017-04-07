@@ -1,7 +1,7 @@
 package org.corfudb.runtime.view.replication;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.runtime.exceptions.HoleFillPolicyException;
+import org.corfudb.runtime.exceptions.HoleFillRequiredException;
 
 import javax.annotation.Nonnull;
 import java.util.function.Function;
@@ -13,7 +13,7 @@ public interface IHoleFillPolicy {
 
     /** Apply the given peek function until hole filling is required or
      * committed data is returned. If hole filling is required a
-     * HoleFillPolicyException is thrown.
+     * HoleFillRequiredException is thrown.
      *
      * @param address                   The address to apply the function.
      *
@@ -21,10 +21,10 @@ public interface IHoleFillPolicy {
      *                                  from the log.
      *
      * @return                          The committed data at the given address.
-     * @throws HoleFillPolicyException  If hole filling is required.
+     * @throws HoleFillRequiredException  If hole filling is required.
      */
     @Nonnull
     ILogData peekUntilHoleFillRequired(long address,
                                        Function<Long, ILogData> peekFunction)
-            throws HoleFillPolicyException;
+            throws HoleFillRequiredException;
 }

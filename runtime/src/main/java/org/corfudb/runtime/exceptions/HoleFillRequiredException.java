@@ -4,9 +4,9 @@ package org.corfudb.runtime.exceptions;
  * by policy.
  * Created by mwei on 4/6/17.
  */
-public class HoleFillPolicyException extends Exception {
+public class HoleFillRequiredException extends Exception {
 
-    public HoleFillPolicyException(String message) {
+    public HoleFillRequiredException(String message) {
         super(message);
     }
 
