@@ -36,4 +36,12 @@ public @interface MutatorAccessor {
      * @return True, if the mutator resets the object.
      */
     boolean reset() default false;
+
+    /** Whether or not we should generate an upcall for this mutator. If set to
+     * true, no upcall will be generated - this is typically used when
+     * providing a mutator-only version of a mutatorAccessor
+     * (for example, "blindPut" and "put").
+     * @return True, if no upcall should be generated.
+     */
+    boolean noUpcall() default false;
 }
