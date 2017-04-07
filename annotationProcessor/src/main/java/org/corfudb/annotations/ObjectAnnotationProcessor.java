@@ -2,12 +2,34 @@ package org.corfudb.annotations;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.squareup.javapoet.*;
-import org.corfudb.runtime.object.*;
+import com.squareup.javapoet.AnnotationSpec;
+import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.FieldSpec;
+import com.squareup.javapoet.JavaFile;
+import com.squareup.javapoet.MethodSpec;
+import com.squareup.javapoet.ParameterSpec;
+import com.squareup.javapoet.ParameterizedTypeName;
+import com.squareup.javapoet.TypeName;
+import com.squareup.javapoet.TypeSpec;
+import com.squareup.javapoet.TypeVariableName;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuSMRProxy;
+import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
+import org.corfudb.runtime.object.IUndoFunction;
+import org.corfudb.runtime.object.IUndoRecordFunction;
 
-import javax.annotation.processing.*;
+import javax.annotation.processing.AbstractProcessor;
+import javax.annotation.processing.Filer;
+import javax.annotation.processing.Messager;
+import javax.annotation.processing.ProcessingEnvironment;
+import javax.annotation.processing.RoundEnvironment;
+import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.lang.model.SourceVersion;
-import javax.lang.model.element.*;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
@@ -16,8 +38,12 @@ import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.lang.reflect.ParameterizedType;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -40,6 +66,9 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
 
     // $ needs to be escaped, so we use _ for fields.
     private static final String CORFUSMR_FIELD = "_CORFUSMR";
+
+    // Suffix for automatically generated methods that retrieve conflict objects
+    private final String CONFLICT_METHODS_SUFFIX = "_GETSMRCONFLICTOBJECTS";
 
     /** Always support the latest source version.
      *
@@ -377,6 +406,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     final String conflictField = "conflictField" + CORFUSMR_FIELD;
                     if (m.hasConflictAnnotations) {
                         addConflictFieldToMethod(ms, conflictField, smrMethod);
+                        addConflictExtractorMethod(typeSpecBuilder, conflictField, smrMethod);
                     }
 
                     // If a mutator, then log the update.
@@ -475,6 +505,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 });
 
         addUpcallMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
+        addConflictExtractorMap(typeSpecBuilder, originalName, methodSet);
         addUndoRecordMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
         addUndoMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
         addResetSet(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
@@ -620,6 +651,47 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         ParameterizedTypeName.get(ClassName.get(ICorfuSMRUpcallTarget.class),
                                 originalName)))
                 .addStatement("return $L", "upcallMap" + CORFUSMR_FIELD)
+                .build());
+    }
+
+    private void addConflictExtractorMap(TypeSpec.Builder typeSpecBuilder, TypeName originalName,
+                                         Set<SMRMethodInfo> methodSet) {
+        // Generate the upcall string and associated map.
+        String conflictExtractorString = methodSet.stream()
+                .filter(x -> x.hasConflictAnnotations)
+                .map(x -> "\n.put(\"" + getSMRFunctionName(x.method) + CONFLICT_METHODS_SUFFIX + "\", " +
+                        "(obj, args) -> { " + (x.method.getReturnType().getKind().equals(TypeKind.VOID)
+                        ? "" : "return ") + "obj." + x.method.getSimpleName() + "(" +
+                        IntStream.range(0, x.method.getParameters().size())
+                                .mapToObj(i ->
+                                        "(" + x.method.getParameters().get(i).asType().toString() + ")" +
+                                                " args[" + i + "]")
+                                .collect(Collectors.joining(", "))
+                        + ");" + (x.method.getReturnType().getKind().equals(TypeKind.VOID)
+                        ? "return null;" : "") + "})")
+                .collect(Collectors.joining());
+
+        FieldSpec conflictExtractorMap = FieldSpec.builder(ParameterizedTypeName.get(ClassName.get(Map.class),
+                ClassName.get(String.class),
+                ParameterizedTypeName.get(ClassName.get(ICorfuSMRUpcallTarget.class),
+                        originalName)), "conflictExtractorMap" + CORFUSMR_FIELD,
+                Modifier.PUBLIC, Modifier.FINAL)
+                .initializer("new $T()$L.build()",
+                        ParameterizedTypeName.get(ClassName.get(ImmutableMap.Builder.class),
+                                ClassName.get(String.class),
+                                ParameterizedTypeName.get(ClassName.get(ICorfuSMRUpcallTarget.class),
+                                        originalName)), conflictExtractorString)
+                .build();
+
+        typeSpecBuilder.addField(conflictExtractorMap);
+
+        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getSMRConflictExtractorMap")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(Map.class),
+                        ClassName.get(String.class),
+                        ParameterizedTypeName.get(ClassName.get(ICorfuSMRUpcallTarget.class),
+                                originalName)))
+                .addStatement("return $L", "conflictExtractorMap" + CORFUSMR_FIELD)
                 .build());
     }
 
@@ -792,6 +864,24 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 .addStatement("return $L", "undoMap" + CORFUSMR_FIELD)
                 .build());
 
+    }
+
+    private void addConflictExtractorMethod(TypeSpec.Builder typeSpecBuilder, String conflictField, ExecutableElement smrMethod) {
+        MethodSpec.Builder conflictRouter = MethodSpec.methodBuilder(smrMethod.getSimpleName() + CONFLICT_METHODS_SUFFIX)
+                .addParameters(smrMethod.getParameters().stream()
+                        .map(param -> ParameterSpec.builder(
+                                TypeName.get(param.asType()),
+                                param.getSimpleName().toString()
+                        ).build())
+                        .collect(Collectors.toSet()))
+                .addModifiers(Modifier.PUBLIC)
+                .returns(Object[].class);
+
+        addConflictFieldToMethod(conflictRouter, conflictField, smrMethod);
+
+        conflictRouter.addStatement("return $L", conflictField);
+
+        typeSpecBuilder.addMethod(conflictRouter.build());
     }
 
     /** Add a conflict field to the method.
