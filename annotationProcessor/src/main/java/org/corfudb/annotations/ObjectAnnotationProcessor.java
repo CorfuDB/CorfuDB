@@ -12,11 +12,9 @@ import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
-import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.lang.reflect.ParameterizedType;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -33,7 +31,6 @@ import java.util.stream.IntStream;
 @SupportedAnnotationTypes("org.corfudb.annotations.*")
 public class ObjectAnnotationProcessor extends AbstractProcessor {
 
-    private Types typeUtils;
     private Elements elementUtils;
     private Filer filer;
     private Messager messager;
@@ -58,7 +55,6 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
-        typeUtils = processingEnv.getTypeUtils();
         elementUtils = processingEnv.getElementUtils();
         filer = processingEnv.getFiler();
         messager = processingEnv.getMessager();
@@ -334,6 +330,9 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         methodSet.removeIf(x -> x.method.getSimpleName()
                 .toString().endsWith(ICorfuSMR.CORFUSMR_SUFFIX));
 
+        // Verify that all methods that require an up call have specified as annotated name
+        checkAnnotatedNames(methodSet);
+
         // Check override conflicts
         Set<SMRMethodInfo> possibleConflictMethods = methodSet.stream()
                 .filter(x -> ((x.method.getAnnotation(Mutator.class) != null)
@@ -491,6 +490,22 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 .build();
 
         javaFile.writeTo(filer);
+    }
+
+    /*
+     * Verify that methods with a mutator annotation specify the name field
+     */
+    void checkAnnotatedNames(Set<SMRMethodInfo> methodSet) {
+
+        for(SMRMethodInfo smrMethodInfo : methodSet) {
+            if((smrMethodInfo.method.getAnnotation(Mutator.class) != null
+                    && smrMethodInfo.method.getAnnotation(Mutator.class).name().isEmpty())
+                    || (smrMethodInfo.method.getAnnotation(MutatorAccessor.class) != null
+                    && smrMethodInfo.method.getAnnotation(MutatorAccessor.class).name().isEmpty())){
+                messager.printMessage(Diagnostic.Kind.ERROR, "Method " + smrMethodInfo.method.getSimpleName()
+                        + " must specify a name in its annotation name field");
+            }
+        }
     }
 
     // Mutator methods that specify a name in their annotation and require upcalls cannot
