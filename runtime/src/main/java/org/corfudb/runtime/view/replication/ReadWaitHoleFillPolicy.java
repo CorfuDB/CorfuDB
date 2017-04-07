@@ -1,7 +1,7 @@
 package org.corfudb.runtime.view.replication;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.runtime.exceptions.HoleFillPolicyException;
+import org.corfudb.runtime.exceptions.HoleFillRequiredException;
 
 import javax.annotation.Nonnull;
 import java.util.function.Function;
@@ -35,7 +35,7 @@ public class ReadWaitHoleFillPolicy implements IHoleFillPolicy {
     @Nonnull
     @Override
     public ILogData peekUntilHoleFillRequired(long address,
-           Function<Long, ILogData> peekFunction) throws HoleFillPolicyException {
+           Function<Long, ILogData> peekFunction) throws HoleFillRequiredException {
         int tryNum = 0;
         do {
             // If this is not the first try, sleep before trying again
@@ -56,6 +56,6 @@ public class ReadWaitHoleFillPolicy implements IHoleFillPolicy {
             tryNum++;
         } while (numRetries > tryNum);
 
-        throw new HoleFillPolicyException("No data after " + numRetries + " retries");
+        throw new HoleFillRequiredException("No data after " + numRetries + " retries");
     }
 }

@@ -1,7 +1,7 @@
 package org.corfudb.runtime.view.replication;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.runtime.exceptions.HoleFillPolicyException;
+import org.corfudb.runtime.exceptions.HoleFillRequiredException;
 
 import javax.annotation.Nonnull;
 import java.util.function.Function;
@@ -17,10 +17,10 @@ public class AlwaysHoleFillPolicy implements IHoleFillPolicy {
     @Nonnull
     @Override
     public ILogData peekUntilHoleFillRequired(long address,
-               Function<Long, ILogData> peekFunction) throws HoleFillPolicyException {
+               Function<Long, ILogData> peekFunction) throws HoleFillRequiredException {
         ILogData data = peekFunction.apply(address);
         if (data == null) {
-            throw new HoleFillPolicyException("No data at address");
+            throw new HoleFillRequiredException("No data at address");
         }
         return data;
     }

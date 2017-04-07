@@ -5,8 +5,8 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
 
 import javax.annotation.Nonnull;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /** The public interface to a replication protocol.
  *
@@ -51,6 +51,25 @@ public interface IReplicationProtocol {
      */
     @Nonnull ILogData read(long globalAddress);
 
+    /** Read data from all the given addresses.
+     *
+     * This method functions exactly like a read, except
+     * that it returns the result for multiple addresses.
+     *
+     * An implementation may optimize for this type of
+     * bulk request, but the default implementation
+     * just performs multiple reads (possible in parallel).
+     *
+     * @param globalAddresses       A set of addresses to read from.
+     * @return                      A map of addresses to committed
+     *                              addresses, hole filling if necessary.
+     */
+    default @Nonnull Map<Long, ILogData> readAll(Set<Long> globalAddresses) {
+        return globalAddresses.parallelStream()
+                .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(a)))
+                .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
+    }
+
     /** Peek data from a given address.
      *
      * This function -may- return null if there was no entry
@@ -64,5 +83,24 @@ public interface IReplicationProtocol {
      *                             there was no entry committed.
      */
     ILogData peek(long globalAddress);
+
+    /** Peek data from all the given addresses.
+     *
+     * This method functions exactly like a peek, except
+     * that it returns the result for multiple addresses.
+     *
+     * An implementation may optimize for this type of
+     * bulk request, but the default implementation
+     * just performs multiple peeks (possible in parallel).
+     *
+     * @param globalAddresses       A set of addresses to read from.
+     * @return                      A map of addresses to uncommitted
+     *                              addresses, without hole filling.
+     */
+    default @Nonnull Map<Long, ILogData> peekAll(Set<Long> globalAddresses) {
+        return globalAddresses.parallelStream()
+                .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, peek(a)))
+                .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
+    }
 
 }
