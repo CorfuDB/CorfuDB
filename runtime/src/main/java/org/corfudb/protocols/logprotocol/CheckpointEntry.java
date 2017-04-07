@@ -1,10 +1,7 @@
 package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
-import lombok.AllArgsConstructor;
-import lombok.NoArgsConstructor;
-import lombok.RequiredArgsConstructor;
-import lombok.ToString;
+import lombok.*;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.Arrays;
@@ -35,16 +32,21 @@ public class CheckpointEntry extends LogEntry {
         }
     };
 
-    CheckpointEntryType type;
+    @Getter
+    CheckpointEntryType cpType;
+    @Getter
     UUID checkpointID;  // Unique identifier for this checkpoint
+    @Getter
     String checkpointAuthorID;  // TODO: UUID instead?
+    @Getter
     Map<String,String> dict;
+    @Getter
     byte[] bulk;
 
     public CheckpointEntry(CheckpointEntryType type, String authorID, UUID checkpointID,
                            Map<String,String> dict, byte[] bulk) {
         super(LogEntryType.CHECKPOINT);
-        this.type = type;
+        this.cpType = type;
         this.checkpointID = checkpointID;
         this.checkpointAuthorID = authorID;
         this.dict = dict;
@@ -64,7 +66,7 @@ public class CheckpointEntry extends LogEntry {
     @Override
     void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
         super.deserializeBuffer(b, rt);
-        type = typeMap.get(b.readByte());
+        cpType = typeMap.get(b.readByte());
         long cpidMSB = b.readLong();
         long cpidLSB = b.readLong();
         checkpointID = new UUID(cpidMSB, cpidLSB);
@@ -84,7 +86,7 @@ public class CheckpointEntry extends LogEntry {
     @Override
     public void serialize(ByteBuf b) {
         super.serialize(b);
-        b.writeByte(type.asByte());
+        b.writeByte(cpType.asByte());
         b.writeLong(checkpointID.getMostSignificantBits());
         b.writeLong(checkpointID.getLeastSignificantBits());
         serializeString(checkpointAuthorID, b);

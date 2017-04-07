@@ -130,7 +130,8 @@ public abstract class AbstractQueuedStreamView extends
 
         // The list to store read results in
         List<ILogData> read = readAll(toRead).stream()
-                .filter(x -> x.getType() == DataType.DATA)
+                // .filter(x -> x.getType() == DataType.DATA)
+                .filter(x -> {if(x.getType()==DataType.CHECKPOINT){System.err.printf("I see CHECKPOINT B\n");} return x.getType() == DataType.DATA;})
                 .filter(x -> x.containsStream(context.id))
                 .collect(Collectors.toList());
 
@@ -321,6 +322,15 @@ public abstract class AbstractQueuedStreamView extends
          */
         final NavigableSet<Long> readQueue
                 = new TreeSet<>();
+
+        /**
+         * A priority queue of potential addresses to read checkpoint records from,
+         * if a successful checkpoint has been observed.
+         */
+        final NavigableSet<Long> readCpQueue
+                = new TreeSet<>();
+
+        UUID checkpointSuccessID = null;
 
         /** Create a new stream context with the given ID and maximum address
          * to read to.

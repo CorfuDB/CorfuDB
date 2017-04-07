@@ -42,7 +42,8 @@ public class StreamViewSMRAdapter implements ISMRStream {
 
     public List<SMREntry> remainingUpTo(long maxGlobal) {
         return streamView.remainingUpTo(maxGlobal).stream()
-                .filter(m -> m.getType() == DataType.DATA)
+                // .filter(m -> m.getType() == DataType.DATA)
+                .filter(m -> {if(m.getType()==DataType.CHECKPOINT){System.err.printf("I see CHECKPOINT 1\n");} return m.getType() == DataType.DATA ;})
                 .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable)
                 .map(logData -> ((ISMRConsumable)logData.getPayload(runtime)).getSMRUpdates(streamView.getID()))
                 .flatMap(List::stream)
@@ -52,6 +53,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
     public List<SMREntry> current() {
         ILogData data = streamView.current();
         if (data != null) {
+            if(data.getType()==DataType.CHECKPOINT){System.err.printf("I see CHECKPOINT 2\n");}
             if (data.getType() == DataType.DATA &&
                     data.getPayload(runtime)
                             instanceof ISMRConsumable) {
@@ -66,6 +68,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
         ILogData data = streamView.previous();
         while (streamView.getCurrentGlobalPosition() >
                 Address.NEVER_READ && data != null) {
+            if(data.getType()==DataType.CHECKPOINT){System.err.printf("I see CHECKPOINT 3\n");}
             if (data.getType() == DataType.DATA &&
                     data.getPayload(runtime)
                             instanceof ISMRConsumable) {

@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view.stream;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -214,6 +215,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         while (currentRead > context.globalPointer &&
                 currentRead != Address.NEVER_READ) {
             log.trace("Read_Fill_Queue[{}] Read {}", this, currentRead);
+            System.err.printf("Read_Fill_Queue[%s] Read %d\n", this, currentRead);
             // Read the entry in question.
             ILogData currentEntry =
                     runtime.getAddressSpaceView().read(currentRead);
@@ -278,7 +280,25 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // If the entry contains this context's stream,
             // we add it to the read queue.
             if (currentEntry.containsStream(context.id)) {
-                context.readQueue.add(currentRead);
+                if (currentEntry.getType() == DataType.CHECKPOINT) {
+                    CheckpointEntry cpEntry = (CheckpointEntry) currentEntry.getPayload(runtime);
+                    if (context.checkpointSuccessID == null && cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.END)) {
+                        log.trace("Checkpoint: address {} found END for id {} by author {}",
+                                currentRead, cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
+                        context.checkpointSuccessID = cpEntry.getCheckpointID();
+                    }
+                    if (context.checkpointSuccessID == cpEntry.getCheckpointID()) {
+                        log.trace("Checkpoint: address {} queue record etype {}", currentRead, cpEntry.getCpType());
+                        context.readCpQueue.add(currentRead);
+                    }
+                    if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
+                        log.trace("Checkpoint: address {} is START", currentRead);
+                        System.err.printf("Checkpoint: address %d is START, TODO left off here\n", currentRead);
+                        // TODO: left off here!
+                    }
+                } else {
+                    context.readQueue.add(currentRead);
+                }
             }
 
             // If everything left is available in the resolved
