@@ -18,7 +18,15 @@ import java.util.function.Function;
 public class NeverHoleFillPolicy implements IHoleFillPolicy {
 
     /** The amount of time to wait before retries. */
-    int waitMs;
+    final int waitMs;
+
+    /** Create a new neverHoleFillPolicy with the given wait time.
+     *
+     * @param waitMs    The time to wait, in milliseconds.
+     */
+    public NeverHoleFillPolicy(int waitMs) {
+        this.waitMs = waitMs;
+    }
 
     /** {@inheritDoc} */
     @Nonnull
