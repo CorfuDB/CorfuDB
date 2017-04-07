@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
  * Created by sfritchie on 4/6/17.
  */
 @ToString(callSuper = true)
-////////////////// @AllArgsConstructor
+@NoArgsConstructor
 public class CheckpointEntry extends LogEntry {
 
     @RequiredArgsConstructor
