@@ -1,12 +1,12 @@
 package org.corfudb.runtime.view;
 
-import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.util.AutoCloseableByteBuf;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.serializer.Serializers;
 
@@ -54,30 +54,29 @@ public class ChainReplicationView extends AbstractReplicationView {
         // To reduce the overhead of serialization, we serialize only the
         // first time we write, saving
         // when we go down the chain.
-        try (AutoCloseableByteBuf b =
-                     new AutoCloseableByteBuf(ByteBufAllocator.DEFAULT.directBuffer())) {
-            Serializers.CORFU.serialize(data, b);
+        ByteBuf b = Unpooled.buffer();
+        Serializers.CORFU.serialize(data, b);
 
-            LogData ld = new LogData(DataType.DATA, b);
-            ld.setBackpointerMap(backpointerMap);
-            ld.setStreams(stream);
-            ld.setGlobalAddress(address);
+        LogData ld = new LogData(DataType.DATA, b);
+        ld.setBackpointerMap(backpointerMap);
+        ld.setStreams(stream);
+        ld.setGlobalAddress(address);
 
-            // FIXME
-            if (data instanceof LogEntry) {
-                ((LogEntry) data).setRuntime(getLayout().getRuntime());
-                ((LogEntry) data).setEntry(ld);
-            }
+        // FIXME
+        if (data instanceof LogEntry) {
+            ((LogEntry) data).setRuntime(getLayout().getRuntime());
+            ((LogEntry) data).setEntry(ld);
+        }
 
-            payloadBytes = b.readableBytes();
-            for (int i = 0; i < numUnits; i++) {
-                log.trace("Write[{}]: chain {}/{}", address, i + 1, numUnits);
-                // In chain replication, we write synchronously to every unit
-                // in the chain.
-                CFUtils.getUninterruptibly(
-                        getLayout().getLogUnitClient(address, i)
-                                .write(address, stream, null, data, backpointerMap), OverwriteException.class);
-            }
+        payloadBytes = b.readableBytes();
+        for (int i = 0; i < numUnits; i++) {
+            log.trace("Write[{}]: chain {}/{}", address, i + 1, numUnits);
+            // In chain replication, we write synchronously to every unit
+            // in the chain.
+            CFUtils.getUninterruptibly(
+                    getLayout().getLogUnitClient(address, i)
+                            .write(address, stream, null, data, backpointerMap), OverwriteException.class);
+
         }
         return payloadBytes;
     }
@@ -108,7 +107,7 @@ public class ChainReplicationView extends AbstractReplicationView {
     @Override
     public Map<Long, LogData> read(UUID stream, long offset, long size) {
         // TODO: when chain replication is used, scan
-       throw new UnsupportedOperationException("not supported in chain replication");
+        throw new UnsupportedOperationException("not supported in chain replication");
     }
 
     /**

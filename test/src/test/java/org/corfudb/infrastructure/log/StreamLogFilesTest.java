@@ -11,6 +11,7 @@ import java.io.File;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 
+import io.netty.buffer.Unpooled;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -35,7 +36,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     public void testWriteReadWithChecksum() {
         // Enable checksum, then append and read the same entry
         StreamLog log = new StreamLogFiles(getDirPath(), false);
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
         LogAddress address0 = new LogAddress((long) 0, null);
@@ -57,7 +58,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     @Test
     public void testOverwriteException() {
         StreamLog log = new StreamLogFiles(getDirPath(), false);
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
         LogAddress address0 = new LogAddress((long) 0, null);
@@ -70,7 +71,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     @Test
     public void testReadingUnknownAddress() {
         StreamLog log = new StreamLogFiles(getDirPath(), false);
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
 
@@ -91,7 +92,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // be computed for stream entries that haven't been written with a checksum
         String logDir = getDirPath();
         StreamLog log = new StreamLogFiles(logDir, true);
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
         LogAddress address0 = new LogAddress((long) 0, null);
@@ -113,7 +114,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // different data corruption scenarios
         String logDir = getDirPath();
         StreamLog log = new StreamLogFiles(logDir, false);
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
         LogAddress address0 = new LogAddress((long) 0, null);
@@ -152,7 +153,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         String logDir = getDirPath();
         StreamLog log = new StreamLogFiles(logDir, false);
 
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
 
@@ -182,7 +183,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     @SuppressWarnings("checkstyle:magicnumber")
     public void testSync() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
         long seg1 = StreamLogFiles.RECORDS_PER_LOG_FILE * 0 + 1;
@@ -213,7 +214,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(sh.getPendingTrims().size()).isEqualTo(0);
 
         // Write to the same address
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
 
@@ -238,7 +239,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     private void writeToLog(StreamLog log, Long addr) {
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
         LogAddress address = new LogAddress(addr, null);
