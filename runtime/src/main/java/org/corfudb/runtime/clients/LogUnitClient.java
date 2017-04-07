@@ -289,7 +289,7 @@ public class LogUnitClient implements IClient {
 
     public CompletableFuture<Boolean> writeCheckpoint(long address, Set<UUID> streams, IMetadata.DataRank rank,
                                                       CheckpointEntry cpEntry, Map<UUID, Long> backpointerMap) {
-        System.err.printf("\nHello, world! %d %s %s\n", address, streams, rank);
+        // System.err.printf("\nHello, world! %d %s %s\n", address, streams, rank);
         Timer.Context context = getTimerContext("writeCheckpoint");
         ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
         Serializers.CORFU.serialize(cpEntry, payload);
