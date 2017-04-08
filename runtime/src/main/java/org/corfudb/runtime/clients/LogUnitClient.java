@@ -234,7 +234,15 @@ public class LogUnitClient implements IClient {
     }
 
 
-
+    /**
+     * Asynchronously write to the logging unit.
+     * @param payload   The log data to write to the logging unit.
+     * @return          A CompletableFuture which will complete with the WriteResult once the
+     *                  write completes.
+     */
+    public CompletableFuture<Boolean> write(ILogData payload) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(new WriteRequest(payload)));
+    }
 
     /**
      * Asynchronously write to the logging unit.

@@ -31,10 +31,12 @@ public interface IReplicationProtocol {
      * @param globalAddress         The global address to write the data at.
      * @param entryMap              A map of stream IDs to stream entries to
      *                              write to the log.
+     * @return                      The ILogData that was generated, for
+     *                              caching writes.
      * @throws OverwriteException   If a write was committed to the log and
      *                              it was not the result of this call.
      */
-    void write(long globalAddress,
+    ILogData write(long globalAddress,
                @Nonnull Map<UUID, StreamData> entryMap) throws OverwriteException;
 
     /** Read data from a given address.

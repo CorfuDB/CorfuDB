@@ -14,8 +14,8 @@ public class StreamData {
     /** The id of the stream this stream data belongs to. */
     UUID streamId;
 
-    /** The set of backpointers for this stream data. */
-    Set<Long> backpointerSet;
+    /** The backpointer this stream data. */
+    Long backpointer;
 
     /** The log entry (to be renamed stream entry) at this stream data. */
     LogEntry streamEntry;
