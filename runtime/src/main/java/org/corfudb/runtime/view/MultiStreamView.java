@@ -3,6 +3,7 @@ package org.corfudb.runtime.view;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.IDivisibleEntry;
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -64,7 +65,7 @@ public class MultiStreamView {
                     runtime.getSequencerView().nextToken(Collections.singleton(destination), 1);
             if (!tokenResponse.getBackpointerMap().get(destination).equals(-1L)) {
                 try {
-                    runtime.getAddressSpaceView().fillHole(tokenResponse.getToken());
+                    runtime.getAddressSpaceView().fillHole(tokenResponse.getToken().getTokenValue());
                 } catch (OverwriteException oe) {
                     log.trace("Attempted to hole fill due to already-existing stream but hole filled by other party");
                 }
@@ -72,9 +73,8 @@ public class MultiStreamView {
             }
             StreamCOWEntry entry = new StreamCOWEntry(source, timestamp);
             try {
-                runtime.getAddressSpaceView().epochedWrite(tokenResponse.getToken(), Collections.singleton(destination),
-                        entry, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses(),
-                        tokenResponse.getEpoch());
+                runtime.getAddressSpaceView().write(tokenResponse.getToken(), Collections.singleton(destination),
+                        entry, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
                 written = true;
             } catch (OverwriteException oe) {
                 log.debug("hole fill during COW entry append, retrying...");
@@ -102,9 +102,8 @@ public class MultiStreamView {
     public void writeAt(TokenResponse address, Set<UUID> streamIDs, Object object) throws OverwriteException {
         Function<UUID, Object> partialEntryFunction =
                 object instanceof IDivisibleEntry ? ((IDivisibleEntry)object)::divideEntry : null;
-        runtime.getAddressSpaceView().epochedWrite(address.getToken(), streamIDs,
-                object, address.getBackpointerMap(), address.getStreamAddresses(), partialEntryFunction,
-                address.getEpoch());
+        runtime.getAddressSpaceView().write(address.getToken(), streamIDs,
+                object, address.getBackpointerMap(), address.getStreamAddresses(), partialEntryFunction);
     }
 
     /**
@@ -136,18 +135,18 @@ public class MultiStreamView {
         TokenResponse tokenResponse = null;
         while (true) {
             if (conflictInfo != null) {
-                long token;
+                Token token;
                 if (overwrite) {
 
                     // on retry, check for conflicts only from the previous
                     // attempt position
-                    conflictInfo.setSnapshotTimestamp(tokenResponse.getToken());
+                    conflictInfo.setSnapshotTimestamp(tokenResponse.getToken().getTokenValue());
 
                     TokenResponse temp =
                             runtime.getSequencerView().nextToken(streamIDs, 1, conflictInfo);
                     token = temp.getToken();
-                    tokenResponse = new TokenResponse(temp.getRespType(), token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses(),
-                            temp.getEpoch());
+                    tokenResponse = new TokenResponse(temp.getRespType(), token, temp.getBackpointerMap(),
+                            tokenResponse.getStreamAddresses());
                 } else {
                     tokenResponse =
                             runtime.getSequencerView().nextToken(streamIDs, 1,  conflictInfo);
@@ -158,14 +157,14 @@ public class MultiStreamView {
                     if (!acquisitionCallback.apply(tokenResponse)) {
                         log.trace("Acquisition rejected token, hole filling acquired address.");
                         try {
-                            runtime.getAddressSpaceView().fillHole(token);
+                            runtime.getAddressSpaceView().fillHole(token.getTokenValue());
                         } catch (OverwriteException oe) {
                             log.trace("Hole fill completed by remote client.");
                         }
                         return -1L;
                     }
                 }
-                if (/* TODO: keeping for now; Remove: */ token == -1L ||
+                if (/* TODO: keeping for now; Remove: */ token.getTokenValue() == -1L ||
                         tokenResponse.getRespType() != TokenType.NORMAL) {
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                         log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
@@ -173,7 +172,7 @@ public class MultiStreamView {
 
                     if (tokenResponse.getRespType() == TokenType.TX_ABORT_CONFLICT)
                         throw new TransactionAbortedException(
-                                tokenResponse.getToken(),
+                                tokenResponse.getToken().getTokenValue(),
                                 AbortCause.CONFLICT
                     );
                     if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ)
@@ -186,10 +185,9 @@ public class MultiStreamView {
                     return -1L;
                 }
                 try {
-                    runtime.getAddressSpaceView().epochedWrite(token, streamIDs,
-                            object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses(),
-                            tokenResponse.getEpoch());
-                    return token;
+                    runtime.getAddressSpaceView().write(token, streamIDs,
+                            object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                    return token.getTokenValue();
                 } catch (ReplexOverwriteException re) {
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                         log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
@@ -205,13 +203,12 @@ public class MultiStreamView {
                     log.debug("Overwrite occurred at {}, retrying.", token);
                 }
             } else {
-                long token;
+                Token token;
                 if (overwrite) {
                     TokenResponse temp =
                             runtime.getSequencerView().nextToken(streamIDs, 1);
                     token = temp.getToken();
-                    tokenResponse = new TokenResponse(temp.getRespType(), token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses(),
-                            temp.getEpoch());
+                    tokenResponse = new TokenResponse(temp.getRespType(), token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
                 } else {
                     tokenResponse =
                             runtime.getSequencerView().nextToken(streamIDs, 1);
@@ -222,7 +219,7 @@ public class MultiStreamView {
                     if (!acquisitionCallback.apply(tokenResponse)) {
                         log.trace("Acquisition rejected token, hole filling acquired address.");
                         try {
-                            runtime.getAddressSpaceView().fillHole(token);
+                            runtime.getAddressSpaceView().fillHole(token.getTokenValue());
                         } catch (OverwriteException oe) {
                             log.trace("Hole fill completed by remote client.");
                         }
@@ -232,10 +229,9 @@ public class MultiStreamView {
                 try {
                     Function<UUID, Object> partialEntryFunction =
                             object instanceof IDivisibleEntry ? ((IDivisibleEntry)object)::divideEntry : null;
-                    runtime.getAddressSpaceView().epochedWrite(token, streamIDs,
-                            object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses(), partialEntryFunction,
-                            tokenResponse.getEpoch());
-                    return token;
+                    runtime.getAddressSpaceView().write(token, streamIDs,
+                            object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses(), partialEntryFunction);
+                    return token.getTokenValue();
                 } catch (ReplexOverwriteException re) {
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                         log.trace("Acquisition rejected overwrite at {}, not retrying.", token);

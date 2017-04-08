@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
@@ -26,8 +27,8 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().epochedWrite(0, Collections.singleton(streamA),
-                testPayload, Collections.emptyMap(), Collections.emptyMap(), 0L);
+        r.getAddressSpaceView().write(new Token(0L, 0L), Collections.singleton(streamA),
+                testPayload, Collections.emptyMap(), Collections.emptyMap());
 
         assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
@@ -49,8 +50,9 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         scheduleConcurrently(numberThreads, threadNumber -> {
             int base = threadNumber * numberRecords;
             for (int i = base; i < base + numberRecords; i++) {
-                r.getAddressSpaceView().epochedWrite(i, Collections.singleton(CorfuRuntime.getStreamID("a")),
-                        Integer.toString(i).getBytes(), Collections.emptyMap(), Collections.emptyMap(), 0L);
+                r.getAddressSpaceView().write(new Token((long)i, 0L),
+                        Collections.singleton(CorfuRuntime.getStreamID("a")),
+                        Integer.toString(i).getBytes(), Collections.emptyMap(), Collections.emptyMap());
             }
         });
         executeScheduled(numberThreads, PARAMETERS.TIMEOUT_LONG);
@@ -95,8 +97,8 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().epochedWrite(0, Collections.singleton(streamA),
-                testPayload, Collections.emptyMap(), Collections.emptyMap(), 0L);
+        r.getAddressSpaceView().write(new Token(0L, 0L), Collections.singleton(streamA),
+                testPayload, Collections.emptyMap(), Collections.emptyMap());
 
         assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
@@ -134,8 +136,8 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().epochedWrite(0, Collections.singleton(streamA),
-                testPayload, Collections.emptyMap(), Collections.emptyMap(), 0L);
+        r.getAddressSpaceView().write(new Token(0L, 0L), Collections.singleton(streamA),
+                testPayload, Collections.emptyMap(), Collections.emptyMap());
 
         assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());

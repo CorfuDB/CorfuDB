@@ -295,7 +295,7 @@ public class VersionLockedObject<T> {
     public long logUpdate(SMREntry entry, boolean saveUpcall) {
         return smrStream.append(entry, t -> {
             if (saveUpcall) {
-                pendingUpcalls.add(t.getToken());
+                pendingUpcalls.add(t.getToken().getTokenValue());
             }
             return true;
         }, t -> {

@@ -258,9 +258,9 @@ public class SequencerServer extends AbstractServer {
 
         // If no streams are specified in the request, this value returns the last global token issued.
         long responseGlobalTail = (req.getStreams().size() == 0) ? globalLogTail.get() - 1 : maxStreamGlobalTails;
+        Token token = new Token(responseGlobalTail, r.getServerEpoch());
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                new TokenResponse(TokenType.NORMAL,
-                        responseGlobalTail, Collections.emptyMap(), responseStreamTails.build(), -1L)));
+                new TokenResponse(TokenType.NORMAL, token, Collections.emptyMap(), responseStreamTails.build())));
     }
 
     /**
@@ -302,6 +302,7 @@ public class SequencerServer extends AbstractServer {
     public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
                                           ChannelHandlerContext ctx, IServerRouter r,
                                           boolean isMetricsEnabled) {
+        final long serverEpoch = r.getServerEpoch();
         TokenRequest req = msg.getPayload();
 
         if (req.getReqType() == TokenRequest.TK_QUERY) {
@@ -314,10 +315,9 @@ public class SequencerServer extends AbstractServer {
 
         // for raw log implementation, simply extend the global log tail and return the global-log token
         if (req.getReqType() == TokenRequest.TK_RAW) {
+            Token token = new Token(globalLogTail.getAndAdd(req.getNumTokens()), serverEpoch);
             r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                    new TokenResponse(TokenType.NORMAL,
-                            globalLogTail.getAndAdd(req.getNumTokens()), Collections.emptyMap(), Collections.emptyMap(),
-                            -1L)));
+                    new TokenResponse(TokenType.NORMAL, token, Collections.emptyMap(), Collections.emptyMap())));
             return;
         }
 
@@ -329,9 +329,9 @@ public class SequencerServer extends AbstractServer {
             TokenType tokenType = txnCanCommit(req.getTxnResolution());
             if (tokenType != TokenType.NORMAL) {
                 // If the txn aborts, then DO NOT hand out a token.
+                Token token = new Token(-1L, serverEpoch);
                 r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                        new TokenResponse(tokenType,
-                                -1L, Collections.emptyMap(), Collections.emptyMap(), -1L)));
+                        new TokenResponse(tokenType, token, Collections.emptyMap(), Collections.emptyMap())));
                 return;
             }
         }
@@ -396,11 +396,11 @@ public class SequencerServer extends AbstractServer {
         log.trace("token {} backpointers {} stream-tokens {}",
                 currentTail, backPointerMap.build(), requestStreamTokens.build());
         // return the token response with the new global tail, new streams tails, and the streams backpointers
+        Token token = new Token(currentTail, serverEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                 new TokenResponse(TokenType.NORMAL,
-                        currentTail,
+                        token,
                         backPointerMap.build(),
-                        requestStreamTokens.build(),
-                        -1L)));
+                        requestStreamTokens.build())));
     }
 }

@@ -128,15 +128,14 @@ public class ReplexStreamView extends
             // to the client.
             try {
                 runtime.getAddressSpaceView()
-                        .epochedWrite(tokenResponse.getToken(),
+                        .write(tokenResponse.getToken(),
                                 Collections.singleton(ID),
                                 object,
                                 tokenResponse.getBackpointerMap(),
-                                tokenResponse.getStreamAddresses(),
-                                tokenResponse.getEpoch());
+                                tokenResponse.getStreamAddresses());
                 // The write completed successfully, so we return this
                 // address to the client.
-                return tokenResponse.getToken();
+                return tokenResponse.getToken().getTokenValue();
             }
             catch (OverwriteException oe) {
                 log.trace("Overwrite occurred at {}", tokenResponse);
@@ -320,7 +319,7 @@ public class ReplexStreamView extends
         return  context.knownStreamMax > context.streamPointer ||
                 runtime.getSequencerView()
                         .nextToken(Collections.singleton(context.id),
-                                0).getToken()
+                                0).getToken().getTokenValue()
                         > context.globalPointer;
     }
 

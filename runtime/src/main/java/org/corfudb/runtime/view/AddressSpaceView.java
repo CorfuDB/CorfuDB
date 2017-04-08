@@ -15,6 +15,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.InMemoryLogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -93,38 +94,32 @@ public class AddressSpaceView extends AbstractView {
     /**
      * Write the given object to an address and streams.
      *
-     * @param address        An address to write to.
+     * @param token          A token: for address to write and match the epoch.
      * @param stream         The streams which will belong on this entry.
      * @param data           The data to write.
      * @param backpointerMap
-     * @param epoch          To verify that the token is acquired in the same epoch as the write.
      */
-    public void epochedWrite(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
-                             Map<UUID, Long> streamAddresses, long epoch)
+    public void write(Token token, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
+                      Map<UUID, Long> streamAddresses)
             throws OverwriteException {
-        epochedWrite(address, stream, data, backpointerMap, streamAddresses, null, epoch);
+        write(token, stream, data, backpointerMap, streamAddresses, null);
     }
 
-    public void epochedWrite(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
-                             Map<UUID, Long> streamAddresses, Function<UUID, Object> partialEntryFunction, long epoch)
+    public void write(Token token, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
+                        Map<UUID, Long> streamAddresses, Function<UUID, Object> partialEntryFunction)
             throws OverwriteException {
-        if (epoch != runtime.getLayoutView().getLayout().getEpoch()) {
+        if (token.getEpoch() != runtime.getLayoutView().getLayout().getEpoch()) {
             throw new WrongEpochException(runtime.getLayoutView().getLayout().getEpoch());
         }
-        write(address, stream, data, backpointerMap, streamAddresses, partialEntryFunction);
-    }
 
-    private void write(long address, Set<UUID> stream, Object data, Map<UUID, Long> backpointerMap,
-                      Map<UUID, Long> streamAddresses, Function<UUID, Object> partialEntryFunction)
-            throws OverwriteException {
-        int numBytes = layoutHelper(l -> AbstractReplicationView.getReplicationView(l, l.getReplicationMode(address),
-                l.getSegment(address))
-                .write(address, stream, data, backpointerMap, streamAddresses, partialEntryFunction));
+        int numBytes = layoutHelper(l -> AbstractReplicationView.getReplicationView(l, l.getReplicationMode(token.getTokenValue()),
+                l.getSegment(token.getTokenValue()))
+                .write(token.getTokenValue(), stream, data, backpointerMap, streamAddresses, partialEntryFunction));
 
         // Insert this append to our local cache.
         if (!runtime.isCacheDisabled()) {
             InMemoryLogData ld = new InMemoryLogData(DataType.DATA, data);
-            ld.setGlobalAddress(address);
+            ld.setGlobalAddress(token.getTokenValue());
             ld.setBackpointerMap(backpointerMap);
             ld.setStreams(stream);
             ld.setLogicalAddresses(streamAddresses);
@@ -134,7 +129,7 @@ public class AddressSpaceView extends AbstractView {
                 ((LogEntry) data).setRuntime(runtime);
                 ((LogEntry) data).setEntry(ld);
             }
-            readCache.put(address, ld);
+            readCache.put(token.getTokenValue(), ld);
         }
     }
 

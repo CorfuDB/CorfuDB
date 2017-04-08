@@ -36,7 +36,6 @@ public class SequencerClient implements IClient {
     @ClientHandler(type=CorfuMsgType.TOKEN_RES)
     private static Object handleTokenResponse(CorfuPayloadMsg<TokenResponse> msg,
                                                 ChannelHandlerContext ctx, IClientRouter r) {
-        msg.getPayload().setEpoch(msg.getEpoch());
         return msg.getPayload();
     }
 
