@@ -22,10 +22,10 @@ public class CorfuSharedCounter {
     @Accessor
     public int getValue() { return value; }
 
-    @Mutator
+    @Mutator(name = "setValue")
     public void setValue(int newValue) { value = newValue; }
 
-    @MutatorAccessor
+    @MutatorAccessor(name = "CAS")
     int CAS(int testValue, int newValue) {
         int curValue = value;
         if (curValue == testValue)

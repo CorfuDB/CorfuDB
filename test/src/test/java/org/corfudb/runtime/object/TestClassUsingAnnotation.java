@@ -24,7 +24,7 @@ public class TestClassUsingAnnotation {
         return true;
     }
 
-    @MutatorAccessor
+    @MutatorAccessor(name = "testIncrement")
     public boolean testIncrement() {
         return a1.incrementAndGet() != 0;
     }
@@ -34,7 +34,7 @@ public class TestClassUsingAnnotation {
         return a1.get();
     }
 
-    @Mutator
+    @Mutator(name = "reset")
     public void reset() {
         a1.set(0);
     }
