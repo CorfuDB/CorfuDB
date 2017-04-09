@@ -6,6 +6,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.*;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
@@ -182,7 +183,7 @@ public class ObjectsView extends AbstractView {
         if (context == null) {
             log.warn("Attempted to abort a transaction, but no transaction active!");
         } else {
-            context.abortTransaction();
+            context.abortTransaction(new TransactionAbortedException(-1L, AbortCause.USER));
             TransactionalContext.removeContext();
         }
     }
