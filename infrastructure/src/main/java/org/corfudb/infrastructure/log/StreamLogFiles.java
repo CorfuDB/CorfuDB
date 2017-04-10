@@ -697,7 +697,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 new UUID(rank.getUuidMostSignificant(), rank.getUuidLeastSignificant()));
     }
 
-    static int getChecksum(byte[] bytes) {
+    public static int getChecksum(byte[] bytes) {
         Hasher hasher = Hashing.crc32c().newHasher();
         for (byte a : bytes) {
             hasher.putByte(a);
