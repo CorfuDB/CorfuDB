@@ -80,8 +80,9 @@ public enum CorfuMsgType {
     MANAGEMENT_ALREADY_BOOTSTRAP_ERROR(72, TypeToken.of(CorfuMsg.class), true),
     MANAGEMENT_START_FAILURE_HANDLER(73, TypeToken.of(CorfuMsg.class), true),
     MANAGEMENT_FAILURE_DETECTED(74, new TypeToken<CorfuPayloadMsg<FailureDetectorMsg>>(){}, true),
-    HEARTBEAT_REQUEST(75, new TypeToken<CorfuPayloadMsg<byte[]>>(){}),
-    HEARTBEAT_RESPONSE(76, new TypeToken<CorfuPayloadMsg<byte[]>>(){}, true);
+    HEARTBEAT_REQUEST(75, new TypeToken<CorfuPayloadMsg<byte[]>>(){}, true),
+    HEARTBEAT_RESPONSE(76, new TypeToken<CorfuPayloadMsg<byte[]>>(){}, true),
+    ROUTER_RULE(77, new TypeToken<CorfuPayloadMsg<RouterRuleMsg>>(){}, true);
 
 
     public final int type;

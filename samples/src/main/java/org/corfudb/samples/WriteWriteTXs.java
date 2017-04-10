@@ -2,6 +2,8 @@ package org.corfudb.samples;
 
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 
@@ -40,7 +42,7 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
     /**
      * test parameters
      */
-    private final int NUM_BATCHES = 10;
+    private final int NUM_BATCHES = 1_000;
     private final int BATCH_SZ = 1_000;
     private final int numTasks = NUM_BATCHES * BATCH_SZ;
     private final int TOTAL_PERCENT = 100;
@@ -50,9 +52,16 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
      */
     @Override
     protected void TXBegin() {
-        getCorfuRuntime().getObjectsView().TXBuild()
-                .setType(TransactionType.WRITE_AFTER_WRITE)
-                .begin();
+        while (true) {
+            try {
+                getCorfuRuntime().getObjectsView().TXBuild()
+                        .setType(TransactionType.WRITE_AFTER_WRITE)
+                        .begin();
+                break;
+            } catch (NetworkException ne) {
+                getCorfuRuntime().invalidateLayout();
+            }
+        }
     }
 
     /**
@@ -73,7 +82,7 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
     @Override
     void action() {
 
-        final int NUM_THREADS = 2;
+        final int NUM_THREADS = 20;
         final long THREAD_TIMEOUT = 300_000; // 5 minutes
         final int READ_PERCENT = 80;
 
@@ -90,7 +99,7 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
             //disabled.
           //  tList.add(new Thread(() -> mixedReadWriteLoad2(threadNum,
           //          READ_PERCENT)));
-            tList.get(t).start();
+//            tList.get(t).start();
         }
 
         tList.forEach(th -> {
@@ -169,45 +178,71 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
         System.out.print("running mixedRWload1..");
         long startt = System.currentTimeMillis();
         AtomicInteger aborts = new AtomicInteger(0);
+        AtomicInteger conflictAborts = new AtomicInteger(0);
+        AtomicInteger newSeqAborts = new AtomicInteger(0);
 
         for (int i = 0; i < NUM_BATCHES; i++) {
-            System.out.print(".");
+//            System.out.print(".");
+            long s1 = System.currentTimeMillis();
             TXBegin();
+//            System.out.println(threadNum + ": TX #" + i + " starting in epoch : " + getCorfuRuntime().getLayoutView().getLayout().getEpoch());
             int accumulator = 0;
             for (int j = 0; j < BATCH_SZ; j++) {
 
-                // perform random get()'s with probability 'readPercent/100'
-                if (rand.nextInt(TOTAL_PERCENT) < readPrecent) {
-                    int r1 = rand.nextInt(numTasks);
-                    int r2 = rand.nextInt(numTasks);
-                    int r3 = rand.nextInt(numTasks);
-                    try {
-                        accumulator += map1.get("m1" + r1);
-                        accumulator += map2.get("m2" + r2);
-                        accumulator += map3.get("m3" + r3);
-                    } catch (Exception e) {
-                        System.out.println(threadNum +
-                                ": exception on iteration " + i + "," + j
-                                + ", r=" + r1 + "," + r2 + "," + r3);
-                        e.printStackTrace();
-                        return;
+                while (true) {
+                    // perform random get()'s with probability 'readPercent/100'
+                    if (rand.nextInt(TOTAL_PERCENT) < readPrecent) {
+                        int r1 = rand.nextInt(numTasks);
+                        int r2 = rand.nextInt(numTasks);
+                        int r3 = rand.nextInt(numTasks);
+                        try {
+                            accumulator += map1.get("m1" + r1);
+                            accumulator += map2.get("m2" + r2);
+                            accumulator += map3.get("m3" + r3);
+                        } catch (Exception e) {
+//                            System.out.println(threadNum +
+//                                    ": exception on iteration " + i + "," + j
+//                                    + ", r=" + r1 + "," + r2 + "," + r3 + "->" + e.getMessage());
+                            getCorfuRuntime().invalidateLayout();
+                            continue;
+                        }
                     }
-                }
 
-                // otherwise, perform a random put()
-                else {
-                    if (rand.nextInt(2) == 1)
-                        map2.put("m2" + rand.nextInt(numTasks), accumulator);
-                    else
-                        map3.put("m3" + rand.nextInt(numTasks), accumulator);
+                    // otherwise, perform a random put()
+                    else {
+                        try {
+                            if (rand.nextInt(2) == 1)
+                                map2.put("m2" + rand.nextInt(numTasks), accumulator);
+                            else
+                                map3.put("m3" + rand.nextInt(numTasks), accumulator);
+                        } catch (Exception e) {
+//                            System.out.println(threadNum +
+//                                    ": exception on iteration " + i + "," + j + "->" + e.getMessage());
+                            getCorfuRuntime().invalidateLayout();
+                            continue;
+                        }
+                    }
+                    break;
                 }
             }
 
-            try {
-                TXEnd();
-            } catch (TransactionAbortedException te) {
-                aborts.getAndIncrement();
+            while (true) {
+                try {
+//                    System.out.println(threadNum + ": TX #" + i + " ending in epoch : " + getCorfuRuntime().getLayoutView().getLayout().getEpoch());
+                    TXEnd();
+                    break;
+                } catch (NetworkException ne) {
+                    getCorfuRuntime().invalidateLayout();
+                } catch (TransactionAbortedException te) {
+//                    System.out.println(threadNum + ": TX Abort #" + i + " = " + te);
+                    aborts.getAndIncrement();
+                    if (te.getAbortCause().equals(AbortCause.CONFLICT)) conflictAborts.getAndIncrement();
+                    else if (te.getAbortCause().equals(AbortCause.NEW_SEQUENCER)) newSeqAborts.getAndIncrement();
+                    break;
+                }
             }
+            long e1 = System.currentTimeMillis();
+            System.out.println(threadNum + ": [TX: #" + i + "\t]\t" + (e1-s1) );
         }
         System.out.println("END");
 
@@ -216,6 +251,10 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
                 + ": mixedReadWriteLoad elapsed time (msecs): " + (endt - startt));
         System.out.println(threadNum
                 + ":   #aborts/#TXs: " + aborts.get() + "/" + numTasks);
+        System.out.println(threadNum
+                + ":   #conflictAborts/#TXs: " + conflictAborts.get() + "/" + numTasks);
+        System.out.println(threadNum
+                + ":   #newSeqAborts/#TXs: " + newSeqAborts.get() + "/" + numTasks);
     }
 
     /**

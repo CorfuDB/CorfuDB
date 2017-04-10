@@ -9,9 +9,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.RouterRuleMsg;
 
-import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -38,6 +41,9 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     Map<CorfuMsgType, AbstractServer> handlerMap;
 
     BaseServer baseServer;
+
+    Set<CorfuMsgType> corfuMsgTypeRuleSet = new HashSet<>();
+    Double dropProbability = 0.0;
 
     /**
      * The epoch of this router. This is managed by the base server implementation.
@@ -109,6 +115,22 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
         return true;
     }
 
+    public void setRouterRule(RouterRuleMsg routerRule) {
+        if (routerRule.getClearAllRules()) {
+            corfuMsgTypeRuleSet.clear();
+        }
+        corfuMsgTypeRuleSet.addAll(routerRule.getCorfuMsgTypeSet());
+        dropProbability = routerRule.getDropProbability();
+        log.info("New rule set on server router : {}", routerRule.toString());
+    }
+
+    public boolean applyRule(CorfuMsg msg) {
+        if (corfuMsgTypeRuleSet.contains(msg.getMsgType())) {
+            return new Random().nextDouble() <= dropProbability;
+        }
+        return false;
+    }
+
     /**
      * Handle an incoming message read on the channel.
      *
@@ -120,6 +142,16 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
         try {
             // The incoming message should have been transformed to a CorfuMsg earlier in the pipeline.
             CorfuMsg m = ((CorfuMsg) msg);
+            if (m.getMsgType().equals(CorfuMsgType.ROUTER_RULE)) {
+                setRouterRule(((CorfuPayloadMsg<RouterRuleMsg>) m).getPayload());
+                sendResponse(ctx, m, new CorfuMsg(CorfuMsgType.ACK));
+                return;
+            }
+            if (applyRule(m)) {
+                log.warn("Dropping message : {} as chosen by rule.", m.toString());
+                return;
+            }
+
             // We get the handler for this message from the map
             AbstractServer handler = handlerMap.get(m.getMsgType());
             if (handler == null) {

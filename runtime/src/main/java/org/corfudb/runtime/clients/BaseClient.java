@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -76,6 +77,11 @@ public class BaseClient implements IClient {
     public CompletableFuture<Boolean> reset() {
         return router.sendMessageAndGetCompletable(
                 new CorfuMsg(CorfuMsgType.RESET));
+    }
+
+    public CompletableFuture<Boolean> setRule(RouterRuleMsg routerRuleMsg) {
+        return router.sendMessageAndGetCompletable(
+                CorfuMsgType.ROUTER_RULE.payloadMsg(routerRuleMsg));
     }
 
     /** The handler and handlers which implement this client. */

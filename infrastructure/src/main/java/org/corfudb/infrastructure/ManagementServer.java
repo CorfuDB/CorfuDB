@@ -281,7 +281,8 @@ public class ManagementServer extends AbstractServer {
         log.info("Received Failures : {}", msg.getPayload().getNodes());
         FailureHandlerDispatcher failureHandlerDispatcher = new FailureHandlerDispatcher();
         try {
-            failureHandlerDispatcher.dispatchHandler(failureHandlerPolicy, (Layout) latestLayout.clone(), getCorfuRuntime(), msg.getPayload().getNodes());
+            if (r.getServerEpoch() == latestLayout.getEpoch())
+                failureHandlerDispatcher.dispatchHandler(failureHandlerPolicy, (Layout) latestLayout.clone(), getCorfuRuntime(), msg.getPayload().getNodes());
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
         } catch (CloneNotSupportedException e) {
             log.error("Failure Handler could not clone layout: {}", e);
@@ -476,14 +477,17 @@ public class ManagementServer extends AbstractServer {
 
         List<String> allServers = new ArrayList<>(latestLayout.getAllServers());
         iLinkFailureDetector = new RapidPollingPolicy(getLocalEndpoint(), latestLayout, getCorfuRuntime());
-        String rapidLocalAddress = getLocalEndpoint().replace('9', '8');
+        String rapidLocalAddress = getLocalEndpoint().substring(0, getLocalEndpoint().indexOf(':')+1).concat("8000");
 
+        log.info("Local Endpoint    :   {}", getLocalEndpoint());
         if (allServers.get(0).equals(getLocalEndpoint())) {
+            log.info("Seed Address    :   {}", rapidLocalAddress);
             cluster = new Cluster.Builder(HostAndPort.fromString(rapidLocalAddress))
                     .setLinkFailureDetector(iLinkFailureDetector)
                     .start();
         } else {
-            String seed = allServers.get(0).replace('9', '8');
+            String seed = allServers.get(0).substring(0, allServers.get(0).indexOf(':')+1).concat("8000");
+            log.info("Seed Address    :   {}", seed);
             cluster = new Cluster.Builder(HostAndPort.fromString(rapidLocalAddress))
                     .setLinkFailureDetector(iLinkFailureDetector)
                     .join(HostAndPort.fromString(seed));
@@ -502,24 +506,22 @@ public class ManagementServer extends AbstractServer {
 
     private void onViewChange(final List<NodeStatusChange> viewChange) {
 
-        getCorfuRuntime().invalidateLayout();
-        // Fetch the latest layout view through the runtime.
-        safeUpdateLayout(getCorfuRuntime().getLayoutView().getLayout());
-
         log.info("View Changed by Rapid. : {}", viewChange);
         try {
             Set<String> set = viewChange.stream()
                     .filter(nodeStatusChange -> nodeStatusChange.getStatus().equals(LinkStatus.DOWN))
                     .map(nodeStatusChange -> nodeStatusChange.getHostAndPort().toString())
-                    .map(serverAddress -> serverAddress.replace('8', '9'))
+                    .map(serverAddress -> serverAddress.substring(0, serverAddress.indexOf(':')+1).concat("9000"))
                     .collect(Collectors.toSet());
             if (!set.isEmpty()) {
                 corfuRuntime.getRouter(getLocalEndpoint()).getClient(ManagementClient.class).handleFailure(set).get();
-                getCorfuRuntime().invalidateLayout();
             }
         } catch (Exception e) {
             log.error("Exception invoking failure handler : {}", e);
         }
+        getCorfuRuntime().invalidateLayout();
+        // Fetch the latest layout view through the runtime.
+        safeUpdateLayout(getCorfuRuntime().getLayoutView().getLayout());
     }
 
     private void onViewChangeOneStepFailed(final List<NodeStatusChange> viewChangeProposal) {

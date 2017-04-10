@@ -43,8 +43,10 @@ public class LayoutWorkflowManager {
      */
     public LayoutWorkflowManager addUnresponsiveServers(Set<String> endpoints) {
         List<String> unresponsiveServers = layout.getUnresponsiveServers();
-        unresponsiveServers.clear();
-        endpoints.forEach(unresponsiveServers::add);
+        endpoints.forEach(endpoint -> {
+            if (!unresponsiveServers.contains(endpoint))
+                unresponsiveServers.add(endpoint);
+        });
         return this;
     }
 
@@ -112,7 +114,7 @@ public class LayoutWorkflowManager {
         List<String> modifiedSequencerServers = new ArrayList<>(layout.getSequencers());
         for (int i = 0; i < modifiedSequencerServers.size(); i++) {
             String sequencerServer = modifiedSequencerServers.get(i);
-            if (!endpoints.contains(sequencerServer)) {
+            if (!endpoints.contains(sequencerServer) && !layout.getUnresponsiveServers().contains(sequencerServer)) {
                 modifiedSequencerServers.remove(sequencerServer);
                 modifiedSequencerServers.add(0, sequencerServer);
                 layout.setSequencers(modifiedSequencerServers);

@@ -50,8 +50,12 @@ public class RapidPollingPolicy implements ILinkFailureDetector {
         final ProbeMessage probeMessage = messageHashMap.get(monitoree);
         final SettableFuture<Void> completionEvent = SettableFuture.create();
         try {
-            CompletableFuture<byte[]> cf = corfuRuntime.getRouter(monitoree.toString().replace('8', '9')).getClient(ManagementClient.class).sendHeartbeatRequest(
-                    ProbeMessage.newBuilder().setSender(localAddress.toString()).build().toByteArray()
+            CompletableFuture<byte[]> cf = corfuRuntime
+                    .getRouter(monitoree.toString()
+                            .substring(0, monitoree.toString().indexOf(':')+1).concat("9000"))
+                    .getClient(ManagementClient.class)
+                    .sendHeartbeatRequest(
+                            ProbeMessage.newBuilder().setSender(localAddress.toString()).build().toByteArray()
             );
             cf.exceptionally(throwable -> {
                 log.debug("Ping to {} failed with {}", monitoree.toString(), throwable);
