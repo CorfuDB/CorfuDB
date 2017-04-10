@@ -10,6 +10,7 @@ import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.PurgeFailurePolicy;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.TestRule;
@@ -19,8 +20,10 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.Map;
 
+import java.util.UUID;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -620,5 +623,70 @@ public class ManagementViewTest extends AbstractViewTest {
         });
 
 
+    }
+
+    /**
+     * When a stream is seen for the first time by the sequencer it returns a -1
+     * in the backpointer map.
+     * After failover, the new sequencer returns a null in the backpointer map
+     * forcing it to single step backwards and get the last backpointer for the
+     * given stream.
+     * An example is shown below:
+     * <p>
+     * Index  :  0  1  2  3  |          | 4  5  6  7  8
+     * Stream :  A  B  A  B  | failover | A  C  A  B  B
+     * B.P    : -1 -1  0  1  |          | X  X  4  X  7
+     * <p>
+     * -1 : New StreamID so empty backpointers
+     *  X : (null) Unknown backpointers as this is a failed-over sequencer.
+     * <p>
+     * @throws Exception
+     */
+    @Test
+    public void sequencerFailoverBackpointerCheck() throws Exception {
+        getManagementTestLayout();
+
+        UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
+        UUID streamB = UUID.nameUUIDFromBytes("stream B".getBytes());
+        UUID streamC = UUID.nameUUIDFromBytes("stream C".getBytes());
+
+        final long streamA_backpointer = 4L;
+        final long streamB_backpointer = 7L;
+
+        getTokenWriteAndAssertBackPointer(streamA, -1L);
+        getTokenWriteAndAssertBackPointer(streamB, -1L);
+        getTokenWriteAndAssertBackPointer(streamA, 0L);
+        getTokenWriteAndAssertBackPointer(streamB, 1L);
+
+        induceSequencerFailureAndWait();
+
+        getTokenWriteAndAssertBackPointer(streamA, null);
+        getTokenWriteAndAssertBackPointer(streamC, null);
+        getTokenWriteAndAssertBackPointer(streamA, streamA_backpointer);
+        getTokenWriteAndAssertBackPointer(streamB, null);
+        getTokenWriteAndAssertBackPointer(streamB, streamB_backpointer);
+    }
+
+    /**
+     * Requests for a token for the given stream ID.
+     * Asserts the backpointer map in the token response with the specified backpointer location.
+     * Writes test data to the log unit servers using the tokenResponse.
+     * @param streamID                  Stream ID to request token for.
+     * @param expectedBackpointerValue  Expected backpointer for given stream.
+     */
+    private void getTokenWriteAndAssertBackPointer(UUID streamID, Long expectedBackpointerValue) {
+        TokenResponse tokenResponse =
+                corfuRuntime.getSequencerView().nextToken(Collections.singleton(streamID), 1);
+        if (expectedBackpointerValue == null) {
+            assertThat(tokenResponse.getBackpointerMap()).isEmpty();
+        } else {
+            assertThat(tokenResponse.getBackpointerMap()).containsEntry(streamID, expectedBackpointerValue);
+        }
+        corfuRuntime.getAddressSpaceView().write(
+                tokenResponse.getToken(),
+                Collections.singleton(streamID),
+                "test".getBytes(),
+                tokenResponse.getBackpointerMap(),
+                tokenResponse.getStreamAddresses());
     }
 }

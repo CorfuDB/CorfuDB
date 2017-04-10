@@ -63,7 +63,8 @@ public class MultiStreamView {
         while (!written) {
             TokenResponse tokenResponse =
                     runtime.getSequencerView().nextToken(Collections.singleton(destination), 1);
-            if (!tokenResponse.getBackpointerMap().get(destination).equals(-1L)) {
+            if (tokenResponse.getBackpointerMap().get(destination) != null &&
+                    !tokenResponse.getBackpointerMap().get(destination).equals(-1L)) {
                 try {
                     runtime.getAddressSpaceView().fillHole(tokenResponse.getToken().getTokenValue());
                 } catch (OverwriteException oe) {

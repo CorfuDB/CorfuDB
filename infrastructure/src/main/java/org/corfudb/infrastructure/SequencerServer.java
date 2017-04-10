@@ -21,7 +21,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -124,6 +123,8 @@ public class SequencerServer extends AbstractServer {
             })
             .recordStats()
             .build();
+
+    private boolean isFailoverSequencer = false;
 
     /** Handler for this server */
     @Getter
@@ -285,6 +286,7 @@ public class SequencerServer extends AbstractServer {
         // It is necessary because we reset the sequencer.
         //
         if (initialToken > globalLogTail.get()) {
+            isFailoverSequencer = true;
             globalLogTail.set(initialToken);
             globalLogStart.set(initialToken);
             maxConflictWildcard = initialToken-1;
@@ -352,7 +354,9 @@ public class SequencerServer extends AbstractServer {
             // step 1. and 2. (comment above)
             streamTailToGlobalTailMap.compute(id, (k, v) -> {
                 if (v == null) {
-                    backPointerMap.put(k, -1L);
+                    // TODO: Use EMPTY or UNKNOWN value descriptors instead of -1 and null.
+                    if (!isFailoverSequencer)
+                        backPointerMap.put(k, -1L);
                     return newTail-1;
                 } else {
                     backPointerMap.put(k, v);
