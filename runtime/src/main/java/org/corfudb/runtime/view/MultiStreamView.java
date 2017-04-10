@@ -4,10 +4,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.IDivisibleEntry;
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.ReplexOverwriteException;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.view.stream.ReplexStreamView;
@@ -21,14 +24,14 @@ import java.util.function.Function;
  * Created by mwei on 12/11/15.
  */
 @Slf4j
-public class StreamsView {
+public class MultiStreamView {
 
     /**
      * The org.corfudb.runtime which backs this view.
      */
     CorfuRuntime runtime;
 
-    public StreamsView(CorfuRuntime runtime) {
+    public MultiStreamView(CorfuRuntime runtime) {
         this.runtime = runtime;
     }
 
@@ -117,7 +120,8 @@ public class StreamsView {
      */
     public long acquireAndWrite(Set<UUID> streamIDs, Object object,
                                 Function<TokenResponse, Boolean> acquisitionCallback,
-                                Function<TokenResponse, Boolean> deacquisitionCallback) {
+                                Function<TokenResponse, Boolean> deacquisitionCallback)
+      throws TransactionAbortedException {
         return acquireAndWrite(streamIDs, object,
                 acquisitionCallback, deacquisitionCallback,null);
     }
@@ -125,7 +129,8 @@ public class StreamsView {
     public long acquireAndWrite(Set<UUID> streamIDs, Object object,
                                 Function<TokenResponse, Boolean> acquisitionCallback,
                                 Function<TokenResponse, Boolean> deacquisitionCallback,
-                                TxResolutionInfo conflictInfo) {
+                                TxResolutionInfo conflictInfo)
+            throws TransactionAbortedException {
         boolean overwrite = false;
         TokenResponse tokenResponse = null;
         while (true) {
@@ -140,7 +145,7 @@ public class StreamsView {
                     TokenResponse temp =
                             runtime.getSequencerView().nextToken(streamIDs, 1, conflictInfo);
                     token = temp.getToken();
-                    tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                    tokenResponse = new TokenResponse(temp.getRespType(), token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
                 } else {
                     tokenResponse =
                             runtime.getSequencerView().nextToken(streamIDs, 1,  conflictInfo);
@@ -158,10 +163,24 @@ public class StreamsView {
                         return -1L;
                     }
                 }
-                if (token == -1L) {
+                if (/* TODO: keeping for now; Remove: */ token == -1L ||
+                        tokenResponse.getRespType() != TokenType.NORMAL) {
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                         log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
                     }
+
+                    if (tokenResponse.getRespType() == TokenType.TX_ABORT_CONFLICT)
+                        throw new TransactionAbortedException(
+                                tokenResponse.getToken(),
+                                AbortCause.CONFLICT
+                    );
+                    if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ)
+                        throw new TransactionAbortedException(
+                                -1L,
+                                AbortCause.NEW_SEQUENCER
+                        );
+
+                    // TODO remove :
                     return -1L;
                 }
                 try {
@@ -188,7 +207,7 @@ public class StreamsView {
                     TokenResponse temp =
                             runtime.getSequencerView().nextToken(streamIDs, 1);
                     token = temp.getToken();
-                    tokenResponse = new TokenResponse(token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                    tokenResponse = new TokenResponse(temp.getRespType(), token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
                 } else {
                     tokenResponse =
                             runtime.getSequencerView().nextToken(streamIDs, 1);

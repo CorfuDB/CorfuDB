@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.*;
 import org.corfudb.util.Utils;
@@ -198,11 +199,11 @@ public abstract class AbstractTransactionalContext implements
 
     /** Forcefully abort the transaction.
      */
-    public void abortTransaction() {
+    public void abortTransaction(TransactionAbortedException ae) {
         log.debug("TXAbort[{}]", this);
         commitAddress = ABORTED_ADDRESS;
         completionFuture
-                .completeExceptionally(new TransactionAbortedException());
+                .completeExceptionally(ae);
     }
 
     abstract public long obtainSnapshotTimestamp();
