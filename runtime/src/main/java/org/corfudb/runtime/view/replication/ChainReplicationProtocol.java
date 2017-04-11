@@ -32,25 +32,25 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
 
     /** {@inheritDoc} */
     @Override
-    public void write(long globalAddress,
+    public ILogData write(long globalAddress,
                       @Nonnull Map<UUID, StreamData> entryMap) throws OverwriteException {
         int numUnits = layout.getSegmentLength(globalAddress);
 
-        try (AutoClosableByteBuf b = new AutoClosableByteBuf()) {
-            // To reduce the overhead of serialization, we serialize only the
-            // first time we write, saving when we go down the chain.
-            StreamedLogData sld = new StreamedLogData(entryMap);
-            sld.getSerializedForm(Serializers.CORFU::serialize, b.getBuf());
 
+        StreamedLogData sld = new StreamedLogData(globalAddress, entryMap);
+
+        // To reduce the overhead of serialization, we serialize only the
+        // first time we write, saving when we go down the chain.
+        try (StreamedLogData.SerializationHandle sh =
+                     sld.getSerializedForm()) {
             log.trace("Write[{}]: chain head {}/{}", 1, numUnits);
             // In chain replication, we start at the chain head.
                 try {
                     CFUtils.getUninterruptibly(
                             layout.getLogUnitClient(globalAddress, 0)
-                                    // TODO: Currently, this call won't work until the log unit client is refactored.
-                                    .write(globalAddress, null, null, b, null)
+                                    .write(sh.getSerialized())
                             , OverwriteException.class);
-                    propagate(globalAddress, b.getBuf());
+                    propagate(globalAddress, sh.getSerialized());
                 } catch (OverwriteException oe) {
                     // Some other wrote here (usually due to hole fill)
                     // We need to invoke the recovery protocol, in case
@@ -59,6 +59,8 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                     throw oe;
                 }
         }
+
+        return sld;
     }
 
     /** {@inheritDoc} */
@@ -84,7 +86,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
      * @param data          The data to propagate, or NULL,
      *                      if it is to be a hole.
      */
-    protected void propagate(long globalAddress, @Nullable ByteBuf data) {
+    protected void propagate(long globalAddress, @Nullable ILogData data) {
         int numUnits = layout.getSegmentLength(globalAddress);
 
         for (int i = 1; i < numUnits; i++) {
@@ -95,8 +97,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                 if (data != null) {
                     CFUtils.getUninterruptibly(
                             layout.getLogUnitClient(globalAddress, i)
-                                    // TODO: Currently, this call won't work until the log unit client is refactored.
-                                    .write(globalAddress, null, null, data, null)
+                                    .write(data)
                             , OverwriteException.class);
                 } else {
                     CFUtils.getUninterruptibly(layout.getLogUnitClient(globalAddress, i)
@@ -152,8 +153,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
             try {
                 CFUtils.getUninterruptibly(
                         layout.getLogUnitClient(globalAddress, i)
-                                // TODO: Currently, this call won't work until the log unit client is refactored.
-                                .write(globalAddress, null, null, ld, null)
+                                .write(ld)
                         , OverwriteException.class);
                 // We successfully recovered a write to this member of the chain
                 log.debug("Recover[{}]: recovered write at chain {}/{}", layout, i + 1, numUnits);

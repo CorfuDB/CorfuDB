@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.assertj.core.api.AbstractAssert;
 import org.corfudb.infrastructure.log.LogAddress;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.util.serializer.Serializers;
 
 
@@ -66,8 +67,8 @@ public class LogUnitServerAssertions extends AbstractAssert<LogUnitServerAsserti
             byte[] expected = new byte[b.readableBytes()];
             b.getBytes(0, expected);
 
-            org.assertj.core.api.Assertions.assertThat(actual.getDataCache()
-                    .get(new LogAddress(address, null)).getData())
+            org.assertj.core.api.Assertions.assertThat(((LogData)actual.getDataCache()
+                    .get(new LogAddress(address, null))).getData())
                     .isEqualTo(expected);
 
         }
