@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object;
 
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -9,6 +10,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
@@ -42,10 +44,21 @@ public class StreamViewSMRAdapter implements ISMRStream {
 
     public List<SMREntry> remainingUpTo(long maxGlobal) {
         return streamView.remainingUpTo(maxGlobal).stream()
-                // .filter(m -> m.getType() == DataType.DATA)
-                .filter(m -> {if(m.getType()==DataType.CHECKPOINT){System.err.printf("I see CHECKPOINT 1\n");} return m.getType() == DataType.DATA ;})
-                .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable)
-                .map(logData -> ((ISMRConsumable)logData.getPayload(runtime)).getSMRUpdates(streamView.getID()))
+                .map(m -> {if(m.getType()==DataType.CHECKPOINT){System.err.printf("I see CHECKPOINT 1, payload %s\n", m.getPayload(runtime).getClass().toString());} return m; }) // delete me!
+                .filter(m -> m.getType() == DataType.DATA || m.getType() == DataType.CHECKPOINT)
+                .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable || m.getType() == DataType.CHECKPOINT)
+                .map(logData -> {
+                    if (logData.getType() == DataType.DATA) {
+                        return ((ISMRConsumable) logData.getPayload(runtime)).getSMRUpdates(streamView.getID());
+                    } else {
+                        // We are a CHECKPOINT record.
+                        // Pull ISMRConsumable thingies out of bulk.
+                        CheckpointEntry cp = (CheckpointEntry) logData.getPayload(runtime);
+                        System.err.printf("cp DBG: bulk byte size = %d\n", cp.getBulk().length);
+                        List<SMREntry> hack = Collections.EMPTY_LIST;
+                        return hack;
+                    }
+                } )
                 .flatMap(List::stream)
                 .collect(Collectors.toList());
     }
