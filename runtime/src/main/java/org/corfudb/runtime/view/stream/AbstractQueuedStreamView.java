@@ -131,7 +131,7 @@ public abstract class AbstractQueuedStreamView extends
         // The list to store read results in
         List<ILogData> read = readAll(toRead).stream()
                 // .filter(x -> x.getType() == DataType.DATA)
-                .filter(x -> {if(x.getType()==DataType.CHECKPOINT){System.err.printf("I see CHECKPOINT B\n");} return x.getType() == DataType.DATA;})
+                .filter(x -> {if(x.getType()==DataType.CHECKPOINT){System.err.printf("I see CHECKPOINT B at %d\n", x.getGlobalAddress());} return x.getType() == DataType.DATA;})
                 .filter(x -> x.containsStream(context.id))
                 .collect(Collectors.toList());
 
