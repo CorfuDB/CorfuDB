@@ -346,6 +346,7 @@ public abstract class AbstractQueuedStreamView extends
         @Override
         void reset() {
             super.reset();
+            readCpQueue.clear();
             readQueue.clear();
         }
 

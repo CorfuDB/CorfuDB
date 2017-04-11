@@ -153,7 +153,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         false, maxGlobal, true);
         // Put those elements in the read queue
         context.readQueue.addAll(resolvedSet);
-        return !context.readQueue.isEmpty();
+        return !context.readCpQueue.isEmpty() && !context.readQueue.isEmpty();
     }
 
     /**
