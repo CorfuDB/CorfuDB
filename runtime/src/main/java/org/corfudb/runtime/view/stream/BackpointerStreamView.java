@@ -153,7 +153,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         false, maxGlobal, true);
         // Put those elements in the read queue
         context.readQueue.addAll(resolvedSet);
-        return !context.readCpQueue.isEmpty() && !context.readQueue.isEmpty();
+        return !context.readQueue.isEmpty();
     }
 
     /**
@@ -168,12 +168,14 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         // Thus, it could be a significant time & I/O saving for the client to playback
         // from the latest checkpoint.
         // On the other hand, if not -1, then we assume that the caller has found & replayed
-        // the log at some earlier state.  We assume a "typical" case where the client
-        // probably needs to discover & replay just a few log entries, whereas the checkpoint
-        // data that this method may discover may be "huge" ... thus we favor ignoring
-        // the checkpoint data.  Such an assumption may be invalid for very small SMR objects,
-        // such as a simple counter, where checkpoint size would always be small enough to
-        // use checkpoint data instead of continuing backward to find individual updates.
+        // the log at some earlier state.
+        //
+        // We assume a "typical" case where the client probably needs to discover & replay
+        // just a few log entries, whereas the checkpoint data that this method may discover
+        // may be "huge" ... thus we favor ignoring the checkpoint data.  Such an assumption
+        // may be invalid for very small SMR objects, such as a simple counter, where
+        // checkpoint size would always be small enough to use checkpoint data instead of
+        // continuing backward to find individual updates.
         boolean considerCheckpoint = context.globalPointer == -1;
         boolean useCheckpoint = false;
 
@@ -302,14 +304,17 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                                 currentRead, cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
                         context.checkpointSuccessID = cpEntry.getCheckpointID();
                     }
-                    if (context.checkpointSuccessID == cpEntry.getCheckpointID()) {
+                    if (context.checkpointSuccessID.equals(cpEntry.getCheckpointID())) {
                         log.trace("Checkpoint: address {} queue record etype {}", currentRead, cpEntry.getCpType());
-                        context.readCpQueue.add(currentRead);
+                        context.readCpList.add(currentEntry);
                     }
                     if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
                         log.trace("Checkpoint: address {} is START", currentRead);
                         useCheckpoint = true;
-                        context.globalPointer = currentRead;
+                        Collections.reverse(context.readCpList);
+                        // This is first attempt to play log, so break now to
+                        // skip fillFromResolved() stuff which we know doesn't apply.
+                        break;
                     }
                 } else {
                     context.readQueue.add(currentRead);
@@ -338,10 +343,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             }
         }
 
-        if (useCheckpoint) {
-            System.err.printf("TODO: left off here: replay checkpoint items\n");
-        }
         log.debug("Read_Fill_Queue[{}] Filled queue with {}", this, context.readQueue);
-        return !context.readQueue.isEmpty();
+        System.err.printf("Read_Fill_Queue[%s] Filled queue with %d cp items / %d regular items\n", this.toString(), context.readCpList.size(), context.readQueue.size());
+        return ! context.readCpList.isEmpty() || !context.readQueue.isEmpty();
     }
 }

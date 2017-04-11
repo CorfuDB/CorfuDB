@@ -377,10 +377,24 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
             log.trace("Object[{}] sync to pos {}, read {} entries",
                     sv.getID(), maxPos == Long.MAX_VALUE ? "MAX" :
                             maxPos, entries.size());
-            // TODO SLF: If there are CHECKPOINT items in the stream, the filter
-            //           below will ignore them, which is what we want.  However,
-            //           do we want the stream view to try to avoid them in the
-            //           first place (if/when feasible)?
+
+            if (! entries.isEmpty()) {
+                ILogData e = entries.get(0);
+                if (e.getType() == DataType.CHECKPOINT) {
+                    System.err.printf("TODO: play back, here.\n");
+                }
+
+                // Get non-checkpoint records, if any exist.
+                entries = sv.remainingUpTo(maxPos);
+                log.trace("Object[{}] sync to pos {}, read {} entries",
+                        sv.getID(), maxPos == Long.MAX_VALUE ? "MAX" :
+                                maxPos, entries.size());
+                System.err.printf("Object[%s] sync to pos %d, read %d non-checkpoint entries\n",
+                        sv.getID(), maxPos == Long.MAX_VALUE ? "MAX" :
+                                maxPos, entries.size());
+
+
+            }
             entries.stream()
                     .filter(m -> m.getType() == DataType.DATA)
                     .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable)

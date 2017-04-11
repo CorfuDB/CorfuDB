@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.stream;
 import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -108,16 +109,34 @@ public abstract class AbstractQueuedStreamView extends
     @Override
     protected List<ILogData> getNextEntries(QueuedStreamContext context, long maxGlobal,
                                             Function<ILogData, Boolean> contextCheckFn) {
+        // The list to store read results in
+        List<ILogData> read;
+
+        // Scan backward in the stream to find interesting
+        // log records less than or equal to maxGlobal.
+        boolean readQueueIsEmpty = !fillReadQueue(maxGlobal, context);
+
+        // If we witnessed a checkpoint during our scan that
+        // we should pay attention to, then return them now.
+        if (! context.readCpList.isEmpty()) {
+            read = context.readCpList;
+            System.err.printf("DBG: %d checkpoint entries returned by getNextEntries()\n", read.size());
+            // We don't need the list any longer, give it to the caller.
+            context.readCpList = new ArrayList<>();
+        } else {
+            read = Collections.emptyList();
+        }
+
         // We always have to fill to the read queue to ensure we read up to
         // max global.
-        if (!fillReadQueue(maxGlobal, context)) {
-            return Collections.emptyList();
+        if (readQueueIsEmpty) {
+            return read;
         }
 
         // If the lowest element is greater than maxGlobal, there's nothing
         // to return.
-        if (context.readQueue.first() > maxGlobal) {
-            return Collections.emptyList();
+        if (!context.readQueue.isEmpty() && context.readQueue.first() > maxGlobal) {
+            return read;
         }
 
         // Select everything in the read queue between
@@ -129,11 +148,12 @@ public abstract class AbstractQueuedStreamView extends
                 .collect(Collectors.toList());
 
         // The list to store read results in
-        List<ILogData> read = readAll(toRead).stream()
+        List<ILogData> read2 = readAll(toRead).stream()
                 // .filter(x -> x.getType() == DataType.DATA)
-                .filter(x -> {if(x.getType()==DataType.CHECKPOINT){System.err.printf("I see CHECKPOINT B at %d\n", x.getGlobalAddress());} return x.getType() == DataType.DATA;})
+                .filter(x -> {if(x.getType()==DataType.CHECKPOINT){System.err.printf("I see CHECKPOINT B at %d (but should be impossible!!!)\n", x.getGlobalAddress());} return x.getType() == DataType.DATA;})
                 .filter(x -> x.containsStream(context.id))
                 .collect(Collectors.toList());
+        read.addAll(read2);
 
         // If any entries change the context,
         // don't return anything greater than
@@ -324,11 +344,13 @@ public abstract class AbstractQueuedStreamView extends
                 = new TreeSet<>();
 
         /**
-         * A priority queue of potential addresses to read checkpoint records from,
-         * if a successful checkpoint has been observed.
+         * A list of checkpoint records, if a successful checkpoint has been observed.
+         * Checkpoints could be pretty big, so this scheme of keeping them in memory
+         * like this could create problems.  However, in the backpointer scheme, we
+         * have already read these big things once, there isn't a lot of reason to
+         * put their addresses into a queue and read them a second time.
          */
-        final NavigableSet<Long> readCpQueue
-                = new TreeSet<>();
+        List<ILogData> readCpList = new ArrayList<>();
 
         UUID checkpointSuccessID = null;
 
@@ -346,7 +368,7 @@ public abstract class AbstractQueuedStreamView extends
         @Override
         void reset() {
             super.reset();
-            readCpQueue.clear();
+            readCpList.clear();
             readQueue.clear();
         }
 
