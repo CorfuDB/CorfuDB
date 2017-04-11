@@ -55,7 +55,11 @@ public class StreamViewSMRAdapter implements ISMRStream {
                         // Pull ISMRConsumable thingies out of bulk.
                         CheckpointEntry cp = (CheckpointEntry) logData.getPayload(runtime);
                         System.err.printf("cp DBG: bulk byte size = %d\n", cp.getBulk().length);
-                        List<SMREntry> hack = Collections.EMPTY_LIST;
+
+                        //BEGIN interrupted
+                        new SMREntry("put", new Object[]{"key9", 99}, Serializers.PRIMITIVE));
+                        //END interrupted
+                        List<SMREntry> hack = Collections.EMPTY_LIST; // WIP: empty list to allow forward progress....
                         return hack;
                     }
                 } )
