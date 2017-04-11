@@ -37,7 +37,7 @@ public class CorfuSharedCounter {
      *
      * @return the old value of the counter, before incrementing
      */
-    @MutatorAccessor
+    @MutatorAccessor(name = "Increment")
     public int Increment() {
         int tmp = value;
         value++;
@@ -56,6 +56,6 @@ public class CorfuSharedCounter {
      * Set() method is annotates as a Mutator method.
      * This guarantees that the runtime will capture the update and append it to the Corfu log, and only then return.
      */
-    @Mutator
+    @Mutator(name = "Set")
     public void Set(int newvalue) { value = newvalue; }
 }
