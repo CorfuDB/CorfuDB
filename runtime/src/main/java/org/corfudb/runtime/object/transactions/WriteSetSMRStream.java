@@ -75,17 +75,30 @@ public class WriteSetSMRStream implements ISMRStream {
         reset();
     }
 
-    /** Return whether we are the stream for this thread's transactions.
+    /** Return whether stream current transaction is the thread current transaction.
      *
-     * This is checked by checking whether the root context
-     * for this stream is the same as for this thread.
+     * This is validated by checking whether the current context
+     * for this stream is the same as the current context for this thread.
      *
-     * @return  True, if we are the stream for this transaction.
+     * @return  True, if the stream current context is the thread current context.
      *          False otherwise.
      */
-    public boolean isStreamForThisTransaction() {
+    public boolean isStreamCurrentContextThreadCurrentContext() {
         return contexts.get(currentContext)
                 .equals(TransactionalContext.getCurrentContext());
+    }
+
+    /** Return whether we are the stream for this current thread
+     *
+     * This is validated by checking whether the root context
+     * for this stream is the same as the root context for this thread.
+     *
+     * @return  True, if the thread owns the optimistic stream
+     *          False otherwise.
+     */
+    public boolean isStreamForThisThread() {
+        return contexts.get(0)
+                .equals(TransactionalContext.getRootContext());
     }
 
     void mergeTransaction() {

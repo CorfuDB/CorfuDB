@@ -12,7 +12,7 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
-import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.runtime.view.MultiStreamView;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Version;
@@ -66,7 +66,7 @@ public class CorfuRuntime {
      * A view of streams in the Corfu server instance.
      */
     @Getter(lazy = true)
-    private final StreamsView streamsView = new StreamsView(this);
+    private final MultiStreamView streamsView = new MultiStreamView(this);
 
     //region Address Space Options
     /**

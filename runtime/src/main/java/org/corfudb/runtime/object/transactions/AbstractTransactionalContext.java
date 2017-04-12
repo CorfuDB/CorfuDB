@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.*;
 import org.corfudb.util.Utils;
@@ -198,11 +199,11 @@ public abstract class AbstractTransactionalContext implements
 
     /** Forcefully abort the transaction.
      */
-    public void abortTransaction() {
+    public void abortTransaction(TransactionAbortedException ae) {
         log.debug("TXAbort[{}]", this);
         commitAddress = ABORTED_ADDRESS;
         completionFuture
-                .completeExceptionally(new TransactionAbortedException());
+                .completeExceptionally(ae);
     }
 
     abstract public long obtainSnapshotTimestamp();
@@ -276,14 +277,23 @@ public abstract class AbstractTransactionalContext implements
 
     void mergeWriteSetInto(Map<UUID, AbstractMap.SimpleEntry<Set<Integer>, List<SMREntry>>> otherWSet) {
         otherWSet.entrySet().forEach(e-> {
+            // create an entry for this streamID
+            writeSet.computeIfAbsent(e.getKey(),                    // the streamID
+                    u -> new AbstractMap.SimpleEntry<>(new HashSet<>(), new ArrayList<>() ));
 
-            // Since nested transactions inherit the write set of its parent, in order to merge the
-            // write set of the child transaction, we only need to add new entries for non-existing
-            // streams.
-            // For entries that were inherited, they share the same reference in the write set map. Any
-            // modification of it will also appear in the parent write set.
-            writeSet.computeIfAbsent(e.getKey(),
-                    k -> e.getValue());
+            // copy all the conflict-params set for this streamID
+            writeSet.get(e.getKey())                 // the entry pair for this streamID
+                    .getKey()                        // the left componentof the pair is a conflict-param set
+                    .addAll(e.getValue()             // the pair from the otherWSet
+                            .getKey());              // the left component of the pair
+
+            // copy all the WriteSetEntry list for this streamID
+            writeSet.get(e.getKey())                 // the entry pair for this streamID
+                    .getValue()                      // the right componentof the pair is a WriteSetEntry list
+                    .addAll(e.getValue()             // the pair from the otherWSet
+                            .getValue());            // the right component of the pair
+
+
         });
     }
 

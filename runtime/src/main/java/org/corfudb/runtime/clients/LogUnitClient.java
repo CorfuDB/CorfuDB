@@ -4,6 +4,7 @@ import com.codahale.metrics.Timer;
 import com.google.common.collect.Range;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
@@ -199,7 +200,7 @@ public class LogUnitClient implements IClient {
     public CompletableFuture<Boolean> write(long address, Set<UUID> streams, IMetadata.DataRank rank,
                                             Object writeObject, Map<UUID, Long> backpointerMap) {
         Timer.Context context = getTimerContext("writeObject");
-        ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf payload = Unpooled.buffer();
         Serializers.CORFU.serialize(writeObject, payload);
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, payload);
         wr.setStreams(streams);
@@ -222,7 +223,7 @@ public class LogUnitClient implements IClient {
     public CompletableFuture<Boolean> writeEmptyData(long address, DataType type, Set<UUID> streams, IMetadata.DataRank rank) {
         Timer.Context context = getTimerContext("writeObject");
         LogEntry entry = new LogEntry(LogEntry.LogEntryType.NOP);
-        ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf payload = Unpooled.buffer();
         Serializers.CORFU.serialize(entry, payload);
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, type,  null,  payload);
         wr.setStreams(streams);
@@ -233,7 +234,15 @@ public class LogUnitClient implements IClient {
     }
 
 
-
+    /**
+     * Asynchronously write to the logging unit.
+     * @param payload   The log data to write to the logging unit.
+     * @return          A CompletableFuture which will complete with the WriteResult once the
+     *                  write completes.
+     */
+    public CompletableFuture<Boolean> write(ILogData payload) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(new WriteRequest(payload)));
+    }
 
     /**
      * Asynchronously write to the logging unit.
@@ -262,7 +271,7 @@ public class LogUnitClient implements IClient {
     public CompletableFuture<Boolean> writeStream(long address, Map<UUID, Long> streamAddresses,
                                                   Object object) {
         Timer.Context context = getTimerContext("writeStreamObject");
-        ByteBuf payload = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf payload = Unpooled.buffer();
         Serializers.CORFU.serialize(object, payload);
         CompletableFuture<Boolean> cf = writeStream(address, streamAddresses, payload);
         return cf.thenApply(x -> { context.stop(); return x; });

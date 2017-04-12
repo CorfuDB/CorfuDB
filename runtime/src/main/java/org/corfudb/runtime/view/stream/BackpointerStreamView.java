@@ -1,7 +1,10 @@
 package org.corfudb.runtime.view.stream;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.*;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
@@ -254,10 +257,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         }
                     }
                 }
-
-                // If we STILL don't have the data, now we need to do a hole
-                // fill.
-                if (currentEntry.getType() == DataType.EMPTY) {
+                //FIXME To be replaced by cleaner interface. This is just a patch till the real fix comes in.
+                // If we STILL don't have the data, it means the writer is either dead or too slow.
+                // We will now try to make sure we have committed data for the currentEntry. We will first
+                // try a HOLE FILL, failing which we will re-read the entry to see if the writer completed.
+                // We will try this in a loop till we get committed data for the currentEntry.
+                while (currentEntry.getType() == DataType.EMPTY) {
                     try {
                         runtime.getAddressSpaceView().fillHole(currentRead);
                         // If we reached here, our hole fill was successful.
@@ -266,13 +271,9 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         // If we reached here, this means the remote client
                         // must have successfully completed the write and
                         // we can continue.
-                        currentEntry =
-                                runtime.getAddressSpaceView().read(currentRead);
+                        currentEntry = runtime.getAddressSpaceView().read(currentRead);
                     }
                 }
-
-                // At this point the hole is filled or has the data and we
-                // can continue.
             }
 
             // If the entry contains this context's stream,

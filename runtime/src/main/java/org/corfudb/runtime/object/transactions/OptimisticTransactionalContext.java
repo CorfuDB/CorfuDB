@@ -4,22 +4,17 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
-import org.corfudb.runtime.view.Address;
 
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
@@ -56,12 +51,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
     OptimisticTransactionalContext(TransactionBuilder builder) {
         super(builder);
-
-        // When starting a nested transaction, the child transaction inherits the write set of its parent.
-        // This will ensure that any access to the objects will reflect parent optimistic updates.
-        if (getParentContext() != null) {
-            writeSet.putAll(getParentContext().writeSet);
-        }
     }
 
     /**
@@ -166,14 +155,15 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     <T> void setAsOptimisticStream(VersionLockedObject<T> object) {
         if (object.getOptimisticStreamUnsafe() == null ||
                 !object.getOptimisticStreamUnsafe()
-                        .isStreamForThisTransaction()) {
+                        .isStreamCurrentContextThreadCurrentContext()) {
             WriteSetSMRStream newSMRStream = new WriteSetSMRStream(
                     TransactionalContext.getTransactionStackAsList(),
                     object.getID());
 
-            // Current context will be the latest in the list of context
-            // (Correspond to the top context in the context stack)
-            newSMRStream.currentContext = newSMRStream.contexts.size() - 1;
+            // We are setting the current context to 0 on purpose, because
+            // it points to the root context of nested transactions. Upon sync forward
+            // the stream will replay every entries from all parent transactional context.
+            newSMRStream.currentContext = 0;
             object.setOptimisticStreamUnsafe(newSMRStream);
         }
     }
@@ -260,35 +250,40 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // Now we obtain a conditional address from the sequencer.
         // This step currently happens all at once, and we get an
         // address of -1L if it is rejected.
-        long address = this.builder.runtime.getStreamsView()
-                .acquireAndWrite(
+        long address = -1L;
 
-                        // a set of stream-IDs that contains the affected streams
-                        affectedStreams,
+        try {
+            address = this.builder.runtime.getStreamsView()
+                    .acquireAndWrite(
 
-                        // a MultiObjectSMREntry that contains the update(s) to objects
-                        collectWriteSetEntries(),
+                            // a set of stream-IDs that contains the affected streams
+                            affectedStreams,
 
-                        // nothing to do after successful acquisition and after deacquisition
-                        t->true, t->true,
+                            // a MultiObjectSMREntry that contains the update(s) to objects
+                            collectWriteSetEntries(),
 
-                        // TxResolution info:
-                        // 1. snapshot timestamp
-                        // 2. a map of conflict params, arranged by streamID's
-                        // 3. a map of write conflict-params, arranged by
-                        // streamID's
-                        new TxResolutionInfo(getTransactionID(),
-                                getSnapshotTimestamp(),
-                                computeConflictSet.get(),
-                                collectWriteConflictParams())
-                );
-        log.trace("Commit[{}] Acquire address {}", this, address);
+                            // nothing to do after successful acquisition and after deacquisition
+                            t->true, t->true,
 
-        if (address == -1L) {
+                            // TxResolution info:
+                            // 1. snapshot timestamp
+                            // 2. a map of conflict params, arranged by streamID's
+                            // 3. a map of write conflict-params, arranged by
+                            // streamID's
+                            new TxResolutionInfo(getTransactionID(),
+                                    getSnapshotTimestamp(),
+                                    computeConflictSet.get(),
+                                    collectWriteConflictParams())
+                    );
+        } catch (TransactionAbortedException ae) {
             log.trace("Commit[{}] Rejected by sequencer", this);
-            abortTransaction();
-            throw new TransactionAbortedException();
+            abortTransaction(ae);
+
+            // rethrow the TXAbortedException
+            throw ae;
         }
+
+        log.trace("Commit[{}] Acquire address {}", this, address);
 
         super.commitTransaction();
         commitAddress = address;

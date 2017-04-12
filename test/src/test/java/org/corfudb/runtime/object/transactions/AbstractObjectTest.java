@@ -69,4 +69,8 @@ public class AbstractObjectTest extends AbstractViewTest {
         getRuntime().getObjectsView().TXEnd();
     }
 
+
+    protected void TXAbort() {
+        getRuntime().getObjectsView().TXAbort();
+    }
 }
