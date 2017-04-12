@@ -71,6 +71,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
                                 ByteBuf rBuf = PooledByteBufAllocator.DEFAULT.buffer();
                                 bulkBuf.readBytes(rBuf, len);
                                 SMREntry e = (SMREntry) SMREntry.deserialize(rBuf, runtime);
+                                e.setEntry(logData);
                                 consumables.add(e);
                             }
                             return consumables;
