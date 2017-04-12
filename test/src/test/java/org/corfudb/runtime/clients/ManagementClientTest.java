@@ -21,8 +21,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class ManagementClientTest extends AbstractClientTest {
 
-    ManagementClient client;
-    ManagementServer server;
+    private ManagementClient client;
+    private ManagementServer server;
 
     @Override
     Set<AbstractServer> getServersForTest() {
@@ -31,6 +31,7 @@ public class ManagementClientTest extends AbstractClientTest {
                 .setMemory(true)
                 .setSingle(true)
                 .setServerRouter(serverRouter)
+                .setPort(SERVERS.PORT_0)
                 .build();
         server = new ManagementServer(serverContext);
         return new ImmutableSet.Builder<AbstractServer>()
@@ -39,6 +40,8 @@ public class ManagementClientTest extends AbstractClientTest {
                 .add(new LayoutServer(serverContext))
                 // Required for management server to be able to bootstrap the sequencer.
                 .add(new SequencerServer(serverContext))
+                .add(new LogUnitServer(serverContext))
+                .add(new BaseServer())
                 .build();
     }
 

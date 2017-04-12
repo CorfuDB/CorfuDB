@@ -326,13 +326,10 @@ public class LayoutServer extends AbstractServer {
      */
     // TODO If a server does not get SET_EPOCH layout commit message cannot reach it
     // TODO as this message is not set to ignore EPOCH.
-    // TODO How do we handle holes in history if let in layout commit message. Maybe we have a
-    // hole filling process
-    // TODO how do reject the older epoch commits, should it be an explicit NACK.
+    // TODO How do we handle holes in history if let in layout commit message. Maybe we have a hole filling process
     @ServerHandler(type = CorfuMsgType.LAYOUT_COMMITTED, opTimer = metricsPrefix + "committed")
-    public synchronized void handleMessageLayoutCommit(CorfuPayloadMsg<LayoutCommittedRequest>
-                                                                   msg, ChannelHandlerContext
-            ctx, IServerRouter r,
+    public synchronized void handleMessageLayoutCommit(CorfuPayloadMsg<LayoutCommittedRequest> msg,
+                                                       ChannelHandlerContext ctx, IServerRouter r,
                                                        boolean isMetricsEnabled) {
         Layout commitLayout = msg.getPayload().getLayout();
         if (!checkBootstrap(msg, ctx, r)) {

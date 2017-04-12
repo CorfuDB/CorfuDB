@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.management;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;

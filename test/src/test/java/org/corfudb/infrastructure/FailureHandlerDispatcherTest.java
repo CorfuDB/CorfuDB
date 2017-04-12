@@ -1,8 +1,11 @@
 package org.corfudb.infrastructure;
 
+import org.corfudb.infrastructure.management.FailureHandlerDispatcher;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.IFailureHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.PurgeFailurePolicy;
 import org.junit.Test;
 
 import java.util.HashSet;

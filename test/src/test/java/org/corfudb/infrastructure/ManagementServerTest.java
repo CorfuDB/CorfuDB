@@ -24,8 +24,23 @@ public class ManagementServerTest extends AbstractServerTest {
     @Override
     public ManagementServer getDefaultServer() {
         // Adding layout server for management server runtime to connect to.
-        router.addServer(new LayoutServer(new ServerContextBuilder().setSingle(true).setServerRouter(getRouter()).build()));
-        managementServer = new ManagementServer(new ServerContextBuilder().setSingle(false).setServerRouter(getRouter()).build());
+        ServerContext serverContext = new ServerContextBuilder()
+                .setSingle(true)
+                .setPort(SERVERS.PORT_0)
+                .setServerRouter(getRouter())
+                .build();
+        // Required for management server to fetch layout.
+        router.addServer(new LayoutServer(serverContext));
+        router.addServer(new BaseServer());
+        // Required to fetch global tails while handling failures.
+        router.addServer(new LogUnitServer(serverContext));
+        // Required for management server to bootstrap during initialization.
+        router.addServer(new SequencerServer(serverContext));
+        managementServer = new ManagementServer(new ServerContextBuilder()
+                .setSingle(false)
+                .setPort(SERVERS.PORT_0)
+                .setServerRouter(getRouter())
+                .build());
         return managementServer;
     }
 

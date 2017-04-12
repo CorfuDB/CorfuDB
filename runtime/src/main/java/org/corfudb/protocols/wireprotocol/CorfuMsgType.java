@@ -93,6 +93,8 @@ public enum CorfuMsgType {
     ORCHESTRATOR_REQUEST(77, new TypeToken<CorfuPayloadMsg<OrchestratorRequest>>() {}),
     ORCHESTRATOR_RESPONSE(78, new TypeToken<CorfuPayloadMsg<OrchestratorResponse>>() {}),
 
+    RAW_DATA_REPLICATE(80, new TypeToken<CorfuPayloadMsg<RawDataMsg>>(){}),
+
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true)
     ;
 
