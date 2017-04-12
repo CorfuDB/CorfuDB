@@ -6,13 +6,16 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.format.Types.NodeMetrics;
+import org.corfudb.format.Types.NetworkMetrics;
+import org.corfudb.format.Types.NodeView;
+import org.corfudb.format.Types.ServerMetrics;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
 
@@ -20,10 +23,10 @@ import java.lang.invoke.MethodHandles;
 
 import java.util.Collections;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.RejectedExecutionException;
 
 /**
@@ -52,42 +55,41 @@ public class ManagementServer extends AbstractServer {
     private static final String metricsPrefix = "corfu.server.management-server.";
 
     private CorfuRuntime corfuRuntime;
-    /**
-     * Policy to be used to detect failures.
-     */
-    private IFailureDetectorPolicy failureDetectorPolicy;
-    /**
-     * Policy to be used to handle failures.
-     */
-    private IFailureHandlerPolicy failureHandlerPolicy;
-    /**
-     * Latest layout received from bootstrap or the runtime.
-     */
+
+    //  Latest layout received from bootstrap or the runtime.
     private volatile Layout latestLayout;
-    /**
-     * Bootstrap endpoint to seed the Management Server
-     */
+
+    //  Bootstrap endpoint to seed the Management Server
     private String bootstrapEndpoint;
-    /**
-     * To determine whether the cluster is setup and the server is ready to
-     * start handling the detected failures.
-     */
-    private boolean startFailureHandler = false;
-    /**
-     * Interval in executing the failure detection policy.
-     * In milliseconds.
-     */
+
+    //  Policy to be used to detect failures.
+    private IFailureDetectorPolicy failureDetectorPolicy;
+    //  Interval in executing the failure detection policy. (milliseconds)
     @Getter
     private final long policyExecuteInterval = 1000;
-    /**
-     * To schedule failure detection.
-     */
+    //  Executor service to schedule failure detection.
     @Getter
     private final ScheduledExecutorService failureDetectorService;
-    /**
-     * Future for periodic failure detection task.
-     */
+    //  Failure Detector service future
     private Future failureDetectorFuture = null;
+
+    //  Policy to be used to handle failures.
+    private IFailureHandlerPolicy failureHandlerPolicy;
+    //  A flag to determine whether the cluster is setup and
+    //  the server is ready to start handling the detected failures.
+    private boolean startFailureHandler = false;
+
+    /** CLUSTER METRICS COLLECTION   */
+    //  Service to poll local node metrics.
+    private final ScheduledExecutorService localMetricsPollingService;
+    //  Local copy of the local node's server metrics.
+    private volatile ServerMetrics serverMetrics = ServerMetrics.getDefaultInstance();
+    //  Locally collected nodeMetrics
+    private final long localMetricsPollInterval = 1000;
+    //  Local copy of the nodeView sent in response to the heartbeat.
+    private volatile NodeView nodeView = NodeView.getDefaultInstance();
+    //  Report of the latest heartbeat poll
+    private volatile HeartbeatPollReport heartbeatPollReport;
 
     public ManagementServer(ServerContext serverContext) {
 
@@ -138,6 +140,25 @@ public class ManagementServer extends AbstractServer {
                     TimeUnit.MILLISECONDS);
         } catch (RejectedExecutionException err) {
             log.error("Error scheduling failure detection task, {}", err);
+        }
+
+        // Collecting local metrics - task scheduler
+        this.localMetricsPollingService = Executors.newScheduledThreadPool(
+                1,
+                new ThreadFactoryBuilder()
+                        .setDaemon(true)
+                        .setNameFormat("LocalMetricsCollector-%d-" + getLocalEndpoint())
+                        .build());
+
+        // Initiating local metrics polling task.
+        try {
+            localMetricsPollingService.scheduleAtFixedRate(
+                    this::updateLocalMetrics,
+                    0,
+                    localMetricsPollInterval,
+                    TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException err) {
+            log.error("Error scheduling local metrics polling task, {}", err);
         }
     }
 
@@ -274,7 +295,9 @@ public class ManagementServer extends AbstractServer {
     /**
      * Handles the heartbeat request.
      * It accumulates the metrics required to build
-     * and send the response(NodeMetrics).
+     * and send the response.
+     * The response comprises of the local nodeMetrics and
+     * this node's view of the cluster (NodeView).
      *
      * @param msg
      * @param ctx
@@ -283,10 +306,8 @@ public class ManagementServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.HEARTBEAT_REQUEST, opTimer = metricsPrefix + "heartbeat-request")
     public void handleHearbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r,
                                       boolean isMetricsEnabled) {
-        // Currently builds a default instance of the model.
-        // TODO: Collect metrics from Layout, Sequencer and LogUnit Servers.
-        NodeMetrics nodeMetrics = NodeMetrics.getDefaultInstance();
-        r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.HEARTBEAT_RESPONSE, nodeMetrics.toByteArray()));
+        // Responds with the in memory status of the local metrics.
+        r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.HEARTBEAT_RESPONSE, nodeView.toByteArray()));
     }
 
     /**
@@ -327,6 +348,38 @@ public class ManagementServer extends AbstractServer {
      */
     private String getLocalEndpoint() {
         return this.opts.get("--address") + ":" + this.opts.get("<port>");
+    }
+
+    /**
+     * Task to collect local node metrics.
+     * This task collects the following:
+     *  Boolean Status of layout, sequencer and logunit servers.
+     *  Logunit Metrics:
+     *      Size of writeQueue for pending write requests.
+     * These metrics are then composed into NodeMetrics protobuf model
+     * and stored locally.
+     */
+    private void updateLocalMetrics() {
+        // Initializing the status of componenets
+        // No need to poll unless node is bootstrapped.
+        if (latestLayout == null) {
+            return;
+        }
+        IClientRouter localRouter = getCorfuRuntime().getRouter(getLocalEndpoint());
+
+        // Build and replace existing locally stored nodeMetrics
+        serverMetrics = ServerMetrics.newBuilder()
+                .setEndpoint(getLocalEndpoint())
+                .build();
+
+        NodeView.Builder nodeViewBuilder = NodeView.newBuilder()
+                .setEndpoint(getLocalEndpoint())
+                .setServerMetrics(serverMetrics);
+        if (heartbeatPollReport != null) {
+            Map<String, NetworkMetrics> networkMetricsMap = heartbeatPollReport.getNetworkMetricsMap();
+            networkMetricsMap.forEach(nodeViewBuilder::putNetworkMetricsMap);
+        }
+        nodeView = nodeViewBuilder.build();
     }
 
     /**
@@ -445,6 +498,8 @@ public class ManagementServer extends AbstractServer {
         super.shutdown();
         // Shutting the fault detector.
         failureDetectorService.shutdownNow();
+        // Shutting down local metrics polling.
+        localMetricsPollingService.shutdownNow();
 
         // Shut down the Corfu Runtime.
         if (corfuRuntime != null) {
@@ -452,7 +507,7 @@ public class ManagementServer extends AbstractServer {
         }
 
         try {
-            failureDetectorService.awaitTermination(serverContext.SHUTDOWN_TIMER.getSeconds(), TimeUnit.SECONDS);
+            failureDetectorService.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(), TimeUnit.SECONDS);
         } catch (InterruptedException ie) {
             log.debug("failureDetectorService awaitTermination interrupted : {}", ie);
         }

@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import org.corfudb.format.Types.NodeView;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
@@ -129,9 +130,8 @@ public class ManagementViewTest extends AbstractViewTest {
                 .build();
         bootstrapAllServers(l);
 
-        CorfuRuntime corfuRuntime = new CorfuRuntime();
-        l.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
-        corfuRuntime.connect();
+        CorfuRuntime corfuRuntime = getRuntime(l).connect();
+
         // Initiating all failure handlers.
         for (String server: l.getAllServers()) {
             corfuRuntime.getRouter(server).getClient(ManagementClient.class).initiateFailureHandler().get();
@@ -157,6 +157,56 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(l2.getLayoutServers().size()).isEqualTo(2);
         assertThat(l2.getLayoutServers().contains(SERVERS.ENDPOINT_1)).isFalse();
     }
+
+    /**
+     * Scenario with 1 node: SERVERS.PORT_0
+     * The node is setup, bootstrapped and then requested for a
+     * heartbeat. This is responded with the nodeMetrics which is
+     * asserted with expected values.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void checkHeartbeat()
+            throws Exception {
+        addServer(SERVERS.PORT_0);
+
+        Layout l = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_0)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        bootstrapAllServers(l);
+
+
+        CorfuRuntime corfuRuntime = getRuntime(l).connect();
+
+        // Set aggressive timeouts.
+        setAggressiveTimeouts(l, corfuRuntime,
+                getManagementServer(SERVERS.PORT_0).getCorfuRuntime());
+
+        NodeView nodeView = NodeView.getDefaultInstance();
+
+        // Send heartbeat requests and wait until we get a valid response.
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
+
+            byte[] buf0 = corfuRuntime.getRouter(SERVERS.ENDPOINT_0).getClient(ManagementClient.class).sendHeartbeatRequest().get();
+            nodeView = NodeView.parseFrom(buf0);
+
+            if (!nodeView.getEndpoint().isEmpty()) {
+                break;
+            }
+            Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        }
+        assertThat(nodeView.getEndpoint()).isEqualTo(SERVERS.ENDPOINT_0);
+    }
+
+
 
     /**
      * Scenario with 3 nodes: SERVERS.PORT_0, SERVERS.PORT_1 and SERVERS.PORT_2.
