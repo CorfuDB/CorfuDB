@@ -21,13 +21,8 @@ import static org.assertj.core.api.Assertions.fail;
  */
 public class WriteWriteTXConcurrencyTest extends TXConflictScenariosTest {
 
-    // override {@link AbstractObjectTest ::TXBegin() } in order to set write-write isolation level
     @Override
-    protected void TXBegin() {
-        getRuntime().getObjectsView().TXBuild()
-                .setType(TransactionType.WRITE_AFTER_WRITE)
-                .begin();
-    }
+    protected void TXBegin() { WWTXBegin(); }
 
     @Test
     public void simpleWWTest() {
@@ -43,11 +38,11 @@ public class WriteWriteTXConcurrencyTest extends TXConflictScenariosTest {
                 valB = new AtomicInteger(0);
 
 
-        t(0, () -> TXBegin());
+        t(0, () -> WWTXBegin());
         t(0, () -> map.put("a", 1));
         t(0, () -> map.put("b", 1));
 
-        t(1, () -> TXBegin());
+        t(1, () -> WWTXBegin());
         t(1, () -> {
             Integer ga  = map.get("a");
             if (ga != null) valA.set(ga);

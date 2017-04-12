@@ -2,18 +2,15 @@ package org.corfudb.runtime.concurrent;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.object.transactions.AbstractObjectTest;
+import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
-public class MultipleNonOverlappingTest extends AbstractObjectTest {
+public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
 
     /**
      * High level:

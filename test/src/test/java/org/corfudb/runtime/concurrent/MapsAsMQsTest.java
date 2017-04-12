@@ -2,12 +2,11 @@ package org.corfudb.runtime.concurrent;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.object.transactions.AbstractObjectTest;
+import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.junit.Test;
 
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -15,7 +14,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * Created by dalia on 3/18/17.
  */
 @Slf4j
-public class MapsAsMQsTest extends AbstractObjectTest {
+public class MapsAsMQsTest extends AbstractTransactionsTest {
 
     protected int numIterations = PARAMETERS.NUM_ITERATIONS_MODERATE;
 

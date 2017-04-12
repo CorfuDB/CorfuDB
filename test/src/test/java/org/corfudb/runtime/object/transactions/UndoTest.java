@@ -3,20 +3,17 @@ package org.corfudb.runtime.object.transactions;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by dalia on 3/6/17.
  */
-public class UndoTest extends AbstractObjectTest {
+public class UndoTest extends AbstractTransactionsTest {
 
     @Test
     public void ckCorrectUndo()
@@ -202,10 +199,6 @@ public class UndoTest extends AbstractObjectTest {
                     + "ms";
         });
 
-    }
-
-    protected void WWTXBegin() {
-        getRuntime().getObjectsView().TXBuild().setType(TransactionType.WRITE_AFTER_WRITE).begin();
     }
 
     @Test

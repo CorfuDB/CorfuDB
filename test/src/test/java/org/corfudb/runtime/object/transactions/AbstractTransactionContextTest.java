@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Created by mwei on 11/21/16.
  */
-public abstract class AbstractTransactionContextTest extends AbstractObjectTest {
+public abstract class AbstractTransactionContextTest extends AbstractTransactionsTest {
 
     protected ISMRMap<String, String> testMap;
 
