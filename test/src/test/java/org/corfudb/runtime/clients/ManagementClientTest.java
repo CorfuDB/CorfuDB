@@ -6,6 +6,7 @@ import org.corfudb.infrastructure.*;
 import org.junit.After;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -20,8 +21,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class ManagementClientTest extends AbstractClientTest {
 
-    ManagementClient client;
-    ManagementServer server;
+    private ManagementClient client;
+    private ManagementServer server;
 
     @Override
     Set<AbstractServer> getServersForTest() {
@@ -30,6 +31,7 @@ public class ManagementClientTest extends AbstractClientTest {
                 .setMemory(true)
                 .setSingle(true)
                 .setServerRouter(serverRouter)
+                .setPort(SERVERS.PORT_0)
                 .build();
         server = new ManagementServer(serverContext);
         return new ImmutableSet.Builder<AbstractServer>()
@@ -38,6 +40,8 @@ public class ManagementClientTest extends AbstractClientTest {
                 .add(new LayoutServer(serverContext))
                 // Required for management server to be able to bootstrap the sequencer.
                 .add(new SequencerServer(serverContext))
+                .add(new LogUnitServer(serverContext))
+                .add(new BaseServer())
                 .build();
     }
 
@@ -82,9 +86,9 @@ public class ManagementClientTest extends AbstractClientTest {
             throws Exception {
 
         // Since the servers are started as single nodes thus already bootstrapped.
-        Set<String> set = new HashSet<>();
-        set.add("Key");
-        assertThat(client.handleFailure(set).get()).isEqualTo(true);
+        assertThat(
+                client.handleFailure(Collections.singleton("key"), Collections.emptySet()).get())
+                .isEqualTo(true);
     }
 
     /**

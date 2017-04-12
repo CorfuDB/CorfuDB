@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.management;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,6 +37,16 @@ public class LayoutWorkflowManager {
     }
 
     /**
+     * Clears the existing unresponsive servers.
+     *
+     * @return
+     */
+    public LayoutWorkflowManager clearUnResponsiveServers() {
+        layout.getUnresponsiveServers().clear();
+        return this;
+    }
+
+    /**
      * Adds unresponsive servers in the list.
      *
      * @param endpoints Endpoints to be added.
@@ -44,8 +54,17 @@ public class LayoutWorkflowManager {
      */
     public LayoutWorkflowManager addUnresponsiveServers(Set<String> endpoints) {
         List<String> unresponsiveServers = layout.getUnresponsiveServers();
-        unresponsiveServers.clear();
-        endpoints.forEach(unresponsiveServers::add);
+        unresponsiveServers.addAll(endpoints);
+        return this;
+    }
+
+    /**
+     * Removes unresponsive servers.
+     *
+     * @return
+     */
+    public LayoutWorkflowManager removeUnResponsiveServers(Set<String> endpoints) {
+        layout.getUnresponsiveServers().removeAll(endpoints);
         return this;
     }
 

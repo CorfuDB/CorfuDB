@@ -37,6 +37,7 @@ import org.corfudb.runtime.view.LayoutView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
+
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Version;
@@ -486,9 +487,9 @@ public class CorfuRuntime {
     private CompletableFuture<Layout> fetchLayout() {
         return CompletableFuture.<Layout>supplyAsync(() -> {
 
+            List<String> layoutServersCopy = new ArrayList<>(layoutServers);
             while (true) {
-                List<String> layoutServersCopy =  layoutServers.stream().collect(
-                        Collectors.toList());
+
                 Collections.shuffle(layoutServersCopy);
                 // Iterate through the layout servers, attempting to connect to one
                 for (String s : layoutServersCopy) {

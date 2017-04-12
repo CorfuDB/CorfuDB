@@ -8,6 +8,10 @@ import java.util.Map;
 import lombok.Getter;
 import lombok.Setter;
 
+import org.corfudb.infrastructure.management.ConservativeFailureHandlerPolicy;
+import org.corfudb.infrastructure.management.IFailureDetectorPolicy;
+import org.corfudb.infrastructure.management.IFailureHandlerPolicy;
+import org.corfudb.infrastructure.management.PeriodicPollPolicy;
 import org.corfudb.util.MetricsUtils;
 
 import static org.corfudb.util.MetricsUtils.addJvmMetrics;
