@@ -20,6 +20,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
 import static org.corfudb.util.MetricsUtils.addCacheGauges;
@@ -168,10 +169,10 @@ public class SequencerServer extends AbstractServer {
     public TokenType txnCanCommit(TxResolutionInfo txInfo) {
         log.trace("Commit-req[" + txInfo + "]");
 
-        AtomicInteger response = new AtomicInteger(TokenType.NORMAL.ordinal());
+        AtomicReference<TokenType> response = new AtomicReference<>(TokenType.NORMAL);
 
         for (Map.Entry<UUID, Set<Integer>> entry : txInfo.getConflictSet().entrySet()) {
-            if (response.get() != TokenType.NORMAL.ordinal())
+            if (response.get() != TokenType.NORMAL)
                 break;
 
             // if conflict-parameters are present, check for conflict based on conflict-parameter updates
@@ -188,13 +189,13 @@ public class SequencerServer extends AbstractServer {
 
                     if (v != null && v > txInfo.getSnapshotTimestamp() ) {
                         log.debug("ABORT[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
-                        response.set(TokenType.TX_ABORT_CONFLICT.ordinal());
+                        response.set(TokenType.TX_ABORT_CONFLICT);
                     }
 
                     if (v == null && maxConflictWildcard > txInfo.getSnapshotTimestamp() ) {
                         log.warn("ABORT[{}] conflict-key[{}](WILDCARD ts={})", txInfo, conflictParam,
                                 maxConflictWildcard);
-                        response.set(TokenType.TX_ABORT_CONFLICT.ordinal());
+                        response.set(TokenType.TX_ABORT_CONFLICT);
                     }
                 });
             }
@@ -209,14 +210,14 @@ public class SequencerServer extends AbstractServer {
                     if (v > txInfo.getSnapshotTimestamp()) {
                         log.debug("ABORT[{}] conflict-stream[{}](ts={})",
                                 txInfo, Utils.toReadableID(streamID), v);
-                        response.set(TokenType.TX_ABORT_CONFLICT.ordinal());
+                        response.set(TokenType.TX_ABORT_CONFLICT);
                     }
                     return v;
                 });
             }
         }
 
-        return TokenType.values()[response.get()];
+        return response.get();
     }
 
     public void handleTokenQuery(CorfuPayloadMsg<TokenRequest> msg,
