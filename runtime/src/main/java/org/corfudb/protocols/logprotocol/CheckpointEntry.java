@@ -30,7 +30,9 @@ public class CheckpointEntry extends LogEntry {
         public byte asByte() {
             return (byte) type;
         }
-    };
+    }
+
+    ;
 
     @Getter
     CheckpointEntryType cpType;
@@ -39,13 +41,26 @@ public class CheckpointEntry extends LogEntry {
     @Getter
     String checkpointAuthorID;  // TODO: UUID instead?
     @Getter
-    Map<String,String> dict;
+    Map<String, String> dict;
     @Getter
     byte[] bulk;
 
     public CheckpointEntry(CheckpointEntryType type, String authorID, UUID checkpointID,
+                           Map<String,String> dict, ByteBuf bulk) {
+        super(LogEntryType.CHECKPOINT);
+        byte[] bulkBytes = new byte[bulk.writableBytes()];
+        bulk.writeBytes(bulkBytes);
+        constructorCommon(type, authorID, checkpointID, dict, bulkBytes);
+    }
+
+    public CheckpointEntry(CheckpointEntryType type, String authorID, UUID checkpointID,
                            Map<String,String> dict, byte[] bulk) {
         super(LogEntryType.CHECKPOINT);
+        constructorCommon(type, authorID, checkpointID, dict, bulk);
+    }
+
+    private void constructorCommon(CheckpointEntryType type, String authorID, UUID checkpointID,
+                                   Map<String,String> dict, byte[] bulk) {
         this.cpType = type;
         this.checkpointID = checkpointID;
         this.checkpointAuthorID = authorID;

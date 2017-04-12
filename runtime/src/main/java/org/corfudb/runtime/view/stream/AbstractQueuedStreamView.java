@@ -124,7 +124,7 @@ public abstract class AbstractQueuedStreamView extends
             // We don't need the list any longer, give it to the caller.
             context.readCpList = new ArrayList<>();
         } else {
-            read = Collections.emptyList();
+            read = new ArrayList<ILogData>();
         }
 
         // We always have to fill to the read queue to ensure we read up to
