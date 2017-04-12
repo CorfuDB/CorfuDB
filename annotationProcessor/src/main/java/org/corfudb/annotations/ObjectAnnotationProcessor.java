@@ -333,15 +333,25 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         // Verify that all methods that require an up call have specified as annotated name
         checkAnnotatedNames(methodSet);
 
-        // Check override conflicts
-        Set<SMRMethodInfo> possibleConflictMethods = methodSet.stream()
+        // Gather methods that require upcalls
+        Set<SMRMethodInfo> upCalls = methodSet.stream()
                 .filter(x -> ((x.method.getAnnotation(Mutator.class) != null)
                         && !x.method.getAnnotation(Mutator.class).noUpcall())
                         || ((x.method.getAnnotation(MutatorAccessor.class) != null)
                         && !x.method.getAnnotation(MutatorAccessor.class).noUpcall()))
                 .collect(Collectors.toCollection(HashSet::new));
 
-        checkOverloadConflicts(possibleConflictMethods);
+        checkOverloadConflicts(upCalls);
+
+        // Gather methods that reference upcall methods (i.e. mutators that require no upcalls)
+        Set<SMRMethodInfo> noUpcalls = methodSet.stream()
+                .filter(x -> ((x.method.getAnnotation(Mutator.class) != null)
+                        && x.method.getAnnotation(Mutator.class).noUpcall())
+                        || ((x.method.getAnnotation(MutatorAccessor.class) != null)
+                        && x.method.getAnnotation(MutatorAccessor.class).noUpcall()))
+                .collect(Collectors.toCollection(HashSet::new));
+
+        verifyNoUpCallReference(noUpcalls, upCalls);
 
         // Generate wrapper classes.
         methodSet.stream()
@@ -517,6 +527,25 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         }
 
         return name;
+    }
+
+    /*
+     * Verify that the no upcall methods reference valid upcall methods
+     */
+    void verifyNoUpCallReference(Set<SMRMethodInfo> noUpcalls, Set<SMRMethodInfo> upCalls) {
+
+        Set<String> upCallMethodNames = upCalls.stream()
+                .map(x -> getAnnotationNameField(x.method))
+                .collect(Collectors.toCollection(HashSet::new));
+
+        for(SMRMethodInfo smrMethodInfo : noUpcalls) {
+            String methodName = getAnnotationNameField(smrMethodInfo.method);
+
+            if(!upCallMethodNames.contains(methodName)){
+                messager.printMessage(Diagnostic.Kind.ERROR,
+                        "Error " + smrMethodInfo.method.toString() +" referencing unknown smr method ");
+            }
+        }
     }
 
     /**
