@@ -122,7 +122,7 @@ public class CorfuObjectProxy<P> {
             if (!method.getReturnType().getName().equals("void")) {
                 CompletableFuture cf = new CompletableFuture();
                 long txAddr = runtime.getStreamsView().acquireAndWrite(affectedStreams, tlre, t -> {
-                    runtime.getObjectsView().getTxFuturesMap().put(t.getToken(), cf);
+                    runtime.getObjectsView().getTxFuturesMap().put(t.getToken().getTokenValue(), cf);
                     return true;
                 }, t -> {
                     runtime.getObjectsView().getTxFuturesMap().remove(t.getToken());

@@ -36,6 +36,19 @@ public class LayoutWorkflowManager {
     }
 
     /**
+     * Adds unresponsive servers in the list.
+     *
+     * @param endpoints Endpoints to be added.
+     * @return
+     */
+    public LayoutWorkflowManager addUnresponsiveServers(Set<String> endpoints) {
+        List<String> unresponsiveServers = layout.getUnresponsiveServers();
+        unresponsiveServers.clear();
+        endpoints.forEach(unresponsiveServers::add);
+        return this;
+    }
+
+    /**
      * Removes the Layout Server passed
      *
      * @param endpoint Endpoint to be removed
@@ -83,6 +96,30 @@ public class LayoutWorkflowManager {
         }
         layout.getLayoutServers().retainAll(modifiedLayoutServers);
         return this;
+    }
+
+    /**
+     * Moves a responsive server to the top of the sequencer server list.
+     * If all have failed, throws exception.
+     *
+     * @param endpoints Failed endpoints.
+     * @return LayoutWorkflowManager
+     * @throws LayoutModificationException throws if no working sequencer left.
+     */
+    public LayoutWorkflowManager moveResponsiveSequencerToTop(Set<String> endpoints)
+            throws LayoutModificationException {
+
+        List<String> modifiedSequencerServers = new ArrayList<>(layout.getSequencers());
+        for (int i = 0; i < modifiedSequencerServers.size(); i++) {
+            String sequencerServer = modifiedSequencerServers.get(i);
+            if (!endpoints.contains(sequencerServer)) {
+                modifiedSequencerServers.remove(sequencerServer);
+                modifiedSequencerServers.add(0, sequencerServer);
+                layout.setSequencers(modifiedSequencerServers);
+                return this;
+            }
+        }
+        throw new LayoutModificationException("All sequencers failed.");
     }
 
     /**
@@ -216,6 +253,7 @@ public class LayoutWorkflowManager {
                 layout.getLayoutServers(),
                 layout.getSequencers(),
                 layout.getSegments(),
+                layout.getUnresponsiveServers(),
                 this.epoch);
     }
 

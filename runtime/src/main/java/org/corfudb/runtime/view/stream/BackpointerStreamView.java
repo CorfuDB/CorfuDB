@@ -76,7 +76,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                                 tokenResponse.getStreamAddresses());
                 // The write completed successfully, so we return this
                 // address to the client.
-                return tokenResponse.getToken();
+                return tokenResponse.getToken().getTokenValue();
             } catch (OverwriteException oe) {
                 log.trace("Overwrite occurred at {}", tokenResponse);
                 // We got overwritten, so we call the deacquisition callback
@@ -131,7 +131,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     public boolean getHasNext(QueuedStreamContext context) {
         return  context.readQueue.isEmpty() ||
                 runtime.getSequencerView()
-                .nextToken(Collections.singleton(context.id), 0).getToken()
+                .nextToken(Collections.singleton(context.id), 0).getToken().getTokenValue()
                         > context.globalPointer;
     }
 
@@ -181,38 +181,38 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             return fillFromResolved(maxGlobal, context);
         }
 
-        Long latestToken = null;
+        Long latestTokenValue = null;
 
-        // If the max has bveen resolved, use it.
+        // If the max has been resolved, use it.
         if (maxGlobal != Address.MAX) {
-            latestToken = context.resolvedQueue.ceiling(maxGlobal);
+            latestTokenValue = context.resolvedQueue.ceiling(maxGlobal);
         }
 
         // If we don't have a larger token in resolved, or the request was for
         // a linearized read, fetch the token from the sequencer.
-        if (latestToken == null || maxGlobal == Address.MAX) {
-            latestToken = runtime.getSequencerView()
+        if (latestTokenValue == null || maxGlobal == Address.MAX) {
+            latestTokenValue = runtime.getSequencerView()
                     .nextToken(Collections.singleton(context.id), 0)
-                    .getToken();
+                    .getToken().getTokenValue();
         }
 
         // If the backpointer was unwritten, return, there is nothing to do
-        if (latestToken == Address.NEVER_READ) {
+        if (latestTokenValue == Address.NEVER_READ) {
             return false;
         }
 
         // If everything is available in the resolved
         // queue, use it
-        if (context.maxResolution > latestToken &&
+        if (context.maxResolution > latestTokenValue &&
                 context.minResolution < context.globalPointer) {
-            return fillFromResolved(latestToken, context);
+            return fillFromResolved(latestTokenValue, context);
         }
 
         // Now we start traversing backpointers, if they are available. We
         // start at the latest token and go backward, until we reach the
         // log pointer. For each address which is less than
         // maxGlobalAddress, we insert it into the read queue.
-        long currentRead = latestToken;
+        long currentRead = latestTokenValue;
 
         while (currentRead > context.globalPointer &&
                 currentRead != Address.NEVER_READ) {
@@ -286,7 +286,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // queue, use it
             if (context.maxResolution > currentRead &&
                     context.minResolution < context.globalPointer) {
-                return fillFromResolved(latestToken, context);
+                return fillFromResolved(latestTokenValue, context);
             }
 
             // Now we calculate the next entry to read.

@@ -7,6 +7,7 @@ import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 import com.codahale.metrics.MetricRegistry;
@@ -73,6 +74,11 @@ public class LogUnitServer extends AbstractServer {
     private AtomicBoolean running = new AtomicBoolean(true);
 
     /**
+     * Maintain the max globalAddress we have written.
+     */
+    private AtomicLong maxAddressGlobalTail = new AtomicLong(0L);
+
+    /**
      * The options map.
      */
     private final Map<String, Object> opts;
@@ -132,6 +138,15 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
+     * Service an incoming request for maximum global address the log unit server has written.
+     * This value is not persisted and only maintained in memory.
+     */
+    @ServerHandler(type = CorfuMsgType.TAIL_REQUEST, opTimer = metricsPrefix + "tailReq")
+    public void handleTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+        r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(maxAddressGlobalTail.get()));
+    }
+
+    /**
      * Service an incoming write request.
      */
     @ServerHandler(type = CorfuMsgType.WRITE, opTimer = metricsPrefix + "write")
@@ -146,7 +161,6 @@ public class LogUnitServer extends AbstractServer {
             if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
                 dataCache.put(new LogAddress(msg.getPayload().getGlobalAddress(), null), msg.getPayload().getData());
                 r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-                return;
             } else {
                 for (UUID streamID : msg.getPayload().getStreamAddresses().keySet()) {
                     dataCache.put(new LogAddress(msg.getPayload().getStreamAddresses().get(streamID), streamID),
@@ -154,6 +168,8 @@ public class LogUnitServer extends AbstractServer {
                 }
                 r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
             }
+            long globalTail = msg.getPayload().getGlobalAddress();
+            maxAddressGlobalTail.getAndUpdate(maxTail -> globalTail > maxTail ? globalTail : maxTail);
         } catch (OverwriteException ex) {
             if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
                 r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
