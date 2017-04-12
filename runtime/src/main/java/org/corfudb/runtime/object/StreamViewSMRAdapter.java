@@ -4,17 +4,15 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
-import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.util.serializer.Serializers;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -58,23 +56,24 @@ public class StreamViewSMRAdapter implements ISMRStream {
                     } else {
                         // We are a CHECKPOINT record.
                         // Pull ISMRConsumable thingies out of bulk.
-                         CheckpointEntry cp = (CheckpointEntry) logData.getPayload(runtime);
+                        CheckpointEntry cp = (CheckpointEntry) logData.getPayload(runtime);
                         byte[] bulk = cp.getBulk();
-                        ByteBuf qq = PooledByteBufAllocator.DEFAULT.buffer();
-                        qq.writeBytes(bulk);
                         if (bulk != null && bulk.length > 0) {
                             System.err.printf("cp DBG: global addr %d, bulk byte size = %d\n", cp.getEntry().getGlobalAddress(), cp.getBulk().length);
+                            // Convert our bytes[] to ByteBuf to be able to deconstruct using readShort(), etc.
+                            ByteBuf bulkBuf = PooledByteBufAllocator.DEFAULT.buffer();
+                            bulkBuf.writeBytes(cp.getBulk());
 
-                            ByteBuf oBuf = PooledByteBufAllocator.DEFAULT.buffer();
-                            SMREntry x = new SMREntry("put", new Object[]{"key9", 99}, Serializers.JSON);
-                            // x.setEntry(logData);
-                            x.serialize(oBuf);
-
-                            SMREntry boomerang = (SMREntry) SMREntry.deserialize(oBuf, runtime);
-                            boomerang.setEntry(logData);
-                            System.err.printf("Adding hack (%s) to the list of SMREntries...\n", boomerang.toString());
-                            List<SMREntry> hack = Collections.singletonList(boomerang);
-                            return hack;
+                            List<SMREntry> consumables = new ArrayList<>();
+                            int items = bulkBuf.readShort();
+                            for (int i = 0; i < items; i++) {
+                                int len = bulkBuf.readInt();
+                                ByteBuf rBuf = PooledByteBufAllocator.DEFAULT.buffer();
+                                bulkBuf.readBytes(rBuf, len);
+                                SMREntry e = (SMREntry) SMREntry.deserialize(rBuf, runtime);
+                                consumables.add(e);
+                            }
+                            return consumables;
                         } else {
                             return (List<SMREntry>) Collections.EMPTY_LIST;
                         }

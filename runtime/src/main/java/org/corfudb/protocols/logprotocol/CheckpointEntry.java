@@ -18,6 +18,22 @@ import java.util.stream.Collectors;
 @NoArgsConstructor
 public class CheckpointEntry extends LogEntry {
 
+    public static void dump(ByteBuf b) {
+        byte[] bulk = new byte[b.readableBytes()];
+        b.readBytes(bulk, 0, b.readableBytes() - 1);
+        dump(bulk);
+    }
+
+    public static void dump(byte[] bulk) {
+        if (bulk != null) {
+            System.err.printf("Bulk(%d): ", bulk.length);
+            for (int i = 0; i < bulk.length; i++) {
+                System.err.printf("%d,", bulk[i]);
+            }
+            System.err.printf("\n");
+        }
+    }
+
     @RequiredArgsConstructor
     public enum CheckpointEntryType {
         START(1),           // Mandatory: 1st record in checkpoint
@@ -30,9 +46,7 @@ public class CheckpointEntry extends LogEntry {
         public byte asByte() {
             return (byte) type;
         }
-    }
-
-    ;
+    };
 
     @Getter
     CheckpointEntryType cpType;
@@ -48,9 +62,13 @@ public class CheckpointEntry extends LogEntry {
     public CheckpointEntry(CheckpointEntryType type, String authorID, UUID checkpointID,
                            Map<String,String> dict, ByteBuf bulk) {
         super(LogEntryType.CHECKPOINT);
-        byte[] bulkBytes = new byte[bulk.writableBytes()];
-        bulk.writeBytes(bulkBytes);
-        constructorCommon(type, authorID, checkpointID, dict, bulkBytes);
+        if (bulk == null) {
+            constructorCommon(type, authorID, checkpointID, dict, null);
+        } else {
+            byte[] bulkBytes = new byte[bulk.readableBytes()];
+            bulk.getBytes(0, bulkBytes);
+            constructorCommon(type, authorID, checkpointID, dict, bulkBytes);
+        }
     }
 
     public CheckpointEntry(CheckpointEntryType type, String authorID, UUID checkpointID,
@@ -66,6 +84,7 @@ public class CheckpointEntry extends LogEntry {
         this.checkpointAuthorID = authorID;
         this.dict = dict;
         this.bulk = bulk;
+        dump(bulk);
     }
 
     static final Map<Byte, CheckpointEntryType> typeMap =
