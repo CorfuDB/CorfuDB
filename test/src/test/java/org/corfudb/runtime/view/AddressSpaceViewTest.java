@@ -3,15 +3,15 @@ package org.corfudb.runtime.view;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
-import org.corfudb.infrastructure.*;
+import org.corfudb.infrastructure.LogUnitServerAssertions;
+import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
-import java.time.Duration;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -79,7 +79,8 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(0, Collections.singleton(streamA),
+        r.getAddressSpaceView().write(new Token(0L, r.getLayoutView().getLayout().getEpoch()),
+                Collections.singleton(streamA),
                 testPayload, Collections.emptyMap(), Collections.emptyMap());
 
         assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
@@ -97,7 +98,8 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_2))
                 .isEmptyAtAddress(0);
 
-        r.getAddressSpaceView().write(1, Collections.singleton(streamA),
+        r.getAddressSpaceView().write(new Token(1L, r.getLayoutView().getLayout().getEpoch()),
+                Collections.singleton(streamA),
                 "1".getBytes(), Collections.emptyMap(), Collections.emptyMap());
         LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_0))
                 .matchesDataAtAddress(0, testPayload);
@@ -141,17 +143,20 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         final long ADDRESS_0 = 0;
         final long ADDRESS_1 = 1;
         final long ADDRESS_2 = 3;
-        r.getAddressSpaceView().write(ADDRESS_0, Collections.singleton(streamA),
+        Token token = new Token(ADDRESS_0, r.getLayoutView().getLayout().getEpoch());
+        r.getAddressSpaceView().write(token, Collections.singleton(streamA),
                 testPayload, Collections.emptyMap(), Collections.emptyMap());
 
         assertThat(r.getAddressSpaceView().read(ADDRESS_0).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
 
 
-        r.getAddressSpaceView().write(ADDRESS_1, Collections.singleton(streamA),
+        r.getAddressSpaceView().write(new Token(ADDRESS_1, r.getLayoutView().getLayout().getEpoch()),
+                Collections.singleton(streamA),
                 "1".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
-        r.getAddressSpaceView().write(ADDRESS_2, Collections.singleton(streamA),
+        r.getAddressSpaceView().write(new Token(ADDRESS_2, r.getLayoutView().getLayout().getEpoch()),
+                Collections.singleton(streamA),
                 "3".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
         RangeSet<Long> rs = TreeRangeSet.create();
@@ -199,26 +204,31 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         UUID streamB = UUID.nameUUIDFromBytes("stream B".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        final int ADDRESS_0 = 0;
-        final int ADDRESS_1 = 1;
-        final int ADDRESS_2 = 2;
-        final int ADDRESS_3 = 3;
-        final int ADDRESS_4 = 5;
+        final long ADDRESS_0 = 0;
+        final long ADDRESS_1 = 1;
+        final long ADDRESS_2 = 2;
+        final long ADDRESS_3 = 3;
+        final long ADDRESS_4 = 5;
 
-        r.getAddressSpaceView().write(ADDRESS_0, Collections.singleton(streamA),
+        r.getAddressSpaceView().write(new Token(ADDRESS_0, r.getLayoutView().getLayout().getEpoch()),
+                Collections.singleton(streamA),
                 testPayload, Collections.emptyMap(), Collections.emptyMap());
 
 
-        r.getAddressSpaceView().write(ADDRESS_1, Collections.singleton(streamA),
+        r.getAddressSpaceView().write(new Token(ADDRESS_1, r.getLayoutView().getLayout().getEpoch()),
+                Collections.singleton(streamA),
                 "1".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
-        r.getAddressSpaceView().write(ADDRESS_2, Collections.singleton(streamB),
+        r.getAddressSpaceView().write(new Token(ADDRESS_2, r.getLayoutView().getLayout().getEpoch()),
+                Collections.singleton(streamB),
                 "2".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
-        r.getAddressSpaceView().write(ADDRESS_3, Collections.singleton(streamA),
+        r.getAddressSpaceView().write(new Token(ADDRESS_3, r.getLayoutView().getLayout().getEpoch()),
+                Collections.singleton(streamA),
                 "3".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
-        r.getAddressSpaceView().write(ADDRESS_4, Collections.singleton(streamA),
+        r.getAddressSpaceView().write(new Token(ADDRESS_4, r.getLayoutView().getLayout().getEpoch()),
+                Collections.singleton(streamA),
                 "3".getBytes(), Collections.emptyMap(), Collections.emptyMap());
 
     }

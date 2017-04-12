@@ -19,7 +19,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse> {
 
     /** The current token,
      * or overload with "cause address" in case token request is denied. */
-    final Long token;
+    final Token token;
 
     /** The backpointer map, if available. */
     final Map<UUID, Long> backpointerMap;
@@ -29,7 +29,9 @@ public class TokenResponse implements ICorfuPayload<TokenResponse> {
 
     public TokenResponse(ByteBuf buf) {
         respType = TokenType.values()[ICorfuPayload.fromBuffer(buf, Byte.class)];
-        token = ICorfuPayload.fromBuffer(buf, Long.class);
+        Long tokenValue = ICorfuPayload.fromBuffer(buf, Long.class);
+        Long epoch = ICorfuPayload.fromBuffer(buf, Long.class);
+        token = new Token(tokenValue, epoch);
         backpointerMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
         streamAddresses = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
     }
@@ -37,7 +39,8 @@ public class TokenResponse implements ICorfuPayload<TokenResponse> {
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, respType);
-        ICorfuPayload.serialize(buf, token);
+        ICorfuPayload.serialize(buf, token.getTokenValue());
+        ICorfuPayload.serialize(buf, token.getEpoch());
         ICorfuPayload.serialize(buf, backpointerMap);
         ICorfuPayload.serialize(buf, streamAddresses);
     }
