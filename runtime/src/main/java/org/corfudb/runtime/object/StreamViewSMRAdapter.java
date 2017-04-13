@@ -47,7 +47,6 @@ public class StreamViewSMRAdapter implements ISMRStream {
 
     public List<SMREntry> remainingUpTo(long maxGlobal) {
         return streamView.remainingUpTo(maxGlobal).stream()
-                .map(m -> {if(m.getType()==DataType.CHECKPOINT){System.err.printf("I see CHECKPOINT 1, payload %s\n", m.getPayload(runtime).getClass().toString());} return m; }) // delete me!
                 .filter(m -> m.getType() == DataType.DATA || m.getType() == DataType.CHECKPOINT)
                 .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable || m.getType() == DataType.CHECKPOINT)
                 .map(logData -> {
@@ -57,9 +56,9 @@ public class StreamViewSMRAdapter implements ISMRStream {
                         // We are a CHECKPOINT record.
                         // Pull ISMRConsumable thingies out of bulk.
                         CheckpointEntry cp = (CheckpointEntry) logData.getPayload(runtime);
+                        // TODO If housekeeping requires access to metadata in this record, do it here
                         byte[] bulk = cp.getBulk();
                         if (bulk != null && bulk.length > 0) {
-                            System.err.printf("cp DBG: global addr %d, bulk byte size = %d\n", cp.getEntry().getGlobalAddress(), cp.getBulk().length);
                             // Convert our bytes[] to ByteBuf to be able to deconstruct using readShort(), etc.
                             ByteBuf bulkBuf = PooledByteBufAllocator.DEFAULT.buffer();
                             bulkBuf.writeBytes(cp.getBulk());

@@ -232,7 +232,6 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         while (currentRead > context.globalPointer &&
                 currentRead != Address.NEVER_READ) {
             log.trace("Read_Fill_Queue[{}] Read {}", this, currentRead);
-            System.err.printf("Read_Fill_Queue[%s] Read %d\n", this, currentRead);
             // Read the entry in question.
             ILogData currentEntry =
                     runtime.getAddressSpaceView().read(currentRead);
@@ -324,8 +323,6 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // If everything left is available in the resolved
             // queue, use it
             if (context.maxResolution > currentRead && context.minResolution < context.globalPointer) {
-                    System.err.printf("context.maxResolution %d > currentRead %d\n", context.maxResolution, currentRead);
-                    System.err.printf("context.minResolution %d < context.globalPointer %d\n", context.minResolution, context.globalPointer);
                 return fillFromResolved(latestToken, context);
             }
 
@@ -344,7 +341,6 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         }
 
         log.debug("Read_Fill_Queue[{}] Filled queue with {}", this, context.readQueue);
-        System.err.printf("Read_Fill_Queue[%s] Filled queue with %d cp items / %d regular items\n", this.toString(), context.readCpList.size(), context.readQueue.size());
         return ! context.readCpList.isEmpty() || !context.readQueue.isEmpty();
     }
 }

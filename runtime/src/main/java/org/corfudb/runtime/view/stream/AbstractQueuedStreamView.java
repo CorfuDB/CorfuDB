@@ -120,7 +120,6 @@ public abstract class AbstractQueuedStreamView extends
         // we should pay attention to, then return them now.
         if (! context.readCpList.isEmpty()) {
             read = context.readCpList;
-            System.err.printf("DBG: %d checkpoint entries returned by getNextEntries()\n", read.size());
             // We don't need the list any longer, give it to the caller.
             context.readCpList = new ArrayList<>();
         } else {
@@ -150,7 +149,7 @@ public abstract class AbstractQueuedStreamView extends
         // The list to store read results in
         List<ILogData> read2 = readAll(toRead).stream()
                 // .filter(x -> x.getType() == DataType.DATA)
-                .filter(x -> {if(x.getType()==DataType.CHECKPOINT){System.err.printf("I see CHECKPOINT B at %d (but should be impossible!!!)\n", x.getGlobalAddress());} return x.getType() == DataType.DATA;})
+                .filter(x -> x.getType() == DataType.DATA)
                 .filter(x -> x.containsStream(context.id))
                 .collect(Collectors.toList());
         read.addAll(read2);
