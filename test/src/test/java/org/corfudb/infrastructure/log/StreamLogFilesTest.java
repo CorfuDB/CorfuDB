@@ -10,6 +10,7 @@ import io.netty.buffer.ByteBufAllocator;
 import java.io.File;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.util.UUID;
 
 import io.netty.buffer.Unpooled;
 import org.corfudb.AbstractCorfuTest;
@@ -108,6 +109,28 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     }
 
     @Test
+    public void testSegmentHandleEviction() {
+        String logDir = getDirPath();
+        long segmentCacheSize = 2;
+        StreamLog log = new StreamLogFiles(logDir, false, segmentCacheSize);
+        ByteBuf b = Unpooled.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        LogAddress address0 = new LogAddress((long) 0, null);
+        LogAddress address1 = new LogAddress((long) StreamLogFiles.RECORDS_PER_LOG_FILE + 1, null);
+        LogAddress address2 = new LogAddress((long) (StreamLogFiles.RECORDS_PER_LOG_FILE * 2) + 1, null);
+        StreamLogFiles streamLogFiles = (StreamLogFiles) log;
+        assertThat(streamLogFiles.getSegmentsCache().size()).isEqualTo(0);
+
+        log.append(address0, new LogData(DataType.DATA, b));
+        assertThat(streamLogFiles.getSegmentsCache().size()).isEqualTo(1);
+        log.append(address1, new LogData(DataType.DATA, b));
+        assertThat(streamLogFiles.getSegmentsCache().size()).isEqualTo(2);
+        log.append(address2, new LogData(DataType.DATA, b));
+        assertThat(streamLogFiles.getSegmentsCache().size()).isEqualTo(2);
+    }
+
+    @Test
     public void testStreamLogDataCorruption() throws Exception {
         // This test manipulates a log file directly and manipulates
         // log records by overwriting some parts of the record simulating
@@ -127,7 +150,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         final int OVERWRITE_BYTES = 12;
 
         // Overwrite 2 bytes of the checksum and 2 bytes of the entry's address
-        String logFilePath = logDir + 0 + ".log";
+        String logFilePath = logDir + new UUID(0,0) + "-" + 0 + ".log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
         ByteBuffer metaDataBuf = ByteBuffer.allocate(METADATA_SIZE);
         file.getChannel().read(metaDataBuf);
