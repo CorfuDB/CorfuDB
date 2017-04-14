@@ -177,7 +177,6 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         // checkpoint size would always be small enough to use checkpoint data instead of
         // continuing backward to find individual updates.
         boolean considerCheckpoint = context.globalPointer == -1;
-        boolean useCheckpoint = false;
 
         // The maximum address we will fill to.
         final long maxAddress =
@@ -298,36 +297,9 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             if (currentEntry.containsStream(context.id)) {
                 if (currentEntry.getType() == DataType.CHECKPOINT) {
                     CheckpointEntry cpEntry = (CheckpointEntry) currentEntry.getPayload(runtime);
-                    if (context.checkpointSuccessID == null &&
-                            cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.END)) {
-                        log.trace("Checkpoint: address {} found END, id {} author {}",
-                                currentRead, cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
-                        if (considerCheckpoint) {
-                            context.checkpointSuccessID = cpEntry.getCheckpointID();
-                        }
-                    }
-                    if (context.checkpointSuccessID != null &&
-                            context.checkpointSuccessID.equals(cpEntry.getCheckpointID())) {
-                        log.trace("Checkpoint: address {} type {} id {} author {}",
-                                currentRead, cpEntry.getCpType(),
-                                cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
-                        if (considerCheckpoint) {
-                            context.readCpList.add(currentEntry);
-                            if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
-                                log.trace("Checkpoint: halting backpointer fill at address {} type {} id {} author {}",
-                                        currentRead, cpEntry.getCpType(),
-                                        cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
-                                useCheckpoint = true;
-                                Collections.reverse(context.readCpList);
-                                // This is first attempt to play log, so break now to
-                                // skip fillFromResolved() stuff which we know doesn't apply.
-                                break;
-                            }
-                        }
-                    } else {
-                        log.trace("Checkpoint: skip address {} type {} id {} author {}",
-                                currentRead, cpEntry.getCpType(),
-                                cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
+                    if (examineCheckpointRecord(context, currentEntry, cpEntry,
+                            considerCheckpoint, currentRead)) {
+                        break;
                     }
                 } else {
                     context.readQueue.add(currentRead);
@@ -356,5 +328,41 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         log.debug("Read_Fill_Queue[{}] Filled queue with {}", this, context.readQueue);
         return ! context.readCpList.isEmpty() || !context.readQueue.isEmpty();
+    }
+
+    private boolean examineCheckpointRecord(final QueuedStreamContext context,
+                                            ILogData currentEntry, CheckpointEntry cpEntry,
+                                            boolean considerCheckpoint, long currentRead) {
+        if (context.checkpointSuccessID == null &&
+                cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.END)) {
+            log.trace("Checkpoint: address {} found END, id {} author {}",
+                    currentRead, cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
+            if (considerCheckpoint) {
+                context.checkpointSuccessID = cpEntry.getCheckpointID();
+            }
+        }
+        if (context.checkpointSuccessID != null &&
+                context.checkpointSuccessID.equals(cpEntry.getCheckpointID())) {
+            log.trace("Checkpoint: address {} type {} id {} author {}",
+                    currentRead, cpEntry.getCpType(),
+                    cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
+            if (considerCheckpoint) {
+                context.readCpList.add(currentEntry);
+                if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
+                    log.trace("Checkpoint: halting backpointer fill at address {} type {} id {} author {}",
+                            currentRead, cpEntry.getCpType(),
+                            cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
+                    Collections.reverse(context.readCpList);
+                    // This is first attempt to play log, so break now to
+                    // skip fillFromResolved() stuff which we know doesn't apply.
+                    return true;
+                }
+            }
+        } else {
+            log.trace("Checkpoint: skip address {} type {} id {} author {}",
+                    currentRead, cpEntry.getCpType(),
+                    cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
+        }
+        return false;
     }
 }
