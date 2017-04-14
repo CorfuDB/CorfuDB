@@ -135,7 +135,25 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         boolean ok3 = logClient.writeCheckpoint(addr3, Collections.singleton(streamId), null, cp3, bpMap3).get();
         assertThat(ok3).isTrue();
 
-        //////// LEFT OFF HERE
+        // Write our 3rd 'real' key, then check all 3
+        m.put(key3, key3Val);
+        assertThat(m.get(key1)).isEqualTo(key1Val);
+        assertThat(m.get(key2)).isEqualTo(key2Val);
+        assertThat(m.get(key3)).isEqualTo(key3Val);
 
+        // Make a new runtime & map, then look for expected bad behavior
+        resetTests();
+        setRuntime();
+        Map<String, Integer> m2 = getRuntime()
+                .getObjectsView()
+                .build()
+                .setStreamName(streamName)
+                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
+                .open();
+        //assertThat(m2.get(key1)).isNull();
+        //assertThat(m2.get(key2)).isNull();
+        assertThat(m2.get(key3)).isEqualTo(key3Val);
+        assertThat(m2.get(key7)).isEqualTo(key7Val);
+        assertThat(m2.get(key8)).isEqualTo(key8Val);
     }
 }
