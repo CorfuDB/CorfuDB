@@ -2,6 +2,7 @@ package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
+import com.google.common.util.concurrent.Runnables;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
@@ -19,6 +20,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * Basic smoke tests for checkpoint-in-stream PoC.
@@ -111,56 +113,148 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         assertThat(m2.get(key8)).isEqualTo(key8Val);
     }
 
+    @Test
     @SuppressWarnings("checkstyle:magicnumber")
+    public void smoke2Test() throws Exception {
+        final String streamName = "mystream2";
+        final UUID streamId = CorfuRuntime.getStreamID(streamName);
+        final UUID checkpointId = UUID.randomUUID();
+        final String checkpointAuthor = "Marty McFly";
+        final String keyPrefixFirst = "first";
+        final String keyPrefixMiddle1 = "middle1";
+        final String keyPrefixMiddle2 = "middle2";
+        final String keyPrefixLast = "last";
+        final int numKeys = 4;
+        final String key7 = "key7";
+        final int key7Val = 7777;
+        final String key8 = "key8";
+        final int key8Val = 88;
+        Consumer<Map<String,Integer>> testAssertions = (map) -> {
+            for (int i = 0; i < numKeys; i++) {
+                assertThat(map.get(keyPrefixFirst + Integer.toString(i))).isNull();
+                assertThat(map.get(keyPrefixMiddle1 + Integer.toString(i))).isEqualTo(i);
+                assertThat(map.get(keyPrefixMiddle2 + Integer.toString(i))).isEqualTo(i);
+                assertThat(map.get(keyPrefixLast + Integer.toString(i))).isEqualTo(i);
+            }
+            assertThat(map.get(key7)).isEqualTo(key7Val);
+            assertThat(map.get(key8)).isEqualTo(key8Val);
+        };
+
+        // Put keys 1 & 2 into m
+        Map<String, Integer> m = r.getObjectsView()
+                .build()
+                .setStreamName(streamName)
+                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
+                .open();
+        for (int i = 0; i < numKeys; i++) {
+            m.put(keyPrefixFirst + Integer.toString(i), i);
+        }
+        writeCheckpointRecords(streamId, checkpointAuthor, checkpointId,
+                new Object[]{new Object[]{key8, key8Val}, new Object[]{key7, key7Val}},
+                () -> { for (int i = 0; i < numKeys; i++) { m.put(keyPrefixMiddle1 + Integer.toString(i), i); } },
+                () -> { for (int i = 0; i < numKeys; i++) { m.put(keyPrefixMiddle2 + Integer.toString(i), i); } },
+                true, true, true);
+        for (int i = 0; i < numKeys; i++) {
+            m.put(keyPrefixLast + Integer.toString(i), i);
+        }
+
+        setRuntime();
+        Map<String, Integer> m2 = r.getObjectsView()
+                .build()
+                .setStreamName(streamName)
+                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
+                .open();
+        testAssertions.accept(m2);
+
+        // Write incomplete checkpoint (no END record) with key7 and key8 values
+        // different than testAssertions() expects. The new m3 map should have
+        // same values as m2 map.
+        final UUID checkpointId2 = UUID.randomUUID();
+        final String checkpointAuthor2 = "Incomplete 2";
+        writeCheckpointRecords(streamId, checkpointAuthor2, checkpointId2,
+                new Object[]{new Object[]{key8, key8Val*2}, new Object[]{key7, key7Val*2}},
+                () -> {}, () -> {}, true, true, false);
+
+        setRuntime();
+        Map<String, Integer> m3 = r.getObjectsView()
+                .build()
+                .setStreamName(streamName)
+                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
+                .open();
+        testAssertions.accept(m3);
+
+    }
+
     private void writeCheckpointRecords(UUID streamId, String checkpointAuthor, UUID checkpointId,
                                         Object[] objects)
             throws Exception {
-        // Setup: get log positions.
+        Runnable l = () -> {};
+        writeCheckpointRecords(streamId, checkpointAuthor, checkpointId, objects,
+                l, l, true, true, true);
+    }
+
+    @SuppressWarnings("checkstyle:magicnumber")
+    private void writeCheckpointRecords(UUID streamId, String checkpointAuthor, UUID checkpointId,
+                                        Object[] objects, Runnable l1, Runnable l2,
+                                        boolean write1, boolean write2, boolean write3)
+            throws Exception {
         LogUnitClient logClient = r.getLayoutView().getLayout()
                 .getLogUnitClient(0, 0);
-        TokenResponse tokResp1 = r.getSequencerView().nextToken(Collections.singleton(streamId), 1);
-        long addr1 = tokResp1.getToken();
-        Map<UUID, Long> bpMap1 = tokResp1.getBackpointerMap();
-        TokenResponse tokResp2 = r.getSequencerView().nextToken(Collections.singleton(streamId), 1);
-        long addr2 = tokResp2.getToken();
-        Map<UUID, Long> bpMap2 = tokResp2.getBackpointerMap();
-        TokenResponse tokResp3 = r.getSequencerView().nextToken(Collections.singleton(streamId), 1);
-        long addr3 = tokResp3.getToken();
-        Map<UUID, Long> bpMap3 = tokResp3.getBackpointerMap();
-
-        // Write cp #1 of 3
+        final byte emptyBulk[] = new byte[0];
         Map<String, String> mdKV = new HashMap<>();
         mdKV.put("Start time", "Miller time(tm)");
-        mdKV.put("CP record #", "1 (for those keeping score)");
-        final byte emptyBulk[] = new byte[0];
-        CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
-                checkpointAuthor, checkpointId, mdKV, emptyBulk);
-        boolean ok1 = logClient.writeCheckpoint(addr1, Collections.singleton(streamId), null, cp1, bpMap1).get();
-        assertThat(ok1).isTrue();
+
+        // Write cp #1 of 3
+        if (write1) {
+            TokenResponse tokResp1 = r.getSequencerView().nextToken(Collections.singleton(streamId), 1);
+            long addr1 = tokResp1.getToken();
+            Map<UUID, Long> bpMap1 = tokResp1.getBackpointerMap();
+            mdKV.put("CP record #", "1 (for those keeping score)");
+            CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
+                    checkpointAuthor, checkpointId, mdKV, emptyBulk);
+            boolean ok1 = logClient.writeCheckpoint(addr1, Collections.singleton(streamId), null, cp1, bpMap1).get();
+            assertThat(ok1).isTrue();
+        }
+
+        // Interlude 1
+        l1.run();
 
         // Write cp #2 of 3
-        mdKV.put("More metadata", "Hello, world!");
-        mdKV.put("CP record #", "2");
-        ByteBuf bulk2 = PooledByteBufAllocator.DEFAULT.buffer();
-        bulk2.writeShort(objects.length); // 2 SMREntry records to follow
-        for (int i = 0; i < objects.length; i++) {
-            SMREntry smrEntryA = new SMREntry("put", (Object[]) objects[i], Serializers.JSON);
-            ByteBuf smrEntryABuf = PooledByteBufAllocator.DEFAULT.buffer();
-            smrEntryA.serialize(smrEntryABuf);
-            bulk2.writeInt(smrEntryABuf.readableBytes());
-            bulk2.writeBytes(smrEntryABuf);
+        if (write2) {
+            TokenResponse tokResp2 = r.getSequencerView().nextToken(Collections.singleton(streamId), 1);
+            long addr2 = tokResp2.getToken();
+            Map<UUID, Long> bpMap2 = tokResp2.getBackpointerMap();
+            mdKV.put("More metadata", "Hello, world!");
+            mdKV.put("CP record #", "2");
+            ByteBuf bulk2 = PooledByteBufAllocator.DEFAULT.buffer();
+            bulk2.writeShort(objects.length); // 2 SMREntry records to follow
+            for (int i = 0; i < objects.length; i++) {
+                SMREntry smrEntryA = new SMREntry("put", (Object[]) objects[i], Serializers.JSON);
+                ByteBuf smrEntryABuf = PooledByteBufAllocator.DEFAULT.buffer();
+                smrEntryA.serialize(smrEntryABuf);
+                bulk2.writeInt(smrEntryABuf.readableBytes());
+                bulk2.writeBytes(smrEntryABuf);
+            }
+            CheckpointEntry cp2 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
+                    checkpointAuthor, checkpointId, mdKV, bulk2);
+            boolean ok2 = logClient.writeCheckpoint(addr2, Collections.singleton(streamId), null, cp2, bpMap2).get();
+            assertThat(ok2).isTrue();
         }
-        CheckpointEntry cp2 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
-                checkpointAuthor, checkpointId, mdKV, bulk2);
-        boolean ok2 = logClient.writeCheckpoint(addr2, Collections.singleton(streamId), null, cp2, bpMap2).get();
-        assertThat(ok2).isTrue();
+
+        // Interlude 2
+        l2.run();
 
         // Write cp #3 of 3
-        mdKV.put("CP record #", "3");
-        CheckpointEntry cp3 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
-                checkpointAuthor, checkpointId, mdKV, emptyBulk);
-        boolean ok3 = logClient.writeCheckpoint(addr3, Collections.singleton(streamId), null, cp3, bpMap3).get();
-        assertThat(ok3).isTrue();
+        if (write3) {
+            TokenResponse tokResp3 = r.getSequencerView().nextToken(Collections.singleton(streamId), 1);
+            long addr3 = tokResp3.getToken();
+            Map<UUID, Long> bpMap3 = tokResp3.getBackpointerMap();
+            mdKV.put("CP record #", "3");
+            CheckpointEntry cp3 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
+                    checkpointAuthor, checkpointId, mdKV, emptyBulk);
+            boolean ok3 = logClient.writeCheckpoint(addr3, Collections.singleton(streamId), null, cp3, bpMap3).get();
+            assertThat(ok3).isTrue();
+        }
     }
 
 }
