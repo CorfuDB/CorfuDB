@@ -296,24 +296,38 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // If the entry contains this context's stream,
             // we add it to the read queue.
             if (currentEntry.containsStream(context.id)) {
-                if (considerCheckpoint && currentEntry.getType() == DataType.CHECKPOINT) {
+                if (currentEntry.getType() == DataType.CHECKPOINT) {
                     CheckpointEntry cpEntry = (CheckpointEntry) currentEntry.getPayload(runtime);
-                    if (context.checkpointSuccessID == null && cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.END)) {
-                        log.trace("Checkpoint: address {} found END for id {} by author {}",
+                    if (context.checkpointSuccessID == null &&
+                            cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.END)) {
+                        log.trace("Checkpoint: address {} found END, id {} author {}",
                                 currentRead, cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
-                        context.checkpointSuccessID = cpEntry.getCheckpointID();
+                        if (considerCheckpoint) {
+                            context.checkpointSuccessID = cpEntry.getCheckpointID();
+                        }
                     }
-                    if (context.checkpointSuccessID.equals(cpEntry.getCheckpointID())) {
-                        log.trace("Checkpoint: address {} queue record etype {}", currentRead, cpEntry.getCpType());
-                        context.readCpList.add(currentEntry);
-                    }
-                    if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
-                        log.trace("Checkpoint: address {} is START", currentRead);
-                        useCheckpoint = true;
-                        Collections.reverse(context.readCpList);
-                        // This is first attempt to play log, so break now to
-                        // skip fillFromResolved() stuff which we know doesn't apply.
-                        break;
+                    if (context.checkpointSuccessID != null &&
+                            context.checkpointSuccessID.equals(cpEntry.getCheckpointID())) {
+                        log.trace("Checkpoint: address {} type {} id {} author {}",
+                                currentRead, cpEntry.getCpType(),
+                                cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
+                        if (considerCheckpoint) {
+                            context.readCpList.add(currentEntry);
+                            if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
+                                log.trace("Checkpoint: halting backpointer fill at address {} type {} id {} author {}",
+                                        currentRead, cpEntry.getCpType(),
+                                        cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
+                                useCheckpoint = true;
+                                Collections.reverse(context.readCpList);
+                                // This is first attempt to play log, so break now to
+                                // skip fillFromResolved() stuff which we know doesn't apply.
+                                break;
+                            }
+                        }
+                    } else {
+                        log.trace("Checkpoint: skip address {} type {} id {} author {}",
+                                currentRead, cpEntry.getCpType(),
+                                cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
                     }
                 } else {
                     context.readQueue.add(currentRead);
