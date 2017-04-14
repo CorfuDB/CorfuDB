@@ -86,55 +86,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         m.put(key2, key2Val);
 
         // Write our successful checkpoint, 3 records total.
-        // Setup: get log positions.
-        LogUnitClient logClient = r.getLayoutView().getLayout()
-                .getLogUnitClient(7, 0); // TODO magic 7
-        TokenResponse tokResp1 = r.getSequencerView().nextToken(Collections.singleton(streamId), 1);
-        long addr1 = tokResp1.getToken();
-        Map<UUID,Long> bpMap1 = tokResp1.getBackpointerMap();
-        TokenResponse tokResp2 = r.getSequencerView().nextToken(Collections.singleton(streamId), 1);
-        long addr2 = tokResp2.getToken();
-        Map<UUID,Long> bpMap2 = tokResp2.getBackpointerMap();
-        TokenResponse tokResp3 = r.getSequencerView().nextToken(Collections.singleton(streamId), 1);
-        long addr3 = tokResp3.getToken();
-        Map<UUID,Long> bpMap3 = tokResp3.getBackpointerMap();
-
-        // Write cp #1 of 3
-        Map<String,String> mdKV = new HashMap<>();
-        mdKV.put("Start time", "Miller time(tm)");
-        mdKV.put("CP record #", "1 (for those keeping score)");
-        final byte emptyBulk[] = new byte[0];
-        CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
-                checkpointAuthor, checkpointId, mdKV, emptyBulk);
-        boolean ok1 = logClient.writeCheckpoint(addr1, Collections.singleton(streamId), null, cp1, bpMap1).get();
-        assertThat(ok1).isTrue();
-
-        // Write cp #2 of 3
-        mdKV.put("More metadata", "Hello, world!");
-        mdKV.put("CP record #", "2");
-        SMREntry smrEntryA = new SMREntry("put", new Object[]{key8, key8Val}, Serializers.JSON);
-        ByteBuf smrEntryABuf = PooledByteBufAllocator.DEFAULT.buffer();
-        smrEntryA.serialize(smrEntryABuf);
-        SMREntry smrEntryB = new SMREntry("put", new Object[]{key7, key7Val}, Serializers.JSON);
-        ByteBuf smrEntryBBuf = PooledByteBufAllocator.DEFAULT.buffer();
-        smrEntryB.serialize(smrEntryBBuf);
-        ByteBuf bulk2 = PooledByteBufAllocator.DEFAULT.buffer();
-        bulk2.writeShort(2); // 2 SMREntry records to follow
-        bulk2.writeInt(smrEntryABuf.readableBytes());
-        bulk2.writeBytes(smrEntryABuf);
-        bulk2.writeInt(smrEntryBBuf.readableBytes());
-        bulk2.writeBytes(smrEntryBBuf);
-        CheckpointEntry cp2 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
-                checkpointAuthor, checkpointId, mdKV, bulk2);
-        boolean ok2 = logClient.writeCheckpoint(addr2, Collections.singleton(streamId), null, cp2, bpMap2).get();
-        assertThat(ok2).isTrue();
-
-        // Write cp #3 of 3
-        mdKV.put("CP record #", "3");
-        CheckpointEntry cp3 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
-                checkpointAuthor, checkpointId, mdKV, emptyBulk);
-        boolean ok3 = logClient.writeCheckpoint(addr3, Collections.singleton(streamId), null, cp3, bpMap3).get();
-        assertThat(ok3).isTrue();
+        writeCheckpointRecords(streamId, checkpointAuthor, checkpointId,
+                new Object[]{new Object[]{key8, key8Val}, new Object[]{key7, key7Val}});
 
         // Write our 3rd 'real' key, then check all 3 keys + the checkpoint keys
         m.put(key3, key3Val);
@@ -157,4 +110,57 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         assertThat(m2.get(key7)).isEqualTo(key7Val);
         assertThat(m2.get(key8)).isEqualTo(key8Val);
     }
+
+    @SuppressWarnings("checkstyle:magicnumber")
+    private void writeCheckpointRecords(UUID streamId, String checkpointAuthor, UUID checkpointId,
+                                        Object[] objects)
+            throws Exception {
+        // Setup: get log positions.
+        LogUnitClient logClient = r.getLayoutView().getLayout()
+                .getLogUnitClient(0, 0);
+        TokenResponse tokResp1 = r.getSequencerView().nextToken(Collections.singleton(streamId), 1);
+        long addr1 = tokResp1.getToken();
+        Map<UUID, Long> bpMap1 = tokResp1.getBackpointerMap();
+        TokenResponse tokResp2 = r.getSequencerView().nextToken(Collections.singleton(streamId), 1);
+        long addr2 = tokResp2.getToken();
+        Map<UUID, Long> bpMap2 = tokResp2.getBackpointerMap();
+        TokenResponse tokResp3 = r.getSequencerView().nextToken(Collections.singleton(streamId), 1);
+        long addr3 = tokResp3.getToken();
+        Map<UUID, Long> bpMap3 = tokResp3.getBackpointerMap();
+
+        // Write cp #1 of 3
+        Map<String, String> mdKV = new HashMap<>();
+        mdKV.put("Start time", "Miller time(tm)");
+        mdKV.put("CP record #", "1 (for those keeping score)");
+        final byte emptyBulk[] = new byte[0];
+        CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
+                checkpointAuthor, checkpointId, mdKV, emptyBulk);
+        boolean ok1 = logClient.writeCheckpoint(addr1, Collections.singleton(streamId), null, cp1, bpMap1).get();
+        assertThat(ok1).isTrue();
+
+        // Write cp #2 of 3
+        mdKV.put("More metadata", "Hello, world!");
+        mdKV.put("CP record #", "2");
+        ByteBuf bulk2 = PooledByteBufAllocator.DEFAULT.buffer();
+        bulk2.writeShort(objects.length); // 2 SMREntry records to follow
+        for (int i = 0; i < objects.length; i++) {
+            SMREntry smrEntryA = new SMREntry("put", (Object[]) objects[i], Serializers.JSON);
+            ByteBuf smrEntryABuf = PooledByteBufAllocator.DEFAULT.buffer();
+            smrEntryA.serialize(smrEntryABuf);
+            bulk2.writeInt(smrEntryABuf.readableBytes());
+            bulk2.writeBytes(smrEntryABuf);
+        }
+        CheckpointEntry cp2 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
+                checkpointAuthor, checkpointId, mdKV, bulk2);
+        boolean ok2 = logClient.writeCheckpoint(addr2, Collections.singleton(streamId), null, cp2, bpMap2).get();
+        assertThat(ok2).isTrue();
+
+        // Write cp #3 of 3
+        mdKV.put("CP record #", "3");
+        CheckpointEntry cp3 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
+                checkpointAuthor, checkpointId, mdKV, emptyBulk);
+        boolean ok3 = logClient.writeCheckpoint(addr3, Collections.singleton(streamId), null, cp3, bpMap3).get();
+        assertThat(ok3).isTrue();
+    }
+
 }

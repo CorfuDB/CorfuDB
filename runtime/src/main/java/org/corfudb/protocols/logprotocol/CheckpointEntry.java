@@ -84,7 +84,6 @@ public class CheckpointEntry extends LogEntry {
         this.checkpointAuthorID = authorID;
         this.dict = dict;
         this.bulk = bulk;
-        dump(bulk);
     }
 
     static final Map<Byte, CheckpointEntryType> typeMap =
