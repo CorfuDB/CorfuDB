@@ -382,13 +382,13 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
                 ILogData e = entries.get(0);
                 if (e.getType() == DataType.CHECKPOINT) {
                     System.err.printf("TODO: Anything for us to do here?\n");
+                    // Get non-checkpoint records, if any exist.
+                    entries = sv.remainingUpTo(maxPos);
+                    log.trace("Object[{}] sync to pos {}, read {} entries",
+                            sv.getID(), maxPos == Long.MAX_VALUE ? "MAX" :
+                                    maxPos, entries.size());
                 }
 
-                // Get non-checkpoint records, if any exist.
-                entries = sv.remainingUpTo(maxPos);
-                log.trace("Object[{}] sync to pos {}, read {} entries",
-                        sv.getID(), maxPos == Long.MAX_VALUE ? "MAX" :
-                                maxPos, entries.size());
             }
             entries.stream()
                     .filter(m -> m.getType() == DataType.DATA)
