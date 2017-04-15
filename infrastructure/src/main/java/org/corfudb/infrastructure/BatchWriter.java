@@ -94,7 +94,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                     currOp = operationsQueue.poll();
 
                     if (currOp == null || processed == BATCH_SIZE || currOp == BatchWriterOperation.SHUTDOWN) {
-                        streamLog.sync();
+                        streamLog.sync(true);
                         log.trace("Sync'd {} writes", processed);
 
                         for (BatchWriterOperation operation : res) {
