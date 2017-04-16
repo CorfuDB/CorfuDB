@@ -660,10 +660,10 @@ public class ManagementViewTest extends AbstractViewTest {
 
         induceSequencerFailureAndWait();
 
-        getTokenWriteAndAssertBackPointer(streamA, null);
-        getTokenWriteAndAssertBackPointer(streamC, null);
+        getTokenWriteAndAssertBackPointer(streamA, Address.NO_BACKPOINTER);
+        getTokenWriteAndAssertBackPointer(streamC, Address.NO_BACKPOINTER);
         getTokenWriteAndAssertBackPointer(streamA, streamA_backpointer);
-        getTokenWriteAndAssertBackPointer(streamB, null);
+        getTokenWriteAndAssertBackPointer(streamB, Address.NO_BACKPOINTER);
         getTokenWriteAndAssertBackPointer(streamB, streamB_backpointer);
     }
 
@@ -682,11 +682,7 @@ public class ManagementViewTest extends AbstractViewTest {
         } else {
             assertThat(tokenResponse.getBackpointerMap()).containsEntry(streamID, expectedBackpointerValue);
         }
-        corfuRuntime.getAddressSpaceView().write(
-                tokenResponse.getToken(),
-                Collections.singleton(streamID),
-                "test".getBytes(),
-                tokenResponse.getBackpointerMap(),
-                tokenResponse.getStreamAddresses());
+        corfuRuntime.getAddressSpaceView().write(tokenResponse,
+                "test".getBytes());
     }
 }

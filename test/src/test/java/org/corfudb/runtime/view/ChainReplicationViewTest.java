@@ -3,6 +3,7 @@ package org.corfudb.runtime.view;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
@@ -27,15 +28,16 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(new Token(0L, 0L), Collections.singleton(streamA),
-                testPayload, Collections.emptyMap(), Collections.emptyMap());
+        r.getAddressSpaceView().write(new TokenResponse(0,
+                        runtime.getLayoutView().getLayout().getEpoch(),
+                        Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
+                testPayload);
 
         assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
 
-        assertThat((Set<UUID>) r.getAddressSpaceView().read(0L).getMetadataMap()
-                .get(IMetadata.LogUnitMetadataType.STREAM))
-                .contains(streamA);
+        assertThat(r.getAddressSpaceView().read(0L).containsStream(streamA))
+                .isTrue();
     }
 
     @Test
@@ -50,9 +52,10 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         scheduleConcurrently(numberThreads, threadNumber -> {
             int base = threadNumber * numberRecords;
             for (int i = base; i < base + numberRecords; i++) {
-                r.getAddressSpaceView().write(new Token((long)i, 0L),
-                        Collections.singleton(CorfuRuntime.getStreamID("a")),
-                        Integer.toString(i).getBytes(), Collections.emptyMap(), Collections.emptyMap());
+                r.getAddressSpaceView().write(new TokenResponse((long)i,
+                                runtime.getLayoutView().getLayout().getEpoch(),
+                                Collections.singletonMap(CorfuRuntime.getStreamID("a"), Address.NO_BACKPOINTER)),
+                        Integer.toString(i).getBytes());
             }
         });
         executeScheduled(numberThreads, PARAMETERS.TIMEOUT_LONG);
@@ -97,15 +100,16 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(new Token(0L, 0L), Collections.singleton(streamA),
-                testPayload, Collections.emptyMap(), Collections.emptyMap());
+        r.getAddressSpaceView().write(new TokenResponse(0,
+                        runtime.getLayoutView().getLayout().getEpoch(),
+                        Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
+                testPayload);
 
         assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
 
-        assertThat((Set<UUID>) r.getAddressSpaceView().read(0L).getMetadataMap()
-                .get(IMetadata.LogUnitMetadataType.STREAM))
-                .contains(streamA);
+        assertThat(r.getAddressSpaceView().read(0L)
+                .containsStream(streamA)).isTrue();
     }
 
     @Test
@@ -136,15 +140,14 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(new Token(0L, 0L), Collections.singleton(streamA),
-                testPayload, Collections.emptyMap(), Collections.emptyMap());
+        r.getAddressSpaceView().write(new TokenResponse(0, 0,
+                        Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
+                testPayload);
 
         assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
 
-        assertThat((Set<UUID>) r.getAddressSpaceView().read(0L).getMetadataMap()
-                .get(IMetadata.LogUnitMetadataType.STREAM))
-                .contains(streamA);
+        assertThat(r.getAddressSpaceView().read(0L).containsStream(streamA));
 
         // Ensure that the data was written to each logunit.
         assertThat(getLogUnit(SERVERS.PORT_0))

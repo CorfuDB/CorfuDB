@@ -11,9 +11,9 @@ import lombok.Data;
  */
 @Data
 @AllArgsConstructor
-public class Token {
+public class Token implements IToken {
 
-    private final Long tokenValue;
-    private final Long epoch;
+    private final long tokenValue;
+    private final long epoch;
 
 }

@@ -51,6 +51,16 @@ public class InMemoryLogData implements ILogData {
         return dataType;
     }
 
+    @Override
+    public void releaseBuffer() {
+
+    }
+
+    @Override
+    public void acquireBuffer() {
+
+    }
+
     /** {@inheritDoc} */
     @Override
     public EnumMap<LogUnitMetadataType, Object> getMetadataMap() {
