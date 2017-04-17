@@ -285,10 +285,11 @@ public class QuorumReplicationViewTest extends  AbstractViewTest {
         assertThat(sv.next().getPayload(getRuntime()))
                 .isEqualTo(testPayload);
 
-        assertThat(r.getAddressSpaceView().read(0).getType()).isEqualTo(DataType.HOLE);
-        assertThat(r.getAddressSpaceView().read(1).getType()).isEqualTo(DataType.DATA);
-        assertThat(r.getAddressSpaceView().read(2).getType()).isEqualTo(DataType.HOLE);
-        assertThat(r.getAddressSpaceView().read(3).getType()).isEqualTo(DataType.EMPTY);
+        int address = 0;
+        assertThat(r.getAddressSpaceView().read(address++).getType()).isEqualTo(DataType.HOLE);
+        assertThat(r.getAddressSpaceView().read(address++).getType()).isEqualTo(DataType.DATA);
+        assertThat(r.getAddressSpaceView().read(address++).getType()).isEqualTo(DataType.HOLE);
+        assertThat(r.getAddressSpaceView().read(address++).getType()).isEqualTo(DataType.EMPTY);
 
 
     }
