@@ -184,6 +184,10 @@ public interface IMetadata {
             this(rank, UUID.randomUUID());
         }
 
+        public DataRank buildHigherRank() {
+            return new DataRank(rank+1, uuid);
+        }
+
         @Override
         public int compareTo(DataRank o) {
             int rankCompared = Long.compare(this.rank, o.rank);
