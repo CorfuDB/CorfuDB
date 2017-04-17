@@ -34,11 +34,16 @@ import java.util.function.Function;
 public class QuorumReplicationView extends AbstractReplicationView {
 
     private static final int QUORUM_READ_ATTEMPTS_WHEN_OUTRANKED = 5;
+    private static final int QUORUM_RECOVERY_READ_EXPONENTIAL_RETRY_BASE = 3;
+    private static final int QUORUM_RECOVERY_READ_EXPONENTIAL_RETRY_BACKOFF_DURATION_SECONDS = 10;
+    private static final int QUORUM_RECOVERY_READ_EXTRA_WAIT_MILLIS = 20;
+    private static final float QUORUM_RECOVERY_READ_WAIT_RANDOM_PART = .5f;
+
     private static final Consumer<ExponentialBackoffRetry> RETRY_SETTINGS = x -> {
-        x.setBase(3);
-        x.setExtraWait(20);
-        x.setBackoffDuration(Duration.ofSeconds(10));
-        x.setRandomPortion(.5f);
+        x.setBase(QUORUM_RECOVERY_READ_EXPONENTIAL_RETRY_BASE);
+        x.setExtraWait(QUORUM_RECOVERY_READ_EXTRA_WAIT_MILLIS);
+        x.setBackoffDuration(Duration.ofSeconds(QUORUM_RECOVERY_READ_EXPONENTIAL_RETRY_BACKOFF_DURATION_SECONDS));
+        x.setRandomPortion(QUORUM_RECOVERY_READ_WAIT_RANDOM_PART);
     };
 
     public QuorumReplicationView(Layout l, Layout.LayoutSegment ls) {
