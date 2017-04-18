@@ -24,6 +24,7 @@ import java.util.function.Function;
  * Created by mwei on 12/11/15.
  */
 @Slf4j
+@Deprecated
 public abstract class AbstractReplicationView {
 
     @Getter
