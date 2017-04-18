@@ -113,13 +113,6 @@ public class StreamedLogData implements ILogData, ICorfuPayload<StreamedLogData>
         metadataMap = ICorfuPayload.enumMapFromBuffer(buf, LogUnitMetadataType.class, Object.class);
     }
 
-    /** Get the serialization handle. */
-    public SerializationHandle getSerializedForm() {
-        serializedForm = Unpooled.buffer();
-        serializedDataToBuffer(serializedForm);
-        return new SerializationHandle(this);
-    }
-
     /** Serialize the data to the given buffer. */
     private void serializedDataToBuffer(ByteBuf buf) {
         ICorfuPayload.serialize(buf, DataType.DATA);
@@ -137,6 +130,16 @@ public class StreamedLogData implements ILogData, ICorfuPayload<StreamedLogData>
     @Override
     public DataType getType() {
         return DataType.DATA;
+    }
+
+    @Override
+    public void releaseBuffer() {
+
+    }
+
+    @Override
+    public void acquireBuffer() {
+
     }
 
 }

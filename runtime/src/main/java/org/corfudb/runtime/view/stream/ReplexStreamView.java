@@ -128,11 +128,7 @@ public class ReplexStreamView extends
             // to the client.
             try {
                 runtime.getAddressSpaceView()
-                        .write(tokenResponse.getToken(),
-                                Collections.singleton(ID),
-                                object,
-                                tokenResponse.getBackpointerMap(),
-                                tokenResponse.getStreamAddresses());
+                        .write(tokenResponse, object);
                 // The write completed successfully, so we return this
                 // address to the client.
                 return tokenResponse.getToken().getTokenValue();

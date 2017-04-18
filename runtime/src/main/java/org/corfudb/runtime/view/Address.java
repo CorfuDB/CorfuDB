@@ -29,4 +29,9 @@ public class Address {
      * optimistic.
      */
     public static final long OPTIMISTIC = -4L;
+
+    /** Constant to indicate that no backpointer is available for
+     * the given stream (due to reset).
+     */
+    public static final long NO_BACKPOINTER = -5L;
 }

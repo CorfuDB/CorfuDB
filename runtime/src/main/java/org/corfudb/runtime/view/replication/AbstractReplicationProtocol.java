@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.replication;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
+import org.corfudb.runtime.view.Layout;
 
 import javax.annotation.Nonnull;
 
@@ -35,14 +36,15 @@ public abstract class AbstractReplicationProtocol implements IReplicationProtoco
      **/
     @Nonnull
     @Override
-    public ILogData read(long globalAddress) {
+    public ILogData read(Layout layout, long globalAddress) {
         try {
             return holeFillPolicy
-                .peekUntilHoleFillRequired(globalAddress, this::peek);
+                .peekUntilHoleFillRequired(globalAddress,
+                        a -> peek(layout, a));
         } catch (HoleFillRequiredException e) {
             log.debug("HoleFill[{}] due to {}", e.getMessage());
-            holeFill(globalAddress);
-            return peek(globalAddress);
+            holeFill(layout, globalAddress);
+            return peek(layout, globalAddress);
         }
     }
 
@@ -56,5 +58,5 @@ public abstract class AbstractReplicationProtocol implements IReplicationProtoco
      *
      * @param globalAddress  The address to hole fill.
      */
-    abstract protected void holeFill(long globalAddress);
+    abstract protected void holeFill(Layout layout, long globalAddress);
 }
