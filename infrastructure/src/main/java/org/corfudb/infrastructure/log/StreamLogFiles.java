@@ -501,7 +501,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 throw new DataCorruptionException();
             }
         } finally {
-            fc.close();
+            if (fc != null) {
+                fc.close();
+            }
         }
     }
 
