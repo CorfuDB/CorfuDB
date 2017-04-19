@@ -485,21 +485,27 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      */
     private LogData  readRecord(SegmentHandle sh, long address)
             throws IOException {
-
-        FileChannel fc = getChannel(sh.fileName, true);
-        AddressMetaData metaData = sh.getKnownAddresses().get(address);
-        if (metaData == null) {
-            return null;
-        }
-
-        fc.position(metaData.offset);
-
+        FileChannel fc = null;
         try {
-            ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
-            fc.read(entryBuf);
-            return getLogData(LogEntry.parseFrom(entryBuf.array()));
-        } catch (InvalidProtocolBufferException e) {
-            throw new DataCorruptionException();
+            fc = getChannel(sh.fileName, true);
+            AddressMetaData metaData = sh.getKnownAddresses().get(address);
+            if (metaData == null) {
+                return null;
+            }
+
+            fc.position(metaData.offset);
+
+            try {
+                ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
+                fc.read(entryBuf);
+                return getLogData(LogEntry.parseFrom(entryBuf.array()));
+            } catch (InvalidProtocolBufferException e) {
+                throw new DataCorruptionException();
+            }
+        } finally {
+            if (fc != null) {
+                fc.close();
+            }
         }
     }
 

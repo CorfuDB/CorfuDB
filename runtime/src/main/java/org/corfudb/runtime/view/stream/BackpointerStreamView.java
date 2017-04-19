@@ -1,5 +1,7 @@
 package org.corfudb.runtime.view.stream;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -8,6 +10,8 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.serializer.CorfuSerializer;
+import org.corfudb.util.serializer.Serializers;
 
 import javax.annotation.Nonnull;
 import java.util.*;
@@ -69,11 +73,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // to the client.
             try {
                 runtime.getAddressSpaceView()
-                        .write(tokenResponse.getToken(),
-                                Collections.singleton(ID),
-                                object,
-                                tokenResponse.getBackpointerMap(),
-                                tokenResponse.getStreamAddresses());
+                        .write(tokenResponse, object);
                 // The write completed successfully, so we return this
                 // address to the client.
                 return tokenResponse.getToken().getTokenValue();
@@ -220,61 +220,6 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // Read the entry in question.
             ILogData currentEntry =
                     runtime.getAddressSpaceView().read(currentRead);
-
-            // If the current entry is unwritten, we need to fill it,
-            // otherwise we cannot resolve the stream.
-            if (currentEntry.getType() == DataType.EMPTY) {
-
-                // We'll retry the read a few times, we should only need
-                // to fill if a client has actually failed, which should
-                // be a relatively rare event.
-
-                for (int i = 0; i < runtime.getParameters().getHoleFillRetry(); i++) {
-                    currentEntry =
-                            runtime.getAddressSpaceView().read(currentRead);
-                    if (currentEntry.getType() != DataType.EMPTY) {
-                        break;
-                    }
-                    // Wait 1 << i ms (exp. backoff) before retrying again.
-                    try {
-                        Thread.sleep(1 << i);
-                    } catch (InterruptedException ie) {
-                        throw new RuntimeException(ie);
-                    }
-                }
-
-                // If hole filling is disabled, we will retry forever.
-                if (runtime.isHoleFillingDisabled()) {
-                    int i = 0; // For exponential backoff.
-                    while (currentEntry.getType() == DataType.EMPTY) {
-                        currentEntry =
-                                runtime.getAddressSpaceView().read(currentRead);
-                        try {
-                            Thread.sleep(1 << i);
-                            i++;
-                        } catch (InterruptedException ie) {
-                            throw new RuntimeException(ie);
-                        }
-                    }
-                }
-                //FIXME To be replaced by cleaner interface. This is just a patch till the real fix comes in.
-                // If we STILL don't have the data, it means the writer is either dead or too slow.
-                // We will now try to make sure we have committed data for the currentEntry. We will first
-                // try a HOLE FILL, failing which we will re-read the entry to see if the writer completed.
-                // We will try this in a loop till we get committed data for the currentEntry.
-                while (currentEntry.getType() == DataType.EMPTY) {
-                    try {
-                        runtime.getAddressSpaceView().fillHole(currentRead);
-                        // If we reached here, our hole fill was successful.
-                        currentEntry = LogData.HOLE;
-                    } catch (OverwriteException oe) {
-                        // If we reached here, this means the remote client
-                        // must have successfully completed the write and
-                        // we can continue.
-                        currentEntry = runtime.getAddressSpaceView().read(currentRead);
-                    }
-                }
-            }
 
             // If the entry contains this context's stream,
             // we add it to the read queue.

@@ -8,6 +8,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.replication.*;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.view.stream.ReplexStreamView;
@@ -352,6 +353,16 @@ public class Layout implements Cloneable {
             public IStreamView  getStreamView(CorfuRuntime r, UUID streamId) {
                 return new BackpointerStreamView(r, streamId);
             }
+
+            @Override
+            public IReplicationProtocol getReplicationProtocol(CorfuRuntime r) {
+                if (r.isHoleFillingDisabled()) {
+                    return new ChainReplicationProtocol(new NeverHoleFillPolicy(100));
+                } else {
+                    return new ChainReplicationProtocol(new ReadWaitHoleFillPolicy(100,
+                            r.getParameters().getHoleFillRetry()));
+                }
+            }
         },
         QUORUM_REPLICATION {
             @Override
@@ -419,6 +430,10 @@ public class Layout implements Cloneable {
         public abstract AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls);
 
         public abstract IStreamView getStreamView(CorfuRuntime r, UUID streamId);
+
+        public IReplicationProtocol getReplicationProtocol(CorfuRuntime r) {
+            throw new UnsupportedOperationException();
+        }
     }
 
 

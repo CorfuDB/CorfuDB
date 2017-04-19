@@ -4,7 +4,9 @@ import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -12,8 +14,14 @@ import java.util.UUID;
  */
 @Data
 @AllArgsConstructor
-public class TokenResponse implements ICorfuPayload<TokenResponse> {
+public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
 
+    public TokenResponse(long tokenValue, long epoch, Map<UUID, Long> backpointerMap) {
+        respType = TokenType.NORMAL;
+        token = new Token(tokenValue, epoch);
+        this.backpointerMap = backpointerMap;
+        streamAddresses = Collections.emptyMap();
+    }
     /** the cause/type of response */
     final TokenType respType;
 
@@ -44,4 +52,15 @@ public class TokenResponse implements ICorfuPayload<TokenResponse> {
         ICorfuPayload.serialize(buf, backpointerMap);
         ICorfuPayload.serialize(buf, streamAddresses);
     }
+
+    @Override
+    public long getTokenValue() {
+        return token.getTokenValue();
+    }
+
+    @Override
+    public long getEpoch() {
+        return token.getEpoch();
+    }
+
 }
