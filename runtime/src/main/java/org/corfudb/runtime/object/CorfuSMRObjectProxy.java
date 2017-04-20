@@ -381,7 +381,7 @@ public class CorfuSMRObjectProxy<P> extends CorfuObjectProxy<P> {
             if (! entries.isEmpty()) {
                 ILogData e = entries.get(0);
                 if (e.getType() == DataType.CHECKPOINT) {
-                    System.err.printf("TODO: Anything for us to do here?\n");
+                    // TODO System.err.printf("TODO: Anything for us to do here?\n");
                     // Get non-checkpoint records, if any exist.
                     entries = sv.remainingUpTo(maxPos);
                     log.trace("Object[{}] sync to pos {}, read {} entries",

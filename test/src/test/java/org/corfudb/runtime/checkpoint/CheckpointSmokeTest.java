@@ -79,11 +79,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         final String checkpointAuthor = "Hey, it's me!";
 
         // Put keys 1 & 2 into m
-        Map<String, Integer> m = r.getObjectsView()
-                .build()
-                .setStreamName(streamName)
-                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
-                .open();
+        Map<String, Integer> m = instantiateMap(streamName);
         m.put(key1, key1Val);
         m.put(key2, key2Val);
 
@@ -101,17 +97,38 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Make a new runtime & map, then look for expected bad behavior
         setRuntime();
-        Map<String, Integer> m2 = r.getObjectsView()
-                .build()
-                .setStreamName(streamName)
-                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
-                .open();
+        Map<String, Integer> m2 = instantiateMap(streamName);
         assertThat(m2.get(key1)).isNull();
         assertThat(m2.get(key2)).isNull();
         assertThat(m2.get(key3)).isEqualTo(key3Val);
         assertThat(m2.get(key7)).isEqualTo(key7Val);
         assertThat(m2.get(key8)).isEqualTo(key8Val);
     }
+
+    /** Second smoke test, steps:
+     *
+     * 1. Put a few keys into an SMRMap "m" with prefix keyPrefixFirst.
+     * 2. Write a checkpoint (3 records totoal) into "m"'s stream.
+     *    The SMREntry records in the checkpoint will *not* match
+     *    the keys written by step #1.
+     *    In between the 3 CP records, write some additional keys to "m"
+     *    with prefixes keyPrefixMiddle1 & keyPrefixMiddle2.
+     *    As with the first smoke test, the checkpoint contains fake
+     *    keys & values (key7 and key8).
+     * 3. Put a few keys into an SMRMap "m" with prefix keyPrefixLast
+     * 4. Write an incomplete checkpoint (START and CONTINUATION but
+     *    no END).
+     *
+     * When a new map is instantiated, the keyPrefixFirst keys should
+     * _not_ visible, the fake checkpoint keys should be visible, and
+     * all middle* and last keys should be visible.
+     *
+     * Again, this is not correct map behavior, same as the first
+     * smoke test.  We don't have code yet to generate "real"
+     * checkpoint data; still PoC stage.
+     *
+     * @throws Exception
+     */
 
     @Test
     @SuppressWarnings("checkstyle:magicnumber")
@@ -140,12 +157,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             assertThat(map.get(key8)).isEqualTo(key8Val);
         };
 
-        // Put keys 1 & 2 into m
-        Map<String, Integer> m = r.getObjectsView()
-                .build()
-                .setStreamName(streamName)
-                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
-                .open();
+        Map<String, Integer> m = instantiateMap(streamName);
         for (int i = 0; i < numKeys; i++) {
             m.put(keyPrefixFirst + Integer.toString(i), i);
         }
@@ -159,16 +171,12 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         }
 
         setRuntime();
-        Map<String, Integer> m2 = r.getObjectsView()
-                .build()
-                .setStreamName(streamName)
-                .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
-                .open();
+        Map<String, Integer> m2 = instantiateMap(streamName);
         testAssertions.accept(m2);
 
         // Write incomplete checkpoint (no END record) with key7 and key8 values
-        // different than testAssertions() expects. The new m3 map should have
-        // same values as m2 map.
+        // different than testAssertions() expects.  The incomplete CP should
+        // be ignored, and the new m3 map should have same values as m2 map.
         final UUID checkpointId2 = UUID.randomUUID();
         final String checkpointAuthor2 = "Incomplete 2";
         writeCheckpointRecords(streamId, checkpointAuthor2, checkpointId2,
@@ -176,13 +184,16 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 () -> {}, () -> {}, true, true, false);
 
         setRuntime();
-        Map<String, Integer> m3 = r.getObjectsView()
+        Map<String, Integer> m3 = instantiateMap(streamName);
+        testAssertions.accept(m3);
+    }
+
+    private Map<String,Integer> instantiateMap(String streamName) {
+        return r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<SMRMap<String, Integer>>() {})
                 .open();
-        testAssertions.accept(m3);
-
     }
 
     private void writeCheckpointRecords(UUID streamId, String checkpointAuthor, UUID checkpointId,
@@ -216,7 +227,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             assertThat(ok1).isTrue();
         }
 
-        // Interlude 1
+        // Interleaving opportunity #1
         l1.run();
 
         // Write cp #2 of 3
@@ -241,7 +252,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             assertThat(ok2).isTrue();
         }
 
-        // Interlude 2
+        // Interleaving opportunity #2
         l2.run();
 
         // Write cp #3 of 3

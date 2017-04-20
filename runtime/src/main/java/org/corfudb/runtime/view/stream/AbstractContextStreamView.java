@@ -277,9 +277,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      * @param data  The entry to use to update the pointer.
      */
     protected void updatePointer(final ILogData data) {
-        if(data.getType()==DataType.CHECKPOINT){System.err.printf("I see CHECKPOINT A\n");}
         // Update the global pointer, if it is data.
-
         if (data.getType() == DataType.DATA) {
             getCurrentContext().globalPointer =
                     data.getGlobalAddress();

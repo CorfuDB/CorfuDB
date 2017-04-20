@@ -35,7 +35,7 @@ public class LogEntry implements ICorfuSerializable {
     @Setter
     protected CorfuRuntime runtime;
     /**
-     * The cpType of log entry
+     * The type of log entry
      */
     @Getter
     LogEntryType type;
@@ -50,15 +50,15 @@ public class LogEntry implements ICorfuSerializable {
     /**
      * Constructor for generating LogEntries.
      *
-     * @param type The cpType of log entry to instantiate.
+     * @param type The type of log entry to instantiate.
      */
     public LogEntry(LogEntryType type) {
         this.type = type;
     }
 
     /**
-     * The base LogEntry format is very simple. The first byte represents the cpType
-     * of entry, and the rest of the format is dependent on the the entry cpType.
+     * The base LogEntry format is very simple. The first byte represents the type
+     * of entry, and the rest of the format is dependent on the the entry type.
      *
      * @param b The buffer to deserialize.
      * @return A LogEntry.
