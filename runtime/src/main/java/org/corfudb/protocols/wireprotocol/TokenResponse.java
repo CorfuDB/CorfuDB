@@ -4,7 +4,9 @@ import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -12,10 +14,20 @@ import java.util.UUID;
  */
 @Data
 @AllArgsConstructor
-public class TokenResponse implements ICorfuPayload<TokenResponse> {
+public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
 
-    /** The current token. */
-    final Long token;
+    public TokenResponse(long tokenValue, long epoch, Map<UUID, Long> backpointerMap) {
+        respType = TokenType.NORMAL;
+        token = new Token(tokenValue, epoch);
+        this.backpointerMap = backpointerMap;
+        streamAddresses = Collections.emptyMap();
+    }
+    /** the cause/type of response */
+    final TokenType respType;
+
+    /** The current token,
+     * or overload with "cause address" in case token request is denied. */
+    final Token token;
 
     /** The backpointer map, if available. */
     final Map<UUID, Long> backpointerMap;
@@ -24,15 +36,31 @@ public class TokenResponse implements ICorfuPayload<TokenResponse> {
     final Map<UUID, Long> streamAddresses;
 
     public TokenResponse(ByteBuf buf) {
-        token = ICorfuPayload.fromBuffer(buf, Long.class);
+        respType = TokenType.values()[ICorfuPayload.fromBuffer(buf, Byte.class)];
+        Long tokenValue = ICorfuPayload.fromBuffer(buf, Long.class);
+        Long epoch = ICorfuPayload.fromBuffer(buf, Long.class);
+        token = new Token(tokenValue, epoch);
         backpointerMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
         streamAddresses = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, token);
+        ICorfuPayload.serialize(buf, respType);
+        ICorfuPayload.serialize(buf, token.getTokenValue());
+        ICorfuPayload.serialize(buf, token.getEpoch());
         ICorfuPayload.serialize(buf, backpointerMap);
         ICorfuPayload.serialize(buf, streamAddresses);
     }
+
+    @Override
+    public long getTokenValue() {
+        return token.getTokenValue();
+    }
+
+    @Override
+    public long getEpoch() {
+        return token.getEpoch();
+    }
+
 }

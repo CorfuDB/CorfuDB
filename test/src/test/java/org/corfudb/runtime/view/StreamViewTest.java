@@ -295,10 +295,10 @@ public class StreamViewTest extends AbstractViewTest {
         //generate a stream hole
         TokenResponse tr =
                 r.getSequencerView().nextToken(Collections.singleton(streamA), 1);
-        r.getAddressSpaceView().fillHole(tr.getToken());
+        r.getAddressSpaceView().fillHole(tr.getToken().getTokenValue());
 
         tr = r.getSequencerView().nextToken(Collections.singleton(streamA), 1);
-        r.getAddressSpaceView().fillHole(tr.getToken());
+        r.getAddressSpaceView().fillHole(tr.getToken().getTokenValue());
 
         sv.append(testPayload2);
 

@@ -7,6 +7,7 @@ import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 import com.codahale.metrics.MetricRegistry;
@@ -26,25 +27,13 @@ import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogFiles;
-import org.corfudb.protocols.wireprotocol.CommitRequest;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.DataType;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.ReadRequest;
-import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.TrimRequest;
-import org.corfudb.protocols.wireprotocol.WriteMode;
-import org.corfudb.protocols.wireprotocol.WriteRequest;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
-import org.corfudb.util.retry.IntervalAndSentinelRetry;
 
 
 /**
@@ -81,8 +70,13 @@ public class LogUnitServer extends AbstractServer {
      * TODO: entire GC handling needs updating, currently not being activated
      */
     private final Thread gcThread = null;
-    private IntervalAndSentinelRetry gcRetry;
+    private Long gcRetryInterval;
     private AtomicBoolean running = new AtomicBoolean(true);
+
+    /**
+     * Maintain the max globalAddress we have written.
+     */
+    private AtomicLong maxAddressGlobalTail = new AtomicLong(0L);
 
     /**
      * The options map.
@@ -100,12 +94,12 @@ public class LogUnitServer extends AbstractServer {
      * This cache services requests for data at various addresses. In a memory implementation,
      * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
      */
-    private final LoadingCache<LogAddress, LogData> dataCache;
+    private final LoadingCache<LogAddress, ILogData> dataCache;
     private final long maxCacheSize;
 
     private final StreamLog streamLog;
 
-    private final BatchWriter<LogAddress, LogData> batchWriter;
+    private final BatchWriter<LogAddress, ILogData> batchWriter;
 
     private static final String metricsPrefix = "corfu.server.logunit.";
 
@@ -131,8 +125,8 @@ public class LogUnitServer extends AbstractServer {
 
         batchWriter = new BatchWriter(streamLog);
 
-        dataCache = Caffeine.<LogAddress, LogData>newBuilder()
-                .<LogAddress, LogData>weigher((k, v) -> v.getData() == null ? 1 : v.getData().length)
+        dataCache = Caffeine.<LogAddress, ILogData>newBuilder()
+                .<LogAddress, ILogData>weigher((k, v) -> ((LogData)v).getData() == null ? 1 : ((LogData)v).getData().length)
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
                 .writer(batchWriter)
@@ -141,6 +135,15 @@ public class LogUnitServer extends AbstractServer {
 
         MetricRegistry metrics = serverContext.getMetrics();
         MetricsUtils.addCacheGauges(metrics, metricsPrefix + "cache.", dataCache);
+    }
+
+    /**
+     * Service an incoming request for maximum global address the log unit server has written.
+     * This value is not persisted and only maintained in memory.
+     */
+    @ServerHandler(type = CorfuMsgType.TAIL_REQUEST, opTimer = metricsPrefix + "tailReq")
+    public void handleTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+        r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(maxAddressGlobalTail.get()));
     }
 
     /**
@@ -158,7 +161,6 @@ public class LogUnitServer extends AbstractServer {
             if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
                 dataCache.put(new LogAddress(msg.getPayload().getGlobalAddress(), null), msg.getPayload().getData());
                 r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-                return;
             } else {
                 for (UUID streamID : msg.getPayload().getStreamAddresses().keySet()) {
                     dataCache.put(new LogAddress(msg.getPayload().getStreamAddresses().get(streamID), streamID),
@@ -166,6 +168,8 @@ public class LogUnitServer extends AbstractServer {
                 }
                 r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
             }
+            long globalTail = msg.getPayload().getGlobalAddress();
+            maxAddressGlobalTail.getAndUpdate(maxTail -> globalTail > maxTail ? globalTail : maxTail);
         } catch (OverwriteException ex) {
             if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
                 r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
@@ -188,7 +192,7 @@ public class LogUnitServer extends AbstractServer {
         Map<UUID, Long> streamAddresses = msg.getPayload().getStreams();
         if (streamAddresses == null) {
             // Then this is a commit bit for the global log.
-            LogData entry = dataCache.get(new LogAddress(msg.getPayload().getAddress(), null));
+            ILogData entry = dataCache.get(new LogAddress(msg.getPayload().getAddress(), null));
             if (entry == null) {
                 r.sendResponse(ctx, msg, CorfuMsgType.ERROR_NOENTRY.msg());
                 return;
@@ -197,7 +201,7 @@ public class LogUnitServer extends AbstractServer {
             }
         } else {
             for (UUID streamID : msg.getPayload().getStreams().keySet()) {
-                LogData entry = dataCache.get(new LogAddress(streamAddresses.get(streamID), streamID));
+                ILogData entry = dataCache.get(new LogAddress(streamAddresses.get(streamID), streamID));
                 if (entry == null) {
                     r.sendResponse(ctx, msg, CorfuMsgType.ERROR_NOENTRY.msg());
                     // TODO: Crap, we have to go back and undo all the commit bits??
@@ -221,13 +225,13 @@ public class LogUnitServer extends AbstractServer {
             for (Long l = msg.getPayload().getRange().lowerEndpoint();
                  l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
                 LogAddress logAddress = new LogAddress(l, msg.getPayload().getStreamID());
-                LogData e = dataCache.get(logAddress);
+                ILogData e = dataCache.get(logAddress);
                 if (e == null) {
                     rr.put(l, LogData.EMPTY);
                 } else if (e.getType() == DataType.HOLE) {
                     rr.put(l, LogData.HOLE);
                 } else {
-                    rr.put(l, e);
+                    rr.put(l, (LogData)e);
                 }
             }
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
@@ -239,7 +243,7 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.GC_INTERVAL, opTimer = metricsPrefix + "gc-interval")
     private void setGcInterval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r,
                                boolean isMetricsEnabled) {
-        gcRetry.setRetryInterval(msg.getPayload());
+        gcRetryInterval = msg.getPayload();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
@@ -284,16 +288,16 @@ public class LogUnitServer extends AbstractServer {
      * the read() and append(). Any address that cannot be retrieved should be returned as
      * unwritten (null).
      */
-    public synchronized LogData handleRetrieval(LogAddress logAddress) {
+    public synchronized ILogData handleRetrieval(LogAddress logAddress) {
         LogData entry = streamLog.read(logAddress);
         log.trace("Retrieved[{} : {}]", logAddress, entry);
         return entry;
     }
 
 
-    public synchronized void handleEviction(LogAddress logAddress, LogData entry, RemovalCause cause) {
+    public synchronized void handleEviction(LogAddress logAddress, ILogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", logAddress, cause);
-        streamLog.release(logAddress, entry);
+        streamLog.release(logAddress, (LogData) entry);
     }
 
     /**
@@ -306,7 +310,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @VisibleForTesting
-    LoadingCache<LogAddress, LogData> getDataCache() {
+    LoadingCache<LogAddress, ILogData> getDataCache() {
         return dataCache;
     }
 }

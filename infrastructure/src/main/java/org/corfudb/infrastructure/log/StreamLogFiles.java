@@ -155,9 +155,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public void sync() throws IOException {
-        for (FileChannel ch : channelsToSync) {
-            ch.force(true);
+    public void sync(boolean force) throws IOException {
+        if(force) {
+            for (FileChannel ch : channelsToSync) {
+                ch.force(true);
+            }
         }
         log.debug("Sync'd {} channels", channelsToSync.size());
         channelsToSync.clear();
@@ -483,21 +485,27 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      */
     private LogData  readRecord(SegmentHandle sh, long address)
             throws IOException {
-
-        FileChannel fc = getChannel(sh.fileName, true);
-        AddressMetaData metaData = sh.getKnownAddresses().get(address);
-        if (metaData == null) {
-            return null;
-        }
-
-        fc.position(metaData.offset);
-
+        FileChannel fc = null;
         try {
-            ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
-            fc.read(entryBuf);
-            return getLogData(LogEntry.parseFrom(entryBuf.array()));
-        } catch (InvalidProtocolBufferException e) {
-            throw new DataCorruptionException();
+            fc = getChannel(sh.fileName, true);
+            AddressMetaData metaData = sh.getKnownAddresses().get(address);
+            if (metaData == null) {
+                return null;
+            }
+
+            fc.position(metaData.offset);
+
+            try {
+                ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
+                fc.read(entryBuf);
+                return getLogData(LogEntry.parseFrom(entryBuf.array()));
+            } catch (InvalidProtocolBufferException e) {
+                throw new DataCorruptionException();
+            }
+        } finally {
+            if (fc != null) {
+                fc.close();
+            }
         }
     }
 
@@ -697,7 +705,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 new UUID(rank.getUuidMostSignificant(), rank.getUuidLeastSignificant()));
     }
 
-    static int getChecksum(byte[] bytes) {
+    public static int getChecksum(byte[] bytes) {
         Hasher hasher = Hashing.crc32c().newHasher();
         for (byte a : bytes) {
             hasher.putByte(a);

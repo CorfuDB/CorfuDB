@@ -17,7 +17,7 @@ public class WriteRequest implements ICorfuPayload<WriteRequest>, IMetadata {
     @Getter
     final Map<UUID, Long> streamAddresses;
     @Getter
-    final LogData data;
+    final ILogData data;
 
     @SuppressWarnings("unchecked")
     public WriteRequest(ByteBuf buf) {
@@ -38,6 +38,11 @@ public class WriteRequest implements ICorfuPayload<WriteRequest>, IMetadata {
         this.data = new LogData(dataType, buf);
     }
 
+    public WriteRequest(ILogData data) {
+        writeMode = WriteMode.NORMAL;
+        this.data = data;
+        streamAddresses = null;
+    }
 
     @Override
     public void doSerialize(ByteBuf buf) {

@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.Setter;
+import org.corfudb.util.Utils;
 
 import java.util.*;
 
@@ -101,5 +102,12 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
             ICorfuPayload.serialize(buf, x.getValue());
         });
     }
+
+    @Override
+    public String toString() {
+        return "TXINFO[" + Utils.toReadableID(TXid) + "](ts="
+                + snapshotTimestamp + ")";
+    }
+
 }
 

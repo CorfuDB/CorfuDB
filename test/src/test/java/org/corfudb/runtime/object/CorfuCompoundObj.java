@@ -23,7 +23,7 @@ public class CorfuCompoundObj {
     Inner user;
     int ID;
 
-    @Mutator
+    @Mutator(name = "set")
     public void set(Inner in, int id) {
         this.user = in;
         this.ID = id;

@@ -137,7 +137,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // Linearize this read against a timestamp
         final long timestamp =
                 rt.getSequencerView()
-                .nextToken(Collections.singleton(streamID), 0).getToken();
+                .nextToken(Collections.singleton(streamID), 0).getToken().getTokenValue();
         log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
         // Perform underlying access
@@ -197,7 +197,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // Linearize this read against a timestamp
         final long timestamp =
                 rt.getSequencerView()
-                        .nextToken(Collections.singleton(streamID), 0).getToken();
+                        .nextToken(Collections.singleton(streamID), 0).getToken().getTokenValue();
 
         log.debug("Sync[{}] {}", this, timestamp);
 

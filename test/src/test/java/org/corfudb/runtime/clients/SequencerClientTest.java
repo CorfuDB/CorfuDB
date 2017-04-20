@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.junit.Test;
 
 import java.util.Collections;
@@ -42,17 +43,17 @@ public class SequencerClientTest extends AbstractClientTest {
     @Test
     public void tokensAreIncrementing()
             throws Exception {
-        long token = client.nextToken(Collections.<UUID>emptySet(), 1).get().getToken();
-        long token2 = client.nextToken(Collections.<UUID>emptySet(), 1).get().getToken();
-        assertThat(token2)
-                .isGreaterThan(token);
+        Token token = client.nextToken(Collections.<UUID>emptySet(), 1).get().getToken();
+        Token token2 = client.nextToken(Collections.<UUID>emptySet(), 1).get().getToken();
+        assertThat(token2.getTokenValue())
+                .isGreaterThan(token.getTokenValue());
     }
 
     @Test
     public void checkTokenPositionWorks()
             throws Exception {
-        long token = client.nextToken(Collections.<UUID>emptySet(), 1).get().getToken();
-        long token2 = client.nextToken(Collections.<UUID>emptySet(), 0).get().getToken();
+        Token token = client.nextToken(Collections.<UUID>emptySet(), 1).get().getToken();
+        Token token2 = client.nextToken(Collections.<UUID>emptySet(), 0).get().getToken();
         assertThat(token)
                 .isEqualTo(token2);
     }
@@ -63,18 +64,18 @@ public class SequencerClientTest extends AbstractClientTest {
         UUID streamA = UUID.nameUUIDFromBytes("streamA".getBytes());
         UUID streamB = UUID.nameUUIDFromBytes("streamB".getBytes());
         client.nextToken(Collections.singleton(streamA), 1).get();
-        long tokenA = client.nextToken(Collections.singleton(streamA), 1).get().getToken();
-        long tokenA2 = client.nextToken(Collections.singleton(streamA), 0).get().getToken();
+        Token tokenA = client.nextToken(Collections.singleton(streamA), 1).get().getToken();
+        Token tokenA2 = client.nextToken(Collections.singleton(streamA), 0).get().getToken();
         assertThat(tokenA)
                 .isEqualTo(tokenA2);
-        long tokenB = client.nextToken(Collections.singleton(streamB), 0).get().getToken();
+        Token tokenB = client.nextToken(Collections.singleton(streamB), 0).get().getToken();
         assertThat(tokenB)
                 .isNotEqualTo(tokenA2);
-        long tokenB2 = client.nextToken(Collections.singleton(streamB), 1).get().getToken();
-        long tokenB3 = client.nextToken(Collections.singleton(streamB), 0).get().getToken();
+        Token tokenB2 = client.nextToken(Collections.singleton(streamB), 1).get().getToken();
+        Token tokenB3 = client.nextToken(Collections.singleton(streamB), 0).get().getToken();
         assertThat(tokenB2)
                 .isEqualTo(tokenB3);
-        long tokenA3 = client.nextToken(Collections.singleton(streamA), 0).get().getToken();
+        Token tokenA3 = client.nextToken(Collections.singleton(streamA), 0).get().getToken();
         assertThat(tokenA3)
                 .isEqualTo(tokenA2);
     }

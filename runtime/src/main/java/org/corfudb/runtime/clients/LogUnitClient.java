@@ -186,6 +186,18 @@ public class LogUnitClient implements IClient {
     }
 
     /**
+     * Handle a TAIL_RESPONSE message
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     */
+    @ClientHandler(type=CorfuMsgType.TAIL_RESPONSE)
+    private static Object handleTailResponse(CorfuPayloadMsg<Long> msg,
+                                             ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    /**
      * Asynchronously write to the logging unit.
      *
      * @param address        The address to write to.
@@ -234,7 +246,15 @@ public class LogUnitClient implements IClient {
     }
 
 
-
+    /**
+     * Asynchronously write to the logging unit.
+     * @param payload   The log data to write to the logging unit.
+     * @return          A CompletableFuture which will complete with the WriteResult once the
+     *                  write completes.
+     */
+    public CompletableFuture<Boolean> write(ILogData payload) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(new WriteRequest(payload)));
+    }
 
     /**
      * Asynchronously write to the logging unit.
@@ -306,6 +326,15 @@ public class LogUnitClient implements IClient {
         CompletableFuture<ReadResponse> cf = router.sendMessageAndGetCompletable(
                 CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(offsetRange, stream)));
         return cf.thenApply(x -> { context.stop(); return x; });
+    }
+
+    /**
+     * Get the global tail maximum address the log unit has written.
+     * @return A CompletableFuture which will complete with the globalTail once
+     * received.
+     */
+    public CompletableFuture<Long> getTail() {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.TAIL_REQUEST.msg());
     }
 
     /**

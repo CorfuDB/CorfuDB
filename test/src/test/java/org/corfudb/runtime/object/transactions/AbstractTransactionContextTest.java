@@ -93,9 +93,10 @@ public abstract class AbstractTransactionContextTest extends AbstractObjectTest 
         ILogData ld =
                 getRuntime()
                         .getAddressSpaceView()
-                        .read(0);
-        assertThat(ld.getType())
-                .isEqualTo(DataType.EMPTY);
+                        .peek(0);
+        assertThat(ld)
+                .isNull();
+
         assertThat(result)
                 .isEqualTo(AbstractTransactionalContext.NOWRITE_ADDRESS);
     }
