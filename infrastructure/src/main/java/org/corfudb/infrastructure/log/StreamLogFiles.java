@@ -155,9 +155,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public void sync() throws IOException {
-        for (FileChannel ch : channelsToSync) {
-            ch.force(true);
+    public void sync(boolean force) throws IOException {
+        if(force) {
+            for (FileChannel ch : channelsToSync) {
+                ch.force(true);
+            }
         }
         log.debug("Sync'd {} channels", channelsToSync.size());
         channelsToSync.clear();

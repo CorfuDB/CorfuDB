@@ -196,7 +196,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         assertThat(log.getChannelsToSync().size()).isEqualTo(3);
 
-        log.sync();
+        log.sync(true);
 
         assertThat(log.getChannelsToSync().size()).isEqualTo(0);
     }
