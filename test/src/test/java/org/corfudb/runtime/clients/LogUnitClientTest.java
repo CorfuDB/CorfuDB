@@ -9,7 +9,9 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.runtime.CorfuRuntime;
@@ -140,7 +142,8 @@ public class LogUnitClientTest extends AbstractClientTest {
                 .isEqualTo(testString);
 
         try {
-            client.writeEmptyData(0, DataType.RANK_ONLY, Collections.<UUID>emptySet(), new IMetadata.DataRank(2)).get();
+            ILogData data = createEmptyData(0, DataType.RANK_ONLY,  new IMetadata.DataRank(2)).getSerialized();
+            client.write(data).get();
             fail();
         } catch (Exception e) {
             // expected
@@ -154,6 +157,13 @@ public class LogUnitClientTest extends AbstractClientTest {
         r = client.read(0).get().getReadSet().get(0L);
         assertThat(r.getType()).isEqualTo(DataType.DATA);
         assertThat(r.getPayload(new CorfuRuntime())).isEqualTo(testString);
+    }
+
+    private ILogData.SerializationHandle createEmptyData(long position, DataType type, IMetadata.DataRank rank) {
+        ILogData data = new LogData(type);
+        data.setRank(rank);
+        data.setGlobalAddress(position);
+        return data.getSerializedForm();
     }
 
     @Test

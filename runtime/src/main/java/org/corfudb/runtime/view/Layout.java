@@ -273,10 +273,7 @@ public class Layout implements Cloneable {
         return runtime.getRouter(getStripe(address).getLogServers().get(index)).getClient(LogUnitClient.class);
     }
 
-    public LogUnitClient getReplexLogUnitClient(int whichReplex, int index) {
-        return runtime.getRouter(getSegments().get(getSegments().size() - 1).replexes.get(whichReplex)
-                .getLogServers().get(index)).getClient(LogUnitClient.class);
-    }
+
     /**
      * Get the layout as a JSON string.
      */
@@ -383,10 +380,22 @@ public class Layout implements Cloneable {
                 SealServersHelper.waitForQuorumSegmentSeal(layoutSegment, completableFutureMap);
             }
 
+
             @Override
             public IStreamView getStreamView(CorfuRuntime r, UUID streamId) {
-                throw new UnsupportedOperationException("Not implemented yet");
+                return new BackpointerStreamView(r, streamId);
             }
+
+            @Override
+            public IReplicationProtocol getReplicationProtocol(CorfuRuntime r) {
+                if (r.isHoleFillingDisabled()) {
+                    return new QuorumReplicationProtocol(new NeverHoleFillPolicy(100));
+                } else {
+                    return new QuorumReplicationProtocol(new ReadWaitHoleFillPolicy(100,
+                            r.getParameters().getHoleFillRetry()));
+                }
+            }
+
         },
         REPLEX {
             @Override
@@ -408,7 +417,6 @@ public class Layout implements Cloneable {
                     throws QuorumUnreachableException {
                 throw new UnsupportedOperationException("unsupported seal");
             }
-
 
             @Override
             public IStreamView getStreamView(CorfuRuntime r, UUID streamId) {

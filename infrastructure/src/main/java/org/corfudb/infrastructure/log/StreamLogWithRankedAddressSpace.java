@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
+import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 
 
@@ -16,6 +17,7 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
  *
  * Created by Konstantin Spirov on 3/15/2017.
  */
+
 public interface StreamLogWithRankedAddressSpace extends StreamLog {
 
     /**
@@ -28,11 +30,16 @@ public interface StreamLogWithRankedAddressSpace extends StreamLog {
      * @throws DataOutrankedException if the log entry cannot be assigned to this log address as there is a data with higher rank
      * @throws ValueAdoptedException if the new message is a proposal during the two phase recovery write and there is an existing
      * data at this log address already.
+     * @throw OverwriteException if the new data is with rank 0 (not from recovery write). This can happen only if there is a bug in the client implementation.
      */
     default void assertAppendPermittedUnsafe(LogAddress logAddress, LogData newEntry) throws DataOutrankedException, ValueAdoptedException {
         LogData oldEntry = read(logAddress);
         if (oldEntry.getType()==DataType.EMPTY) {
              return;
+        }
+        if (newEntry.getRank().getRank()==0) {
+            // data consistency in danger
+            throw new OverwriteException();
         }
         int compare = newEntry.getRank().compareTo(oldEntry.getRank());
         if (compare<0) {

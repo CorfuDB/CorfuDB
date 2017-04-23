@@ -17,7 +17,7 @@ import java.util.concurrent.*;
  * Created by Konstantin Spirov on 2/3/2017.
  */
 @Slf4j
-class QuorumFuturesFactory {
+public class QuorumFuturesFactory {
 
     /**
      * Get a thread safe future that will complete only when n/2+1 futures complete or if there is no hope
@@ -51,10 +51,11 @@ class QuorumFuturesFactory {
      * @param comparator Any comparator consistent with equals that is able to distinguish the results
      * @param futures The N futures
      * @param failFastThrowables list of exceptions that will cause the future to complete immediately.
+     *                           All fail fast exceptions are directly propagated and thrown outside.
      * @return The composite future
      */
 
-    static <R> CompositeFuture<R> getQuorumFuture(Comparator<R> comparator, CompletableFuture<R>[] futures, Class... failFastThrowables) {
+    public static <R> CompositeFuture<R> getQuorumFuture(Comparator<R> comparator, CompletableFuture<R>[] futures, Class... failFastThrowables) {
         return new CompositeFuture(comparator, futures.length/2+1, futures, failFastThrowables);
     }
 
@@ -97,9 +98,10 @@ class QuorumFuturesFactory {
 
         @Override
         public R get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
+
             Comparator<Integer> ic = Integer::compareTo;
             TreeMultimap<Integer, R> valuesSortedByCount = TreeMultimap.create(ic.reversed(), comparator);
-            HashMultimap<R, Integer> indexesByValue = HashMultimap.create();
+            TreeMultimap<R, Integer> indexesByValue = TreeMultimap.create(comparator, ic);
 
             long until = 0;
             boolean infinite = (timeout==Long.MAX_VALUE);
@@ -155,15 +157,22 @@ class QuorumFuturesFactory {
                 boolean noMoreHope = numIncompleteFutures+greatestNumCompleteFutures < quorum;
                 if (noMoreHope) {
                     done = canceled = true;
+                    for (Throwable t: getThrowables()) {
+                        log.debug(t.getMessage(), t);
+                    }
                     throw new ExecutionException(
                             new QuorumUnreachableException(greatestNumCompleteFutures, quorum));
                 }
-                if (infinite) {
-                    aggregatedFuture.get();
-                } else {
-                    aggregatedFuture.get(timeout, unit);
+                try {
+                    if (infinite) {
+                        aggregatedFuture.get();
+                    } else {
+                        aggregatedFuture.get(timeout, unit);
+                    }
+                } catch (ExecutionException t) {
+                    //  The exceptions after after constructing the future will be handled on the next loop
                 }
-            }
+            } // while
             throw new TimeoutException();
         }
 
@@ -214,6 +223,20 @@ class QuorumFuturesFactory {
          */
         public Set<Throwable> getThrowables() {
             return ImmutableSet.copyOf(throwables);
+        }
+
+        /**
+         * Checks whether one of the exceptons is throwable from the given type
+         * @param check - the throwable to search for
+         * @return true if there is a throwable from the given type, otherwise false
+         */
+        public boolean containsThrowableFrom(Class <? extends Throwable>check) {
+            for (Throwable t: throwables) {
+                if (t.getClass().isAssignableFrom(check)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
     }
