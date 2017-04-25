@@ -188,7 +188,7 @@ public class LayoutServer extends AbstractServer {
         long serverEpoch = getServerEpoch();
         if (msg.getPayload().getEpoch() != serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
-            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}", msg.getEpoch(), serverEpoch, msg);
+            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}", msg.getPayload().getEpoch(), serverEpoch, msg);
             return;
         }
 
@@ -225,7 +225,7 @@ public class LayoutServer extends AbstractServer {
 
         if (msg.getPayload().getEpoch() != serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
-            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}", proposeLayout.getEpoch(), serverEpoch, msg);
+            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}", msg.getPayload().getEpoch(), serverEpoch, msg);
             return;
         }
         // This is a propose. If no prepare, reject.

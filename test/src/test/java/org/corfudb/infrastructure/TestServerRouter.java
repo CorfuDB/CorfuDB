@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
@@ -13,13 +14,10 @@ import org.corfudb.runtime.clients.TestChannelContext;
 import org.corfudb.runtime.clients.TestRule;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 12/13/15.
@@ -147,7 +145,7 @@ public class TestServerRouter implements IServerRouter {
 
     public CorfuMsg simulateSerialization(CorfuMsg message) {
         /* simulate serialization/deserialization */
-        ByteBuf oBuf = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf oBuf = Unpooled.buffer();
         //Class<? extends CorfuMsg> type = message.getMsgType().messageType;
         //extra assert needed to simulate real Netty behavior
         //assertThat(message.getClass().getSimpleName()).isEqualTo(type.getSimpleName());

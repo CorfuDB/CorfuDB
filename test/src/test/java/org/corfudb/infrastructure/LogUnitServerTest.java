@@ -4,6 +4,7 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import edu.umd.cs.findbugs.SystemProperties;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.Unpooled;
 import org.assertj.core.api.Assertions;
 import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.StreamLogFiles;
@@ -50,7 +51,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         final long ADDRESS_0 = 0L;
         final long ADDRESS_1 = 100L;
         //write at 0
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
         WriteRequest m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)
@@ -101,7 +102,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         final long MID_ADDRESS = 100L;
         final long HIGH_ADDRESS = 10000000L;
         //write at 0
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
         WriteRequest m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)
@@ -112,7 +113,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         m.setBackpointerMap(Collections.emptyMap());
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
         //100
-        b = ByteBufAllocator.DEFAULT.buffer();
+        b = Unpooled.buffer();
         Serializers.CORFU.serialize("100".getBytes(), b);
         m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)
@@ -123,7 +124,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         m.setBackpointerMap(Collections.emptyMap());
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
         //and 10000000
-        b = ByteBufAllocator.DEFAULT.buffer();
+        b = Unpooled.buffer();
         Serializers.CORFU.serialize("10000000".getBytes(), b);
         m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)
@@ -225,7 +226,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         final long ADDRESS_0 = 0L;
         final long ADDRESS_1 = 100L;
         //write at 0
-        ByteBuf b = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
         WriteRequest m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)
@@ -245,7 +246,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         // repeat: do not throw exception, the overwrite is forced
         b.clear();
-        b = ByteBufAllocator.DEFAULT.buffer();
+        b = Unpooled.buffer();
         Serializers.CORFU.serialize("1".getBytes(), b);
         m = WriteRequest.builder()
                 .writeMode(WriteMode.NORMAL)

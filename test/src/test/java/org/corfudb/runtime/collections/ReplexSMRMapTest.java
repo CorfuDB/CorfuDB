@@ -5,6 +5,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.test.DisabledOnTravis;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.*;
@@ -19,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Created by mwei on 1/8/16.
  */
 @DisabledOnTravis
+@Ignore
 public class ReplexSMRMapTest extends SMRMapTest {
 
     @Before

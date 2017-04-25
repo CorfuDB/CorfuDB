@@ -2,11 +2,13 @@ package org.corfudb.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 
 /**
  * The FailureHandlerDispatcher handles the trigger provided by any source
@@ -43,6 +45,9 @@ public class FailureHandlerDispatcher {
             currentLayout.setRuntime(corfuRuntime);
             sealEpoch(currentLayout);
 
+            // Reconfigure servers if required
+            reconfigureServers(corfuRuntime, currentLayout, newLayout);
+
             // Attempts to update all the layout servers with the modified layout.
             try {
                 corfuRuntime.getLayoutView().updateLayout(newLayout, prepareRank);
@@ -73,5 +78,61 @@ public class FailureHandlerDispatcher {
     private void sealEpoch(Layout layout) throws QuorumUnreachableException {
         layout.setEpoch(layout.getEpoch() + 1);
         layout.moveServersToEpoch();
+    }
+
+    /**
+     * Reconfigures the servers in the new layout if reconfiguration required.
+     *
+     * @param runtime        Runtime to reconfigure new servers.
+     * @param originalLayout Current layout to get the latest state of servers.
+     * @param newLayout      New Layout to be reconfigured.
+     */
+    private void reconfigureServers(CorfuRuntime runtime, Layout originalLayout, Layout newLayout)
+            throws ExecutionException {
+
+        // Reconfigure the primary Sequencer Server if changed.
+        reconfigureSequencerServers(runtime, originalLayout, newLayout);
+
+        // TODO: Reconfigure log units if new log unit added.
+    }
+
+    /**
+     * Reconfigures the sequencer.
+     * If the primary sequencer has changed in the new layout,
+     * the global tail of the log units are queried and used to set
+     * the initial token of the new primary sequencer.
+     *
+     * @param runtime           Runtime to reconfigure new servers.
+     * @param originalLayout    Current layout to get the latest state of servers.
+     * @param newLayout         New Layout to be reconfigured.
+     */
+    private void reconfigureSequencerServers(CorfuRuntime runtime, Layout originalLayout, Layout newLayout)
+            throws ExecutionException {
+
+        // Reconfigure Primary Sequencer if required
+        if (!originalLayout.getSequencers().get(0).equals(newLayout.getSequencers().get(0))) {
+            long maxTokenRequested = 0;
+            for (Layout.LayoutSegment segment : originalLayout.getSegments()) {
+                // Query the tail of every log unit in every stripe.
+                for (Layout.LayoutStripe stripe : segment.getStripes()) {
+                    for (String logServer : stripe.getLogServers()) {
+                        try {
+                            long tail = runtime.getRouter(logServer).getClient(LogUnitClient.class).getTail().get();
+                            if (tail != 0) {
+                                maxTokenRequested = maxTokenRequested > tail ? maxTokenRequested : tail;
+                            }
+                        } catch (Exception e) {
+                            log.error("Exception while fetching log unit tail : {}", e);
+                        }
+                    }
+                }
+            }
+            try {
+                // Configuring the new sequencer.
+                newLayout.getSequencer(0).reset(maxTokenRequested + 1).get();
+            } catch (InterruptedException e) {
+                log.error("Sequencer Reset interrupted : {}", e);
+            }
+        }
     }
 }

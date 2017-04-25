@@ -17,6 +17,7 @@ public class TestLayoutBuilder {
 
     List<String> sequencerServers;
     List<String> layoutServers;
+    List<String> unresponsiveServers;
     List<TestSegmentBuilder> segments;
 
     @Getter
@@ -26,6 +27,7 @@ public class TestLayoutBuilder {
     public TestLayoutBuilder() {
         sequencerServers = new ArrayList<>();
         layoutServers = new ArrayList<>();
+        unresponsiveServers = new ArrayList<>();
         segments = new ArrayList<>();
     }
 
@@ -55,6 +57,11 @@ public class TestLayoutBuilder {
         return this;
     }
 
+    public TestLayoutBuilder addUnresponsiveServer(int port) {
+        unresponsiveServers.add(getEndpoint(port));
+        return this;
+    }
+
     private TestLayoutBuilder addSegment(TestSegmentBuilder builder) {
         segments.add(builder);
         return this;
@@ -72,6 +79,7 @@ public class TestLayoutBuilder {
         return new Layout(layoutServers,
                 sequencerServers,
                 segmentList,
+                unresponsiveServers,
                 epoch);
     }
 

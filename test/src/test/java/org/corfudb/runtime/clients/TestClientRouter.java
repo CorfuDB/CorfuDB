@@ -2,6 +2,7 @@ package org.corfudb.runtime.clients;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
@@ -335,7 +336,7 @@ public class TestClientRouter implements IClientRouter {
 
     public CorfuMsg simulateSerialization(CorfuMsg message) {
         /* simulate serialization/deserialization */
-        ByteBuf oBuf = ByteBufAllocator.DEFAULT.buffer();
+        ByteBuf oBuf = Unpooled.buffer();
         message.serialize(oBuf);
         oBuf.resetReaderIndex();
         CorfuMsg msg = CorfuMsg.deserialize(oBuf);

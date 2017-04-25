@@ -415,6 +415,7 @@ public class ManagementServer extends AbstractServer {
                 // unresponsive in the layout. If yes take no action. Else trigger handler.
                 log.info("Failures detected. Failed nodes : {}", pollReport.toString());
                 // Check if this failure has already been recognized.
+                //TODO: Does not handle the un-marking case where markedSet is a superset of pollFailures.
                 for (String failedServer : pollReport.getFailingNodes()) {
                     if (!latestLayout.getUnresponsiveServers().contains(failedServer)) {
                         localManagementClient.handleFailure(pollReport.getFailingNodes()).get();

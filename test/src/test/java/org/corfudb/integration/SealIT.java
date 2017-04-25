@@ -34,7 +34,7 @@ public class SealIT {
         CorfuRuntime cr1 = new CorfuRuntime(layoutServers).connect();
         CorfuRuntime cr2 = new CorfuRuntime(layoutServers).connect();
 
-        Long beforeAddress = cr2.getSequencerView().nextToken(new HashSet<>(),1).getToken();
+        Long beforeAddress = cr2.getSequencerView().nextToken(new HashSet<>(),1).getToken().getTokenValue();
 
         /* We will trigger a Paxos round, this is what will happen:
          *   1. Set our layout (same than before) with a new Epoch
@@ -61,7 +61,7 @@ public class SealIT {
          *
          * These steps get cr2 in the new epoch.
          */
-        Long afterAddress = cr2.getSequencerView().nextToken(new HashSet<>(),1).getToken();
+        Long afterAddress = cr2.getSequencerView().nextToken(new HashSet<>(),1).getToken().getTokenValue();
         assertThat(cr2.getLayoutView().getCurrentLayout().getEpoch()).
             isEqualTo(cr1.getLayoutView().getCurrentLayout().getEpoch());
         assertThat(afterAddress).isEqualTo(beforeAddress+1);

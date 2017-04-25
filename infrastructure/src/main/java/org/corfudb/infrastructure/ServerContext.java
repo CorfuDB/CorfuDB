@@ -66,7 +66,7 @@ public class ServerContext {
         this.dataStore = new DataStore(serverConfig);
         this.serverRouter = serverRouter;
         this.failureDetectorPolicy = new PeriodicPollPolicy();
-        this.failureHandlerPolicy = new PurgeFailurePolicy();
+        this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
 
         // Metrics setup & reporting configuration
         String mp = "corfu.server.";
