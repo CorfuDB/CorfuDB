@@ -21,7 +21,7 @@ LOGFILE="/var/log/corfu.$PORT.log"
 
 export PATH="${PATH:+$PATH:}/usr/sbin/:usr/bin"
 
-terminate_java_process() {
+terminate_java_process () {
     # save default shell delimiter
     SAVED_IFS=$IFS
     IFS=$'\n'
@@ -47,7 +47,7 @@ case "$1" in
         ;;
     stop)
         log_daemon_msg "Stopping $ROLENAME on port $PORT"
-        terminate_java_process()
+        terminate_java_process
         if start-stop-daemon --stop --quiet  --oknodo --pidfile $PIDFILE; then
             log_end_msg 0
         else
@@ -57,7 +57,7 @@ case "$1" in
     restart)
         log_daemon_msg "Restarting $ROLENAME on port $PORT"
         set +e
-        terminate_java_process()
+        terminate_java_process
         start-stop-daemon --stop --quiet --retry 30 --pidfile $PIDFILE
         RET="$?"
         set -e
