@@ -5,7 +5,7 @@
 # Required-Start:       $remote_fs $syslog
 # Required-Stop:        $remote_fs $syslog
 # Default-Start:        2 3 4 5
-# Default-Stop:
+# Default-Stop:         0 1 6
 # Short-Description:    Corfu Infrastructure Server
 ### END INIT INFO
 
@@ -21,6 +21,20 @@ LOGFILE="/var/log/corfu.$PORT.log"
 
 export PATH="${PATH:+$PATH:}/usr/sbin/:usr/bin"
 
+terminate_java_process () {
+    # save default shell delimiter
+    SAVED_IFS=$IFS
+    IFS=$'\n'
+    ALL_PROCESSES=$(ps aux)
+    for line in $ALL_PROCESSES; do
+        if [[ $line == *"org.corfudb.infrastructure.CorfuServer"* ]]; then
+            # send SIGTERM to JVM
+            kill -15 $(echo $line | awk '{print $2}')
+        fi
+    done
+    IFS=$SAVED_IFS
+}
+
 case "$1" in
     start)
         log_daemon_msg "Starting $ROLENAME on port $PORT"
@@ -33,6 +47,7 @@ case "$1" in
         ;;
     stop)
         log_daemon_msg "Stopping $ROLENAME on port $PORT"
+        terminate_java_process
         if start-stop-daemon --stop --quiet  --oknodo --pidfile $PIDFILE; then
             log_end_msg 0
         else
@@ -42,6 +57,7 @@ case "$1" in
     restart)
         log_daemon_msg "Restarting $ROLENAME on port $PORT"
         set +e
+        terminate_java_process
         start-stop-daemon --stop --quiet --retry 30 --pidfile $PIDFILE
         RET="$?"
         set -e
