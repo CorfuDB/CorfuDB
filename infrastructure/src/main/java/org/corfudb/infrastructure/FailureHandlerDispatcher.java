@@ -25,6 +25,50 @@ public class FailureHandlerDispatcher {
     private volatile long prepareRank = 1;
 
     /**
+     * Recover cluster from layout.
+     * @param recoveryLayout    Layout to use to recover
+     * @param corfuRuntime      Connected runtime
+     * @return
+     */
+    public boolean recoverCluster(Layout recoveryLayout, CorfuRuntime corfuRuntime) {
+
+        try {
+            // Seals and increments the epoch.
+            recoveryLayout.setRuntime(corfuRuntime);
+            sealEpoch(recoveryLayout);
+            log.info("After seal: {}", recoveryLayout.asJSONString());
+
+            // Reconfigure servers if required
+            reconfigureServers(corfuRuntime, recoveryLayout, recoveryLayout, true);
+
+            // Attempts to update all the layout servers with the modified layout.
+            while (true) {
+                try {
+                    corfuRuntime.getLayoutView().updateLayout(recoveryLayout, prepareRank);
+                    prepareRank++;
+                } catch (OutrankedException oe) {
+                    // Update rank since outranked.
+                    log.error("Retrying layout update with higher rank: {}", oe);
+                    // Update rank to be able to outrank other competition and complete paxos.
+                    prepareRank = oe.getNewRank() + 1;
+                    continue;
+                }
+                break;
+            }
+
+            // Check if our proposed layout got selected and committed.
+            corfuRuntime.invalidateLayout();
+            if (corfuRuntime.getLayoutView().getLayout().equals(recoveryLayout)) {
+                log.info("Layout Recovered = {}", recoveryLayout);
+            }
+        } catch (Exception e) {
+            log.error("Error: recovery: {}", e);
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * Takes in the existing layout and a set of failed nodes.
      * It first generates a new layout by removing the failed nodes from the existing layout.
      * It then seals the epoch to prevent any client from accessing the stale layout.
@@ -46,7 +90,7 @@ public class FailureHandlerDispatcher {
             sealEpoch(currentLayout);
 
             // Reconfigure servers if required
-            reconfigureServers(corfuRuntime, currentLayout, newLayout);
+            reconfigureServers(corfuRuntime, currentLayout, newLayout, false);
 
             // Attempts to update all the layout servers with the modified layout.
             try {
@@ -83,15 +127,16 @@ public class FailureHandlerDispatcher {
     /**
      * Reconfigures the servers in the new layout if reconfiguration required.
      *
-     * @param runtime        Runtime to reconfigure new servers.
-     * @param originalLayout Current layout to get the latest state of servers.
-     * @param newLayout      New Layout to be reconfigured.
+     * @param runtime           Runtime to reconfigure new servers.
+     * @param originalLayout    Current layout to get the latest state of servers.
+     * @param newLayout         New Layout to be reconfigured.
+     * @param forceReconfigure  Flag to force reconfiguration.
      */
-    private void reconfigureServers(CorfuRuntime runtime, Layout originalLayout, Layout newLayout)
+    private void reconfigureServers(CorfuRuntime runtime, Layout originalLayout, Layout newLayout, boolean forceReconfigure)
             throws ExecutionException {
 
         // Reconfigure the primary Sequencer Server if changed.
-        reconfigureSequencerServers(runtime, originalLayout, newLayout);
+        reconfigureSequencerServers(runtime, originalLayout, newLayout, forceReconfigure);
 
         // TODO: Reconfigure log units if new log unit added.
     }
@@ -105,12 +150,14 @@ public class FailureHandlerDispatcher {
      * @param runtime           Runtime to reconfigure new servers.
      * @param originalLayout    Current layout to get the latest state of servers.
      * @param newLayout         New Layout to be reconfigured.
+     * @param forceReconfigure  Flag to force reconfiguration.
      */
-    private void reconfigureSequencerServers(CorfuRuntime runtime, Layout originalLayout, Layout newLayout)
+    private void reconfigureSequencerServers(CorfuRuntime runtime, Layout originalLayout, Layout newLayout, boolean forceReconfigure)
             throws ExecutionException {
 
         // Reconfigure Primary Sequencer if required
-        if (!originalLayout.getSequencers().get(0).equals(newLayout.getSequencers().get(0))) {
+        if (forceReconfigure ||
+                !originalLayout.getSequencers().get(0).equals(newLayout.getSequencers().get(0))) {
             long maxTokenRequested = 0;
             for (Layout.LayoutSegment segment : originalLayout.getSegments()) {
                 // Query the tail of every log unit in every stripe.

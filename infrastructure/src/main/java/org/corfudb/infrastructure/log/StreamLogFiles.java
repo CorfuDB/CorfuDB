@@ -443,7 +443,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());
-        logData.setBackpointerMap(getUUIDLongMap(entry.getLogicalAddressesMap()));
+        logData.setLogicalAddresses(getUUIDLongMap(entry.getLogicalAddressesMap()));
         logData.setStreams(getStreamsSet(entry.getStreamsList().asByteStringList()));
         logData.setRank(createDataRank(entry));
 
