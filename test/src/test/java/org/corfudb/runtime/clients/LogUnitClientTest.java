@@ -47,14 +47,12 @@ public class LogUnitClientTest extends AbstractClientTest {
     @Override
     Set<AbstractServer> getServersForTest() {
         dirPath = PARAMETERS.TEST_TEMP_DIR;
-        final int MAX_CACHE = 256_000_000;
         serverContext = new ServerContextBuilder()
                 .setInitialToken(0)
                 .setSingle(false)
                 .setNoVerify(false)
                 .setMemory(false)
                 .setLogPath(dirPath)
-                .setMaxCache(MAX_CACHE)
                 .setServerRouter(serverRouter)
                 .build();
         server = new LogUnitServer(serverContext);

@@ -20,7 +20,7 @@ public class ServerContextBuilder {
     String logPath = null;
     boolean noVerify = false;
     boolean tlsEnabled = false;
-    int maxCache = 1000000;
+    String cacheSizeHeapRatio = "0.5";
     String address = "test";
     int port = 9000;
     String managementBootstrapEndpoint = null;
@@ -43,11 +43,11 @@ public class ServerContextBuilder {
             builder.put("--management-server", managementBootstrapEndpoint);
         }
          builder
-                .put("--no-verify", noVerify)
-                .put("--max-cache", maxCache)
-                .put("--address", address)
-                .put("--enable-tls", tlsEnabled)
-                .put("<port>", port);
+                 .put("--no-verify", noVerify)
+                 .put("--address", address)
+                 .put("--cache-heap-ratio", cacheSizeHeapRatio)
+                 .put("--enable-tls", tlsEnabled)
+                 .put("<port>", port);
         return new ServerContext(builder.build(), serverRouter);
     }
 
