@@ -15,6 +15,9 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 @Slf4j
 public class MapsAsMQsTest extends AbstractTransactionsTest {
+    @Override
+    public void TXBegin() { OptimisticTXBegin(); }
+
 
     protected int numIterations = PARAMETERS.NUM_ITERATIONS_MODERATE;
 

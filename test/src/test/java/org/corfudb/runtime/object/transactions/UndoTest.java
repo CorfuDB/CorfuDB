@@ -14,6 +14,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Created by dalia on 3/6/17.
  */
 public class UndoTest extends AbstractTransactionsTest {
+    @Override
+    public void TXBegin() { WWTXBegin(); }
+
 
     @Test
     public void ckCorrectUndo()

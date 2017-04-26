@@ -6,6 +6,10 @@ import org.junit.Test;
  * Created by mwei on 11/22/16.
  */
 public class SnapshotTransactionContextTest extends AbstractTransactionContextTest {
+    @Override
+    public void TXBegin() { SnapshotTXBegin(); }
+
+
 
     /** Check if we can read a snapshot from the past, without
      * concurrent modifications.

@@ -8,17 +8,15 @@ import org.junit.Before;
 /**
  * Created by dmalkhi on 1/4/17.
  */
-public class AbstractTransactionsTest extends AbstractObjectTest {
+public abstract class AbstractTransactionsTest extends AbstractObjectTest {
     @Before
     public void becomeCorfuApp() {         getDefaultRuntime(); }
 
     /**
-     * Utility method to start a (default type) TX
+     * Utility method to start a (default type) TX;
+     * must be overriden with the desired type of TX
      */
-    protected void TXBegin() {
-        getRuntime().getObjectsView().TXBuild()
-                .begin();
-    }
+    public abstract void TXBegin();
 
     /**
      * Utility method to end a TX

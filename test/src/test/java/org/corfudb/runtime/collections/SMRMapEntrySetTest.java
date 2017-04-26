@@ -16,6 +16,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Created by dmalkhi on 3/20/17.
  */
 public class SMRMapEntrySetTest extends AbstractTransactionsTest {
+    @Override
+    public void TXBegin() { OptimisticTXBegin(); }
+
     @Getter
     final String defaultConfigurationString = getDefaultEndpoint();
 

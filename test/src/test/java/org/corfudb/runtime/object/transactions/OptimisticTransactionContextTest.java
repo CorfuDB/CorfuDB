@@ -8,6 +8,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Created by mwei on 11/16/16.
  */
 public class OptimisticTransactionContextTest extends AbstractTransactionContextTest {
+    @Override
+    public void TXBegin() { OptimisticTXBegin(); }
+
+
 
     /** In an optimistic transaction, we should be able to
      *  read our own writes in the same thread.

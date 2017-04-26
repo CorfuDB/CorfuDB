@@ -21,6 +21,10 @@ import static org.assertj.core.api.Assertions.fail;
  * Created by dmalkhi on 12/13/16.
  */
 public class StreamTest extends AbstractTransactionsTest {
+    @Override
+    public void TXBegin() { OptimisticTXBegin(); }
+
+
 
     /**
      * This workload operates over three distinct maps

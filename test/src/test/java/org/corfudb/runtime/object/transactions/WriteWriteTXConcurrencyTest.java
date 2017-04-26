@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.fail;
 public class WriteWriteTXConcurrencyTest extends TXConflictScenariosTest {
 
     @Override
-    protected void TXBegin() { WWTXBegin(); }
+    public void TXBegin() { WWTXBegin(); }
 
     @Test
     public void simpleWWTest() {

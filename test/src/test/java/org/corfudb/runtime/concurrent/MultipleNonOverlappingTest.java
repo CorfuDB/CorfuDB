@@ -11,6 +11,10 @@ import java.util.Map;
 
 @Slf4j
 public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
+    @Override
+    public void TXBegin() { WWTXBegin(); }
+
+
 
     /**
      * High level:
@@ -224,14 +228,6 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
 
             TXEnd();
         }
-    }
-
-    /**
-     * A helper function that starts a transaction using Write-Write conflict resolution.
-     */
-    protected void TXBegin() {
-        getRuntime().getObjectsView().TXBuild().setType(TransactionType
-                .WRITE_AFTER_WRITE).begin();
     }
 
     /**

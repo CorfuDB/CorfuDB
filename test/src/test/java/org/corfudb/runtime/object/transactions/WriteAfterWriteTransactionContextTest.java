@@ -22,6 +22,9 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
     /** In a write after write transaction, concurrent modifications
      * with the same read timestamp should abort.
      */
+    @Override
+    public void TXBegin() { WWTXBegin(); }
+
 
     @Test
     public void concurrentModificationsCauseAbort()

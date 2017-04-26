@@ -16,6 +16,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Slf4j
 public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
+    @Override
+    public void TXBegin() { OptimisticTXBegin(); }
+
+
 
     protected int numIterations = PARAMETERS.NUM_ITERATIONS_MODERATE;
 
