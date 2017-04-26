@@ -86,7 +86,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     @Override
-    public void sync(){
+    public void sync(boolean force){
         //no-op
     }
 

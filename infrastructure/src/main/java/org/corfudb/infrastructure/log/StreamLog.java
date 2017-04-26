@@ -39,8 +39,10 @@ public interface StreamLog {
 
     /**
      * Sync the stream log file to secondary storage.
+     *
+     * @param force force data to secondary storage if true
      */
-    void sync() throws IOException;
+    void sync(boolean force) throws IOException;
 
     /**
      * Close the stream log.
