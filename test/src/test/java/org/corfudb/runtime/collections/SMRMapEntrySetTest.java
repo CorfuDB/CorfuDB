@@ -1,10 +1,8 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.runtime.collections.SMRMap;
 import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.object.transactions.AbstractObjectTest;
-import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -13,12 +11,14 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by dmalkhi on 3/20/17.
  */
-public class SMRMapEntrySetTest extends AbstractObjectTest {
+public class SMRMapEntrySetTest extends AbstractTransactionsTest {
+    @Override
+    public void TXBegin() { OptimisticTXBegin(); }
+
     @Getter
     final String defaultConfigurationString = getDefaultEndpoint();
 
