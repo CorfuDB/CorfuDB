@@ -6,6 +6,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Collections;
@@ -17,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Created by mwei on 1/8/16.
  */
+@Ignore
 public class ReplexStreamViewTest extends StreamViewTest {
 
     @Before

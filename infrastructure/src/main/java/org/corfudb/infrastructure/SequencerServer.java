@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
@@ -356,7 +357,10 @@ public class SequencerServer extends AbstractServer {
                 if (v == null) {
                     // TODO: Use EMPTY or UNKNOWN value descriptors instead of -1 and null.
                     if (!isFailoverSequencer)
-                        backPointerMap.put(k, -1L);
+                        backPointerMap.put(k, -1L); //TODO: set to Address.NEVER_READ
+                    else {
+                        backPointerMap.put(k, Address.NO_BACKPOINTER);
+                    }
                     return newTail-1;
                 } else {
                     backPointerMap.put(k, v);

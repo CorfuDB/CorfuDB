@@ -8,6 +8,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.replication.*;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.view.stream.ReplexStreamView;
@@ -22,6 +23,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * This class represents the layout of a Corfu instance.
  * Created by mwei on 12/8/15.
@@ -34,7 +37,9 @@ public class Layout implements Cloneable {
     /**
      * A Gson parser.
      */
-    static final Gson parser = new GsonBuilder().create();
+    static final Gson parser = new GsonBuilder()
+            .registerTypeAdapter(Layout.class, new LayoutDeserializer())
+            .create();
     /**
      * A list of layout servers in the layout.
      */
@@ -71,12 +76,26 @@ public class Layout implements Cloneable {
 
     transient ConcurrentHashMap<LayoutSegment, AbstractReplicationView> replicationViewCache;
 
-    public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments, List<String> unresponsiveServers, long epoch) {
+    /* Defensive constructor since we can create a Layout from a JSON file. JSON deserialize is forced through
+     * this constructor.
+     */
+    public Layout(@NonNull List<String> layoutServers, @NonNull List<String> sequencers,
+                  @NonNull List<LayoutSegment> segments, @NonNull List<String> unresponsiveServers, long epoch) {
+
         this.layoutServers = layoutServers;
         this.sequencers = sequencers;
         this.segments = segments;
         this.unresponsiveServers = unresponsiveServers;
         this.epoch = epoch;
+
+        /* Assert that we constructed a valid Layout */
+        if (this.layoutServers.size() == 0) throw new IllegalArgumentException("Empty list of LayoutServers");
+        if (this.sequencers.size() == 0) throw new IllegalArgumentException("Empty list of Sequencers");
+        if (this.segments.size() == 0) throw new IllegalArgumentException("Empty list of segments");
+        for (Layout.LayoutSegment segment : segments) {
+            requireNonNull(segment.stripes);
+            if (segment.stripes.size() == 0) throw new IllegalArgumentException("One segment has an empty list of stripes");
+        }
     }
 
     public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments, long epoch) {
@@ -87,7 +106,8 @@ public class Layout implements Cloneable {
      * Get a layout from a JSON string.
      */
     public static Layout fromJSONString(String json) {
-        return parser.fromJson(json, Layout.class);
+        /* Empty Json file creates an null Layout */
+        return requireNonNull(parser.fromJson(json, Layout.class));
     }
 
     /**
@@ -352,6 +372,16 @@ public class Layout implements Cloneable {
             public IStreamView  getStreamView(CorfuRuntime r, UUID streamId) {
                 return new BackpointerStreamView(r, streamId);
             }
+
+            @Override
+            public IReplicationProtocol getReplicationProtocol(CorfuRuntime r) {
+                if (r.isHoleFillingDisabled()) {
+                    return new ChainReplicationProtocol(new NeverHoleFillPolicy(100));
+                } else {
+                    return new ChainReplicationProtocol(new ReadWaitHoleFillPolicy(100,
+                            r.getParameters().getHoleFillRetry()));
+                }
+            }
         },
         QUORUM_REPLICATION {
             @Override
@@ -419,6 +449,10 @@ public class Layout implements Cloneable {
         public abstract AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls);
 
         public abstract IStreamView getStreamView(CorfuRuntime r, UUID streamId);
+
+        public IReplicationProtocol getReplicationProtocol(CorfuRuntime r) {
+            throw new UnsupportedOperationException();
+        }
     }
 
 
@@ -443,11 +477,13 @@ public class Layout implements Cloneable {
          */
         List<LayoutStripe> stripes;
 
-        public LayoutSegment(ReplicationMode replicationMode, long start, long end, List<LayoutStripe> stripes) {
+        public LayoutSegment(@NonNull ReplicationMode replicationMode, long start, long end,
+                             @NonNull List<LayoutStripe> stripes) {
             this.replicationMode = replicationMode;
             this.start = start;
             this.end = end;
             this.stripes = stripes;
+
         }
 
         List<LayoutStripe> replexes; // A list of replexes. Each LayoutStripe is a replex, because it is just a list of
@@ -461,8 +497,11 @@ public class Layout implements Cloneable {
 
     @Data
     @Getter
-    @AllArgsConstructor
     public static class LayoutStripe {
         final List<String> logServers;
+
+        public LayoutStripe(@NonNull List<String> logServers) {
+            this.logServers = logServers;
+        }
     }
 }

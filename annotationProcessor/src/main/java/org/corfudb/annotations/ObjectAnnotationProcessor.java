@@ -333,16 +333,25 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         // Verify that all methods that require an up call have specified as annotated name
         checkAnnotatedNames(methodSet);
 
-        // Check override conflicts
-        Set<SMRMethodInfo> possibleConflictMethods = methodSet.stream()
+        // Gather methods that require upcalls
+        Set<SMRMethodInfo> upCalls = methodSet.stream()
                 .filter(x -> ((x.method.getAnnotation(Mutator.class) != null)
-                        && !x.method.getAnnotation(Mutator.class).name().equals("")
                         && !x.method.getAnnotation(Mutator.class).noUpcall())
                         || ((x.method.getAnnotation(MutatorAccessor.class) != null)
-                        && !x.method.getAnnotation(MutatorAccessor.class).name().equals("")))
+                        && !x.method.getAnnotation(MutatorAccessor.class).noUpcall()))
                 .collect(Collectors.toCollection(HashSet::new));
 
-        checkOverrideConflicts(methodSet, possibleConflictMethods);
+        checkOverloadConflicts(upCalls);
+
+        // Gather methods that reference upcall methods (i.e. mutators that require no upcalls)
+        Set<SMRMethodInfo> noUpcalls = methodSet.stream()
+                .filter(x -> ((x.method.getAnnotation(Mutator.class) != null)
+                        && x.method.getAnnotation(Mutator.class).noUpcall())
+                        || ((x.method.getAnnotation(MutatorAccessor.class) != null)
+                        && x.method.getAnnotation(MutatorAccessor.class).noUpcall()))
+                .collect(Collectors.toCollection(HashSet::new));
+
+        verifyNoUpCallReference(noUpcalls, upCalls);
 
         // Generate wrapper classes.
         methodSet.stream()
@@ -508,54 +517,61 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         }
     }
 
-    // Mutator methods that specify a name in their annotation and require upcalls cannot
-    // be overridden. This method checks for possible conflicts.
-    void checkOverrideConflicts(Set<SMRMethodInfo> allMethods, Set<SMRMethodInfo> possibleConflictMethods) {
+    String getAnnotationNameField(ExecutableElement method) {
+        String name = "";
 
-        for(SMRMethodInfo annotatedMethod : possibleConflictMethods) {
-            Set<SMRMethodInfo> setDiff = new HashSet<>(allMethods);
-            setDiff.remove(annotatedMethod);
+        if(method.getAnnotation(Mutator.class) != null) {
+            name = method.getAnnotation(Mutator.class).name();
+        } else if (method.getAnnotation(MutatorAccessor.class) != null) {
+            name = method.getAnnotation(MutatorAccessor.class).name();
+        }
 
-            String annotationString = "";
-            if(annotatedMethod.method.getAnnotation(Mutator.class) != null &&
-                    !annotatedMethod.method.getAnnotation(Mutator.class).name().equals("")) {
-                annotationString = annotatedMethod.method.getAnnotation(Mutator.class).name();
-            } else if (annotatedMethod.method.getAnnotation(MutatorAccessor.class) != null &&
-                    !annotatedMethod.method.getAnnotation(MutatorAccessor.class).name().equals("")) {
-                annotationString = annotatedMethod.method.getAnnotation(MutatorAccessor.class).name();
-            }
-
-            for(SMRMethodInfo smrMethodInfo : setDiff) {
-                String methodName = smrMethodInfo.method.getSimpleName().toString();
-                TypeMirror returnType = smrMethodInfo.method.getReturnType();
-                List<? extends VariableElement> parameters = smrMethodInfo.method.getParameters();
-
-                // We need to check for two cases:
-                // 1. Methods with same parameters and different return type
-                // 2. Methods with same parameters and same return type
-
-                boolean equalReturnTypes = returnType.equals(annotatedMethod.method.getReturnType());
-                boolean equalParameters = checkParams(parameters, annotatedMethod.method.getParameters());
-
-                if(methodName.equals(annotationString)
-                        && ((equalParameters && equalReturnTypes)
-                        || (equalParameters && !equalReturnTypes))){
-                        messager.printMessage(Diagnostic.Kind.ERROR,
-                                "Error overloading with annotation name "
-                                        + smrMethodInfo.method.toString() + " and " + annotatedMethod.method.toString());
-                    }
-                }
-            }
+        return name;
     }
 
-    boolean checkParams(List<? extends VariableElement> a, List<? extends VariableElement> b) {
-        if(a.size() != b.size()) return false;
-        int index = 0;
-        for(VariableElement variableElement : a) {
-            if(!variableElement.asType().equals(b.get(index).asType())) return false;
-            index++;
+    /*
+     * Verify that the no upcall methods reference valid upcall methods
+     */
+    void verifyNoUpCallReference(Set<SMRMethodInfo> noUpcalls, Set<SMRMethodInfo> upCalls) {
+
+        Set<String> upCallMethodNames = upCalls.stream()
+                .map(x -> getAnnotationNameField(x.method))
+                .collect(Collectors.toCollection(HashSet::new));
+
+        for(SMRMethodInfo smrMethodInfo : noUpcalls) {
+            String methodName = getAnnotationNameField(smrMethodInfo.method);
+
+            if(!upCallMethodNames.contains(methodName)){
+                messager.printMessage(Diagnostic.Kind.ERROR,
+                        "Error " + smrMethodInfo.method.toString() +" referencing unknown smr method ");
+            }
         }
-        return true;
+    }
+
+    /**
+     * Verify that no two methods have the same annotation name
+     * @param possibleConflictMethods Methods that are mutators and require upcalls
+     */
+    void checkOverloadConflicts(Set<SMRMethodInfo> possibleConflictMethods) {
+        Set<SMRMethodInfo> allMethods = new HashSet<>(possibleConflictMethods);
+
+        for(SMRMethodInfo smrMethodInfo : possibleConflictMethods) {
+            Set<SMRMethodInfo> setDiff = new HashSet<>(allMethods);
+            setDiff.remove(smrMethodInfo);
+
+            String baseMethodName = getAnnotationNameField(smrMethodInfo.method);
+
+            for(SMRMethodInfo smrMethodInfo2 : setDiff) {
+                String methodName = getAnnotationNameField(smrMethodInfo2.method);
+
+                if(baseMethodName.equals(methodName)){
+                    messager.printMessage(Diagnostic.Kind.ERROR,
+                            "Error overloading with annotation name "
+                                    + smrMethodInfo.method.toString() + " and " + smrMethodInfo2.method.toString());
+                    
+                }
+            }
+        }
     }
 
     /** Add the reset set and the getter for the set.

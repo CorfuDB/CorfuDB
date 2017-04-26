@@ -50,7 +50,8 @@ public interface IMetadata {
      * @return          True, if the entry contains the given stream.
      */
     default boolean containsStream(UUID stream) {
-        return getStreams().contains(stream);
+        return  getBackpointerMap().keySet().contains(stream) ||
+                getStreams().contains(stream);
     }
 
     /**
@@ -126,7 +127,9 @@ public interface IMetadata {
 
     @SuppressWarnings("unchecked")
     default Long getGlobalAddress() {
-
+        if (getMetadataMap() == null || getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS) == null) {
+            return -1L;
+        }
         return Optional.ofNullable((Long) getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse((long) -1);
     }
 

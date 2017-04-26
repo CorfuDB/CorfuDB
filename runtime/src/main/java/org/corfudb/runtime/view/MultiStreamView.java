@@ -3,10 +3,7 @@ package org.corfudb.runtime.view;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.IDivisibleEntry;
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.wireprotocol.TokenType;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -74,8 +71,7 @@ public class MultiStreamView {
             }
             StreamCOWEntry entry = new StreamCOWEntry(source, timestamp);
             try {
-                runtime.getAddressSpaceView().write(tokenResponse.getToken(), Collections.singleton(destination),
-                        entry, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                runtime.getAddressSpaceView().write(tokenResponse, entry);
                 written = true;
             } catch (OverwriteException oe) {
                 log.debug("hole fill during COW entry append, retrying...");
@@ -100,12 +96,6 @@ public class MultiStreamView {
         return acquireAndWrite(streamIDs, object, t -> true, t -> true);
     }
 
-    public void writeAt(TokenResponse address, Set<UUID> streamIDs, Object object) throws OverwriteException {
-        Function<UUID, Object> partialEntryFunction =
-                object instanceof IDivisibleEntry ? ((IDivisibleEntry)object)::divideEntry : null;
-        runtime.getAddressSpaceView().write(address.getToken(), streamIDs,
-                object, address.getBackpointerMap(), address.getStreamAddresses(), partialEntryFunction);
-    }
 
     /**
      * Write an object to multiple streams, retuning the physical address it
@@ -186,8 +176,7 @@ public class MultiStreamView {
                     return -1L;
                 }
                 try {
-                    runtime.getAddressSpaceView().write(token, streamIDs,
-                            object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                    runtime.getAddressSpaceView().write(tokenResponse, object);
                     return token.getTokenValue();
                 } catch (ReplexOverwriteException re) {
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
@@ -228,10 +217,7 @@ public class MultiStreamView {
                     }
                 }
                 try {
-                    Function<UUID, Object> partialEntryFunction =
-                            object instanceof IDivisibleEntry ? ((IDivisibleEntry)object)::divideEntry : null;
-                    runtime.getAddressSpaceView().write(token, streamIDs,
-                            object, tokenResponse.getBackpointerMap(), tokenResponse.getStreamAddresses(), partialEntryFunction);
+                    runtime.getAddressSpaceView().write(tokenResponse, object);
                     return token.getTokenValue();
                 } catch (ReplexOverwriteException re) {
                     if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
