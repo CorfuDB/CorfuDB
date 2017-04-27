@@ -25,7 +25,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.corfudb.infrastructure.ServerContext.NON_LOG_ADDR_MAGIC;
 import static org.corfudb.util.MetricsUtils.addCacheGauges;
 
 /**
@@ -92,10 +91,10 @@ public class SequencerServer extends AbstractServer {
     /**  - {@link SequencerServer::globalLogTail}:
      *      global log first available position (initially, 0). */
     @Getter
-    private final AtomicLong globalLogTail = new AtomicLong(0L);
+    private final AtomicLong globalLogTail = new AtomicLong(Address.minAddress());
 
     /** remember start point, if sequencer is started as failover sequencer */
-    private final AtomicLong globalLogStart = new AtomicLong(0L);
+    private final AtomicLong globalLogStart = new AtomicLong(Address.minAddress());
 
     /**  - {@link SequencerServer::streamTailMap}:
      *      per-streamfirst available position (initially, null). */
@@ -150,7 +149,7 @@ public class SequencerServer extends AbstractServer {
         this.opts = serverContext.getServerConfig();
 
         long initialToken = Utils.parseLong(opts.get("--initial-token"));
-        if (initialToken == NON_LOG_ADDR_MAGIC) {
+        if (Address.nonAddress(initialToken)) {
             globalLogTail.set(0L);
         } else {
             globalLogTail.set(initialToken);
