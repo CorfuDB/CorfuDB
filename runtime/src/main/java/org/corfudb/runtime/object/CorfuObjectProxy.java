@@ -9,7 +9,6 @@ import net.bytebuddy.implementation.bind.annotation.RuntimeType;
 import net.bytebuddy.implementation.bind.annotation.SuperCall;
 import net.bytebuddy.implementation.bind.annotation.This;
 import org.corfudb.annotations.TransactionalMethod;
-import org.corfudb.protocols.logprotocol.TXLambdaReferenceEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.IStreamView;
@@ -108,41 +107,6 @@ public class CorfuObjectProxy<P> {
         }
         Object res;
         TransactionalMethod tm = method.getAnnotation(TransactionalMethod.class);
-        if (false) {
-            // 1) Find the annotated streams function
-            // case A: takes no arguments.
-            Method m = originalClass.getDeclaredMethod(tm.modifiedStreamsFunction());
-            m.setAccessible(true);
-            Set<UUID> affectedStreams = (Set<UUID>) m.invoke(obj);
-            // append the transaction to the log
-            log.trace("TX Method: {}, Affected streams: {}", method.getName(), affectedStreams);
-            TXLambdaReferenceEntry tlre = new TXLambdaReferenceEntry(method, obj,
-                    arguments, Serializers.JSON);
-            // if the TX returns something, we need to join on a completable future.
-            if (!method.getReturnType().getName().equals("void")) {
-                CompletableFuture cf = new CompletableFuture();
-                long txAddr = runtime.getStreamsView().acquireAndWrite(affectedStreams, tlre, t -> {
-                    runtime.getObjectsView().getTxFuturesMap().put(t.getToken().getTokenValue(), cf);
-                    return true;
-                }, t -> {
-                    runtime.getObjectsView().getTxFuturesMap().remove(t.getToken());
-                    return true;
-                });
-                log.debug("Wrote TX to log@{}", txAddr);
-                // pick the first affected object and sync.
-                ICorfuObject cobj = (ICorfuObject) runtime.getObjectsView().getObjectCache().entrySet().stream()
-                        .filter(x -> affectedStreams.contains(x.getKey().getStreamID()))
-                        .findFirst().get().getValue();
-                cobj.getProxy().sync(cobj, txAddr);
-                return cf.join();
-            } else {
-                // TX doesn't return anything, so we can blindly append to the log.
-                long txAddr = runtime.getStreamsView().write(affectedStreams, tlre);
-                log.debug("Wrote TX to log@{}", txAddr);
-                return null;
-            }
-
-        } else {
             try {
                 runtime.getObjectsView().TXBegin();
                 res = originalCall.call();
@@ -152,7 +116,6 @@ public class CorfuObjectProxy<P> {
                 res = handleTransactionalMethod(originalCall, method, arguments, obj);
             }
             return res;
-        }
     }
 
     synchronized public void sync(P obj, long maxPos) {

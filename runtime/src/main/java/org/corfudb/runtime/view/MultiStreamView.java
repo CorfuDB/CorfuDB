@@ -11,11 +11,15 @@ import org.corfudb.runtime.exceptions.ReplexOverwriteException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.Utils;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/11/15.
@@ -80,161 +84,68 @@ public class MultiStreamView {
         return new BackpointerStreamView(runtime, destination);
     }
 
-    /**
-     * Write an object to multiple streams, retuning the physical address it
-     * was written at.
-     * <p>
-     * Note: While the completion of this operation guarantees that the append
-     * has been persisted, it DOES NOT guarantee that the object has been
-     * written to the stream. For example, another client may have deleted
-     * the stream.
-     *
-     * @param object The object to append to the stream.
-     * @return The address this
+    /** Append to multiple streams simultaneously, possibly providing
+     * information on how to resolve conflicts.
+     * @param streamIDs     The streams to append to.
+     * @param object        The object to append to each stream.
+     * @param conflictInfo  Conflict information for the sequencer to check.
+     * @return              The address the entry was written to.
+     * @throws TransactionAbortedException      If the transaction was aborted by
+     *                                          the sequencer.
      */
-    public long write(Set<UUID> streamIDs, Object object) {
-        return acquireAndWrite(streamIDs, object, t -> true, t -> true);
-    }
+    public long append(@Nonnull Set<UUID> streamIDs, @Nonnull Object object,
+                       @Nullable TxResolutionInfo conflictInfo)
+        throws TransactionAbortedException {
 
+        // Go to the sequencer, grab an initial token.
+        TokenResponse tokenResponse = conflictInfo == null ?
+                // Token w/o conflict info
+                runtime.getSequencerView().nextToken(streamIDs, 1) :
+                // Token w/ conflict info
+                runtime.getSequencerView().nextToken(streamIDs, 1, conflictInfo);
 
-    /**
-     * Write an object to multiple streams, retuning the physical address it
-     * was written at.
-     * <p>
-     * Note: While the completion of this operation guarantees that the append
-     * has been persisted, it DOES NOT guarantee that the object has been
-     * written to the stream. For example, another client may have deleted
-     * the stream.
-     *
-     * @param object The object to append to the stream.
-     * @return The address this
-     */
-    public long acquireAndWrite(Set<UUID> streamIDs, Object object,
-                                Function<TokenResponse, Boolean> acquisitionCallback,
-                                Function<TokenResponse, Boolean> deacquisitionCallback)
-      throws TransactionAbortedException {
-        return acquireAndWrite(streamIDs, object,
-                acquisitionCallback, deacquisitionCallback,null);
-    }
-
-    public long acquireAndWrite(Set<UUID> streamIDs, Object object,
-                                Function<TokenResponse, Boolean> acquisitionCallback,
-                                Function<TokenResponse, Boolean> deacquisitionCallback,
-                                TxResolutionInfo conflictInfo)
-            throws TransactionAbortedException {
-        boolean overwrite = false;
-        TokenResponse tokenResponse = null;
+        // Until we've succeeded
         while (true) {
-            if (conflictInfo != null) {
-                Token token;
-                if (overwrite) {
 
-                    // on retry, check for conflicts only from the previous
-                    // attempt position
-                    conflictInfo.setSnapshotTimestamp(tokenResponse.getToken().getTokenValue());
+            // Is our token a valid type?
+            if (tokenResponse.getRespType() == TokenType.TX_ABORT_CONFLICT)
+                throw new TransactionAbortedException(
+                        tokenResponse.getToken().getTokenValue(),
+                        AbortCause.CONFLICT
+                );
 
-                    TokenResponse temp =
-                            runtime.getSequencerView().nextToken(streamIDs, 1, conflictInfo);
-                    token = temp.getToken();
-                    tokenResponse = new TokenResponse(temp.getRespType(), token, temp.getBackpointerMap(),
-                            tokenResponse.getStreamAddresses());
-                } else {
-                    tokenResponse =
-                            runtime.getSequencerView().nextToken(streamIDs, 1,  conflictInfo);
-                    token = tokenResponse.getToken();
-                }
-                log.trace("Write[{}]: acquired token = {}, global addr: {}", streamIDs, tokenResponse, token);
-                if (acquisitionCallback != null) {
-                    if (!acquisitionCallback.apply(tokenResponse)) {
-                        log.trace("Acquisition rejected token, hole filling acquired address.");
-                        try {
-                            runtime.getAddressSpaceView().fillHole(token.getTokenValue());
-                        } catch (OverwriteException oe) {
-                            log.trace("Hole fill completed by remote client.");
-                        }
-                        return -1L;
-                    }
-                }
-                if (/* TODO: keeping for now; Remove: */ token.getTokenValue() == -1L ||
-                        tokenResponse.getRespType() != TokenType.NORMAL) {
-                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
-                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
-                    }
+            if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ)
+                throw new TransactionAbortedException(
+                        -1L,
+                        AbortCause.NEW_SEQUENCER
+                );
 
-                    if (tokenResponse.getRespType() == TokenType.TX_ABORT_CONFLICT)
-                        throw new TransactionAbortedException(
-                                tokenResponse.getToken().getTokenValue(),
-                                AbortCause.CONFLICT
-                    );
-                    if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ)
-                        throw new TransactionAbortedException(
-                                -1L,
-                                AbortCause.NEW_SEQUENCER
-                        );
+            // Attempt to write to the log
+            try {
+                runtime.getAddressSpaceView().write(tokenResponse, object);
+                // If we're here, we succeeded, return the acquired token
+                return tokenResponse.getTokenValue();
+            } catch (OverwriteException oe) {
+                log.trace("Overwrite[{}]: streams {}", tokenResponse.getTokenValue(),
+                        streamIDs.stream().map(Utils::toReadableID).collect(Collectors.toSet()));
+                // On retry, check for conflicts only from the previous
+                // attempt position
+                conflictInfo.setSnapshotTimestamp(tokenResponse.getToken().getTokenValue());
 
-                    // TODO remove :
-                    return -1L;
-                }
-                try {
-                    runtime.getAddressSpaceView().write(tokenResponse, object);
-                    return token.getTokenValue();
-                } catch (ReplexOverwriteException re) {
-                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
-                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
-                        return -1L;
-                    }
-                    overwrite = false;
-                } catch (OverwriteException oe) {
-                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
-                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
-                        return -1L;
-                    }
-                    overwrite = true;
-                    log.debug("Overwrite occurred at {}, retrying.", token);
-                }
-            } else {
-                Token token;
-                if (overwrite) {
-                    TokenResponse temp =
-                            runtime.getSequencerView().nextToken(streamIDs, 1);
-                    token = temp.getToken();
-                    tokenResponse = new TokenResponse(temp.getRespType(), token, temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
-                } else {
-                    tokenResponse =
-                            runtime.getSequencerView().nextToken(streamIDs, 1);
-                    token = tokenResponse.getToken();
-                }
-                log.trace("Write[{}]: acquired token = {}, global addr: {}", streamIDs, tokenResponse, token);
-                if (acquisitionCallback != null) {
-                    if (!acquisitionCallback.apply(tokenResponse)) {
-                        log.trace("Acquisition rejected token, hole filling acquired address.");
-                        try {
-                            runtime.getAddressSpaceView().fillHole(token.getTokenValue());
-                        } catch (OverwriteException oe) {
-                            log.trace("Hole fill completed by remote client.");
-                        }
-                        return -1L;
-                    }
-                }
-                try {
-                    runtime.getAddressSpaceView().write(tokenResponse, object);
-                    return token.getTokenValue();
-                } catch (ReplexOverwriteException re) {
-                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
-                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
-                        return -1L;
-                    }
-                    overwrite = false;
-                } catch (OverwriteException oe) {
-                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
-                        log.trace("Acquisition rejected overwrite at {}, not retrying.", token);
-                        return -1L;
-                    }
-                    overwrite = true;
-                    log.debug("Overwrite occurred at {}, retrying.", token);
-                }
+                // We were overwritten, get a new token and try again.
+                TokenResponse temp = conflictInfo == null ?
+                        // Token w/o conflict info
+                        runtime.getSequencerView().nextToken(streamIDs, 1) :
+                        // Token w/ conflict info
+                        runtime.getSequencerView().nextToken(streamIDs, 1, conflictInfo);
+
+                // We need to fix the token (to use the stream addresses- may
+                // eventually be deprecated since these are no longer used)
+                tokenResponse = new TokenResponse(temp.getRespType(), temp.getToken(),
+                        temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
             }
         }
+
     }
 
 
