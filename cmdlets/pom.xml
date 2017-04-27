@@ -23,8 +23,13 @@
             <version>${project.version}</version>
         </dependency>
 
-
         <!-- External Dependencies -->
+        <!-- fix protobuf dependency issue -->
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>3.1.0</version>
+        </dependency>
         <dependency>
             <groupId>org.clojure</groupId>
             <artifactId>clojure</artifactId>
