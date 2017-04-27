@@ -38,6 +38,11 @@ public interface StreamLog {
     void compact();
 
     /**
+     * Get the last global address that was written.
+     */
+    long getGlobalTail();
+
+    /**
      * Sync the stream log file to secondary storage.
      *
      * @param force force data to secondary storage if true

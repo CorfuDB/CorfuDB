@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -22,6 +23,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     private Map<Long, LogData> logCache;
     private Map<UUID, Map<Long, LogData>> streamCache;
     private Set<LogAddress> trimmed;
+    final private AtomicLong globalTail = new AtomicLong(0L);
 
     public InMemoryStreamLog() {
         logCache = new ConcurrentHashMap();
@@ -48,8 +50,14 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
                 throwLogUnitExceptionsIfNecessary(logAddress, entry);
             }
             stream.put(logAddress.address, entry);
-
         }
+
+        globalTail.getAndUpdate(maxTail -> entry.getGlobalAddress() > maxTail ? entry.getGlobalAddress() : maxTail);
+    }
+
+    @Override
+    public long getGlobalTail() {
+        return globalTail.get();
     }
 
     private void throwLogUnitExceptionsIfNecessary(LogAddress logAddress, LogData entry) {

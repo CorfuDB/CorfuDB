@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.hash.Hasher;
@@ -49,6 +50,7 @@ import org.corfudb.format.Types.DataType;
 import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -84,14 +86,59 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private Map<String, SegmentHandle> writeChannels;
     private Set<FileChannel> channelsToSync;
     private MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
+    final private ServerContext serverContext;
+    final private AtomicLong globalTail = new AtomicLong(0L);
+    private long lastSegment;
 
-    public StreamLogFiles(String logDir, boolean noVerify) {
-        this.logDir = logDir;
+    public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
+        logDir = serverContext.getServerConfig().get("--log-path") + File.separator + "log";
+        File dir = new File(logDir);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+
         writeChannels = new ConcurrentHashMap();
         channelsToSync = new HashSet<>();
         this.noVerify = noVerify;
-
+        this.serverContext = serverContext;
         verifyLogs();
+        initializeMaxGlobalAddress();
+    }
+
+    @Override
+    public long getGlobalTail() {
+        return globalTail.get();
+    }
+
+    private void syncTailSegment(long address) {
+        // TODO(Maithem) since writing a record and setting the tail segment is not
+        // an atomic operation, it is possible to set an incorrect tail segment. In
+        // that case we will need to scan more than one segment
+        globalTail.getAndUpdate(maxTail -> address > maxTail ? address : maxTail);
+        long segment = address / RECORDS_PER_LOG_FILE;
+        if(lastSegment < segment) {
+            serverContext.setTailSegment(segment);
+            lastSegment = segment;
+        }
+    }
+
+    private void initializeMaxGlobalAddress() {
+        long tailSegment = serverContext.getTailSegment();
+        long addressInTailSegment = (tailSegment * RECORDS_PER_LOG_FILE) + 1;
+        SegmentHandle sh = getSegmentHandleForAddress(new LogAddress(addressInTailSegment, null));
+        try {
+            Collection<LogEntry> segmentEntries = (Collection<LogEntry>) getCompactedEntries(sh.getFileName(),
+                    new HashSet()).getValue();
+
+            for(LogEntry entry : segmentEntries){
+                long currentAddress = entry.getGlobalAddress();
+                globalTail.getAndUpdate(maxTail -> currentAddress > maxTail ? currentAddress : maxTail);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e.getMessage(), e);
+        }
+
+        lastSegment = tailSegment;
     }
 
     private void verifyLogs() {
@@ -750,6 +797,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             channelOffset = fh.logChannel.position() + Short.BYTES + METADATA_SIZE;
             fh.logChannel.write(recordBuf);
             channelsToSync.add(fh.logChannel);
+            syncTailSegment(address);
         }
 
         return new AddressMetaData(metadata.getChecksum(), metadata.getLength(), channelOffset);
