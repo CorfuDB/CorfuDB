@@ -89,32 +89,35 @@ public class SequencerServer extends AbstractServer {
     private static final String KEY_STREAM_TAIL_MAP = "STREAM_TAIL_MAP";
     private static final String KEY_STREAM_TAIL_TO_GLOBAL_TAIL_MAP = "STREAM_TAIL_TO_GLOBAL_TAIL_MAP";
 
-    /**
-     * The sequencer maintains information about log and streams:
-     *
-     *  - {@link SequencerServer::globalLogTail}:
-     *      global log tail. points to the first available position (initially, 0).
-     *  - {@link SequencerServer::streamTailMap}:
-     *      a map of per-streams tail. points to per-streams first available position.
-     *  - {@link SequencerServer::streamTailToGlobalTailMap}:
-     *      per streams map to last issued global-log position. used for backpointers.
-     *  - {@link SequencerServer::conflictToGlobalTailCache}:
-     *      a cache of recent conflict keys and their latest global-log position
-     *  - {@link SequencerServer::maxConflictWildcard} :
-     *      a "wildcard" representing the maximal update timestamp of
-     *      all the confict keys which were evicted from the cache
-     *
-     * Every append to the log updates the information in these maps.
-     */
+    /**  - {@link SequencerServer::globalLogTail}:
+     *      global log first available position (initially, 0). */
     @Getter
     private final AtomicLong globalLogTail = new AtomicLong(0L);
-    private final AtomicLong globalLogStart = new AtomicLong(0L); // remember start point, if sequencer is started as failover sequencer
 
+    /** remember start point, if sequencer is started as failover sequencer */
+    private final AtomicLong globalLogStart = new AtomicLong(0L);
+
+    /**  - {@link SequencerServer::streamTailMap}:
+     *      per-streamfirst available position (initially, null). */
     private final ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
+
+    /**  - {@link SequencerServer::streamTailToGlobalTailMap}:
+     *      per streams map to last issued global-log position. used for
+     *      backpointers. */
     private final ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
 
-    private final long maxConflictCacheSize = 1_000_000;
+    /**  TX conflict-resolution information:
+     *
+     * {@link SequencerServer::conflictToGlobalTailCache}:
+     *      a cache of recent conflict keys and their latest global-log
+     *      position.
+     *
+     * {@link SequencerServer::maxConflictWildcard} :
+     *      a "wildcard" representing the maximal update timestamp of
+     *      all the confict keys which were evicted from the cache
+     */
     private long maxConflictWildcard = -1L;
+    private final long maxConflictCacheSize = 1_000_000;
     private final Cache<Integer, Long>
             conflictToGlobalTailCache = Caffeine.newBuilder()
             .maximumSize(maxConflictCacheSize)
@@ -128,6 +131,9 @@ public class SequencerServer extends AbstractServer {
             .recordStats()
             .build();
 
+    /** flag indicating whether this sequencer is the bootstrap
+     * sequencer for the log, or not.
+     */
     private boolean isFailoverSequencer = false;
 
     /** Handler for this server */
