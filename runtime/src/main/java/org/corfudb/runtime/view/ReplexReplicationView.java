@@ -24,6 +24,7 @@ import java.util.function.Function;
  * Created by amytai on 8/26/16.
  */
 @Slf4j
+@Deprecated
 public class ReplexReplicationView extends AbstractReplicationView {
 
     public ReplexReplicationView(Layout l, Layout.LayoutSegment ls) {

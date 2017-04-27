@@ -254,16 +254,13 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
         try {
             address = this.builder.runtime.getStreamsView()
-                    .acquireAndWrite(
+                    .append(
 
                             // a set of stream-IDs that contains the affected streams
                             affectedStreams,
 
                             // a MultiObjectSMREntry that contains the update(s) to objects
                             collectWriteSetEntries(),
-
-                            // nothing to do after successful acquisition and after deacquisition
-                            t->true, t->true,
 
                             // TxResolution info:
                             // 1. snapshot timestamp

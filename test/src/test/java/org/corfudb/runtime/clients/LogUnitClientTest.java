@@ -256,7 +256,7 @@ public class LogUnitClientTest extends AbstractClientTest {
 
         // Corrupt the written log entry
         String logDir = (String) serverContext.getServerConfig().get("--log-path");
-        String logFilePath = logDir + File.separator + "log" + File.separator + new UUID(0,0) + "-0.log";
+        String logFilePath = logDir + File.separator + "log/0.log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
 
         ByteBuffer metaDataBuf = ByteBuffer.allocate(METADATA_SIZE);

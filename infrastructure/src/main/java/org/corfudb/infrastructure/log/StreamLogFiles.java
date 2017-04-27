@@ -27,17 +27,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
-import com.google.common.cache.RemovalListener;
-import com.google.common.cache.RemovalNotification;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
-import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -59,7 +52,6 @@ import org.corfudb.format.Types.Metadata;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
@@ -79,9 +71,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     static public final short RECORD_DELIMITER = 0x4C45;
     static public int VERSION = 1;
-    static public int RECORDS_PER_LOG_FILE = 10_000;
+    static public int RECORDS_PER_LOG_FILE = 10000;
     static public int TRIM_THRESHOLD = (int) (.25 * RECORDS_PER_LOG_FILE);
-    static public int DEFAULT_SEGMENT_CACHE_SIZE = 100_000;
 
     static public final int METADATA_SIZE = Metadata.newBuilder()
             .setChecksum(-1)
@@ -90,71 +81,17 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             .getSerializedSize();
     private final boolean noVerify;
     public final String logDir;
-    private LoadingCache<Pair<UUID, Long>, SegmentHandle> segmentsCache;
+    private Map<String, SegmentHandle> writeChannels;
     private Set<FileChannel> channelsToSync;
     private MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
 
     public StreamLogFiles(String logDir, boolean noVerify) {
-        this(logDir, noVerify, DEFAULT_SEGMENT_CACHE_SIZE);
-    }
-
-    public StreamLogFiles(String logDir, boolean noVerify, long segmentCacheSize) {
         this.logDir = logDir;
-        segmentsCache = getCache(segmentCacheSize);
+        writeChannels = new ConcurrentHashMap();
         channelsToSync = new HashSet<>();
         this.noVerify = noVerify;
 
         verifyLogs();
-    }
-
-    @SuppressWarnings("unchecked")
-    private LoadingCache<Pair<UUID, Long>, SegmentHandle> getCache(long numSegments) {
-        return CacheBuilder.newBuilder()
-                .maximumWeight(numSegments)
-                .weigher((Long, SegmentHandle) -> {
-                            return 1;
-                        }
-                )
-                .removalListener(new RemovalListener() {
-                    @Override
-                    public void onRemoval(RemovalNotification notification) {
-                        SegmentHandle segmentHandle = (SegmentHandle) notification.getValue();
-                        segmentHandle.close();
-                        log.trace("Segment evicting segment {}", segmentHandle.getSegment());
-                    }
-                })
-                .build(new CacheLoader<Pair<UUID, Long>, SegmentHandle>() {
-                    public SegmentHandle load(Pair<UUID, Long> segmentKey) {
-
-                        String filePath = logDir + File.separator;
-
-                        if (segmentKey.getKey() == null) {
-                            filePath += segmentKey.getValue();
-                        } else {
-                            filePath += segmentKey.getKey().toString() + "-" + segmentKey.getValue();
-                        }
-
-                        filePath += ".log";
-
-                        try {
-                            FileChannel fc1 = getChannel(filePath, false);
-                            FileChannel fc2 = getChannel(getTrimmedFilePath(filePath), false);
-                            FileChannel fc3 = getChannel(getPendingTrimsFilePath(filePath), false);
-
-                            writeHeader(fc1, VERSION, !noVerify);
-                            log.trace("Opened new log file at {}", filePath);
-                            SegmentHandle sh = new SegmentHandle(segmentKey.getValue(), fc1, fc2, fc3, filePath, segmentKey.getKey());
-                            // The first time we open a file we should read to the end, to load the
-                            // map of entries we already have.
-                            readAddressSpace(sh);
-                            loadTrimAddresses(sh);
-                            return sh;
-                        } catch (IOException e) {
-                            log.error("Error opening file {}", filePath, e);
-                            throw new RuntimeException(e);
-                        }
-                    }
-                });
     }
 
     private void verifyLogs() {
@@ -255,7 +192,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public void compact() {
         //TODO(Maithem) Open all segment handlers?
-        for (SegmentHandle sh : segmentsCache.asMap().values()) {
+        for (SegmentHandle sh : writeChannels.values()) {
             Set<Long> pending = new HashSet(sh.getPendingTrims());
             Set<Long> trimmed = sh.getTrimmedAddresses();
 
@@ -274,22 +211,22 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
             try {
                 log.info("Starting compaction, pending entries size {}", pending.size());
-                trimLogFile(sh, pending);
+                trimLogFile(sh.getFileName(), pending);
             } catch (IOException e) {
                 log.error("Compact operation failed for file {}", sh.getFileName());
             }
         }
     }
 
-    private void trimLogFile(SegmentHandle segmentHandle, Set<Long> pendingTrim) throws IOException {
-        FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(segmentHandle.getFileName() + ".copy"),
+    private void trimLogFile(String filePath, Set<Long> pendingTrim) throws IOException {
+        FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath + ".copy"),
                 EnumSet.of(StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE,
                         StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
 
-        FileChannel fc2 = FileChannel.open(FileSystems.getDefault().getPath(getTrimmedFilePath(segmentHandle.getFileName())),
+        FileChannel fc2 = FileChannel.open(FileSystems.getDefault().getPath(getTrimmedFilePath(filePath)),
                 EnumSet.of(StandardOpenOption.APPEND));
 
-        Pair<LogHeader, Collection<LogEntry>> log = getCompactedEntries(segmentHandle.getFileName(), pendingTrim);
+        Pair<LogHeader, Collection<LogEntry>> log = getCompactedEntries(filePath, pendingTrim);
         LogHeader header = log.getKey();
         Collection<LogEntry> compacted = log.getValue();
 
@@ -325,11 +262,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
         fc2.close();
 
-        Files.move(Paths.get(segmentHandle.getFileName() + ".copy"), Paths.get(segmentHandle.getFileName()),
-                StandardCopyOption.ATOMIC_MOVE);
+        Files.move(Paths.get(filePath + ".copy"), Paths.get(filePath), StandardCopyOption.ATOMIC_MOVE);
 
         // Force the reload of the new segment
-        segmentsCache.invalidate(new Pair<>(segmentHandle.getStream(), segmentHandle.getSegment()));
+        writeChannels.remove(filePath);
     }
 
     Pair<LogHeader, Collection<LogEntry>> getCompactedEntries(String filePath, Set<Long> pendingTrim) throws IOException {
@@ -547,7 +483,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param address The address of the entry.
      * @return The log unit entry at that address, or NULL if there was no entry.
      */
-    private LogData readRecord(SegmentHandle sh, long address)
+    private LogData  readRecord(SegmentHandle sh, long address)
             throws IOException {
         FileChannel fc = null;
         try {
@@ -604,18 +540,43 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      */
     @VisibleForTesting
     synchronized SegmentHandle getSegmentHandleForAddress(LogAddress logAddress) {
+        String filePath = logDir + File.separator;
         long segment = logAddress.address / RECORDS_PER_LOG_FILE;
-        UUID streamUUID = new UUID(0L, 0L);
-        if(logAddress.getStream() != null){
-            streamUUID = logAddress.getStream();
+
+        if (logAddress.getStream() == null) {
+            filePath += segment;
+        } else {
+            filePath += logAddress.getStream().toString() + "-" + segment;
         }
-        Pair<UUID, Long> key = new Pair<>(streamUUID, segment);
-        try {
-            return segmentsCache.getUnchecked(key);
-        } catch (UncheckedExecutionException e) {
-            log.error("Encountered exception while accessing a segment for address {}", logAddress, e);
-            throw (LogUnitException)e.getCause();
-        }
+
+        filePath += ".log";
+
+        return writeChannels.computeIfAbsent(filePath, a -> {
+
+            try {
+                FileChannel fc1 = getChannel(a, false);
+                FileChannel fc2 = getChannel(getTrimmedFilePath(a), false);
+                FileChannel fc3 = getChannel(getPendingTrimsFilePath(a), false);
+
+                boolean verify = true;
+
+                if (noVerify) {
+                    verify = false;
+                }
+
+                writeHeader(fc1, VERSION, verify);
+                log.trace("Opened new log file at {}", a);
+                SegmentHandle sh = new SegmentHandle(segment, fc1, fc2, fc3, a);
+                // The first time we open a file we should read to the end, to load the
+                // map of entries we already have.
+                readAddressSpace(sh);
+                loadTrimAddresses(sh);
+                return sh;
+            } catch (IOException e) {
+                log.error("Error opening file {}", a, e);
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     private void loadTrimAddresses(SegmentHandle sh) throws IOException {
@@ -724,7 +685,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     private Optional<Types.DataRank> createProtobufsDataRank(IMetadata entry) {
         IMetadata.DataRank rank = entry.getRank();
-        if (rank == null) {
+        if (rank==null) {
             return Optional.empty();
         }
         Types.DataRank result = Types.DataRank.newBuilder().
@@ -735,8 +696,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         return Optional.of(result);
     }
 
-    private @Nullable
-    IMetadata.DataRank createDataRank(LogEntry entity) {
+    private @Nullable IMetadata.DataRank createDataRank(LogEntry entity) {
         if (!entity.hasRank()) {
             return null;
         }
@@ -800,7 +760,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             SegmentHandle fh = getSegmentHandleForAddress(logAddress);
             if (fh.getKnownAddresses().containsKey(logAddress.address) ||
                     fh.getTrimmedAddresses().contains(logAddress.address)) {
-                if (entry.getRank() == null) {
+                if (entry.getRank()==null) {
                     throw new OverwriteException();
                 } else {
                     // the method below might throw DataOutrankedException or ValueAdoptedException
@@ -848,8 +808,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         private final FileChannel pendingTrimChannel;
         @NonNull
         private String fileName;
-        @NonNull
-        private UUID stream;
         private Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap();
         private Set<Long> trimmedAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
         private Set<Long> pendingTrims = Collections.newSetFromMap(new ConcurrentHashMap<>());
@@ -875,18 +833,15 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     @Override
     public void close() {
-        segmentsCache.invalidateAll();
-        segmentsCache.cleanUp();
-        segmentsCache = null;
+        for (SegmentHandle fh : writeChannels.values()) {
+            fh.close();
+        }
+
+        writeChannels = new HashMap<>();
     }
 
     @Override
     public void release(LogAddress logAddress, LogData entry) {
-    }
-
-    @VisibleForTesting
-    LoadingCache<Pair<UUID, Long>, SegmentHandle> getSegmentsCache () {
-        return segmentsCache;
     }
 
     @VisibleForTesting
