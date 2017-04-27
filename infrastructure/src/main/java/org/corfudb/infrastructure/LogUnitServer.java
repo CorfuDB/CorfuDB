@@ -106,7 +106,9 @@ public class LogUnitServer extends AbstractServer {
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
-        maxCacheSize = Utils.parseLong(opts.get("--max-cache"));
+        double cacheSizeHeapRatio = Double.parseDouble((String) opts.get("--cache-heap-ratio"));
+
+        maxCacheSize = (long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio);
 
         if ((Boolean) opts.get("--memory")) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). " +
@@ -312,5 +314,10 @@ public class LogUnitServer extends AbstractServer {
     @VisibleForTesting
     LoadingCache<LogAddress, ILogData> getDataCache() {
         return dataCache;
+    }
+
+    @VisibleForTesting
+    long getMaxCacheSize() {
+        return maxCacheSize;
     }
 }

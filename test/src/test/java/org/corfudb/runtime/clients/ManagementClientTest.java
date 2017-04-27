@@ -26,12 +26,10 @@ public class ManagementClientTest extends AbstractClientTest {
 
     @Override
     Set<AbstractServer> getServersForTest() {
-        final int MAX_CACHE = 256_000_000;
         ServerContext serverContext = new ServerContextBuilder()
                 .setInitialToken(0)
                 .setMemory(true)
                 .setSingle(true)
-                .setMaxCache(MAX_CACHE)
                 .setServerRouter(serverRouter)
                 .build();
         server = new ManagementServer(serverContext);
