@@ -1,20 +1,13 @@
 package org.corfudb.infrastructure;
 
-import com.github.benmanes.caffeine.cache.LoadingCache;
-import edu.umd.cs.findbugs.SystemProperties;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import org.assertj.core.api.Assertions;
 import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.serializer.Serializers;
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
@@ -22,10 +15,14 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.Collections;
 import java.util.Random;
-import java.util.concurrent.RunnableFuture;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 2/4/16.
@@ -165,6 +162,52 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .matchesDataAtAddress(LOW_ADDRESS, "0".getBytes())
                 .matchesDataAtAddress(MID_ADDRESS, "100".getBytes())
                 .matchesDataAtAddress(HIGH_ADDRESS, "10000000".getBytes());
+    }
+
+    @Test
+    public void checkUnCachedWrites() {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+
+        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .build());
+
+        this.router.reset();
+        this.router.addServer(s1);
+
+        ByteBuf b = Unpooled.buffer();
+        Serializers.CORFU.serialize("0".getBytes(), b);
+        WriteRequest m = WriteRequest.builder()
+                .writeMode(WriteMode.NORMAL)
+                .data(new LogData(DataType.DATA, b))
+                .build();
+        final Long globalAddress = 0L;
+        m.setGlobalAddress(globalAddress);
+        Set<UUID> streamSet = new HashSet(Collections.singleton(CorfuRuntime.getStreamID("a")));
+        m.setStreams(streamSet);
+        Map<UUID, Long> uuidLongMap = new HashMap();
+        UUID uuid = new UUID(1,1);
+        final Long address = 5L;
+        uuidLongMap.put(uuid, address);
+        m.setBackpointerMap(uuidLongMap);
+        m.setLogicalAddresses(uuidLongMap);
+        sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
+
+        s1 = new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .build());
+
+        this.router.reset();
+        this.router.addServer(s1);
+
+        ILogData entry = s1.getDataCache().get(new LogAddress(globalAddress, null));
+
+        // Verify that the meta data can be read correctly
+        assertThat(entry.getBackpointerMap()).isEqualTo(uuidLongMap);
+        assertThat(entry.getLogicalAddresses()).isEqualTo(uuidLongMap);
+        assertThat(entry.getGlobalAddress()).isEqualTo(globalAddress);
     }
 
     private String createLogFile(String path, int version, boolean noVerify) throws IOException {
