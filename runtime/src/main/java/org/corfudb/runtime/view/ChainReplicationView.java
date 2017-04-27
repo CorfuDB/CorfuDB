@@ -32,6 +32,7 @@ import java.util.function.Function;
  * Created by mwei on 12/11/15.
  */
 @Slf4j
+@Deprecated
 public class ChainReplicationView extends AbstractReplicationView {
 
     public ChainReplicationView(Layout l, Layout.LayoutSegment ls) {
