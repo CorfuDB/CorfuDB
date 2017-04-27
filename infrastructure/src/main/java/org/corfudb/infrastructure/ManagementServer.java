@@ -25,6 +25,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Instantiates and performs failure detection and handling asynchronously.
@@ -46,8 +47,8 @@ public class ManagementServer extends AbstractServer {
     private final Map<String, Object> opts;
     private final ServerContext serverContext;
 
-    private static final String PREFIX_LAYOUT = "M_LAYOUT";
-    private static final String KEY_LAYOUT = "M_CURRENT";
+    private static final String PREFIX_MANAGEMENT = "MANAGEMENT";
+    private static final String KEY_LAYOUT = "LAYOUT";
 
     private static final String metricsPrefix = "corfu.server.management-server.";
 
@@ -74,6 +75,10 @@ public class ManagementServer extends AbstractServer {
      */
     private boolean startFailureHandler = false;
     /**
+     * Failure Handler Dispatcher to launch configuration changes or recovery.
+     */
+    FailureHandlerDispatcher failureHandlerDispatcher;
+    /**
      * Interval in executing the failure detection policy.
      * In milliseconds.
      */
@@ -88,6 +93,7 @@ public class ManagementServer extends AbstractServer {
      * Future for periodic failure detection task.
      */
     private Future failureDetectorFuture = null;
+    private AtomicBoolean recovered = new AtomicBoolean(false);
 
     public ManagementServer(ServerContext serverContext) {
 
@@ -95,6 +101,12 @@ public class ManagementServer extends AbstractServer {
         this.serverContext = serverContext;
 
         bootstrapEndpoint = (opts.get("--management-server")!=null) ? opts.get("--management-server").toString() : null;
+
+        safeUpdateLayout(getCurrentLayout());
+        // If no state was preserved, there is no layout to recover.
+        if (latestLayout == null) {
+            recovered.set(true);
+        }
 
         if((Boolean) opts.get("--single")) {
             String localAddress = opts.get("--address") + ":" + opts.get("<port>");
@@ -116,12 +128,11 @@ public class ManagementServer extends AbstractServer {
             );
 
             safeUpdateLayout(singleLayout);
-        } else {
-            safeUpdateLayout(getCurrentLayout());
         }
 
         this.failureDetectorPolicy = serverContext.getFailureDetectorPolicy();
         this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();
+        this.failureHandlerDispatcher = new FailureHandlerDispatcher();
         this.failureDetectorService = Executors.newScheduledThreadPool(
                 2,
                 new ThreadFactoryBuilder()
@@ -138,6 +149,15 @@ public class ManagementServer extends AbstractServer {
                     TimeUnit.MILLISECONDS);
         } catch (RejectedExecutionException err) {
             log.error("Error scheduling failure detection task, {}", err);
+        }
+    }
+
+    private void recover() {
+        try {
+            failureHandlerDispatcher.recoverCluster((Layout) latestLayout.clone(), getCorfuRuntime());
+            safeUpdateLayout(corfuRuntime.getLayoutView().getLayout());
+        } catch (CloneNotSupportedException e) {
+            log.error("Failure Handler could not clone layout: {}", e);
         }
     }
 
@@ -170,7 +190,7 @@ public class ManagementServer extends AbstractServer {
      * @param layout Layout to be persisted
      */
     private void setCurrentLayout(Layout layout) {
-        serverContext.getDataStore().put(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT, layout);
+        serverContext.getDataStore().put(Layout.class, PREFIX_MANAGEMENT, KEY_LAYOUT, layout);
     }
 
     /**
@@ -179,7 +199,7 @@ public class ManagementServer extends AbstractServer {
      * @return The last persisted layout
      */
     private Layout getCurrentLayout() {
-        return serverContext.getDataStore().get(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT);
+        return serverContext.getDataStore().get(Layout.class, PREFIX_MANAGEMENT, KEY_LAYOUT);
     }
 
     boolean checkBootstrap(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
@@ -261,7 +281,6 @@ public class ManagementServer extends AbstractServer {
         if (!checkBootstrap(msg, ctx, r)) { return; }
 
         log.info("Received Failures : {}", msg.getPayload().getNodes());
-        FailureHandlerDispatcher failureHandlerDispatcher = new FailureHandlerDispatcher();
         try {
             failureHandlerDispatcher.dispatchHandler(failureHandlerPolicy, (Layout) latestLayout.clone(), getCorfuRuntime(), msg.getPayload().getNodes());
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
@@ -337,6 +356,8 @@ public class ManagementServer extends AbstractServer {
             log.warn("Management Server waiting to be bootstrapped");
             return;
         }
+        // Recover if flag is false
+        if (!recovered.getAndSet(true)) recover();
         if (failureDetectorFuture == null || failureDetectorFuture.isDone()) {
             failureDetectorFuture = failureDetectorService.submit(this::failureDetectorTask);
         } else {
@@ -389,7 +410,7 @@ public class ManagementServer extends AbstractServer {
 
         // Check if handler has been initiated.
         if (!startFailureHandler) {
-            log.warn("Failure Handler not yet initiated: {}", pollReport.toString());
+            log.debug("Failure Handler not yet initiated: {}", pollReport.toString());
             return;
         }
 
