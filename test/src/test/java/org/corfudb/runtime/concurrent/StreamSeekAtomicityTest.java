@@ -3,23 +3,23 @@ package org.corfudb.runtime.concurrent;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.object.transactions.AbstractObjectTest;
-import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Created by dmalkhi on 3/17/17.
  */
 @Slf4j
-public class StreamSeekAtomicityTest extends AbstractObjectTest  {
+public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
+    @Override
+    public void TXBegin() { OptimisticTXBegin(); }
+
+
 
     protected int numIterations = PARAMETERS.NUM_ITERATIONS_MODERATE;
 

@@ -19,19 +19,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class WriteAfterWriteTransactionContextTest extends AbstractTransactionContextTest {
 
-
-    // override {@link AbstractObjectTest ::TXBegin() } in order to set write-write isolation level
-    @Override
-    protected void TXBegin() {
-        getRuntime().getObjectsView().TXBuild()
-                .setType(TransactionType.WRITE_AFTER_WRITE)
-                .begin();
-    }
-
-
     /** In a write after write transaction, concurrent modifications
      * with the same read timestamp should abort.
      */
+    @Override
+    public void TXBegin() { WWTXBegin(); }
+
 
     @Test
     public void concurrentModificationsCauseAbort()
@@ -41,8 +34,8 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
         getMap();
 
         t(1, () -> write("k" , "v1"));
-        t(1, this::TXBegin);
-        t(2, this::TXBegin);
+        t(1, this::WWTXBegin);
+        t(2, this::WWTXBegin);
         t(1, () -> get("k"));
         t(2, () -> get("k"));
         t(1, () -> write("k" , "v2"));

@@ -21,6 +21,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.Collections;
+import java.util.Random;
+import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
@@ -30,6 +32,8 @@ import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
  */
 public class LogUnitServerTest extends AbstractServerTest {
 
+    private static final double minHeapRatio = 0.1;
+    private static final double maxHeapRatio = 0.9;
 
     @Override
     public AbstractServer getDefaultServer() {
@@ -291,6 +295,22 @@ public class LogUnitServerTest extends AbstractServerTest {
         assertThat(s2)
                 .matchesDataAtAddress(ADDRESS_0, "1".getBytes());
 
+    }
+
+    @Test
+    public void CheckCacheSizeIsCorrectRatio() throws Exception {
+
+        Random r = new Random(System.currentTimeMillis());
+        double randomCacheRatio = minHeapRatio + (maxHeapRatio - minHeapRatio) * r.nextDouble();
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .setCacheSizeHeapRatio(String.valueOf(randomCacheRatio))
+                .build());
+
+
+        assertThat(s1).hasCorrectCacheSize(randomCacheRatio);
     }
 
 

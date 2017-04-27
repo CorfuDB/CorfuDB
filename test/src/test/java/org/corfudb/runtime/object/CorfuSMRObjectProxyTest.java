@@ -20,20 +20,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Created by mwei on 1/21/16.
  */
-public class CorfuSMRObjectProxyTest extends AbstractViewTest {
-    @Getter
-    final String defaultConfigurationString = getDefaultEndpoint();
-
+public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
     @Test
     @SuppressWarnings("unchecked")
     public void canReadWriteToSingle()
             throws Exception {
         getDefaultRuntime();
 
-        Map<String, String> testMap = getRuntime().getObjectsView().build()
-        .setStreamName("test")
-        .setTypeToken(new TypeToken<TreeMap<String,String>>() {})
-                .open();
+        Map<String, String> testMap = (Map<String, String>)
+                instantiateCorfuObject(new TypeToken<TreeMap<String,String>>() {}, "test");
 
         testMap.clear();
         assertThat(testMap.put("a", "a"))
@@ -43,10 +38,8 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
 
-        Map<String, String> testMap2 = getRuntime().getObjectsView().build()
-                .setStreamName("test")
-                .setTypeToken(new TypeToken<TreeMap<String,String>>() {})
-                .open();
+        Map<String, String> testMap2 = (Map<String, String>)
+                instantiateCorfuObject(new TypeToken<TreeMap<String,String>>() {}, "test");
 
         assertThat(testMap2.get("a"))
                 .isEqualTo("b");
@@ -58,11 +51,8 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         getDefaultRuntime();
 
         final int TEST_VALUE = 42;
-        TestClass testClass = getRuntime().getObjectsView()
-                .build()
-                .setStreamName("test")
-                .setTypeToken(new TypeToken<TestClass>() {})
-                .open();
+        TestClass testClass = (TestClass)
+                instantiateCorfuObject(new TypeToken<TestClass>() {}, "test");
 
         testClass.set(TEST_VALUE);
         assertThat(testClass.get())
@@ -71,11 +61,9 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
         CorfuRuntime runtime2 = new CorfuRuntime(getDefaultEndpoint());
         runtime2.connect();
 
-        TestClass testClass2 = runtime2.getObjectsView()
-                .build()
-                .setStreamName("test")
-                .setType(TestClass.class)
-                .open();
+        TestClass testClass2 = (TestClass)
+                instantiateCorfuObject(runtime2,
+                        new TypeToken<TestClass>() {}, "test");
 
         assertThat(testClass2.get())
                 .isEqualTo(TEST_VALUE);
@@ -175,11 +163,10 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canUseAnnotations()
             throws Exception {
-        CorfuRuntime r = getDefaultRuntime();
-        TestClassUsingAnnotation test = r.getObjectsView().build()
-                .setStreamName("test")
-                .setTypeToken(new TypeToken<TestClassUsingAnnotation>() {})
-                .open();
+        getDefaultRuntime();
+
+        TestClassUsingAnnotation test = (TestClassUsingAnnotation)
+                instantiateCorfuObject(new TypeToken<TestClassUsingAnnotation>() {}, "test");
 
         assertThat(test.testFn1())
                 .isTrue();
@@ -191,12 +178,10 @@ public class CorfuSMRObjectProxyTest extends AbstractViewTest {
                 .isNotZero();
 
         // clear the cache, forcing a new object to be built.
-        r.getObjectsView().getObjectCache().clear();
+        getRuntime().getObjectsView().getObjectCache().clear();
 
-        TestClassUsingAnnotation test2 = r.getObjectsView().build()
-                .setStreamName("test")
-                .setType(TestClassUsingAnnotation.class)
-                .open();
+        TestClassUsingAnnotation test2 = (TestClassUsingAnnotation)
+                instantiateCorfuObject(TestClassUsingAnnotation.class, "test");
 
         assertThat(test)
                 .isNotSameAs(test2);
