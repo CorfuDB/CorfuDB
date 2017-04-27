@@ -40,5 +40,4 @@ CORFUDB_HEAP="${CORFUDB_HEAP:-1000}"
 export CORFUDB_JVMFLAGS="-Xmx${CORFUDB_HEAP}m $SERVER_JVMFLAGS"
 
 RUN_AS=`basename $0`
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 "$JAVA" -cp "$CLASSPATH" $JVMFLAGS org.corfudb.shell.ShellMain run-script "$DIR/../corfu_scripts/$RUN_AS.clj" $*
