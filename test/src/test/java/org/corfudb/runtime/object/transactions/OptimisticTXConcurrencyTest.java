@@ -9,13 +9,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Created by dalia on 12/8/16.
  */
 public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
-
     @Override
-    protected void TXBegin() {
-        getRuntime().getObjectsView().TXBuild()
-                .setType(TransactionType.OPTIMISTIC)
-                .begin();
-    }
+    public void TXBegin() { OptimisticTXBegin(); }
+
+
 
     public void testOpacityOptimistic(boolean isInterleaved) throws Exception {
 

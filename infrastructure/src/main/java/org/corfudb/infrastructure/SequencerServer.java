@@ -22,7 +22,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -85,6 +84,10 @@ public class SequencerServer extends AbstractServer {
      * Our options
      */
     private final Map<String, Object> opts;
+
+    private static final String KEY_GLOBAL_LOG_TAIL = "GLOBAL_LOG_TAIL";
+    private static final String KEY_STREAM_TAIL_MAP = "STREAM_TAIL_MAP";
+    private static final String KEY_STREAM_TAIL_TO_GLOBAL_TAIL_MAP = "STREAM_TAIL_TO_GLOBAL_TAIL_MAP";
 
     /**
      * The sequencer maintains information about log and streams:
@@ -258,6 +261,8 @@ public class SequencerServer extends AbstractServer {
             maxStreamGlobalTails = Math.max(maxStreamGlobalTails, lastIssued == null ? Long.MIN_VALUE : lastIssued);
         }
 
+        saveStreamTailMap(streamTailMap);
+
         // If no streams are specified in the request, this value returns the last global token issued.
         long responseGlobalTail = (req.getStreams().size() == 0) ? globalLogTail.get() - 1 : maxStreamGlobalTails;
         Token token = new Token(responseGlobalTail, r.getServerEpoch());
@@ -271,7 +276,8 @@ public class SequencerServer extends AbstractServer {
     @ServerHandler(type=CorfuMsgType.RESET_SEQUENCER, opTimer=metricsPrefix + "reset")
     public synchronized void resetServer(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r,
                                          boolean isMetricsEnabled) {
-        long initialToken = msg.getPayload();
+        long restoredGlobalTail = restoreGlobalLogTail();
+        long initialToken = restoredGlobalTail > msg.getPayload() ? restoredGlobalTail : msg.getPayload();
 
         //
         // if the sequencer is reset, then we can't know when was
@@ -292,6 +298,11 @@ public class SequencerServer extends AbstractServer {
             globalLogStart.set(initialToken);
             maxConflictWildcard = initialToken-1;
             conflictToGlobalTailCache.invalidateAll();
+            // FIXME: Do not preserve Sequencer State.
+            streamTailMap.clear();
+            streamTailToGlobalTailMap.clear();
+            streamTailMap.putAll(restoreStreamTailMap());
+            streamTailToGlobalTailMap.putAll(restoreStreamTailToGlobalTailMap());
         }
 
         log.info("Sequencer reset with token = {}", initialToken);
@@ -319,6 +330,7 @@ public class SequencerServer extends AbstractServer {
         // for raw log implementation, simply extend the global log tail and return the global-log token
         if (req.getReqType() == TokenRequest.TK_RAW) {
             Token token = new Token(globalLogTail.getAndAdd(req.getNumTokens()), serverEpoch);
+            saveGlobalLogTail(globalLogTail.get());
             r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                     new TokenResponse(TokenType.NORMAL, token, Collections.emptyMap(), Collections.emptyMap())));
             return;
@@ -385,6 +397,11 @@ public class SequencerServer extends AbstractServer {
             });
         }
 
+        // FIXME: Do not preserve Sequencer State.
+        saveGlobalLogTail(globalLogTail.get());
+        saveStreamTailMap(streamTailMap);
+        saveStreamTailToGlobalTailMap(streamTailToGlobalTailMap);
+
         // update the cache of conflict parameters
         if (req.getTxnResolution() != null)
             req.getTxnResolution().getWriteConflictParams().entrySet()
@@ -410,5 +427,38 @@ public class SequencerServer extends AbstractServer {
                         token,
                         backPointerMap.build(),
                         requestStreamTokens.build())));
+    }
+
+    private void saveGlobalLogTail(Long globalLogTail) {
+        serverContext.getDataStore().put(Long.class, PREFIX_SEQUENCER, KEY_GLOBAL_LOG_TAIL, globalLogTail);
+    }
+
+    private Long restoreGlobalLogTail() {
+        Long tail = serverContext.getDataStore().get(Long.class, PREFIX_SEQUENCER, KEY_GLOBAL_LOG_TAIL);
+        return tail == null ? 0L : tail;
+    }
+
+    private void saveStreamTailMap(ConcurrentHashMap<UUID, Long> streamTailMap) {
+        serverContext.getDataStore().put(Map.class, PREFIX_SEQUENCER, KEY_STREAM_TAIL_MAP, streamTailMap);
+    }
+
+    private ConcurrentHashMap<UUID, Long> restoreStreamTailMap() {
+        ConcurrentHashMap map = serverContext.getDataStore().get(ConcurrentHashMap.class, PREFIX_SEQUENCER, KEY_STREAM_TAIL_MAP);
+        if (map == null) return new ConcurrentHashMap<>();
+        ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
+        map.forEach((uuid, aLong) -> streamTailMap.put(UUID.fromString((String)uuid), ((Double)aLong).longValue()));
+        return streamTailMap;
+    }
+
+    private void saveStreamTailToGlobalTailMap(ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap) {
+        serverContext.getDataStore().put(Map.class, PREFIX_SEQUENCER, KEY_STREAM_TAIL_TO_GLOBAL_TAIL_MAP, streamTailToGlobalTailMap);
+    }
+
+    private ConcurrentHashMap<UUID, Long> restoreStreamTailToGlobalTailMap() {
+        ConcurrentHashMap map = serverContext.getDataStore().get(ConcurrentHashMap.class, PREFIX_SEQUENCER, KEY_STREAM_TAIL_TO_GLOBAL_TAIL_MAP);
+        if (map == null) return new ConcurrentHashMap<>();
+        ConcurrentHashMap<UUID, Long> streamTailToGlobalTailMap = new ConcurrentHashMap<>();
+        map.forEach((uuid, aLong) -> streamTailToGlobalTailMap.put(UUID.fromString((String)uuid), ((Double)aLong).longValue()));
+        return streamTailToGlobalTailMap;
     }
 }
