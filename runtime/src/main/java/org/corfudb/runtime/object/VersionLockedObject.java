@@ -349,7 +349,7 @@ public class VersionLockedObject<T> {
     /** Check whether this object is currently under optimistic modifications. */
     public boolean isOptimisticallyModifiedUnsafe() {
         return optimisticStream != null &&
-                optimisticStream.pos() != Address.NEVER_READ;
+                Address.isAddress(optimisticStream.pos());
     }
 
     /** Reset this object to the uninitialized state. */
@@ -377,7 +377,7 @@ public class VersionLockedObject<T> {
     @Override
     public String toString() {
         return object.getClass().getSimpleName() + "[" + Utils.toReadableID(smrStream.getID()) + "]@"
-                + (getVersionUnsafe() == Address.NEVER_READ ? "NR" : getVersionUnsafe())
+                + (Address.nonAddress(getVersionUnsafe()) ? "NR" : getVersionUnsafe())
                 + (optimisticStream == null ? "" : "+" + optimisticStream.pos());
     }
 
@@ -532,7 +532,7 @@ public class VersionLockedObject<T> {
     protected void optimisticRollbackUnsafe() {
         try {
             log.trace("OptimisticRollback[{}] started", this);
-            rollbackStreamUnsafe(this.optimisticStream, Address.NEVER_READ);
+            rollbackStreamUnsafe(this.optimisticStream, Address.maxNonAddress());
             log.trace("OptimisticRollback[{}] complete", this);
         } catch (NoRollbackException nre) {
             log.debug("OptimisticRollback[{}] failed", this);

@@ -41,12 +41,12 @@ public abstract class AbstractStreamContext implements
                                  final long maxGlobalAddress) {
         this.id = id;
         this.maxGlobalAddress = maxGlobalAddress;
-        this.globalPointer = Address.NEVER_READ;
+        this.globalPointer = Address.maxNonAddress();
     }
 
     /** Reset the stream context. */
     void reset() {
-        globalPointer = Address.NEVER_READ;
+        globalPointer = Address.maxNonAddress();
     }
 
     /** Move the pointer for the context to the given global address,
@@ -57,6 +57,7 @@ public abstract class AbstractStreamContext implements
         // by default we just need to update the pointer.
         // we subtract by one, since the NEXT read will
         // have to include globalAddress.
+        // FIXME change this; what if globalAddress==0? somewhere down the line, some code will compare this with NEVER_READ
         globalPointer = globalAddress - 1;
     }
 

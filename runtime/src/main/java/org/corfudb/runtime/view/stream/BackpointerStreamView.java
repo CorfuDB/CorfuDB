@@ -196,8 +196,14 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     .getToken().getTokenValue();
         }
 
-        // If the backpointer was unwritten, return, there is nothing to do
-        if (latestTokenValue == Address.NEVER_READ) {
+        // If there is no infomation on the tail of the stream, return, there is nothing to do
+        if (Address.nonAddress(latestTokenValue)) {
+
+            // sanity check:
+            // curretly, the only possible non-address return value for a token-query is Address.NON_EXIST
+            if (latestTokenValue != Address.NON_EXIST)
+                log.warn("TOKEN[{}] unexpected return value", latestTokenValue);
+
             return false;
         }
 
@@ -215,7 +221,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         long currentRead = latestTokenValue;
 
         while (currentRead > context.globalPointer &&
-                currentRead != Address.NEVER_READ) {
+                Address.isAddress(currentRead)) {
             log.trace("Read_Fill_Queue[{}] Read {}", this, currentRead);
             // Read the entry in question.
             ILogData currentEntry =

@@ -8,11 +8,34 @@ package org.corfudb.runtime.view;
  */
 public class Address {
 
+    /**
+     * @param addr
+     * @return true for all flag non-address constants
+     */
+    public static boolean nonAddress(long addr) { return addr < 0; }
+
+    /**
+     * @param addr
+     * @return true is addr is a legitimate address; false for all flag non-address constants
+     */
+    public static boolean isAddress(long addr) { return addr >= 0; }
+
+    /**
+     * @return a constant which can be used as the base for address iterations
+     */
+    public static long minAddress() { return 0L; }
+
+    /**
+     * @return A constant which can be used in loops going down up to hitting a non-address.
+     */
+    public static long maxNonAddress() { return -1L; }
+
     /** The maximum address. */
     public static final long MAX = Long.MAX_VALUE;
 
-    /** Never read constant. Used by stream implementations to indicate
-     * that no entries have ever been returned. */
+    /** A runtime (only) constant,
+     * Indicating a stream address is not cached.
+     */
     public static final long NEVER_READ = -1L;
 
     /** Aborted request constant. Used to indicate an attempted read, but
@@ -34,4 +57,9 @@ public class Address {
      * the given stream (due to reset).
      */
     public static final long NO_BACKPOINTER = -5L;
+
+    /** A non-existing address constant.
+     * Indicating that an address was request, but no match exists.
+     */
+    public static final long NON_EXIST = -6L;
 }

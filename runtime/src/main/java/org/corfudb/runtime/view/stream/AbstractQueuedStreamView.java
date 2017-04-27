@@ -1,21 +1,16 @@
 package org.corfudb.runtime.view.stream;
 
-import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 
 import javax.annotation.Nonnull;
 import java.util.*;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
 /** The abstract queued stream view implements a stream backed by a read queue.
  *
@@ -252,13 +247,13 @@ public abstract class AbstractQueuedStreamView extends
                 .resolvedQueue.lower(context.globalPointer);
         // If the pointer is before our min resolution, we need to resolve
         // to get the correct previous entry.
-        if (prevAddress == null && context.minResolution != Address.NEVER_READ
+        if (prevAddress == null && Address.isAddress(context.minResolution)
                 || prevAddress != null && prevAddress <= context.minResolution) {
             long oldPointer = context.globalPointer;
             context.globalPointer = prevAddress == null ? Address.NEVER_READ :
                                                 prevAddress - 1L;
             remainingUpTo(context.minResolution);
-            context.minResolution = Address.NEVER_READ;
+            context.minResolution = Address.maxNonAddress();
             context.globalPointer = oldPointer;
             prevAddress = context
                     .resolvedQueue.lower(context.globalPointer);
@@ -280,7 +275,7 @@ public abstract class AbstractQueuedStreamView extends
     public synchronized ILogData current() {
         final QueuedStreamContext context = getCurrentContext();
 
-        if (context.globalPointer == Address.NEVER_READ) {
+        if (Address.nonAddress(context.globalPointer)) {
             return null;
         }
         return read(context.globalPointer);
@@ -309,12 +304,12 @@ public abstract class AbstractQueuedStreamView extends
         /** The minimum global address which we have resolved this
          * stream to.
          */
-        long minResolution = Address.NEVER_READ;
+        long minResolution = Address.maxNonAddress();
 
         /** The maximum global address which we have resolved this
          * stream to.
          */
-        long maxResolution = Address.NEVER_READ;
+        long maxResolution = Address.maxNonAddress();
 
         /**
          * A priority queue of potential addresses to be read from.
@@ -342,8 +337,8 @@ public abstract class AbstractQueuedStreamView extends
         /** {@inheritDoc} */
         @Override
         void seek(long globalAddress) {
-            if (globalAddress < Address.NEVER_READ) {
-                throw new IllegalArgumentException("globalAddress must be >= Address.NEVER_READ");
+            if (Address.nonAddress(globalAddress)) {
+                throw new IllegalArgumentException("globalAddress must be >= Address.maxNonAddress()");
             }
             log.trace("Seek[{}]({}), min={} max={}", this,  globalAddress, minResolution, maxResolution);
             // Update minResolution if necessary
