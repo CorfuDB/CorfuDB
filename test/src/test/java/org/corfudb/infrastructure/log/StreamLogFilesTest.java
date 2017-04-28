@@ -305,4 +305,17 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
                     .isInstanceOf(OverwriteException.class);
         }
     }
+
+    @Test
+    public void testWritingFileHeader() throws Exception {
+        String path = getDirPath();
+        StreamLogFiles log = new StreamLogFiles(path, false);
+        writeToLog(log, 0L);
+        log.sync(true);
+        StreamLogFiles log2 = new StreamLogFiles(path, false);
+        writeToLog(log2, 1L);
+        log2.sync(true);
+        StreamLogFiles log3 = new StreamLogFiles(path, false);
+        assertThat(log3.read(new LogAddress(1L, null))).isNotNull();
+    }
 }
