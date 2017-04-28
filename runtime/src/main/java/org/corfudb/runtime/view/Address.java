@@ -1,5 +1,7 @@
 package org.corfudb.runtime.view;
 
+import lombok.Getter;
+
 /** Currently, this class holds static constants used
  * to represent addresses. In the future, it may replace the
  * use of long depending on performance.
@@ -23,20 +25,19 @@ public class Address {
     /**
      * @return a constant which can be used as the base for address iterations
      */
-    public static long minAddress() { return 0L; }
+    @Getter
+    private static long minAddress = 0L;
+    public static boolean isMinAddress(long addr) { return addr == minAddress; }
+    // TODO should clean this up soon
+    public static long maxNonAddress() { return -1L; }
 
     /**
      * @return A constant which can be used in loops going down up to hitting a non-address.
      */
-    public static long maxNonAddress() { return -1L; }
+    public static long NON_ADDRESS = -1L;
 
     /** The maximum address. */
     public static final long MAX = Long.MAX_VALUE;
-
-    /** A runtime (only) constant,
-     * Indicating a stream address is not cached.
-     */
-    public static final long NEVER_READ = -1L;
 
     /** Aborted request constant. Used to indicate an attempted read, but
      * was rejected at the request of the client.
@@ -62,4 +63,11 @@ public class Address {
      * Indicating that an address was request, but no match exists.
      */
     public static final long NON_EXIST = -6L;
+
+    /** A runtime (only) constant,
+     * Indicating a stream address is not cached.
+     */
+    // FIXME this fails when NEVER_READ is set to (say) -7L. This indicates
+    // NEVER_READ is NOT used properly!!
+    public static final long NEVER_READ = -1L;
 }

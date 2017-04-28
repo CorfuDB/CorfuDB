@@ -1,21 +1,16 @@
 package org.corfudb.infrastructure;
 
-import com.github.benmanes.caffeine.cache.LoadingCache;
-import edu.umd.cs.findbugs.StringAnnotation;
-import edu.umd.cs.findbugs.SystemProperties;
+//import com.github.benmanes.caffeine.cache.LoadingCache;
+//import edu.umd.cs.findbugs.StringAnnotation;
+//import edu.umd.cs.findbugs.SystemProperties;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import org.assertj.core.api.Assertions;
 import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.serializer.Serializers;
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
@@ -23,10 +18,14 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.Collections;
 import java.util.Random;
-import java.util.concurrent.RunnableFuture;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 2/4/16.
@@ -103,51 +102,20 @@ public class LogUnitServerTest extends AbstractServerTest {
         this.router.reset();
         this.router.addServer(s1);
 
-        final long LOW_ADDRESS = 0L;
-        final long MID_ADDRESS = 100L;
-        final long HIGH_ADDRESS = 10000000L;
-        //write at 0
-        ByteBuf b = Unpooled.buffer();
-        Serializers.CORFU.serialize("0".getBytes(), b);
-        WriteRequest m = WriteRequest.builder()
-                .writeMode(WriteMode.NORMAL)
-                .data(new LogData(DataType.DATA, b))
-                .build();
-        m.setGlobalAddress(LOW_ADDRESS);
-        m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
-        m.setBackpointerMap(Collections.emptyMap());
-        sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
-        //100
-        b = Unpooled.buffer();
-        Serializers.CORFU.serialize("100".getBytes(), b);
-        m = WriteRequest.builder()
-                .writeMode(WriteMode.NORMAL)
-                .data(new LogData(DataType.DATA, b))
-                .build();
-        m.setGlobalAddress(MID_ADDRESS);
-        m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
-        m.setBackpointerMap(Collections.emptyMap());
-        sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
-        //and 10000000
-        b = Unpooled.buffer();
-        Serializers.CORFU.serialize("10000000".getBytes(), b);
-        m = WriteRequest.builder()
-                .writeMode(WriteMode.NORMAL)
-                .data(new LogData(DataType.DATA, b))
-                .build();
-        m.setGlobalAddress(HIGH_ADDRESS);
-        m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
-        m.setBackpointerMap(Collections.emptyMap());
-        sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
+        final long LOW_ADDRESS = 0L; final String low_payload = "0";
+        final long MID_ADDRESS = 100L; final String mid_payload = "100";
+        final long HIGH_ADDRESS = 10000000L; final String high_payload =
+                "100000";
+        final String streamName = "a";
 
-        assertThat(s1)
-                .containsDataAtAddress(LOW_ADDRESS)
-                .containsDataAtAddress(MID_ADDRESS)
-                .containsDataAtAddress(HIGH_ADDRESS);
-        assertThat(s1)
-                .matchesDataAtAddress(LOW_ADDRESS, "0".getBytes())
-                .matchesDataAtAddress(MID_ADDRESS, "100".getBytes())
-                .matchesDataAtAddress(HIGH_ADDRESS, "10000000".getBytes());
+        //write at 0
+        rawWrite(LOW_ADDRESS, low_payload, streamName);
+
+        //100
+        rawWrite(MID_ADDRESS, mid_payload, streamName);
+
+        //and 10000000
+        rawWrite(HIGH_ADDRESS, high_payload, streamName);
 
         s1.shutdown();
 
@@ -163,9 +131,9 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .containsDataAtAddress(MID_ADDRESS)
                 .containsDataAtAddress(HIGH_ADDRESS);
         assertThat(s2)
-                .matchesDataAtAddress(LOW_ADDRESS, "0".getBytes())
-                .matchesDataAtAddress(MID_ADDRESS, "100".getBytes())
-                .matchesDataAtAddress(HIGH_ADDRESS, "10000000".getBytes());
+                .matchesDataAtAddress(LOW_ADDRESS, low_payload.getBytes())
+                .matchesDataAtAddress(MID_ADDRESS, mid_payload.getBytes())
+                .matchesDataAtAddress(HIGH_ADDRESS, high_payload.getBytes());
     }
 
     protected void rawWrite(long addr, String s, String streamName) {

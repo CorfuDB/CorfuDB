@@ -68,10 +68,12 @@ public class logReaderTest {
     }
     @Test
     public void TestRecordCount() {
+        final int totalRecordCnt = 3;
+
         logReader reader = new logReader();
         String[] args = {"report", LOGPATH + "/" + testUUID + "-0.log"};
         int cnt = reader.run(args);
-        assertEquals(3, cnt);
+        assertEquals(totalRecordCnt, cnt);
     }
     @Test
     public void TestDisplayOne() {

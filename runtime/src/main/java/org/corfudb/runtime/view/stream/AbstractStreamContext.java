@@ -41,12 +41,12 @@ public abstract class AbstractStreamContext implements
                                  final long maxGlobalAddress) {
         this.id = id;
         this.maxGlobalAddress = maxGlobalAddress;
-        this.globalPointer = Address.maxNonAddress();
+        this.globalPointer = Address.NON_ADDRESS;
     }
 
     /** Reset the stream context. */
     void reset() {
-        globalPointer = Address.maxNonAddress();
+        globalPointer = Address.NON_ADDRESS;
     }
 
     /** Move the pointer for the context to the given global address,

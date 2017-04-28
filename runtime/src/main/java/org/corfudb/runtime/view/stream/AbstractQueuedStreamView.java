@@ -253,7 +253,7 @@ public abstract class AbstractQueuedStreamView extends
             context.globalPointer = prevAddress == null ? Address.NEVER_READ :
                                                 prevAddress - 1L;
             remainingUpTo(context.minResolution);
-            context.minResolution = Address.maxNonAddress();
+            context.minResolution = Address.NON_ADDRESS;
             context.globalPointer = oldPointer;
             prevAddress = context
                     .resolvedQueue.lower(context.globalPointer);
@@ -304,12 +304,12 @@ public abstract class AbstractQueuedStreamView extends
         /** The minimum global address which we have resolved this
          * stream to.
          */
-        long minResolution = Address.maxNonAddress();
+        long minResolution = Address.NON_ADDRESS;
 
         /** The maximum global address which we have resolved this
          * stream to.
          */
-        long maxResolution = Address.maxNonAddress();
+        long maxResolution = Address.NON_ADDRESS;
 
         /**
          * A priority queue of potential addresses to be read from.
