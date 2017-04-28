@@ -554,6 +554,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         return writeChannels.computeIfAbsent(filePath, a -> {
 
             try {
+
                 FileChannel fc1 = getChannel(a, false);
                 FileChannel fc2 = getChannel(getTrimmedFilePath(a), false);
                 FileChannel fc3 = getChannel(getPendingTrimsFilePath(a), false);
@@ -564,7 +565,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                     verify = false;
                 }
 
-                writeHeader(fc1, VERSION, verify);
+                if(fc1.size() == 0) {
+                    writeHeader(fc1, VERSION, verify);
+                    log.trace("Opened new segment file, writing header for {}", a);
+                }
                 log.trace("Opened new log file at {}", a);
                 SegmentHandle sh = new SegmentHandle(segment, fc1, fc2, fc3, a);
                 // The first time we open a file we should read to the end, to load the
