@@ -22,7 +22,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     final DataType type;
 
     @Getter
-    final byte[] data;
+    byte[] data;
 
     private ByteBuf serializedCache = null;
 
@@ -51,6 +51,8 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                 }
             }
         }
+
+        data = null;
         return value;
     }
 
@@ -121,12 +123,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         this.type = type;
         this.data = byteArrayFromBuf(buf);
         this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
-    }
-
-    public LogData(ByteBuf buf, EnumMap<LogUnitMetadataType, Object> metadataMap) {
-        this.type = DataType.DATA;
-        this.data = byteArrayFromBuf(buf);
-        this.metadataMap = metadataMap;
     }
 
     public byte[] byteArrayFromBuf(final ByteBuf buf) {
