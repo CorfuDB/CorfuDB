@@ -132,6 +132,37 @@ public class ServerRestartTest extends AbstractCorfuTest {
     }
 
     /**
+     * Test recovery with a failed over server and a new client.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testDoubleFailoverRecovery() throws Exception {
+        setUp();
+        Process corfuServerProcess = runCorfuServer();
+        Map<String, Integer> map = createMap(createRuntime());
+
+        final int expectedValue = 5;
+
+        Integer previous = map.get("a");
+        assertThat(previous).isNull();
+        map.put("a", expectedValue);
+
+        shutdownCorfuServer(corfuServerProcess);
+
+        assert !corfuServerProcess.isAlive();
+
+        corfuServerProcess = runCorfuServer();
+
+        map = createMap(createRuntime());
+
+        assertThat(map.get("a")).isEqualTo(expectedValue);
+
+        // final destroy
+        shutdownCorfuServer(corfuServerProcess);
+    }
+
+    /**
      * Test recovery with a new client without server failover.
      *
      * @throws Exception

@@ -80,7 +80,7 @@ public interface ILogData extends IMetadata {
     default boolean hasBackpointer(UUID streamID) {
         return getBackpointerMap() != null
                 && getBackpointerMap().containsKey(streamID) &&
-                getBackpointerMap().get(streamID) != Address.NO_BACKPOINTER;
+                Address.isAddress(getBackpointerMap().get(streamID));
     }
 
     /**

@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import com.github.benmanes.caffeine.cache.LoadingCache;
+import edu.umd.cs.findbugs.StringAnnotation;
 import edu.umd.cs.findbugs.SystemProperties;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -165,6 +166,112 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .matchesDataAtAddress(LOW_ADDRESS, "0".getBytes())
                 .matchesDataAtAddress(MID_ADDRESS, "100".getBytes())
                 .matchesDataAtAddress(HIGH_ADDRESS, "10000000".getBytes());
+    }
+
+    protected void rawWrite(long addr, String s, String streamName) {
+        ByteBuf b = Unpooled.buffer();
+        Serializers.CORFU.serialize(s.getBytes(), b);
+        WriteRequest m = WriteRequest.builder()
+                .writeMode(WriteMode.NORMAL)
+                .data(new LogData(DataType.DATA, b))
+                .build();
+        m.setGlobalAddress(addr);
+        m.setStreams(Collections.singleton(CorfuRuntime.getStreamID(streamName)));
+        m.setBackpointerMap(Collections.emptyMap());
+        sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
+
+    }
+
+    @Test
+    public void checkThatMoreWritesArePersisted()
+            throws Exception {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+
+        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .build());
+
+        this.router.reset();
+        this.router.addServer(s1);
+
+        final long START_ADDRESS = 0L; final String low_payload = "0";
+        final int num_iterations_very_low = PARAMETERS.NUM_ITERATIONS_VERY_LOW;
+        final String streamName = "a";
+
+        for (int i = 0; i < num_iterations_very_low; i++)
+            rawWrite(START_ADDRESS+i, low_payload+i, streamName);
+
+        for (int i = 0; i < num_iterations_very_low; i++)
+            assertThat(s1)
+                .containsDataAtAddress(START_ADDRESS+i);
+
+        for (int i = 0; i < num_iterations_very_low; i++)
+            assertThat(s1)
+                .matchesDataAtAddress(START_ADDRESS+i, (low_payload+i)
+                    .getBytes());
+
+        s1.shutdown();
+
+        LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .build());
+        this.router.reset();
+        this.router.addServer(s2);
+
+        for (int i = 0; i < num_iterations_very_low; i++)
+            assertThat(s2)
+                    .containsDataAtAddress(START_ADDRESS+i);
+
+        for (int i = 0; i < num_iterations_very_low; i++)
+            assertThat(s2)
+                    .matchesDataAtAddress(START_ADDRESS+i, (low_payload+i)
+                            .getBytes());
+
+        for (int i = 0; i < num_iterations_very_low; i++)
+            rawWrite(START_ADDRESS+num_iterations_very_low+i, low_payload+i, streamName);
+
+        for (int i = 0; i < num_iterations_very_low; i++)
+            assertThat(s2)
+                    .containsDataAtAddress
+                            (START_ADDRESS+num_iterations_very_low+i);
+
+        for (int i = 0; i < num_iterations_very_low; i++)
+            assertThat(s2)
+                    .matchesDataAtAddress
+                            (START_ADDRESS+num_iterations_very_low+i,
+                                    (low_payload+i)
+                            .getBytes());
+
+        LogUnitServer s3 = new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .build());
+        this.router.reset();
+        this.router.addServer(s3);
+
+        for (int i = 0; i < num_iterations_very_low; i++)
+            assertThat(s3)
+                    .containsDataAtAddress(START_ADDRESS+i);
+
+        for (int i = 0; i < num_iterations_very_low; i++)
+            assertThat(s3)
+                    .matchesDataAtAddress(START_ADDRESS+i, (low_payload+i)
+                            .getBytes());
+
+        for (int i = 0; i < num_iterations_very_low; i++)
+            assertThat(s3)
+                    .containsDataAtAddress
+                            (START_ADDRESS+num_iterations_very_low+i);
+
+        for (int i = 0; i < num_iterations_very_low; i++)
+            assertThat(s3)
+                    .matchesDataAtAddress
+                            (START_ADDRESS+num_iterations_very_low+i,
+                                    (low_payload+i)
+                                            .getBytes());
+
     }
 
     private String createLogFile(String path, int version, boolean noVerify) throws IOException {
