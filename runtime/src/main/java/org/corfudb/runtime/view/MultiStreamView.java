@@ -74,8 +74,10 @@ public class MultiStreamView {
                 throw new RuntimeException("Stream already exists!");
             }
             StreamCOWEntry entry = new StreamCOWEntry(source, timestamp);
+            TokenResponse cowToken = new TokenResponse(tokenResponse.getTokenValue(), tokenResponse.getEpoch(),
+                    Collections.singletonMap(destination, Address.COW_BACKPOINTER));
             try {
-                runtime.getAddressSpaceView().write(tokenResponse, entry);
+                runtime.getAddressSpaceView().write(cowToken, entry);
                 written = true;
             } catch (OverwriteException oe) {
                 log.debug("hole fill during COW entry append, retrying...");

@@ -162,4 +162,9 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
             ICorfuPayload.serialize(buf, metadataMap);
         }
     }
+
+    @Override
+    public String toString() {
+        return "LogData[" + getGlobalAddress() + "]";
+    }
 }
