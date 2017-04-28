@@ -239,6 +239,52 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     }
 
+    @Test
+    public void checkUnCachedWrites() {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+
+        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .build());
+
+        this.router.reset();
+        this.router.addServer(s1);
+
+        ByteBuf b = Unpooled.buffer();
+        Serializers.CORFU.serialize("0".getBytes(), b);
+        WriteRequest m = WriteRequest.builder()
+                .writeMode(WriteMode.NORMAL)
+                .data(new LogData(DataType.DATA, b))
+                .build();
+        final Long globalAddress = 0L;
+        m.setGlobalAddress(globalAddress);
+        Set<UUID> streamSet = new HashSet(Collections.singleton(CorfuRuntime.getStreamID("a")));
+        m.setStreams(streamSet);
+        Map<UUID, Long> uuidLongMap = new HashMap();
+        UUID uuid = new UUID(1,1);
+        final Long address = 5L;
+        uuidLongMap.put(uuid, address);
+        m.setBackpointerMap(uuidLongMap);
+        m.setLogicalAddresses(uuidLongMap);
+        sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
+
+        s1 = new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .build());
+
+        this.router.reset();
+        this.router.addServer(s1);
+
+        ILogData entry = s1.getDataCache().get(new LogAddress(globalAddress, null));
+
+        // Verify that the meta data can be read correctly
+        assertThat(entry.getBackpointerMap()).isEqualTo(uuidLongMap);
+        assertThat(entry.getLogicalAddresses()).isEqualTo(uuidLongMap);
+        assertThat(entry.getGlobalAddress()).isEqualTo(globalAddress);
+    }
+
     private String createLogFile(String path, int version, boolean noVerify) throws IOException {
         // Generate a log file and manually change the version
         File logDir = new File(path + File.separator + "log");

@@ -1,4 +1,4 @@
-Package: [[name]]-server
+Package: corfu-server
 Version: [[version]]
 Section: misc
 Priority: optional
