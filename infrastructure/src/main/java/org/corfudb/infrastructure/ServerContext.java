@@ -30,11 +30,6 @@ public class ServerContext {
     private static final String KEY_EPOCH = "CURRENT";
 
     /**
-     * magic non-address value, used in parameters to indicate no valid log address is provided
-     */
-    public static final long NON_LOG_ADDR_MAGIC = -1L;
-
-    /**
      * various duration constants
      */
     public static final Duration SMALL_INTERVAL = Duration.ofMillis(60_000);

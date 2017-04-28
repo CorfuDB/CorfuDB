@@ -179,7 +179,7 @@ public interface IStreamView extends Iterator<ILogData> {
     /** Get the current position of the pointer in this stream (global address).
      *
      * @return          The position of the pointer in this stream (global address),
-     *                  or Address.NEVER_READ.
+     *                  or Address.NON_ADDRESS.
      */
     long getCurrentGlobalPosition();
 }

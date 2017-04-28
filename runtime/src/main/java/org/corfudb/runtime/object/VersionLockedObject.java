@@ -532,7 +532,8 @@ public class VersionLockedObject<T> {
     protected void optimisticRollbackUnsafe() {
         try {
             log.trace("OptimisticRollback[{}] started", this);
-            rollbackStreamUnsafe(this.optimisticStream, Address.NEVER_READ);
+            rollbackStreamUnsafe(this.optimisticStream,
+                    Address.getMinAddress() - 1L);
             log.trace("OptimisticRollback[{}] complete", this);
         } catch (NoRollbackException nre) {
             log.debug("OptimisticRollback[{}] failed", this);

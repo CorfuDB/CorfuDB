@@ -65,7 +65,7 @@ public class MultiStreamView {
             TokenResponse tokenResponse =
                     runtime.getSequencerView().nextToken(Collections.singleton(destination), 1);
             if (tokenResponse.getBackpointerMap().get(destination) != null &&
-                    !tokenResponse.getBackpointerMap().get(destination).equals(-1L)) {
+                    Address.isAddress(tokenResponse.getBackpointerMap().get(destination))) {
                 try {
                     runtime.getAddressSpaceView().fillHole(tokenResponse.getToken().getTokenValue());
                 } catch (OverwriteException oe) {
@@ -116,7 +116,7 @@ public class MultiStreamView {
 
             if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ)
                 throw new TransactionAbortedException(
-                        -1L,
+                        Address.NON_EXIST,
                         AbortCause.NEW_SEQUENCER
                 );
 
