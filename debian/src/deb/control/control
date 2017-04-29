@@ -1,4 +1,4 @@
-Package: corfu-server
+Package: nsx-corfu-server
 Version: [[version]]
 Section: misc
 Priority: optional

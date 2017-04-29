@@ -168,7 +168,7 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             "/build/toolchain/noarch/apache-maven-3.3.3/bin/mvn clean deploy",
             "mkdir -p /tmp/mvn",
             "mkdir -p /tmp/%s" % (DIST),
-            "cp /root/corfudb/infrastructure/target/*.deb /tmp/%s" % (DIST)
+            "cp /root/corfudb/debian/target/*.deb /tmp/%s" % (DIST)
         ]
         # For now, hard-code the sub-module names.
         sub_modules = [
@@ -176,8 +176,10 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             "annotationProcessor",
             "annotations",
             "cmdlets",
+            "debian",
             "format",
             "infrastructure",
+            "logReader",
             "runtime",
             "test"]
         artifact_paths = [os.path.join("/root/corfudb",

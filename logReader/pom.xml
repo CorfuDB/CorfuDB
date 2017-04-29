@@ -24,7 +24,7 @@
         </dependency>
         <dependency>
             <groupId>org.corfudb</groupId>
-            <artifactId>nsx-corfu</artifactId>
+            <artifactId>infrastructure</artifactId>
             <version>${project.version}</version>
         </dependency>
         <!-- External Dependencies-->
