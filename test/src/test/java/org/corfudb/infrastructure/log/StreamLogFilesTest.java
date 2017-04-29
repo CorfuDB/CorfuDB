@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 
 import java.io.File;
 import java.io.RandomAccessFile;
@@ -14,6 +13,8 @@ import java.nio.ByteBuffer;
 import io.netty.buffer.Unpooled;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.format.Types.Metadata;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -29,13 +30,21 @@ import org.junit.Test;
 public class StreamLogFilesTest extends AbstractCorfuTest {
 
     private String getDirPath() {
-        return PARAMETERS.TEST_TEMP_DIR + File.separator;
+        return PARAMETERS.TEST_TEMP_DIR;
+    }
+
+    private ServerContext getContext() {
+        String path = getDirPath();
+        return new ServerContextBuilder()
+            .setLogPath(path)
+            .setMemory(false)
+            .build();
     }
 
     @Test
     public void testWriteReadWithChecksum() {
         // Enable checksum, then append and read the same entry
-        StreamLog log = new StreamLogFiles(getDirPath(), false);
+        StreamLog log = new StreamLogFiles(getContext(), false);
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
@@ -46,7 +55,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Disable checksum, then append and read then same entry
         // An overwrite exception should occur, since we are writing the
         // same entry.
-        final StreamLog newLog = new StreamLogFiles(getDirPath(), true);
+        final StreamLog newLog = new StreamLogFiles(getContext(), true);
         assertThatThrownBy(() -> {
             newLog
                     .append(address0, new LogData(DataType.DATA, b));
@@ -57,7 +66,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
     @Test
     public void testOverwriteException() {
-        StreamLog log = new StreamLogFiles(getDirPath(), false);
+        StreamLog log = new StreamLogFiles(getContext(), false);
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
@@ -70,7 +79,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
     @Test
     public void testReadingUnknownAddress() {
-        StreamLog log = new StreamLogFiles(getDirPath(), false);
+        StreamLog log = new StreamLogFiles(getContext(), false);
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
@@ -91,7 +100,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // behaviour is to throw a DataCorruptionException because a checksum cannot
         // be computed for stream entries that haven't been written with a checksum
         String logDir = getDirPath();
-        StreamLog log = new StreamLogFiles(logDir, true);
+        StreamLog log = new StreamLogFiles(getContext(), true);
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
@@ -103,7 +112,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.close();
 
         // Re-open stream log with checksum enabled
-        assertThatThrownBy(() -> new StreamLogFiles(logDir, false))
+        assertThatThrownBy(() -> new StreamLogFiles(getContext(), false))
                 .isInstanceOf(RuntimeException.class);
     }
 
@@ -112,8 +121,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // This test manipulates a log file directly and manipulates
         // log records by overwriting some parts of the record simulating
         // different data corruption scenarios
-        String logDir = getDirPath();
-        StreamLog log = new StreamLogFiles(logDir, false);
+        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        StreamLog log = new StreamLogFiles(getContext(), false);
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
@@ -127,7 +136,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         final int OVERWRITE_BYTES = 12;
 
         // Overwrite 2 bytes of the checksum and 2 bytes of the entry's address
-        String logFilePath = logDir + 0 + ".log";
+        String logFilePath = logDir + File.separator + 0 + ".log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
         ByteBuffer metaDataBuf = ByteBuffer.allocate(METADATA_SIZE);
         file.getChannel().read(metaDataBuf);
@@ -141,17 +150,14 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         file.writeInt(OVERWRITE_DELIMITER);
         file.close();
 
-        StreamLog log2 = new StreamLogFiles(logDir, false);
-        assertThatThrownBy(() -> log2.read(address0))
-                .isInstanceOf(RuntimeException.class)
-                .hasCauseInstanceOf(DataCorruptionException.class);
-        log2.close();
+        assertThatThrownBy(() -> new StreamLogFiles(getContext(), false))
+                .isInstanceOf(DataCorruptionException.class);
     }
 
     @Test
     public void multiThreadedReadWrite() throws Exception {
         String logDir = getDirPath();
-        StreamLog log = new StreamLogFiles(logDir, false);
+        StreamLog log = new StreamLogFiles(getContext(), false);
 
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
@@ -182,7 +188,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     @Test
     @SuppressWarnings("checkstyle:magicnumber")
     public void testSync() throws Exception {
-        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
@@ -203,7 +209,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
     @Test
     public void testSameAddressTrim() throws Exception {
-        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
 
         // Trim an unwritten address
         LogAddress logAddress = new LogAddress(0L, null);
@@ -248,7 +254,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
     @Test
     public void testTrim() throws Exception {
-        StreamLogFiles log = new StreamLogFiles(getDirPath(), false);
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
         final int logChunk = StreamLogFiles.RECORDS_PER_LOG_FILE / 2;
 
         // Write to the addresses then trim the addresses that span two log files
@@ -308,14 +314,43 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
     @Test
     public void testWritingFileHeader() throws Exception {
-        String path = getDirPath();
-        StreamLogFiles log = new StreamLogFiles(path, false);
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
         writeToLog(log, 0L);
         log.sync(true);
-        StreamLogFiles log2 = new StreamLogFiles(path, false);
+        StreamLogFiles log2 = new StreamLogFiles(getContext(), false);
         writeToLog(log2, 1L);
         log2.sync(true);
-        StreamLogFiles log3 = new StreamLogFiles(path, false);
+        StreamLogFiles log3 = new StreamLogFiles(getContext(), false);
         assertThat(log3.read(new LogAddress(1L, null))).isNotNull();
+    }
+
+    @Test
+    public void testGetGlobalTail() {
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
+
+        assertThat(log.getGlobalTail()).isEqualTo(0);
+
+        // Write to multiple segments
+        final int segments = 3;
+        long lastAddress = segments * StreamLogFiles.RECORDS_PER_LOG_FILE;
+        for (long x = 0; x <= lastAddress; x++){
+            writeToLog(log, x);
+            assertThat(log.getGlobalTail()).isEqualTo(x);
+        }
+
+        // Restart and try to retrieve the global tail
+        log = new StreamLogFiles(getContext(), false);
+        assertThat(log.getGlobalTail()).isEqualTo(lastAddress);
+
+        // Advance the tail some more
+        final long tailDelta = 5;
+        for (long x = lastAddress + 1; x <= lastAddress + tailDelta; x++){
+            writeToLog(log, x);
+            assertThat(log.getGlobalTail()).isEqualTo(x);
+        }
+
+        // Restart and try to retrieve the global tail one last time
+        log = new StreamLogFiles(getContext(), false);
+        assertThat(log.getGlobalTail()).isEqualTo(lastAddress + tailDelta);
     }
 }

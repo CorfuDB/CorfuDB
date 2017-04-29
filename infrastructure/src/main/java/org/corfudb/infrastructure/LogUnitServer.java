@@ -74,11 +74,6 @@ public class LogUnitServer extends AbstractServer {
     private AtomicBoolean running = new AtomicBoolean(true);
 
     /**
-     * Maintain the max globalAddress we have written.
-     */
-    private AtomicLong maxAddressGlobalTail = new AtomicLong(0L);
-
-    /**
      * The options map.
      */
     private final Map<String, Object> opts;
@@ -117,12 +112,7 @@ public class LogUnitServer extends AbstractServer {
                     "The unit WILL LOSE ALL DATA if it exits.", Utils.convertToByteStringRepresentation(maxCacheSize));
             streamLog = new InMemoryStreamLog();
         } else {
-            String logdir = opts.get("--log-path") + File.separator + "log";
-            File dir = new File(logdir);
-            if (!dir.exists()) {
-                dir.mkdirs();
-            }
-            streamLog = new StreamLogFiles(logdir, (Boolean) opts.get("--no-verify"));
+            streamLog = new StreamLogFiles(serverContext, (Boolean) opts.get("--no-verify"));
         }
 
         batchWriter = new BatchWriter(streamLog);
@@ -145,7 +135,7 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.TAIL_REQUEST, opTimer = metricsPrefix + "tailReq")
     public void handleTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
-        r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(maxAddressGlobalTail.get()));
+        r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(streamLog.getGlobalTail()));
     }
 
     /**
@@ -170,8 +160,6 @@ public class LogUnitServer extends AbstractServer {
                 }
                 r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
             }
-            long globalTail = msg.getPayload().getGlobalAddress();
-            maxAddressGlobalTail.getAndUpdate(maxTail -> globalTail > maxTail ? globalTail : maxTail);
         } catch (OverwriteException ex) {
             if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
                 r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
