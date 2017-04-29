@@ -37,7 +37,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                     if (data == null) {
                         this.payload.set(null);
                     } else {
-                        ByteBuf copyBuf = Unpooled.copiedBuffer(data);
+                        ByteBuf copyBuf = Unpooled.wrappedBuffer(data);
                         final Object actualValue =
                                 Serializers.CORFU.deserialize(copyBuf, runtime);
                         // TODO: Remove circular dependency on logentry.
@@ -47,6 +47,8 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                         }
                         value = actualValue == null ? this.payload : actualValue;
                         this.payload.set(value);
+                        copyBuf.release();
+                        data = null;
                     }
                 }
             }

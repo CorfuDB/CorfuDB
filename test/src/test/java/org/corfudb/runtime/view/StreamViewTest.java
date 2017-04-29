@@ -243,8 +243,9 @@ public class StreamViewTest extends AbstractViewTest {
         UUID streamA = CorfuRuntime.getStreamID("stream A");
         byte[] testPayload = "hello world".getBytes();
 
-        // append without reserving a token
-        r.getAddressSpaceView().fillHole(0);
+        // read from an address that hasn't been written to
+        // causing a hole fill
+        r.getAddressSpaceView().read(0L);
 
         // Write to the stream, and read back. The hole should be filled.
         IStreamView sv = r.getStreamsView().get(streamA);
@@ -295,10 +296,18 @@ public class StreamViewTest extends AbstractViewTest {
         //generate a stream hole
         TokenResponse tr =
                 r.getSequencerView().nextToken(Collections.singleton(streamA), 1);
-        r.getAddressSpaceView().fillHole(tr.getToken().getTokenValue());
+
+        // read from an address that hasn't been written to
+        // causing a hole fill
+        r.getAddressSpaceView().read(tr.getToken().getTokenValue());
+
 
         tr = r.getSequencerView().nextToken(Collections.singleton(streamA), 1);
-        r.getAddressSpaceView().fillHole(tr.getToken().getTokenValue());
+
+        // read from an address that hasn't been written to
+        // causing a hole fill
+        r.getAddressSpaceView().read(tr.getToken().getTokenValue());
+
 
         sv.append(testPayload2);
 

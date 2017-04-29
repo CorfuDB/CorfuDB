@@ -7,9 +7,7 @@ import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.object.ICorfuObject;
 import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.ICorfuSMRProxy;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -84,20 +82,7 @@ public class JSONSerializer implements ISerializer {
     @Override
     public void serialize(Object o, ByteBuf b) {
         String className = o == null ? "null" : o.getClass().getName();
-        if (className.contains("$ByteBuddy$")) {
-            String SMRClass = className.split("\\$")[0];
-            className = "CorfuObject";
-            byte[] classNameBytes = className.getBytes();
-            b.writeShort(classNameBytes.length);
-            b.writeBytes(classNameBytes);
-            byte[] SMRClassNameBytes = SMRClass.getBytes();
-            b.writeShort(SMRClassNameBytes.length);
-            b.writeBytes(SMRClassNameBytes);
-            UUID id = ((ICorfuObject) o).getStreamID();
-            log.trace("Serializing a CorfuObject of type {} as a stream pointer to {}", SMRClass, id);
-            b.writeLong(id.getMostSignificantBits());
-            b.writeLong(id.getLeastSignificantBits());
-        } else if (className.endsWith(ICorfuSMR.CORFUSMR_SUFFIX)) {
+        if (className.endsWith(ICorfuSMR.CORFUSMR_SUFFIX)) {
             String SMRClass = className.split("\\$")[0];
             className = "CorfuObject";
             byte[] classNameBytes = className.getBytes();
