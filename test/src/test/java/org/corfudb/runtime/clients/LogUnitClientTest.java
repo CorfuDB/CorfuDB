@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -247,16 +248,12 @@ public class LogUnitClientTest extends AbstractClientTest {
     public void CorruptedDataReadThrowsException() throws Exception {
         byte[] testString = "hello world".getBytes();
         client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
-        LogData r = client.read(0).get().getReadSet().get(0L);
-        // Verify that the data has been written correctly
-        assertThat(r.getPayload(null)).isEqualTo(testString);
-
-        LogUnitServer server2 = new LogUnitServer(serverContext);
-        serverRouter.addServer(server2);
+        client.write(StreamLogFiles.RECORDS_PER_LOG_FILE + 1, Collections.<UUID>emptySet(), null,
+                testString, Collections.emptyMap()).get();
 
         // Corrupt the written log entry
-        String logDir = (String) serverContext.getServerConfig().get("--log-path");
-        String logFilePath = logDir + File.separator + "log/0.log";
+        String logDir = serverContext.getServerConfig().get("--log-path") + File.separator + "log";
+        String logFilePath = logDir + File.separator + "0.log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
 
         ByteBuffer metaDataBuf = ByteBuffer.allocate(METADATA_SIZE);
@@ -269,6 +266,10 @@ public class LogUnitClientTest extends AbstractClientTest {
         file.seek(fileOffset); // File header + delimiter
         file.writeInt(CORRUPT_BYTES);
         file.close();
+
+        LogUnitServer server2 = new LogUnitServer(serverContext);
+        serverRouter.reset();
+        serverRouter.addServer(server2);
 
         // Try to read a corrupted log entry
         assertThatThrownBy(() -> client.read(0).get())

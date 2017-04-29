@@ -68,11 +68,11 @@ public class SequencerViewTest extends AbstractViewTest {
         UUID streamB = UUID.nameUUIDFromBytes("stream B".getBytes());
 
         assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 1).getBackpointerMap())
-                .containsEntry(streamA, -1L);
+                .containsEntry(streamA, Address.NON_EXIST);
         assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 0).getBackpointerMap())
                 .isEmpty();
         assertThat(r.getSequencerView().nextToken(Collections.singleton(streamB), 1).getBackpointerMap())
-                .containsEntry(streamB, -1L);
+                .containsEntry(streamB, Address.NON_EXIST);
         assertThat(r.getSequencerView().nextToken(Collections.singleton(streamB), 0).getBackpointerMap())
                 .isEmpty();
         assertThat(r.getSequencerView().nextToken(Collections.singleton(streamA), 1).getBackpointerMap())

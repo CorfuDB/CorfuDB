@@ -16,6 +16,7 @@
         <module>annotations</module>
         <module>samples</module>
         <module>logReader</module>
+        <module>debian</module>
     </modules>
 
     <packaging>pom</packaging>

@@ -653,8 +653,8 @@ public class ManagementViewTest extends AbstractViewTest {
         final long streamA_backpointer = 4L;
         final long streamB_backpointer = 7L;
 
-        getTokenWriteAndAssertBackPointer(streamA, -1L);
-        getTokenWriteAndAssertBackPointer(streamB, -1L);
+        getTokenWriteAndAssertBackPointer(streamA, Address.NON_EXIST);
+        getTokenWriteAndAssertBackPointer(streamB, Address.NON_EXIST);
         getTokenWriteAndAssertBackPointer(streamA, 0L);
         getTokenWriteAndAssertBackPointer(streamB, 1L);
 

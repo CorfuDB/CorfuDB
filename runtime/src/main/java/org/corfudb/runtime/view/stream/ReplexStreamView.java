@@ -159,7 +159,7 @@ public class ReplexStreamView extends
         doPendingSeek(getCurrentContext(), Address.MAX);
 
         // If never read or only one entry, return null
-        if (getCurrentContext().streamPointer == Address.NEVER_READ ||
+        if (getCurrentContext().streamPointer <= Address.NON_ADDRESS ||
                 getCurrentContext().streamPointer == 0)
         return null;
 
@@ -174,7 +174,7 @@ public class ReplexStreamView extends
     /** {@inheritDoc} */
     @Override
     public ILogData current() {
-        if (getCurrentContext().streamPointer > Address.NEVER_READ) {
+        if (getCurrentContext().streamPointer > Address.NON_ADDRESS) {
             getCurrentContext().streamPointer--;
         }
         return next();
@@ -340,7 +340,7 @@ public class ReplexStreamView extends
         /** The largest known stream address we know was issued. */
         long knownStreamMax;
 
-        /** A pending seek, if requested, or Address.NEVER_READ
+        /** A pending seek, if requested, or Address.NON_ADDRESS
          * if there is no pending seek.
          */
         long pendingSeek;

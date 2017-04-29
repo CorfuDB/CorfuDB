@@ -64,8 +64,8 @@ public class StreamViewSMRAdapter implements ISMRStream {
 
     public List<SMREntry> previous() {
         ILogData data = streamView.previous();
-        while (streamView.getCurrentGlobalPosition() >
-                Address.NEVER_READ && data != null) {
+        while (Address.isAddress(streamView.getCurrentGlobalPosition())
+                && data != null) {
             if (data.getType() == DataType.DATA &&
                     data.getPayload(runtime)
                             instanceof ISMRConsumable) {

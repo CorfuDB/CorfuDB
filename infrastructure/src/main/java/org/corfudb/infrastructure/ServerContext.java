@@ -28,11 +28,8 @@ import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 public class ServerContext {
     private static final String PREFIX_EPOCH = "SERVER_EPOCH";
     private static final String KEY_EPOCH = "CURRENT";
-
-    /**
-     * magic non-address value, used in parameters to indicate no valid log address is provided
-     */
-    public static final long NON_LOG_ADDR_MAGIC = -1L;
+    private static final String PREFIX_TAIL_SEGMENT = "TAIL_SEGMENT";
+    private static final String KEY_TAIL_SEGMENT = "CURRENT";
 
     /**
      * various duration constants
@@ -82,15 +79,24 @@ public class ServerContext {
     /**
      * The epoch of this router. This is managed by the base server implementation.
      */
-    public synchronized long getServerEpoch() {
+    public long getServerEpoch() {
         Long epoch = dataStore.get(Long.class, PREFIX_EPOCH, KEY_EPOCH);
         return epoch == null ? 0 : epoch;
     }
 
-    public synchronized void setServerEpoch(long serverEpoch) {
+    public void setServerEpoch(long serverEpoch) {
         dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
         // Set the epoch in the router as well.
         //TODO need to figure out if we can remove this redundancy
         serverRouter.setServerEpoch(serverEpoch);
+    }
+
+    public long getTailSegment() {
+        Long tailSegment = dataStore.get(Long.class, PREFIX_TAIL_SEGMENT, KEY_TAIL_SEGMENT);
+        return tailSegment == null ? 0 : tailSegment;
+    }
+
+    public void setTailSegment(long tailSegment) {
+        dataStore.put(Long.class, PREFIX_TAIL_SEGMENT, KEY_TAIL_SEGMENT, tailSegment);
     }
 }

@@ -9,8 +9,6 @@ import org.corfudb.util.Utils;
 
 import java.util.*;
 import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 /**
  * Created by mwei on 3/13/17.
@@ -23,7 +21,7 @@ import java.util.stream.IntStream;
  * SMRStream maintains for us a position in the sequence. We can consume it
  * in a forward direction, and scroll back to previously read entries.
  *
- * First, forget about nested transactions for now, and neglected the contexts
+ * First, forget about nested transactions for now, and neglect the contexts
  * stack; that is, assume the stack has size 1.
  *
  * A reminder from AbstractTransactionalContext about the write-set of a
@@ -61,8 +59,10 @@ public class WriteSetSMRStream implements ISMRStream {
 
     int currentContext = 0;
 
+    // TODO add comment
     long currentContextPos;
 
+    // TODO add comment
     long writePos;
 
     // the specific stream-id for which this SMRstream wraps the write-set
@@ -105,7 +105,8 @@ public class WriteSetSMRStream implements ISMRStream {
         contexts.remove(contexts.size()-1);
         if (currentContext == contexts.size()) {
             // recalculate the pos based on the write pointer
-            long readPos = Address.NEVER_READ;
+            // TODO add explanation, code below very confusing!
+            long readPos = Address.maxNonAddress();
             for (int i = 0; i < contexts.size(); i++) {
                 readPos += contexts.get(i).getWriteSetEntryList(id).size();
                 if (readPos >= writePos) {
@@ -148,7 +149,7 @@ public class WriteSetSMRStream implements ISMRStream {
 
     @Override
     public List<SMREntry> current() {
-        if (writePos == Address.NEVER_READ) {
+        if (Address.nonAddress(writePos)) {
             return null;
         }
         return Collections.singletonList(contexts.get(currentContext)
@@ -160,14 +161,14 @@ public class WriteSetSMRStream implements ISMRStream {
     public List<SMREntry> previous() {
         writePos--;
 
-        if (writePos <= Address.NEVER_READ) {
-            writePos = Address.NEVER_READ;
+        if (writePos <= Address.maxNonAddress()) {
+            writePos = Address.maxNonAddress();
             return null;
         }
 
         currentContextPos--;
         // Pop the context if we're at the beginning of it
-        if (currentContextPos <= Address.NEVER_READ) {
+        if (currentContextPos <= Address.maxNonAddress()) {
             if (currentContext == 0) {
                 throw new RuntimeException("Attempted to pop first context (pos=" + pos() + ")");
             }
@@ -188,9 +189,9 @@ public class WriteSetSMRStream implements ISMRStream {
 
     @Override
     public void reset() {
-        writePos = Address.NEVER_READ;
+        writePos = Address.maxNonAddress();
         currentContext = 0;
-        currentContextPos = Address.NEVER_READ;
+        currentContextPos = Address.maxNonAddress();
     }
 
     @Override
