@@ -167,8 +167,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         // beginning because the caller has never read anything from the stream before.
         // Thus, it could be a significant time & I/O saving for the client to playback
         // from the latest checkpoint.
-        // On the other hand, if not -1, then we assume that the caller has found & replayed
-        // the log at some earlier state.
+        // On the other hand, if not -1, then we assume that the caller has already
+        // found the stream head and replayed some/all of it.
         //
         // We assume a "typical" case where the client probably needs to discover & replay
         // just a few log entries, whereas the checkpoint data that this method may discover
