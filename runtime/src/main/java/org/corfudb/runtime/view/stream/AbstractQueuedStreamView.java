@@ -49,8 +49,10 @@ public abstract class AbstractQueuedStreamView extends
      * @param globalAddress     The resolved global address.
      */
     protected void addToResolvedQueue(QueuedStreamContext context,
-                                      long globalAddress) {
+                                      long globalAddress,
+                                      ILogData ld) {
         context.resolvedQueue.add(globalAddress);
+        context.resolvedEstBytes += ld.getSizeEstimate();
 
         if (context.maxResolution < globalAddress)
         {
@@ -84,7 +86,7 @@ public abstract class AbstractQueuedStreamView extends
             final long thisRead = context.readQueue.pollFirst();
             ILogData ld = read(thisRead);
             if (ld.containsStream(context.id)) {
-                addToResolvedQueue(context, thisRead);
+                addToResolvedQueue(context, thisRead, ld);
                 return ld;
             }
         }
@@ -163,8 +165,7 @@ public abstract class AbstractQueuedStreamView extends
 
         // Transfer the addresses of the read entries to the resolved queue
         readFromQ.stream()
-                .map(x -> x.getGlobalAddress())
-                .forEach(x -> addToResolvedQueue(context, x));
+                .forEach(x -> addToResolvedQueue(context, x.getGlobalAddress(), x));
 
         // Update the global pointer
         if (readFromQ.size() > 0) {
@@ -345,7 +346,16 @@ public abstract class AbstractQueuedStreamView extends
          */
         List<ILogData> readCpList = new ArrayList<>();
 
+        /** Info on checkpoint we used for initial stream replay,
+         *  other checkpoint-related info & stats.  Hodgepodge, clarify.
+         */
         UUID checkpointSuccessID = null;
+        long checkpointSuccessStartAddr = Address.NEVER_READ;
+        long checkpointSuccessEndAddr = Address.NEVER_READ;
+        long checkpointSuccessNumEntries = 0L;
+        long checkpointSuccessEstBytes = 0L;
+        // No need to keep track of # of DATA entries, use context.resolvedQueue.size()?
+        long resolvedEstBytes = 0L;
 
         /** Create a new stream context with the given ID and maximum address
          * to read to.

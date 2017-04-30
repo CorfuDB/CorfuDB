@@ -339,6 +339,9 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     currentRead, cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
             if (considerCheckpoint) {
                 context.checkpointSuccessID = cpEntry.getCheckpointID();
+                context.checkpointSuccessNumEntries = 1L;
+                context.checkpointSuccessEstBytes = (long) currentEntry.getSizeEstimate();
+                context.checkpointSuccessEndAddr = currentRead;
             }
         }
         if (context.checkpointSuccessID != null &&
@@ -348,10 +351,13 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
             if (considerCheckpoint) {
                 context.readCpList.add(currentEntry);
+                context.checkpointSuccessNumEntries++;
+                context.checkpointSuccessEstBytes += currentEntry.getSizeEstimate();
                 if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
                     log.trace("Checkpoint: halting backpointer fill at address {} type {} id {} author {}",
                             currentRead, cpEntry.getCpType(),
                             cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
+                    context.checkpointSuccessStartAddr = currentRead;
                     Collections.reverse(context.readCpList);
                     // This is first attempt to play log, so break now to
                     // skip fillFromResolved() stuff which we know doesn't apply.
