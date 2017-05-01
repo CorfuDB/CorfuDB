@@ -17,11 +17,6 @@
             <artifactId>infrastructure</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.corfudb</groupId>
-            <artifactId>cmdlets</artifactId>
-            <version>${project.version}</version>
-        </dependency>
         <!-- make debian the last module in maven lifecycle -->
         <dependency>
             <groupId>org.corfudb</groupId>
@@ -54,9 +49,8 @@
                                         <filemode>755</filemode>
                                     </mapper>
                                 </data>
-                                <!-- infrastructure is a dependency of cmdlets so it is included -->
                                 <data>
-                                    <src>${session.executionRootDirectory}/cmdlets/target/cmdlets-${project.version}-shaded.jar</src>
+                                    <src>${session.executionRootDirectory}/infrastructure/target/infrastructure-${project.version}-shaded.jar</src>
                                     <type>file</type>
                                     <mapper>
                                         <type>perm</type>
