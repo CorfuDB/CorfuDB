@@ -38,7 +38,6 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
-import javafx.util.Pair;
 import lombok.Data;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -128,7 +127,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         SegmentHandle sh = getSegmentHandleForAddress(new LogAddress(addressInTailSegment, null));
         try {
             Collection<LogEntry> segmentEntries = (Collection<LogEntry>) getCompactedEntries(sh.getFileName(),
-                    new HashSet()).getValue();
+                    new HashSet()).getEntries();
 
             for(LogEntry entry : segmentEntries){
                 long currentAddress = entry.getGlobalAddress();
@@ -273,9 +272,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         FileChannel fc2 = FileChannel.open(FileSystems.getDefault().getPath(getTrimmedFilePath(filePath)),
                 EnumSet.of(StandardOpenOption.APPEND));
 
-        Pair<LogHeader, Collection<LogEntry>> log = getCompactedEntries(filePath, pendingTrim);
-        LogHeader header = log.getKey();
-        Collection<LogEntry> compacted = log.getValue();
+        CompactedEntry log = getCompactedEntries(filePath, pendingTrim);
+
+        LogHeader header = log.getLogHeader();
+        Collection<LogEntry> compacted = log.getEntries();
 
         writeHeader(fc, header.getVersion(), header.getVerifyChecksum());
 
@@ -315,7 +315,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         writeChannels.remove(filePath);
     }
 
-    Pair<LogHeader, Collection<LogEntry>> getCompactedEntries(String filePath, Set<Long> pendingTrim) throws IOException {
+    private CompactedEntry getCompactedEntries(String filePath, Set<Long> pendingTrim) throws IOException {
         FileChannel fc = getChannel(filePath, true);
 
         // Skip the header
@@ -370,7 +370,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             }
         }
 
-        return new Pair(header, compacted.values());
+        return new CompactedEntry(header, compacted.values());
     }
 
     /**
@@ -880,6 +880,23 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             knownAddresses = null;
             trimmedAddresses = null;
             pendingTrims = null;
+        }
+    }
+
+    static public class CompactedEntry {
+        private final LogHeader logHeader;
+        private final Collection<LogEntry> entries;
+        public CompactedEntry(LogHeader logHeader, Collection<LogEntry> entries) {
+            this.logHeader = logHeader;
+            this.entries = entries;
+        }
+
+        public LogHeader getLogHeader() {
+            return logHeader;
+        }
+
+        public Collection<LogEntry> getEntries() {
+            return entries;
         }
     }
 
