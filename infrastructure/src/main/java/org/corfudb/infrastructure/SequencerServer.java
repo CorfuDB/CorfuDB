@@ -473,6 +473,4 @@ public class SequencerServer extends AbstractServer {
                         token,
                         backPointerMap.build())));
     }
-
-    private static final int globalTokenBatchSize = 100;
 }

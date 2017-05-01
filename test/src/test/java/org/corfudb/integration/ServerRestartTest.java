@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 
 import org.junit.Test;
@@ -21,97 +22,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class ServerRestartTest extends AbstractIntegrationTest {
 
     /**
-     * Test recovery with a failed over server and a new client.
-     *
-     * @throws Exception
-     */
-    @Test
-    public void testRecoveryFailoverServerAndClient() throws Exception {
-
-        // Set up and run server
-        Process corfuServerProcess = runCorfuServer();
-        Map<String, Integer> map = createMap(createRuntime(), "A");
-
-        final int expectedValue = 5;
-
-        Integer previous = map.get("a");
-        assertThat(previous).isNull();
-        map.put("a", expectedValue);
-
-        // Shut down and assert node is down.
-        shutdownCorfuServer(corfuServerProcess);
-        assert !corfuServerProcess.isAlive();
-
-        corfuServerProcess = runCorfuServer();
-        map = createMap(createRuntime(), "A");
-        assertThat(map.get("a")).isEqualTo(expectedValue);
-
-        // final destroy
-        shutdownCorfuServer(corfuServerProcess);
-    }
-
-    /**
-     * Test recovery with a new client without server failover.
-     *
-     * @throws Exception
-     */
-    @Test
-    public void testRecoveryFailoverClient() throws Exception {
-
-        Process corfuServerProcess = runCorfuServer();
-        Map<String, Integer> map = createMap(createRuntime(), "A");
-
-        final int expectedValue = 5;
-
-        Integer previous = map.get("a");
-        assertThat(previous).isNull();
-        map.put("a", expectedValue);
-
-        map = createMap(createRuntime(), "A");
-
-        assertThat(map.get("a")).isEqualTo(expectedValue);
-
-        // final destroy
-        shutdownCorfuServer(corfuServerProcess);
-    }
-
-    /**
-     * Test recovery with a failover sequencer but the same client querying.
-     *
-     * @throws Exception
-     */
-    @Test
-    public void testRecoveryFailoverServer() throws Exception {
-
-        Process corfuServerProcess = runCorfuServer();
-        Map<String, Integer> map = createMap(createRuntime(), "A");
-
-        final int expectedValue = 5;
-
-        Integer previous = map.get("a");
-        assertThat(previous).isNull();
-        map.put("a", expectedValue);
-
-        shutdownCorfuServer(corfuServerProcess);
-
-        assert !corfuServerProcess.isAlive();
-
-        corfuServerProcess = runCorfuServer();
-
-        while (true) {
-            try {
-                assertThat(map.get("a")).isEqualTo(expectedValue);
-                break;
-            } catch (NetworkException ne) {
-                Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
-            }
-        }
-
-        // final destroy
-        shutdownCorfuServer(corfuServerProcess);
-    }
-
-    /**
      * Randomized tests with mixed client and server failovers.
      *
      * @throws Exception
@@ -120,7 +30,7 @@ public class ServerRestartTest extends AbstractIntegrationTest {
     public void testRandomizedRecovery() throws Exception {
 
         // Total number of iterations of randomized failovers.
-        final int ITERATIONS = 10;
+        final int ITERATIONS = 20;
         // Total percentage.
         final int TOTAL_PERCENTAGE = 100;
         // Percentage of Client restarts.
@@ -131,120 +41,114 @@ public class ServerRestartTest extends AbstractIntegrationTest {
         // Number of maps or streams to test recovery on.
         final int MAPS = 3;
         // Number of insertions in map in each iteration.
-        final int INSERTIONS = 10;
+        final int INSERTIONS = 100;
         // Number of keys to be used throughout the test in each map.
-        final int KEYS = 3;
+        final int KEYS = 20;
 
-        final Random rand = new Random();
+        final Random randomSeed = new Random();
+
+        final long SEED = randomSeed.nextLong();
+        final Random rand = new Random(SEED);
+
+        // Keep this print at all times to reproduce any failed test.
+        System.out.println("SEED = " + SEED);
 
         Process corfuServerProcess = runCorfuServer();
+
+        List<String> testSequenceList = new ArrayList<>();
+
+        List<CorfuRuntime> runtimeList = new ArrayList<>();
+
         List<Map<String, Integer>> smrMapList = new ArrayList<>();
         for (int i = 0; i < MAPS; i++) {
-            smrMapList.add(createMap(createRuntime(), Integer.toString(i)));
+            CorfuRuntime runtime = createRuntime();
+            runtimeList.add(runtime);
+            smrMapList.add(createMap(runtime, Integer.toString(i)));
         }
         List<Map<String, Integer>> expectedMapList = new ArrayList<>();
         for (int i = 0; i < MAPS; i++) {
             expectedMapList.add(new HashMap<>());
         }
 
-        for (int i = 0; i < ITERATIONS; i++) {
+        try {
 
-            boolean serverRestart = rand.nextInt(TOTAL_PERCENTAGE) < SERVER_RESTART_PERCENTAGE;
-            boolean clientRestart = rand.nextInt(TOTAL_PERCENTAGE) < CLIENT_RESTART_PERCENTAGE;
+            for (int i = 0; i < ITERATIONS; i++) {
 
-            if (clientRestart) {
-                smrMapList.clear();
-                for (int j = 0; j < MAPS; j++) {
-                    smrMapList.add(createMap(createRuntime(), Integer.toString(j)));
-                }
-            }
+                boolean serverRestart = rand.nextInt(TOTAL_PERCENTAGE) < SERVER_RESTART_PERCENTAGE;
+                boolean clientRestart = rand.nextInt(TOTAL_PERCENTAGE) < CLIENT_RESTART_PERCENTAGE;
 
-            // Map assertions
-            while (true) {
-                try {
-                    if (i != 0) {
-                        for (int j = 0; j < MAPS; j++) {
-                            assertThat(smrMapList.get(j)).isEqualTo(expectedMapList.get(j));
-                        }
+                testSequenceList.add(getRestartStateRecord(i, serverRestart, clientRestart));
+
+                if (clientRestart) {
+                    smrMapList.clear();
+                    runtimeList.forEach(corfuRuntime -> {
+                        corfuRuntime.stop();
+                        corfuRuntime.shutdown();
+                    });
+                    for (int j = 0; j < MAPS; j++) {
+                        CorfuRuntime runtime = createRuntime();
+                        runtimeList.add(runtime);
+                        smrMapList.add(createMap(runtime, Integer.toString(j)));
                     }
-                    break;
-                } catch (NetworkException ne) {
-                    Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+                }
+
+                // Map assertions
+                while (true) {
+                    try {
+                        if (i != 0) {
+                            for (int j = 0; j < MAPS; j++) {
+                                assertThat(smrMapList.get(j)).isEqualTo(expectedMapList.get(j));
+                            }
+                        }
+                        break;
+                    } catch (NetworkException ne) {
+                        Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+                    }
+                }
+
+                // Map insertions
+                for (int j = 0; j < INSERTIONS; j++) {
+                    int value = rand.nextInt();
+                    int map = rand.nextInt(MAPS);
+                    String key = Integer.toString(rand.nextInt(KEYS));
+
+                    smrMapList.get(map).put(key, value);
+                    expectedMapList.get(map).put(key, value);
+
+                    testSequenceList.add(getMapInsertion(i, map, key, value));
+                }
+
+                testSequenceList.add(getMapStateRecord(i, expectedMapList));
+
+                if (serverRestart) {
+                    shutdownCorfuServer(corfuServerProcess);
+                    assert !corfuServerProcess.isAlive();
+                    runCorfuServer();
                 }
             }
 
-            // Map insertions
-            for (int j = 0; j < INSERTIONS; j++) {
-                int value = rand.nextInt();
-                int map = rand.nextInt(MAPS);
-                String key = Integer.toString(rand.nextInt(KEYS));
+            shutdownCorfuServer(corfuServerProcess);
 
-                smrMapList.get(map).put(key, value);
-                expectedMapList.get(map).put(key, value);
-            }
-
-            if (serverRestart) {
-                shutdownCorfuServer(corfuServerProcess);
-                assert !corfuServerProcess.isAlive();
-                runCorfuServer();
-            }
+        } catch (Exception e) {
+            testSequenceList.forEach(System.out::println);
+            throw e;
         }
-
-        shutdownCorfuServer(corfuServerProcess);
     }
 
-    @Test
-    public void testRecoveryWith3FailoversAnd3Keys() throws Exception {
-
-        Process corfuServerProcess = runCorfuServer();
-        Map<String, Integer> map = createMap(createRuntime(), "A");
-
-        final int expectedValue = 5;
-
-        Integer previous = map.get("a");
-        assertThat(previous).isNull();
-        map.put("a", expectedValue);
-        map.put("a", expectedValue + 1);
-        map.put("a", expectedValue + 2);
-        map.put("c", expectedValue + 1);
-
-        shutdownCorfuServer(corfuServerProcess);
-        assert !corfuServerProcess.isAlive();
-
-        corfuServerProcess = runCorfuServer();
-        map = createMap(createRuntime(), "A");
-        assertThat(map.get("a")).isEqualTo(expectedValue + 2);
-        assertThat(map.get("c")).isEqualTo(expectedValue + 1);
-
-        final int expectedValue2 = 10;
-        map.put("a", expectedValue2);
-        map.put("b", expectedValue2);
-        map.put("c", expectedValue2 + 1);
-
-        shutdownCorfuServer(corfuServerProcess);
-        assert !corfuServerProcess.isAlive();
-
-        corfuServerProcess = runCorfuServer();
-        map = createMap(createRuntime(), "A");
-        assertThat(map.get("a")).isEqualTo(expectedValue2);
-        assertThat(map.get("b")).isEqualTo(expectedValue2);
-        assertThat(map.get("c")).isEqualTo(expectedValue2 + 1);
-        map.put("a", expectedValue2 + 1);
-        map.put("a", expectedValue2 + 2);
-        map.put("b", expectedValue);
-
-        shutdownCorfuServer(corfuServerProcess);
-        assert !corfuServerProcess.isAlive();
-
-        corfuServerProcess = runCorfuServer();
-        map = createMap(createRuntime(), "A");
-        assertThat(map.get("a")).isEqualTo(expectedValue2 + 2);
-        assertThat(map.get("b")).isEqualTo(expectedValue);
-        assertThat(map.get("c")).isEqualTo(expectedValue2 + 1);
-
-        // final destroy
-        shutdownCorfuServer(corfuServerProcess);
+    private String getRestartStateRecord(int iteration, boolean serverRestart, boolean clientRestart) {
+        return "[" + iteration + "]: ServerRestart=" + serverRestart + ", ClientRestart=" + clientRestart;
     }
 
+    private String getMapStateRecord(int iteration, List<Map<String, Integer>> mapStateList) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("[" + iteration + "]: Map State :\n");
+        for (int i = 0; i < mapStateList.size(); i ++){
+            sb.append("map#" + i + " map = " + mapStateList.get(i).toString() + "\n");
+        }
+        return sb.toString();
+    }
 
+    private String getMapInsertion(int iteration, int streamId, String key, int value) {
+        return "[" + iteration + "]: Map put => streamId=" + streamId + " key=" + key + " value=" + value;
+    }
 }
