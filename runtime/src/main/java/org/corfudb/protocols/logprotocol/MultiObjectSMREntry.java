@@ -17,25 +17,35 @@ import java.util.*;
  * Created by mwei on 9/20/16.
  */
 @ToString
-@NoArgsConstructor
 @Slf4j
-public class MultiObjectSMREntry extends LogEntry implements IDivisibleEntry, ISMRConsumable {
+public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
 
     @Getter
-    public Map<UUID, MultiSMREntry> entryMap;
+    public Map<UUID, MultiSMREntry> entryMap = new HashMap<>();
 
-    /** Produce an entry for the given stream, or return null if there is no entry.
-     *
-     * @param stream    The stream to produce an entry for.
-     * @return          An entry for that stream, or NULL, if there is no entry for that stream.
-     */
-    public LogEntry divideEntry(UUID stream) {
-       return entryMap.get(stream);
-    }
+    public MultiObjectSMREntry() { this.type = LogEntryType.MULTIOBJSMR; }
 
     public MultiObjectSMREntry(Map<UUID, MultiSMREntry> entryMap) {
         this.type = LogEntryType.MULTIOBJSMR;
         this.entryMap = entryMap;
+    }
+
+    protected MultiSMREntry getStreamEntry(UUID streamID) {
+        return getEntryMap().computeIfAbsent(streamID, u -> {
+            return new MultiSMREntry();
+        } );
+    }
+
+    public void addTo(UUID streamID, SMREntry updateEntry) {
+        getStreamEntry(streamID).addTo(updateEntry);
+    }
+
+    public void mergeInto(MultiObjectSMREntry other) {
+        if (other == null) return;
+
+        other.getEntryMap().forEach((streamID, MSMRentry) -> {
+            getStreamEntry(streamID).mergeInto(MSMRentry);
+        });
     }
 
     /**

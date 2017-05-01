@@ -1,7 +1,6 @@
 package org.corfudb.integration;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.BeforeClass;
@@ -41,7 +40,7 @@ public class StreamIT {
 
         UUID streamId = CorfuRuntime.getStreamID(Integer.toString(rand.nextInt()));
 
-        IStreamView s1 = rt.getStreamsView().get(streamId);
+        IStreamView s1 = rt.getMultiStreamsView().get(streamId);
 
         // Verify that the stream is empty
         assertThat(s1.hasNext())

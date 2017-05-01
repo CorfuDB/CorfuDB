@@ -7,16 +7,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.*;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Utils;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
+
+import static org.corfudb.runtime.object.transactions.TransactionalContext.getRootContext;
 
 /**
  * Represents a transactional context. Transactional contexts
@@ -79,6 +79,7 @@ public abstract class AbstractTransactionalContext implements
     public final TransactionBuilder builder;
 
     /**
+     * TODO remove this!
      * The start time of the context.
      */
     @Getter
@@ -99,14 +100,22 @@ public abstract class AbstractTransactionalContext implements
     @Getter
     private final AbstractTransactionalContext parentContext;
 
+    @Getter
+    private final WriteSetInfo writeSetInfo = new WriteSetInfo();
+
+    @Getter
+    private final ReadSetInfo readSetInfo = new ReadSetInfo();
+
     /**
      * A read-set of the txn.
      * We collect the read-set as a map, organized by streams.
      * For each stream, we record:
      *  - a set of conflict-parameters read by this transaction on the stream,
      */
+/*
     @Getter
     private final Map<UUID, Set<Integer>> readSet = new HashMap<>();
+*/
 
     /**
      * A write-set is a key component of a transaction.
@@ -118,6 +127,7 @@ public abstract class AbstractTransactionalContext implements
      * @return a map from streams to write entry representing an update made by
      * this TX
      */
+/*
     @Getter
     protected final Map
             <  UUID,                                                // stream ID
@@ -127,6 +137,7 @@ public abstract class AbstractTransactionalContext implements
                     >
             >
             writeSet = new HashMap<>();
+*/
 
     /**
      * A future which gets completed when this transaction commits.
@@ -139,9 +150,13 @@ public abstract class AbstractTransactionalContext implements
     AbstractTransactionalContext(TransactionBuilder builder) {
         transactionID = UUID.randomUUID();
         this.builder = builder;
-        this.startTime = System.currentTimeMillis();
-        this.parentContext = TransactionalContext.getCurrentContext();
-        log.debug("TXBegin[{}]", this);
+
+        // TODO remove this
+        startTime = System.currentTimeMillis();
+
+        parentContext = TransactionalContext.getCurrentContext();
+
+        AbstractTransactionalContext.log.debug("TXBegin[{}]", this);
     }
 
     /** Access the state of the object.
@@ -200,7 +215,7 @@ public abstract class AbstractTransactionalContext implements
     /** Forcefully abort the transaction.
      */
     public void abortTransaction(TransactionAbortedException ae) {
-        log.debug("TXAbort[{}]", this);
+        AbstractTransactionalContext.log.debug("TXAbort[{}]", this);
         commitAddress = ABORTED_ADDRESS;
         completionFuture
                 .completeExceptionally(ae);
@@ -215,6 +230,9 @@ public abstract class AbstractTransactionalContext implements
      */
     public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects)
     {
+        getReadSetInfo().addToReadSet(proxy.getStreamID(), conflictObjects);
+
+/*
         readSet.computeIfAbsent(proxy.getStreamID(), k -> {
             log.trace("AddToResetSet[{}] {}", this, proxy);
             return new HashSet<Integer>();
@@ -224,20 +242,26 @@ public abstract class AbstractTransactionalContext implements
             Arrays.asList(conflictObjects).stream()
                 .forEach(V -> conflictParamSet.add(Integer.valueOf(V.hashCode()))) ;
         }
+*/
     }
 
     /**
      * merge another readSet into this one
-     * @param otherCSet
+     * @param other
      */
-    void mergeReadSetInto(Map<UUID, Set<Integer>> otherCSet) {
-        otherCSet.forEach((branchID, conflictParamSet) -> {
-            this.readSet.computeIfAbsent(branchID, u -> new HashSet<Integer>());
-            this.readSet.get(branchID).addAll(conflictParamSet);
-        });
+    void mergeReadSetInto(ReadSetInfo other) {
+        getReadSetInfo().mergeInto(other);
+
+        //otherCSet.forEach((branchID, conflictParamSet) -> {
+        //    this.readSet.computeIfAbsent(branchID, u -> new HashSet<Integer>());
+        //});
     }
 
     void addToWriteSet(ICorfuSMRProxy proxy, SMREntry updateEntry, Object[] conflictObjects) {
+        getWriteSetInfo().addToWriteSet(proxy.getStreamID(), updateEntry, conflictObjects);
+
+/*
+
         // create an entry for this streamID
         writeSet.computeIfAbsent(proxy.getStreamID(),
                 u -> {
@@ -255,6 +279,7 @@ public abstract class AbstractTransactionalContext implements
             Arrays.asList(conflictObjects).stream()
                     .forEach(V -> writeConflictParamSet.add(Integer.valueOf(V.hashCode())));
         }
+*/
     }
 
     /**
@@ -263,18 +288,20 @@ public abstract class AbstractTransactionalContext implements
      * @return A set of longs representing all the conflict params
      */
     Map<UUID, Set<Integer>> collectWriteConflictParams() {
-        ImmutableMap.Builder<UUID, Set<Integer>> builder = new ImmutableMap.Builder<>();
+        return getWriteSetInfo().getWriteSetConflicts();
 
-        writeSet.entrySet()         // mappings from streamIDs to
-                                    // pairs (set of conflict-params, list of WriteSetEntry)
-                .forEach(e -> {
-                    builder.put(e.getKey(),     // UUID
-                                e.getValue()   // a pair
-                                   .getKey() );// left component: a conflict-params set
-                    });
-        return builder.build();
+//        writeSet.entrySet()         // mappings from streamIDs to
+//                                    // pairs (set of conflict-params, list of WriteSetEntry)
+//                .forEach(e -> {
+//                    builder.put(e.getKey(),     // UUID
+//                                e.getValue()   // a pair
+//                                   .getKey() );// left component: a conflict-params set
+//                    });
+//
+//        return builder.build();
     }
 
+/*
     void mergeWriteSetInto(Map<UUID, AbstractMap.SimpleEntry<Set<Integer>, List<SMREntry>>> otherWSet) {
         otherWSet.entrySet().forEach(e-> {
             // create an entry for this streamID
@@ -297,26 +324,32 @@ public abstract class AbstractTransactionalContext implements
         });
     }
 
+*/
+
+    void mergeWriteSetInto(WriteSetInfo other) {
+        getWriteSetInfo().mergeInto(other);
+    }
+
     /**
      * convert our write set into a new MultiObjectSMREntry.
      * @return
      */
     MultiObjectSMREntry collectWriteSetEntries() {
-        ImmutableMap.Builder<UUID, MultiSMREntry> builder =
-                ImmutableMap.builder();
+        return getWriteSetInfo().getWriteSet();
 
-        writeSet.entrySet()                 // mappings from streamIDs to
-                // pairs (set of conflict-params, list of WriteSetEntry)
-
-                .forEach(x -> builder.put(x.getKey(),   // a streamID
-                        new MultiSMREntry(x.getValue()  // a pair
-                                .getValue()             // right component: a list of WriteSetEntry
-                                .stream()
-                                .collect(Collectors.toList())))
-                );
-        Map<UUID, MultiSMREntry> entryMap = builder.build();
-        MultiObjectSMREntry entry = new MultiObjectSMREntry(entryMap);
-        return entry;
+//        writeSet.entrySet()                 // mappings from streamIDs to
+//                // pairs (set of conflict-params, list of WriteSetEntry)
+//
+//                .forEach(x -> builder.put(x.getKey(),   // a streamID
+//                        new MultiSMREntry(x.getValue()  // a pair
+//                                .getValue()             // right component: a list of WriteSetEntry
+//                                .stream()
+//                                .collect(Collectors.toList())))
+//                );
+//
+//        Map<UUID, MultiSMREntry> entryMap = builder.build();
+//        MultiObjectSMREntry entry = new MultiObjectSMREntry(entryMap);
+//        return entry;
     }
 
     /** Helper function to get a write set for a particular stream.
@@ -325,12 +358,21 @@ public abstract class AbstractTransactionalContext implements
      * @return      The append set for that stream, as an ordered list.
      */
     List<SMREntry> getWriteSetEntryList(UUID id) {
+        return getWriteSetInfo().getWriteSet().getSMRUpdates(id);
 
-        return writeSet
-                .getOrDefault(id, new AbstractMap.SimpleEntry<>(Collections.emptySet(), Collections.emptyList()))
-                .getValue();
+//        return writeSet
+//                .getOrDefault(id, new AbstractMap.SimpleEntry<>(Collections.emptySet(), Collections.emptyList()))
+//                .getValue();
     }
 
+    int getWriteSetEntrySize(UUID id) {
+        List<SMREntry> entries = getWriteSetInfo().getWriteSet().getSMRUpdates(id);
+
+        if (entries == null)
+            return 0;
+        else
+            return entries.size();
+    }
 
     /** Transactions are ordered by their snapshot timestamp. */
     @Override
@@ -343,4 +385,72 @@ public abstract class AbstractTransactionalContext implements
     public String toString() {
         return "TX[" + Utils.toReadableID(transactionID) + "]";
     }
+}
+
+@Getter
+class ReadSetInfo {
+    Map<UUID, Set<Integer>> readSetConflicts = new HashMap<>();
+
+    public void mergeInto(ReadSetInfo other) {
+        other.getReadSetConflicts().forEach((streamID, cSet) -> {
+            getConflictSet(streamID).addAll(cSet);
+        });
+    }
+
+    public void addToReadSet(UUID streamID, Object[] conflictObjects) {
+        if (conflictObjects == null) return;
+
+        Set<Integer> streamConflicts = getConflictSet(streamID);
+        Arrays.asList(conflictObjects).stream()
+                .forEach(V -> streamConflicts.add(Integer.valueOf(V.hashCode()))) ;
+    }
+
+    public Set<Integer> getConflictSet(UUID streamID) {
+        return getReadSetConflicts().computeIfAbsent(streamID, u -> {
+            return new HashSet<>();
+        } );
+    }
+
+}
+
+@Getter @groovy.util.logging.Slf4j
+class WriteSetInfo {
+    Map<UUID, Set<Integer>> writeSetConflicts = new HashMap<>();
+    Set<UUID> affectedStreams = new HashSet<>();
+    MultiObjectSMREntry writeSet = new MultiObjectSMREntry();
+
+    Set<Integer> getConflictSet(UUID streamID) {
+        return getWriteSetConflicts().computeIfAbsent(streamID, u -> {
+            return new HashSet<>();
+        } );
+    }
+
+    public void mergeInto(WriteSetInfo other) {
+        synchronized (getRootContext().getTransactionID()) {
+
+            // copy all the conflict-params
+            other.writeSetConflicts.forEach((streamID, cSet) ->{
+                getConflictSet(streamID).addAll(cSet);
+            });
+
+            // copy all the writeSet SMR entries
+            writeSet.mergeInto(other.getWriteSet());
+        }
+    }
+
+    public void addToWriteSet(UUID streamID, SMREntry updateEntry, Object[] conflictObjects) {
+        synchronized (getRootContext().getTransactionID()) {
+
+            // add the SMRentry to the list of updates for this stream
+            writeSet.addTo(streamID, updateEntry);
+
+            // add all the conflict params to the conflict-params set for this stream
+            if (conflictObjects != null) {
+                Set<Integer> streamConflicts = getConflictSet(streamID);
+                Arrays.asList(conflictObjects).stream()
+                        .forEach(V -> streamConflicts.add(Integer.valueOf(V.hashCode())));
+            }
+        }
+    }
+
 }

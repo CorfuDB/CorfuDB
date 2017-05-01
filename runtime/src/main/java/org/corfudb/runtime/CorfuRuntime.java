@@ -66,7 +66,7 @@ public class CorfuRuntime {
      * A view of streams in the Corfu server instance.
      */
     @Getter(lazy = true)
-    private final MultiStreamView streamsView = new MultiStreamView(this);
+    private final MultiStreamView multiStreamsView = new MultiStreamView(this);
 
     //region Address Space Options
     /**

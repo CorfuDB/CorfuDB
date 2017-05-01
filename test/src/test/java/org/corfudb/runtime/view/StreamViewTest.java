@@ -34,7 +34,7 @@ public class StreamViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        IStreamView sv = r.getStreamsView().get(streamA);
+        IStreamView sv = r.getMultiStreamsView().get(streamA);
         sv.append(testPayload);
 
         assertThat(sv.next().getPayload(getRuntime()))
@@ -51,7 +51,7 @@ public class StreamViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        IStreamView sv = r.getStreamsView().get(streamA);
+        IStreamView sv = r.getMultiStreamsView().get(streamA);
         scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW,
                 i -> sv.append(testPayload));
         executeScheduled(PARAMETERS.CONCURRENCY_SOME,
@@ -75,7 +75,7 @@ public class StreamViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        IStreamView sv = r.getStreamsView().get(streamA);
+        IStreamView sv = r.getMultiStreamsView().get(streamA);
         scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW, i ->
                 sv.append(testPayload));
         executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_NORMAL);
@@ -98,7 +98,7 @@ public class StreamViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        IStreamView sv = r.getStreamsView().get(streamA);
+        IStreamView sv = r.getMultiStreamsView().get(streamA);
         sv.append(testPayload);
 
         assertThat(sv.next().getPayload(getRuntime()))
@@ -113,7 +113,7 @@ public class StreamViewTest extends AbstractViewTest {
         throws Exception
     {
         CorfuRuntime r = getDefaultRuntime().connect();
-        IStreamView sv = r.getStreamsView().get(
+        IStreamView sv = r.getMultiStreamsView().get(
                 CorfuRuntime.getStreamID("stream  A"));
 
         // Append some entries
@@ -148,9 +148,9 @@ public class StreamViewTest extends AbstractViewTest {
             throws Exception
     {
         CorfuRuntime r = getDefaultRuntime().connect();
-        IStreamView svA = r.getStreamsView().get(
+        IStreamView svA = r.getMultiStreamsView().get(
                 CorfuRuntime.getStreamID("stream  A"));
-        IStreamView svB = r.getStreamsView().get(
+        IStreamView svB = r.getMultiStreamsView().get(
                 CorfuRuntime.getStreamID("stream  B"));
 
         // Append some entries
@@ -204,7 +204,7 @@ public class StreamViewTest extends AbstractViewTest {
             throws Exception
     {
         CorfuRuntime r = getDefaultRuntime().connect();
-        IStreamView sv = r.getStreamsView().get(
+        IStreamView sv = r.getMultiStreamsView().get(
                 CorfuRuntime.getStreamID("stream  A"));
 
         // Append some entries
@@ -247,7 +247,7 @@ public class StreamViewTest extends AbstractViewTest {
         r.getAddressSpaceView().fillHole(0);
 
         // Write to the stream, and read back. The hole should be filled.
-        IStreamView sv = r.getStreamsView().get(streamA);
+        IStreamView sv = r.getMultiStreamsView().get(streamA);
         sv.append(testPayload);
 
         assertThat(sv.next().getPayload(getRuntime()))
@@ -269,7 +269,7 @@ public class StreamViewTest extends AbstractViewTest {
         r.getSequencerView().nextToken(Collections.singleton(streamA), 1);
 
         // Write to the stream, and read back. The hole should be filled.
-        IStreamView sv = r.getStreamsView().get(streamA);
+        IStreamView sv = r.getMultiStreamsView().get(streamA);
         sv.append(testPayload);
 
         assertThat(sv.next().getPayload(getRuntime()))
@@ -289,7 +289,7 @@ public class StreamViewTest extends AbstractViewTest {
         byte[] testPayload = "hello world".getBytes();
         byte[] testPayload2 = "hello world2".getBytes();
 
-        IStreamView sv = r.getStreamsView().get(streamA);
+        IStreamView sv = r.getMultiStreamsView().get(streamA);
         sv.append(testPayload);
 
         //generate a stream hole

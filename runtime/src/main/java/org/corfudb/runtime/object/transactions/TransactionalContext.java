@@ -5,7 +5,6 @@ import org.corfudb.util.Utils;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
 
 /** A class which allows access to transactional contexts, which manage
@@ -21,7 +20,7 @@ public class TransactionalContext {
     /** A thread local stack containing all transaction contexts
      * for a given thread.
      */
-    private static final ThreadLocal<Deque<AbstractTransactionalContext>>
+    private static final ThreadLocal<LinkedList<AbstractTransactionalContext>>
             threadTransactionStack = ThreadLocal.withInitial(
             LinkedList<AbstractTransactionalContext>::new);
 
@@ -36,19 +35,8 @@ public class TransactionalContext {
      *
      * @return The transaction stack for the calling thread.
      */
-    public static Deque<AbstractTransactionalContext> getTransactionStack() {
+    public static LinkedList<AbstractTransactionalContext> getTransactionStack() {
         return threadTransactionStack.get();
-    }
-
-    /**
-     * Get the transaction stack as a list.
-     * @return  The transaction stack as a list.
-     */
-    public static List<AbstractTransactionalContext> getTransactionStackAsList() {
-        List<AbstractTransactionalContext> listReverse =
-                getTransactionStack().stream().collect(Collectors.toList());
-        Collections.reverse(listReverse);
-        return listReverse;
     }
 
     /**
@@ -57,7 +45,7 @@ public class TransactionalContext {
      * @return The current transactional context for the calling thread.
      */
     public static AbstractTransactionalContext getCurrentContext() {
-        return getTransactionStack().peekFirst();
+        return getTransactionStack().peekLast();
     }
 
     /**
@@ -66,7 +54,7 @@ public class TransactionalContext {
      * @return The last transactional context for the calling thread.
      */
     public static AbstractTransactionalContext getRootContext() {
-        return getTransactionStack().peekLast();
+        return getTransactionStack().peekFirst();
     }
 
     /**
@@ -86,7 +74,12 @@ public class TransactionalContext {
      */
     public static AbstractTransactionalContext newContext(AbstractTransactionalContext context) {
         log.debug("TX begin[{}]", context);
-        getTransactionStack().addFirst(context);
+        if (getRootContext() != null)
+            synchronized (TransactionalContext.getRootContext().getTransactionID()) {
+                getTransactionStack().addLast(context);
+            }
+        else
+            getTransactionStack().addLast(context);
         return context;
     }
 
@@ -95,7 +88,10 @@ public class TransactionalContext {
      * @return          The context which was removed from the transaction stack.
      */
     public static AbstractTransactionalContext removeContext() {
-        AbstractTransactionalContext r = getTransactionStack().pollFirst();
+        AbstractTransactionalContext r;
+        synchronized (TransactionalContext.getRootContext().getTransactionID()) {
+            r = getTransactionStack().pollLast();
+        }
         if (getTransactionStack().isEmpty()) {
             synchronized (getTransactionStack())
             {

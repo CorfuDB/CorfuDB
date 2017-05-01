@@ -1,7 +1,6 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.protocols.logprotocol.*;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -136,7 +135,7 @@ public class ObjectsViewTest extends AbstractViewTest {
         assertThat(map)
                 .containsEntry("k", "v2");
 
-        IStreamView txStream = r.getStreamsView().get(ObjectsView
+        IStreamView txStream = r.getMultiStreamsView().get(ObjectsView
                 .TRANSACTION_STREAM_ID);
         List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE);
         assertThat(txns).hasSize(1);
@@ -165,7 +164,7 @@ public class ObjectsViewTest extends AbstractViewTest {
         CorfuRuntime r = getDefaultRuntime();
 
         Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
-        IStreamView streamB = r.getStreamsView().get(CorfuRuntime.getStreamID("b"));
+        IStreamView streamB = r.getMultiStreamsView().get(CorfuRuntime.getStreamID("b"));
         smrMap.put("a", "b");
         streamB.append(new SMREntry("hi", new Object[]{"hello"}, Serializers.PRIMITIVE));
 

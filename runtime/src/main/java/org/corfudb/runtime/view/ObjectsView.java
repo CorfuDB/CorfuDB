@@ -116,7 +116,7 @@ public class ObjectsView extends AbstractView {
             CorfuSMRObjectProxy<T> proxy = (CorfuSMRObjectProxy<T>) ((ICorfuSMRObject) obj).getProxy();
             ObjectID oid = new ObjectID(destination, proxy.getOriginalClass());
             return (T) objectCache.computeIfAbsent(oid, x -> {
-                IStreamView sv = runtime.getStreamsView().copy(proxy.getSv().getID(),
+                IStreamView sv = runtime.getMultiStreamsView().copy(proxy.getSv().getID(),
                         destination, proxy.getTimestamp());
                 return CorfuProxyBuilder.getProxy(proxy.getOriginalClass(), sv, runtime,
                         proxy.getSerializer(), Collections.emptySet());
@@ -126,7 +126,7 @@ public class ObjectsView extends AbstractView {
             ICorfuSMR<T> proxy = (ICorfuSMR<T>)obj;
             ObjectID oid = new ObjectID(destination, proxy.getCorfuSMRProxy().getObjectType());
             return (T) objectCache.computeIfAbsent(oid, x -> {
-                IStreamView sv = runtime.getStreamsView().copy(proxy.getCorfuStreamID(),
+                IStreamView sv = runtime.getMultiStreamsView().copy(proxy.getCorfuStreamID(),
                         destination, proxy.getCorfuSMRProxy().getVersion());
                 try {
                     return
@@ -212,9 +212,11 @@ public class ObjectsView extends AbstractView {
             log.warn("Attempted to end a transaction, but no transaction active!");
             return AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
         } else {
+            // TODO remove this, doesn't belong here!
             long totalTime = System.currentTimeMillis() - context.getStartTime();
             log.trace("TXCommit[{}] time={} ms",
                     context, totalTime);
+            // TODO up to here
                 try {
                     return TransactionalContext.getCurrentContext().commitTransaction();
                 } finally {

@@ -19,17 +19,22 @@ import java.util.UUID;
  * Created by amytai on 9/16/16.
  */
 @ToString
-@NoArgsConstructor
 @Slf4j
 public class MultiSMREntry extends LogEntry implements ISMRConsumable {
 
     @Getter
-    List<SMREntry> updates;
+    List<SMREntry> updates = new ArrayList<>();
+
+    public MultiSMREntry() { this.type = LogEntryType.MULTISMR; }
 
     public MultiSMREntry(List<SMREntry> updates) {
         this.type = LogEntryType.MULTISMR;
         this.updates = updates;
     }
+
+    public void addTo(SMREntry entry) { getUpdates().add(entry); }
+
+    public void mergeInto(MultiSMREntry other) { getUpdates().addAll(other.getUpdates()); }
 
     /**
      * This function provides the remaining buffer.
@@ -64,6 +69,8 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
 
     @Override
     public List<SMREntry> getSMRUpdates(UUID id) {
+        // FIXME MultiSMREntry should not implement ISMRConsumable; we have MultiObjectSMREntry for that
+
         // TODO: we should check that the id matches the id of this entry,
         // but replex erases this information.
         return updates;
