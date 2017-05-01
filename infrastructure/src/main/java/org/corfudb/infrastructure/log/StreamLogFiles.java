@@ -38,7 +38,6 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
-import javafx.util.Pair;
 import lombok.Data;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +55,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.util.Utils.Pair;
 
 import javax.annotation.Nullable;
 
@@ -274,6 +274,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 EnumSet.of(StandardOpenOption.APPEND));
 
         Pair<LogHeader, Collection<LogEntry>> log = getCompactedEntries(filePath, pendingTrim);
+
         LogHeader header = log.getKey();
         Collection<LogEntry> compacted = log.getValue();
 
