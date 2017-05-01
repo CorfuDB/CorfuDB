@@ -169,16 +169,17 @@ public class WriteSetSMRStream implements ISMRStream {
         currentContextPos--;
         // Pop the context if we're at the beginning of it
         if (currentContextPos <= Address.maxNonAddress()) {
-            if (currentContext == 0) {
-                throw new RuntimeException("Attempted to pop first context (pos=" + pos() + ")");
-            }
-            else {
-                currentContext--;
-            }
-
+            do {
+                if (currentContext == 0) {
+                    throw new RuntimeException("Attempted to pop first context (pos=" + pos() + ")");
+                } else {
+                    currentContext--;
+                }
+            } while (!contexts.get(currentContext).getWriteSet().containsKey(id));
             currentContextPos = contexts.get(currentContext)
                     .getWriteSet().get(id).getValue().size() - 1;
         }
+
         return current();
     }
 
