@@ -346,4 +346,21 @@ public class Utils {
     public static String toReadableID(UUID id) {
         return Long.toHexString((id.getLeastSignificantBits()) & 0xFFFF);
     }
+
+    static public class Pair<K, V> {
+        public final K k;
+        public final V v;
+        public Pair(K k, V v) {
+            this.k = k;
+            this.v = v;
+        }
+
+        public K getKey() {
+            return k;
+        }
+
+        public V getValue() {
+            return v;
+        }
+    }
 }
