@@ -19,52 +19,85 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 
 /**
+ * Integration tests.
  * Created by zlokhandwala on 4/28/17.
  */
 public class AbstractIntegrationTest extends AbstractCorfuTest {
 
-    private static final String TEST_HOST = "localhost";
-    private static final String TEST_PORT = "9000";
-    private static final String TEST_ENDPOINT = TEST_HOST + ":" + TEST_PORT;
+    static final String DEFAULT_HOST = "localhost";
+    static final int DEFAULT_PORT = 9000;
+    static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
 
     private static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
-    private static final String CORFU_SERVER_COMMAND = "bin/corfu_server -a " + TEST_HOST + " -sl " + CORFU_LOG_PATH + " -d TRACE " + TEST_PORT;
     private static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
     private static final String CORFU_CONSOLELOG = CORFU_LOG_PATH + File.separator + "consolelog";
-    private static final String KILL_COMMAND = "kill -9 ";
-    private static final String KILL_CORFUSERVER = "jps | grep CorfuServer|awk '{print $1}'| xargs kill -9";
+    private static final String KILL_COMMAND = "pkill -9 -P ";
+    private static final String FORCE_KILL_ALL_CORFU_COMMAND = "jps | grep CorfuServer|awk '{print $1}'| xargs kill -9";
+
+    private static final int SHUTDOWN_RETRIES = 10;
+    private static final long SHUTDOWN_RETRY_WAIT = 500;
+
+    public static final String TEST_SEQUENCE_LOG_PATH = CORFU_LOG_PATH + File.separator + "testSequenceLog";
 
     public AbstractIntegrationTest() {
         CorfuRuntime.overrideGetRouterFunction = null;
     }
 
+    /**
+     * Cleans up the corfu log directory before running any test.
+     *
+     * @throws Exception
+     */
     @Before
     public void setUp() throws Exception {
         forceShutdownAllCorfuServers();
         FileUtils.cleanDirectory(new File(CORFU_LOG_PATH));
     }
 
-    @After
-    public void cleanUp() throws Exception {
-        forceShutdownAllCorfuServers();
+    /**
+     * Runs the CorfuServer in a separate bash process.
+     * By default the server starts on localhost:9000.
+     *
+     * @return
+     * @throws IOException
+     * @throws InterruptedException
+     */
+    public static Process runCorfuServer() throws IOException, InterruptedException {
+        return runCorfuServer(DEFAULT_HOST, DEFAULT_PORT);
     }
 
     /**
      * Runs the CorfuServer in a separate bash process.
      *
-     * @return Corfu Process
+     * @param host
+     * @param port
+     * @return
      * @throws IOException
      * @throws InterruptedException
      */
-    public static Process runCorfuServer() throws IOException, InterruptedException {
+    public static Process runCorfuServer(String host, int port) throws IOException, InterruptedException {
+        File logPath = new File(getCorfuServerLogPath(host, port));
+        if (!logPath.exists()) {
+            logPath.mkdir();
+        }
+
         ProcessBuilder builder = new ProcessBuilder();
-        builder.command("sh", "-c", CORFU_SERVER_COMMAND);
+        builder.command("sh", "-c", getRunServerCommand(host, port, getCorfuServerLogPath(host, port)));
         builder.directory(new File(CORFU_PROJECT_DIR));
         Process corfuServerProcess = builder.start();
         StreamGobbler streamGobbler = new StreamGobbler(corfuServerProcess.getInputStream(), CORFU_CONSOLELOG);
         Executors.newSingleThreadExecutor().submit(streamGobbler);
         return corfuServerProcess;
     }
+
+    public static String getCorfuServerLogPath(String host, int port) {
+        return CORFU_LOG_PATH + File.separator + host + "_" + port + "_log";
+    }
+
+    private static String getRunServerCommand(String host, int port, String logPath) {
+        return "bin/corfu_server -a " + host + " -sl " + logPath + " -d TRACE " + port;
+    }
+
 
     /**
      * Shuts down all corfu instances running on the node.
@@ -74,19 +107,39 @@ public class AbstractIntegrationTest extends AbstractCorfuTest {
      */
     public static void forceShutdownAllCorfuServers() throws IOException, InterruptedException {
         ProcessBuilder builder = new ProcessBuilder();
-        builder.command("sh", "-c", KILL_CORFUSERVER);
+        builder.command("sh", "-c", FORCE_KILL_ALL_CORFU_COMMAND);
         Process p = builder.start();
         p.waitFor();
     }
 
+    /**
+     * Shuts down all corfu instances.
+     * TODO: Should be able to gracefully kill a single specified corfu server.
+     *
+     * @param corfuServerProcess
+     * @return
+     * @throws IOException
+     * @throws InterruptedException
+     */
     public static boolean shutdownCorfuServer(Process corfuServerProcess) throws IOException, InterruptedException {
-        long pid = getPid(corfuServerProcess);
-        ProcessBuilder builder = new ProcessBuilder();
-        builder.command("sh", "-c", KILL_COMMAND + pid);
-        Process p = builder.start();
-        p.waitFor();
-        forceShutdownAllCorfuServers();
-        return true;
+        int retries = SHUTDOWN_RETRIES;
+        while (true) {
+            long pid = getPid(corfuServerProcess);
+            ProcessBuilder builder = new ProcessBuilder();
+            builder.command("sh", "-c", KILL_COMMAND + pid);
+            Process p = builder.start();
+            p.waitFor();
+
+            if (retries == 0) {
+                return false;
+            }
+            if (corfuServerProcess.isAlive()) {
+                retries--;
+                Thread.sleep(SHUTDOWN_RETRY_WAIT);
+            } else {
+                return true;
+            }
+        }
     }
 
     public static long getPid(Process p) {
@@ -105,12 +158,15 @@ public class AbstractIntegrationTest extends AbstractCorfuTest {
         return pid;
     }
 
-    public static CorfuRuntime createRuntime() {
-        CorfuRuntime rt = new CorfuRuntime(TEST_ENDPOINT)
+    public static CorfuRuntime createDefaultRuntime() {
+        return createRuntime(DEFAULT_ENDPOINT);
+    }
+
+    public static CorfuRuntime createRuntime(String endpoint) {
+        CorfuRuntime rt = new CorfuRuntime(endpoint)
                 .setCacheDisabled(true)
                 .connect();
         return rt;
-
     }
 
     public static Map<String, Integer> createMap(CorfuRuntime rt, String streamName) {

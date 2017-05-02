@@ -141,7 +141,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     /**
      * Whether or not this router is shutdown.
      */
-    volatile public boolean shutdown;
+    public volatile boolean shutdown;
     /**
      * The host that this router is routing requests for.
      */
@@ -156,7 +156,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * Are we connected?
      */
     @Getter
-    Boolean connected_p;
+    volatile Boolean connected_p;
 
     private Bootstrap b;
 
@@ -379,7 +379,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             });
             if (!shutdown) {
                 log.trace("Disconnected, reconnecting...");
-                while (true) {
+                while (!shutdown) {
                     try {
                         connectChannel(b, c);
                         return;
@@ -409,9 +409,25 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         shutdown = shutdown_p;
         connected_p = false;
 
-        ChannelFuture cf = channel.disconnect();
-        cf.syncUninterruptibly();
-        boolean b1 = cf.awaitUninterruptibly(1000);
+        if (shutdown_p) {
+            try {
+                ChannelFuture cf = channel.close();
+                cf.syncUninterruptibly();
+                cf.awaitUninterruptibly(1000);
+            } catch (Exception e) {
+                log.error("Error in closing channel");
+            }
+            try {
+                ee.shutdownGracefully().sync();
+                workerGroup.shutdownGracefully().sync();
+            } catch (InterruptedException e) {
+                log.error("Interrupted exception in shutting event pool : {}", e);
+            }
+        } else {
+            ChannelFuture cf = channel.disconnect();
+            cf.syncUninterruptibly();
+            boolean b1 = cf.awaitUninterruptibly(1000);
+        }
     }
 
     /**

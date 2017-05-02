@@ -244,6 +244,7 @@ public class CorfuRuntime {
                 log.error("Runtime shutting down. Exception in terminating fetchLayout: {}", e);
             }
         }
+        stop(true);
     }
 
     /**
@@ -257,7 +258,7 @@ public class CorfuRuntime {
         for (IClientRouter r: nodeRouters.values()) {
             r.stop(shutdown_p);
         }
-        if (shutdown_p) {
+        if (!shutdown_p) {
             // N.B. An icky side-effect of this clobbering is leaking
             // Pthreads, namely the Netty client-side worker threads.
             nodeRouters = new ConcurrentHashMap<>();

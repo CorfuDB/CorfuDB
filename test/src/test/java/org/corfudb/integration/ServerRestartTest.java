@@ -5,6 +5,8 @@ import org.corfudb.runtime.exceptions.NetworkException;
 
 import org.junit.Test;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -30,7 +32,7 @@ public class ServerRestartTest extends AbstractIntegrationTest {
     public void testRandomizedRecovery() throws Exception {
 
         // Total number of iterations of randomized failovers.
-        final int ITERATIONS = 20;
+        final int ITERATIONS = 10;
         // Total percentage.
         final int TOTAL_PERCENTAGE = 100;
         // Percentage of Client restarts.
@@ -45,23 +47,29 @@ public class ServerRestartTest extends AbstractIntegrationTest {
         // Number of keys to be used throughout the test in each map.
         final int KEYS = 20;
 
-        final Random randomSeed = new Random();
-
-        final long SEED = randomSeed.nextLong();
-        final Random rand = new Random(SEED);
+        // Logs the server and client state in each iteration with the
+        // maps used and keys and values inserted in each iteration.
+        final boolean TEST_SEQUENCE_LOGGING = true;
+        final File testSequenceLogFile = new File(TEST_SEQUENCE_LOG_PATH);
+        if (!testSequenceLogFile.exists()) {
+            testSequenceLogFile.createNewFile();
+        }
 
         // Keep this print at all times to reproduce any failed test.
+        final Random randomSeed = new Random();
+        final long SEED = randomSeed.nextLong();
+        final Random rand = new Random(SEED);
         System.out.println("SEED = " + SEED);
 
+        // Runs the corfu server. Expect slight delay until server is running.
         Process corfuServerProcess = runCorfuServer();
 
-        List<String> testSequenceList = new ArrayList<>();
-
+        // List of runtimes to free resources when not needed.
         List<CorfuRuntime> runtimeList = new ArrayList<>();
 
         List<Map<String, Integer>> smrMapList = new ArrayList<>();
         for (int i = 0; i < MAPS; i++) {
-            CorfuRuntime runtime = createRuntime();
+            CorfuRuntime runtime = createDefaultRuntime();
             runtimeList.add(runtime);
             smrMapList.add(createMap(runtime, Integer.toString(i)));
         }
@@ -70,23 +78,22 @@ public class ServerRestartTest extends AbstractIntegrationTest {
             expectedMapList.add(new HashMap<>());
         }
 
-        try {
+        try (final FileOutputStream fos = new FileOutputStream(testSequenceLogFile)) {
 
             for (int i = 0; i < ITERATIONS; i++) {
 
                 boolean serverRestart = rand.nextInt(TOTAL_PERCENTAGE) < SERVER_RESTART_PERCENTAGE;
                 boolean clientRestart = rand.nextInt(TOTAL_PERCENTAGE) < CLIENT_RESTART_PERCENTAGE;
 
-                testSequenceList.add(getRestartStateRecord(i, serverRestart, clientRestart));
+                if (TEST_SEQUENCE_LOGGING) {
+                    fos.write(getRestartStateRecord(i, serverRestart, clientRestart).getBytes());
+                }
 
                 if (clientRestart) {
                     smrMapList.clear();
-                    runtimeList.forEach(corfuRuntime -> {
-                        corfuRuntime.stop();
-                        corfuRuntime.shutdown();
-                    });
+                    runtimeList.forEach(CorfuRuntime::shutdown);
                     for (int j = 0; j < MAPS; j++) {
-                        CorfuRuntime runtime = createRuntime();
+                        CorfuRuntime runtime = createDefaultRuntime();
                         runtimeList.add(runtime);
                         smrMapList.add(createMap(runtime, Integer.toString(j)));
                     }
@@ -115,22 +122,24 @@ public class ServerRestartTest extends AbstractIntegrationTest {
                     smrMapList.get(map).put(key, value);
                     expectedMapList.get(map).put(key, value);
 
-                    testSequenceList.add(getMapInsertion(i, map, key, value));
+                    if (TEST_SEQUENCE_LOGGING) {
+                        fos.write(getMapInsertion(i, map, key, value).getBytes());
+                    }
                 }
 
-                testSequenceList.add(getMapStateRecord(i, expectedMapList));
+                if (TEST_SEQUENCE_LOGGING) {
+                    fos.write(getMapStateRecord(i, expectedMapList).getBytes());
+                }
 
                 if (serverRestart) {
-                    shutdownCorfuServer(corfuServerProcess);
-                    assert !corfuServerProcess.isAlive();
-                    runCorfuServer();
+                    assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
+                    corfuServerProcess = runCorfuServer();
                 }
             }
 
-            shutdownCorfuServer(corfuServerProcess);
+            assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
 
         } catch (Exception e) {
-            testSequenceList.forEach(System.out::println);
             throw e;
         }
     }
