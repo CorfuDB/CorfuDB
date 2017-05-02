@@ -489,7 +489,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             channelOffset += Short.BYTES;
 
             if (magic != RECORD_DELIMITER) {
-                return;
+                log.error("Expected a delimiter but found something else while trying to read file {}", sh.fileName);
+                throw new DataCorruptionException();
             }
 
             byte[] metadataBuf = new byte[METADATA_SIZE];
