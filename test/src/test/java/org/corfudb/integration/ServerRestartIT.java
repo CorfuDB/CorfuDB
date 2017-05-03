@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * fresh servers.
  * Created by zlokhandwala on 4/25/17.
  */
-public class ServerRestartTest extends AbstractIntegrationTest {
+public class ServerRestartIT extends AbstractIT {
 
     /**
      * Randomized tests with mixed client and server failovers.
@@ -32,7 +32,7 @@ public class ServerRestartTest extends AbstractIntegrationTest {
     public void testRandomizedRecovery() throws Exception {
 
         // Total number of iterations of randomized failovers.
-        final int ITERATIONS = 10;
+        final int ITERATIONS = 20;
         // Total percentage.
         final int TOTAL_PERCENTAGE = 100;
         // Percentage of Client restarts.
@@ -82,6 +82,7 @@ public class ServerRestartTest extends AbstractIntegrationTest {
 
             for (int i = 0; i < ITERATIONS; i++) {
 
+                System.out.println("Iteration #" + i);
                 boolean serverRestart = rand.nextInt(TOTAL_PERCENTAGE) < SERVER_RESTART_PERCENTAGE;
                 boolean clientRestart = rand.nextInt(TOTAL_PERCENTAGE) < CLIENT_RESTART_PERCENTAGE;
 

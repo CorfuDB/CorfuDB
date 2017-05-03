@@ -22,7 +22,7 @@ import java.util.concurrent.Executors;
  * Integration tests.
  * Created by zlokhandwala on 4/28/17.
  */
-public class AbstractIntegrationTest extends AbstractCorfuTest {
+public class AbstractIT extends AbstractCorfuTest {
 
     static final String DEFAULT_HOST = "localhost";
     static final int DEFAULT_PORT = 9000;
@@ -39,7 +39,7 @@ public class AbstractIntegrationTest extends AbstractCorfuTest {
 
     public static final String TEST_SEQUENCE_LOG_PATH = CORFU_LOG_PATH + File.separator + "testSequenceLog";
 
-    public AbstractIntegrationTest() {
+    public AbstractIT() {
         CorfuRuntime.overrideGetRouterFunction = null;
     }
 

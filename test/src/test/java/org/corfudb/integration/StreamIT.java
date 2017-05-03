@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * A set integration tests that exercise the stream API.
  */
 
-public class StreamIT {
+public class StreamIT extends AbstractIT {
     static String layoutServers;
     static Properties properties;
 
@@ -30,10 +30,12 @@ public class StreamIT {
         layoutServers = (String) properties.get("layoutServers");
     }
 
-    @Test
+//    @Test
     public void simpleStreamTest() throws Exception {
 
-        CorfuRuntime rt = new CorfuRuntime(layoutServers).connect();
+        Process corfuServerProcess = runCorfuServer();
+
+        CorfuRuntime rt = createDefaultRuntime();
         rt.setCacheDisabled(true);
 
         Random rand = new Random();
@@ -63,5 +65,7 @@ public class StreamIT {
 
             assertThat(tmp).isEqualTo(data[x]);
         }
+
+        assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
     }
 }

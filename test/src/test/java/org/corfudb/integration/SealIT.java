@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Created by rmichoud on 2/12/17.
  */
-public class SealIT {
+public class SealIT extends AbstractIT{
     static String layoutServers;
     static Properties properties;
 
@@ -29,8 +29,9 @@ public class SealIT {
 
     @Test
     public void RuntimeWithWrongEpochGetUpdated() throws Exception {
-        CorfuRuntime cr1 = new CorfuRuntime(layoutServers).connect();
-        CorfuRuntime cr2 = new CorfuRuntime(layoutServers).connect();
+        Process corfuProcess = runCorfuServer();
+        CorfuRuntime cr1 = createDefaultRuntime();
+        CorfuRuntime cr2 = createDefaultRuntime();
 
         Long beforeAddress = cr2.getSequencerView().nextToken(new HashSet<>(),1).getToken().getTokenValue();
 
@@ -63,5 +64,7 @@ public class SealIT {
         assertThat(cr2.getLayoutView().getCurrentLayout().getEpoch()).
             isEqualTo(cr1.getLayoutView().getCurrentLayout().getEpoch());
         assertThat(afterAddress).isEqualTo(beforeAddress+1);
+
+        assertThat(shutdownCorfuServer(corfuProcess)).isTrue();
     }
 }
