@@ -60,20 +60,60 @@ $ sudo apt-get install corfu-server
 ```
 
 ### Building Corfu From Source
-To build Corfu, you will need the Java JDK 8 as well as Apache Maven to invoke the build system.
+To build Corfu, you will need the Java JDK 8 as well as Apache Maven
+3.3 or later to invoke the build system.
 
 On Linux (Debian/Ubuntu), run:
 ```bash
 $ sudo add-apt-repository ppa:webupd8team/java
 $ sudo apt-get update
-$ sudo apt-get install oracle-java8-installer maven
+$ sudo apt-get install oracle-java8-installer
 ```
+
+Your major release number of Debian/Ubuntu will determine whether the
+simple command below is sufficient to install Maven 3.3 or later.
+
+```bash
+$ sudo apt-get install maven
+```
+
+Use the command `mvn --version` to confirm that Maven 3.3 or later is
+installed.  If an older version is installed, then use the
+instructions at
+[Installing maven 3.3 on Ubuntu](https://npatta01.github.io/2015/08/05/maven_install/)
+to install manually.
+**PLEASE NOTE:** Please substitute the version number `3.3.9` in place of this
+blog's instructions for an older & unavailable `3.3.3`.
 
 On Mac OS X, the [homebrew](http://brew.sh) package manager should help.
 After installing homebrew, run:
 ```
 $ brew install maven 
 ```
+
+The OS X package manager [MacPorts](http://macports.org/) can also
+install Maven 3 via `sudo port install maven3`.
+
+### Double-check Java and Maven prerequisites
+
+Use the command `mvn --version` to confirm that Maven 3.3 or later is
+installed.  Output should look like:
+
+    % mvn --version
+    Apache Maven 3.3.9 (bb52d8502b132ec0a5a3f4c09453c07478323dc5; 2015-11-10T08:41:47-08:00)
+    Maven home: /opt/local/share/java/maven3
+    Java version: 1.8.0_91, vendor: Oracle Corporation
+    Java home: /Library/Java/JavaVirtualMachines/jdk1.8.0_91.jdk/Contents/Home/jre
+    Default locale: en_US, platform encoding: UTF-8
+    OS name: "mac os x", version: "10.11.6", arch: "x86_64", family: "mac"
+
+Some OS X users have had problems where the version of Maven installed
+by MacPorts uses a different Java version than expected.  Java version
+1.8 or later is required.  If Java 1.7 or earlier is reported, then
+refer to this
+[StackOverflow Maven JDK mismatch question](http://stackoverflow.com/questions/18813828/why-maven-use-jdk-1-6-but-my-java-version-is-1-7).
+
+### Building Corfu
 
 Once you've installed the prerequisites, you can build Corfu.
 
