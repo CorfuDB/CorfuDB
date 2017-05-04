@@ -13,6 +13,7 @@ import org.junit.Test;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.*;
@@ -132,6 +133,8 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
     public void transactionalManyWritesThenRead() throws TransactionAbortedException {
         int numKeys = ONE_THOUSAND;
         ObjectsView view = getRuntime().getObjectsView();
+        final CountDownLatch barrier = new CountDownLatch(2);
+
         Map<String, String> testMap = getRuntime()
                 .getObjectsView()
                 .build()
@@ -146,6 +149,10 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 String key = "key" + String.valueOf(i);
                 String val = "value0_" + String.valueOf(i);
                 testMap.put(key, val);
+                if (i == 0) {
+                    barrier.countDown();
+                    barrier.await();
+                }
                 if (i % ONE_HUNDRED == 0) {
                     Thread.yield();
                 }
@@ -159,6 +166,10 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
                 String key = "key" + String.valueOf(i);
                 String val = "value1_" + String.valueOf(i);
                 testMap.put(key, val);
+                if (i == 0) {
+                    barrier.countDown();
+                    barrier.await();
+                }
                 if (i % ONE_HUNDRED == 0) {
                     Thread.yield();
                 }
