@@ -30,7 +30,7 @@ import static java.util.Objects.requireNonNull;
  */
 @Slf4j
 @Data
-@ToString(exclude = {"runtime", "replicationViewCache"})
+@ToString(exclude = {"runtime"})
 @EqualsAndHashCode
 public class Layout implements Cloneable {
     /**
