@@ -16,10 +16,15 @@ import java.util.UUID;
  *
  * Created by mwei on 8/17/16.
  */
-public interface ILogData extends IMetadata {
+public interface ILogData extends IMetadata, Comparable<ILogData> {
 
     Object getPayload(CorfuRuntime t);
     DataType getType();
+
+    @Override
+    default int compareTo(ILogData o) {
+        return getGlobalAddress().compareTo(o.getGlobalAddress());
+    }
 
     /** This class provides a serialization handle, which
      * manages the lifetime of the serialized copy of this

@@ -28,7 +28,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         getDefaultRuntime();
 
         Map<String, String> testMap = (Map<String, String>)
-                instantiateCorfuObject(new TypeToken<TreeMap<String,String>>() {}, "test");
+                instantiateCorfuObject(new TypeToken<SMRMap<String,String>>() {}, "test");
 
         testMap.clear();
         assertThat(testMap.put("a", "a"))
@@ -39,7 +39,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
                 .isEqualTo("b");
 
         Map<String, String> testMap2 = (Map<String, String>)
-                instantiateCorfuObject(new TypeToken<TreeMap<String,String>>() {}, "test");
+                instantiateCorfuObject(new TypeToken<SMRMap<String,String>>() {}, "test");
 
         assertThat(testMap2.get("a"))
                 .isEqualTo("b");

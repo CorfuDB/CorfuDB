@@ -112,9 +112,7 @@ public class LogEntry implements ICorfuSerializable {
         // Base Messages
         NOP(0, LogEntry.class),
         SMR(1, SMREntry.class),
-        STREAM_HINT(3, StreamHintEntry.class),
         STREAM_COW(4, StreamCOWEntry.class),
-        OPT_TX(6, MultiSMREntry.class),
         MULTIOBJSMR(7, MultiObjectSMREntry.class),
         MULTISMR(8, MultiSMREntry.class);
 

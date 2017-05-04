@@ -42,7 +42,7 @@ public abstract class AbstractReplicationProtocol implements IReplicationProtoco
                 .peekUntilHoleFillRequired(globalAddress,
                         a -> peek(layout, a));
         } catch (HoleFillRequiredException e) {
-            log.debug("HoleFill[{}] due to {}", e.getMessage());
+            log.debug("HoleFill[{}] due to {}", globalAddress, e.getMessage());
             holeFill(layout, globalAddress);
             return peek(layout, globalAddress);
         }
