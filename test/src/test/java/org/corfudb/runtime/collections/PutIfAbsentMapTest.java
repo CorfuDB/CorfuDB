@@ -4,9 +4,6 @@ import lombok.Getter;
 import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.MutatorAccessor;
-import org.corfudb.annotations.ObjectType;
-import org.corfudb.annotations.StateSource;
-import org.corfudb.runtime.object.ICorfuSMRObject;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
 
@@ -69,15 +66,12 @@ public class PutIfAbsentMapTest extends AbstractViewTest {
                 .isEqualTo(1);
     }
 
-    @CorfuObject(objectType = ObjectType.SMR,
-            stateSource = StateSource.SELF
-    )
-
-    public static class PutIfAbsentMap<K, V> implements ICorfuSMRObject {
+    @CorfuObject
+    public static class PutIfAbsentMap<K, V> {
 
         HashMap<K, V> map = new HashMap<>();
 
-        @MutatorAccessor
+        @MutatorAccessor(name="put")
         public V put(K key, V value) {
             return map.put(key, value);
         }
@@ -87,7 +81,7 @@ public class PutIfAbsentMapTest extends AbstractViewTest {
             return map.get(key);
         }
 
-        @MutatorAccessor
+        @MutatorAccessor(name="putIfAbsent")
         public boolean putIfAbsent(K key, V value) {
             if (map.get(key) == null) {
                 map.put(key, value);

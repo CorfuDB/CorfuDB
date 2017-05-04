@@ -268,8 +268,9 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      * @return      True, if the entry will update the context.
      */
     protected boolean doesEntryUpdateContext(final ILogData data) {
-        return data.containsStream(getCurrentContext().id) &&
-                data.getPayload(runtime) instanceof StreamCOWEntry;
+        return data.hasBackpointer(getCurrentContext().id) &&
+                data.getBackpointer(getCurrentContext().id)
+                        .equals(Address.COW_BACKPOINTER);
     }
 
     /** Update the global pointer, given an entry.

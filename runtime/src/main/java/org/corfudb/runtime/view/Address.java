@@ -70,4 +70,9 @@ public class Address {
     // FIXME this fails when NEVER_READ is set to (say) -7L. This indicates
     // NEVER_READ is NOT used properly!!
     public static final long NEVER_READ = -1L;
+
+    /** Indicates that the previous entry in the stream belongs
+     * to another stream.
+     */
+    public static final long COW_BACKPOINTER = -7L;
 }

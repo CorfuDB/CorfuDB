@@ -219,32 +219,6 @@ public class LogUnitClientTest extends AbstractClientTest {
     }
 
     @Test
-    public void canCommitWrite()
-            throws Exception {
-        byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
-        client.writeCommit(null, 0, true).get();
-        LogData r = client.read(0).get().getReadSet().get(0L);
-        assertThat(r.getType())
-                .isEqualTo(DataType.DATA);
-        assertThat(r.getPayload(new CorfuRuntime()))
-                .isEqualTo(testString);
-        assertThat(r.getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT));
-
-        final long OUTSIDE_ADDRESS = 10L;
-        UUID streamA = CorfuRuntime.getStreamID("streamA");
-        client.writeStream(1, Collections.singletonMap(streamA, 0L), testString).get();
-        client.writeCommit(Collections.singletonMap(streamA, 0L), OUTSIDE_ADDRESS, true).get(); // 10L shouldn't matter
-
-        r = client.read(streamA, Range.singleton(0L)).get().getReadSet().get(0L);
-        assertThat(r.getType())
-                .isEqualTo(DataType.DATA);
-        assertThat(r.getPayload(new CorfuRuntime()))
-                .isEqualTo(testString);
-        assertThat(r.getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT));
-    }
-
-    @Test
     public void CorruptedDataReadThrowsException() throws Exception {
         byte[] testString = "hello world".getBytes();
         client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();

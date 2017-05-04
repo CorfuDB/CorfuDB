@@ -21,7 +21,7 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
 
 
 
-    protected int numIterations = PARAMETERS.NUM_ITERATIONS_MODERATE;
+    protected int numIterations = PARAMETERS.NUM_ITERATIONS_LOW;
 
     /**
      * This test verifies commit atomicity against concurrent -read- activity,

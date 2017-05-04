@@ -96,6 +96,11 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         + classElement.getSimpleName() + " with IOException");
             }
         }
+        // deal with any inner classes
+        classElement.getEnclosedElements().stream()
+                .filter(x -> x instanceof TypeElement)
+                .map(x -> (TypeElement) x)
+                .forEach(this::processClass);
     }
 
     /** Return a SMR function name, extracting it from the annotations if available.
@@ -160,8 +165,12 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         // Extract the package name for the class. We'll need this to generate the proxy file.
         String packageName = elementUtils.getPackageOf(classElement).toString();
         // Calculate the name of the proxy, which appends $CORFUSMR to the class name.
-        ClassName proxyName = ClassName.bestGuess(classElement.getSimpleName().toString()
-                + ICorfuSMR.CORFUSMR_SUFFIX);
+        ClassName proxyName = classElement.getNestingKind() == NestingKind.TOP_LEVEL ?
+                // Top level classes can just use the name
+                ClassName.bestGuess(classElement.getSimpleName() + ICorfuSMR.CORFUSMR_SUFFIX) :
+                // Otherwise we need to include the enclosing element as well.
+                ClassName.bestGuess(classElement.getEnclosingElement().getSimpleName()
+                        + "$" + classElement.getSimpleName() + ICorfuSMR.CORFUSMR_SUFFIX);
         // Also get the class name of the original class.
         TypeName originalName = ParameterizedTypeName.get(classElement.asType());
 
