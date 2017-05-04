@@ -46,7 +46,7 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception, G
      */
     @Getter
     @Setter
-    private long extraRetry = 0;
+    private long extraWait = 0;
 
     public ExponentialBackoffRetry(IRetryable runFunction) {
         super(runFunction);
@@ -59,13 +59,13 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception, G
         }
         retryCounter++;
         long sleepTime = (long) Math.pow(base, retryCounter);
-        sleepTime += extraRetry;
+        sleepTime += extraWait;
         float randomPart = new Random().nextFloat()*randomPortion;
         sleepTime -= sleepTime*randomPart;
         if (System.currentTimeMillis()+sleepTime>nextBackoffTime) {
             nextBackoffTime = 0;
             retryCounter = 1;
-            sleepTime = base + extraRetry;
+            sleepTime = base + extraWait;
             sleepTime -= sleepTime*randomPart;
         }
         Thread.sleep(sleepTime);

@@ -394,12 +394,12 @@ public class Layout implements Cloneable {
 
             @Override
             public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
-                throw new UnsupportedOperationException("Not implemented yet");
+                return new QuorumReplicationView(l, ls);
             }
 
             @Override
             public IStreamView getStreamView(CorfuRuntime r, UUID streamId) {
-                throw new UnsupportedOperationException("Not implemented yet");
+                return new BackpointerStreamView(r, streamId);
             }
         },
         REPLEX {

@@ -3,7 +3,6 @@ package org.corfudb.runtime.clients;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.Range;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
@@ -220,6 +219,18 @@ public class LogUnitClient implements IClient {
         wr.setBackpointerMap(backpointerMap);
         wr.setGlobalAddress(address);
         CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
+        return cf.thenApply(x -> { context.stop(); return x; });
+    }
+
+    /**
+     * Asynchronously write to the logging unit a previousely prepared write request.
+     * @param  request  The request to be written
+     * @return          A CompletableFuture which will complete with the WriteResult once the
+     *                  write completes.
+     */
+    public CompletableFuture<Boolean> writeRequest(WriteRequest request) {
+        Timer.Context context = getTimerContext("writeObject");
+        CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(request));
         return cf.thenApply(x -> { context.stop(); return x; });
     }
 

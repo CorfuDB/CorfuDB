@@ -97,9 +97,10 @@ class QuorumFuturesFactory {
 
         @Override
         public R get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
+
             Comparator<Integer> ic = Integer::compareTo;
             TreeMultimap<Integer, R> valuesSortedByCount = TreeMultimap.create(ic.reversed(), comparator);
-            HashMultimap<R, Integer> indexesByValue = HashMultimap.create();
+            TreeMultimap<R, Integer> indexesByValue = TreeMultimap.create(comparator, ic);
 
             long until = 0;
             boolean infinite = (timeout==Long.MAX_VALUE);
@@ -155,15 +156,22 @@ class QuorumFuturesFactory {
                 boolean noMoreHope = numIncompleteFutures+greatestNumCompleteFutures < quorum;
                 if (noMoreHope) {
                     done = canceled = true;
+                    for (Throwable t: getThrowables()) {
+                        log.debug(t.getMessage(), t);
+                    }
                     throw new ExecutionException(
                             new QuorumUnreachableException(greatestNumCompleteFutures, quorum));
                 }
-                if (infinite) {
-                    aggregatedFuture.get();
-                } else {
-                    aggregatedFuture.get(timeout, unit);
+                try {
+                    if (infinite) {
+                        aggregatedFuture.get();
+                    } else {
+                        aggregatedFuture.get(timeout, unit);
+                    }
+                } catch (ExecutionException t) {
+                    //  The exceptions after after constructing the future will be handled on the next loop
                 }
-            }
+            } // while
             throw new TimeoutException();
         }
 
@@ -214,6 +222,20 @@ class QuorumFuturesFactory {
          */
         public Set<Throwable> getThrowables() {
             return ImmutableSet.copyOf(throwables);
+        }
+
+        /**
+         * Checks whether one of the exceptons is throwable from the given type
+         * @param check - the throwable to search for
+         * @return true if there is a throwable from the given type, otherwise false
+         */
+        public boolean containsThrowableFrom(Class <? extends Throwable>check) {
+            for (Throwable t: throwables) {
+                if (t.getClass().isAssignableFrom(check)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
     }
