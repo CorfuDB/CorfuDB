@@ -62,7 +62,7 @@ public abstract class AbstractView {
      * @param <D>      Any exception the function may throw.
      * @return The return value of the function.
      */
-    public <T, A extends Throwable, B extends Throwable, C extends Throwable, D extends Throwable>
+    public <T, A extends RuntimeException, B extends RuntimeException, C extends RuntimeException, D extends RuntimeException>
     T layoutHelper(LayoutFunction<Layout, T, A, B, C, D> function)
             throws A, B, C, D {
         while (true) {
@@ -98,7 +98,7 @@ public abstract class AbstractView {
     }
 
     @FunctionalInterface
-    public interface LayoutFunction<Layout, R, A extends Throwable,
+    public interface LayoutFunction<v, R, A extends Throwable,
             B extends Throwable, C extends Throwable, D extends Throwable> {
         R apply(Layout l) throws A, B, C, D;
     }
