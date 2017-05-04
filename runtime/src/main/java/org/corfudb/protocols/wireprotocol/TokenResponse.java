@@ -20,7 +20,6 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
         respType = TokenType.NORMAL;
         token = new Token(tokenValue, epoch);
         this.backpointerMap = backpointerMap;
-        streamAddresses = Collections.emptyMap();
     }
     /** the cause/type of response */
     final TokenType respType;
@@ -32,8 +31,6 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     /** The backpointer map, if available. */
     final Map<UUID, Long> backpointerMap;
 
-    /** The map of local stream addresses. */
-    final Map<UUID, Long> streamAddresses;
 
     public TokenResponse(ByteBuf buf) {
         respType = TokenType.values()[ICorfuPayload.fromBuffer(buf, Byte.class)];
@@ -41,7 +38,6 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
         Long epoch = ICorfuPayload.fromBuffer(buf, Long.class);
         token = new Token(tokenValue, epoch);
         backpointerMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
-        streamAddresses = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
     }
 
     @Override
@@ -50,7 +46,6 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
         ICorfuPayload.serialize(buf, token.getTokenValue());
         ICorfuPayload.serialize(buf, token.getEpoch());
         ICorfuPayload.serialize(buf, backpointerMap);
-        ICorfuPayload.serialize(buf, streamAddresses);
     }
 
     @Override

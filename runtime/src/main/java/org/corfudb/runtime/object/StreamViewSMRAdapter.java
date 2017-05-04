@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * StreamViewSMRAdapter wraps a stream and implements the ISMRStream API over
@@ -87,6 +88,20 @@ public class StreamViewSMRAdapter implements ISMRStream {
 
     public void seek(long globalAddress) {
         streamView.seek(globalAddress);
+    }
+
+    @Override
+    public Stream<SMREntry> stream() {
+        return streamUpTo(Address.MAX);
+    }
+
+    @Override
+    public Stream<SMREntry> streamUpTo(long maxGlobal) {
+        return streamView.streamUpTo(maxGlobal)
+                .filter(m -> m.getType() == DataType.DATA)
+                .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable)
+                .map(logData -> ((ISMRConsumable)logData.getPayload(runtime)).getSMRUpdates(streamView.getID()))
+                .flatMap(List::stream);
     }
 
     /** Append a SMREntry to the stream, returning the global address

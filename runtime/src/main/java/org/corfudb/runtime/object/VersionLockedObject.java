@@ -429,21 +429,30 @@ public class VersionLockedObject<T> {
         }
 
         // No undo record is present
-        if (!entry.isUndoable()) {
+        // -OR- there this is an optimistic entry, calculate
+        // an undo record.
+        // (in the case of optimistic entries, the snapshot
+        // may have changed since the last time they were
+        // applied, so we need to recalculate undo) --- this
+        // is the case without snapshot isolation
+        if (!entry.isUndoable()  ||  entry.getEntry() == null)  {
             // Can we generate an undo record?
             IUndoRecordFunction<T> undoRecordTarget =
                     undoRecordFunctionMap
                             .get(entry.getSMRMethod());
-            if (undoRecordTarget != null) {
+            // If there was no previously calculated undo entry
+            if (undoRecordTarget != null){
                 // calculate the undo record
                 entry.setUndoRecord(undoRecordTarget
                         .getUndoRecord(object, entry.getSMRArguments()));
+                log.trace("Apply[{}] Undo->{}", this, entry.getUndoRecord());
             } else if (resetSet.contains(entry.getSMRMethod())) {
                 // This entry actually resets the object. So here
                 // we can safely get a new instance, and add the
                 // previous instance to the undo log.
                 entry.setUndoRecord(object);
                 object = newObjectFn.get();
+                log.trace("Apply[{}] Undo->RESET", this);
             }
         }
 
@@ -504,8 +513,7 @@ public class VersionLockedObject<T> {
         log.trace("Sync[{}] {}", this, (timestamp == Address.OPTIMISTIC)
                 ? "Optimistic" : "to " + timestamp);
         long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;
-        stream.remainingUpTo(syncTo)
-                .stream()
+        stream.streamUpTo(syncTo)
                 .forEachOrdered(entry -> {
                     try {
                         Object res = applyUpdateUnsafe(entry);

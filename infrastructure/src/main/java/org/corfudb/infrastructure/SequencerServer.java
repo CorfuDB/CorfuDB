@@ -98,10 +98,6 @@ public class SequencerServer extends AbstractServer {
     private final AtomicLong globalLogStart = new AtomicLong(Address
             .getMinAddress());
 
-    /**  - {@link SequencerServer::streamTailMap}:
-     *      per-streamfirst available position (initially, null). */
-    private final ConcurrentHashMap<UUID, Long> streamTailMap = new ConcurrentHashMap<>();
-
     /**  - {@link SequencerServer::streamTailToGlobalTailMap}:
      *      per streams map to last issued global-log position. used for
      *      backpointers. */
@@ -283,7 +279,7 @@ public class SequencerServer extends AbstractServer {
         long responseGlobalTail = (req.getStreams().size() == 0) ? globalLogTail.get() - 1 : maxStreamGlobalTail;
         Token token = new Token(responseGlobalTail, r.getServerEpoch());
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                new TokenResponse(TokenType.NORMAL, token, Collections.emptyMap(), Collections.emptyMap())));
+                new TokenResponse(TokenType.NORMAL, token, Collections.emptyMap())));
     }
 
     /**
@@ -370,7 +366,7 @@ public class SequencerServer extends AbstractServer {
 
         Token token = new Token(globalLogTail.getAndAdd(req.getNumTokens()), serverEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                new TokenResponse(TokenType.NORMAL, token, Collections.emptyMap(), Collections.emptyMap())));
+                new TokenResponse(TokenType.NORMAL, token, Collections.emptyMap())));
 
     }
 
@@ -400,7 +396,7 @@ public class SequencerServer extends AbstractServer {
             // If the txn aborts, then DO NOT hand out a token.
             Token token = new Token(Address.ABORTED, serverEpoch);
             r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
-                    new TokenResponse(tokenType, token, Collections.emptyMap(), Collections.emptyMap())));
+                    new TokenResponse(tokenType, token, Collections.emptyMap())));
             return;
         }
 
@@ -434,7 +430,6 @@ public class SequencerServer extends AbstractServer {
         //   2. record the new global tail as back-pointer for this streams.
         //   3. extend the tail by the requested # tokens.
         ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
-        ImmutableMap.Builder<UUID, Long> requestStreamTokens = ImmutableMap.builder();
         for (UUID id : req.getStreams()) {
 
             // step 1. and 2. (comment above)
@@ -450,17 +445,6 @@ public class SequencerServer extends AbstractServer {
                     backPointerMap.put(k, v);
                     return newTail-1;
                 }
-            });
-
-            // TODO: remove this; stream positions are only needed for Replex
-            // step 3. (comment above)
-            streamTailMap.compute(id, (k, v) -> {
-                if (v == null) {
-                    requestStreamTokens.put(k, req.getNumTokens() - 1L);
-                    return req.getNumTokens() - 1L;
-                }
-                requestStreamTokens.put(k, v + req.getNumTokens());
-                return v + req.getNumTokens();
             });
         }
 
@@ -480,16 +464,15 @@ public class SequencerServer extends AbstractServer {
                                                     .getKey(), conflictParam),
                                             newTail - 1)));
 
-        log.trace("token {} backpointers {} stream-tokens {}",
-                currentTail, backPointerMap.build(), requestStreamTokens.build());
-        // return the token response with the new global tail, new streams tails,
+        log.trace("token {} backpointers {}",
+                currentTail, backPointerMap.build());
+        // return the token response with the new global tail
         // and the streams backpointers
         Token token = new Token(currentTail, serverEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(
                 new TokenResponse(TokenType.NORMAL,
                         token,
-                        backPointerMap.build(),
-                        requestStreamTokens.build())));
+                        backPointerMap.build())));
     }
 
     private static final int globalTokenBatchSize = 100;

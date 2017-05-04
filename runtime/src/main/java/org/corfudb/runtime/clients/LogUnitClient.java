@@ -215,7 +215,6 @@ public class LogUnitClient implements IClient {
         ByteBuf payload = Unpooled.buffer();
         Serializers.CORFU.serialize(writeObject, payload);
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, payload);
-        wr.setStreams(streams);
         wr.setRank(rank);
         wr.setBackpointerMap(backpointerMap);
         wr.setGlobalAddress(address);
@@ -238,7 +237,6 @@ public class LogUnitClient implements IClient {
         ByteBuf payload = Unpooled.buffer();
         Serializers.CORFU.serialize(entry, payload);
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, type,  null,  payload);
-        wr.setStreams(streams);
         wr.setRank(rank);
         wr.setGlobalAddress(address);
         CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
@@ -254,56 +252,6 @@ public class LogUnitClient implements IClient {
      */
     public CompletableFuture<Boolean> write(ILogData payload) {
         return router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(new WriteRequest(payload)));
-    }
-
-    /**
-     * Asynchronously write to the logging unit.
-     *
-     * @param address        The address to write to.
-     * @param streams        The streams, if any, that this write belongs to.
-     * @param rank           The rank of this write (used for quorum
-     *                       replication).
-     * @param buffer         The object, post-serialization, to write.
-     * @param backpointerMap The map of backpointers to write.
-     * @return A CompletableFuture which will complete with the WriteResult once the
-     * write completes.
-     */
-    public CompletableFuture<Boolean> write(long address, Set<UUID> streams, IMetadata.DataRank rank,
-                                            ByteBuf buffer, Map<UUID, Long> backpointerMap) {
-        Timer.Context context = getTimerContext("writeByteBuf");
-        WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, buffer);
-        wr.setStreams(streams);
-        wr.setRank(rank);
-        wr.setBackpointerMap(backpointerMap);
-        wr.setGlobalAddress(address);
-        CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
-        return cf.thenApply(x -> { context.stop(); return x; });
-    }
-
-    public CompletableFuture<Boolean> writeStream(long address, Map<UUID, Long> streamAddresses,
-                                                  Object object) {
-        Timer.Context context = getTimerContext("writeStreamObject");
-        ByteBuf payload = Unpooled.buffer();
-        Serializers.CORFU.serialize(object, payload);
-        CompletableFuture<Boolean> cf = writeStream(address, streamAddresses, payload);
-        return cf.thenApply(x -> { context.stop(); return x; });
-    }
-
-    public CompletableFuture<Boolean> writeStream(long address, Map<UUID, Long> streamAddresses,
-                                                  ByteBuf buffer) {
-        Timer.Context context = getTimerContext("writeStreamByteBuf");
-        WriteRequest wr = new WriteRequest(WriteMode.REPLEX_STREAM, streamAddresses, buffer);
-        wr.setLogicalAddresses(streamAddresses);
-        wr.setGlobalAddress(address);
-        CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));
-        return cf.thenApply(x -> { context.stop(); return x; });
-    }
-
-    public CompletableFuture<Boolean> writeCommit(Map<UUID, Long> streams, long address, boolean commit) {
-        Timer.Context context = getTimerContext("writeCommit");
-        CommitRequest wr = new CommitRequest(streams, address, commit);
-        CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(CorfuMsgType.COMMIT.payloadMsg(wr));
-        return cf.thenApply(x -> { context.stop(); return x; });
     }
 
     /**
