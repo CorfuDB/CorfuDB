@@ -99,7 +99,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // tries to read from the same log file with checksum enabled. The expected
         // behaviour is to throw a DataCorruptionException because a checksum cannot
         // be computed for stream entries that haven't been written with a checksum
-        String logDir = getDirPath();
         StreamLog log = new StreamLogFiles(getContext(), true);
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
@@ -126,29 +125,46 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
+        // Write to two segments
         LogAddress address0 = new LogAddress((long) 0, null);
+        LogAddress address1 = new LogAddress(StreamLogFiles.RECORDS_PER_LOG_FILE + 1L, null);
         log.append(address0, new LogData(DataType.DATA, b));
+        log.append(address1, new LogData(DataType.DATA, b));
 
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
         log.close();
 
         final int OVERWRITE_DELIMITER = 0xFFFF;
-        final int OVERWRITE_BYTES = 12;
+        final int OVERWRITE_BYTES = 4;
 
         // Overwrite 2 bytes of the checksum and 2 bytes of the entry's address
-        String logFilePath = logDir + File.separator + 0 + ".log";
-        RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
+        String logFilePath1 = logDir + File.separator + 0 + ".log";
+        String logFilePath2 = logDir + File.separator + 1 + ".log";
+        RandomAccessFile file1 = new RandomAccessFile(logFilePath1, "rw");
+        RandomAccessFile file2 = new RandomAccessFile(logFilePath2, "rw");
         ByteBuffer metaDataBuf = ByteBuffer.allocate(METADATA_SIZE);
-        file.getChannel().read(metaDataBuf);
+        file1.getChannel().read(metaDataBuf);
         metaDataBuf.flip();
 
         Metadata metadata = Metadata.parseFrom(metaDataBuf.array());
 
-        final int fileOffset = Integer.BYTES + METADATA_SIZE + metadata.getLength() + OVERWRITE_BYTES;
+        final int offset1 = METADATA_SIZE + metadata.getLength();
+        final int offset2 = METADATA_SIZE + metadata.getLength() + Short.BYTES + OVERWRITE_BYTES;
 
-        file.seek(fileOffset);
-        file.writeInt(OVERWRITE_DELIMITER);
-        file.close();
+        // Corrupt delimiter in the first segment
+
+        file1.seek(offset1);
+        file1.writeShort(0);
+        file1.close();
+
+        assertThatThrownBy(() -> new StreamLogFiles(getContext(), false).read(new LogAddress(0L, null)))
+                .isInstanceOf(RuntimeException.class)
+                .hasCauseInstanceOf(DataCorruptionException.class);
+
+        // Corrupt metadata in the second segment
+        file2.seek(offset2);
+        file2.writeInt(OVERWRITE_DELIMITER);
+        file2.close();
 
         assertThatThrownBy(() -> new StreamLogFiles(getContext(), false))
                 .isInstanceOf(DataCorruptionException.class);
