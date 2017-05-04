@@ -49,7 +49,7 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
                 .containsEntry("k", "v2")
                 .doesNotContainEntry("k", "v3");
 
-        IStreamView txStream = getRuntime().getMultiStreamsView()
+        IStreamView txStream = getRuntime().getStreams()
                 .get(ObjectsView.TRANSACTION_STREAM_ID);
 
         List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE);

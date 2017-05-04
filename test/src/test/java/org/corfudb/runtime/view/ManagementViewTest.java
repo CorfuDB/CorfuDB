@@ -399,7 +399,7 @@ public class ManagementViewTest extends AbstractViewTest {
         final long beforeFailure = 5L;
         final long afterFailure = 10L;
 
-        IStreamView sv = getCorfuRuntime().getMultiStreamsView().get(CorfuRuntime.getStreamID("streamA"));
+        IStreamView sv = getCorfuRuntime().getStreams().get(CorfuRuntime.getStreamID("streamA"));
         byte[] testPayload = "hello world".getBytes();
         sv.append(testPayload);
         sv.append(testPayload);

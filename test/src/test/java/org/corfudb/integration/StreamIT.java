@@ -40,7 +40,7 @@ public class StreamIT {
 
         UUID streamId = CorfuRuntime.getStreamID(Integer.toString(rand.nextInt()));
 
-        IStreamView s1 = rt.getMultiStreamsView().get(streamId);
+        IStreamView s1 = rt.getStreams().get(streamId);
 
         // Verify that the stream is empty
         assertThat(s1.hasNext())

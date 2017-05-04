@@ -102,7 +102,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         this.serializer = serializer;
 
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
-                new StreamViewSMRAdapter(rt, rt.getMultiStreamsView().get(streamID)),
+                new StreamViewSMRAdapter(rt, rt.getStreams().get(streamID)),
                 upcallTargetMap, undoRecordTargetMap,
                 undoTargetMap, resetSet);
     }

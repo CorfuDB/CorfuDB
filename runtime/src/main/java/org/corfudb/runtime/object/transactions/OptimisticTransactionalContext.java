@@ -253,7 +253,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         long address = -1L;
 
         try {
-            address = this.builder.runtime.getMultiStreamsView()
+            address = this.builder.runtime.getStreams()
                     .append(
 
                             // a set of stream-IDs that contains the affected streams
