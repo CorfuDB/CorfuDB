@@ -1,7 +1,6 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
-import com.sun.xml.internal.bind.v2.model.runtime.RuntimeBuiltinLeafInfo;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Setter;
@@ -10,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.IObjectBuilder;
-import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -84,8 +82,6 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
         if (streamName != null) {
             streamID = CorfuRuntime.getStreamID(streamName);
         }
-
-        final IStreamView sv = runtime.getStreamsView().get(streamID);
 
         if (useCompiledClass)
         {

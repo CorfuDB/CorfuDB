@@ -43,9 +43,6 @@ public class CorfuRuntime {
 
         /** Number of times to attempt to read before hole filling. */
         int holeFillRetry = 10;
-
-        /** Maximum number of entries to read in a batch from the log unit. */
-        int maxStreamReadBatch = 50;
     }
 
     @Getter

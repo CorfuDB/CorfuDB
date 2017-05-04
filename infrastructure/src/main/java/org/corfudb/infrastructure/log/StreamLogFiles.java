@@ -426,8 +426,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());
-        logData.setLogicalAddresses(getUUIDLongMap(entry.getLogicalAddressesMap()));
-        logData.setStreams(getStreamsSet(entry.getStreamsList().asByteStringList()));
         logData.setRank(createDataRank(entry));
 
         logData.clearCommit();
@@ -722,7 +720,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 .setGlobalAddress(address)
                 .setCommit(setCommit)
                 .addAllStreams(getStrUUID(entry.getStreams()))
-                .putAllLogicalAddresses(getStrLongMap(entry.getLogicalAddresses()))
                 .putAllBackpointers(getStrLongMap(entry.getBackpointerMap()));
 
         Optional<Types.DataRank> rank = createProtobufsDataRank(entry);

@@ -38,13 +38,6 @@ public class AddressSpaceView extends AbstractView {
      */
     static LoadingCache<Long, ILogData> readCache;
 
-    /**
-     * Duration before retrying an empty read.
-     */
-    @Getter
-    @Setter
-    Duration emptyDuration = Duration.ofMillis(100L);
-
     public AddressSpaceView(CorfuRuntime runtime) {
         super(runtime);
         // We don't lock readCache, this should be ok in the rare

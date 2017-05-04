@@ -132,7 +132,7 @@ public class MultiStreamView extends AbstractView {
                 // We need to fix the token (to use the stream addresses- may
                 // eventually be deprecated since these are no longer used)
                 tokenResponse = new TokenResponse(temp.getRespType(), temp.getToken(),
-                        temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                        temp.getBackpointerMap());
             }
         }
 

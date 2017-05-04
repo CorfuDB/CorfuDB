@@ -215,7 +215,6 @@ public class LogUnitClient implements IClient {
         ByteBuf payload = Unpooled.buffer();
         Serializers.CORFU.serialize(writeObject, payload);
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, null, payload);
-        wr.setStreams(streams);
         wr.setRank(rank);
         wr.setBackpointerMap(backpointerMap);
         wr.setGlobalAddress(address);
@@ -238,7 +237,6 @@ public class LogUnitClient implements IClient {
         ByteBuf payload = Unpooled.buffer();
         Serializers.CORFU.serialize(entry, payload);
         WriteRequest wr = new WriteRequest(WriteMode.NORMAL, type,  null,  payload);
-        wr.setStreams(streams);
         wr.setRank(rank);
         wr.setGlobalAddress(address);
         CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(CorfuMsgType.WRITE.payloadMsg(wr));

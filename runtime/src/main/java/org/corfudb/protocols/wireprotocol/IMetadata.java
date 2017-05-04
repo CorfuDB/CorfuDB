@@ -36,12 +36,8 @@ public interface IMetadata {
      */
     @SuppressWarnings("unchecked")
     default Set<UUID> getStreams() {
-        return (Set<UUID>) getMetadataMap().getOrDefault(
-                LogUnitMetadataType.STREAM,
-                // Handle a special condition in the Replex case,
-                // where streams are stored in a stream address map instead.
-                getStreamAddressMap() == null ? Collections.EMPTY_SET :
-                getStreamAddressMap().keySet());
+        return (Set<UUID>) ((Map<UUID, Long>)getMetadataMap().getOrDefault(
+                LogUnitMetadataType.BACKPOINTER_MAP, Collections.emptyMap())).keySet();
     }
 
     /**
@@ -50,17 +46,7 @@ public interface IMetadata {
      * @return          True, if the entry contains the given stream.
      */
     default boolean containsStream(UUID stream) {
-        return  getBackpointerMap().keySet().contains(stream) ||
-                getStreams().contains(stream);
-    }
-
-    /**
-     * Set the streams that belong to this append.
-     *
-     * @param streams The set of streams that will belong to this append.
-     */
-    default void setStreams(Set<UUID> streams) {
-        getMetadataMap().put(IMetadata.LogUnitMetadataType.STREAM, streams);
+        return  getBackpointerMap().keySet().contains(stream);
     }
 
     /**
@@ -91,26 +77,6 @@ public interface IMetadata {
         }
     }
 
-    /**
-     * Get the logical stream addresses that belong to this append.
-     *
-     * @return A map of UUID to logical stream addresses that belong to this append.
-     */
-    @SuppressWarnings("unchecked")
-    default Map<UUID, Long> getLogicalAddresses() {
-        return (Map<UUID, Long>) getMetadataMap().getOrDefault(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES,
-                Collections.EMPTY_MAP);
-    }
-
-    /**
-     * Set the logical stream addresses that belong to this append.
-     *
-     * @param streams The map from UUID to logical stream addresses that will belong to this append.
-     */
-    default void setLogicalAddresses(Map<UUID, Long> streams) {
-        getMetadataMap().put(IMetadata.LogUnitMetadataType.STREAM_ADDRESSES, streams);
-    }
-
     @SuppressWarnings("unchecked")
     default Map<UUID, Long> getBackpointerMap() {
         return (Map<UUID, Long>) getMetadataMap().getOrDefault(LogUnitMetadataType.BACKPOINTER_MAP,
@@ -133,18 +99,6 @@ public interface IMetadata {
         return Optional.ofNullable((Long) getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse((long) -1);
     }
 
-    @SuppressWarnings("unchecked")
-    default Map<UUID,Long> getStreamAddressMap() {
-        return ((Map<UUID,Long>) getMetadataMap()
-                .get(LogUnitMetadataType.STREAM_ADDRESSES));
-    }
-
-    @SuppressWarnings("unchecked")
-    default Long getStreamAddress(UUID stream) {
-        return ((Map<UUID,Long>) getMetadataMap().get(LogUnitMetadataType.STREAM_ADDRESSES)) == null ? null :
-                ((Map<UUID,Long>) getMetadataMap().get(LogUnitMetadataType.STREAM_ADDRESSES)).get(stream);
-    }
-
 
     default void clearCommit() {
         getMetadataMap().put(LogUnitMetadataType.COMMIT, false);
@@ -156,9 +110,7 @@ public interface IMetadata {
 
     @RequiredArgsConstructor
     public enum LogUnitMetadataType implements ITypedEnum {
-        STREAM(0, new TypeToken<Set<UUID>>() {}),
         RANK(1, TypeToken.of(DataRank.class)),
-        STREAM_ADDRESSES(2, new TypeToken<Map<UUID, Long>>() {}),
         BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {}),
         GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
         COMMIT(5, TypeToken.of(Boolean.class))
