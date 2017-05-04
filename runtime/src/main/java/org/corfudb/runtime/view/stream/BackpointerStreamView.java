@@ -164,6 +164,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     @Override
     protected boolean fillReadQueue(final long maxGlobal,
                                  final QueuedStreamContext context) {
+        log.trace("Read_Fill_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}", this,
+                maxGlobal, context.globalPointer, context.maxResolution, context.minResolution);
         // The maximum address we will fill to.
         final long maxAddress =
                 Long.min(maxGlobal, context.maxGlobalAddress);
@@ -222,6 +224,11 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         while (currentRead > context.globalPointer &&
                 Address.isAddress(currentRead)) {
+            // We've somehow reached a read we already know about.
+            if (context.readQueue.contains(currentRead)) {
+                break;
+            }
+
             log.trace("Read_Fill_Queue[{}] Read {}", this, currentRead);
             // Read the entry in question.
             ILogData currentEntry =
@@ -240,6 +247,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 return fillFromResolved(latestTokenValue, context);
             }
 
+            // If the start is available in the resolved queue,
+            // use it.
+            if (context.minResolution <= context.globalPointer) {
+                fillFromResolved(maxGlobal, context);
+            }
+
             // Now we calculate the next entry to read.
             // If we have a backpointer, we'll use that for our next read.
             if (!runtime.backpointersDisabled &&
@@ -252,6 +265,13 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             else {
                 currentRead = currentRead - 1L;
             }
+
+            // If the next read is before or equal to the max resolved
+            // we need to stop.
+            if (context.maxResolution >= currentRead) {
+                break;
+            }
+
         }
 
         log.debug("Read_Fill_Queue[{}] Filled queue with {}", this, context.readQueue);

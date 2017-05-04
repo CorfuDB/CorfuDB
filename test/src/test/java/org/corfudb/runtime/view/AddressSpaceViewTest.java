@@ -9,10 +9,7 @@ import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
-import java.util.Collections;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -130,8 +127,11 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         r.getAddressSpaceView().write(new Token(ADDRESS_2, r.getLayoutView().getLayout().getEpoch()),
                 "3".getBytes());
 
-        RangeSet<Long> rs = TreeRangeSet.create();
-        rs.add(Range.closed(0L, ADDRESS_2));
+        List<Long> rs = new ArrayList<>();
+        rs.add(ADDRESS_0);
+        rs.add(ADDRESS_1);
+        rs.add(ADDRESS_2);
+
         Map<Long, ILogData> m = r.getAddressSpaceView().read(rs);
 
         assertThat(m.get(ADDRESS_0).getPayload(getRuntime()))

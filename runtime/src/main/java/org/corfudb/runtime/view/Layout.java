@@ -11,7 +11,6 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.replication.*;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.runtime.view.stream.ReplexStreamView;
 
 import java.util.Map;
 import java.util.HashSet;
@@ -73,8 +72,6 @@ public class Layout implements Cloneable {
     @Getter
     @Setter
     transient CorfuRuntime runtime;
-
-    transient ConcurrentHashMap<LayoutSegment, AbstractReplicationView> replicationViewCache;
 
     /* Defensive constructor since we can create a Layout from a JSON file. JSON deserialize is forced through
      * this constructor.
@@ -364,11 +361,6 @@ public class Layout implements Cloneable {
             }
 
             @Override
-            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
-                return new ChainReplicationView(l, ls);
-            }
-
-            @Override
             public IStreamView  getStreamView(CorfuRuntime r, UUID streamId) {
                 return new BackpointerStreamView(r, streamId);
             }
@@ -393,11 +385,6 @@ public class Layout implements Cloneable {
             }
 
             @Override
-            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
-                throw new UnsupportedOperationException("Not implemented yet");
-            }
-
-            @Override
             public IStreamView getStreamView(CorfuRuntime r, UUID streamId) {
                 throw new UnsupportedOperationException("Not implemented yet");
             }
@@ -411,13 +398,8 @@ public class Layout implements Cloneable {
             }
 
             @Override
-            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
-                return new ReplexReplicationView(l, ls);
-            }
-
-            @Override
             public IStreamView  getStreamView(CorfuRuntime r, UUID streamId) {
-                return new ReplexStreamView(r, streamId);
+                throw new UnsupportedOperationException("unsupported in this release");
             }
         },
         NO_REPLICATION {
@@ -428,10 +410,6 @@ public class Layout implements Cloneable {
                 throw new UnsupportedOperationException("unsupported seal");
             }
 
-            @Override
-            public AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls) {
-                throw new UnsupportedOperationException("Replication view used without a replication mode");
-            }
 
             @Override
             public IStreamView getStreamView(CorfuRuntime r, UUID streamId) {
@@ -445,8 +423,6 @@ public class Layout implements Cloneable {
         public abstract void validateSegmentSeal(LayoutSegment layoutSegment,
                                                  Map<String, CompletableFuture<Boolean>> completableFutureMap)
                 throws QuorumUnreachableException;
-
-        public abstract AbstractReplicationView getReplicationView(Layout l, LayoutSegment ls);
 
         public abstract IStreamView getStreamView(CorfuRuntime r, UUID streamId);
 

@@ -161,7 +161,7 @@ public interface IMetadata {
         STREAM_ADDRESSES(2, new TypeToken<Map<UUID, Long>>() {}),
         BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {}),
         GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
-        COMMIT(5, TypeToken.of(Boolean.class)),
+        COMMIT(5, TypeToken.of(Boolean.class))
         ;
         final int type;
         @Getter
