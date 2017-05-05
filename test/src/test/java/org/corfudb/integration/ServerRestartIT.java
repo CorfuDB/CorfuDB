@@ -3,6 +3,7 @@ package org.corfudb.integration;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 
+import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
@@ -23,6 +24,26 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class ServerRestartIT extends AbstractIT {
 
+    // Total number of iterations of randomized failovers.
+    static int ITERATIONS;
+    // Percentage of Client restarts.
+    static int CLIENT_RESTART_PERCENTAGE;
+    // Percentage of Server restarts.
+    static int SERVER_RESTART_PERCENTAGE;
+
+    static String corfuSingleNodeHost;
+    static int corfuSingleNodePort;
+
+    @Before
+    public void loadProperties() {
+        ITERATIONS = Integer.parseInt((String) PROPERTIES.get("RandomizedRecoveryIterations"));
+        CLIENT_RESTART_PERCENTAGE = Integer.parseInt((String) PROPERTIES.get("ClientRestartPercentage"));
+        SERVER_RESTART_PERCENTAGE = Integer.parseInt((String) PROPERTIES.get("ServerRestartPercentage"));
+        corfuSingleNodeHost = (String) PROPERTIES.get("corfuSingleNodeHost");
+        corfuSingleNodePort = Integer.parseInt((String) PROPERTIES.get("corfuSingleNodePort"));
+    }
+
+
     /**
      * Randomized tests with mixed client and server failovers.
      *
@@ -31,14 +52,8 @@ public class ServerRestartIT extends AbstractIT {
     @Test
     public void testRandomizedRecovery() throws Exception {
 
-        // Total number of iterations of randomized failovers.
-        final int ITERATIONS = 20;
         // Total percentage.
         final int TOTAL_PERCENTAGE = 100;
-        // Percentage of Client restarts.
-        final int CLIENT_RESTART_PERCENTAGE = 70;
-        // Percentage of Server restarts.
-        final int SERVER_RESTART_PERCENTAGE = 70;
 
         // Number of maps or streams to test recovery on.
         final int MAPS = 3;
@@ -62,7 +77,7 @@ public class ServerRestartIT extends AbstractIT {
         System.out.println("SEED = " + SEED);
 
         // Runs the corfu server. Expect slight delay until server is running.
-        Process corfuServerProcess = runCorfuServer();
+        Process corfuServerProcess = runCorfuServer(corfuSingleNodeHost, corfuSingleNodePort);
 
         // List of runtimes to free resources when not needed.
         List<CorfuRuntime> runtimeList = new ArrayList<>();

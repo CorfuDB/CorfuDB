@@ -16,6 +16,7 @@ import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.Executors;
 
 /**
@@ -37,10 +38,20 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
 
+    static public Properties PROPERTIES;
+
     public static final String TEST_SEQUENCE_LOG_PATH = CORFU_LOG_PATH + File.separator + "testSequenceLog";
 
     public AbstractIT() {
         CorfuRuntime.overrideGetRouterFunction = null;
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        InputStream input = classLoader.getResourceAsStream("CorfuDB.properties");
+        PROPERTIES = new Properties();
+        try {
+            PROPERTIES.load(input);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -52,6 +63,16 @@ public class AbstractIT extends AbstractCorfuTest {
     public void setUp() throws Exception {
         forceShutdownAllCorfuServers();
         FileUtils.cleanDirectory(new File(CORFU_LOG_PATH));
+    }
+
+    /**
+     * Cleans up all Corfu instances after the tests.
+     *
+     * @throws Exception
+     */
+    @After
+    public void cleanUp() throws Exception {
+        forceShutdownAllCorfuServers();
     }
 
     /**

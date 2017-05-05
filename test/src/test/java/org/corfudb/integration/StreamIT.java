@@ -3,11 +3,8 @@ package org.corfudb.integration;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.Before;
 
-import java.io.InputStream;
-import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
 
@@ -18,16 +15,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 
 public class StreamIT extends AbstractIT {
-    static String layoutServers;
-    static Properties properties;
+    static String corfuSingleNodeHost;
+    static int corfuSingleNodePort;
 
-    @BeforeClass
-    static public void getLayoutServers() throws Exception {
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        InputStream input = classLoader.getResourceAsStream("CorfuDB.properties");
-        properties = new Properties();
-        properties.load(input);
-        layoutServers = (String) properties.get("layoutServers");
+    @Before
+    public void loadProperties() throws Exception {
+        corfuSingleNodeHost = (String) PROPERTIES.get("corfuSingleNodeHost");
+        corfuSingleNodePort = Integer.parseInt((String) PROPERTIES.get("corfuSingleNodePort"));
     }
 
 //    @Test
@@ -49,7 +43,7 @@ public class StreamIT extends AbstractIT {
                 .isFalse();
 
         // Generate and append random data
-        int entrySize = Integer.valueOf(properties.getProperty("largeEntrySize"));
+        int entrySize = Integer.valueOf(PROPERTIES.getProperty("largeEntrySize"));
         final int numEntries = 100;
         byte[][] data = new byte[numEntries][entrySize];
 
