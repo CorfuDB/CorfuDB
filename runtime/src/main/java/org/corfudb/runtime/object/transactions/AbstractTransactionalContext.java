@@ -275,8 +275,13 @@ public abstract class AbstractTransactionalContext implements
     }
 }
 
+/**
+ * This class captures information about objects accessed (read) during speculative transaction execution
+ */
 @Getter
 class ReadSetInfo {
+    // fine-grained conflict information regarding accessed-objects;
+    // captures values passed using @conflict annotations in @corfuObject
     Map<UUID, Set<Integer>> readSetConflicts = new HashMap<>();
 
     public void mergeInto(ReadSetInfo other) {
@@ -301,10 +306,20 @@ class ReadSetInfo {
 
 }
 
-@Getter @groovy.util.logging.Slf4j
+/**
+ * This class captures information about objects mutated (written) during speculative transaction execution
+ */
+@Getter
 class WriteSetInfo {
+
+    // fine-grained conflict information regarding mutated-objects;
+    // captures values passed using @conflict annotations in @corfuObject
     Map<UUID, Set<Integer>> writeSetConflicts = new HashMap<>();
+
+    // the set of mutated objects
     Set<UUID> affectedStreams = new HashSet<>();
+
+    // teh actual updates to mutated objects
     MultiObjectSMREntry writeSet = new MultiObjectSMREntry();
 
     Set<Integer> getConflictSet(UUID streamID) {

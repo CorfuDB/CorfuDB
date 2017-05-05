@@ -16,7 +16,9 @@ import java.util.UUID;
 
 
 /**
- * Created by amytai on 9/16/16.
+ * This class captures a list of updates.
+ * Its primary use case is to alow a single log entry to
+ * hold a sequence of updates made by a transaction, which are applied atomically.
  */
 @ToString
 @Slf4j

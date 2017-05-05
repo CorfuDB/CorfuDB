@@ -14,12 +14,14 @@ import java.util.*;
 
 
 /**
- * Created by mwei on 9/20/16.
+ * A log entry sturcture which contains a collection of multiSMRentries,
+ * each one contains a list of updates for one object.
  */
 @ToString
 @Slf4j
 public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
 
+    // map from stream-ID to a list of updates encapsulated as MultiSMREntry
     @Getter
     public Map<UUID, MultiSMREntry> entryMap = new HashMap<>();
 
@@ -30,16 +32,31 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
         this.entryMap = entryMap;
     }
 
+    /**
+     *
+     * @param streamID
+     * @return the MultiSMREntry corresponding to streamID
+     */
     protected MultiSMREntry getStreamEntry(UUID streamID) {
         return getEntryMap().computeIfAbsent(streamID, u -> {
             return new MultiSMREntry();
         } );
     }
 
+    /**
+     * Add one SMR-update to one object's update-list
+     * @param streamID
+     * @param updateEntry
+     */
     public void addTo(UUID streamID, SMREntry updateEntry) {
         getStreamEntry(streamID).addTo(updateEntry);
     }
 
+    /**
+     * merge two MultiObjectSMREntry records.
+     * merging is done object-by-object
+     * @param other
+     */
     public void mergeInto(MultiObjectSMREntry other) {
         if (other == null) return;
 
@@ -78,6 +95,11 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
                         Serializers.CORFU.serialize(x.getValue(), b);});
     }
 
+    /**
+     * Get the list of SMR updates for a particular object
+     * @param id
+     * @return an empty list if object has no updates; a list of updates if exists
+     */
     @Override
     public List<SMREntry> getSMRUpdates(UUID id) {
         MultiSMREntry entry = entryMap.get(id);
