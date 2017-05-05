@@ -31,6 +31,12 @@ public @interface MutatorAccessor {
      */
     String undoRecordFunction() default "";
 
+    /** The name of the function used to generate conflict parameters, which
+     * will be used to generate conflict information.
+     * @return  The name of a conflict generation function.
+     */
+    String conflictParameterFunction() default "";
+
     /** Whether this mutator resets the state of this object. Typically used
      * for methods like clear().
      * @return True, if the mutator resets the object.
