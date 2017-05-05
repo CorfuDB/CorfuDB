@@ -1,18 +1,14 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
-import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.util.Map;
-import java.util.TreeMap;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+
 import org.corfudb.CustomSerializer;
 
 import static org.assertj.core.api.Assertions.assertThat;

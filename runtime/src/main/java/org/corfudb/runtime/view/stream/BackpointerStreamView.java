@@ -1,17 +1,11 @@
 package org.corfudb.runtime.view.stream;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.serializer.CorfuSerializer;
-import org.corfudb.util.serializer.Serializers;
 
 import javax.annotation.Nonnull;
 import java.util.*;

@@ -9,7 +9,6 @@ import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.junit.Test;
 
-import java.util.IllegalFormatCodePointException;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.*;

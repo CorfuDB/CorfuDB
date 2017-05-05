@@ -1,6 +1,5 @@
 package org.corfudb.integration;
 
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.junit.BeforeClass;
@@ -9,7 +8,6 @@ import org.junit.Test;
 import java.io.InputStream;
 import java.util.HashSet;
 import java.util.Properties;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

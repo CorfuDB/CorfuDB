@@ -1,7 +1,6 @@
 package org.corfudb.protocols.wireprotocol;
 
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import java.lang.management.ManagementFactory;
 import java.util.Map;

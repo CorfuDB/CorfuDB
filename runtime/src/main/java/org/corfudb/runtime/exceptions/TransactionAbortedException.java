@@ -1,8 +1,6 @@
 package org.corfudb.runtime.exceptions;
 
 import lombok.Getter;
-import org.corfudb.protocols.wireprotocol.TokenType;
-import org.corfudb.runtime.view.Layout;
 
 /**
  * Created by mwei on 1/11/16.

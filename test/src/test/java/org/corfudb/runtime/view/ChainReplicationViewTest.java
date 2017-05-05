@@ -1,14 +1,11 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
 import java.util.Collections;
-import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;

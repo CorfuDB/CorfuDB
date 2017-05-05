@@ -1,8 +1,6 @@
 package org.corfudb.runtime.object.transactions;
 
-import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.object.AbstractObjectTest;
-import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Before;
 
 /**

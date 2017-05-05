@@ -1,11 +1,8 @@
 package org.corfudb.runtime.object.transactions;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.util.Utils;
 
-import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.stream.Collectors;
 
 /** A class which allows access to transactional contexts, which manage
