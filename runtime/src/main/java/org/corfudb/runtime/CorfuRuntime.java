@@ -63,10 +63,10 @@ public class CorfuRuntime {
     @Getter(lazy = true)
     private final AddressSpaceView addressSpaceView = new AddressSpaceView(this);
     /**
-     * A view of streams in the Corfu server instance.
+     * A view of streamsView in the Corfu server instance.
      */
     @Getter(lazy = true)
-    private final StreamsView streams = new StreamsView(this);
+    private final StreamsView streamsView = new StreamsView(this);
 
     //region Address Space Options
     /**

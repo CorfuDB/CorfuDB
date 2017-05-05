@@ -85,7 +85,7 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
             streamID = CorfuRuntime.getStreamID(streamName);
         }
 
-        final IStreamView sv = runtime.getStreams().get(streamID);
+        final IStreamView sv = runtime.getStreamsView().get(streamID);
 
         if (useCompiledClass)
         {

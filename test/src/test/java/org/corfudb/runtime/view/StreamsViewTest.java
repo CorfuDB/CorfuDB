@@ -29,7 +29,7 @@ public class StreamsViewTest extends AbstractViewTest {
         byte[] testPayload = "hello world".getBytes();
         byte[] testPayloadCopy = "hello world copy".getBytes();
 
-        IStreamView sv = r.getStreams().get(streamA);
+        IStreamView sv = r.getStreamsView().get(streamA);
         sv.append(testPayload);
 
         assertThat(sv.next().getPayload(getRuntime()))
@@ -38,7 +38,7 @@ public class StreamsViewTest extends AbstractViewTest {
                 .isEqualTo(null);
 
         SequencerView sequencerView = r.getSequencerView();
-        IStreamView svCopy = r.getStreams().copy(streamA, streamACopy,
+        IStreamView svCopy = r.getStreamsView().copy(streamA, streamACopy,
                 sequencerView.nextToken(
                         Collections.singleton(sv.getID()),
                         0).getToken().getTokenValue());

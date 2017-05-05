@@ -73,7 +73,7 @@ public class LayoutViewTest extends AbstractViewTest {
 
         r.invalidateLayout();
 
-        r.getStreams().get(CorfuRuntime.getStreamID("hi")).hasNext();
+        r.getStreamsView().get(CorfuRuntime.getStreamID("hi")).hasNext();
     }
 
     /**
@@ -154,7 +154,7 @@ public class LayoutViewTest extends AbstractViewTest {
         t.start();
 
         // verify writes and reads happen before and after the reconfiguration
-        IStreamView sv = corfuRuntime.getStreams().get(CorfuRuntime.getStreamID("streamA"));
+        IStreamView sv = corfuRuntime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
         // This append will happen before the reconfiguration while the read for this append
         // will happen after reconfiguration
         writeAndReadStream(corfuRuntime, sv, startReconfigurationLatch, layoutReconfiguredLatch);
