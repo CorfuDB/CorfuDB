@@ -21,10 +21,15 @@ import java.util.stream.Collectors;
  * Created by mwei on 12/11/15.
  */
 @Slf4j
-public class MultiStreamView extends AbstractView {
+public class StreamsView {
 
-    public MultiStreamView(CorfuRuntime runtime) {
-        super(runtime);
+    /**
+     * The org.corfudb.runtime which backs this view.
+     */
+    CorfuRuntime runtime;
+
+    public StreamsView(CorfuRuntime runtime) {
+        this.runtime = runtime;
     }
 
     /**

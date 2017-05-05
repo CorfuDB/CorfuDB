@@ -13,28 +13,55 @@ import java.util.*;
 
 
 /**
- * Created by mwei on 9/20/16.
+ * A log entry sturcture which contains a collection of multiSMRentries,
+ * each one contains a list of updates for one object.
  */
 @ToString
-@NoArgsConstructor
 @Slf4j
-public class MultiObjectSMREntry extends LogEntry implements IDivisibleEntry, ISMRConsumable {
+public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
 
+    // map from stream-ID to a list of updates encapsulated as MultiSMREntry
     @Getter
-    public Map<UUID, MultiSMREntry> entryMap;
+    public Map<UUID, MultiSMREntry> entryMap = new HashMap<>();
 
-    /** Produce an entry for the given stream, or return null if there is no entry.
-     *
-     * @param stream    The stream to produce an entry for.
-     * @return          An entry for that stream, or NULL, if there is no entry for that stream.
-     */
-    public LogEntry divideEntry(UUID stream) {
-       return entryMap.get(stream);
-    }
+    public MultiObjectSMREntry() { this.type = LogEntryType.MULTIOBJSMR; }
 
     public MultiObjectSMREntry(Map<UUID, MultiSMREntry> entryMap) {
         this.type = LogEntryType.MULTIOBJSMR;
         this.entryMap = entryMap;
+    }
+
+    /**
+     *
+     * @param streamID
+     * @return the MultiSMREntry corresponding to streamID
+     */
+    protected MultiSMREntry getStreamEntry(UUID streamID) {
+        return getEntryMap().computeIfAbsent(streamID, u -> {
+            return new MultiSMREntry();
+        } );
+    }
+
+    /**
+     * Add one SMR-update to one object's update-list
+     * @param streamID
+     * @param updateEntry
+     */
+    public void addTo(UUID streamID, SMREntry updateEntry) {
+        getStreamEntry(streamID).addTo(updateEntry);
+    }
+
+    /**
+     * merge two MultiObjectSMREntry records.
+     * merging is done object-by-object
+     * @param other
+     */
+    public void mergeInto(MultiObjectSMREntry other) {
+        if (other == null) return;
+
+        other.getEntryMap().forEach((streamID, MSMRentry) -> {
+            getStreamEntry(streamID).mergeInto(MSMRentry);
+        });
     }
 
     /**
@@ -67,6 +94,11 @@ public class MultiObjectSMREntry extends LogEntry implements IDivisibleEntry, IS
                         Serializers.CORFU.serialize(x.getValue(), b);});
     }
 
+    /**
+     * Get the list of SMR updates for a particular object
+     * @param id
+     * @return an empty list if object has no updates; a list of updates if exists
+     */
     @Override
     public List<SMREntry> getSMRUpdates(UUID id) {
         MultiSMREntry entry = entryMap.get(id);

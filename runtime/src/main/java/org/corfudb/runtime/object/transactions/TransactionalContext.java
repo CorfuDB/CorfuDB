@@ -38,17 +38,6 @@ public class TransactionalContext {
     }
 
     /**
-     * Get the transaction stack as a list.
-     * @return  The transaction stack as a list.
-     */
-    public static List<AbstractTransactionalContext> getTransactionStackAsList() {
-        List<AbstractTransactionalContext> listReverse =
-                getTransactionStack().stream().collect(Collectors.toList());
-        Collections.reverse(listReverse);
-        return listReverse;
-    }
-
-    /**
      * Returns the current transactional context for the calling thread.
      *
      * @return The current transactional context for the calling thread.
@@ -100,5 +89,16 @@ public class TransactionalContext {
             }
         }
         return r;
+    }
+
+    /**
+     * Get the transaction stack as a list.
+     * @return  The transaction stack as a list.
+     */
+    public static List<AbstractTransactionalContext> getTransactionStackAsList() {
+        List<AbstractTransactionalContext> listReverse =
+                getTransactionStack().stream().collect(Collectors.toList());
+        Collections.reverse(listReverse);
+        return listReverse;
     }
 }
