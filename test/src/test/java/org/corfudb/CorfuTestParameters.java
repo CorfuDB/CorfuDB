@@ -1,7 +1,5 @@
 package org.corfudb;
 
-import lombok.Getter;
-
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.time.Duration;

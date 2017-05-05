@@ -1,15 +1,12 @@
 package org.corfudb.runtime.view;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.IDivisibleEntry;
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.ReplexOverwriteException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Utils;
 
@@ -18,7 +15,6 @@ import javax.annotation.Nullable;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**

@@ -6,7 +6,6 @@ package org.corfudb.infrastructure.log;
 
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 
 import java.io.File;
 

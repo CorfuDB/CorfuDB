@@ -1,13 +1,8 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.collect.ImmutableSet;
 import org.corfudb.annotations.*;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentMap;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
-import java.util.function.Function;
 
 /**
  * Created by mwei on 1/9/16.

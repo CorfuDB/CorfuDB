@@ -2,7 +2,6 @@ package org.corfudb.runtime.object.transactions;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.junit.Test;
 
 import java.util.ArrayList;

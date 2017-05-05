@@ -9,9 +9,6 @@ import java.util.ArrayList;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
-
 /**
  * These tests generate workloads with mixed reads/writes on multiple maps.
  *

@@ -10,7 +10,6 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.*;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;

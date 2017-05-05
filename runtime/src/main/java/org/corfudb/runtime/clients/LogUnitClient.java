@@ -3,7 +3,6 @@ package org.corfudb.runtime.clients;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.Range;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;

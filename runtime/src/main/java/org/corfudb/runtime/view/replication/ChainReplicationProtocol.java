@@ -1,22 +1,13 @@
 package org.corfudb.runtime.view.replication;
 
-import io.netty.buffer.ByteBuf;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.StreamData;
-import org.corfudb.protocols.logprotocol.StreamedLogData;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.AutoClosableByteBuf;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.serializer.Serializers;
 
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.Map;
-import java.util.UUID;
 
 /**
  * Created by mwei on 4/6/17.

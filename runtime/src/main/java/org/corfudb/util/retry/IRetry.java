@@ -2,7 +2,6 @@ package org.corfudb.util.retry;
 
 import lombok.SneakyThrows;
 
-import java.lang.reflect.InvocationTargetException;
 import java.util.function.Consumer;
 
 /**

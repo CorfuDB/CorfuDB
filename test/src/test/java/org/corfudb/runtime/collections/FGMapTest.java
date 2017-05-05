@@ -3,16 +3,10 @@ package org.corfudb.runtime.collections;
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.TestClassWithPrimitives;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.junit.Test;
 
-import java.util.EnumSet;
 import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
