@@ -1,6 +1,5 @@
 package org.corfudb.runtime.object;
 
-import jdk.nashorn.internal.objects.annotations.Constructor;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.annotations.Accessor;

@@ -7,7 +7,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Utils;
 
@@ -40,13 +39,9 @@ public class StreamsView {
      * @return A view
      */
     public IStreamView get(UUID stream) {
-        return getReplicationMode().getStreamView(runtime, stream);
-    }
-
-    private Layout.ReplicationMode getReplicationMode() {
         return runtime.getLayoutView().getLayout().getSegments().get(
                 runtime.getLayoutView().getLayout().getSegments().size() - 1)
-                .getReplicationMode();
+                .getReplicationMode().getStreamView(runtime, stream);
     }
 
     /**
@@ -63,22 +58,21 @@ public class StreamsView {
                     runtime.getSequencerView().nextToken(Collections.singleton(destination), 1);
             if (tokenResponse.getBackpointerMap().get(destination) != null &&
                     Address.isAddress(tokenResponse.getBackpointerMap().get(destination))) {
-                try {
-                    runtime.getAddressSpaceView().fillHole(tokenResponse.getToken().getTokenValue());
-                } catch (OverwriteException oe) {
-                    log.trace("Attempted to hole fill due to already-existing stream but hole filled by other party");
-                }
+                // Reading from this address will cause a hole fill
+                runtime.getAddressSpaceView().read(tokenResponse.getTokenValue());
                 throw new RuntimeException("Stream already exists!");
             }
             StreamCOWEntry entry = new StreamCOWEntry(source, timestamp);
+            TokenResponse cowToken = new TokenResponse(tokenResponse.getTokenValue(), tokenResponse.getEpoch(),
+                    Collections.singletonMap(destination, Address.COW_BACKPOINTER));
             try {
-                runtime.getAddressSpaceView().write(tokenResponse, entry);
+                runtime.getAddressSpaceView().write(cowToken, entry);
                 written = true;
             } catch (OverwriteException oe) {
                 log.debug("hole fill during COW entry append, retrying...");
             }
         }
-        return new BackpointerStreamView(runtime, destination);
+        return get(destination);
     }
 
     /** Append to multiple streams simultaneously, possibly providing
@@ -139,7 +133,7 @@ public class StreamsView {
                 // We need to fix the token (to use the stream addresses- may
                 // eventually be deprecated since these are no longer used)
                 tokenResponse = new TokenResponse(temp.getRespType(), temp.getToken(),
-                        temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                        temp.getBackpointerMap());
             }
         }
 

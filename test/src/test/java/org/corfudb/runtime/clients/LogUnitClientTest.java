@@ -2,7 +2,6 @@ package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Range;
 import org.corfudb.format.Types;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
@@ -32,7 +31,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 
 /**
@@ -216,32 +214,6 @@ public class LogUnitClientTest extends AbstractClientTest {
                 .containsEntry(CorfuRuntime.getStreamID("hello"), ADDRESS_0);
         assertThat(r.getBackpointerMap())
                 .containsEntry(CorfuRuntime.getStreamID("hello2"), ADDRESS_1);
-    }
-
-    @Test
-    public void canCommitWrite()
-            throws Exception {
-        byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
-        client.writeCommit(null, 0, true).get();
-        LogData r = client.read(0).get().getReadSet().get(0L);
-        assertThat(r.getType())
-                .isEqualTo(DataType.DATA);
-        assertThat(r.getPayload(new CorfuRuntime()))
-                .isEqualTo(testString);
-        assertThat(r.getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT));
-
-        final long OUTSIDE_ADDRESS = 10L;
-        UUID streamA = CorfuRuntime.getStreamID("streamA");
-        client.writeStream(1, Collections.singletonMap(streamA, 0L), testString).get();
-        client.writeCommit(Collections.singletonMap(streamA, 0L), OUTSIDE_ADDRESS, true).get(); // 10L shouldn't matter
-
-        r = client.read(streamA, Range.singleton(0L)).get().getReadSet().get(0L);
-        assertThat(r.getType())
-                .isEqualTo(DataType.DATA);
-        assertThat(r.getPayload(new CorfuRuntime()))
-                .isEqualTo(testString);
-        assertThat(r.getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT));
     }
 
     @Test

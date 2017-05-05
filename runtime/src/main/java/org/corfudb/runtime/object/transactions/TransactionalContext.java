@@ -1,9 +1,7 @@
 package org.corfudb.runtime.object.transactions;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.util.Utils;
 
-import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 

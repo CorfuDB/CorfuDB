@@ -3,7 +3,6 @@ package org.corfudb.runtime.object.transactions;
 import com.google.common.collect.ImmutableSet;
 import lombok.Getter;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 

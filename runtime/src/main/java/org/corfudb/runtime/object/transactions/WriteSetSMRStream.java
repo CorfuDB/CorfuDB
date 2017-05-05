@@ -9,6 +9,7 @@ import org.corfudb.util.Utils;
 
 import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 /**
  * Created by mwei on 3/13/17.
@@ -204,6 +205,17 @@ public class WriteSetSMRStream implements ISMRStream {
     @Override
     public void seek(long globalAddress) {
         throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Stream<SMREntry> stream() {
+        return streamUpTo(Address.MAX);
+    }
+
+    @Override
+    public Stream<SMREntry> streamUpTo(long maxGlobal) {
+        return remainingUpTo(maxGlobal)
+                .stream();
     }
 
     @Override

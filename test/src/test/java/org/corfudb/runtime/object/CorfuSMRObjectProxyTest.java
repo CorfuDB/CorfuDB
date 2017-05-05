@@ -1,18 +1,14 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
-import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.util.Map;
-import java.util.TreeMap;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+
 import org.corfudb.CustomSerializer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,7 +24,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         getDefaultRuntime();
 
         Map<String, String> testMap = (Map<String, String>)
-                instantiateCorfuObject(new TypeToken<TreeMap<String,String>>() {}, "test");
+                instantiateCorfuObject(new TypeToken<SMRMap<String,String>>() {}, "test");
 
         testMap.clear();
         assertThat(testMap.put("a", "a"))
@@ -39,7 +35,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
                 .isEqualTo("b");
 
         Map<String, String> testMap2 = (Map<String, String>)
-                instantiateCorfuObject(new TypeToken<TreeMap<String,String>>() {}, "test");
+                instantiateCorfuObject(new TypeToken<SMRMap<String,String>>() {}, "test");
 
         assertThat(testMap2.get("a"))
                 .isEqualTo("b");

@@ -1,8 +1,6 @@
 package org.corfudb.protocols.wireprotocol;
 
-import com.google.common.collect.ImmutableRangeSet;
 import com.google.common.collect.Range;
-import com.google.common.collect.RangeSet;
 import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.Data;

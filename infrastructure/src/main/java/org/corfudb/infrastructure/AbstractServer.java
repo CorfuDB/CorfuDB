@@ -1,12 +1,10 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Timer;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.MetricsUtils;
 
 /**

@@ -1,20 +1,17 @@
 package org.corfudb.runtime.view.stream;
 
-import lombok.Data;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.view.Address;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 /** This interface represents a view on a stream. A stream is an ordered
  * set of log entries which can only be appended to and read in sequential
@@ -22,7 +19,8 @@ import java.util.function.Function;
  *
  * Created by mwei on 1/5/17.
  */
-public interface IStreamView extends Iterator<ILogData> {
+public interface IStreamView extends
+        Iterator<ILogData> {
 
     /** Return the ID of the stream this view is for.
      * @return  The ID of the stream.
@@ -182,4 +180,36 @@ public interface IStreamView extends Iterator<ILogData> {
      *                  or Address.NON_ADDRESS.
      */
     long getCurrentGlobalPosition();
+
+    /** Get a spliterator for this stream view
+     * @return  A spliterator for this stream view.
+     */
+    default Spliterator<ILogData> spliterator() {
+        return new StreamSpliterator(this);
+    }
+
+    /** Get a spliterator for this stream view, limiting the return
+     * values to a specified global address.
+     * @param maxGlobal     The maximum global address to read to
+     * @return              A spliterator for this stream view.
+     */
+    default Spliterator<ILogData> spliteratorUpTo(long maxGlobal) {
+        return new StreamSpliterator(this, maxGlobal);
+    }
+
+    /** Get a Java stream from this stream view.
+     * @return  A Java stream for this stream view.
+     */
+    default Stream<ILogData> stream() {
+        return StreamSupport.stream(spliterator(), false);
+    }
+
+    /** Get a Java stream from this stream view, limiting
+     * reads to a specified global address.
+     * @param maxGlobal     The maximum global address to read to.
+     * @return              A spliterator for this stream view.
+     */
+    default Stream<ILogData> streamUpTo(long maxGlobal) {
+        return StreamSupport.stream(spliteratorUpTo(maxGlobal), false);
+    }
 }

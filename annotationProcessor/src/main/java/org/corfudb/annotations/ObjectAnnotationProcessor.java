@@ -96,6 +96,11 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         + classElement.getSimpleName() + " with IOException");
             }
         }
+        // deal with any inner classes
+        classElement.getEnclosedElements().stream()
+                .filter(x -> x instanceof TypeElement)
+                .map(x -> (TypeElement) x)
+                .forEach(this::processClass);
     }
 
     /** Return a SMR function name, extracting it from the annotations if available.
@@ -114,19 +119,19 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
     /** Class to hold data about SMR Methods. */
     class SMRMethodInfo {
         /** The method itself. */
-        ExecutableElement method;
+        final ExecutableElement method;
         /** The interface, if present, which provided the element. */
-        TypeElement interfaceOverride;
+        final TypeElement interfaceOverride;
         /** If the element should be excluded from instrumentation. */
-        boolean doNotAdd = false;
+        final boolean doNotAdd;
         /** If the element has conflictParameter annotations. */
         final boolean hasConflictAnnotations;
+        /** If the element has a function to calculate conflict params. */
+        final String conflictFunction;
 
         public SMRMethodInfo(ExecutableElement method,
                              TypeElement interfaceOverride) {
-            this.method = method;
-            this.interfaceOverride = interfaceOverride;
-            this.hasConflictAnnotations = checkForConflictAnnotations(method);
+            this(method, interfaceOverride, false);
         }
 
         public SMRMethodInfo(ExecutableElement method,
@@ -136,6 +141,29 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
             this.interfaceOverride = interfaceOverride;
             this.doNotAdd = doNotAdd;
             this.hasConflictAnnotations = checkForConflictAnnotations(method);
+
+
+            Accessor accessor = method.getAnnotation(Accessor.class);
+            MutatorAccessor mutatorAccessor = method.getAnnotation(MutatorAccessor.class);
+            Mutator mutator = method.getAnnotation(Mutator.class);
+
+            // Check if there is a conflictFunction
+            if (accessor != null && !accessor.conflictParameterFunction().equals("")) {
+                conflictFunction = accessor.conflictParameterFunction();
+            }else if (mutator != null && !mutator.conflictParameterFunction().equals("")) {
+                conflictFunction = mutator.conflictParameterFunction();
+            }
+            else if (mutatorAccessor != null && !mutatorAccessor.conflictParameterFunction().equals("")) {
+                conflictFunction = mutatorAccessor.conflictParameterFunction();
+            } else {
+                conflictFunction = null;
+            }
+
+            if (conflictFunction != null && hasConflictAnnotations) {
+                messager.printMessage(Diagnostic.Kind.ERROR, "Method " + method.getSimpleName() +
+                " cannot have both conflict annotations and conflict function '" + conflictFunction + "'");
+
+            }
         }
 
         /** Return whether the given method has conflict annotations.
@@ -160,8 +188,12 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         // Extract the package name for the class. We'll need this to generate the proxy file.
         String packageName = elementUtils.getPackageOf(classElement).toString();
         // Calculate the name of the proxy, which appends $CORFUSMR to the class name.
-        ClassName proxyName = ClassName.bestGuess(classElement.getSimpleName().toString()
-                + ICorfuSMR.CORFUSMR_SUFFIX);
+        ClassName proxyName = classElement.getNestingKind() == NestingKind.TOP_LEVEL ?
+                // Top level classes can just use the name
+                ClassName.bestGuess(classElement.getSimpleName() + ICorfuSMR.CORFUSMR_SUFFIX) :
+                // Otherwise we need to include the enclosing element as well.
+                ClassName.bestGuess(classElement.getEnclosingElement().getSimpleName()
+                        + "$" + classElement.getSimpleName() + ICorfuSMR.CORFUSMR_SUFFIX);
         // Also get the class name of the original class.
         TypeName originalName = ParameterizedTypeName.get(classElement.asType());
 
@@ -382,8 +414,16 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     }
 
                     // If there is conflict information, calculate the conflict set
+                    boolean hasConflictData = false;
                     final String conflictField = "conflictField" + CORFUSMR_FIELD;
-                    if (m.hasConflictAnnotations) {
+
+
+                    if (m.conflictFunction != null) {
+                        hasConflictData = true;
+                        addConflictFieldFromFunctionToMethod(ms, conflictField, m.conflictFunction, smrMethod);
+                    }
+                    else if (m.hasConflictAnnotations) {
+                        hasConflictData = true;
                         addConflictFieldToMethod(ms, conflictField, smrMethod);
                     }
 
@@ -397,7 +437,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 mutator != null ? "false" :
                                 // or mutatorAccessors which return void.
                                 smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ? "false" : "true",
-                                m.hasConflictAnnotations ? conflictField : "null",
+                                hasConflictData ? conflictField : "null",
                                 smrMethod.getParameters().size() > 0 ? "," : "",
                                 smrMethod.getParameters().stream()
                                     .map(VariableElement::getSimpleName)
@@ -838,6 +878,22 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         .stream()
                         .filter(y -> y.getAnnotation(ConflictParameter.class)
                                 != null)
+                        .map(y -> y.getSimpleName())
+                        .collect(Collectors.joining(", ")));
+    }
+
+    /** Add a conflict field to the method.
+     *
+     * @param ms                The builder to add the field to.
+     * @param conflictField     The name of the field to add
+     * @param functionName      The function to call to obtain the parameters.
+     * @param smrMethod         The method element.
+     */
+    public void addConflictFieldFromFunctionToMethod(MethodSpec.Builder ms, String conflictField, String functionName,
+                                                     ExecutableElement smrMethod) {
+        ms.addStatement("$T $L = $L($L)", Object[].class, conflictField, functionName,
+                smrMethod.getParameters()
+                        .stream()
                         .map(y -> y.getSimpleName())
                         .collect(Collectors.joining(", ")));
     }

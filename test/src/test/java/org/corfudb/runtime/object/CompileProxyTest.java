@@ -4,7 +4,6 @@ import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
 import java.util.Map;

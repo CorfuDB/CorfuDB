@@ -3,7 +3,6 @@ package org.corfudb.runtime.concurrent;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
-import org.corfudb.runtime.object.transactions.TransactionType;
 import org.junit.Assert;
 import org.junit.Test;
 

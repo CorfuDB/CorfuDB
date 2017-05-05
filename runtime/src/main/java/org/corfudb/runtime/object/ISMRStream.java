@@ -1,16 +1,12 @@
 package org.corfudb.runtime.object;
 
-import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.DataType;
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.view.Address;
 
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * On top of a stream, an SMR object layer implements objects whose history of updates are backed by a stream.
@@ -36,6 +32,10 @@ public interface ISMRStream {
     void reset();
 
     void seek(long globalAddress);
+
+    Stream<SMREntry> stream();
+
+    Stream<SMREntry> streamUpTo(long maxGlobal);
 
     /** Append a SMREntry to the stream, returning the global address
      * it was written at.

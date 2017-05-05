@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -59,8 +60,6 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .data(new LogData(DataType.DATA, b))
                 .build();
         m.setGlobalAddress(ADDRESS_0);
-        // m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
-        m.setStreams(Collections.EMPTY_SET);
         m.setBackpointerMap(Collections.emptyMap());
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
 
@@ -76,8 +75,6 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .data(new LogData(DataType.DATA, b))
                 .build();
         m2.setGlobalAddress(ADDRESS_0);
-        // m.setStreams(Collections.singleton(CorfuRuntime.getStreamID("a")));
-        m2.setStreams(Collections.EMPTY_SET);
         m2.setBackpointerMap(Collections.emptyMap());
 
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m2));
@@ -141,8 +138,8 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .data(new LogData(DataType.DATA, b))
                 .build();
         m.setGlobalAddress(addr);
-        m.setStreams(Collections.singleton(CorfuRuntime.getStreamID(streamName)));
-        m.setBackpointerMap(Collections.emptyMap());
+        m.setBackpointerMap(Collections.singletonMap(CorfuRuntime.getStreamID(streamName),
+                Address.NO_BACKPOINTER));
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
 
     }
@@ -260,13 +257,11 @@ public class LogUnitServerTest extends AbstractServerTest {
         final Long globalAddress = 0L;
         m.setGlobalAddress(globalAddress);
         Set<UUID> streamSet = new HashSet(Collections.singleton(CorfuRuntime.getStreamID("a")));
-        m.setStreams(streamSet);
         Map<UUID, Long> uuidLongMap = new HashMap();
         UUID uuid = new UUID(1,1);
         final Long address = 5L;
         uuidLongMap.put(uuid, address);
         m.setBackpointerMap(uuidLongMap);
-        m.setLogicalAddresses(uuidLongMap);
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
 
         s1 = new LogUnitServer(new ServerContextBuilder()
@@ -281,7 +276,6 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         // Verify that the meta data can be read correctly
         assertThat(entry.getBackpointerMap()).isEqualTo(uuidLongMap);
-        assertThat(entry.getLogicalAddresses()).isEqualTo(uuidLongMap);
         assertThat(entry.getGlobalAddress()).isEqualTo(globalAddress);
     }
 
@@ -355,7 +349,6 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .data(new LogData(DataType.DATA, b))
                 .build();
         m.setGlobalAddress(ADDRESS_0);
-        m.setStreams(Collections.EMPTY_SET);
         m.setRank(new IMetadata.DataRank(0));
         m.setBackpointerMap(Collections.emptyMap());
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
@@ -375,7 +368,6 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .data(new LogData(DataType.DATA, b))
                 .build();
         m.setGlobalAddress(ADDRESS_0);
-        m.setStreams(Collections.EMPTY_SET);
         m.setBackpointerMap(Collections.emptyMap());
 
 
@@ -385,7 +377,6 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .build();
 
         m2.setGlobalAddress(ADDRESS_0);
-        m2.setStreams(Collections.EMPTY_SET);
         m2.setRank(new IMetadata.DataRank(1));
         m2.setBackpointerMap(Collections.emptyMap());
 

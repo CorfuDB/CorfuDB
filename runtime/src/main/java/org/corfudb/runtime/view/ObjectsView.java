@@ -8,7 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.*;
+import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -17,10 +18,8 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -40,56 +39,12 @@ public class ObjectsView extends AbstractView {
     @Setter
     boolean transactionLogging = false;
 
-    @Getter
-    Map<Long, CompletableFuture> txFuturesMap = new ConcurrentHashMap<>();
 
     @Getter
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
 
     public ObjectsView(CorfuRuntime runtime) {
         super(runtime);
-    }
-
-    /**
-     * Gets a view of an object in the Corfu instance.
-     *
-     * @param streamID The stream that the object should be read from.
-     * @param type     The type of the object that should be opened.
-     *                 If the type implements ICorfuSMRObject or implements an interface which implements
-     *                 ISMRInterface, Accessors, Mutator and MutatorAccessor annotations will be respected.
-     *                 Otherwise, the entire object will be wrapped around SMR and it will be assumed that
-     *                 all methods are MutatorAccessors.
-     * @param <T>      The type of object to return.
-     * @return Returns a view of the object in a Corfu instance.
-     */
-    @Deprecated
-    public <T> T open(@NonNull UUID streamID, @NonNull Class<T> type, Object... args) {
-        return build()
-                .setType(type)
-                .setStreamID(streamID)
-                .setArgumentsArray(args)
-                .open();
-    }
-
-    /**
-     * Gets a view of an object in the Corfu instance.
-     *
-     * @param streamName The stream that the object should be read from.
-     * @param type       The type of the object that should be opened.
-     *                   If the type implements ICorfuSMRObject or implements an interface which implements
-     *                   ISMRInterface, Accessors, Mutator and MutatorAccessor annotations will be respected.
-     *                   Otherwise, the entire object will be wrapped around SMR and it will be assumed that
-     *                   all methods are MutatorAccessors.
-     * @param <T>        The type of object to return.
-     * @return Returns a view of the object in a Corfu instance.
-     */
-    @Deprecated
-    public <T> T open(@NonNull String streamName, @NonNull Class<T> type, Object... args) {
-        return new ObjectBuilder<T>(runtime)
-                .setType(type)
-                .setStreamName(streamName)
-                .setArgumentsArray(args)
-                .open();
     }
 
     /**
@@ -111,33 +66,20 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings("unchecked")
     public <T> T copy(@NonNull T obj, @NonNull UUID destination) {
-        try {
-            // to be deprecated
-            CorfuSMRObjectProxy<T> proxy = (CorfuSMRObjectProxy<T>) ((ICorfuSMRObject) obj).getProxy();
-            ObjectID oid = new ObjectID(destination, proxy.getOriginalClass());
-            return (T) objectCache.computeIfAbsent(oid, x -> {
-                IStreamView sv = runtime.getStreamsView().copy(proxy.getSv().getID(),
-                        destination, proxy.getTimestamp());
-                return CorfuProxyBuilder.getProxy(proxy.getOriginalClass(), sv, runtime,
-                        proxy.getSerializer(), Collections.emptySet());
-            });
-        } catch (Exception e) {
-            // new code path
-            ICorfuSMR<T> proxy = (ICorfuSMR<T>)obj;
-            ObjectID oid = new ObjectID(destination, proxy.getCorfuSMRProxy().getObjectType());
-            return (T) objectCache.computeIfAbsent(oid, x -> {
-                IStreamView sv = runtime.getStreamsView().copy(proxy.getCorfuStreamID(),
-                        destination, proxy.getCorfuSMRProxy().getVersion());
-                try {
-                    return
-                            CorfuCompileWrapperBuilder.getWrapper(proxy.getCorfuSMRProxy().getObjectType(),
-                                    runtime, sv.getID(), null, Serializers.JSON);
-                }
-                catch (Exception ex) {
-                    throw new RuntimeException(ex);
-                }
-            });
-        }
+        ICorfuSMR<T> proxy = (ICorfuSMR<T>)obj;
+        ObjectID oid = new ObjectID(destination, proxy.getCorfuSMRProxy().getObjectType());
+        return (T) objectCache.computeIfAbsent(oid, x -> {
+            IStreamView sv = runtime.getStreamsView().copy(proxy.getCorfuStreamID(),
+                    destination, proxy.getCorfuSMRProxy().getVersion());
+            try {
+                return
+                        CorfuCompileWrapperBuilder.getWrapper(proxy.getCorfuSMRProxy().getObjectType(),
+                                runtime, sv.getID(), null, Serializers.JSON);
+            }
+            catch (Exception ex) {
+                throw new RuntimeException(ex);
+            }
+        });
     }
 
     /**
@@ -161,7 +103,7 @@ public class ObjectsView extends AbstractView {
      */
     public void TXBegin() {
         TXBuild()
-                .setType(TransactionType.OPTIMISTIC) // TODO:default needs to be configurable
+                .setType(TransactionType.OPTIMISTIC)
                 .begin();
     }
 
