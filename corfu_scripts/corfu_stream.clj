@@ -6,7 +6,7 @@
 (def usage "corfu_stream, work with Corfu streams.
 Usage:
   corfu_stream [-i <stream-id>] -c <config> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]] read
-  corfu_stream [-i <stream-id>] -c <config> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]] write
+  corfu_stream [-i <stream-id>] -c <config> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]] append
 Options:
   -i <stream-id>, --stream-id <stream-id>                                                ID or name of the stream to work with.
   -c <config>, --config <config>                                                         Configuration string to use.
@@ -29,13 +29,13 @@ Options:
     (.toByteArray out)))
 
 ; a function which reads a stream to stdout
-(defn read-stream [stream] (doseq [obj (.. stream (readTo Long/MAX_VALUE))]
+(defn read-stream [stream] (doseq [obj (.. stream (streamUpTo Long/MAX_VALUE)(toArray))]
                              (let [bytes (.. obj (getPayload *r))]
                              (.. System/out (write bytes 0 (count bytes))))))
 
 ; a function which writes to a stream from stdin
 (defn write-stream [stream] (let [in (slurp-bytes System/in)]
-                              (.. stream (write in))
+                              (.. stream (append in))
                               ))
 
 (def localcmd (.. (new Docopt usage) (parse *args)))
@@ -47,6 +47,6 @@ Options:
 
 ; determine whether to read or write
 (cond (.. localcmd (get "read")) (read-stream stream)
-      (.. localcmd (get "write")) (write-stream stream)
+      (.. localcmd (get "append")) (write-stream stream)
   :else (println "Unknown arguments.")
   )

@@ -171,7 +171,7 @@ This means that the infrastructure is currently configured with a single layout 
 
 Now we can try writing to the instance. The stream utility can be used to write to the instance:
 ```
-$ echo "hello world" | corfu_stream write -c localhost:9000 -i test
+$ echo "hello world" | corfu_stream append -c localhost:9000 -i test
 ```
 
 This utility takes input from stdin and writes it into the log. This command invocation writes a entry named "hello world" to a stream called "test". Streams are a kind of virtualized log in Corfu - think of them as append-only files.
