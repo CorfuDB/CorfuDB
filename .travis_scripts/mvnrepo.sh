@@ -10,6 +10,19 @@ if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; th
         cp -R target/mvn-repo $HOME/mvn-repo-current
         for pkg in runtime annotations annotationProcessor; do
             cp -R $pkg/target/mvn-repo/* $HOME/mvn-repo-current
+            (
+                cd $HOME/mvn-repo-current/*/*/$pkg
+                SNAPSHOT_DIR=`echo $PROJECT_VERSION | sed s/-.*/-SNAPSHOT/`
+                rm -rf $SNAPSHOT_DIR
+                mkdir $SNAPSHOT_DIR
+                cp -pv $PROJECT_VERSION/* $SNAPSHOT_DIR
+                (
+                    cd $SNAPSHOT_DIR
+                    for file in *.jar* *.pom*; do
+                        mv -v $file `echo $file | sed 's/-\([0-9.][0-9.]*\)-[0-9]*/-\1-SNAPSHOT/'`
+                    done
+                )
+            )
         done
         cd $HOME
         git config --global user.email "travis@travis-ci.org"
