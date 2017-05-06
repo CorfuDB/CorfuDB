@@ -154,9 +154,11 @@ public class ObjectsView extends AbstractView {
             log.warn("Attempted to end a transaction, but no transaction active!");
             return AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
         } else {
+            // TODO remove this, doesn't belong here!
             long totalTime = System.currentTimeMillis() - context.getStartTime();
             log.trace("TXCommit[{}] time={} ms",
                     context, totalTime);
+            // TODO up to here
                 try {
                     return TransactionalContext.getCurrentContext().commitTransaction();
                 } finally {

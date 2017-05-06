@@ -83,7 +83,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // to the correct version, reflecting any optimistic
         // updates.
         return proxy.getUnderlyingObject().access(
-                o -> (writeSet.get(proxy.getStreamID()) == null && // No updates
+                o -> (getWriteSetEntryList(proxy.getStreamID()) == null && // No updates
                         o.getVersionUnsafe() == getSnapshotTimestamp() && // And at the correct timestamp
                         !o.isOptimisticallyModifiedUnsafe()),
                 o -> {
@@ -140,7 +140,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // If we still don't have the upcall, this must be a bug.
             throw new RuntimeException("Tried to get upcall during a transaction but" +
                     " we don't have it even after an optimistic sync (asked for " + timestamp +
-                    " we have 0-" + (writeSet.get(proxy.getStreamID()).getValue().size() - 1) + ")");
+                    " we have 0-" + (getWriteSetEntryList(proxy.getStreamID()).size() - 1) + ")");
         });
     }
 
@@ -156,13 +156,14 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         if (object.getOptimisticStreamUnsafe() == null ||
                 !object.getOptimisticStreamUnsafe()
                         .isStreamCurrentContextThreadCurrentContext()) {
-            WriteSetSMRStream newSMRStream = new WriteSetSMRStream(
-                    TransactionalContext.getTransactionStackAsList(),
+
+            // We are setting the current context to the root context of nested transactions.
+            // Upon sync forward
+            // the stream will replay every entries from all parent transactional context.
+            WriteSetSMRStream newSMRStream =
+                    new WriteSetSMRStream(TransactionalContext.getTransactionStackAsList(),
                     object.getID());
 
-            // We are setting the current context to 0 on purpose, because
-            // it points to the root context of nested transactions. Upon sync forward
-            // the stream will replay every entries from all parent transactional context.
             newSMRStream.currentContext = 0;
             object.setOptimisticStreamUnsafe(newSMRStream);
         }
@@ -170,6 +171,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
     /** Logs an update. In the case of an optimistic transaction, this update
      * is logged to the write set for the transaction.
+     *
+     * Return the "address" of the update; used for retrieving results from operations via getUpcallRestult.
+     *
      * @param proxy         The proxy making the request.
      * @param updateEntry   The timestamp of the request.
      * @param <T>           The type of the proxy.
@@ -183,11 +187,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 this, proxy, updateEntry.getSMRMethod(),
                 updateEntry.getSMRArguments(), conflictObjects);
 
-        // Insert the modification into writeSet.
-        addToWriteSet(proxy, updateEntry, conflictObjects);
-
-        // Return the "address" of the update; used for retrieving results from operations via getUpcallRestult.
-        return writeSet.get(proxy.getStreamID()).getValue().size() - 1;
+        return addToWriteSet(proxy, updateEntry, conflictObjects);
     }
 
     /**
@@ -200,10 +200,10 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     public void addTransaction(AbstractTransactionalContext tc) {
         log.trace("Merge[{}] adding {}", this, tc);
         // merge the conflict maps
-        mergeReadSetInto(tc.getReadSet());
+        mergeReadSetInto(tc.getReadSetInfo());
 
         // merge the write-sets
-        mergeWriteSetInto(tc.writeSet);
+        mergeWriteSetInto(tc.getWriteSetInfo());
 
         // "commit" the optimistic writes (for each proxy we touched)
         // by updating the modifying context (as long as the context
@@ -221,7 +221,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     public long commitTransaction() throws TransactionAbortedException {
         log.debug("TX[{}] request optimistic commit", this);
 
-        return getConflictSetAndCommit(() -> getReadSet());
+        return getConflictSetAndCommit(() -> getReadSetInfo().getReadSetConflicts());
     }
 
     public long getConflictSetAndCommit(Supplier<Map<UUID, Set<Integer>>>
@@ -236,13 +236,13 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
         // If the write set is empty, we're done and just return
         // NOWRITE_ADDRESS.
-        if (writeSet.isEmpty()) {
+        if (getWriteSetInfo().getWriteSet().getEntryMap().isEmpty()) {
             log.trace("Commit[{}] Read-only commit (no write)", this);
             return NOWRITE_ADDRESS;
         }
 
         // Write to the transaction stream if transaction logging is enabled
-        Set<UUID> affectedStreams = new HashSet<>(writeSet.keySet());
+        Set<UUID> affectedStreams = new HashSet<>(getWriteSetInfo().getWriteSet().getEntryMap().keySet());
         if (this.builder.runtime.getObjectsView().isTransactionLogging()) {
             affectedStreams.add(TRANSACTION_STREAM_ID);
         }
