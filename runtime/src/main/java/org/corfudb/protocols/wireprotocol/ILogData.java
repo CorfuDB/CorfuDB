@@ -1,11 +1,9 @@
 package org.corfudb.protocols.wireprotocol;
 
 import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.StreamedLogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 
-import java.util.EnumMap;
 import java.util.UUID;
 
 /** An interface to log data entries.

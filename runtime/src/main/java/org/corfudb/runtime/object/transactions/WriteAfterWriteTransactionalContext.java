@@ -1,17 +1,8 @@
 package org.corfudb.runtime.object.transactions;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-
-import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
 /** A write-after-write transactional context.
  *

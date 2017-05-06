@@ -153,9 +153,12 @@ public class WriteSetSMRStream implements ISMRStream {
         if (Address.nonAddress(writePos)) {
             return null;
         }
-        return Collections.singletonList(contexts.get(currentContext)
-                .getWriteSet().get(id)
-                .getValue().get((int)(currentContextPos)));
+        if (Address.nonAddress(currentContextPos))
+            currentContextPos = -1;
+        return Collections.singletonList(contexts
+                .get(currentContext)
+                .getWriteSetEntryList(id)
+                .get((int)(currentContextPos)));
     }
 
     @Override
@@ -176,9 +179,12 @@ public class WriteSetSMRStream implements ISMRStream {
                 } else {
                     currentContext--;
                 }
-            } while (!contexts.get(currentContext).getWriteSet().containsKey(id));
-            currentContextPos = contexts.get(currentContext)
-                    .getWriteSet().get(id).getValue().size() - 1;
+            } while (contexts
+                    .get(currentContext)
+                    .getWriteSetEntrySize(id) == 0);
+            currentContextPos = contexts
+                    .get(currentContext)
+                    .getWriteSetEntrySize(id)-1 ;
         }
 
         return current();

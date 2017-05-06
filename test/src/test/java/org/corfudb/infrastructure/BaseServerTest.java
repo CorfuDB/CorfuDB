@@ -3,10 +3,7 @@ package org.corfudb.infrastructure;
 import org.assertj.core.api.Assertions;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.junit.Before;
 import org.junit.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 12/14/15.

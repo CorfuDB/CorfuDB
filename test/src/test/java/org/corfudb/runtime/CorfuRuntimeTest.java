@@ -3,8 +3,6 @@ package org.corfudb.runtime;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
 
-import java.util.concurrent.TimeUnit;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 

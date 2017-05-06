@@ -1,7 +1,6 @@
 package org.corfudb.runtime.object.transactions;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;

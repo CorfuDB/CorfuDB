@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Timer;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 
 import java.lang.annotation.*;
