@@ -8,11 +8,16 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,6 +48,14 @@ public class ServerRestartIT extends AbstractIT {
         corfuSingleNodePort = Integer.parseInt((String) PROPERTIES.get("corfuSingleNodePort"));
     }
 
+    private Process runCorfuServer() throws IOException {
+        return new CorfuServerRunner()
+                .setHost(corfuSingleNodeHost)
+                .setPort(corfuSingleNodePort)
+                .setLogPath(getCorfuServerLogPath(corfuSingleNodeHost, corfuSingleNodePort))
+                .runServer();
+    }
+
 
     /**
      * Randomized tests with mixed client and server failovers.
@@ -70,6 +83,8 @@ public class ServerRestartIT extends AbstractIT {
             testSequenceLogFile.createNewFile();
         }
 
+        final ExecutorService executorService = Executors.newSingleThreadExecutor();
+
         // Keep this print at all times to reproduce any failed test.
         final Random randomSeed = new Random();
         final long SEED = randomSeed.nextLong();
@@ -77,16 +92,21 @@ public class ServerRestartIT extends AbstractIT {
         System.out.println("SEED = " + SEED);
 
         // Runs the corfu server. Expect slight delay until server is running.
-        Process corfuServerProcess = runCorfuServer(corfuSingleNodeHost, corfuSingleNodePort);
+        Process corfuServerProcess = runCorfuServer();
 
         // List of runtimes to free resources when not needed.
         List<CorfuRuntime> runtimeList = new ArrayList<>();
 
         List<Map<String, Integer>> smrMapList = new ArrayList<>();
         for (int i = 0; i < MAPS; i++) {
-            CorfuRuntime runtime = createDefaultRuntime();
-            runtimeList.add(runtime);
-            smrMapList.add(createMap(runtime, Integer.toString(i)));
+            final int ii = i;
+            Future<Boolean> future = executorService.submit(() -> {
+                CorfuRuntime runtime = createDefaultRuntime();
+                runtimeList.add(runtime);
+                smrMapList.add(createMap(runtime, Integer.toString(ii)));
+                return true;
+            });
+            future.get(PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS);
         }
         List<Map<String, Integer>> expectedMapList = new ArrayList<>();
         for (int i = 0; i < MAPS; i++) {
@@ -109,9 +129,14 @@ public class ServerRestartIT extends AbstractIT {
                     smrMapList.clear();
                     runtimeList.forEach(CorfuRuntime::shutdown);
                     for (int j = 0; j < MAPS; j++) {
-                        CorfuRuntime runtime = createDefaultRuntime();
-                        runtimeList.add(runtime);
-                        smrMapList.add(createMap(runtime, Integer.toString(j)));
+                        final int jj = j;
+                        Future<Boolean> future = executorService.submit(() -> {
+                            CorfuRuntime runtime = createDefaultRuntime();
+                            runtimeList.add(runtime);
+                            smrMapList.add(createMap(runtime, Integer.toString(jj)));
+                            return true;
+                        });
+                        future.get(PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS);
                     }
                 }
 
@@ -167,7 +192,7 @@ public class ServerRestartIT extends AbstractIT {
     private String getMapStateRecord(int iteration, List<Map<String, Integer>> mapStateList) {
         StringBuilder sb = new StringBuilder();
         sb.append("[" + iteration + "]: Map State :\n");
-        for (int i = 0; i < mapStateList.size(); i ++){
+        for (int i = 0; i < mapStateList.size(); i++) {
             sb.append("map#" + i + " map = " + mapStateList.get(i).toString() + "\n");
         }
         return sb.toString();
