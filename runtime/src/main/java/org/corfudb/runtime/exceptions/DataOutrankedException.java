@@ -8,5 +8,5 @@ package org.corfudb.runtime.exceptions;
  * Thrown when the log entry cannot be appended as it has lower rank than the other on the same log position
  * Created by Konstantin Spirov on 3/18/2017.
  */
-public class DataOutrankedException extends DataRejectedException {
+public class DataOutrankedException extends LogUnitException {
 }
