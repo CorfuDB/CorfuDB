@@ -24,7 +24,10 @@ public class SealIT extends AbstractIT{
 
     @Test
     public void RuntimeWithWrongEpochGetUpdated() throws Exception {
-        Process corfuProcess = runCorfuServer(corfuSingleNodeHost, corfuSingleNodePort);
+        Process corfuProcess = new CorfuServerRunner()
+                .setHost(corfuSingleNodeHost)
+                .setPort(corfuSingleNodePort)
+                .runServer();
         CorfuRuntime cr1 = createDefaultRuntime();
         CorfuRuntime cr2 = createDefaultRuntime();
 
