@@ -25,7 +25,6 @@ public class CompileProxyTest extends AbstractViewTest {
         Map<String, String> map = getDefaultRuntime()
                                     .getObjectsView().build()
                                     .setStreamName("my stream")
-                                    .setUseCompiledClass(true)
                                     .setTypeToken(new TypeToken<SMRMap<String,String>>() {})
                                     .open();
 
@@ -45,7 +44,6 @@ public class CompileProxyTest extends AbstractViewTest {
         CorfuSharedCounter sharedCounter = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setUseCompiledClass(true)
                 .setTypeToken(new TypeToken<CorfuSharedCounter>() {
                 })
                 .open();
@@ -68,7 +66,6 @@ public class CompileProxyTest extends AbstractViewTest {
         CorfuSharedCounter sharedCounter = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setUseCompiledClass(true)
                 .setTypeToken(new TypeToken<CorfuSharedCounter>() {
                 })
                 .open();
@@ -125,7 +122,6 @@ public class CompileProxyTest extends AbstractViewTest {
     CorfuSharedCounter sharedCounter = getDefaultRuntime()
             .getObjectsView().build()
             .setStreamName("my stream")
-            .setUseCompiledClass(true)
             .setTypeToken(new TypeToken<CorfuSharedCounter>() {
             })
             .open();
@@ -163,7 +159,6 @@ public class CompileProxyTest extends AbstractViewTest {
         CorfuSharedCounter sharedCounter = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setUseCompiledClass(true)
                 .setTypeToken(new TypeToken<CorfuSharedCounter>() {
                 })
                 .open();
@@ -207,7 +202,6 @@ public class CompileProxyTest extends AbstractViewTest {
         CorfuSharedCounter sharedCounter = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setUseCompiledClass(true)
                 .setTypeToken(new TypeToken<CorfuSharedCounter>() {
                 })
                 .open();
@@ -275,7 +269,6 @@ public class CompileProxyTest extends AbstractViewTest {
         Map<String, String> map = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setUseCompiledClass(true)
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {
                 })
                 .open();
@@ -312,7 +305,6 @@ public class CompileProxyTest extends AbstractViewTest {
         CorfuCompoundObj sharedCorfuCompound = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setUseCompiledClass(true)
                 .setTypeToken(new TypeToken<CorfuCompoundObj>() {
                 })
                 .open();
@@ -340,7 +332,6 @@ public class CompileProxyTest extends AbstractViewTest {
         CorfuCompoundObj sharedCorfuCompound = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setUseCompiledClass(true)
                 .setTypeToken(new TypeToken<CorfuCompoundObj>() {
                 })
                 .open();
@@ -384,7 +375,6 @@ public class CompileProxyTest extends AbstractViewTest {
         CorfuCompoundObj sharedCorfuCompound = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setUseCompiledClass(true)
                 .setTypeToken(new TypeToken<CorfuCompoundObj>() {
                 })
                 .open();

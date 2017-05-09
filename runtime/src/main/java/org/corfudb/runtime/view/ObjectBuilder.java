@@ -43,9 +43,6 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
     @Setter(AccessLevel.NONE)
     Object[] arguments = new Object[0];
 
-    @Setter
-    boolean useCompiledClass = true;
-
     @SuppressWarnings("unchecked")
     public <R> ObjectBuilder<R> setType(Class<R> type) {
         this.type = (Class<T>) type;
@@ -83,31 +80,26 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
             streamID = CorfuRuntime.getStreamID(streamName);
         }
 
-        if (useCompiledClass)
-        {
-            try {
-                if (options.contains(ObjectOpenOptions.NO_CACHE)) {
-                    return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
-                            arguments, serializer);
-                }
-                else {
-                    ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
-                    return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
-                        try {
-                            return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
-                                    arguments, serializer);
-                        } catch (Exception ex) {
-                            throw new RuntimeException(ex);
-                        }}
-                    );
-                }
-            } catch (Exception ex) {
-                log.error("Couldn't use compiled class for {}, using runtime instrumentation.", type);
-                throw new RuntimeException(ex);
+        try {
+            if (options.contains(ObjectOpenOptions.NO_CACHE)) {
+                return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
+                        arguments, serializer);
+            } else {
+                ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
+                return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
+                            try {
+                                return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
+                                        arguments, serializer);
+                            } catch (Exception ex) {
+                                throw new RuntimeException(ex);
+                            }
+                        }
+                );
             }
+        } catch (Exception ex) {
+            log.error("Runtime instrumentation no longer supported and no compiled class found for {}", type);
+            throw new RuntimeException(ex);
         }
-
-        throw new RuntimeException("Runtime instrumentation no longer supported and no compiled class found");
     }
 
 
