@@ -37,7 +37,7 @@ public abstract class AbstractView {
     public Layout getCurrentLayout() {
         while (true) {
             try {
-                return runtime.layout.get();
+                return runtime.layoutFuture.get();
             } catch (Exception ex) {
                 log.warn("Error executing remote call, invalidating view and retrying in {}s", runtime.retryRate, ex);
                 runtime.invalidateLayout();
@@ -67,7 +67,7 @@ public abstract class AbstractView {
             throws A, B, C, D {
         while (true) {
             try {
-                return function.apply(runtime.layout.get());
+                return function.apply(runtime.layoutFuture.get());
             } catch (RuntimeException re) {
                 if (re.getCause() instanceof TimeoutException) {
                     log.warn("Timeout executing remote call, invalidating view and retrying in {}s", runtime.retryRate);
