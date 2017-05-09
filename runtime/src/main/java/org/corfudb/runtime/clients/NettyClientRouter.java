@@ -141,7 +141,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     /**
      * Whether or not this router is shutdown.
      */
-    volatile public boolean shutdown;
+    public volatile boolean shutdown;
     /**
      * The host that this router is routing requests for.
      */
@@ -156,7 +156,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * Are we connected?
      */
     @Getter
-    Boolean connected_p;
+    volatile Boolean connected;
 
     private Bootstrap b;
 
@@ -187,7 +187,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         this.port = port;
 
         clientID = UUID.randomUUID();
-        connected_p = false;
+        connected = false;
         timeoutConnect = 500;
         timeoutResponse = 5000;
         timeoutRetry = 1000;
@@ -202,7 +202,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         String pfx = CorfuRuntime.getMpCR() + host + ":" + port.toString() + ".";
         synchronized (metrics) {
             if (!metrics.getNames().contains(pfx + "connected")) {
-                gaugeConnected = metrics.register(pfx + "connected", () -> connected_p ? 1 : 0);
+                gaugeConnected = metrics.register(pfx + "connected", () -> connected ? 1 : 0);
             }
         }
         timerConnect = metrics.timer(pfx + "connect");
@@ -371,7 +371,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             channel = cf.channel();
         }
         channel.closeFuture().addListener((r) -> {
-            connected_p = false;
+            connected = false;
             outstandingRequests.forEach((ReqID, reqCF) -> {
                 MetricsUtils.incConditionalCounter(isEnabled, counterSendDisconnected, 1);
                 reqCF.completeExceptionally(new NetworkException("Disconnected", host + ":" + port));
@@ -379,7 +379,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             });
             if (!shutdown) {
                 log.trace("Disconnected, reconnecting...");
-                while (true) {
+                while (!shutdown) {
                     try {
                         connectChannel(b, c);
                         return;
@@ -391,7 +391,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 }
             }
         });
-        connected_p = true;
+        connected = true;
     }
 
     /**
@@ -403,15 +403,31 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     }
 
     @Override
-    public void stop(boolean shutdown_p) {
+    public void stop(boolean shutdown) {
         // A very hasty check of Netty state-of-the-art is that shutting down
         // the worker threads is tricksy or impossible.
-        shutdown = shutdown_p;
-        connected_p = false;
+        this.shutdown = shutdown;
+        connected = false;
 
-        ChannelFuture cf = channel.disconnect();
-        cf.syncUninterruptibly();
-        boolean b1 = cf.awaitUninterruptibly(1000);
+        if (shutdown) {
+            try {
+                ChannelFuture cf = channel.close();
+                cf.syncUninterruptibly();
+                cf.awaitUninterruptibly(1000);
+            } catch (Exception e) {
+                log.error("Error in closing channel");
+            }
+            try {
+                ee.shutdownGracefully().sync();
+                workerGroup.shutdownGracefully().sync();
+            } catch (InterruptedException e) {
+                log.error("Interrupted exception in shutting event pool : {}", e);
+            }
+        } else {
+            ChannelFuture cf = channel.disconnect();
+            cf.syncUninterruptibly();
+            boolean b1 = cf.awaitUninterruptibly(1000);
+        }
     }
 
     /**
@@ -425,7 +441,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message) {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
-        if (!connected_p) {
+        if (!connected) {
             log.trace("Disconnected endpoint " + host + ":" + port);
             MetricsUtils.incConditionalCounter(isEnabled, counterSendDisconnected, 1);
             throw new NetworkException("Disconnected endpoint", host + ":" + port);

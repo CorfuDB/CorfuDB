@@ -296,15 +296,38 @@
                         <propertyName>test.travisBuild</propertyName>
                         <propertyName>test.seed</propertyName>
                     </systemPropertyVariables>
+                    <includes>
+                        <include>**/*Test.java</include>
+                    </includes>
                 </configuration>
+                <executions>
+                    <execution>
+                        <!-- Run JUnit tests -->
+                        <id>test-junit</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
-                <configuration>
-                    <workingDirectory>${project.build.directory}</workingDirectory>
-                </configuration>
                 <version>2.19.1</version>
+                <configuration>
+                    <includes>
+                        <include>**/*IT.java</include>
+                    </includes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>pl.project13.maven</groupId>

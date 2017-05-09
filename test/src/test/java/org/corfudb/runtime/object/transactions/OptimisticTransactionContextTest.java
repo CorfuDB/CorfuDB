@@ -24,7 +24,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         ConflictParameterClass testObject = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setUseCompiledClass(true)
                 .setType(ConflictParameterClass.class)
                 .open();
 
