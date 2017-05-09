@@ -82,10 +82,15 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // Next, we sync the object, which will bring the object
         // to the correct version, reflecting any optimistic
         // updates.
-        return proxy.getUnderlyingObject().access(
-                o -> (getWriteSetEntryList(proxy.getStreamID()) == null && // No updates
+        return proxy
+                .getUnderlyingObject()
+                .access(o -> (
+                        getWriteSetEntrySize(proxy.getStreamID()) == 0 && // No updates
                         o.getVersionUnsafe() == getSnapshotTimestamp() && // And at the correct timestamp
-                        !o.isOptimisticallyModifiedUnsafe()),
+                        (o.getOptimisticStreamUnsafe() == null ||
+                                o.getOptimisticStreamUnsafe()
+                                        .isStreamCurrentContextThreadCurrentContext() )
+                ),
                 o -> {
                     // Swap ourselves to be the active optimistic stream.
                     // Inside setAsOptimisticStream, if there are
