@@ -101,13 +101,15 @@ public class StreamsView {
             // Is our token a valid type?
             if (tokenResponse.getRespType() == TokenType.TX_ABORT_CONFLICT)
                 throw new TransactionAbortedException(
-                        tokenResponse.getToken().getTokenValue(),
+                        conflictInfo,
+                        tokenResponse.getConflictKey(),
                         AbortCause.CONFLICT
                 );
 
             if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ)
                 throw new TransactionAbortedException(
-                        Address.NON_EXIST,
+                        conflictInfo,
+                        tokenResponse.getConflictKey(),
                         AbortCause.NEW_SEQUENCER
                 );
 
@@ -132,8 +134,9 @@ public class StreamsView {
 
                 // We need to fix the token (to use the stream addresses- may
                 // eventually be deprecated since these are no longer used)
-                tokenResponse = new TokenResponse(temp.getRespType(), temp.getToken(),
-                        temp.getBackpointerMap());
+                tokenResponse = new TokenResponse(
+                        temp.getRespType(), tokenResponse.getConflictKey(),
+                        temp.getToken(), temp.getBackpointerMap());
             }
         }
 
