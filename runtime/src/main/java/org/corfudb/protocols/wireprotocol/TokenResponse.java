@@ -14,13 +14,21 @@ import java.util.UUID;
 @AllArgsConstructor
 public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
 
+    public static Integer NO_CONFLICT_KEY = Integer.MIN_VALUE;
+
     public TokenResponse(long tokenValue, long epoch, Map<UUID, Long> backpointerMap) {
         respType = TokenType.NORMAL;
+        conflictKey = NO_CONFLICT_KEY;
         token = new Token(tokenValue, epoch);
         this.backpointerMap = backpointerMap;
     }
     /** the cause/type of response */
     final TokenType respType;
+
+    /**
+     * In case there is a conflict, signal to the client which key was responsible for the conflict.
+     */
+    final Integer conflictKey;
 
     /** The current token,
      * or overload with "cause address" in case token request is denied. */
@@ -32,6 +40,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
 
     public TokenResponse(ByteBuf buf) {
         respType = TokenType.values()[ICorfuPayload.fromBuffer(buf, Byte.class)];
+        conflictKey = ICorfuPayload.fromBuffer(buf, Integer.class);
         Long tokenValue = ICorfuPayload.fromBuffer(buf, Long.class);
         Long epoch = ICorfuPayload.fromBuffer(buf, Long.class);
         token = new Token(tokenValue, epoch);
@@ -41,6 +50,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, respType);
+        ICorfuPayload.serialize(buf, conflictKey);
         ICorfuPayload.serialize(buf, token.getTokenValue());
         ICorfuPayload.serialize(buf, token.getEpoch());
         ICorfuPayload.serialize(buf, backpointerMap);
