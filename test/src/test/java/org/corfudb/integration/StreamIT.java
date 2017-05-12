@@ -1,14 +1,10 @@
 package org.corfudb.integration;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.Before;
 
-import java.io.InputStream;
-import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
 
@@ -18,23 +14,22 @@ import static org.assertj.core.api.Assertions.assertThat;
  * A set integration tests that exercise the stream API.
  */
 
-public class StreamIT {
-    static String layoutServers;
-    static Properties properties;
+public class StreamIT extends AbstractIT {
+    static String corfuSingleNodeHost;
+    static int corfuSingleNodePort;
 
-    @BeforeClass
-    static public void getLayoutServers() throws Exception {
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        InputStream input = classLoader.getResourceAsStream("CorfuDB.properties");
-        properties = new Properties();
-        properties.load(input);
-        layoutServers = (String) properties.get("layoutServers");
+    @Before
+    public void loadProperties() throws Exception {
+        corfuSingleNodeHost = (String) PROPERTIES.get("corfuSingleNodeHost");
+        corfuSingleNodePort = Integer.parseInt((String) PROPERTIES.get("corfuSingleNodePort"));
     }
 
-    @Test
+//    @Test
     public void simpleStreamTest() throws Exception {
 
-        CorfuRuntime rt = new CorfuRuntime(layoutServers).connect();
+        Process corfuServerProcess = runCorfuServer();
+
+        CorfuRuntime rt = createDefaultRuntime();
         rt.setCacheDisabled(true);
 
         Random rand = new Random();
@@ -48,7 +43,7 @@ public class StreamIT {
                 .isFalse();
 
         // Generate and append random data
-        int entrySize = Integer.valueOf(properties.getProperty("largeEntrySize"));
+        int entrySize = Integer.valueOf(PROPERTIES.getProperty("largeEntrySize"));
         final int numEntries = 100;
         byte[][] data = new byte[numEntries][entrySize];
 
@@ -64,5 +59,7 @@ public class StreamIT {
 
             assertThat(tmp).isEqualTo(data[x]);
         }
+
+        assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
     }
 }

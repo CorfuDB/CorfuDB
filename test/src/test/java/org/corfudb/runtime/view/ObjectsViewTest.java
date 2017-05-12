@@ -1,12 +1,11 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.protocols.logprotocol.*;
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -41,8 +40,13 @@ public class ObjectsViewTest extends AbstractViewTest {
         //begin tests
         CorfuRuntime r = getDefaultRuntime();
 
-        Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
+        Map<String, String> smrMap = r.getObjectsView().build()
+                                                    .setStreamName("map a")
+                                                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                                                    .open();
+
         smrMap.put("a", "a");
+
         Map<String, String> smrMapCopy = r.getObjectsView()
                 .copy(smrMap, "map a copy");
         smrMapCopy.put("b", "b");
@@ -164,7 +168,11 @@ public class ObjectsViewTest extends AbstractViewTest {
         //begin tests
         CorfuRuntime r = getDefaultRuntime();
 
-        Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
+        Map<String, String> smrMap = r.getObjectsView().build()
+                .setStreamName("map a")
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .open();
+
         IStreamView streamB = r.getStreamsView().get(CorfuRuntime.getStreamID("b"));
         smrMap.put("a", "b");
         streamB.append(new SMREntry("hi", new Object[]{"hello"}, Serializers.PRIMITIVE));
@@ -188,8 +196,15 @@ public class ObjectsViewTest extends AbstractViewTest {
         //begin tests
         CorfuRuntime r = getDefaultRuntime();
 
-        Map<String, String> smrMap = r.getObjectsView().open("map a", SMRMap.class);
-        Map<String, String> smrMapB = r.getObjectsView().open("map b", SMRMap.class);
+        Map<String, String> smrMap = r.getObjectsView().build()
+                .setStreamName("map a")
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .open();
+
+        Map<String, String> smrMapB = r.getObjectsView().build()
+                .setStreamName("map b")
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .open();
 
         smrMap.put("a", "b");
 

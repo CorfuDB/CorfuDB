@@ -1,9 +1,5 @@
 package org.corfudb.runtime.object;
 
-import org.corfudb.runtime.exceptions.NoRollbackException;
-
-import java.util.Map;
-
 /** An internal interface to the SMR Proxy.
  *
  * This interface contains methods which are used only by Corfu's object layer,

@@ -1,8 +1,6 @@
 package org.corfudb.runtime.view.replication;
 
-import org.corfudb.protocols.logprotocol.StreamData;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Layout;
 

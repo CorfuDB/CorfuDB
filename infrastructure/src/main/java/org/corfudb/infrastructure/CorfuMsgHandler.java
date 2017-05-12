@@ -4,7 +4,6 @@ import com.codahale.metrics.Timer;
 import io.netty.channel.ChannelHandlerContext;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.MetricsUtils;
 
 import java.lang.invoke.*;

@@ -3,7 +3,6 @@ package org.corfudb.runtime.clients;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.format.Types.NodeMetrics;
 import org.corfudb.infrastructure.*;
-import org.corfudb.infrastructure.ManagementServer;
 import org.junit.After;
 import org.junit.Test;
 

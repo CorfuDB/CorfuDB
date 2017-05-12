@@ -12,7 +12,7 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
-import org.corfudb.runtime.view.MultiStreamView;
+import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Version;
@@ -63,10 +63,10 @@ public class CorfuRuntime {
     @Getter(lazy = true)
     private final AddressSpaceView addressSpaceView = new AddressSpaceView(this);
     /**
-     * A view of streams in the Corfu server instance.
+     * A view of streamsView in the Corfu server instance.
      */
     @Getter(lazy = true)
-    private final MultiStreamView streamsView = new MultiStreamView(this);
+    private final StreamsView streamsView = new StreamsView(this);
 
     //region Address Space Options
     /**
@@ -244,6 +244,7 @@ public class CorfuRuntime {
                 log.error("Runtime shutting down. Exception in terminating fetchLayout: {}", e);
             }
         }
+        stop(true);
     }
 
     /**
@@ -253,11 +254,11 @@ public class CorfuRuntime {
         stop(false);
     }
 
-    public void stop(boolean shutdown_p) {
+    public void stop(boolean shutdown) {
         for (IClientRouter r: nodeRouters.values()) {
-            r.stop(shutdown_p);
+            r.stop(shutdown);
         }
-        if (shutdown_p) {
+        if (!shutdown) {
             // N.B. An icky side-effect of this clobbering is leaking
             // Pthreads, namely the Netty client-side worker threads.
             nodeRouters = new ConcurrentHashMap<>();

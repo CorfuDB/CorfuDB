@@ -1,13 +1,11 @@
 package org.corfudb.infrastructure;
 
-import java.io.File;
 import java.lang.invoke.MethodHandles;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 
 import com.codahale.metrics.MetricRegistry;

@@ -8,9 +8,7 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
-import org.corfudb.runtime.object.CorfuProxyBuilder;
 import org.corfudb.runtime.object.IObjectBuilder;
-import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -44,9 +42,6 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
 
     @Setter(AccessLevel.NONE)
     Object[] arguments = new Object[0];
-
-    @Setter
-    boolean useCompiledClass = true;
 
     @SuppressWarnings("unchecked")
     public <R> ObjectBuilder<R> setType(Class<R> type) {
@@ -85,42 +80,26 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
             streamID = CorfuRuntime.getStreamID(streamName);
         }
 
-        final IStreamView sv = runtime.getStreamsView().get(streamID);
-
-        if (useCompiledClass)
-        {
-            try {
-                if (options.contains(ObjectOpenOptions.NO_CACHE)) {
-                    return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
-                            arguments, serializer);
-                }
-                else {
-                    ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
-                    return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
-                        try {
-                            return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
-                                    arguments, serializer);
-                        } catch (Exception ex) {
-                            throw new RuntimeException(ex);
-                        }}
-                    );
-                }
-            } catch (Exception ex) {
-                log.error("Couldn't use compiled class for {}, using runtime instrumentation.", type);
+        try {
+            if (options.contains(ObjectOpenOptions.NO_CACHE)) {
+                return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
+                        arguments, serializer);
+            } else {
+                ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
+                return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
+                            try {
+                                return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
+                                        arguments, serializer);
+                            } catch (Exception ex) {
+                                throw new RuntimeException(ex);
+                            }
+                        }
+                );
             }
+        } catch (Exception ex) {
+            log.error("Runtime instrumentation no longer supported and no compiled class found for {}", type);
+            throw new RuntimeException(ex);
         }
-
-
-        // CREATE_ONLY implies no cache
-        if (options.contains(ObjectOpenOptions.NO_CACHE) || options.contains(ObjectOpenOptions.CREATE_ONLY)) {
-            return CorfuProxyBuilder.getProxy(type, sv, runtime, serializer, options, arguments);
-        }
-
-        ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
-        return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
-            return CorfuProxyBuilder.getProxy(type, sv, runtime, serializer, options, arguments);
-        });
-
     }
 
 

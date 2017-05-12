@@ -155,39 +155,4 @@ public class SequencerServerTest extends AbstractServerTest {
         }
     }
 
-    @Test
-    public void localAddressesWork() {
-        UUID streamA = UUID.nameUUIDFromBytes("streamA".getBytes());
-        UUID streamB = UUID.nameUUIDFromBytes("streamB".getBytes());
-
-        long Alocal = -1L;
-        long Blocal = -1L;
-
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
-            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                    new TokenRequest(1L, Collections.singleton(streamA))));
-            long thisTokenAValue = getLastPayloadMessageAs(TokenResponse.class).getStreamAddresses().get(streamA);
-
-            Alocal++;
-            assertThat(thisTokenAValue)
-                    .isEqualTo(Alocal);
-
-            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                    new TokenRequest(1L, Collections.singleton(streamB))));
-            long thisTokenB = getLastPayloadMessageAs(TokenResponse.class).getStreamAddresses().get(streamB);
-
-            Blocal++;
-            assertThat(thisTokenB)
-                    .isEqualTo(Blocal);
-
-
-            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                    new TokenRequest(2L, Collections.singleton(streamA))));
-            thisTokenAValue = getLastPayloadMessageAs(TokenResponse.class).getStreamAddresses().get(streamA);
-
-            Alocal+=2;
-            assertThat(thisTokenAValue)
-                    .isEqualTo(Alocal);
-        }
-    }
 }

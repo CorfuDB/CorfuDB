@@ -56,6 +56,6 @@ public class ReadWaitHoleFillPolicy implements IHoleFillPolicy {
             tryNum++;
         } while (numRetries > tryNum);
 
-        throw new HoleFillRequiredException("No data after " + numRetries + " retries");
+        throw new HoleFillRequiredException("No data after " + tryNum + " retries");
     }
 }

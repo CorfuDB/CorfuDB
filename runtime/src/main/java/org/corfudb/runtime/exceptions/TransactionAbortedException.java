@@ -1,26 +1,34 @@
 package org.corfudb.runtime.exceptions;
 
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+
 import lombok.Getter;
-import org.corfudb.protocols.wireprotocol.TokenType;
-import org.corfudb.runtime.view.Layout;
 
 /**
  * Created by mwei on 1/11/16.
  */
 public class TransactionAbortedException extends RuntimeException {
-    @Getter
-    long conflictAddress;
 
     @Getter
     AbortCause abortCause;
 
-    public TransactionAbortedException(long conflictAddress, AbortCause abortCause) {
+    @Getter
+    TxResolutionInfo txResolutionInfo;
 
-        super("TX abort. " +
-                "cause=" + abortCause +
-                "; conflict address=" + conflictAddress );
+    @Getter
+    Integer conflictKey;
+
+    public TransactionAbortedException(
+            TxResolutionInfo txResolutionInfo,
+            Integer conflictKey, AbortCause abortCause) {
+        super("TX ABORT " +
+                " | Snapshot Time = " + txResolutionInfo.getSnapshotTimestamp() +
+                " | Transaction ID = " + txResolutionInfo.getTXid() +
+                " | Conflict Key = " + conflictKey +
+                " | Cause = " + abortCause );
+        this.txResolutionInfo = txResolutionInfo;
+        this.conflictKey = conflictKey;
         this.abortCause = abortCause;
-        this.conflictAddress = conflictAddress;
     }
 
 }

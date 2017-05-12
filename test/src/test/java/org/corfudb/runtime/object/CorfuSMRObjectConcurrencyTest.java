@@ -1,12 +1,6 @@
 package org.corfudb.runtime.object;
 
-import lombok.Getter;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
-
-import java.util.TreeMap;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

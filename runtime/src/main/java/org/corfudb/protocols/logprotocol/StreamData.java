@@ -1,6 +1,5 @@
 package org.corfudb.protocols.logprotocol;
 
-import java.util.Set;
 import java.util.UUID;
 
 /** This class represents a stream data, which is data for a stream contained

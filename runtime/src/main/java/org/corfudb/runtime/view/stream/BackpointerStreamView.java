@@ -1,17 +1,11 @@
 package org.corfudb.runtime.view.stream;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.serializer.CorfuSerializer;
-import org.corfudb.util.serializer.Serializers;
 
 import javax.annotation.Nonnull;
 import java.util.*;
@@ -164,6 +158,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     @Override
     protected boolean fillReadQueue(final long maxGlobal,
                                  final QueuedStreamContext context) {
+        log.trace("Read_Fill_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}", this,
+                maxGlobal, context.globalPointer, context.maxResolution, context.minResolution);
         // The maximum address we will fill to.
         final long maxAddress =
                 Long.min(maxGlobal, context.maxGlobalAddress);
@@ -222,6 +218,11 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         while (currentRead > context.globalPointer &&
                 Address.isAddress(currentRead)) {
+            // We've somehow reached a read we already know about.
+            if (context.readQueue.contains(currentRead)) {
+                break;
+            }
+
             log.trace("Read_Fill_Queue[{}] Read {}", this, currentRead);
             // Read the entry in question.
             ILogData currentEntry =
@@ -240,6 +241,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 return fillFromResolved(latestTokenValue, context);
             }
 
+            // If the start is available in the resolved queue,
+            // use it.
+            if (context.minResolution <= context.globalPointer) {
+                fillFromResolved(maxGlobal, context);
+            }
+
             // Now we calculate the next entry to read.
             // If we have a backpointer, we'll use that for our next read.
             if (!runtime.backpointersDisabled &&
@@ -252,6 +259,13 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             else {
                 currentRead = currentRead - 1L;
             }
+
+            // If the next read is before or equal to the max resolved
+            // we need to stop.
+            if (context.maxResolution >= currentRead) {
+                break;
+            }
+
         }
 
         log.debug("Read_Fill_Queue[{}] Filled queue with {}", this, context.readQueue);

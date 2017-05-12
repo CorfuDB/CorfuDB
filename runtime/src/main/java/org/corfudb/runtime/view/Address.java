@@ -64,10 +64,13 @@ public class Address {
      */
     public static final long NON_EXIST = -6L;
 
-    /** A runtime (only) constant,
-     * Indicating a stream address is not cached.
+    /** This is a constant use for initializing addresses before 0 is read.
+     * to be consistent, a initial position already "consumed" is -1L
      */
-    // FIXME this fails when NEVER_READ is set to (say) -7L. This indicates
-    // NEVER_READ is NOT used properly!!
     public static final long NEVER_READ = -1L;
+
+    /** Indicates that the previous entry in the stream belongs
+     * to another stream.
+     */
+    public static final long COW_BACKPOINTER = -7L;
 }

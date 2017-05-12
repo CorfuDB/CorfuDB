@@ -1,6 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import org.apache.bcel.generic.NEW;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.TestServerRouter;

@@ -9,6 +9,7 @@ import org.corfudb.util.Utils;
 
 import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 /**
  * Created by mwei on 3/13/17.
@@ -152,9 +153,12 @@ public class WriteSetSMRStream implements ISMRStream {
         if (Address.nonAddress(writePos)) {
             return null;
         }
-        return Collections.singletonList(contexts.get(currentContext)
-                .getWriteSet().get(id)
-                .getValue().get((int)(currentContextPos)));
+        if (Address.nonAddress(currentContextPos))
+            currentContextPos = -1;
+        return Collections.singletonList(contexts
+                .get(currentContext)
+                .getWriteSetEntryList(id)
+                .get((int)(currentContextPos)));
     }
 
     @Override
@@ -175,9 +179,12 @@ public class WriteSetSMRStream implements ISMRStream {
                 } else {
                     currentContext--;
                 }
-            } while (!contexts.get(currentContext).getWriteSet().containsKey(id));
-            currentContextPos = contexts.get(currentContext)
-                    .getWriteSet().get(id).getValue().size() - 1;
+            } while (contexts
+                    .get(currentContext)
+                    .getWriteSetEntrySize(id) == 0);
+            currentContextPos = contexts
+                    .get(currentContext)
+                    .getWriteSetEntrySize(id)-1 ;
         }
 
         return current();
@@ -198,6 +205,17 @@ public class WriteSetSMRStream implements ISMRStream {
     @Override
     public void seek(long globalAddress) {
         throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Stream<SMREntry> stream() {
+        return streamUpTo(Address.MAX);
+    }
+
+    @Override
+    public Stream<SMREntry> streamUpTo(long maxGlobal) {
+        return remainingUpTo(maxGlobal)
+                .stream();
     }
 
     @Override

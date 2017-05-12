@@ -1,15 +1,12 @@
 package org.corfudb.runtime.view;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.IDivisibleEntry;
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.ReplexOverwriteException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Utils;
 
@@ -18,21 +15,20 @@ import javax.annotation.Nullable;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/11/15.
  */
 @Slf4j
-public class MultiStreamView {
+public class StreamsView {
 
     /**
      * The org.corfudb.runtime which backs this view.
      */
     CorfuRuntime runtime;
 
-    public MultiStreamView(CorfuRuntime runtime) {
+    public StreamsView(CorfuRuntime runtime) {
         this.runtime = runtime;
     }
 
@@ -43,13 +39,9 @@ public class MultiStreamView {
      * @return A view
      */
     public IStreamView get(UUID stream) {
-        return getReplicationMode().getStreamView(runtime, stream);
-    }
-
-    private Layout.ReplicationMode getReplicationMode() {
         return runtime.getLayoutView().getLayout().getSegments().get(
                 runtime.getLayoutView().getLayout().getSegments().size() - 1)
-                .getReplicationMode();
+                .getReplicationMode().getStreamView(runtime, stream);
     }
 
     /**
@@ -66,22 +58,21 @@ public class MultiStreamView {
                     runtime.getSequencerView().nextToken(Collections.singleton(destination), 1);
             if (tokenResponse.getBackpointerMap().get(destination) != null &&
                     Address.isAddress(tokenResponse.getBackpointerMap().get(destination))) {
-                try {
-                    runtime.getAddressSpaceView().fillHole(tokenResponse.getToken().getTokenValue());
-                } catch (OverwriteException oe) {
-                    log.trace("Attempted to hole fill due to already-existing stream but hole filled by other party");
-                }
+                // Reading from this address will cause a hole fill
+                runtime.getAddressSpaceView().read(tokenResponse.getTokenValue());
                 throw new RuntimeException("Stream already exists!");
             }
             StreamCOWEntry entry = new StreamCOWEntry(source, timestamp);
+            TokenResponse cowToken = new TokenResponse(tokenResponse.getTokenValue(), tokenResponse.getEpoch(),
+                    Collections.singletonMap(destination, Address.COW_BACKPOINTER));
             try {
-                runtime.getAddressSpaceView().write(tokenResponse, entry);
+                runtime.getAddressSpaceView().write(cowToken, entry);
                 written = true;
             } catch (OverwriteException oe) {
                 log.debug("hole fill during COW entry append, retrying...");
             }
         }
-        return new BackpointerStreamView(runtime, destination);
+        return get(destination);
     }
 
     /** Append to multiple streams simultaneously, possibly providing
@@ -110,13 +101,15 @@ public class MultiStreamView {
             // Is our token a valid type?
             if (tokenResponse.getRespType() == TokenType.TX_ABORT_CONFLICT)
                 throw new TransactionAbortedException(
-                        tokenResponse.getToken().getTokenValue(),
+                        conflictInfo,
+                        tokenResponse.getConflictKey(),
                         AbortCause.CONFLICT
                 );
 
             if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ)
                 throw new TransactionAbortedException(
-                        Address.NON_EXIST,
+                        conflictInfo,
+                        tokenResponse.getConflictKey(),
                         AbortCause.NEW_SEQUENCER
                 );
 
@@ -141,8 +134,9 @@ public class MultiStreamView {
 
                 // We need to fix the token (to use the stream addresses- may
                 // eventually be deprecated since these are no longer used)
-                tokenResponse = new TokenResponse(temp.getRespType(), temp.getToken(),
-                        temp.getBackpointerMap(), tokenResponse.getStreamAddresses());
+                tokenResponse = new TokenResponse(
+                        temp.getRespType(), tokenResponse.getConflictKey(),
+                        temp.getToken(), temp.getBackpointerMap());
             }
         }
 
