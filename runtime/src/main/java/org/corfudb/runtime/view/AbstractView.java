@@ -67,7 +67,7 @@ public abstract class AbstractView {
             throws A, B, C, D {
         while (true) {
             try {
-                return function.apply(runtime.layout.get());
+
             } catch (RuntimeException re) {
                 if (re.getCause() instanceof TimeoutException) {
                     log.warn("Timeout executing remote call, invalidating view and retrying in {}s", runtime.retryRate);
