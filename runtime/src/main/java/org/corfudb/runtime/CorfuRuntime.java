@@ -147,7 +147,8 @@ public class CorfuRuntime {
      * The maximum size of the cache, in bytes.
      */
     @Getter
-    public int maxCacheSize = 100_000_000;
+    @Setter
+    public long maxCacheSize = 4_000_000_000L;
 
     /**
      * Whether or not to disable backpointers.

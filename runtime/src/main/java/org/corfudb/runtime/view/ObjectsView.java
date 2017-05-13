@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -125,7 +126,10 @@ public class ObjectsView extends AbstractView {
         if (context == null) {
             log.warn("Attempted to abort a transaction, but no transaction active!");
         } else {
-            context.abortTransaction(new TransactionAbortedException(-1L, AbortCause.USER));
+            TxResolutionInfo txInfo = new TxResolutionInfo(
+                    context.getTransactionID(), context.getSnapshotTimestamp());
+            context.abortTransaction(new TransactionAbortedException(
+                    txInfo, null, AbortCause.USER));
             TransactionalContext.removeContext();
         }
     }

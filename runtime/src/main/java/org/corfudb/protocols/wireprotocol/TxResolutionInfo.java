@@ -12,6 +12,7 @@ import java.util.*;
  * Created by dmalkhi on 12/26/16.
  */
 public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
+
     @Getter
     @Setter
     UUID TXid; // transaction ID, mostly for debugging purposes
@@ -27,21 +28,18 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     @Getter
     final Map<UUID, Set<Integer>>  writeConflictParams;
 
-    public TxResolutionInfo(UUID TXid, long snapshotTS, Map<UUID, Set<Integer>> conflictMap, Map<UUID, Set<Integer>> writeConflictParams) {
+    public TxResolutionInfo(UUID TXid, long snapshotTS) {
+        this.TXid = TXid;
+        this.snapshotTimestamp = snapshotTS;
+        this.conflictSet = Collections.emptyMap();
+        this.writeConflictParams = Collections.emptyMap();
+    }
+
+    public TxResolutionInfo(UUID TXid, long snapshotTS, Map<UUID, Set<Integer>>
+            conflictMap, Map<UUID, Set<Integer>> writeConflictParams) {
         this.TXid = TXid;
         this.snapshotTimestamp = snapshotTS;
         this.conflictSet = conflictMap;
-        this.writeConflictParams = writeConflictParams;
-    }
-
-
-    public TxResolutionInfo(UUID TXid, long readTS, Set<UUID> streams,  Map<UUID, Set<Integer>> writeConflictParams) {
-        this.TXid = TXid;
-        this.snapshotTimestamp = readTS;
-        ImmutableMap.Builder<UUID, Set<Integer>> conflictMapBuilder = new ImmutableMap.Builder<>();
-        if (streams != null)
-            streams.forEach(streamID -> conflictMapBuilder.put(streamID, new HashSet<>()));
-        conflictSet = conflictMapBuilder.build();
         this.writeConflictParams = writeConflictParams;
     }
 
