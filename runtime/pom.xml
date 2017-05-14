@@ -64,6 +64,11 @@
             <artifactId>metrics-jvm</artifactId>
             <version>3.1.0</version>
         </dependency>
+        <dependency>
+            <groupId>com.breinify</groupId>
+            <artifactId>brein-time-utilities</artifactId>
+            <version>1.6.1</version>
+        </dependency>
     </dependencies>
 
 </project>
