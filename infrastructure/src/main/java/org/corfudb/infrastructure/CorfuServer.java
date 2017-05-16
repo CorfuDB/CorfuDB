@@ -96,7 +96,7 @@ public class CorfuServer {
                     + " -l <path>, --log-path=<path>                                                           Set the path to the storage file for the log unit.\n"
                     + " -s, --single                                                                           Deploy a single-node configuration.\n"
                     + "                                                                                        The server will be bootstrapped with a simple one-unit layout.\n"
-                    + " -a <address>, --address=<address>                                                      IP address to advertise to external clients [default: localhost].\n"
+                    + " -a <address>, --address=<address>                                                      IP address to advertise to external clients [default: 127.0.0.1].\n"
                     + " -m, --memory                                                                           Run the unit in-memory (non-persistent).\n"
                     + "                                                                                        Data will be lost when the server exits!\n"
                     + " -c <ratio>, --cache-heap-ratio=<ratio>                                                 The ratio of jvm max heap size we will use for the the in-memory cache to serve requests from -\n"
