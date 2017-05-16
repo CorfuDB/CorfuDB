@@ -773,7 +773,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      *
      * @param fh      The file handle to use.
      * @param address The address of the entry.
-     * @param entry   The LogUnitEntry to append.
+     * @param entry   The LogData to append.
      * @return Returns metadata for the written record
      */
     private AddressMetaData writeRecord(SegmentHandle fh, long address, LogData entry) throws IOException {

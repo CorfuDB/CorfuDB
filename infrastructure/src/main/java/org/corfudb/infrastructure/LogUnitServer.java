@@ -268,7 +268,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
-     * Retrieve the LogUnitEntry from disk, given an address.
+     * Retrieve the ILogData from disk, given an address.
      *
      * @param logAddress The address to retrieve the entry from.
      * @return The log unit entry to retrieve into the cache.
