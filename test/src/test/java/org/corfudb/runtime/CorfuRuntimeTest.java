@@ -16,8 +16,8 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
         CorfuRuntime rt = getDefaultRuntime().connect();
 
-        // Check that access to the CorfuRuntime layoutFuture is always valid. Specifically, access to the layoutFuture
-        // while a new layoutFuture is being fetched/set concurrently.
+        // Check that access to the CorfuRuntime layout is always valid. Specifically, access to the layout
+        // while a new layout is being fetched/set concurrently.
 
         scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LARGE, (v) -> {
             rt.invalidateLayout();
@@ -25,7 +25,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         });
 
         scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LARGE, (v) -> {
-            assertThat(rt.layoutFuture.get().getRuntime()).isEqualTo(rt);
+            assertThat(rt.layout.get().getRuntime()).isEqualTo(rt);
         });
 
         executeScheduled(PARAMETERS.CONCURRENCY_TWO, PARAMETERS.TIMEOUT_LONG);

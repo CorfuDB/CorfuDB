@@ -47,79 +47,33 @@ public class CorfuRuntime {
 
     @Getter
     private final CorfuRuntimeParameters parameters = new CorfuRuntimeParameters();
-
-    /** A view of the layout. */
-    private final LayoutView layout = new LayoutView(this);
-
-    /** A view of the sequencer. */
-    private final SequencerView sequencer = new SequencerView(this);
-
-    /** A view of the address space. */
-    private final AddressSpaceView addressSpace = new AddressSpaceView(this);
-
-    /** A view of streams. */
-    private final StreamsView streams = new StreamsView(this);
-
-    /** A view of objects. */
-    private final ObjectsView objects= new ObjectsView(this);
-
-    /** New, less verbose getters. */
-
-    /** Get a view of the layout.
-     * @return  A layout view, which allows interaction with the layout.
+    /**
+     * A view of the layout service in the Corfu server instance.
      */
-    public LayoutView layout() { return layout; }
-
-    /** Get a view of the sequencer.
-     * @return  A sequencer view, which allows interaction with the sequencer.
+    @Getter(lazy = true)
+    private final LayoutView layoutView = new LayoutView(this);
+    /**
+     * A view of the sequencer server in the Corfu server instance.
      */
-    public SequencerView sequencer() { return sequencer; }
-
-    /** Get a view of the address space.
-     * @return  An address space view, which allows interaction with the address space.
+    @Getter(lazy = true)
+    private final SequencerView sequencerView = new SequencerView(this);
+    /**
+     * A view of the address space in the Corfu server instance.
      */
-    public AddressSpaceView addressSpace() { return addressSpace; }
-
-    /** Get a view of the streams.
-     * @return  A streams view, which allows interaction with streams.
+    @Getter(lazy = true)
+    private final AddressSpaceView addressSpaceView = new AddressSpaceView(this);
+    /**
+     * A view of streamsView in the Corfu server instance.
      */
-    public StreamsView streams() { return streams; }
-
-    /** Get a view of objects.
-     * @return  A objects view, which allows interaction with objects.
-     */
-    public ObjectsView objects() { return objects; }
-
-
-    /** Deprecated getters */
-
-    /** @deprecated This getter will be removed in the next release of Corfu,
-     * please use layout() instead. */
-    @Deprecated
-    public LayoutView getLayoutView() {return layout;}
-
-    /** @deprecated This getter will be removed in the next release of Corfu,
-     * please use sequencer() instead. */
-    @Deprecated
-    public SequencerView getSequencerView() {return sequencer; }
-
-    /** @deprecated This getter will be removed in the next release of Corfu,
-     * please use addressSpace() instead. */
-    @Deprecated
-    public AddressSpaceView getAddressSpaceView() {return addressSpace; }
-
-    /** @deprecated This getter will be removed in the next release of Corfu,
-     * please use streams() instead. */
-    @Deprecated
-    public StreamsView getStreamsView() { return streams; }
-
-    /** @deprecated This getter will be removed in the next release of Corfu,
-     * please use objects() instead. */
-    @Deprecated
-    public ObjectsView getObjectsView() {return objects; }
+    @Getter(lazy = true)
+    private final StreamsView streamsView = new StreamsView(this);
 
     //region Address Space Options
-
+    /**
+     * Views of objects in the Corfu server instance.
+     */
+    @Getter(lazy = true)
+    private final ObjectsView objectsView = new ObjectsView(this);
     /**
      * A list of known layout servers.
      */
@@ -131,9 +85,9 @@ public class CorfuRuntime {
      */
     public Map<String, IClientRouter> nodeRouters;
     /**
-     * A completable future containing a layoutFuture, when completed.
+     * A completable future containing a layout, when completed.
      */
-    public volatile CompletableFuture<Layout> layoutFuture;
+    public volatile CompletableFuture<Layout> layout;
     /**
      * The rate in seconds to retry accessing a layout, in case of a failure.
      */
@@ -282,11 +236,11 @@ public class CorfuRuntime {
      */
     public void shutdown() {
 
-        // Stopping async task from fetching layoutFuture.
+        // Stopping async task from fetching layout.
         isShutdown = true;
-        if (layoutFuture != null) {
+        if (layout != null) {
             try {
-                layoutFuture.cancel(true);
+                layout.cancel(true);
             } catch (Exception e) {
                 log.error("Runtime shutting down. Exception in terminating fetchLayout: {}", e);
             }
@@ -404,16 +358,16 @@ public class CorfuRuntime {
      */
     public synchronized void invalidateLayout() {
         // Is there a pending request to retrieve the layout?
-        if (!layoutFuture.isDone()) {
+        if (!layout.isDone()) {
             // Don't create a new request for a layout if there is one pending.
             return;
         }
-        layoutFuture = fetchLayout();
+        layout = fetchLayout();
     }
 
 
     /**
-     * Return a completable future which is guaranteed to contain a layout
+     * Return a completable future which is guaranteed to contain a layout.
      * This future will continue retrying until it gets a layout. If you need this completable future to fail,
      * you should chain it with a timeout.
      *
@@ -432,12 +386,12 @@ public class CorfuRuntime {
                         IClientRouter router = getRouter(s);
                         // Try to get a layout.
                         CompletableFuture<Layout> layoutFuture = router.getClient(LayoutClient.class).getLayout();
-                        // Wait for layoutFuture
+                        // Wait for layout
                         Layout l = layoutFuture.get();
                         l.setRuntime(this);
-                        // this.layoutFuture should only be assigned to the new layoutFuture future once it has been
-                        // completely constructed and initialized. For example, assigning this.layoutFuture = l
-                        // before setting the layoutFuture's runtime can result in other threads trying to access a layoutFuture
+                        // this.layout should only be assigned to the new layout future once it has been
+                        // completely constructed and initialized. For example, assigning this.layout = l
+                        // before setting the layout's runtime can result in other threads trying to access a layout
                         // with  a null runtime.
                         //FIXME Synchronization START
                         // We are updating multiple variables and we need the update to be synchronized across all variables.
@@ -446,7 +400,7 @@ public class CorfuRuntime {
                         // but setEpoch of routers needs to be synchronized as those variables are not local.
                         l.getAllServers().stream().map(getRouterFunction).forEach(x -> x.setEpoch(l.getEpoch()));
                         layoutServers = l.getLayoutServers();
-                        this.layoutFuture = layoutFuture;
+                        layout = layoutFuture;
                         //FIXME Synchronization END
 
                         log.debug("Layout server {} responded with layout {}", s, l);
@@ -473,12 +427,12 @@ public class CorfuRuntime {
      * When this function returns, the Corfu server is ready to be accessed.
      */
     public synchronized CorfuRuntime connect() {
-        if (layoutFuture == null) {
+        if (layout == null) {
             log.info("Connecting to Corfu server instance, layout servers={}", layoutServers);
             // Fetch the current layout and save the future.
-            layoutFuture = fetchLayout();
+            layout = fetchLayout();
             try {
-                layoutFuture.get();
+                layout.get();
             } catch (Exception e) {
                 // A serious error occurred trying to connect to the Corfu instance.
                 log.error("Fatal error connecting to Corfu server instance.", e);
