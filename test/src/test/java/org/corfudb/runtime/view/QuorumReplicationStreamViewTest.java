@@ -14,7 +14,7 @@ public class QuorumReplicationStreamViewTest extends StreamViewTest {
     public void setRuntime() throws Exception {
         r = getDefaultRuntime().connect();
         // First commit a layout that uses Replex
-        Layout newLayout = r.layout.get();
+        Layout newLayout = r.layoutFuture.get();
         newLayout.getSegment(0L).setReplicationMode(Layout.ReplicationMode.QUORUM_REPLICATION);
         newLayout.setEpoch(1);
         r.setCacheDisabled(true);
