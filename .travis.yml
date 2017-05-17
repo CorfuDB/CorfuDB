@@ -2,35 +2,39 @@ language: java
 sudo: required
 dist: trusty
 jdk:
-- oraclejdk8
+  - oraclejdk8
 before_install:
-- .travis_scripts/generate_keys.sh $encrypted_026743b97986_key $encrypted_026743b97986_iv
-- .travis_scripts/setup_env.sh
+  - >-
+    .travis_scripts/generate_keys.sh $encrypted_026743b97986_key
+    $encrypted_026743b97986_iv
+  - .travis_scripts/setup_env.sh
 script:
-# Running unit and integration tests
-- ./mvnw verify -Dmaven.javadoc.skip=true -Dtest.travisBuild=true
+  - ./mvnw verify -Dmaven.javadoc.skip=true -Dtest.travisBuild=true
 after_success:
-- mvn jacoco:report coveralls:report
-- .travis_scripts/javadocs.sh
-- .travis_scripts/mvnrepo.sh
-- .travis_scripts/push_deb.sh
+  - 'mvn jacoco:report coveralls:report'
+  - .travis_scripts/javadocs.sh
+  - .travis_scripts/mvnrepo.sh
+  - .travis_scripts/push_deb.sh
 before_cache:
-- rm -rf $HOME/.m2/repository/org/corfudb
+  - rm -rf $HOME/.m2/repository/org/corfudb
 cache:
   directories:
-  - $HOME/.m2
+    - $HOME/.m2
 notifications:
   email:
-  - corfudb-dev@googlegroups.com
+    - corfudb-dev@googlegroups.com
   webhooks:
     urls:
-    - https://webhooks.gitter.im/e/e26458f01e3586e3c140
+      - 'https://webhooks.gitter.im/e/e26458f01e3586e3c140'
     on_success: always
     on_failure: always
     on_start: true
 env:
   global:
-    secure: WJZd15DtGSetu3HuaPE/Ap0EaPkR1D68ZUIFxyqUho8AY/rLGuANUrAY5U02jO1K1+iaYFMecRr2ZlOEK4N1XiBNz2gMnYmkHmUs9Gz+J3eA8SXdYOHsKyI5iRpyUgwzHIVLOKz03cvDlI04Rrm0Uhe/7hjNaXVge6I0YKPmiXI=
+    - secure: >-
+        WJZd15DtGSetu3HuaPE/Ap0EaPkR1D68ZUIFxyqUho8AY/rLGuANUrAY5U02jO1K1+iaYFMecRr2ZlOEK4N1XiBNz2gMnYmkHmUs9Gz+J3eA8SXdYOHsKyI5iRpyUgwzHIVLOKz03cvDlI04Rrm0Uhe/7hjNaXVge6I0YKPmiXI=
+    - secure: >-
+        YSaXp8PYE5YOaHOJTWXHIORNTP0oWdNDhSAMud1OD7LvH7ZdSPt35XVG8+Vagz+Y4mufCu0UVqVq62KJLtG9AVpKXxTvDdvCGZ7N5WLbGO0CAscjOuXm1uEKfGefpyFj2HZJ+h8zbuinAoZ5RHZa+SniRb1iES0lJUfxcYBMmoQ=
 addons:
   apt:
     packages: reprepro
