@@ -1,12 +1,13 @@
 package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
-import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
 import lombok.experimental.Accessors;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.clients.*;
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutView;
@@ -16,8 +17,13 @@ import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Version;
+import org.slf4j.Logger;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
@@ -28,11 +34,94 @@ import java.util.stream.Collectors;
 /**
  * Created by mwei on 12/9/15.
  */
-@Slf4j
 @Accessors(chain = true)
 public class CorfuRuntime {
 
-    @Data
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(CorfuRuntime.class);
+
+    public static String getMpASV() {
+        return CorfuRuntime.mpASV;
+    }
+
+    public static String getMpLUC() {
+        return CorfuRuntime.mpLUC;
+    }
+
+    public static String getMpCR() {
+        return CorfuRuntime.mpCR;
+    }
+
+    public static String getMpObj() {
+        return CorfuRuntime.mpObj;
+    }
+
+    public static MetricRegistry getMetrics() {
+        return CorfuRuntime.metrics;
+    }
+
+    public CorfuRuntimeParameters getParameters() {
+        return this.parameters;
+    }
+
+    public LayoutView getLayoutView() {
+        return this.layoutView;
+    }
+
+    public SequencerView getSequencerView() {
+        return this.sequencerView;
+    }
+
+    public AddressSpaceView getAddressSpaceView() {
+        return this.addressSpaceView;
+    }
+
+    public StreamsView getStreamsView() {
+        return this.streamsView;
+    }
+
+    public ObjectsView getObjectsView() {
+        return this.objectsView;
+    }
+
+    public boolean isCacheDisabled() {
+        return this.cacheDisabled;
+    }
+
+    public long getMaxCacheSize() {
+        return this.maxCacheSize;
+    }
+
+    public boolean isBackpointersDisabled() {
+        return this.backpointersDisabled;
+    }
+
+    public boolean isHoleFillingDisabled() {
+        return this.holeFillingDisabled;
+    }
+
+    public boolean isShutdown() {
+        return this.isShutdown;
+    }
+
+    public Function<String, IClientRouter> getGetRouterFunction() {
+        return this.getRouterFunction;
+    }
+
+    public CorfuRuntime setMaxCacheSize(long maxCacheSize) {
+        this.maxCacheSize = maxCacheSize;
+        return this;
+    }
+
+    public CorfuRuntime setHoleFillingDisabled(boolean holeFillingDisabled) {
+        this.holeFillingDisabled = holeFillingDisabled;
+        return this;
+    }
+
+    public CorfuRuntime setGetRouterFunction(Function<String, IClientRouter> getRouterFunction) {
+        this.getRouterFunction = getRouterFunction;
+        return this;
+    }
+
     public static class CorfuRuntimeParameters {
 
         /** True, if undo logging is disabled. */
@@ -43,36 +132,88 @@ public class CorfuRuntime {
 
         /** Number of times to attempt to read before hole filling. */
         int holeFillRetry = 10;
+
+        public CorfuRuntimeParameters() {
+        }
+
+        public boolean isUndoDisabled() {
+            return this.undoDisabled;
+        }
+
+        public boolean isOptimisticUndoDisabled() {
+            return this.optimisticUndoDisabled;
+        }
+
+        public int getHoleFillRetry() {
+            return this.holeFillRetry;
+        }
+
+        public CorfuRuntimeParameters setUndoDisabled(boolean undoDisabled) {
+            this.undoDisabled = undoDisabled;
+            return this;
+        }
+
+        public CorfuRuntimeParameters setOptimisticUndoDisabled(boolean optimisticUndoDisabled) {
+            this.optimisticUndoDisabled = optimisticUndoDisabled;
+            return this;
+        }
+
+        public CorfuRuntimeParameters setHoleFillRetry(int holeFillRetry) {
+            this.holeFillRetry = holeFillRetry;
+            return this;
+        }
+
+        public boolean equals(Object o) {
+            if (o == this) return true;
+            if (!(o instanceof CorfuRuntimeParameters)) return false;
+            final CorfuRuntimeParameters other = (CorfuRuntimeParameters) o;
+            if (!other.canEqual((Object) this)) return false;
+            if (this.isUndoDisabled() != other.isUndoDisabled()) return false;
+            if (this.isOptimisticUndoDisabled() != other.isOptimisticUndoDisabled()) return false;
+            if (this.getHoleFillRetry() != other.getHoleFillRetry()) return false;
+            return true;
+        }
+
+        public int hashCode() {
+            final int PRIME = 59;
+            int result = 1;
+            result = result * PRIME + (this.isUndoDisabled() ? 79 : 97);
+            result = result * PRIME + (this.isOptimisticUndoDisabled() ? 79 : 97);
+            result = result * PRIME + this.getHoleFillRetry();
+            return result;
+        }
+
+        protected boolean canEqual(Object other) {
+            return other instanceof CorfuRuntimeParameters;
+        }
+
+        public String toString() {
+            return "org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters(undoDisabled=" + this.isUndoDisabled() + ", optimisticUndoDisabled=" + this.isOptimisticUndoDisabled() + ", holeFillRetry=" + this.getHoleFillRetry() + ")";
+        }
     }
 
-    @Getter
     private final CorfuRuntimeParameters parameters = new CorfuRuntimeParameters();
     /**
      * A view of the layout service in the Corfu server instance.
      */
-    @Getter(lazy = true)
     private final LayoutView layoutView = new LayoutView(this);
     /**
      * A view of the sequencer server in the Corfu server instance.
      */
-    @Getter(lazy = true)
     private final SequencerView sequencerView = new SequencerView(this);
     /**
      * A view of the address space in the Corfu server instance.
      */
-    @Getter(lazy = true)
     private final AddressSpaceView addressSpaceView = new AddressSpaceView(this);
     /**
      * A view of streamsView in the Corfu server instance.
      */
-    @Getter(lazy = true)
     private final StreamsView streamsView = new StreamsView(this);
 
     //region Address Space Options
     /**
      * Views of objects in the Corfu server instance.
      */
-    @Getter(lazy = true)
     private final ObjectsView objectsView = new ObjectsView(this);
     /**
      * A list of known layout servers.
@@ -95,33 +236,26 @@ public class CorfuRuntime {
     /**
      * Whether or not to disable the cache.
      */
-    @Getter
     public boolean cacheDisabled = false;
     /**
      * The maximum size of the cache, in bytes.
      */
-    @Getter
-    @Setter
     public long maxCacheSize = 4_000_000_000L;
 
     /**
      * Whether or not to disable backpointers.
      */
-    @Getter
     public boolean backpointersDisabled = false;
 
     /**
      * If hole filling is disabled.
      */
-    @Getter
-    @Setter
     public boolean holeFillingDisabled = false;
 
     /**
      * Notifies that the runtime is no longer used
      * and async retries to fetch the layout can be stopped.
      */
-    @Getter
     private volatile boolean isShutdown = false;
 
     private boolean tlsEnabled = false;
@@ -138,15 +272,10 @@ public class CorfuRuntime {
      * Metrics: meter (counter), histogram
      */
     static private final String mp = "corfu.runtime.";
-    @Getter
     static private final String mpASV = mp + "as-view.";
-    @Getter
     static private final String mpLUC = mp + "log-unit-client.";
-    @Getter
     static private final String mpCR = mp + "client-router.";
-    @Getter
     static private final String mpObj = mp + "object.";
-    @Getter
     static public final MetricRegistry metrics = new MetricRegistry();
 
     /**
@@ -160,8 +289,6 @@ public class CorfuRuntime {
      * a test router. Can also be used to provide alternative logic for obtaining
      * a router.
      */
-    @Getter
-    @Setter
     public Function<String, IClientRouter> getRouterFunction = overrideGetRouterFunction != null ?
             (address) -> overrideGetRouterFunction.apply(this, address) : (address) -> {
 
