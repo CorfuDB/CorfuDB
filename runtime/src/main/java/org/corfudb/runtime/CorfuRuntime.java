@@ -49,7 +49,7 @@ public class CorfuRuntime {
     private final CorfuRuntimeParameters parameters = new CorfuRuntimeParameters();
 
     /** A view of the layout. */
-    private final LayoutView layout = new LayoutView(this);
+    private final LayoutView layoutView = new LayoutView(this);
 
     /** A view of the sequencer. */
     private final SequencerView sequencer = new SequencerView(this);
@@ -68,7 +68,7 @@ public class CorfuRuntime {
     /** Get a view of the layout.
      * @return  A layout view, which allows interaction with the layout.
      */
-    public LayoutView layout() { return layout; }
+    public LayoutView layout() { return layoutView; }
 
     /** Get a view of the sequencer.
      * @return  A sequencer view, which allows interaction with the sequencer.
@@ -96,7 +96,7 @@ public class CorfuRuntime {
     /** @deprecated This getter will be removed in the next release of Corfu,
      * please use layout() instead. */
     @Deprecated
-    public LayoutView getLayoutView() {return layout;}
+    public LayoutView getLayoutView() {return layoutView;}
 
     /** @deprecated This getter will be removed in the next release of Corfu,
      * please use sequencer() instead. */
@@ -131,9 +131,9 @@ public class CorfuRuntime {
      */
     public Map<String, IClientRouter> nodeRouters;
     /**
-     * A completable future containing a layoutFuture, when completed.
+     * A completable future containing a layout, when completed.
      */
-    public volatile CompletableFuture<Layout> layoutFuture;
+    public volatile CompletableFuture<Layout> layout;
     /**
      * The rate in seconds to retry accessing a layout, in case of a failure.
      */
@@ -282,11 +282,11 @@ public class CorfuRuntime {
      */
     public void shutdown() {
 
-        // Stopping async task from fetching layoutFuture.
+        // Stopping async task from fetching layout.
         isShutdown = true;
-        if (layoutFuture != null) {
+        if (layout != null) {
             try {
-                layoutFuture.cancel(true);
+                layout.cancel(true);
             } catch (Exception e) {
                 log.error("Runtime shutting down. Exception in terminating fetchLayout: {}", e);
             }
@@ -404,11 +404,11 @@ public class CorfuRuntime {
      */
     public synchronized void invalidateLayout() {
         // Is there a pending request to retrieve the layout?
-        if (!layoutFuture.isDone()) {
+        if (!layout.isDone()) {
             // Don't create a new request for a layout if there is one pending.
             return;
         }
-        layoutFuture = fetchLayout();
+        layout = fetchLayout();
     }
 
 
@@ -446,7 +446,7 @@ public class CorfuRuntime {
                         // but setEpoch of routers needs to be synchronized as those variables are not local.
                         l.getAllServers().stream().map(getRouterFunction).forEach(x -> x.setEpoch(l.getEpoch()));
                         layoutServers = l.getLayoutServers();
-                        this.layoutFuture = layoutFuture;
+                        layout = layoutFuture;
                         //FIXME Synchronization END
 
                         log.debug("Layout server {} responded with layout {}", s, l);
@@ -473,12 +473,12 @@ public class CorfuRuntime {
      * When this function returns, the Corfu server is ready to be accessed.
      */
     public synchronized CorfuRuntime connect() {
-        if (layoutFuture == null) {
+        if (layout == null) {
             log.info("Connecting to Corfu server instance, layout servers={}", layoutServers);
             // Fetch the current layout and save the future.
-            layoutFuture = fetchLayout();
+            layout = fetchLayout();
             try {
-                layoutFuture.get();
+                layout.get();
             } catch (Exception e) {
                 // A serious error occurred trying to connect to the Corfu instance.
                 log.error("Fatal error connecting to Corfu server instance.", e);
