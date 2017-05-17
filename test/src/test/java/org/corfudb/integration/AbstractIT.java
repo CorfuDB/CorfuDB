@@ -10,14 +10,12 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.junit.After;
 import org.junit.Before;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executors;
@@ -27,7 +25,6 @@ import java.util.concurrent.Executors;
  * Created by zlokhandwala on 4/28/17.
  */
 public class AbstractIT extends AbstractCorfuTest {
-
     static final String DEFAULT_HOST = "localhost";
     static final int DEFAULT_PORT = 9000;
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
@@ -107,24 +104,73 @@ public class AbstractIT extends AbstractCorfuTest {
     public static boolean shutdownCorfuServer(Process corfuServerProcess) throws IOException, InterruptedException {
         int retries = SHUTDOWN_RETRIES;
         while (true) {
-            long pid = getPid(corfuServerProcess);
+            long parentPid = getPid(corfuServerProcess);
+            // Get Children PIDs
+            List<Long> pidList = getChildPIDs(parentPid);
+            pidList.add(parentPid);
+
             ProcessBuilder builder = new ProcessBuilder();
-            builder.command("sh", "-c", KILL_COMMAND + pid);
+            for (Long pid : pidList) {
+                builder.command("sh", "-c", KILL_COMMAND + pid.longValue());
+                Process p = builder.start();
+                p.waitFor();
+             }
+
+             if (retries == 0) {
+                 return false;
+             }
+
+             if (corfuServerProcess.isAlive()) {
+                 retries--;
+                 Thread.sleep(SHUTDOWN_RETRY_WAIT);
+             } else {
+                 return true;
+             }
+        }
+    }
+
+    /**
+     * Get list of children (descendant) process identifiers (recursive)
+     *
+     * @param pid parent process identifier
+     * @return list of children process identifiers
+     *
+     * @throws IOException
+     */
+    private static List<Long> getChildPIDs (long pid) {
+        List<Long> childPIDs = new ArrayList<>();
+        try {
+            // Get child pid(s)
+            ProcessBuilder builder = new ProcessBuilder();
+            builder.command("sh", "-c", "pgrep -P " + pid);
             Process p = builder.start();
             p.waitFor();
 
-            if (retries == 0) {
-                System.out.println("DID NOT SHUT DOWN");
-                return false;
+            // Read output
+            BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            String line = null;
+            String previous = null;
+            while ((line = br.readLine()) != null) {
+                if (!line.equals(previous)) {
+                    previous = line;
+                    long childPID = Long.parseLong(line);
+                    childPIDs.add(childPID);
+                }
             }
-            if (corfuServerProcess.isAlive()) {
-                retries--;
-                Thread.sleep(SHUTDOWN_RETRY_WAIT);
-            } else {
-                return true;
+
+            // Recursive lookup of children pids
+            for (Long childPID : childPIDs) {
+                List<Long> pidRecursive = getChildPIDs(childPID.longValue());
+                childPIDs.addAll(pidRecursive);
             }
+
+        } catch (IOException e) {
+            throw e;
+        } finally {
+            return childPIDs;
         }
     }
+
 
     public static long getPid(Process p) {
         long pid = -1;
