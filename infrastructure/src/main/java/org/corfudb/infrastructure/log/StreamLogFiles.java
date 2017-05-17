@@ -428,12 +428,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         logData.setGlobalAddress(entry.getGlobalAddress());
         logData.setRank(createDataRank(entry));
 
-        logData.clearCommit();
-
-        if (entry.getCommit()) {
-            logData.setCommit();
-        }
-
         return logData;
     }
 
@@ -709,17 +703,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             data = entry.getData();
         }
 
-        boolean setCommit = false;
-        Object val = entry.getMetadataMap().get(IMetadata.LogUnitMetadataType.COMMIT);
-        if (val != null) {
-            setCommit = (boolean) val;
-        }
-
         LogEntry.Builder logEntryBuilder = LogEntry.newBuilder()
                 .setDataType(DataType.forNumber(entry.getType().ordinal()))
                 .setData(ByteString.copyFrom(data))
                 .setGlobalAddress(address)
-                .setCommit(setCommit)
                 .addAllStreams(getStrUUID(entry.getStreams()))
                 .putAllBackpointers(getStrLongMap(entry.getBackpointerMap()));
 

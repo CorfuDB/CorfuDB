@@ -19,7 +19,6 @@ message LogEntry {
     optional DataType data_type = 1;
     optional bytes data = 2;
     optional int64 global_address = 3;
-    optional bool commit = 5;
     repeated string	streams = 6;
     map<string, int64> logical_addresses = 7;
     map<string, int64> backpointers = 8;

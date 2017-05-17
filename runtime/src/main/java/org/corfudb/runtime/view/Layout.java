@@ -219,15 +219,6 @@ public class Layout implements Cloneable {
         throw new RuntimeException("Unmapped address!");
     }
 
-    public int getNumReplexUnits(int whichReplex) {
-        return segments.get(segments.size() - 1).replexes.get(whichReplex).getLogServers().size();
-    }
-
-    public int getReplexUnitIndex(int whichReplex, UUID streamID) {
-        return streamID.hashCode() % getNumReplexUnits(whichReplex);
-
-    }
-
     public LayoutSegment getSegment(long globalAddress) {
         for (LayoutSegment ls : segments) {
             if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1)) {
@@ -396,21 +387,7 @@ public class Layout implements Cloneable {
                 }
             }
 
-        },
-        REPLEX {
-            @Override
-            public void validateSegmentSeal(LayoutSegment layoutSegment,
-                                            Map<String, CompletableFuture<Boolean>> completableFutureMap)
-                    throws QuorumUnreachableException {
-                throw new UnsupportedOperationException("unsupported seal");
-            }
-
-            @Override
-            public IStreamView  getStreamView(CorfuRuntime r, UUID streamId) {
-                throw new UnsupportedOperationException("unsupported in this release");
-            }
-        },
-        NO_REPLICATION {
+        }, NO_REPLICATION {
             @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,
                                             Map<String, CompletableFuture<Boolean>> completableFutureMap)
@@ -469,13 +446,7 @@ public class Layout implements Cloneable {
 
         }
 
-        List<LayoutStripe> replexes; // A list of replexes. Each LayoutStripe is a replex, because it is just a list of
-                                     // servers. Select one node from each LayoutStripe (replex) to append to.
-                                     // For now, there is only 1 replex, which are the stream homes.
-
         public int getNumberOfStripes() { return stripes.size(); }
-
-        public int getNumberOfReplexes() { return replexes.size(); }
     }
 
     @Data
