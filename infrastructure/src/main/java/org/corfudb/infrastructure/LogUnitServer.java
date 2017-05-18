@@ -143,63 +143,19 @@ public class LogUnitServer extends AbstractServer {
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
                       boolean isMetricsEnabled) {
         log.debug("log write: global: {}, streams: {}, backpointers: {}", msg
-                .getPayload().getGlobalAddress(),
-                msg.getPayload().getStreamAddresses(), msg.getPayload().getData().getBackpointerMap());
-        // clear any commit record (or set initially to false).
-        msg.getPayload().clearCommit();
+                .getPayload().getGlobalAddress(), msg.getPayload().getData().getBackpointerMap());
+
         try {
-            if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
-                dataCache.put(new LogAddress(msg.getPayload().getGlobalAddress(), null), msg.getPayload().getData());
-                r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-            } else {
-                for (UUID streamID : msg.getPayload().getStreamAddresses().keySet()) {
-                    dataCache.put(new LogAddress(msg.getPayload().getStreamAddresses().get(streamID), streamID),
-                            msg.getPayload().getData());
-                }
-                r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-            }
+            dataCache.put(new LogAddress(msg.getPayload().getGlobalAddress(), null), msg.getPayload().getData());
+            r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
+
         } catch (OverwriteException ex) {
-            if (msg.getPayload().getWriteMode() != WriteMode.REPLEX_STREAM) {
                 r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
-            } else {
-                r.sendResponse(ctx, msg, CorfuMsgType.ERROR_REPLEX_OVERWRITE.msg());
-            }
         } catch (DataOutrankedException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
         } catch (ValueAdoptedException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_VALUE_ADOPTED.payloadMsg(e.getReadResponse()));
         }
-    }
-
-    /**
-     * Service an incoming commit request.
-     */
-    @ServerHandler(type = CorfuMsgType.COMMIT, opTimer = metricsPrefix + "commit")
-    public void commit(CorfuPayloadMsg<CommitRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
-                       boolean isMetricsEnabled) {
-        Map<UUID, Long> streamAddresses = msg.getPayload().getStreams();
-        if (streamAddresses == null) {
-            // Then this is a commit bit for the global log.
-            ILogData entry = dataCache.get(new LogAddress(msg.getPayload().getAddress(), null));
-            if (entry == null) {
-                r.sendResponse(ctx, msg, CorfuMsgType.ERROR_NOENTRY.msg());
-                return;
-            } else {
-                entry.getMetadataMap().put(IMetadata.LogUnitMetadataType.COMMIT, msg.getPayload().getCommit());
-            }
-        } else {
-            for (UUID streamID : msg.getPayload().getStreams().keySet()) {
-                ILogData entry = dataCache.get(new LogAddress(streamAddresses.get(streamID), streamID));
-                if (entry == null) {
-                    r.sendResponse(ctx, msg, CorfuMsgType.ERROR_NOENTRY.msg());
-                    // TODO: Crap, we have to go back and undo all the commit bits??
-                    return;
-                } else {
-                    entry.getMetadataMap().put(IMetadata.LogUnitMetadataType.COMMIT, msg.getPayload().getCommit());
-                }
-            }
-        }
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     @ServerHandler(type = CorfuMsgType.READ_REQUEST, opTimer = metricsPrefix + "read")
@@ -268,7 +224,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
-     * Retrieve the ILogData from disk, given an address.
+     * Retrieve the LogUnitEntry from disk, given an address.
      *
      * @param logAddress The address to retrieve the entry from.
      * @return The log unit entry to retrieve into the cache.

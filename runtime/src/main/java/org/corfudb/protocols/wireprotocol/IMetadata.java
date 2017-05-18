@@ -99,21 +99,11 @@ public interface IMetadata {
         return Optional.ofNullable((Long) getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse((long) -1);
     }
 
-
-    default void clearCommit() {
-        getMetadataMap().put(LogUnitMetadataType.COMMIT, false);
-    }
-
-    default void setCommit() {
-        getMetadataMap().put(LogUnitMetadataType.COMMIT, true);
-    }
-
     @RequiredArgsConstructor
     public enum LogUnitMetadataType implements ITypedEnum {
         RANK(1, TypeToken.of(DataRank.class)),
         BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {}),
-        GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
-        COMMIT(5, TypeToken.of(Boolean.class))
+        GLOBAL_ADDRESS(4, TypeToken.of(Long.class))
         ;
         final int type;
         @Getter

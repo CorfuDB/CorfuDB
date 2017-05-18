@@ -229,9 +229,6 @@ public class logReader {
                 dr.hasRank() ? dr.getRank() : 0L,
                 dr.hasUuidMostSignificant() ? dr.getUuidMostSignificant() : 0L,
                 dr.hasUuidLeastSignificant() ? dr.getUuidLeastSignificant() : 0L);
-        System.out.format("Commit: ");
-        System.out.println(entry.getCommit());
-
     }
 
     // Read and conditionally replace a record
