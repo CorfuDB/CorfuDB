@@ -61,6 +61,35 @@ public class SMRMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    public void canWriteScanAndFilterToSingle()
+            throws Exception {
+        Map<String, String> corfuInstancesMap = getRuntime()
+                .getObjectsView()
+                .build()
+                .setStreamName("test")
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .open();
+
+        corfuInstancesMap.clear();
+        assertThat(corfuInstancesMap.put("a", "CorfuServer"))
+                .isNull();
+        assertThat(corfuInstancesMap.put("b", "CorfuClient"))
+                .isNull();
+        assertThat(corfuInstancesMap.put("c", "CorfuClient"))
+                .isNull();
+        assertThat(corfuInstancesMap.put("d", "CorfuServer"))
+                .isNull();
+        List<String> corfuServerList = ((SMRMap)corfuInstancesMap).scanAndFilter(p -> p.equals("CorfuServer"));
+
+        assertThat(corfuServerList.size()).isEqualTo(2);
+
+        for(String corfuInstance : corfuServerList) {
+            assertThat(corfuInstance).isEqualTo("CorfuServer");
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     public void canGetID()
             throws Exception {
         UUID id = UUID.randomUUID();
