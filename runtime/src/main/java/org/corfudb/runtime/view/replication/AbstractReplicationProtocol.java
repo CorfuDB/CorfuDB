@@ -37,14 +37,20 @@ public abstract class AbstractReplicationProtocol implements IReplicationProtoco
     @Nonnull
     @Override
     public ILogData read(Layout layout, long globalAddress) {
+        return read(layout, globalAddress, -1);
+    }
+
+    @Nonnull
+    @Override
+    public ILogData read(Layout layout, long globalAddress, long pointer) {
         try {
             return holeFillPolicy
-                .peekUntilHoleFillRequired(globalAddress,
-                        a -> peek(layout, a));
+                    .peekUntilHoleFillRequired(globalAddress,
+                            a -> peek(layout, a));
         } catch (HoleFillRequiredException e) {
             log.debug("HoleFill[{}] due to {}", globalAddress, e.getMessage());
             holeFill(layout, globalAddress);
-            return peek(layout, globalAddress);
+            return peek(layout, globalAddress, pointer);
         }
     }
 

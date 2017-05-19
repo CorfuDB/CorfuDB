@@ -29,6 +29,7 @@ import org.corfudb.util.retry.RetryNeededException;
 import java.time.Duration;
 import java.util.Comparator;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -131,6 +132,10 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
         }
     }
 
+    /** {@inheritDoc} */
+    @Override
+    public void writeForwardpointer(Layout layout, UUID stream, long address, long nextAddress) {
+    }
 
     private ILogData.SerializationHandle createEmptyData(long position, DataType type, IMetadata.DataRank rank) {
         ILogData data = new LogData(type);

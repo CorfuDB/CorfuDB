@@ -4,9 +4,7 @@ import com.codahale.metrics.Gauge;
 import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
-
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
@@ -16,12 +14,10 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -149,6 +145,24 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
+     * Read the given object from an address and streams.
+     *
+     * @param address An address to read from.
+     * @param pointer A pointer to include as a hint to the log unit
+     * @return A result, which be cached.
+     */
+    public @Nonnull ILogData read(long address, long pointer) {
+        if (!runtime.isCacheDisabled()) {
+            ILogData data = readCache.get(address);
+            if (data == null || data.getType() == DataType.EMPTY) {
+                throw new RuntimeException("Unexpected return of empty data at address " + address + " on read");
+            }
+            return data;
+        }
+        return fetch(address, pointer);
+    }
+
+    /**
      * Read the given object from a range of addresses.
      *
      * @param addresses An iterable with addresses to read from
@@ -271,6 +285,20 @@ public class AddressSpaceView extends AbstractView {
         return layoutHelper(l -> l.getReplicationMode(address)
                 .getReplicationProtocol(runtime)
                 .read(l, address)
+        );
+    }
+
+    /**
+     * Explicitly fetch a given address, bypassing the cache.
+     *
+     * @param address An address to read from.
+     * @param pointer A pointer to pass as a hint to the log unit
+     * @return A result, which will be uncached.
+     */
+    public @Nonnull ILogData fetch(final long address, final long pointer) {
+        return layoutHelper(l -> l.getReplicationMode(address)
+                .getReplicationProtocol(runtime)
+                .read(l, address, pointer)
         );
     }
 }

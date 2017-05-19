@@ -35,6 +35,17 @@ public interface IReplicationProtocol {
      */
     void write(Layout layout, ILogData data) throws OverwriteException;
 
+    /** Write forward pointer to the log for a given address
+     *
+     * This function is non-blocking
+     *
+     * @param layout
+     * @param streamId
+     * @param address
+     * @param next
+     */
+    void writeForwardpointer(Layout layout, UUID streamId, long address, long next); /* throws in case of mismatched pointer? */
+
     /** Read data from a given address.
      *
      * This function only returns committed data. If the
@@ -49,6 +60,22 @@ public interface IReplicationProtocol {
      *                             filling entry if necessary.
      */
     @Nonnull ILogData read(Layout layout, long globalAddress);
+
+    /** Read data from a given address and send a pointer to the log unit
+     *
+     * This function only returns committed data. If the
+     * address given has not committed, the implementation may
+     * either block until it is committed, or commit a hole filling
+     * entry to that address.
+     *
+     * @param  layout              The layout to use for the read.
+     * @param globalAddress        The global address to read the data from.
+     * @param pointer              A pointer to send to the log unit
+     * @return                     The data that was committed at the
+     *                             given global address, committing a hole
+     *                             filling entry if necessary.
+     */
+    @Nonnull ILogData read(Layout layout, long globalAddress, long pointer);
 
     /** Read data from all the given addresses.
      *
@@ -84,6 +111,8 @@ public interface IReplicationProtocol {
      *                             there was no entry committed.
      */
     ILogData peek(Layout layout, long globalAddress);
+
+    ILogData peek(Layout layout, long globalAddress, long pointer);
 
     /** Peek data from all the given addresses.
      *

@@ -8,6 +8,7 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 
 import javax.annotation.Nullable;
+import java.util.UUID;
 
 /**
  * Created by mwei on 4/6/17.
@@ -49,6 +50,16 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
 
     /** {@inheritDoc} */
     @Override
+    public void writeForwardpointer(Layout layout, UUID stream, long address, long nextAddress) {
+        int numUnits = layout.getSegmentLength(address);
+        log.trace("Write forward pointer {}->{}: chain head 1/{}", address, nextAddress, numUnits);
+        layout.getLogUnitClient(address, 0)
+                .writeForwardPointer(stream, address, nextAddress);
+        propagateForwardPointer(layout, stream, address, nextAddress);
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public ILogData peek(Layout layout, long globalAddress) {
         int numUnits = layout.getSegmentLength(globalAddress);
         log.trace("Read[{}]: chain {}/{}", globalAddress, numUnits, numUnits);
@@ -57,6 +68,20 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         ILogData ret =  CFUtils.getUninterruptibly(layout
                 .getLogUnitClient(globalAddress, numUnits - 1)
                                     .read(globalAddress)).getReadSet()
+                .getOrDefault(globalAddress, null);
+        return ret == null || ret.isEmpty() ? null : ret;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public ILogData peek(Layout layout, long globalAddress, long pointer) {
+        int numUnits = layout.getSegmentLength(globalAddress);
+        log.trace("Read[{}]: chain {}/{}", globalAddress, numUnits, numUnits);
+        // In chain replication, we read from the last unit, though we can optimize if we
+        // know where the committed tail is.
+        ILogData ret =  CFUtils.getUninterruptibly(layout
+                .getLogUnitClient(globalAddress, numUnits - 1)
+                .read(globalAddress, pointer)).getReadSet()
                 .getOrDefault(globalAddress, null);
         return ret == null || ret.isEmpty() ? null : ret;
     }
@@ -92,6 +117,23 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
             } catch (OverwriteException oe) {
                 log.trace("Propogate[{}]: Completed by other writer", globalAddress);
             }
+        }
+    }
+
+    /**
+     * Propagate a forward pointer write down the chain
+     * It is expected that the write has already succeeded at the head of the chain
+     *
+     * @param layout
+     * @param stream
+     * @param address
+     * @param nextAddress
+     */
+    protected void propagateForwardPointer(Layout layout, UUID stream, long address, long nextAddress) {
+        int numUnits = layout.getSegmentLength(address);
+        for (int i = 1; i < numUnits; i++) {
+            log.trace("Propagate forward pointer {}->{}: chain {}/{}", address, nextAddress, i + 1, numUnits);
+            layout.getLogUnitClient(address, i).writeForwardPointer(stream, address, nextAddress);
         }
     }
 

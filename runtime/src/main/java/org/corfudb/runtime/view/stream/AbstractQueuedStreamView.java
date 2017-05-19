@@ -199,6 +199,15 @@ public abstract class AbstractQueuedStreamView extends
     abstract protected @Nonnull ILogData read(final long address);
 
     /**
+     * Retrieve the data at the given address and include a
+     * pointer hint to the log unit
+     *
+     * @param address       The address to read.
+     * @param pointer       The next pointer associated with the address
+     */
+    abstract protected @Nonnull ILogData read(final long address, final long pointer);
+
+    /**
      * Given a list of addresses, retrieve the data as a list in the same
      * order of the addresses given in the list.
      * @param addresses     The addresses to read.

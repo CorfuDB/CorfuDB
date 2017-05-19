@@ -56,6 +56,7 @@ public enum CorfuMsgType {
     TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
     COMPACT_REQUEST(43, TypeToken.of(CorfuMsg.class), true),
     FLUSH_CACHE(44, TypeToken.of(CorfuMsg.class), true),
+    POINTER_UPDATE(45, new TypeToken<CorfuPayloadMsg<PointerUpdate>>() {}),
 
     WRITE_OK(50, TypeToken.of(CorfuMsg.class)),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),

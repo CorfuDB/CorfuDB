@@ -1,18 +1,25 @@
 package org.corfudb.runtime.view.stream;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import javax.annotation.Nonnull;
+
 import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Utils;
-
-import javax.annotation.Nonnull;
-import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /** A view of a stream implemented with backpointers.
  *
@@ -106,6 +113,11 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             return runtime.getAddressSpaceView().read(address);
     }
 
+    @Override
+    protected ILogData read(final long address, final long pointer) {
+        return runtime.getAddressSpaceView().read(address);
+    }
+
     @Nonnull
     @Override
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
@@ -169,9 +181,10 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         boolean entryAdded = false;
         // The current address which we are reading from.
         long currentAddress = startAddress;
+        long previousPointer = -1;
 
         // Loop until we have reached the stop address.
-        while (currentAddress > stopAddress) {
+        while (currentAddress > stopAddress && Address.isAddress(currentAddress)) {
             // The queue already contains an address from this
             // range, terminate.
             if (queue.contains(currentAddress)) {
@@ -181,7 +194,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             }
 
             // Read the current address
-            ILogData d = read(currentAddress);
+            ILogData d;
+            if (previousPointer >= 0) {
+                d = read(currentAddress, previousPointer);
+            } else {
+                d = read(currentAddress);
+            }
 
             // If it contains the stream we are interested in
             if (d.containsStream(streamId)) {
@@ -196,18 +214,29 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         return entryAdded;
                     }
                 }
+                if (previousPointer >= 0 && d.hasForwardpointer(streamId)) {
+                    // a pointer can never change:  if already present, make sure it matches
+                    assert(previousPointer == d.getForwardpointer(streamId));
+                }
             }
 
             // Now calculate the next address
             // Try using backpointers first
+            boolean single_step = true;
             if (!runtime.isBackpointersDisabled() &&
                     d.hasBackpointer(streamId)) {
-                currentAddress = d.getBackpointer(streamId);
+                long tmp = d.getBackpointer(streamId);
+                if (Address.isAddress(tmp) || tmp == Address.NON_EXIST) {
+                    previousPointer = currentAddress;
+                    currentAddress = tmp;
+                    single_step = false;
+                }
             }
             // backpointers failed, so we're
             // downgrading to a linear scan
-            else {
+            if (single_step) {
                 currentAddress = currentAddress - 1;
+                previousPointer = -1;
             }
         }
 
@@ -251,6 +280,15 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             }
         }
         return BackpointerOp.INCLUDE;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    protected void writeForwardPointer(UUID streamId, long address, long next) {
+        Layout l = runtime.getLayoutView().getLayout();
+        l.getReplicationMode(address).getReplicationProtocol(runtime)
+                .writeForwardpointer(l, streamId, address, next);
     }
 
     /**

@@ -91,6 +91,15 @@ public interface IMetadata {
         getMetadataMap().put(LogUnitMetadataType.BACKPOINTER_MAP, backpointerMap);
     }
 
+    default Map<UUID, Long> getForwardpointerMap() {
+        return (Map<UUID, Long>) getMetadataMap().getOrDefault(LogUnitMetadataType.FORWARDPOINTER_MAP,
+                Collections.EMPTY_MAP);
+    }
+
+    default void setForwardpointer(UUID stream, Long forwardPointer) {
+        getForwardpointerMap().put(stream, forwardPointer);
+    }
+
     default void setGlobalAddress(Long address) {
         getMetadataMap().put(LogUnitMetadataType.GLOBAL_ADDRESS, address);
     }
@@ -144,7 +153,8 @@ public interface IMetadata {
         GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
         COMMIT(5, TypeToken.of(Boolean.class)),
         CHECKPOINT_TYPE(6, TypeToken.of(CheckpointEntry.CheckpointEntryType.class)),
-        CHECKPOINT_ID(7, TypeToken.of(UUID.class))
+        CHECKPOINT_ID(7, TypeToken.of(UUID.class)),
+        FORWARDPOINTER_MAP(8, new TypeToken<Map<UUID, Long>>() {})
         ;
         final int type;
         @Getter

@@ -12,15 +12,11 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
 import io.netty.channel.ChannelHandlerContext;
-
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogFiles;
@@ -32,6 +28,14 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
+
+import java.lang.invoke.MethodHandles;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
@@ -86,6 +90,8 @@ public class LogUnitServer extends AbstractServer {
     private final BatchWriter<Long, ILogData> batchWriter;
 
     private static final String metricsPrefix = "corfu.server.logunit.";
+
+    private final HashMap<LogAddress, Long> forwardPointerMap = new HashMap<>();
 
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
@@ -167,6 +173,12 @@ public class LogUnitServer extends AbstractServer {
                 } else if (e.getType() == DataType.HOLE) {
                     rr.put(l, LogData.HOLE);
                 } else {
+                    for (UUID u : e.getBackpointerMap().keySet()) {
+                        LogAddress a = new LogAddress(l, u);
+                        if (forwardPointerMap.containsKey(a)) {
+                            e.setForwardpointer(u, forwardPointerMap.get(a));
+                        }
+                    }
                     rr.put(l, (LogData)e);
                 }
             }
@@ -230,6 +242,7 @@ public class LogUnitServer extends AbstractServer {
     private void flushCache(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
         try {
             dataCache.invalidateAll();
+
         } catch (RuntimeException e) {
             log.error("Encountered error while flushing cache {}", e);
         }
@@ -239,6 +252,15 @@ public class LogUnitServer extends AbstractServer {
 
 
 
+
+    @ServerHandler(type = CorfuMsgType.POINTER_UPDATE)
+    private void setPointer(CorfuPayloadMsg<PointerUpdate> msg, ChannelHandlerContext ctx, IServerRouter r,
+                            boolean isMetricsEnabled) {
+        PointerUpdate payload = msg.getPayload();
+        log.debug("setPointer {}->{}", payload.getCurrent(), payload.getNext());
+        forwardPointerMap.put(new LogAddress(payload.getCurrent(), payload.getStream()), payload.getNext());
+        //r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
 
     /**
      * Retrieve the LogUnitEntry from disk, given an address.

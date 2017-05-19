@@ -15,6 +15,7 @@ public class ReadRequest implements ICorfuPayload<ReadRequest> {
 
     final Range<Long> range;
     final UUID streamID;
+    final Long forwardPointer;
 
     public ReadRequest(ByteBuf buf) {
         range = ICorfuPayload.rangeFromBuffer(buf, Long.class);
@@ -24,11 +25,21 @@ public class ReadRequest implements ICorfuPayload<ReadRequest> {
         else {
             streamID = null;
         }
+        if (ICorfuPayload.fromBuffer(buf, Boolean.class)) {
+            forwardPointer = ICorfuPayload.fromBuffer(buf, Long.class);
+        } else {
+            forwardPointer = new Long(0);
+        }
     }
 
     public ReadRequest(Long address) {
+        this(address, new Long(0));
+    }
+
+    public ReadRequest(Long address, Long next_address) {
         range = Range.singleton(address);
         streamID = null;
+        forwardPointer = next_address;
     }
 
     @Override
@@ -37,6 +48,10 @@ public class ReadRequest implements ICorfuPayload<ReadRequest> {
         ICorfuPayload.serialize(buf, streamID != null);
         if (streamID != null) {
             ICorfuPayload.serialize(buf, streamID);
+        }
+        ICorfuPayload.serialize(buf, forwardPointer > 0);
+        if (forwardPointer > 0) {
+            ICorfuPayload.serialize(buf, forwardPointer);
         }
     }
 

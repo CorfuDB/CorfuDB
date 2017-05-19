@@ -95,6 +95,25 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     }
 
     /**
+     * Return whether there is a forward pointer for a stream
+     */
+    default boolean hasForwardpointer(UUID streamID) {
+        return getForwardpointerMap() != null
+                && getForwardpointerMap().containsKey(streamID)
+                && Address.isAddress(getForwardpointerMap().get(streamID));
+    }
+
+    /**
+     * Return the forward pointer for a stream
+     */
+    default Long getForwardpointer(UUID streamID) {
+        if (hasForwardpointer(streamID)) {
+            return getForwardpointerMap().get(streamID);
+        }
+        return null;
+    }
+
+    /**
      * Return if this is the first entry in a particular stream.
      */
     default boolean isFirstEntry(UUID streamID) {

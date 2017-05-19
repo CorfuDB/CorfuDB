@@ -253,6 +253,22 @@ public class LogUnitClient implements IClient {
         return cf.thenApply(x -> { context.stop(); return x; });
     }
 
+    /**
+     * Asynchronously read from and send a pointer to the logging unit.
+     *
+     * @param address The address to read from.
+     * @param pointer A pointer to send to the log unit
+     * @return A CompletableFuture which will complete with a ReadResult once the read
+     * completes.
+     */
+    public CompletableFuture<ReadResponse> read(long address, long pointer) {
+        Timer.Context context = getTimerContext("read");
+        CompletableFuture<ReadResponse> cf = router.sendMessageAndGetCompletable(
+                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address, pointer)));
+
+        return cf.thenApply(x -> { context.stop(); return x; });
+    }
+
     public CompletableFuture<ReadResponse> read(UUID stream, Range<Long> offsetRange) {
         Timer.Context context = getTimerContext("readRange");
         CompletableFuture<ReadResponse> cf = router.sendMessageAndGetCompletable(
@@ -318,6 +334,17 @@ public class LogUnitClient implements IClient {
         CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(
                 CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(streamID, address)));
         return cf.thenApply(x -> { context.stop(); return x; });
+    }
+
+    /**
+     * Write forward pointer for a stream at a given address
+     *
+     * @param stream
+     * @param address
+     * @param next_address
+     */
+    public void writeForwardPointer(UUID stream, long address, long next_address) {
+        router.sendMessage(CorfuMsgType.POINTER_UPDATE.payloadMsg(new PointerUpdate(stream, address, next_address)));
     }
 
     private Timer.Context getTimerContext(String opName) {

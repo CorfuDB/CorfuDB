@@ -6,9 +6,6 @@ package org.corfudb.infrastructure.log;
 
 
 import io.netty.buffer.ByteBuf;
-
-import java.io.File;
-
 import io.netty.buffer.Unpooled;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.ServerContext;
@@ -21,6 +18,8 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Ignore;
 import org.junit.Test;
+
+import java.io.File;
 
 import static org.junit.Assert.*;
 
@@ -61,6 +60,8 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
         assertTrue(new String(value2.getData()).contains("v-2"));
         log.close();
     }
+
+    // KJ:  test can be annotated with expected exception
 
     @Test
     public void testLowerRank() {
