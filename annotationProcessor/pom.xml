@@ -11,6 +11,33 @@
 
     <artifactId>annotationProcessor</artifactId>
 
+    <profiles>
+        <profile>
+            <id>windows-profile</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+                <file>
+                    <exists>${JAVA_HOME}/lib/tools.jar</exists>
+                </file>
+            </activation>
+            <properties>
+                <toolsjar>${JAVA_HOME}/lib/tools.jar</toolsjar>
+            </properties>
+        </profile>
+        <profile>
+            <id>mac-profile</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+                <file>
+                    <exists>${java.home}/../lib/tools.jar</exists>
+                </file>
+            </activation>
+            <properties>
+                <toolsjar>${java.home}/../lib/tools.jar</toolsjar>
+            </properties>
+        </profile>
+    </profiles>
+
     <dependencies>
         <dependency>
             <groupId>org.corfudb</groupId>
@@ -22,7 +49,14 @@
         <dependency>
             <groupId>com.squareup</groupId>
             <artifactId>javapoet</artifactId>
-            <version>1.7.0</version>
+            <version>1.9.0</version>
+        </dependency>
+        <dependency>
+            <groupId>jdk.tools</groupId>
+            <artifactId>jdk.tools</artifactId>
+            <version>jdk1.8.0</version>
+            <scope>system</scope>
+            <systemPath>${toolsjar}</systemPath>
         </dependency>
     </dependencies>
 

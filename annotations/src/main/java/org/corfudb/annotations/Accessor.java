@@ -21,4 +21,19 @@ public @interface Accessor {
      */
     String conflictParameterFunction() default "";
 
+    /** Whether to wrap the return in a wrapper which ensures
+     * that accesses occur inside a lock.
+     * @return  True, if the return value should be wrapped,
+     *          False otherwise.
+     */
+    boolean accessWrapReturn() default false;
+
+    /** An array of function names which deep access wrapping should be
+     * enabled on. Deep wrapped functions are only used if accessWrapReturn
+     * is set to true.
+     *
+     * @return  A list of functions in which deep access wrapping will be
+     *          run against.
+     */
+    String[] deepAccessWrap() default {};
 }
