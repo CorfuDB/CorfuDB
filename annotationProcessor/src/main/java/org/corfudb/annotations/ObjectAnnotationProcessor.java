@@ -461,7 +461,8 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                     mutatorAccessor.deepAccessWrap();
                             generateAccessWrapper(smrMethod, typeSpecBuilder,
                                     originalName, classElement, Arrays.asList(deepWrap),
-                                    (DeclaredType) smrMethod.getEnclosingElement().asType());
+                                    (DeclaredType) smrMethod.getEnclosingElement().asType(),
+                                    oe.isPresent() ? oe.get().getReturnType() : null);
                             isWrapped = true;
                         }
                     } catch (Exception e) {
@@ -590,7 +591,8 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
     void generateAccessWrapper(ExecutableElement method,
                                TypeSpec.Builder typeSpecBuilder,
                                TypeName originalName,
-                               TypeElement classElement, List<String> deepWrap, DeclaredType parentType) {
+                               TypeElement classElement, List<String> deepWrap, DeclaredType parentType,
+                               TypeMirror originalType) {
         // Get the "fixed version" of the enclosing type.
         ExecutableType newRetType = (ExecutableType) processingEnv.getTypeUtils()
                 .asMemberOf(parentType, method);
@@ -612,6 +614,11 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         ;
 
 
+        innerTypeSpec.addField(TypeName.get(retType), "original" + CORFUSMR_FIELD);
+        innerTypeSpec.addField(ParameterizedTypeName.get(
+                ClassName.get(ICorfuSMRProxy.class),
+                originalName), "proxy" + CORFUSMR_FIELD);
+
         // The original field contains the object to be wrapped.
         innerTypeSpec.addMethod(
                 MethodSpec.constructorBuilder().addParameter(
@@ -622,15 +629,39 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 ParameterizedTypeName.get(ClassName.get(ICorfuSMRProxy.class),
                                         originalName)
                                 , "proxy").build())
-                        .addStatement("super($L,$L)",  "original", "proxy")
+                        .addStatement("this.original" + CORFUSMR_FIELD +
+                                " = $L;this.proxy" + CORFUSMR_FIELD + " = $L;",  "original", "proxy")
                         .build());
 
 
-        innerTypeSpec.addSuperinterface(ParameterizedTypeName.get(retType));
-        innerTypeSpec.superclass(ParameterizedTypeName.get(
-                ClassName.get(CorfuAccessWrapper.class),
+        if (originalType != null && !processingEnv.getTypeUtils()
+                .asElement(originalType).getKind().isInterface()) {
+            innerTypeSpec.superclass(ParameterizedTypeName.get(originalType));
+        } else {
+            innerTypeSpec.addSuperinterface(ParameterizedTypeName.get(retType));
+        }
+        innerTypeSpec.addSuperinterface(ParameterizedTypeName.get(
+                ClassName.get(ICorfuAccessWrapper.class),
                 ParameterizedTypeName.get(retType),
                 ParameterizedTypeName.get(classElement.asType())));
+
+        // Implement ICorfuWrapper classes
+        innerTypeSpec.addMethod(
+                MethodSpec.methodBuilder("getObject$CORFUSMR")
+                        .addModifiers(Modifier.PUBLIC)
+                        .addAnnotation(Override.class)
+                        .addStatement("return original" + CORFUSMR_FIELD)
+                        .returns(TypeName.get(retType))
+                        .build());
+        innerTypeSpec.addMethod(
+                MethodSpec.methodBuilder("getProxy$CORFUSMR")
+                        .addStatement("return proxy" + CORFUSMR_FIELD)
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PUBLIC)
+                        .returns(ParameterizedTypeName.get(
+                                ClassName.get(ICorfuSMRProxy.class),
+                                originalName))
+                        .build());
 
         // Implement each of the calls of the interface by proxying to the
         // original.
@@ -647,17 +678,17 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                             // Need to deep wrap this object
                             generateAccessWrapper(e, innerTypeSpec, originalName, classElement, deepWrap,
                                     newRetType.getReturnType() instanceof DeclaredType ?
-                                    (DeclaredType) newRetType.getReturnType() : parentType);
+                                    (DeclaredType) newRetType.getReturnType() : parentType, null);
                             wrapperMethod.addStatement("return new " + ((TypeElement) ((Type) e.getReturnType())
                                             .asElement()).getSimpleName().toString() + "$$"
                                             + e.getSimpleName().toString() + "$$Wrapper(" +
-                                            "wrappedAccess((w,p) -> w.$L($L), null), getProxy())",
+                                            "wrappedAccess$$CORFUSMR((w,p) -> w.$L($L), null), getProxy$$CORFUSMR())",
                                     e.getSimpleName(),
                                     e.getParameters().stream()
                                             .map(x -> x.getSimpleName())
                                             .collect(Collectors.joining(",")));
                         } else {
-                            wrapperMethod.addStatement("return wrappedAccess((w,p) -> w.$L($L), null)",
+                            wrapperMethod.addStatement("return wrappedAccess$$CORFUSMR((w,p) -> w.$L($L), null)",
                                     e.getSimpleName(),
                                     e.getParameters().stream()
                                             .map(x -> x.getSimpleName())
@@ -668,7 +699,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     }
                 } else {
                     wrapperMethod.addStatement(
-                            "wrappedAccess((w,p) -> {$L($L); return null;}, null)",
+                            "wrappedAccess$$CORFUSMR((w,p) -> {$L($L); return null;}, null)",
                             e.getSimpleName(),
                             e.getParameters().stream()
                                     .map(x -> x.getSimpleName())

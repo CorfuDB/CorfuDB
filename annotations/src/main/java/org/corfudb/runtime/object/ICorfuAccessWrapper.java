@@ -1,7 +1,5 @@
 package org.corfudb.runtime.object;
 
-import lombok.Getter;
-
 import java.util.function.BiFunction;
 
 
@@ -12,26 +10,16 @@ import java.util.function.BiFunction;
  * @param <P>   The type of the proxy being used.
  * Created by mwei on 5/18/17.
  */
-public class CorfuAccessWrapper<T, P> {
+public interface ICorfuAccessWrapper<T, P> {
 
-    /** The object which is being wrapped. */
-    @Getter
-    private final T object;
+    /** Get the object which is being wrapped.
+     * @return The object that was wrapped.
+     * */
+    T getObject$CORFUSMR();
 
-    /** The proxy to synchronize accesses against. */
-    @Getter
-    private final ICorfuSMRProxy<P> proxy;
-
-    /** Generate a new wrapper.
-     *
-     * @param wrappedObject     The object to wrap.
-     * @param parentProxy             The proxy to use.
-     */
-    public CorfuAccessWrapper(final T wrappedObject,
-                              final ICorfuSMRProxy<P> parentProxy) {
-        this.object = wrappedObject;
-        this.proxy = parentProxy;
-    }
+    /** Get a proxy to synchronize accesses against.
+     * @return  The proxy this wrapped object came from. */
+    ICorfuSMRProxy<P> getProxy$CORFUSMR();
 
     /** Perform a wrapped access, which executes the given function
      * under the correct version.
@@ -41,9 +29,11 @@ public class CorfuAccessWrapper<T, P> {
      * @return                  The return value calculated by the
      *                          wrap function.
      */
-    public <R> R wrappedAccess(final BiFunction<T, P, R> wrapFunction,
+    default <R> R wrappedAccess$CORFUSMR(
+            final BiFunction<T, P, R> wrapFunction,
                                final Object[] conflictObjects) {
-        return proxy.access(o -> wrapFunction.apply(object, o),
+        return getProxy$CORFUSMR().access(o ->
+                        wrapFunction.apply(getObject$CORFUSMR(), o),
                 conflictObjects);
     }
 }
