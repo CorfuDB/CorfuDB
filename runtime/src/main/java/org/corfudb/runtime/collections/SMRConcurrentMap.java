@@ -19,7 +19,6 @@ import java.util.function.Function;
 @CorfuObject
 public class SMRConcurrentMap<K,V> extends ConcurrentMapWrapper<K,V>
         implements ISMRMap<K,V>, Map<K,V> {
-
     /**
      * {@inheritDoc}
      */
