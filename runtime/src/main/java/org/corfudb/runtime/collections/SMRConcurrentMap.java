@@ -10,12 +10,16 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 
-/**
+/** This is a concurrent SMR map implementation which does not
+ * throw a ConcurrentModificationException during iteration
+ * and traversal of entrySet, keySet or values.
+ *
  * Created by mwei on 5/19/17.
  */
 @CorfuObject
 public class SMRConcurrentMap<K,V> extends ConcurrentMapWrapper<K,V>
         implements ISMRMap<K,V>, Map<K,V> {
+
     /**
      * {@inheritDoc}
      */
