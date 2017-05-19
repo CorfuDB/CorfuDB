@@ -1,11 +1,15 @@
 package org.corfudb.runtime.concurrent;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.annotations.ConflictParameter;
+import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.junit.Test;
 
+import java.util.Collection;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
