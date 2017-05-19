@@ -13,10 +13,7 @@ import java.util.stream.Collectors;
  */
 @RequiredArgsConstructor
 public enum WriteMode implements ICorfuPayload<WriteMode> {
-    NORMAL((byte) 0),
-    REPLEX_GLOBAL((byte) 1),
-    REPLEX_HYBRID((byte) 2),
-    REPLEX_STREAM((byte) 3);
+    NORMAL((byte) 0);
 
     final int val;
 

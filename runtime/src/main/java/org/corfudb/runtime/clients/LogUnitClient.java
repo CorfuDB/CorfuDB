@@ -103,20 +103,6 @@ public class LogUnitClient implements IClient {
         throw new ValueAdoptedException(msg.getPayload());
     }
 
-    /** Handle an ERROR_REPLEX_OVERWRITE message.
-     *
-     * @param msg   Incoming Message
-     * @param ctx   Context
-     * @param r     Router
-     * @throws      OverwriteException
-     */
-    @ClientHandler(type=CorfuMsgType.ERROR_REPLEX_OVERWRITE)
-    private static Object handleReplexOverwrite(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
-            throws Exception
-    {
-        throw new ReplexOverwriteException();
-    }
-
     /** Handle an ERROR_OOS message.
      *
      * @param msg   Incoming Message
