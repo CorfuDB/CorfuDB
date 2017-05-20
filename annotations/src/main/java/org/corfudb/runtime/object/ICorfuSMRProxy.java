@@ -1,5 +1,8 @@
 package org.corfudb.runtime.object;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -13,10 +16,14 @@ public interface ICorfuSMRProxy<T> {
     /** Access the state of the object.
      * @param accessMethod      The method to execute when accessing an object.
      * @param conflictObject    Fine-grained conflict information, if available.
+     * @param directAccessMap   A map of direct access functions, if available.
      * @param <R>               The type to return.
      * @return                  The result of the accessMethod
      */
-    <R> R access(ICorfuSMRAccess<R, T> accessMethod, Object[] conflictObject);
+    <R> R access(@Nonnull ICorfuSMRAccess<R, T> accessMethod,
+                 @Nullable Object[] conflictObject,
+                 @Nullable Map<String, IDirectAccessFunction<R>>
+                         directAccessMap);
 
     /**
      * Record an SMR function to the log before returning.
@@ -30,8 +37,8 @@ public interface ICorfuSMRProxy<T> {
      *
      * @return  The address in the log the SMR function was recorded at.
      */
-    long logUpdate(String smrUpdateFunction, boolean keepUpcallResult,
-                   Object[] conflictObject, Object... args);
+    long logUpdate(@Nonnull String smrUpdateFunction, boolean keepUpcallResult,
+                   @Nullable Object[] conflictObject, Object... args);
 
     /**
      * Return the result of an upcall at the given timestamp.
@@ -41,7 +48,7 @@ public interface ICorfuSMRProxy<T> {
      * @param <R>                   The type of the upcall to return.
      * @return                      The result of the upcall.
      */
-    <R> R getUpcallResult(long timestamp, Object[] conflictObject);
+    <R> R getUpcallResult(long timestamp, @Nullable Object[] conflictObject);
 
     /**
      * Update the proxy to the latest committed version.

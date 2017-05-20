@@ -5,6 +5,7 @@ import lombok.Getter;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.IDirectAccessFunction;
 
 import java.util.*;
 
@@ -35,7 +36,8 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     @Override
     public <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
                            ICorfuSMRAccess<R, T> accessFunction,
-                           Object[] conflictObject) {
+                           Object[] conflictObject,
+                           Map<String, IDirectAccessFunction<R>> directAccessFunctionMap) {
 
         // In snapshot transactions, there are no conflicts.
         // Hence, we do not need to add this access to a conflict set

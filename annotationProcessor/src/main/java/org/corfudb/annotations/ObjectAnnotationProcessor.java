@@ -331,6 +331,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                             if (method.getAnnotation(Accessor.class) != null ||
                                 method.getAnnotation(Mutator.class) != null ||
                                 method.getAnnotation(MutatorAccessor.class) != null ||
+                                method.getAnnotation(DirectReadFunction.class) != null ||
                                 method.getAnnotation(PassThrough.class) != null) {
                                 if (overwrite.isPresent()) {
                                     methodSet.remove(overwrite.get());
@@ -450,6 +451,12 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         addConflictFieldToMethod(ms, conflictField, smrMethod);
                     }
 
+                    // If directaccess functions are provided, generate the access map
+                    if (accessor != null && accessor.directReadFunctions() != null &&
+                            accessor.directReadFunctions().length > 0) {
+                        generateDirectAccessMap(methodSet, smrMethod, typeSpecBuilder);
+                    }
+
                     // If wrapping was requested, generate a wrapper class
                     // Currently, we assume that the return type is an interface
                     // If it's not an interface we can't yet process anything
@@ -522,6 +529,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 "});"
                         );
                     }
+
                     else if (smrMethod.getAnnotation(PassThrough.class) != null) {
                         ms.addStatement("$L super.$L($L)",
                                 smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ?
@@ -549,7 +557,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                         "return ") +
                                         "$Lproxy" + CORFUSMR_FIELD + ".access(" +
                                         "o" + CORFUSMR_FIELD + " -> {$Lo" + CORFUSMR_FIELD + ".$L($L);$L}," +
-                                        "$L)$L",
+                                        "$L,$L)$L",
                                 (isWrapped ? "new " + ((Type)smrMethod.getReturnType())
                                         .asElement().getSimpleName() + "$" +
                                         smrMethod.getSimpleName() + "$Wrapper(" : "" ),
@@ -563,6 +571,11 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                         "return null;" : "",
                                 (m.hasConflictAnnotations ?
                                         conflictField : "null"),
+                                accessor != null && accessor.directReadFunctions() != null &&
+                                        accessor.directReadFunctions().length > 0 ?
+                                "directAccess_" + smrMethod.getSimpleName().toString() +
+                                                CORFUSMR_FIELD
+                                : "null",
                                 (isWrapped ? ", proxy" + CORFUSMR_FIELD + ")" : "")
                         );
                     }
@@ -710,6 +723,83 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         }
 
         typeSpecBuilder.addType(innerTypeSpec.build());
+    }
+
+    void generateDirectAccessMap(Set<SMRMethodInfo> methodSet, ExecutableElement smrElement, TypeSpec.Builder builder) {
+        try {
+            Accessor accessor = smrElement.getAnnotation(Accessor.class);
+            String mapString = Arrays.stream(accessor.directReadFunctions())
+                    .map(n -> {
+                        try {
+                            return methodSet
+                                    .stream().filter(e -> e.method.getSimpleName().toString().equals(n))
+                                    .findFirst().get().method;
+                        } catch (NoSuchElementException nse) {
+                            messager.printMessage(Diagnostic.Kind.ERROR, "Couldn't find directAccessFunction named "
+                            + n + " for " + smrElement.getSimpleName());
+                            throw new RuntimeException(nse);
+                        }
+                    })
+                    .map(e -> {
+                        StringBuilder sb = new StringBuilder();
+                        sb.append(".put(\"")
+                                .append(e.getAnnotation(DirectReadFunction.class).mutatorName())
+                                .append("\", (a,m) -> ")
+                                .append(e.getSimpleName())
+                                .append("(");
+
+                        int numAccessors = 0;
+                        // Append accessors
+                        for (int i = 0; i < smrElement.getParameters().size(); i++) {
+                            // add comma to second element+
+                            if (i != 0) {
+                                sb.append(",");
+                            }
+                            sb.append("(")
+                              .append(ClassName.get(smrElement.getParameters().get(i).asType()))
+                              .append(")")
+                              .append("a[")
+                              .append(i)
+                              .append("]");
+                            numAccessors++;
+                        }
+
+                        for (int i = numAccessors; i < e.getParameters().size(); i++) {
+                            // add comma to all elements unless i==0 which means no accessor args
+                            if (i != 0) {
+                                sb.append(",");
+                            }
+                            sb.append("(")
+                              .append(ClassName.get(e.getParameters().get(i).asType()))
+                              .append(")")
+                              .append("m[")
+                              .append(i - numAccessors)
+                              .append("]");
+                        }
+
+                        sb.append("))");
+                        return sb.toString();
+                    })
+                    .collect(Collectors.joining("\n"));
+
+            FieldSpec directAccessField = FieldSpec.builder(ParameterizedTypeName.get(ClassName.get(Map.class),
+                    ClassName.get(String.class),
+                    ParameterizedTypeName.get(ClassName.get(IDirectAccessFunction.class),
+                            ClassName.get(smrElement.getReturnType()))),
+                    "directAccess_" + smrElement.getSimpleName().toString() +
+                            CORFUSMR_FIELD, Modifier.FINAL, Modifier.PUBLIC)
+                    .initializer("new $T()$L.build()",
+                            ParameterizedTypeName.get(ClassName.get(ImmutableMap.Builder.class),
+                                    ClassName.get(String.class),
+                                    ParameterizedTypeName.get(ClassName.get(IDirectAccessFunction.class),
+                                            ClassName.get(smrElement.getReturnType()))), mapString)
+                    .build();
+
+            builder.addField(directAccessField);
+        } catch (Exception ex) {
+            messager.printMessage(Diagnostic.Kind.ERROR, "Failed to generate direct access map for "
+                    + smrElement.getSimpleName() +  " ( " + ex.getClass() + "): " + ex.getMessage());
+        }
     }
 
     /*
