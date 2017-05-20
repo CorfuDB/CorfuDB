@@ -37,15 +37,10 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     @Getter
     final Map<UUID, Set<byte[]>>  writeConflictParams;
 
-    /**
-     * Constructor for TxResolutionInfo.
-     *
-     * @param txId transaction identifier
-     * @param snapshotTimestamp transaction snapshot timestamp
-     */
-    public TxResolutionInfo(UUID txId, long snapshotTimestamp) {
-        this.TXid = txId;
-        this.snapshotTimestamp = snapshotTimestamp;
+
+    public TxResolutionInfo(UUID TXid, long snapshotTS) {
+        this.TXid = TXid;
+        this.snapshotTimestamp = snapshotTS;
         this.conflictSet = Collections.emptyMap();
         this.writeConflictParams = Collections.emptyMap();
     }
@@ -58,7 +53,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
      * @param conflictMap map of conflict parameters, arranged by stream IDs
      * @param writeConflictParams map of write conflict parameters, arranged by stream IDs
      */
-    public TxResolutionInfo(UUID txId, long snapshotTimestamp, Map<UUID, Set<byte[]>>
+    public TxResolutionInfo(UUID txId, long snapshotTimestamp,  Map<UUID, Set<byte[]>>
             conflictMap, Map<UUID, Set<byte[]>> writeConflictParams) {
         this.TXid = txId;
         this.snapshotTimestamp = snapshotTimestamp;

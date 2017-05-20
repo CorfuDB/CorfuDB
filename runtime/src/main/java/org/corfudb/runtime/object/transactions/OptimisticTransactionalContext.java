@@ -267,25 +267,33 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // address of -1L if it is rejected.
         long address = -1L;
 
-        address = this.builder.runtime.getStreamsView()
-                .append(
+        try {
+            address = this.builder.runtime.getStreamsView()
+                    .append(
 
-                        // a set of stream-IDs that contains the affected streams
-                        affectedStreams,
+                            // a set of stream-IDs that contains the affected streams
+                            affectedStreams,
 
-                        // a MultiObjectSMREntry that contains the update(s) to objects
-                        collectWriteSetEntries(),
+                            // a MultiObjectSMREntry that contains the update(s) to objects
+                            collectWriteSetEntries(),
 
-                        // TxResolution info:
-                        // 1. snapshot timestamp
-                        // 2. a map of conflict params, arranged by streamID's
-                        // 3. a map of write conflict-params, arranged by
-                        // streamID's
-                        new TxResolutionInfo(getTransactionID(),
-                                getSnapshotTimestamp(),
-                                conflictSet.getHashedConflictSet(),
-                                getWriteSetInfo().getHashedConflictSet())
-                );
+                            // TxResolution info:
+                            // 1. snapshot timestamp
+                            // 2. a map of conflict params, arranged by streamID's
+                            // 3. a map of write conflict-params, arranged by
+                            // streamID's
+                            new TxResolutionInfo(getTransactionID(),
+                                    getSnapshotTimestamp(),
+                                    conflictSet.getHashedConflictSet(),
+                                    getWriteSetInfo().getHashedConflictSet())
+                    );
+        } catch (TransactionAbortedException ae) {
+            log.trace("Commit[{}] Rejected by sequencer", this);
+            abortTransaction(ae);
+
+            // rethrow the TXAbortedException
+            throw ae;
+        }
 
         log.trace("Commit[{}] Acquire address {}", this, address);
 
