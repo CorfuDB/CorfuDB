@@ -34,6 +34,6 @@ public interface ICorfuAccessWrapper<T, P> {
                                final Object[] conflictObjects) {
         return getProxy$CORFUSMR().access(o ->
                         wrapFunction.apply(getObject$CORFUSMR(), o),
-                conflictObjects);
+                conflictObjects, null);
     }
 }

@@ -1,10 +1,8 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
-import org.corfudb.annotations.Accessor;
-import org.corfudb.annotations.ConflictParameter;
-import org.corfudb.annotations.Mutator;
-import org.corfudb.annotations.MutatorAccessor;
+import org.corfudb.annotations.*;
+import org.corfudb.format.log.ISMREntry;
 
 import java.util.Collection;
 import java.util.Map;
@@ -61,9 +59,19 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      * Conflicts: this operation conflicts with any operation on the
      * given key.
      */
-    @Accessor
+    @Accessor(directReadFunctions = {"getPutDirectReader"} )
     @Override
     V get(@ConflictParameter Object key);
+
+    @DirectReadFunction(mutatorName = "put")
+    default V getPutDirectReader(Object getKey, Object putKey, V value) {
+        if (getKey.equals(putKey)) {
+            return value;
+        } else {
+            throw new UnsupportedOperationException("Attempted to read " +
+                    "from an entry which doesn't update the same key!");
+        }
+    }
 
     /**
      * {@inheritDoc}

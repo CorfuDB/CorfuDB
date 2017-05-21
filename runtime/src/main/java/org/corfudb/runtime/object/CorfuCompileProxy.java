@@ -112,18 +112,21 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
-                        Object[] conflictObject) {
+                        Object[] conflictObject,
+                        Map<String, IDirectAccessFunction<R>> directAccessFunctionMap) {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerAccess)){
-            return accessInner(accessMethod, conflictObject, isEnabled);
+            return accessInner(accessMethod, conflictObject, directAccessFunctionMap, isEnabled);
         }
     }
 
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
-                              Object[] conflictObject, boolean isMetricsEnabled) {
+                              Object[] conflictObject,
+                              Map<String, IDirectAccessFunction<R>> directAccessFunctionMap,
+                              boolean isMetricsEnabled) {
         if (TransactionalContext.isInTransaction()) {
             return TransactionalContext.getCurrentContext()
-                    .access(this, accessMethod, conflictObject);
+                    .access(this, accessMethod, conflictObject, directAccessFunctionMap);
         }
 
         // Linearize this read against a timestamp

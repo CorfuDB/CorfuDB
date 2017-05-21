@@ -138,7 +138,8 @@ public abstract class AbstractTransactionalContext implements
      */
     abstract public <R,T> R access(ICorfuSMRProxyInternal<T> proxy,
                                    ICorfuSMRAccess<R,T> accessFunction,
-                                   Object[] conflictObject);
+                                   Object[] conflictObject,
+                                   Map<String, IDirectAccessFunction<R>> directAccessFunctionMap);
 
     /** Get the result of an upcall.
      *

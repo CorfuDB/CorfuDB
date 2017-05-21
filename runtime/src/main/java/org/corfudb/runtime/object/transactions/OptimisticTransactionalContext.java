@@ -9,6 +9,7 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.IDirectAccessFunction;
 import org.corfudb.runtime.object.VersionLockedObject;
 
 import java.util.*;
@@ -74,7 +75,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @Override
     public <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
                            ICorfuSMRAccess<R, T> accessFunction,
-                           Object[] conflictObject) {
+                           Object[] conflictObject,
+                           Map<String, IDirectAccessFunction<R>> directAccessFunctionMap) {
         log.debug("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
         // First, we add this access to the read set
         addToReadSet(proxy, conflictObject);

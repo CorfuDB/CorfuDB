@@ -36,4 +36,11 @@ public @interface Accessor {
      *          run against.
      */
     String[] deepAccessWrap() default {};
+
+    /** A list of functions to dispatch to perform a direct read.
+     *
+     * @return  A list of functions which direct reads can be
+     *          performed against.
+     */
+    String[] directReadFunctions() default {};
 }

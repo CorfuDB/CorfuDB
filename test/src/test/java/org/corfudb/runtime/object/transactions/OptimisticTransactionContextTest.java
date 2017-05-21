@@ -1,9 +1,13 @@
 package org.corfudb.runtime.object.transactions;
 
+import com.google.common.reflect.TypeToken;
+import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ConflictParameterClass;
 import org.junit.Test;
 
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -60,7 +64,6 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
         getRuntime().getObjectsView().TXAbort();
     }
-
 
     /** In an optimistic transaction, we should be able to
      *  read our own writes in the same thread.
