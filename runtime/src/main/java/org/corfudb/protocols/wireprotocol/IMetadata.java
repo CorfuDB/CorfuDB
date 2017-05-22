@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Value;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 
 import javax.annotation.Nullable;
 import java.util.Arrays;
@@ -17,6 +18,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_ID;
+import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_TYPE;
 
 /**
  * Created by mwei on 9/18/15.
@@ -99,11 +103,48 @@ public interface IMetadata {
         return Optional.ofNullable((Long) getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse((long) -1);
     }
 
+    default void clearCommit() {
+        getMetadataMap().put(LogUnitMetadataType.COMMIT, false);
+    }
+
+    default void setCommit() {
+        getMetadataMap().put(LogUnitMetadataType.COMMIT, true);
+    }
+
+    default boolean hasCheckpointMetadata() {
+        return getCheckpointType() != null &&
+               getCheckpointID() != null;
+    }
+
+    @Nullable
+    default CheckpointEntry.CheckpointEntryType getCheckpointType() {
+        return (CheckpointEntry.CheckpointEntryType) getMetadataMap()
+                .getOrDefault(LogUnitMetadataType.CHECKPOINT_TYPE,
+                        null);
+    }
+
+    default void setCheckpointType(CheckpointEntry.CheckpointEntryType type) {
+        getMetadataMap().put(CHECKPOINT_TYPE, type);
+    }
+
+    @Nullable
+    default UUID getCheckpointID() {
+        return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CHECKPOINT_ID,
+                null);
+    }
+
+    default void setCheckpointID(UUID ID) {
+        getMetadataMap().put(CHECKPOINT_ID, ID);
+    }
+
     @RequiredArgsConstructor
     public enum LogUnitMetadataType implements ITypedEnum {
         RANK(1, TypeToken.of(DataRank.class)),
         BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {}),
-        GLOBAL_ADDRESS(4, TypeToken.of(Long.class))
+        GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
+        COMMIT(5, TypeToken.of(Boolean.class)),
+        CHECKPOINT_TYPE(6, TypeToken.of(CheckpointEntry.CheckpointEntryType.class)),
+        CHECKPOINT_ID(7, TypeToken.of(UUID.class))
         ;
         final int type;
         @Getter

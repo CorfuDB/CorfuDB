@@ -25,7 +25,6 @@ public enum DataType implements ICorfuPayload<DataType> {
     @Getter
     private boolean metadataAware;
 
-
     byte asByte() {
         return (byte) val;
     }

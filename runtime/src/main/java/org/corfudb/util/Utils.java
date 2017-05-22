@@ -20,6 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 
+import io.netty.buffer.ByteBuf;
 import jdk.internal.org.objectweb.asm.ClassReader;
 import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
 import jdk.internal.org.objectweb.asm.tree.ClassNode;
@@ -218,6 +219,35 @@ public class Utils {
             throw new RuntimeException(ce);
         }
     }
+
+    /**
+     * Hex dump readable contents of ByteBuf to stdout.
+     *
+     * @param b ByteBuf with readable bytes available.
+     */
+    public static void hexdump(ByteBuf b) {
+        byte[] bulk = new byte[b.readableBytes()];
+        int oldReaderIndex = b.readerIndex();
+        b.readBytes(bulk, 0, b.readableBytes() - 1);
+        b.readerIndex(oldReaderIndex);
+        hexdump(bulk);
+    }
+
+    /**
+     * Hex dump contents of byte[] to stdout.
+     *
+     * @param bulk Bytes.
+     */
+    public static void hexdump(byte[] bulk) {
+        if (bulk != null) {
+            System.out.printf("Bulk(%d): ", bulk.length);
+            for (int i = 0; i < bulk.length; i++) {
+                System.out.printf("%x,", bulk[i]);
+            }
+            System.out.printf("\n");
+        }
+    }
+
 
     static long rotl64(long x, int r) {
         return (x << r) | (x >> (64 - r));

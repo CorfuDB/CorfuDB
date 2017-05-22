@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Map;
+import java.util.UUID;
 
 public class logReader {
     private static int metadataSize;
@@ -218,7 +219,7 @@ public class logReader {
                 System.out.println("DataType: TRIMMED");
                 break;
             default:
-                System.out.println("UNKNOWN DataType");
+                System.out.printf("UNKNOWN DataType %s\n", dt);
                 break;
         }
         if (showBinary) {
@@ -229,6 +230,16 @@ public class logReader {
                 dr.hasRank() ? dr.getRank() : 0L,
                 dr.hasUuidMostSignificant() ? dr.getUuidMostSignificant() : 0L,
                 dr.hasUuidLeastSignificant() ? dr.getUuidLeastSignificant() : 0L);
+        if (entry.hasCheckpointEntryType()) {
+            System.out.format("Checkpoint type: %s, ID %s\n",
+                    entry.getCheckpointEntryType(),
+                    new UUID(entry.hasCheckpointIDMostSignificant()
+                             ? entry.getCheckpointIDMostSignificant()
+                             : 0L,
+                             entry.hasCheckpointIDLeastSignificant()
+                             ? entry.getCheckpointIDLeastSignificant()
+                             : 0L));
+        }
     }
 
     // Read and conditionally replace a record

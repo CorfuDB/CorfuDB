@@ -6,6 +6,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
@@ -89,7 +90,8 @@ public class AddressSpaceView extends AbstractView {
      */
     public void write(IToken token, Object data)
         throws OverwriteException {
-        final ILogData ld = new LogData(data);
+        final ILogData ld = new LogData(DataType.DATA, data);
+
         layoutHelper(l -> {
             // Check if the token issued is in the same
             // epoch as the layout we are about to write
@@ -105,10 +107,8 @@ public class AddressSpaceView extends AbstractView {
             l.getReplicationMode(token.getTokenValue())
                         .getReplicationProtocol(runtime)
                         .write(l, ld);
-
             return null;
          });
-
 
         // Cache the successful write
         if (!runtime.isCacheDisabled()) {
