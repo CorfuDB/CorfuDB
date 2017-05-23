@@ -15,7 +15,8 @@ public class BatchWriterOperation {
     public enum Type {
         SHUTDOWN,
         WRITE,
-        TRIM
+        TRIM,
+        PREFIX_TRIM
     }
 
     private final Type type;

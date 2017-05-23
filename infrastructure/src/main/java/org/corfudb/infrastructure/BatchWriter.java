@@ -10,6 +10,7 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 
 import javax.annotation.Nonnull;
 import java.util.LinkedList;
@@ -68,6 +69,16 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
         }
     }
 
+    public void prefixTrim(@Nonnull LogAddress logAddress) {
+        try {
+            CompletableFuture<Void> cf = new CompletableFuture();
+            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.PREFIX_TRIM, logAddress, null, cf));
+            cf.get();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Override
     public void delete(K key, V value, RemovalCause removalCause) {
     }
@@ -119,6 +130,16 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                     streamLog.trim(currOp.getLogAddress());
                     currOp.setException(null);
                     res.add(currOp);
+                } else if (currOp.getType() == BatchWriterOperation.Type.PREFIX_TRIM) {
+                    try {
+                        streamLog.prefixTrim(currOp.getLogAddress());
+                        currOp.setException(null);
+                        res.add(currOp);
+                    } catch (TrimmedException e) {
+                        currOp.setException(e);
+                        res.add(currOp);
+                    }
+
                 } else if (currOp.getType() == BatchWriterOperation.Type.WRITE) {
                     try {
                         streamLog.append(currOp.getLogAddress(), currOp.getLogData());

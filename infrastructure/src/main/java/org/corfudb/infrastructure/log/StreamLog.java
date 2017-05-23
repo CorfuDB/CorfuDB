@@ -33,6 +33,12 @@ public interface StreamLog {
     void trim(LogAddress logAddress);
 
     /**
+     * Prefix trim the global log
+     * @param logAddress Address to trim the log up to
+     */
+    void prefixTrim(LogAddress logAddress);
+
+    /**
      * Remove all trimmed addresses from the StreamLog.
      */
     void compact();
