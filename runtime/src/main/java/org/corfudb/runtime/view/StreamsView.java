@@ -15,21 +15,17 @@ import javax.annotation.Nullable;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/11/15.
  */
 @Slf4j
-public class StreamsView {
+public class StreamsView extends AbstractView {
 
-    /**
-     * The org.corfudb.runtime which backs this view.
-     */
-    CorfuRuntime runtime;
-
-    public StreamsView(CorfuRuntime runtime) {
-        this.runtime = runtime;
+    public StreamsView(final CorfuRuntime runtime) {
+        super(runtime);
     }
 
     /**
