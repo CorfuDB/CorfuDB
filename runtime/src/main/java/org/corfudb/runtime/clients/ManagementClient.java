@@ -1,6 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import com.google.common.collect.ImmutableSet;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
@@ -12,6 +11,7 @@ import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
 
+import java.lang.invoke.MethodHandles;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -25,44 +25,34 @@ import java.util.concurrent.CompletableFuture;
  */
 public class ManagementClient implements IClient {
 
-    /**
-     * The messages this client should handle.
-     */
-    @Getter
-    public final Set<CorfuMsgType> HandledTypes =
-            new ImmutableSet.Builder<CorfuMsgType>()
-                    .add(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST)
-                    .add(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR)
-                    .add(CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP_ERROR)
-                    .add(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)
-                    .add(CorfuMsgType.MANAGEMENT_START_FAILURE_HANDLER)
-                    .add(CorfuMsgType.HEARTBEAT_REQUEST)
-                    .add(CorfuMsgType.HEARTBEAT_RESPONSE)
-                    .build();
-
     @Setter
     @Getter
     IClientRouter router;
 
+
     /**
-     * Handle a incoming message on the channel
-     *
-     * @param msg The incoming message
-     * @param ctx The channel handler context
+     * The handler and handlers which implement this client.
      */
-    @Override
-    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
-        switch (msg.getMsgType()) {
-            case MANAGEMENT_NOBOOTSTRAP_ERROR:
-                router.completeExceptionally(msg.getRequestID(), new NoBootstrapException());
-                break;
-            case MANAGEMENT_ALREADY_BOOTSTRAP_ERROR:
-                router.completeExceptionally(msg.getRequestID(), new AlreadyBootstrappedException());
-                break;
-            case HEARTBEAT_RESPONSE:
-                router.completeRequest(msg.getRequestID(), ((CorfuPayloadMsg<byte[]>)msg).getPayload());
-                break;
-        }
+    @Getter
+    public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
+            .generateHandlers(MethodHandles.lookup(), this);
+
+
+    @ClientHandler(type = CorfuMsgType.HEARTBEAT_RESPONSE)
+    private static Object handleHeartbeatResponse(CorfuPayloadMsg<byte[]> msg, ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    @ClientHandler(type = CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR)
+    private static Object handleNoBootstrapError(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+        throw new NoBootstrapException();
+    }
+
+    @ClientHandler(type = CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP_ERROR)
+    private static Object handleAlreadyBootstrappedError(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+        throw new AlreadyBootstrappedException();
     }
 
     /**
