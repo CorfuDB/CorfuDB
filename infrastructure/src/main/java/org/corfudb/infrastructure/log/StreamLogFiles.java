@@ -840,7 +840,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 throw new TrimmedException();
             }
             return readRecord(sh, logAddress.address);
-        } catch (Exception e) {
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
