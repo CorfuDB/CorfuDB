@@ -29,6 +29,7 @@ import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
@@ -222,6 +223,17 @@ public class LogUnitServer extends AbstractServer {
         //TODO(Maithem): should we return an error if the write fails
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
+
+    @ServerHandler(type = CorfuMsgType.PREFIX_TRIM)
+    private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        try {
+            batchWriter.trim(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()));
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        } catch (TrimmedException ex) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
+        }
+    }
+
 
     /**
      * Retrieve the LogUnitEntry from disk, given an address.
