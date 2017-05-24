@@ -158,8 +158,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         file1.close();
 
         assertThatThrownBy(() -> new StreamLogFiles(getContext(), false).read(new LogAddress(0L, null)))
-                .isInstanceOf(RuntimeException.class)
-                .hasCauseInstanceOf(DataCorruptionException.class);
+                .isInstanceOf(DataCorruptionException.class);
 
         // Corrupt metadata in the second segment
         file2.seek(offset2);
@@ -256,8 +255,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Read trimmed address
         assertThatThrownBy(() -> log.read(logAddress))
-                .isInstanceOf(RuntimeException.class)
-                .hasCauseInstanceOf(TrimmedException.class);
+                .isInstanceOf(TrimmedException.class);
     }
 
     private void writeToLog(StreamLog log, Long addr) {
@@ -319,8 +317,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         for (long x = 0; x < logChunk; x++) {
             LogAddress logAddress = new LogAddress(x, null);
             assertThatThrownBy(() -> log.read(logAddress))
-                    .isInstanceOf(RuntimeException.class)
-                    .hasCauseInstanceOf(TrimmedException.class);
+                    .isInstanceOf(TrimmedException.class);
 
             final long address = x;
             assertThatThrownBy(() -> writeToLog(log, address))

@@ -18,6 +18,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.junit.Test;
 
@@ -81,6 +82,26 @@ public class LogUnitClientTest extends AbstractClientTest {
                 .isEqualTo(DataType.DATA);
         assertThat(r.getPayload(new CorfuRuntime()))
                 .isEqualTo(testString);
+    }
+
+    @Test
+    public void readingTrimmedAddress() throws Exception {
+        byte[] testString = "hello world".getBytes();
+        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
+        LogData r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+
+        client.trim(0);
+
+        // For logunit cach flush
+        LogUnitServer server2 = new LogUnitServer(serverContext);
+        serverRouter.reset();
+        serverRouter.addServer(server2);
+
+        assertThatThrownBy(() -> client.read(0).get().getReadSet().get(0L))
+                .isInstanceOf(ExecutionException.class)
+                .hasCauseInstanceOf(TrimmedException.class);
     }
 
     @Test
@@ -255,7 +276,7 @@ public class LogUnitClientTest extends AbstractClientTest {
 
         // Try to read a corrupted log entry
         assertThatThrownBy(() -> client.read(0).get())
-                .isInstanceOf(RuntimeException.class)
+                .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(DataCorruptionException.class);
     }
 }
