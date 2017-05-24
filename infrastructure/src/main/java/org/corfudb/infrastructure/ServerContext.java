@@ -30,6 +30,8 @@ public class ServerContext {
     private static final String KEY_EPOCH = "CURRENT";
     private static final String PREFIX_TAIL_SEGMENT = "TAIL_SEGMENT";
     private static final String KEY_TAIL_SEGMENT = "CURRENT";
+    private static final String PREFIX_STARTING_ADDRESS = "STARTING_ADDRESS";
+    private static final String KEY_STARTING_ADDRESS = "CURRENT";
 
     /**
      * various duration constants
@@ -98,5 +100,14 @@ public class ServerContext {
 
     public void setTailSegment(long tailSegment) {
         dataStore.put(Long.class, PREFIX_TAIL_SEGMENT, KEY_TAIL_SEGMENT, tailSegment);
+    }
+
+    public long getStartingAddress() {
+        Long startingAddress = dataStore.get(Long.class, PREFIX_STARTING_ADDRESS, KEY_STARTING_ADDRESS);
+        return startingAddress == null ? 0 : startingAddress;
+    }
+
+    public void setStartingAddress(long startingAddress) {
+        dataStore.put(Long.class, PREFIX_STARTING_ADDRESS, KEY_STARTING_ADDRESS, startingAddress);
     }
 }

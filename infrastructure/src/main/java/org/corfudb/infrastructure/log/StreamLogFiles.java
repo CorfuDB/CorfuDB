@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.log;
 
 import java.io.File;
+import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -43,6 +44,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.filefilter.WildcardFileFilter;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.TrimEntry;
 import org.corfudb.format.Types.DataType;
@@ -58,6 +60,8 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
 import javax.annotation.Nullable;
+
+import static org.apache.tools.ant.types.resources.MultiRootFileSet.SetType.file;
 
 
 /**
@@ -89,6 +93,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     final private ServerContext serverContext;
     final private AtomicLong globalTail = new AtomicLong(0L);
     private long lastSegment;
+    private volatile long startingAddress;
 
     public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
         logDir = serverContext.getServerConfig().get("--log-path") + File.separator + "log";
@@ -102,7 +107,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         this.noVerify = noVerify;
         this.serverContext = serverContext;
         verifyLogs();
+        // Starting address initialization should happen before
+        // initializing the tail segment (i.e. initializeMaxGlobalAddress)
+        initializeStartingAddress();
         initializeMaxGlobalAddress();
+        int a;
     }
 
     @Override
@@ -124,7 +133,28 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     @Override
     public void prefixTrim(LogAddress logAddress) {
-        //No-op
+        if (logAddress.getAddress() < startingAddress) {
+            throw new TrimmedException();
+        } else {
+            // TODO(Maithem): Although this operation is persisted to disk,
+            // the startingAddress can be lost even after the method has completed.
+            // This is due to the fact that updates on the local datastore don't
+            // expose disk sync functionalty.
+            long newStartingAddress = logAddress.getAddress() + 1;
+            serverContext.setStartingAddress(newStartingAddress);
+            startingAddress = newStartingAddress;
+            log.debug("Trimmed prefix, new starting address {}", newStartingAddress);
+        }
+    }
+
+    private void checkAddress(long address) {
+        if (address < startingAddress) {
+            throw new TrimmedException();
+        }
+    }
+
+    private void initializeStartingAddress() {
+        startingAddress = serverContext.getStartingAddress();
     }
 
     private void initializeMaxGlobalAddress() {
@@ -242,7 +272,41 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public void compact() {
+    public synchronized void compact() {
+        if (startingAddress == 0) {
+            spaseCompact();
+        } else {
+            trimPrefix();
+        }
+    }
+
+    private void trimPrefix() {
+        // Trim all segments up till the segment that contains the starting address
+        // (i.e. trim only complete segments)
+        long endSegment = (startingAddress / RECORDS_PER_LOG_FILE) - 1;
+
+        if (endSegment <= 0) {
+            log.debug("Only one segment detected, ignoring trim");
+            return;
+        }
+
+        File dir = new File(logDir);
+        FileFilter fileFilter = new FileFilter() {
+            public boolean accept(File file) {
+                String segmentStr = file.getName().split("\\.")[0];
+                return Long.parseLong(segmentStr) <= endSegment;
+            }};
+        File[] files = dir.listFiles(fileFilter);
+
+        for(File file : files) {
+            if(!file.delete()) {
+                log.error("Couldn't delete/trim file {}", file.getName());
+            }
+        }
+        log.info("Prefix trim completed, delete segments 0 to {}", endSegment);
+    }
+
+    private void spaseCompact() {
         //TODO(Maithem) Open all segment handlers?
         for (SegmentHandle sh : writeChannels.values()) {
             Set<Long> pending = new HashSet(sh.getPendingTrims());
@@ -587,6 +651,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      */
     @VisibleForTesting
     synchronized SegmentHandle getSegmentHandleForAddress(LogAddress logAddress) {
+        checkAddress(logAddress.getAddress());
+
         String filePath = logDir + File.separator;
         long segment = logAddress.address / RECORDS_PER_LOG_FILE;
 
@@ -829,6 +895,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         } catch (IOException e) {
             log.error("Disk_write[{}]: Exception", logAddress, e);
             throw new RuntimeException(e);
+        } catch (TrimmedException e) {
+            throw new OverwriteException();
         }
     }
 
