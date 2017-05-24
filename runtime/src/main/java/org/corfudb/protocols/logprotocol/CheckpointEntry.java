@@ -99,7 +99,7 @@ public class CheckpointEntry extends LogEntry {
 
     public CheckpointEntry(CheckpointEntryType type, String authorID, UUID checkpointID,
                            Map<CheckpointDictKey,String> dict, MultiSMREntry smrEntries) {
-        super(LogEntryType.SMR);
+        super(LogEntryType.CHECKPOINT);
         this.cpType = type;
         this.checkpointID = checkpointID;
         this.checkpointAuthorID = authorID;

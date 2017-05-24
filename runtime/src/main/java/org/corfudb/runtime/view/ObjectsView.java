@@ -18,6 +18,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 
+import javax.annotation.Nonnull;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
@@ -44,7 +45,7 @@ public class ObjectsView extends AbstractView {
     @Getter
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
 
-    public ObjectsView(CorfuRuntime runtime) {
+    public ObjectsView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
     }
 
