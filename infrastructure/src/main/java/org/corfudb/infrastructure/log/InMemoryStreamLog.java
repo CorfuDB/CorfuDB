@@ -36,7 +36,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public synchronized void append(LogAddress logAddress, LogData entry) {
         try {
-            checkPrefix(logAddress.getAddress());
+            checkRange(logAddress.getAddress());
         } catch (TrimmedException e) {
             throw new OverwriteException();
         }
@@ -63,16 +63,16 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         globalTail.getAndUpdate(maxTail -> entry.getGlobalAddress() > maxTail ? entry.getGlobalAddress() : maxTail);
     }
 
-    private void checkPrefix(long address) {
-        if(address <= startingAddress) {
+    private void checkRange(long address) {
+        if(address < startingAddress) {
             throw new TrimmedException();
         }
     }
 
     @Override
     public synchronized void prefixTrim(LogAddress logAddress) {
-        checkPrefix(logAddress.getAddress());
-        startingAddress =logAddress.getAddress();
+        checkRange(logAddress.getAddress());
+        startingAddress = logAddress.getAddress() + 1;
     }
 
     @Override
@@ -96,7 +96,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
 
     @Override
     public LogData read(LogAddress logAddress) {
-        checkPrefix(logAddress.getAddress());
+        checkRange(logAddress.getAddress());
 
         if(trimmed.contains(logAddress)) {
             throw new TrimmedException();
