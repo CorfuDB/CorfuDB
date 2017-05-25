@@ -7,10 +7,15 @@ import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 import io.netty.buffer.ByteBuf;
 
 import java.io.File;
+import java.io.FileFilter;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 import io.netty.buffer.Unpooled;
+import org.apache.commons.io.filefilter.WildcardFileFilter;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
@@ -365,5 +370,60 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Restart and try to retrieve the global tail one last time
         log = new StreamLogFiles(getContext(), false);
         assertThat(log.getGlobalTail()).isEqualTo(lastAddress + tailDelta);
+    }
+
+    @Test
+    public void testPrefixTrim() {
+        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        StreamLog log = new StreamLogFiles(getContext(), false);
+
+        // Write 50 segments and trim the first 25
+        final long numSegments = 50;
+        final long filesPerSegment = 3;
+        for(long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
+            writeToLog(log, x);
+        }
+
+        File logs = new File(logDir);
+
+        assertThat((long) logs.list().length).isEqualTo(numSegments * filesPerSegment);
+
+        final long endSegment = 25;
+        long trimAddress = endSegment * StreamLogFiles.RECORDS_PER_LOG_FILE + 1;
+        log.prefixTrim(new LogAddress(trimAddress, null));
+        log.compact();
+
+        // Verify that first 25 segments have been deleted
+        String[] afterTrimFiles = logs.list();
+        assertThat((long) afterTrimFiles.length).isEqualTo((numSegments - endSegment) * filesPerSegment);
+
+        Set<String> fileNames = new HashSet(Arrays.asList(afterTrimFiles));
+        for (long x = endSegment + 1; x < numSegments; x++) {
+            String logFile = Long.toString(x) + ".log";
+            String trimmedLogFile = StreamLogFiles.getTrimmedFilePath(logFile);
+            String pendingLogFile = StreamLogFiles.getPendingTrimsFilePath(logFile);
+
+            assertThat(fileNames).contains(logFile);
+            assertThat(fileNames).contains(trimmedLogFile);
+            assertThat(fileNames).contains(pendingLogFile);
+        }
+
+        // Try to trim an address that is less than the new starting address
+        assertThatThrownBy(() -> log.prefixTrim(new LogAddress(trimAddress, null)))
+                .isInstanceOf(TrimmedException.class);
+
+        long trimmedExceptions = 0;
+
+        // Try to read trimmed addresses
+        for(long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
+            try {
+                log.read(new LogAddress(x, null));
+            } catch (TrimmedException e) {
+                trimmedExceptions++;
+            }
+        }
+
+        // Address 0 is not reflected in trimAddress
+        assertThat(trimmedExceptions).isEqualTo(trimAddress + 1);
     }
 }

@@ -88,11 +88,16 @@ public class LogUnitClientTest extends AbstractClientTest {
     public void readingTrimmedAddress() throws Exception {
         byte[] testString = "hello world".getBytes();
         client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
+        client.write(1, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
         LogData r = client.read(0).get().getReadSet().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
+        r = client.read(1).get().getReadSet().get(1L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
 
-        client.trim(0);
+        client.prefixTrim(0);
+        client.compact();
 
         // For logunit cach flush
         LogUnitServer server2 = new LogUnitServer(serverContext);
@@ -102,6 +107,8 @@ public class LogUnitClientTest extends AbstractClientTest {
         assertThatThrownBy(() -> client.read(0).get().getReadSet().get(0L))
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(TrimmedException.class);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
     }
 
     @Test

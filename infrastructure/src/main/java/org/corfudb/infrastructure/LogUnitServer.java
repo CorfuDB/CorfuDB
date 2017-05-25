@@ -2,9 +2,10 @@ package org.corfudb.infrastructure;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
@@ -50,9 +51,6 @@ import org.corfudb.util.Utils;
  */
 @Slf4j
 public class LogUnitServer extends AbstractServer {
-
-    private final ServerContext serverContext;
-
     /**
      * A scheduler, which is used to schedule periodic tasks like garbage collection.
      */
@@ -71,6 +69,7 @@ public class LogUnitServer extends AbstractServer {
     private final Thread gcThread = null;
     private Long gcRetryInterval;
     private AtomicBoolean running = new AtomicBoolean(true);
+    private ScheduledFuture<?> compactor;
 
     /**
      * The options map.
@@ -99,7 +98,6 @@ public class LogUnitServer extends AbstractServer {
 
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
-        this.serverContext = serverContext;
         double cacheSizeHeapRatio = Double.parseDouble((String) opts.get("--cache-heap-ratio"));
 
         maxCacheSize = (long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio);
@@ -126,6 +124,9 @@ public class LogUnitServer extends AbstractServer {
 
         MetricRegistry metrics = serverContext.getMetrics();
         MetricsUtils.addCacheGauges(metrics, metricsPrefix + "cache.", dataCache);
+
+        Runnable task = () -> streamLog.compact();
+        compactor = scheduler.scheduleAtFixedRate(task, 10,45, TimeUnit.MINUTES);
     }
 
     /**
@@ -228,14 +229,28 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @ServerHandler(type = CorfuMsgType.PREFIX_TRIM)
-    private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
+                            boolean isMetricsEnabled) {
         try {
-            batchWriter.trim(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()));
+            batchWriter.prefixTrim(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()));
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         } catch (TrimmedException ex) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
         }
     }
+
+    @ServerHandler(type = CorfuMsgType.COMPACT_REQUEST, opTimer = metricsPrefix + "compact")
+    private void compact(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+        try {
+            streamLog.compact();
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        } catch (RuntimeException ex) {
+            log.error("Internal Error");
+            //TODO(Maithem) Need an internal error return type
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        }
+    }
+
 
 
     /**
@@ -264,6 +279,7 @@ public class LogUnitServer extends AbstractServer {
      */
     @Override
     public void shutdown() {
+        compactor.cancel(true);
         scheduler.shutdownNow();
         batchWriter.close();
     }
