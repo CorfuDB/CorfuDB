@@ -68,6 +68,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     /** The serializer SMR entries will use to serialize their
      * arguments.
      */
+    @Getter
     ISerializer serializer;
 
     /** The arguments this proxy was created with.

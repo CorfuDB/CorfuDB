@@ -11,8 +11,7 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.StreamsView;
-import org.corfudb.runtime.view.stream.AbstractQueuedStreamView;
-import org.corfudb.runtime.view.stream.BackpointerStreamView;
+import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.time.LocalDateTime;
@@ -79,6 +78,10 @@ public class CheckpointWriter {
      *  TODO: generalize to all SMR objects.
      */
     private SMRMap map;
+
+    @Getter
+    @Setter
+    ISerializer serializer = Serializers.JSON;
 
     public CheckpointWriter(CorfuRuntime rt, UUID streamID, String author, SMRMap map) {
         this.rt = rt;
@@ -178,7 +181,7 @@ public class CheckpointWriter {
                 .map(k -> {
                     return new SMREntry("put",
                             new Object[]{keyMutator.apply(k), valueMutator.apply(map.get(k))},
-                            Serializers.JSON);
+                            serializer);
                 }).iterator(), batchSize)
                 .forEachRemaining(entries -> {
                     MultiSMREntry smrEntries = new MultiSMREntry();
