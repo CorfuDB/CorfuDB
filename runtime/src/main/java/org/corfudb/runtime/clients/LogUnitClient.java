@@ -313,30 +313,6 @@ public class LogUnitClient implements IClient {
         return cf.thenApply(x -> { context.stop(); return x; });
     }
 
-
-    /**
-     * Force the garbage collector to begin garbage collection.
-     */
-    public void forceGC() {
-        router.sendMessage(CorfuMsgType.FORCE_GC.msg());
-    }
-
-    /**
-     * Force the compactor to recalculate the contiguous tail.
-     */
-    public void forceCompact() {
-        router.sendMessage(CorfuMsgType.FORCE_COMPACT.msg());
-    }
-
-    /**
-     * Change the default garbage collection interval.
-     *
-     * @param millis The new garbage collection interval, in milliseconds.
-     */
-    public void setGCInterval(long millis) {
-        router.sendMessage(CorfuMsgType.GC_INTERVAL.payloadMsg(millis));
-    }
-
     private Timer.Context getTimerContext(String opName) {
         Timer t = CorfuRuntime.getMetrics().timer(
                 CorfuRuntime.getMpLUC() +
