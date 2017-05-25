@@ -10,9 +10,11 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.util.serializer.Serializers;
@@ -225,6 +227,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Write all CP data.
         r.getObjectsView().TXBegin();
+        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
+        long txBeginGlobalAddress = context.getSnapshotTimestamp();
         try {
             long startAddress = cpw.startCheckpoint();
             List<Long> continuationAddrs = cpw.appendObjectState();
@@ -417,4 +421,69 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         }
     }
 
+    @Test
+    public void MultiCheckpointWriter2Test() throws Exception {
+        MultiCheckpointWriterTestInner(true);
+        // While creating & testing MultiCheckpointWriter,
+        // I accidentally discovered that a checkpoint that
+        // immediately follows an earlier checkpoint can cause
+        // map corruption.  Let's test again for posterity.
+        MultiCheckpointWriterTestInner(false);
+    }
+
+    public void MultiCheckpointWriterTestInner(boolean regressionFlavor) throws Exception {
+
+        final String streamNameA = "mystream5A" + regressionFlavor;
+        final String streamNameB = "mystream5B" + regressionFlavor;
+        final String keyPrefix = "first";
+        final int numKeys = 10;
+        final String author = "Me, myself, and I";
+
+        // Instantiate map and write first keys
+        Map<String, Long> mA = instantiateMap(streamNameA);
+        Map<String, Long> mB = instantiateMap(streamNameB);
+        for (int j = 0; j < 2*2; j++) {
+            for (int i = 0; i < numKeys; i++) {
+                String key = "A" + keyPrefix + Integer.toString(i);
+                mA.put(key, (long) i);
+                key = "B" + keyPrefix + Integer.toString(i);
+                mB.put(key, (long) i);
+            }
+        }
+        mA.put("one more", 1L);
+        mB.put("one more", 1L);
+
+        MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
+        mcw1.addMap((SMRMap) mA);
+        mcw1.addMap((SMRMap) mB);
+        long firstGlobalAddress1 = mcw1.appendCheckpoints(r, author);
+        assertThat(firstGlobalAddress1).isGreaterThan(-1);
+        assertThat(mcw1.getCheckpointLogAddresses().size()).isGreaterThan(-1);
+
+        setRuntime();
+        Map<String, Long> m2c = instantiateMap(streamNameA);
+
+        // A bug was once here when 2 checkpoints were adjacent to
+        // each other without any regular entries in between.
+        if (regressionFlavor) {
+            mA.put("one more", 1L);
+            mB.put("one more", 1L);
+        }
+
+        MultiCheckpointWriter mcw2 = new MultiCheckpointWriter();
+        mcw2.addMap((SMRMap) mA);
+        mcw2.addMap((SMRMap) mB);
+        long firstGlobalAddress2 = mcw2.appendCheckpoints(r, author);
+        assertThat(firstGlobalAddress2).isGreaterThan(firstGlobalAddress1);
+
+        setRuntime();
+        Map<String, Long> m2A = instantiateMap(streamNameA);
+        Map<String, Long> m2B = instantiateMap(streamNameB);
+        for (int i = 0; i < numKeys; i++) {
+            String keyA = "A" + keyPrefix + Integer.toString(i);
+            String keyB = "B" + keyPrefix + Integer.toString(i);
+            assertThat(m2A.get(keyA)).isEqualTo(i);
+            assertThat(m2B.get(keyB)).isEqualTo(i);
+        }
+    }
 }
