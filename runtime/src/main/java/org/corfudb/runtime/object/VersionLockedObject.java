@@ -521,7 +521,7 @@ public class VersionLockedObject<T> {
                             entry.setUpcallResult(res);
                         }
                         else if (pendingUpcalls.contains(entry.getEntry().getGlobalAddress())) {
-                            log.debug("Sync[{}] Upcall Result {}", entry.getEntry().getGlobalAddress());
+                            log.debug("Sync[{}] Upcall Result {}", this, entry.getEntry().getGlobalAddress());
                             upcallResults.put(entry.getEntry().getGlobalAddress(), res == null ?
                                     NullValue.NULL_VALUE : res);
                             pendingUpcalls.remove(entry.getEntry().getGlobalAddress());

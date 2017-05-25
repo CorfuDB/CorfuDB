@@ -6,6 +6,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
@@ -32,17 +33,25 @@ public class AddressSpaceView extends AbstractView {
     /**
      * A cache for read results.
      */
-    static LoadingCache<Long, ILogData> readCache;
+    final LoadingCache<Long, ILogData> readCache = Caffeine.<Long, ILogData>newBuilder()
+            .<Long, ILogData>weigher((k, v) -> v.getSizeEstimate())
+            .maximumWeight(runtime.getMaxCacheSize())
+            .recordStats()
+            .build(new CacheLoader<Long, ILogData>() {
+                @Override
+                public ILogData load(Long aLong) throws Exception {
+                    return cacheFetch(aLong);
+                }
 
-    public AddressSpaceView(CorfuRuntime runtime) {
+                @Override
+                public Map<Long, ILogData>
+                loadAll(Iterable<? extends Long> keys) throws Exception {
+                    return cacheFetch((Iterable<Long>) keys);
+                }
+            });
+
+    public AddressSpaceView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
-        // We don't lock readCache, this should be ok in the rare
-        // case we generate a second readCache as it won't be pointed to.
-        if (readCache == null) {
-            resetCaches();
-        } else {
-            log.debug("Read cache already built, re-using existing read cache.");
-        }
 
         final String pfx = String.format("%s0x%x.cache.", runtime.getMpASV(), this.hashCode());
         runtime.getMetrics().register(pfx + "cache-size", (Gauge<Long>) () -> readCache.estimatedSize());
@@ -56,22 +65,7 @@ public class AddressSpaceView extends AbstractView {
      * Reset all in-memory caches.
      */
     public void resetCaches() {
-        readCache = Caffeine.<Long, ILogData>newBuilder()
-                .<Long, ILogData>weigher((k, v) -> v.getSizeEstimate())
-                .maximumWeight(runtime.getMaxCacheSize())
-                .recordStats()
-                .build(new CacheLoader<Long, ILogData>() {
-                    @Override
-                    public ILogData load(Long aLong) throws Exception {
-                        return cacheFetch(aLong);
-                    }
-
-                    @Override
-                    public Map<Long, ILogData>
-                    loadAll(Iterable<? extends Long> keys) throws Exception {
-                        return cacheFetch((Iterable<Long>) keys);
-                    }
-                });
+        readCache.invalidateAll();
     }
 
     /** Write the given log data using a token, returning
@@ -89,7 +83,8 @@ public class AddressSpaceView extends AbstractView {
      */
     public void write(IToken token, Object data)
         throws OverwriteException {
-        final ILogData ld = new LogData(data);
+        final ILogData ld = new LogData(DataType.DATA, data);
+
         layoutHelper(l -> {
             // Check if the token issued is in the same
             // epoch as the layout we are about to write
@@ -105,10 +100,8 @@ public class AddressSpaceView extends AbstractView {
             l.getReplicationMode(token.getTokenValue())
                         .getReplicationProtocol(runtime)
                         .write(l, ld);
-
             return null;
          });
-
 
         // Cache the successful write
         if (!runtime.isCacheDisabled()) {

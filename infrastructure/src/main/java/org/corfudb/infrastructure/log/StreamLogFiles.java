@@ -50,6 +50,7 @@ import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -119,6 +120,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             serverContext.setTailSegment(segment);
             lastSegment = segment;
         }
+    }
+
+    @Override
+    public void prefixTrim(LogAddress logAddress) {
+        //No-op
     }
 
     private void initializeMaxGlobalAddress() {
@@ -424,6 +430,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         LogData logData = new LogData(org.corfudb.protocols.wireprotocol.
                 DataType.typeMap.get((byte) entry.getDataType().getNumber()), data);
 
+        // Checkpoint-related metadata are set by LogData constructor.
         logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());
         logData.setRank(createDataRank(entry));
@@ -714,6 +721,15 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         if (rank.isPresent()) {
             logEntryBuilder.setRank(rank.get());
         }
+        if (entry.hasCheckpointMetadata()) {
+            logEntryBuilder.setCheckpointEntryType(
+                    Types.CheckpointEntryType.forNumber(
+                            entry.getCheckpointType().ordinal()));
+            logEntryBuilder.setCheckpointIDMostSignificant(
+                    entry.getCheckpointID().getMostSignificantBits());
+            logEntryBuilder.setCheckpointIDLeastSignificant(
+                    entry.getCheckpointID().getLeastSignificantBits());
+        }
 
         return logEntryBuilder.build();
     }
@@ -824,7 +840,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 throw new TrimmedException();
             }
             return readRecord(sh, logAddress.address);
-        } catch (Exception e) {
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }

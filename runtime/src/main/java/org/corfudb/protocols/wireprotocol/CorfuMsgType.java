@@ -54,6 +54,7 @@ public enum CorfuMsgType {
     FORCE_GC(35, TypeToken.of(CorfuMsg.class)),
     GC_INTERVAL(36, new TypeToken<CorfuPayloadMsg<Long>>() {}),
     FORCE_COMPACT(37, TypeToken.of(CorfuMsg.class)),
+    PREFIX_TRIM(38, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
     TAIL_REQUEST(41, TypeToken.of(CorfuMsg.class), true),
     TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
 
@@ -63,7 +64,7 @@ public enum CorfuMsgType {
     ERROR_OOS(53, TypeToken.of(CorfuMsg.class)),
     ERROR_RANK(54, TypeToken.of(CorfuMsg.class)),
     ERROR_NOENTRY(55, TypeToken.of(CorfuMsg.class)),
-    ERROR_DATA_CORRUPTION(57, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
+    ERROR_DATA_CORRUPTION(57, TypeToken.of(CorfuMsg.class)),
     ERROR_DATA_OUTRANKED(58, TypeToken.of(CorfuMsg.class)),
     ERROR_VALUE_ADOPTED(59,new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
 
