@@ -3,7 +3,6 @@ package org.corfudb.infrastructure;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.assertj.core.api.Assertions;
-import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
@@ -272,7 +271,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         this.router.reset();
         this.router.addServer(s1);
 
-        ILogData entry = s1.getDataCache().get(new LogAddress(globalAddress, null));
+        ILogData entry = s1.getDataCache().get(globalAddress);
 
         // Verify that the meta data can be read correctly
         assertThat(entry.getBackpointerMap()).isEqualTo(uuidLongMap);

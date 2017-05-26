@@ -5,7 +5,7 @@ import io.netty.buffer.ByteBufAllocator;
 import org.corfudb.format.Types;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.log.StreamLogFiles;
-import org.corfudb.infrastructure.log.LogAddress;
+
 import static org.junit.Assert.*;
 
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -40,22 +40,21 @@ public class logReaderTest {
 
     @Before
     public void setUp() {
-        testUUID = UUID.randomUUID();
         File fDir = new File(LOG_PATH);
         fDir.mkdirs();
         StreamLogFiles logfile = new StreamLogFiles(getContext(), false);
         ByteBuf buf = ByteBufAllocator.DEFAULT.buffer();
         Serializers.CORFU.serialize("Hello World".getBytes(), buf);
         LogData data = new LogData(DataType.DATA, buf);
-        logfile.append(new LogAddress(new Long(0), testUUID), data);
+        logfile.append(0, data);
         buf.clear();
         Serializers.CORFU.serialize("Happy Days".getBytes(), buf);
         data = new LogData(DataType.DATA, buf);
-        logfile.append(new LogAddress(new Long(1), testUUID), data);
+        logfile.append(1, data);
         buf.clear();
         Serializers.CORFU.serialize("Corfu test".getBytes(), buf);
         data = new LogData(DataType.DATA, buf);
-        logfile.append(new LogAddress(new Long(2), testUUID), data);
+        logfile.append(2, data);
         logfile.close();
     }
     @After
@@ -82,14 +81,14 @@ public class logReaderTest {
         final int totalRecordCnt = 3;
 
         logReader reader = new logReader();
-        String[] args = {"report", LOG_PATH + "/" + testUUID + "-0.log"};
+        String[] args = {"report", LOG_PATH + "/" + "0.log"};
         int cnt = reader.run(args);
         assertEquals(totalRecordCnt, cnt);
     }
     @Test
     public void TestDisplayOne() {
         logReader reader = new logReader();
-        String[] args = {"display", "--from=1", "--to=1", LOG_PATH + "/" + testUUID + "-0.log"};
+        String[] args = {"display", "--from=1", "--to=1", LOG_PATH + "/" + "0.log"};
         reader.init(args);
         try {
             reader.openLogFile(0);
@@ -107,7 +106,7 @@ public class logReaderTest {
     @Test
     public void TestDisplayAll() {
         logReader reader = new logReader();
-        String[] args = {"display", "--from=0", "--to=2", LOG_PATH + "/" + testUUID + "-0.log"};
+        String[] args = {"display", "--from=0", "--to=2", LOG_PATH + "/" + "0.log"};
         reader.init(args);
         try {
             reader.openLogFile(0);
@@ -125,12 +124,12 @@ public class logReaderTest {
     @Test
     public void TestEraseOne() {
         logReader reader = new logReader();
-        String[] args = {"erase", "--from=1", "--to=1", LOG_PATH + "/" + testUUID + "-0.log"};
+        String[] args = {"erase", "--from=1", "--to=1", LOG_PATH + "/" + "0.log"};
         reader.run(args);
 
         // Read back the new modified log file and confirm the expected change
         reader = new logReader();
-        args = new String[]{"display", LOG_PATH + "/" + testUUID + "-0.log.modified"};
+        args = new String[]{"display", LOG_PATH + "/" + "0.log.modified"};
         reader.init(args);
         try {
             reader.openLogFile(0);
@@ -148,12 +147,12 @@ public class logReaderTest {
     @Test
     public void TestEraseTail() {
         logReader reader = new logReader();
-        String[] args = {"erase", "--from=1", LOG_PATH + "/" + testUUID + "-0.log"};
+        String[] args = {"erase", "--from=1", LOG_PATH + "/" + "0.log"};
         reader.run(args);
 
         // Read back the new modified log file and confirm the expected change
         reader = new logReader();
-        args = new String[]{"display", LOG_PATH + "/" + testUUID + "-0.log.modified"};
+        args = new String[]{"display", LOG_PATH + "/" + "0.log.modified"};
         reader.init(args);
         try {
             reader.openLogFile(0);
@@ -168,5 +167,4 @@ public class logReaderTest {
             fail();
         }
     }
-    private UUID testUUID;
 }
