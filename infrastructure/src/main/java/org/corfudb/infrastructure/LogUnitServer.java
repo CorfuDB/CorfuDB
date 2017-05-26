@@ -230,6 +230,18 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
+    @ServerHandler(type = CorfuMsgType.FLUSH_CACHE, opTimer = metricsPrefix + "flush-cache")
+    private void flushCache(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+        try {
+            dataCache.invalidateAll();
+        } catch (RuntimeException e) {
+            log.error("Encountered error while flushing cache {}", e);
+        }
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+
+
 
 
     /**
@@ -264,7 +276,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @VisibleForTesting
-    LoadingCache<LogAddress, ILogData> getDataCache() {
+    public LoadingCache<LogAddress, ILogData> getDataCache() {
         return dataCache;
     }
 
