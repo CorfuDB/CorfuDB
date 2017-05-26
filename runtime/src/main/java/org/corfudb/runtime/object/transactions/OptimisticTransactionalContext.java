@@ -6,10 +6,13 @@ import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.view.Address;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -257,33 +260,25 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // address of -1L if it is rejected.
         long address = -1L;
 
-        try {
-            address = this.builder.runtime.getStreamsView()
-                    .append(
+        address = this.builder.runtime.getStreamsView()
+                .append(
 
-                            // a set of stream-IDs that contains the affected streams
-                            affectedStreams,
+                        // a set of stream-IDs that contains the affected streams
+                        affectedStreams,
 
-                            // a MultiObjectSMREntry that contains the update(s) to objects
-                            collectWriteSetEntries(),
+                        // a MultiObjectSMREntry that contains the update(s) to objects
+                        collectWriteSetEntries(),
 
-                            // TxResolution info:
-                            // 1. snapshot timestamp
-                            // 2. a map of conflict params, arranged by streamID's
-                            // 3. a map of write conflict-params, arranged by
-                            // streamID's
-                            new TxResolutionInfo(getTransactionID(),
-                                    getSnapshotTimestamp(),
-                                    computeConflictSet.get(),
-                                    collectWriteConflictParams())
-                    );
-        } catch (TransactionAbortedException ae) {
-            log.trace("Commit[{}] Rejected by sequencer", this);
-            abortTransaction(ae);
-
-            // rethrow the TXAbortedException
-            throw ae;
-        }
+                        // TxResolution info:
+                        // 1. snapshot timestamp
+                        // 2. a map of conflict params, arranged by streamID's
+                        // 3. a map of write conflict-params, arranged by
+                        // streamID's
+                        new TxResolutionInfo(getTransactionID(),
+                                getSnapshotTimestamp(),
+                                computeConflictSet.get(),
+                                collectWriteConflictParams())
+                );
 
         log.trace("Commit[{}] Acquire address {}", this, address);
 
