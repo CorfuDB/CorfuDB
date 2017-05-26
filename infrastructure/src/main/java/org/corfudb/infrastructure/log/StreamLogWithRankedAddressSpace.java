@@ -25,15 +25,15 @@ public interface StreamLogWithRankedAddressSpace extends StreamLog {
      * Note that it is not permitted multiple threads to access the same log address
      * concurrently through this method, this method does not lock or synchronize.
      * This method needs
-     * @param logAddress
+     * @param address
      * @param newEntry
      * @throws DataOutrankedException if the log entry cannot be assigned to this log address as there is a data with higher rank
      * @throws ValueAdoptedException if the new message is a proposal during the two phase recovery write and there is an existing
      * data at this log address already.
      * @throw OverwriteException if the new data is with rank 0 (not from recovery write). This can happen only if there is a bug in the client implementation.
      */
-    default void assertAppendPermittedUnsafe(LogAddress logAddress, LogData newEntry) throws DataOutrankedException, ValueAdoptedException {
-        LogData oldEntry = read(logAddress);
+    default void assertAppendPermittedUnsafe(long address, LogData newEntry) throws DataOutrankedException, ValueAdoptedException {
+        LogData oldEntry = read(address);
         if (oldEntry.getType()==DataType.EMPTY) {
              return;
         }
@@ -49,7 +49,7 @@ public interface StreamLogWithRankedAddressSpace extends StreamLog {
             if (newEntry.getType()==DataType.RANK_ONLY && oldEntry.getType() != DataType.RANK_ONLY) {
                 // the new data is a proposal, the other data is not, so the old value should be adopted
                 ReadResponse resp = new ReadResponse();
-                resp.put(logAddress.getAddress(), oldEntry);
+                resp.put(address, oldEntry);
                 throw new ValueAdoptedException(resp);
             } else {
                 return;

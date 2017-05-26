@@ -9,5 +9,7 @@ import lombok.RequiredArgsConstructor;
 public enum AbortCause {
     CONFLICT,
     NEW_SEQUENCER,
-    USER;
+    USER,
+    NETWORK,
+    UNDEFINED;
 }

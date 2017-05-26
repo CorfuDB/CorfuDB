@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure;
 
 import lombok.Data;
-import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.protocols.wireprotocol.LogData;
 
 import java.util.concurrent.CompletableFuture;
@@ -20,7 +19,7 @@ public class BatchWriterOperation {
     }
 
     private final Type type;
-    private final LogAddress logAddress;
+    private final Long address;
     private final LogData logData;
     private final CompletableFuture future;
     private Exception exception;

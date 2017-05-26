@@ -6,15 +6,22 @@ import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.lang.reflect.Constructor;
-import java.util.*;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 import static java.lang.Long.min;
@@ -123,8 +130,13 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
                               Object[] conflictObject, boolean isMetricsEnabled) {
         if (TransactionalContext.isInTransaction()) {
-            return TransactionalContext.getCurrentContext()
-                    .access(this, accessMethod, conflictObject);
+            try {
+                return TransactionalContext.getCurrentContext()
+                        .access(this, accessMethod, conflictObject);
+            } catch (Exception e) {
+                log.debug("Access[{}] Exception: {}", this, e);
+                this.abortTransaction(e);
+            }
         }
 
         // Linearize this read against a timestamp
@@ -155,12 +167,16 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (TransactionalContext.isInTransaction()) {
-            // We generate an entry to avoid exposing the serializer to the tx context.
-            SMREntry entry = new SMREntry(smrUpdateFunction, args, serializer);
-            return TransactionalContext.getCurrentContext()
-                    .logUpdate(this, entry, conflictObject);
+            try {
+                // We generate an entry to avoid exposing the serializer to the tx context.
+                SMREntry entry = new SMREntry(smrUpdateFunction, args, serializer);
+                return TransactionalContext.getCurrentContext()
+                        .logUpdate(this, entry, conflictObject);
+            } catch (Exception e) {
+                log.debug("Update[{}] Exception: {}", this, e);
+                this.abortTransaction(e);
+            }
         }
-
 
         // If we aren't in a transaction, we can just write the modification.
         // We need to add the acquired token into the pending upcall list.
@@ -205,8 +221,13 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (TransactionalContext.isInTransaction()) {
-            return (R) TransactionalContext.getCurrentContext()
-                    .getUpcallResult(this, timestamp, conflictObject);
+            try {
+                return (R) TransactionalContext.getCurrentContext()
+                        .getUpcallResult(this, timestamp, conflictObject);
+            } catch (Exception e) {
+                log.debug("UpcallResult[{}] Exception: {}", this, e);
+                this.abortTransaction(e);
+            }
         }
 
         // Check first if we have the upcall, if we do
@@ -273,6 +294,17 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 rt.getObjectsView().TXEnd();
                 return ret;
             } catch (TransactionAbortedException e) {
+                // If TransactionAbortedException is due to a 'Network Exception' do not keep retrying a nested
+                // transaction indefinitely (this could go on forever). If this is part of an outer transaction abort
+                // and remove from context. Re-throw exception to client.
+                if (e.getAbortCause() == AbortCause.NETWORK) {
+                    if (TransactionalContext.getCurrentContext() != null) {
+                        TransactionalContext.getCurrentContext().abortTransaction(e);
+                        TransactionalContext.removeContext();
+                        throw e;
+                    }
+                }
+
                 if (retries == 1) {
                     MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTxnRetry1, 1);
                 }
@@ -282,6 +314,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 catch (Exception ex) {}
                 sleepTime = min(sleepTime * 2L, maxSleepTime);
                 retries++;
+            } catch (Exception e) {
+                log.debug("TXExecute[{}] Abort with Exception: {}", this, e);
+                this.abortTransaction(e);
             }
         }
     }
@@ -350,5 +385,29 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public String toString() {
         return type.getSimpleName() + "[" + Utils.toReadableID(streamID) + "]";
+    }
+
+    private void abortTransaction(Exception e) {
+        long snapshot_timestamp;
+        AbortCause abortCause;
+
+        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
+
+        if (e instanceof NetworkException) {
+            // If a 'NetworkException' was received within a transactional context, an attempt to
+            // 'getSnapshotTimestamp' will also fail (as it requests it to the Sequencer). A new NetworkException
+            // would prevent the earliest to be propagated and encapsulated as a TransactionAbortedException.
+            snapshot_timestamp = -1L;
+            abortCause = AbortCause.NETWORK;
+        } else {
+            snapshot_timestamp = context.getSnapshotTimestamp();
+            abortCause = AbortCause.UNDEFINED;
+        }
+
+        TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(), snapshot_timestamp);
+        TransactionAbortedException tae = new TransactionAbortedException(txInfo, null, abortCause);
+        context.abortTransaction(tae);
+        TransactionalContext.removeContext();
+        throw tae;
     }
 }

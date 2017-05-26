@@ -14,29 +14,29 @@ public interface StreamLog {
 
     /**
      * Append an entry to the stream log.
-     * @param logAddress
+     * @param address
      * @param entry
      */
-    void append(LogAddress logAddress, LogData entry);
+    void append(long address, LogData entry);
 
     /**
      * Given an address, read the corresponding stream entry.
-     * @param logAddress
+     * @param address
      * @return Stream entry if it exists, otherwise return null
      */
-    LogData read(LogAddress logAddress);
+    LogData read(long address);
 
     /**
      * Mark a StreamLog address as trimmed.
-     * @param logAddress
+     * @param address
      */
-    void trim(LogAddress logAddress);
+    void trim(long address);
 
     /**
      * Prefix trim the global log
-     * @param logAddress Address to trim the log up to
+     * @param address address to trim the log up to
      */
-    void prefixTrim(LogAddress logAddress);
+    void prefixTrim(long address);
 
     /**
      * Remove all trimmed addresses from the StreamLog.
@@ -63,7 +63,7 @@ public interface StreamLog {
     /**
      * unmap/release the memory for entry
      *
-     * @param logAddress
+     * @param address
      */
-    void release(LogAddress logAddress, LogData entry);
+    void release(long address, LogData entry);
 }

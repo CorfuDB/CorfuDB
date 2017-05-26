@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.TransactionalMethod;
+import org.corfudb.annotations.Accessor;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -73,6 +74,7 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      * @param p java predicate (function to evaluate)
      * @return a view of the values contained in this map meeting the predicate condition.   
      */
+    @Accessor
     public List<V> scanAndFilter(Predicate<? super V> p) {
         return super.values().parallelStream().filter(p).collect(Collectors.toList());
     }
