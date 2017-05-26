@@ -62,13 +62,6 @@ public class LogUnitServer extends AbstractServer {
                             .setNameFormat("LogUnit-Maintenance-%d")
                             .build());
 
-    /**
-     * GC parameters
-     * TODO: entire GC handling needs updating, currently not being activated
-     */
-    private final Thread gcThread = null;
-    private Long gcRetryInterval;
-    private AtomicBoolean running = new AtomicBoolean(true);
     private ScheduledFuture<?> compactor;
 
     /**
@@ -188,20 +181,6 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.GC_INTERVAL, opTimer = metricsPrefix + "gc-interval")
-    private void setGcInterval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r,
-                               boolean isMetricsEnabled) {
-        gcRetryInterval = msg.getPayload();
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-    }
-
-    @ServerHandler(type = CorfuMsgType.FORCE_GC, opTimer = metricsPrefix + "force-gc")
-    private void forceGc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r,
-                         boolean isMetricsEnabled) {
-        gcThread.interrupt();
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-    }
-
     @ServerHandler(type = CorfuMsgType.FILL_HOLE, opTimer = metricsPrefix + "fill-hole")
     private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
                           boolean isMetricsEnabled) {
@@ -251,6 +230,18 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
+    @ServerHandler(type = CorfuMsgType.FLUSH_CACHE, opTimer = metricsPrefix + "flush-cache")
+    private void flushCache(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+        try {
+            dataCache.invalidateAll();
+        } catch (RuntimeException e) {
+            log.error("Encountered error while flushing cache {}", e);
+        }
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+
+
 
 
     /**
@@ -285,7 +276,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @VisibleForTesting
-    LoadingCache<LogAddress, ILogData> getDataCache() {
+    public LoadingCache<LogAddress, ILogData> getDataCache() {
         return dataCache;
     }
 

@@ -295,6 +295,13 @@ public class LogUnitClient implements IClient {
     }
 
     /**
+     * Send a flush cache request that will flush the logunit cache
+     */
+    public CompletableFuture flushCache() {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.FLUSH_CACHE.msg());
+    }
+
+    /**
      * Fill a hole at a given address.
      *
      * @param address The address to fill a hole at.
@@ -311,30 +318,6 @@ public class LogUnitClient implements IClient {
         CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(
                 CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(streamID, address)));
         return cf.thenApply(x -> { context.stop(); return x; });
-    }
-
-
-    /**
-     * Force the garbage collector to begin garbage collection.
-     */
-    public void forceGC() {
-        router.sendMessage(CorfuMsgType.FORCE_GC.msg());
-    }
-
-    /**
-     * Force the compactor to recalculate the contiguous tail.
-     */
-    public void forceCompact() {
-        router.sendMessage(CorfuMsgType.FORCE_COMPACT.msg());
-    }
-
-    /**
-     * Change the default garbage collection interval.
-     *
-     * @param millis The new garbage collection interval, in milliseconds.
-     */
-    public void setGCInterval(long millis) {
-        router.sendMessage(CorfuMsgType.GC_INTERVAL.payloadMsg(millis));
     }
 
     private Timer.Context getTimerContext(String opName) {
