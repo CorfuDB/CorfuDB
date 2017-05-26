@@ -1,8 +1,7 @@
 package org.corfudb.runtime.checkpoint;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.CheckpointWriter;
-import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -19,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class CheckpointTrimTest extends AbstractViewTest {
 
     @Test
-    public void testCheckpointTrim() {
+    public void testCheckpointTrim() throws Exception {
         Map<String, String> testMap = getDefaultRuntime().getObjectsView().build()
                                             .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                                             .setStreamName("test")
@@ -31,13 +30,9 @@ public class CheckpointTrimTest extends AbstractViewTest {
         testMap.put("c", "c");
 
         // Insert a checkpoint
-        getRuntime().getObjectsView().TXBegin();
-        CheckpointWriter cpw = new CheckpointWriter(getRuntime(), CorfuRuntime.getStreamID("test"),
-                                                    "author", (SMRMap) testMap);
-        long checkpointAddress = cpw.startCheckpoint();
-        cpw.appendObjectState();
-        cpw.finishCheckpoint();
-        getRuntime().getObjectsView().TXEnd();
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap((SMRMap) testMap);
+        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
         // Trim the log
         getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress - 1);
@@ -59,7 +54,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
 
     @Test
-    public void testCheckpointTrimDuringPlayback() {
+    public void testCheckpointTrimDuringPlayback() throws Exception {
         Map<String, String> testMap = getDefaultRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .setStreamName("test")
@@ -90,13 +85,9 @@ public class CheckpointTrimTest extends AbstractViewTest {
         getRuntime().getObjectsView().TXEnd();
 
         // Insert a checkpoint
-        getRuntime().getObjectsView().TXBegin();
-        CheckpointWriter cpw = new CheckpointWriter(getRuntime(), CorfuRuntime.getStreamID("test"),
-                "author", (SMRMap) testMap);
-        long checkpointAddress = cpw.startCheckpoint();
-        cpw.appendObjectState();
-        cpw.finishCheckpoint();
-        getRuntime().getObjectsView().TXEnd();
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap((SMRMap) testMap);
+        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
         // Trim the log
         getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress - 1);
