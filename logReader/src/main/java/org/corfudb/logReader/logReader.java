@@ -1,6 +1,8 @@
 package org.corfudb.logReader;
 
 import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
+import lombok.Setter;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.DataType;
 import org.corfudb.format.Types.LogEntry;
@@ -40,6 +42,8 @@ public class logReader {
     private FileChannel fileChannelOut = null;
     private int recordCnt = 0;
     private long remSize = 0;
+    @Setter
+    private boolean showOutput = false;
 
     public static void main(final String[] args) {
         logReader reader = new logReader();
@@ -71,12 +75,12 @@ public class logReader {
         boolean useOutputFile = false;
         if (opts.get("<log_file>") != null) {
             logFileName = (String) opts.get("<log_file>");
-            System.out.println("Log file: " + logFileName);
+            if (showOutput)
+                System.out.println("Log file: " + logFileName);
         } else {
             System.out.print(USAGE);
             return false;
         }
-
         int startAddr = 0;
         int finalAddr = -1;
         if (opts.get("--from") != null) {
@@ -86,15 +90,16 @@ public class logReader {
             finalAddr = Integer.parseInt((String) opts.get("--to"));
         }
         if ((Boolean) opts.get("display")) {
-            Boolean showBinary = (Boolean) opts.get("--show_binary");
-            System.out.format("display from %d to %d show_binary=%s\n", startAddr, finalAddr, showBinary.toString());
-            if (showBinary) {
-                op = new Operation(Operation.OperationType.DISPLAY, startAddr, finalAddr);
-            } else {
+            showOutput = true;
+            Boolean showData = (Boolean) opts.get("--show_data");
+            //System.out.format("display from %d to %d show_binary=%s\n", startAddr, finalAddr, showData.toString());
+            if (showData != null && showData.booleanValue() == true) {
                 op = new Operation(Operation.OperationType.DISPLAY_ALL, startAddr, finalAddr);
+            } else {
+                op = new Operation(Operation.OperationType.DISPLAY, startAddr, finalAddr);
             }
         } else if ((Boolean) opts.get("erase")) {
-            System.out.format("erase from %d to %d\n", startAddr, finalAddr);
+            //System.out.format("erase from %d to %d\n", startAddr, finalAddr);
             op = new Operation(Operation.OperationType.ERASE_RANGE, startAddr, finalAddr);
             useOutputFile = true;
         }
@@ -185,15 +190,36 @@ public class logReader {
         fcOut.write(recordBuffer);
     }
 
-    public final void printLogEntry(final LogEntry entry, final boolean showBinary) {
+    private final boolean reSync() {
+        ByteBuffer commaBuffer = ByteBuffer.allocate(2);
+        try {
+            short delim = 0;
+            while (delim != StreamLogFiles.RECORD_DELIMITER) {
+                int bytesRead = fileChannelIn.read(commaBuffer);
+                if (bytesRead < 2) {
+                    return false;
+                }
+                commaBuffer.flip();
+                delim = commaBuffer.getShort();
+                commaBuffer.flip();
+            }
+            return true;
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public final void printLogEntry(final LogEntry entry, final boolean showData) {
         System.out.format("Global address: %d\n", entry.getGlobalAddress());
         System.out.format("Log Entry streams (%d):  ", entry.getStreamsCount());
-        for (int i = 0; i < entry.getStreamsCount(); i++) {
-            System.out.print(entry.getStreams(i) + " ");
-        }
+        System.out.print(entry.getStreamsList().toString());
+        System.out.format("\n");
+        System.out.format("Backpointers (%d):  ", entry.getBackpointersCount());
+        System.out.print(entry.getBackpointersMap().toString());
         System.out.format("\n");
         String bstr = new String();
-        if (showBinary) {
+        if (showData) {
             ByteString dbuff = entry.getData();
             for (int i = 0; i < dbuff.size(); i++) {
                 byte c = dbuff.byteAt(i);
@@ -222,7 +248,7 @@ public class logReader {
                 System.out.printf("UNKNOWN DataType %s\n", dt);
                 break;
         }
-        if (showBinary) {
+        if (showData) {
             System.out.format("Data:\n%s\n", bstr);
         }
         Types.DataRank dr = entry.getRank();
@@ -246,14 +272,19 @@ public class logReader {
     //   - replace record in case of ERASE or ERASE_TAIL
     //   - returns same or modified record
     final LogEntry processRecordBody(final ByteBuffer recordBuffer) throws IOException {
-        LogEntry le = LogEntry.parseFrom(recordBuffer.array());
-        if (op.getOpType() == Operation.OperationType.ERASE_RANGE) {
-            if (op.isInRange(le.getGlobalAddress())) {
-                LogEntry entry = buildHoleLogEntry(le);
-                return entry;
+        try {
+            LogEntry le = LogEntry.parseFrom(recordBuffer.array());
+            if (op.getOpType() == Operation.OperationType.ERASE_RANGE) {
+                if (op.isInRange(le.getGlobalAddress())) {
+                    LogEntry entry = buildHoleLogEntry(le);
+                    return entry;
+                }
             }
+            return le;
+        } catch (InvalidProtocolBufferException e) {
+            System.out.println("exception");
         }
-        return le;
+        return null;
     }
 
     final logHeader processHeader() throws IOException {
@@ -266,20 +297,31 @@ public class logReader {
         }
         if (r > 0) {
             logHeader header = new logHeader();
-            Metadata md = Metadata.parseFrom(mdBuffer.array());
-            int logHeaderSize = md.getLength();
-            header.setChecksum(md.getChecksum());
-            header.setLength(md.getLength());
-            ByteBuffer lhBuffer = ByteBuffer.allocate(logHeaderSize);
-            r = fileChannelIn.read(lhBuffer);
-            lhBuffer.flip();
-            if (fileChannelOut != null) {
-                fileChannelOut.write(lhBuffer);
-            }
-            if (r > 0) {
-                LogHeader lh = LogHeader.parseFrom(lhBuffer.array());
-                header.setVersion(lh.getVersion());
-                header.setVerifyChecksum(lh.getVerifyChecksum());
+            try {
+                Metadata md = Metadata.parseFrom(mdBuffer.array());
+                int logHeaderSize = md.getLength();
+                header.setChecksum(md.getChecksum());
+                header.setLength(md.getLength());
+                ByteBuffer lhBuffer = ByteBuffer.allocate(logHeaderSize);
+                r = fileChannelIn.read(lhBuffer);
+                lhBuffer.flip();
+                if (fileChannelOut != null) {
+                    fileChannelOut.write(lhBuffer);
+                }
+                if (r > 0) {
+                    LogHeader lh = LogHeader.parseFrom(lhBuffer.array());
+                    header.setVersion(lh.getVersion());
+                    header.setVerifyChecksum(lh.getVerifyChecksum());
+                    if (lh.getVerifyChecksum() == true) {
+                        int cksum = StreamLogFiles.getChecksum(lhBuffer.array());
+                        if (cksum != md.getChecksum()) {
+                            System.out.format("Header checksum %08x\n", cksum);
+                            System.out.format("Header checksum error:  expected %08x\n", md.getChecksum());
+                        }
+                    }
+                }
+            } catch (InvalidProtocolBufferException e) {
+                System.out.println("exception");
             }
             return header;
         }
@@ -293,26 +335,41 @@ public class logReader {
         Short delim = commaBuffer.getShort();
         commaBuffer.flip();
         if (delim != StreamLogFiles.RECORD_DELIMITER) {
-            System.out.println("Incorrect delimiter");
+            System.out.println("Incorrect delimiter at position " + fileChannelIn.position());
+            if (reSync()) {
+                // The channel should now be aligned at a correct delimiter
+                System.out.println("Re-sync successful at position " + fileChannelIn.position());
+            } else {
+                // Error out
+                System.out.println("Unable to re-sync to a valid record");
+                throw new RuntimeException();  // throw instead of exit due to junit test
+            }
         }
         ByteBuffer mdBuffer = ByteBuffer.allocate(metadataSize);
         bytesRead += fileChannelIn.read(mdBuffer);
         mdBuffer.flip();
-        Metadata md = Metadata.parseFrom(mdBuffer.array());
-        ByteBuffer recordBuffer = ByteBuffer.allocate(md.getLength());
-        bytesRead += fileChannelIn.read(recordBuffer);
-        recordBuffer.flip();
-        int cksum = StreamLogFiles.getChecksum(recordBuffer.array());
-        if (cksum != md.getChecksum()) {
-            System.out.println("Checksum ERROR");
+        try {
+            Metadata md = Metadata.parseFrom(mdBuffer.array());
+            ByteBuffer recordBuffer = ByteBuffer.allocate(md.getLength());
+            bytesRead += fileChannelIn.read(recordBuffer);
+            recordBuffer.flip();
+            int cksum = StreamLogFiles.getChecksum(recordBuffer.array());
+            if (cksum != md.getChecksum()) {
+                System.out.println("Checksum ERROR");
+            }
+            LogEntry leNew = processRecordBody(recordBuffer);
+            if (leNew != null) {
+                return new LogEntryExtended(leNew, bytesRead, cksum);
+            }
+        } catch (InvalidProtocolBufferException e) {
+            System.out.println("exception");
         }
-        LogEntry leNew = processRecordBody(recordBuffer);
-        return new LogEntryExtended(leNew, bytesRead, cksum);
+        return null;
     }
 
-    final void openLogFile(final int display) throws IOException {
+    final void openLogFile() throws IOException {
         logHeader hdr = processHeader();
-        if (display > 0) {
+        if (showOutput) {
             System.out.println("file size " + fileChannelIn.size());
             System.out.println("checksum " + String.format("%08x", hdr.getChecksum()));
             System.out.println("length " + Integer.toString(hdr.getLength()));
@@ -324,43 +381,37 @@ public class logReader {
 
     final LogEntryExtended nextRecord() throws IOException {
         LogEntryExtended leNew = processRecord();
-        long addr = leNew.getEntryBody().getGlobalAddress();
-        boolean display = (op.getOpType() == Operation.OperationType.DISPLAY
-            || op.getOpType() == Operation.OperationType.DISPLAY_ALL) && op.isInRange(addr);
-        if (display) {
-            System.out.format("Record length %d checksum %08x\n", leNew.getBytesLength(), leNew.getChecksum());
-            printLogEntry(leNew.getEntryBody(), op.getOpType() == Operation.OperationType.DISPLAY_ALL);
+        if (leNew != null) {
+            long addr = leNew.getEntryBody().getGlobalAddress();
+            if (showOutput == true && op.isInRange(addr)) {
+                System.out.format("Record length %d checksum %08x\n", leNew.getBytesLength(), leNew.getChecksum());
+                printLogEntry(leNew.getEntryBody(), op.getOpType() == Operation.OperationType.DISPLAY_ALL);
+            }
+            if (fileChannelOut != null) {
+                writeBuffer(leNew.getEntryBody(), fileChannelOut);
+            }
+            recordCnt++;
+            remSize -= leNew.getBytesLength();
+            if (op.isInRange(addr))
+                return leNew;
         }
-        if (fileChannelOut != null) {
-            writeBuffer(leNew.getEntryBody(), fileChannelOut);
-        }
-        recordCnt++;
-        remSize -= leNew.getBytesLength();
-        if (display)
-            return leNew;
         return null;
     }
 
     final int processLogFile() throws IOException {
-        int display = op.getOpType() == Operation.OperationType.DISPLAY ? 1
-                : op.getOpType() == Operation.OperationType.DISPLAY_ALL ? 2 : 0;
-
-        System.out.format("processLogFile display %d output %d\n", display,
-                fileChannelOut != null ? 1 : 0);
-
         // Metadata
         //   LogHeader
         // Metadata
         //   LogEntry
         // ...
-        openLogFile(display);
-        while (remSize > 0) {
+        openLogFile();
+        while (fileChannelIn.position() < fileChannelIn.size()) {
             nextRecord();
         }
         // REPORT
-        System.out.println("Read " + Integer.toString(recordCnt) + " log entries");
+        if (op.getOpType() == Operation.OperationType.REPORT)
+            System.out.println("Read " + Integer.toString(recordCnt) + " log entries");
         return recordCnt;
     }
-
 
 }
