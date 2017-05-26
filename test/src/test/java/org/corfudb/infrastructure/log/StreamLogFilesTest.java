@@ -53,7 +53,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
-        LogAddress address0 = new LogAddress((long) 0, null);
+        long address0 = 0;
         log.append(address0, new LogData(DataType.DATA, b));
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
 
@@ -75,7 +75,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
-        LogAddress address0 = new LogAddress((long) 0, null);
+        long address0 = 0;
         log.append(address0, new LogData(DataType.DATA, b));
 
         assertThatThrownBy(() -> log.append(address0, new LogData(DataType.DATA, b)))
@@ -89,9 +89,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
 
-        LogAddress address0 = new LogAddress((long) 0, null);
-        LogAddress address1 = new LogAddress((long) 1, null);
-        LogAddress address2 = new LogAddress((long) 2, null);
+        long address0 = 0;
+        long address1 = 1;
+        long address2 = 2;
 
         log.append(address0, new LogData(DataType.DATA, b));
         log.append(address2, new LogData(DataType.DATA, b));
@@ -108,7 +108,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
-        LogAddress address0 = new LogAddress((long) 0, null);
+        long address0 = 0;
         log.append(address0, new LogData(DataType.DATA, b));
 
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
@@ -131,8 +131,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
         // Write to two segments
-        LogAddress address0 = new LogAddress((long) 0, null);
-        LogAddress address1 = new LogAddress(StreamLogFiles.RECORDS_PER_LOG_FILE + 1L, null);
+        long address0 = 0;
+        long address1 = StreamLogFiles.RECORDS_PER_LOG_FILE + 1L;
         log.append(address0, new LogData(DataType.DATA, b));
         log.append(address1, new LogData(DataType.DATA, b));
 
@@ -162,7 +162,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         file1.writeShort(0);
         file1.close();
 
-        assertThatThrownBy(() -> new StreamLogFiles(getContext(), false).read(new LogAddress(0L, null)))
+        assertThatThrownBy(() -> new StreamLogFiles(getContext(), false).read(0L))
                 .isInstanceOf(DataCorruptionException.class);
 
         // Corrupt metadata in the second segment
@@ -189,7 +189,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_entries;
             for (int i = base; i < base + num_entries; i++) {
-                LogAddress address = new LogAddress((long) i, null);
+                long address = (long) i;
                 log.append(address, new LogData(DataType.DATA, b));
             }
         });
@@ -198,7 +198,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // verify that addresses 0 to 2000 have been used up
         for (int x = 0; x < num_entries * num_threads; x++) {
-            LogAddress address = new LogAddress((long) x, null);
+            long address = (long) x;
             LogData data = log.read(address);
             byte[] bytes = (byte[]) data.getPayload(null);
             assertThat(bytes).isEqualTo(streamEntry);
@@ -216,9 +216,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         long seg2 = StreamLogFiles.RECORDS_PER_LOG_FILE * 1 + 1;
         long seg3 = StreamLogFiles.RECORDS_PER_LOG_FILE * 2 + 1;
 
-        log.append(new LogAddress(seg1, null), new LogData(DataType.DATA, b));
-        log.append(new LogAddress(seg2, null), new LogData(DataType.DATA, b));
-        log.append(new LogAddress(seg3, null), new LogData(DataType.DATA, b));
+        log.append(seg1, new LogData(DataType.DATA, b));
+        log.append(seg2, new LogData(DataType.DATA, b));
+        log.append(seg3, new LogData(DataType.DATA, b));
 
         assertThat(log.getChannelsToSync().size()).isEqualTo(3);
 
@@ -232,11 +232,11 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
 
         // Trim an unwritten address
-        LogAddress logAddress = new LogAddress(0L, null);
-        log.trim(logAddress);
+        long address = 0L;
+        log.trim(address);
 
         // Verify that the unwritten address trim is not persisted
-        StreamLogFiles.SegmentHandle sh = log.getSegmentHandleForAddress(logAddress);
+        StreamLogFiles.SegmentHandle sh = log.getSegmentHandleForAddress(address);
         assertThat(sh.getPendingTrims().size()).isEqualTo(0);
 
         // Write to the same address
@@ -244,30 +244,29 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
 
-        log.append(logAddress, new LogData(DataType.DATA, b));
+        log.append(address, new LogData(DataType.DATA, b));
 
         // Verify that the address has been written
-        assertThat(log.read(logAddress)).isNotNull();
+        assertThat(log.read(address)).isNotNull();
 
         // Trim the address
-        log.trim(logAddress);
-        sh = log.getSegmentHandleForAddress(logAddress);
-        assertThat(sh.getPendingTrims().contains(logAddress.address)).isTrue();
+        log.trim(address);
+        sh = log.getSegmentHandleForAddress(address);
+        assertThat(sh.getPendingTrims().contains(address)).isTrue();
 
         // Write to a trimmed address
-        assertThatThrownBy(() -> log.append(logAddress, new LogData(DataType.DATA, b)))
+        assertThatThrownBy(() -> log.append(address, new LogData(DataType.DATA, b)))
                 .isInstanceOf(OverwriteException.class);
 
         // Read trimmed address
-        assertThatThrownBy(() -> log.read(logAddress))
+        assertThatThrownBy(() -> log.read(address))
                 .isInstanceOf(TrimmedException.class);
     }
 
-    private void writeToLog(StreamLog log, Long addr) {
+    private void writeToLog(StreamLog log, long address) {
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
-        LogAddress address = new LogAddress(addr, null);
         log.append(address, new LogData(DataType.DATA, b));
     }
 
@@ -283,13 +282,12 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Verify that an incomplete log segment isn't compacted
         for (long x = 0; x < logChunk; x++) {
-            LogAddress logAddress = new LogAddress(x, null);
-            log.trim(logAddress);
+            log.trim(x);
         }
 
         log.compact();
 
-        StreamLogFiles.SegmentHandle sh = log.getSegmentHandleForAddress(new LogAddress((long) logChunk, null));
+        StreamLogFiles.SegmentHandle sh = log.getSegmentHandleForAddress(logChunk);
 
         assertThat(logChunk).isGreaterThan(StreamLogFiles.TRIM_THRESHOLD);
         assertThat(sh.getPendingTrims().size()).isEqualTo(logChunk);
@@ -310,7 +308,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(sizeAfterCompact).isLessThan(sizeBeforeCompact);
 
         // Reload the segment handler and check that the first half of the segment has been trimmed
-        sh = log.getSegmentHandleForAddress(new LogAddress((long) logChunk, null));
+        sh = log.getSegmentHandleForAddress(logChunk);
         assertThat(sh.getTrimmedAddresses().size()).isEqualTo(logChunk);
         assertThat(sh.getKnownAddresses().size()).isEqualTo(logChunk);
 
@@ -320,11 +318,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Verify that the trimmed addresses cannot be written to or read from after compaction
         for (long x = 0; x < logChunk; x++) {
-            LogAddress logAddress = new LogAddress(x, null);
-            assertThatThrownBy(() -> log.read(logAddress))
+            long address = x;
+            assertThatThrownBy(() -> log.read(address))
                     .isInstanceOf(TrimmedException.class);
-
-            final long address = x;
             assertThatThrownBy(() -> writeToLog(log, address))
                     .isInstanceOf(OverwriteException.class);
         }
@@ -339,7 +335,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         writeToLog(log2, 1L);
         log2.sync(true);
         StreamLogFiles log3 = new StreamLogFiles(getContext(), false);
-        assertThat(log3.read(new LogAddress(1L, null))).isNotNull();
+        assertThat(log3.read(1L)).isNotNull();
     }
 
     @Test
@@ -390,7 +386,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         final long endSegment = 25;
         long trimAddress = endSegment * StreamLogFiles.RECORDS_PER_LOG_FILE + 1;
-        log.prefixTrim(new LogAddress(trimAddress, null));
+        log.prefixTrim(trimAddress);
         log.compact();
 
         // Verify that first 25 segments have been deleted
@@ -409,7 +405,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         }
 
         // Try to trim an address that is less than the new starting address
-        assertThatThrownBy(() -> log.prefixTrim(new LogAddress(trimAddress, null)))
+        assertThatThrownBy(() -> log.prefixTrim(trimAddress))
                 .isInstanceOf(TrimmedException.class);
 
         long trimmedExceptions = 0;
@@ -417,7 +413,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Try to read trimmed addresses
         for(long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
             try {
-                log.read(new LogAddress(x, null));
+                log.read(x);
             } catch (TrimmedException e) {
                 trimmedExceptions++;
             }
