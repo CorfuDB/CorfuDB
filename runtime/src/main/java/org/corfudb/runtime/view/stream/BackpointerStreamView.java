@@ -125,7 +125,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
      */
     @Override
     public boolean getHasNext(QueuedStreamContext context) {
-        return  context.readQueue.isEmpty() ||
+        return  !context.readQueue.isEmpty() ||
                 runtime.getSequencerView()
                 .nextToken(Collections.singleton(context.id), 0).getToken().getTokenValue()
                         > context.globalPointer;

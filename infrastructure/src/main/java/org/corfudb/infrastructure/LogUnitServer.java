@@ -2,9 +2,10 @@ package org.corfudb.infrastructure;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
@@ -50,9 +51,6 @@ import org.corfudb.util.Utils;
  */
 @Slf4j
 public class LogUnitServer extends AbstractServer {
-
-    private final ServerContext serverContext;
-
     /**
      * A scheduler, which is used to schedule periodic tasks like garbage collection.
      */
@@ -64,13 +62,7 @@ public class LogUnitServer extends AbstractServer {
                             .setNameFormat("LogUnit-Maintenance-%d")
                             .build());
 
-    /**
-     * GC parameters
-     * TODO: entire GC handling needs updating, currently not being activated
-     */
-    private final Thread gcThread = null;
-    private Long gcRetryInterval;
-    private AtomicBoolean running = new AtomicBoolean(true);
+    private ScheduledFuture<?> compactor;
 
     /**
      * The options map.
@@ -99,7 +91,6 @@ public class LogUnitServer extends AbstractServer {
 
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
-        this.serverContext = serverContext;
         double cacheSizeHeapRatio = Double.parseDouble((String) opts.get("--cache-heap-ratio"));
 
         maxCacheSize = (long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio);
@@ -126,6 +117,9 @@ public class LogUnitServer extends AbstractServer {
 
         MetricRegistry metrics = serverContext.getMetrics();
         MetricsUtils.addCacheGauges(metrics, metricsPrefix + "cache.", dataCache);
+
+        Runnable task = () -> streamLog.compact();
+        compactor = scheduler.scheduleAtFixedRate(task, 10,45, TimeUnit.MINUTES);
     }
 
     /**
@@ -187,20 +181,6 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.GC_INTERVAL, opTimer = metricsPrefix + "gc-interval")
-    private void setGcInterval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r,
-                               boolean isMetricsEnabled) {
-        gcRetryInterval = msg.getPayload();
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-    }
-
-    @ServerHandler(type = CorfuMsgType.FORCE_GC, opTimer = metricsPrefix + "force-gc")
-    private void forceGc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r,
-                         boolean isMetricsEnabled) {
-        gcThread.interrupt();
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-    }
-
     @ServerHandler(type = CorfuMsgType.FILL_HOLE, opTimer = metricsPrefix + "fill-hole")
     private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
                           boolean isMetricsEnabled) {
@@ -228,14 +208,40 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @ServerHandler(type = CorfuMsgType.PREFIX_TRIM)
-    private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
+                            boolean isMetricsEnabled) {
         try {
-            batchWriter.trim(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()));
+            batchWriter.prefixTrim(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()));
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         } catch (TrimmedException ex) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
         }
     }
+
+    @ServerHandler(type = CorfuMsgType.COMPACT_REQUEST, opTimer = metricsPrefix + "compact")
+    private void compact(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+        try {
+            streamLog.compact();
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        } catch (RuntimeException ex) {
+            log.error("Internal Error");
+            //TODO(Maithem) Need an internal error return type
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        }
+    }
+
+    @ServerHandler(type = CorfuMsgType.FLUSH_CACHE, opTimer = metricsPrefix + "flush-cache")
+    private void flushCache(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+        try {
+            dataCache.invalidateAll();
+        } catch (RuntimeException e) {
+            log.error("Encountered error while flushing cache {}", e);
+        }
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+
+
 
 
     /**
@@ -264,12 +270,13 @@ public class LogUnitServer extends AbstractServer {
      */
     @Override
     public void shutdown() {
+        compactor.cancel(true);
         scheduler.shutdownNow();
         batchWriter.close();
     }
 
     @VisibleForTesting
-    LoadingCache<LogAddress, ILogData> getDataCache() {
+    public LoadingCache<LogAddress, ILogData> getDataCache() {
         return dataCache;
     }
 

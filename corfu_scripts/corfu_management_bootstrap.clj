@@ -28,6 +28,7 @@ Options:
                                        (let [q (.. (get-management-client) (bootstrapManagement (Layout/fromJSONString (str layout))))]
                                             (.. q (get))
                                             )
+                                       (println endpoint "bootstrapped successfully")
                                        ))
 
 ; a function which builds and bootstraps the layout

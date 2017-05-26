@@ -284,7 +284,21 @@ public class LogUnitClient implements IClient {
      * @param address An address to trim up to (i.e. [0, address))
      */
     public void prefixTrim(long address) {
-        router.sendMessageAndGetCompletable(CorfuMsgType.PREFIX_TRIM.payloadMsg(new TrimRequest(null, address)));
+        router.sendMessage(CorfuMsgType.PREFIX_TRIM.payloadMsg(new TrimRequest(null, address)));
+    }
+
+    /**
+     * Send a compact request that will delete the trimmed parts of the log
+     */
+    public void compact() {
+        router.sendMessage(CorfuMsgType.COMPACT_REQUEST.msg());
+    }
+
+    /**
+     * Send a flush cache request that will flush the logunit cache
+     */
+    public CompletableFuture flushCache() {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.FLUSH_CACHE.msg());
     }
 
     /**
@@ -304,30 +318,6 @@ public class LogUnitClient implements IClient {
         CompletableFuture<Boolean> cf = router.sendMessageAndGetCompletable(
                 CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(streamID, address)));
         return cf.thenApply(x -> { context.stop(); return x; });
-    }
-
-
-    /**
-     * Force the garbage collector to begin garbage collection.
-     */
-    public void forceGC() {
-        router.sendMessage(CorfuMsgType.FORCE_GC.msg());
-    }
-
-    /**
-     * Force the compactor to recalculate the contiguous tail.
-     */
-    public void forceCompact() {
-        router.sendMessage(CorfuMsgType.FORCE_COMPACT.msg());
-    }
-
-    /**
-     * Change the default garbage collection interval.
-     *
-     * @param millis The new garbage collection interval, in milliseconds.
-     */
-    public void setGCInterval(long millis) {
-        router.sendMessage(CorfuMsgType.GC_INTERVAL.payloadMsg(millis));
     }
 
     private Timer.Context getTimerContext(String opName) {

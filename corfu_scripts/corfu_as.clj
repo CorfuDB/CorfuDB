@@ -2,6 +2,8 @@
 (in-ns 'org.corfudb.shell) ; so our IDE knows what NS we are using
 
 (import org.docopt.Docopt) ; parse some cmdline opts
+(import org.corfudb.protocols.wireprotocol.Token)
+(import org.corfudb.protocols.wireprotocol.TokenResponse)
 
 (def usage "corfu_as, work with a Corfu address space.
 Usage:
@@ -56,13 +58,9 @@ Options:
     (.toByteArray out)))
 
 ; a function which reads an address to stdout
-(defn read-address-space [stream, address] (let [read-response
-  (if (nil? stream)
+(defn read-address-space [address] (let [read-response
       (.. (get-address-space-view)
-              (read address))
-      (.. (.. (get-address-space-view)
-              (read stream address 1)) (get address)
-          ))]
+              (read address))]
  (if (.equals (.. read-response (getType)) org.corfudb.protocols.wireprotocol.DataType/DATA)
      (let [bytes (.. read-response (getPayload *r))]
        (.. System/out (write bytes 0 (count bytes))))
@@ -73,21 +71,18 @@ Options:
 (defn write-address-space [stream, address] (let [in (slurp-bytes System/in)]
   (if (nil? stream)
       (.. (get-address-space-view)
-              (write address
-                     (java.util.Collections/emptySet)
-                     in
-                     (java.util.Collections/emptyMap)
-                     (java.util.Collections/emptyMap)))
+              (write (new Token address (.. (.. (get-layout-view) (getLayout)) (getEpoch)))
+                     in))
       (.. (get-address-space-view)
-              (write address
-                     (java.util.Collections/singleton stream)
-                     in
-                     (java.util.Collections/emptyMap)
-                     (java.util.Collections/emptyMap)))
+              (write (new TokenResponse
+                          address
+                          (.. (.. (get-layout-view) (getLayout)) (getEpoch))
+                          (java.util.Collections/singletonMap stream (long -5)))
+                     in))
 )))
 
 ; determine whether to read or write
-(cond (.. localcmd (get "read")) (read-address-space stream (Long/parseLong (.. localcmd (get "<address>"))))
+(cond (.. localcmd (get "read")) (read-address-space (Long/parseLong (.. localcmd (get "<address>"))))
   (.. localcmd (get "write")) (write-address-space stream (Long/parseLong (.. localcmd (get "<address>"))))
   :else (println "Unknown arguments.")
   )
