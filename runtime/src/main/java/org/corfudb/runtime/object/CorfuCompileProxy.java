@@ -11,6 +11,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.MetricsUtils;
@@ -75,6 +76,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     /** The serializer SMR entries will use to serialize their
      * arguments.
      */
+    @Getter
     ISerializer serializer;
 
     /** The arguments this proxy was created with.
@@ -145,9 +147,21 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
         // Perform underlying access
-        return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp && !o.isOptimisticallyModifiedUnsafe(),
-                o -> o.syncObjectUnsafe(timestamp),
-                o -> accessMethod.access(o));
+        try {
+            return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp &&
+                            !o.isOptimisticallyModifiedUnsafe(),
+                    o -> o.syncObjectUnsafe(timestamp),
+                    o -> accessMethod.access(o));
+        } catch (TrimmedException te) {
+            log.debug("Access[{}] Encountered Trim, reset and retry", this);
+            // We encountered a TRIM during sync, reset the object
+            underlyingObject.update(o -> {
+                o.resetUnsafe();
+                return null;
+            });
+            // And attempt an access again.
+            return accessInner(accessMethod, conflictObject, isMetricsEnabled);
+        }
     }
 
     /**

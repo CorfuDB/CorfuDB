@@ -9,7 +9,6 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -22,7 +21,6 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -44,7 +42,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.filefilter.WildcardFileFilter;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.TrimEntry;
 import org.corfudb.format.Types.DataType;
@@ -60,8 +57,6 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
 import javax.annotation.Nullable;
-
-import static org.apache.tools.ant.types.resources.MultiRootFileSet.SetType.file;
 
 
 /**
@@ -132,15 +127,15 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public void prefixTrim(LogAddress logAddress) {
-        if (logAddress.getAddress() < startingAddress) {
+    public void prefixTrim(long address) {
+        if (address < startingAddress) {
             throw new TrimmedException();
         } else {
             // TODO(Maithem): Although this operation is persisted to disk,
             // the startingAddress can be lost even after the method has completed.
             // This is due to the fact that updates on the local datastore don't
             // expose disk sync functionalty.
-            long newStartingAddress = logAddress.getAddress() + 1;
+            long newStartingAddress = address + 1;
             serverContext.setStartingAddress(newStartingAddress);
             startingAddress = newStartingAddress;
             log.debug("Trimmed prefix, new starting address {}", newStartingAddress);
@@ -160,7 +155,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private void initializeMaxGlobalAddress() {
         long tailSegment = serverContext.getTailSegment();
         long addressInTailSegment = (tailSegment * RECORDS_PER_LOG_FILE) + 1;
-        SegmentHandle sh = getSegmentHandleForAddress(new LogAddress(addressInTailSegment, null));
+        SegmentHandle sh = getSegmentHandleForAddress(addressInTailSegment);
         try {
             Collection<LogEntry> segmentEntries = (Collection<LogEntry>) getCompactedEntries(sh.getFileName(),
                     new HashSet()).getEntries();
@@ -248,15 +243,15 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public void trim(LogAddress logAddress) {
-        SegmentHandle handle = getSegmentHandleForAddress(logAddress);
-        if (!handle.getKnownAddresses().containsKey(logAddress.getAddress()) ||
-                handle.getPendingTrims().contains(logAddress.getAddress())) {
+    public void trim(long address) {
+        SegmentHandle handle = getSegmentHandleForAddress(address);
+        if (!handle.getKnownAddresses().containsKey(address) ||
+                handle.getPendingTrims().contains(address)) {
             return;
         }
         TrimEntry entry = TrimEntry.newBuilder()
-                .setChecksum(getChecksum(logAddress.getAddress()))
-                .setAddress(logAddress.getAddress())
+                .setChecksum(getChecksum(address))
+                .setAddress(address)
                 .build();
 
         // TODO(Maithem) possibly move this to SegmentHandle. Do we need to close and flush?
@@ -264,10 +259,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         try {
             entry.writeDelimitedTo(outputStream);
             outputStream.flush();
-            handle.pendingTrims.add(logAddress.getAddress());
+            handle.pendingTrims.add(address);
             channelsToSync.add(handle.getPendingTrimChannel());
         } catch (IOException e) {
-            log.warn("Exception while writing a trim entry {} : {}", logAddress.toString(), e.toString());
+            log.warn("Exception while writing a trim entry {} : {}", address, e.toString());
         }
     }
 
@@ -494,22 +489,26 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         LogData logData = new LogData(org.corfudb.protocols.wireprotocol.
                 DataType.typeMap.get((byte) entry.getDataType().getNumber()), data);
 
-        // Checkpoint-related metadata are set by LogData constructor.
         logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());
         logData.setRank(createDataRank(entry));
+        
+        if (entry.hasCheckpointEntryType()) {
+            logData.setCheckpointType(CheckpointEntry.CheckpointEntryType
+                    .typeMap.get((byte) entry.getCheckpointEntryType().ordinal()));
 
-        return logData;
-    }
+            if (!entry.hasCheckpointIDLeastSignificant() || !entry.hasCheckpointIDMostSignificant()) {
+                log.error("Checkpoint has missing information {}", entry);
+            }
 
-    Set<UUID> getStreamsSet(List<ByteString> list) {
-        Set<UUID> set = new HashSet();
+            long lsd = entry.getCheckpointIDLeastSignificant();
+            long msd = entry.getCheckpointIDMostSignificant();
+            UUID checkpointId = new UUID(msd, lsd);
 
-        for (ByteString string : list) {
-            set.add(UUID.fromString(string.toString(StandardCharsets.UTF_8)));
+            logData.setCheckpointID(checkpointId);
         }
 
-        return set;
+        return logData;
     }
 
     /**
@@ -646,22 +645,16 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * Gets the file channel for a particular address, creating it
      * if is not present in the map.
      *
-     * @param logAddress The address to open.
+     * @param address The address to open.
      * @return The FileChannel for that address.
      */
     @VisibleForTesting
-    synchronized SegmentHandle getSegmentHandleForAddress(LogAddress logAddress) {
-        checkAddress(logAddress.getAddress());
+    synchronized SegmentHandle getSegmentHandleForAddress(long address) {
+        checkAddress(address);
 
         String filePath = logDir + File.separator;
-        long segment = logAddress.address / RECORDS_PER_LOG_FILE;
-
-        if (logAddress.getStream() == null) {
-            filePath += segment;
-        } else {
-            filePath += logAddress.getStream().toString() + "-" + segment;
-        }
-
+        long segment = address / RECORDS_PER_LOG_FILE;
+        filePath += segment;
         filePath += ".log";
 
         return writeChannels.computeIfAbsent(filePath, a -> {
@@ -871,29 +864,29 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public void append(LogAddress logAddress, LogData entry) {
+    public void append(long address, LogData entry) {
         //evict the data by getting the next pointer.
         try {
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
-            SegmentHandle fh = getSegmentHandleForAddress(logAddress);
-            if (fh.getKnownAddresses().containsKey(logAddress.address) ||
-                    fh.getTrimmedAddresses().contains(logAddress.address)) {
+            SegmentHandle fh = getSegmentHandleForAddress(address);
+            if (fh.getKnownAddresses().containsKey(address) ||
+                    fh.getTrimmedAddresses().contains(address)) {
                 if (entry.getRank()==null) {
                     throw new OverwriteException();
                 } else {
                     // the method below might throw DataOutrankedException or ValueAdoptedException
-                    assertAppendPermittedUnsafe(logAddress, entry);
-                    AddressMetaData addressMetaData = writeRecord(fh, logAddress.address, entry);
-                    fh.getKnownAddresses().put(logAddress.address, addressMetaData);
+                    assertAppendPermittedUnsafe(address, entry);
+                    AddressMetaData addressMetaData = writeRecord(fh, address, entry);
+                    fh.getKnownAddresses().put(address, addressMetaData);
                 }
             } else {
-                AddressMetaData addressMetaData = writeRecord(fh, logAddress.address, entry);
-                fh.getKnownAddresses().put(logAddress.address, addressMetaData);
+                AddressMetaData addressMetaData = writeRecord(fh, address, entry);
+                fh.getKnownAddresses().put(address, addressMetaData);
             }
-            log.trace("Disk_write[{}]: Written to disk.", logAddress);
+            log.trace("Disk_write[{}]: Written to disk.", address);
         } catch (IOException e) {
-            log.error("Disk_write[{}]: Exception", logAddress, e);
+            log.error("Disk_write[{}]: Exception", address, e);
             throw new RuntimeException(e);
         } catch (TrimmedException e) {
             throw new OverwriteException();
@@ -901,13 +894,13 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public LogData read(LogAddress logAddress) {
+    public LogData read(long address) {
         try {
-            SegmentHandle sh = getSegmentHandleForAddress(logAddress);
-            if (sh.getPendingTrims().contains(logAddress.getAddress())) {
+            SegmentHandle sh = getSegmentHandleForAddress(address);
+            if (sh.getPendingTrims().contains(address)) {
                 throw new TrimmedException();
             }
-            return readRecord(sh, logAddress.address);
+            return readRecord(sh, address);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -979,7 +972,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public void release(LogAddress logAddress, LogData entry) {
+    public void release(long address, LogData entry) {
     }
 
     @VisibleForTesting

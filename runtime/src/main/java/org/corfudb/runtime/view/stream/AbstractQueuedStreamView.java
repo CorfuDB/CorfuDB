@@ -68,7 +68,7 @@ public abstract class AbstractQueuedStreamView extends
                                     long maxGlobal) {
         // If we have no entries to read, fill the read queue.
         // Return if the queue is still empty.
-        if (context.readQueue.isEmpty() &&
+        if (context.readQueue.isEmpty() && context.readCpQueue.isEmpty() &&
                 !fillReadQueue(maxGlobal, context)) {
             return null;
         }
@@ -77,6 +77,18 @@ public abstract class AbstractQueuedStreamView extends
         NavigableSet<Long> getFrom;
         if (context.readCpQueue.size() > 0) {
             getFrom = context.readCpQueue;
+            if (context.readQueue.isEmpty()) {
+                // readQueue is empty, readCpQueue is not.
+                // This is a case where we have had 2 checkpoints
+                // adjacent to each other, and no non-checkpoint
+                // entries in the stream in between the checkpoints
+                // or during the 2nd checkpoint.  Processing of
+                // checkpoint entries will not advance our context
+                // globalPointer, only regular entries in readQueue.
+                // However, we know that readQueue is *empty*, so
+                // we advance globalPointer here.
+                context.globalPointer = maxGlobal;
+            }
         } else {
             getFrom = context.readQueue;
         }
@@ -90,7 +102,7 @@ public abstract class AbstractQueuedStreamView extends
         // Otherwise we remove entries one at a time from the read queue.
         // The entry may not actually be part of the stream, so we might
         // have to perform several reads.
-        while (context.readQueue.size() > 0) {
+        while (getFrom.size() > 0) {
             final long thisRead = getFrom.pollFirst();
             ILogData ld = read(thisRead);
             if (ld.containsStream(context.id)) {
@@ -368,6 +380,16 @@ public abstract class AbstractQueuedStreamView extends
             super.reset();
             readCpQueue.clear();
             readQueue.clear();
+            resolvedQueue.clear();
+            minResolution = Address.NON_ADDRESS;
+            maxResolution = Address.NON_ADDRESS;
+
+            checkpointSuccessID = null;
+            checkpointSuccessStartAddr = Address.NEVER_READ;
+            checkpointSuccessEndAddr = Address.NEVER_READ;
+            checkpointSuccessNumEntries = 0;
+            checkpointSuccessBytes = 0;
+            resolvedEstBytes = 0;
         }
 
         /** {@inheritDoc} */

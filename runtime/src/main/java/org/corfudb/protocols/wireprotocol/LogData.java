@@ -11,9 +11,6 @@ import org.corfudb.util.serializer.Serializers;
 import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_ID;
-import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_TYPE;
-
 /**
  * Created by mwei on 8/15/16.
  */
