@@ -226,9 +226,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         cpw.setBatchSize(4);
 
         // Write all CP data.
-        r.getObjectsView().TXBegin();
-        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
-        long txBeginGlobalAddress = context.getSnapshotTimestamp();
+        long txBeginGlobalAddress = CheckpointWriter.startGlobalSnapshotTxn(r);
         try {
             long startAddress = cpw.startCheckpoint();
             List<Long> continuationAddrs = cpw.appendObjectState();
@@ -243,7 +241,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                         .isEqualTo(i + fudgeFactor);
             }
         } finally {
-            r.getObjectsView().TXAbort();
+            r.getObjectsView().TXEnd();
         }
     }
 
@@ -355,7 +353,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             assertThat(m2.entrySet())
                     .describedAs("Snapshot at global log address " + globalAddr)
                     .isEqualTo(expectedHistory.entrySet());
-            r.getObjectsView().TXAbort();
+            r.getObjectsView().TXEnd();
         }
     }
 

@@ -2,18 +2,16 @@ package org.corfudb.runtime;
 
 import lombok.Getter;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.serializer.ISerializer;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.BiConsumer;
 
 /**
@@ -65,9 +63,7 @@ public class MultiCheckpointWriter {
     public long appendCheckpoints(CorfuRuntime rt, String author,
                                   BiConsumer<CheckpointEntry,Long> postAppendFunc)
             throws Exception {
-        rt.getObjectsView().TXBegin();
-        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
-        long firstGlobalAddress = context.getSnapshotTimestamp();
+        long globalAddress = CheckpointWriter.startGlobalSnapshotTxn(rt);
 
         try {
             for (ICorfuSMR<Map> map : maps) {
@@ -82,9 +78,9 @@ public class MultiCheckpointWriter {
                 checkpointLogAddresses.addAll(addresses);
             }
         } finally {
-            rt.getObjectsView().TXAbort();
+            rt.getObjectsView().TXEnd();
         }
-        return firstGlobalAddress;
+        return globalAddress;
     }
 
 }

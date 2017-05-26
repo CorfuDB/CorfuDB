@@ -7,8 +7,10 @@ import lombok.Setter;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.serializer.ISerializer;
@@ -114,14 +116,14 @@ public class CheckpointWriter {
         List<Long> addrs = new ArrayList<>();
         setupWriter.accept(this);
 
-        rt.getObjectsView().TXBegin();
+        startGlobalSnapshotTxn(rt);
         try {
             addrs.add(startCheckpoint());
             addrs.addAll(appendObjectState());
             addrs.add(finishCheckpoint());
             return addrs;
         } finally {
-            rt.getObjectsView().TXAbort();
+            rt.getObjectsView().TXEnd();
         }
     }
 
@@ -225,5 +227,17 @@ public class CheckpointWriter {
 
         postAppendFunc.accept(cp, endAddress);
         return endAddress;
+    }
+
+    public static long startGlobalSnapshotTxn(CorfuRuntime rt) {
+        TokenResponse tokenResponse =
+                rt.getSequencerView().nextToken(Collections.EMPTY_SET, 0);
+        long globalTail = tokenResponse.getToken().getTokenValue();
+        rt.getObjectsView().TXBuild()
+                .setType(TransactionType.SNAPSHOT)
+                .setSnapshot(globalTail)
+                .begin();
+        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
+        return context.getSnapshotTimestamp();
     }
 }
