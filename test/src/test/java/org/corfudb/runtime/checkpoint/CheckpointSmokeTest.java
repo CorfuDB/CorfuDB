@@ -12,9 +12,7 @@ import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.util.serializer.Serializers;
@@ -422,17 +420,14 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     @Test
     public void MultiCheckpointWriter2Test() throws Exception {
         MultiCheckpointWriterTestInner(true);
-        // While creating & testing MultiCheckpointWriter,
-        // I accidentally discovered that a checkpoint that
-        // immediately follows an earlier checkpoint can cause
-        // map corruption.  Let's test again for posterity.
+        // test a dense sequence of (two) checkpoints, without any updates in between
         MultiCheckpointWriterTestInner(false);
     }
 
-    public void MultiCheckpointWriterTestInner(boolean regressionFlavor) throws Exception {
+    public void MultiCheckpointWriterTestInner(boolean consecutiveCkpoints) throws Exception {
 
-        final String streamNameA = "mystream5A" + regressionFlavor;
-        final String streamNameB = "mystream5B" + regressionFlavor;
+        final String streamNameA = "mystream5A" + consecutiveCkpoints;
+        final String streamNameB = "mystream5B" + consecutiveCkpoints;
         final String keyPrefix = "first";
         final int numKeys = 10;
         final String author = "Me, myself, and I";
@@ -463,7 +458,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // A bug was once here when 2 checkpoints were adjacent to
         // each other without any regular entries in between.
-        if (regressionFlavor) {
+        if (consecutiveCkpoints) {
             mA.put("one more", 1L);
             mB.put("one more", 1L);
         }
