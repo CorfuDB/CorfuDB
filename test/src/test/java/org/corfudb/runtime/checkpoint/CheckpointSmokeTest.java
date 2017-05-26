@@ -10,7 +10,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -224,7 +224,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         cpw.setBatchSize(4);
 
         // Write all CP data.
-        r.getObjectsView().TXBegin();
+        long txBeginGlobalAddress = CheckpointWriter.startGlobalSnapshotTxn(r);
         try {
             long startAddress = cpw.startCheckpoint();
             List<Long> continuationAddrs = cpw.appendObjectState();
@@ -239,7 +239,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                         .isEqualTo(i + fudgeFactor);
             }
         } finally {
-            r.getObjectsView().TXAbort();
+            r.getObjectsView().TXEnd();
         }
     }
 
@@ -351,7 +351,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             assertThat(m2.entrySet())
                     .describedAs("Snapshot at global log address " + globalAddr)
                     .isEqualTo(expectedHistory.entrySet());
-            r.getObjectsView().TXAbort();
+            r.getObjectsView().TXEnd();
         }
     }
 
@@ -417,4 +417,66 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         }
     }
 
+    @Test
+    public void MultiCheckpointWriter2Test() throws Exception {
+        MultiCheckpointWriterTestInner(true);
+        // test a dense sequence of (two) checkpoints, without any updates in between
+        MultiCheckpointWriterTestInner(false);
+    }
+
+    public void MultiCheckpointWriterTestInner(boolean consecutiveCkpoints) throws Exception {
+
+        final String streamNameA = "mystream5A" + consecutiveCkpoints;
+        final String streamNameB = "mystream5B" + consecutiveCkpoints;
+        final String keyPrefix = "first";
+        final int numKeys = 10;
+        final String author = "Me, myself, and I";
+
+        // Instantiate map and write first keys
+        Map<String, Long> mA = instantiateMap(streamNameA);
+        Map<String, Long> mB = instantiateMap(streamNameB);
+        for (int j = 0; j < 2*2; j++) {
+            for (int i = 0; i < numKeys; i++) {
+                String key = "A" + keyPrefix + Integer.toString(i);
+                mA.put(key, (long) i);
+                key = "B" + keyPrefix + Integer.toString(i);
+                mB.put(key, (long) i);
+            }
+        }
+        mA.put("one more", 1L);
+        mB.put("one more", 1L);
+
+        MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
+        mcw1.addMap((SMRMap) mA);
+        mcw1.addMap((SMRMap) mB);
+        long firstGlobalAddress1 = mcw1.appendCheckpoints(r, author);
+        assertThat(firstGlobalAddress1).isGreaterThan(-1);
+        assertThat(mcw1.getCheckpointLogAddresses().size()).isGreaterThan(-1);
+
+        setRuntime();
+        Map<String, Long> m2c = instantiateMap(streamNameA);
+
+        // A bug was once here when 2 checkpoints were adjacent to
+        // each other without any regular entries in between.
+        if (consecutiveCkpoints) {
+            mA.put("one more", 1L);
+            mB.put("one more", 1L);
+        }
+
+        MultiCheckpointWriter mcw2 = new MultiCheckpointWriter();
+        mcw2.addMap((SMRMap) mA);
+        mcw2.addMap((SMRMap) mB);
+        long firstGlobalAddress2 = mcw2.appendCheckpoints(r, author);
+        assertThat(firstGlobalAddress2).isGreaterThan(firstGlobalAddress1);
+
+        setRuntime();
+        Map<String, Long> m2A = instantiateMap(streamNameA);
+        Map<String, Long> m2B = instantiateMap(streamNameB);
+        for (int i = 0; i < numKeys; i++) {
+            String keyA = "A" + keyPrefix + Integer.toString(i);
+            String keyB = "B" + keyPrefix + Integer.toString(i);
+            assertThat(m2A.get(keyA)).isEqualTo(i);
+            assertThat(m2B.get(keyB)).isEqualTo(i);
+        }
+    }
 }
