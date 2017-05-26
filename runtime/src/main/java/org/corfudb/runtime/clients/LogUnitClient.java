@@ -295,6 +295,13 @@ public class LogUnitClient implements IClient {
     }
 
     /**
+     * Send a flush cache request that will flush the logunit cache
+     */
+    public CompletableFuture flushCache() {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.FLUSH_CACHE.msg());
+    }
+
+    /**
      * Fill a hole at a given address.
      *
      * @param address The address to fill a hole at.
