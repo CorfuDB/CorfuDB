@@ -1,9 +1,5 @@
 package org.corfudb.samples;
 
-import org.corfudb.annotations.Accessor;
-import org.corfudb.annotations.CorfuObject;
-import org.corfudb.annotations.MutatorAccessor;
-
 /**
  * Created by shriyav on 5/25/17.
  */

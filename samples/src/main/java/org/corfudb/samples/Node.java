@@ -1,9 +1,5 @@
 package org.corfudb.samples;
 
-import org.corfudb.annotations.Accessor;
-import org.corfudb.annotations.CorfuObject;
-import org.corfudb.annotations.MutatorAccessor;
-
 import java.util.ArrayList;
 
 /**
