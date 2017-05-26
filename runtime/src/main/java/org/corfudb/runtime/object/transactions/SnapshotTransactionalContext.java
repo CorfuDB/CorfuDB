@@ -3,6 +3,10 @@ package org.corfudb.runtime.object.transactions;
 import com.google.common.collect.ImmutableSet;
 import lombok.Getter;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 
@@ -42,7 +46,18 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
         // do not add: addToReadSet(proxy, conflictObject);
         return proxy.getUnderlyingObject().access(o -> o.getVersionUnsafe() == getSnapshotTimestamp()
                         && !o.isOptimisticallyModifiedUnsafe(),
-                o -> o.syncObjectUnsafe(getSnapshotTimestamp()),
+                o -> {
+                    try {
+                        o.syncObjectUnsafe(getSnapshotTimestamp());
+                    } catch (TrimmedException te) {
+                        // If a trim is encountered, we must reset the object
+                        o.resetUnsafe();
+                        // and abort the transaction
+                        abortTransaction(new TransactionAbortedException(
+                                new TxResolutionInfo(getTransactionID(),
+                                        getSnapshotTimestamp()), null, AbortCause.TRIM));
+                    }
+                },
                 o -> accessFunction.access(o));
     }
 

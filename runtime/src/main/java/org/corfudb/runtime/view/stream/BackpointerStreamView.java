@@ -260,7 +260,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             // If we've reached the beginning of a successful checkpoint
             // that the caller wants us to us, then we're done here.
-            if (considerCheckpoint && currentRead <= context.checkpointSuccessStartAddr) {
+            if (considerCheckpoint && currentRead <= context.checkpointSuccessStartAddr ) {
                 log.trace("Read_Fill_Queue[{}]: currentRead {} checkpointSuccessStartAddr {}",
                         this, currentRead, context.checkpointSuccessStartAddr);
                 break;
