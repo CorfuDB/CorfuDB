@@ -112,6 +112,22 @@ public class LogUnitClientTest extends AbstractClientTest {
     }
 
     @Test
+    public void flushLogunitCache() throws Exception {
+        LogUnitServer server2 = new LogUnitServer(serverContext);
+        serverRouter.reset();
+        serverRouter.addServer(server2);
+
+        assertThat(server2.getDataCache().asMap().size()).isEqualTo(0);
+        byte[] testString = "hello world".getBytes();
+        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
+        assertThat(server2.getDataCache().asMap().size()).isEqualTo(1);
+        client.flushCache();
+        assertThat(server2.getDataCache().asMap().size()).isEqualTo(0);
+        LogData r = client.read(0).get().getReadSet().get(0L);
+        assertThat(server2.getDataCache().asMap().size()).isEqualTo(1);
+    }
+
+    @Test
     public void canReadWriteRanked()
             throws Exception {
         byte[] testString = "hello world".getBytes();
