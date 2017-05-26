@@ -17,6 +17,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -32,7 +33,7 @@ public class AddressSpaceView extends AbstractView {
     /**
      * A cache for read results.
      */
-    static LoadingCache<Long, ILogData> readCache;
+    LoadingCache<Long, ILogData> readCache;
 
     public AddressSpaceView(CorfuRuntime runtime) {
         super(runtime);
@@ -59,6 +60,8 @@ public class AddressSpaceView extends AbstractView {
         readCache = Caffeine.<Long, ILogData>newBuilder()
                 .<Long, ILogData>weigher((k, v) -> v.getSizeEstimate())
                 .maximumWeight(runtime.getMaxCacheSize())
+                .expireAfterAccess(20, TimeUnit.MINUTES)
+                .expireAfterWrite(20, TimeUnit.MINUTES)
                 .recordStats()
                 .build(new CacheLoader<Long, ILogData>() {
                     @Override
