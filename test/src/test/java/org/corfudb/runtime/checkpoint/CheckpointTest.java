@@ -54,7 +54,6 @@ public class CheckpointTest extends AbstractObjectTest {
         scheduleConcurrently(1, ignored_task_num -> {
             CorfuRuntime currentRuntime = getMyRuntime();
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
-                //System.out.println("ckpoint " + i);
                 MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
                 mcw1.addMap((SMRMap) m2A);
                 mcw1.addMap((SMRMap) m2B);
@@ -64,11 +63,8 @@ public class CheckpointTest extends AbstractObjectTest {
 
         scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW, ignored_task_num -> {
             setRuntime();
-            //System.out.println("task " + ignored_task_num + " START " +
-            // "instiatate maps");
             Map<String, Long> localm2A = instantiateMap(streamNameA);
             Map<String, Long> localm2B = instantiateMap(streamNameB);
-            //System.out.println("task " + ignored_task_num + " DONE " +"instiatate" +" maps");
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
                 assertThat(localm2A.get(String.valueOf(i)) == null ||
                         localm2A.get(String.valueOf(i)) == (long) i
@@ -80,7 +76,6 @@ public class CheckpointTest extends AbstractObjectTest {
         });
 
         executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
-        // System.out.println("done executeScheduled");
 
         setRuntime();
         Map<String, Long> localm2A = instantiateMap(streamNameA);
@@ -106,7 +101,6 @@ public class CheckpointTest extends AbstractObjectTest {
         scheduleConcurrently(1, ignored_task_num -> {
             CorfuRuntime currentRuntime = getMyRuntime();
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
-                // System.out.println("ckpoint " + i);
                 MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
                 mcw1.addMap((SMRMap) m2A);
                 mcw1.addMap((SMRMap) m2B);
@@ -116,11 +110,8 @@ public class CheckpointTest extends AbstractObjectTest {
 
         scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW, ignored_task_num -> {
             setRuntime();
-            //System.out.println("task " + ignored_task_num + " START " +
-            // "instiatate maps");
             Map<String, Long> localm2A = instantiateMap(streamNameA);
             Map<String, Long> localm2B = instantiateMap(streamNameB);
-            //System.out.println("task " + ignored_task_num + " DONE " +"instiatate" +" maps");
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
                 assertThat(localm2A.get(String.valueOf(i)) ).isNull();
                 assertThat(localm2B.get(String.valueOf(i)) ).isNull();
@@ -128,7 +119,6 @@ public class CheckpointTest extends AbstractObjectTest {
         });
 
         executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
-        // System.out.println("done executeScheduled");
 
         setRuntime();
         Map<String, Long> localm2A = instantiateMap(streamNameA);
@@ -160,21 +150,17 @@ public class CheckpointTest extends AbstractObjectTest {
         scheduleConcurrently(1, ignored_task_num -> {
             CorfuRuntime currentRuntime = getMyRuntime();
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
-                //System.out.println("ckpoint " + i);
                 MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
                 mcw1.addMap((SMRMap) m2A);
                 mcw1.addMap((SMRMap) m2B);
-                long firstGlobalAddress1 = mcw1.appendCheckpoints(currentRuntime, author);
+                mcw1.appendCheckpoints(currentRuntime, author);
             }
         });
 
         scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW, ignored_task_num -> {
             setRuntime();
-            //System.out.println("task " + ignored_task_num + " START " +
-            // "instiatate maps");
             Map<String, Long> localm2A = instantiateMap(streamNameA);
             Map<String, Long> localm2B = instantiateMap(streamNameB);
-            //System.out.println("task " + ignored_task_num + " DONE " +"instiatate" +" maps");
             for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
                 assertThat(localm2A.get(String.valueOf(i))).isEqualTo((long) i);
                 assertThat(localm2B.get(String.valueOf(i)) ).isEqualTo((long) 0);
@@ -182,7 +168,6 @@ public class CheckpointTest extends AbstractObjectTest {
         });
 
         executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
-        // System.out.println("done executeScheduled");
 
         setRuntime();
         Map<String, Long> localm2A = instantiateMap(streamNameA);
@@ -193,4 +178,70 @@ public class CheckpointTest extends AbstractObjectTest {
         }
 
     }
+
+    @Test
+    public void periodicCkpointTrimTest() throws Exception {
+        final String streamNameA = "mystreamA";
+        final String streamNameB = "mystreamB";
+        final String author = "periodicCkpoint";
+        final int mapSize = PARAMETERS.NUM_ITERATIONS_MODERATE;
+
+        myRuntime = getDefaultRuntime().connect();
+
+        Map<String, Long> m2A = instantiateMap(streamNameA);
+        Map<String, Long> m2B = instantiateMap(streamNameB);
+
+        scheduleConcurrently(1, ignored_task_num -> {
+            for (int i = 0; i < mapSize; i++) {
+                m2A.put(String.valueOf(i), (long)i);
+                m2B.put(String.valueOf(i), (long)0);
+            }
+        });
+
+        scheduleConcurrently(1, ignored_task_num -> {
+            CorfuRuntime currentRuntime = getMyRuntime();
+            for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+
+                // i'th checkpoint
+                MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
+                mcw1.addMap((SMRMap) m2A);
+                mcw1.addMap((SMRMap) m2B);
+                long checkpointAddress = mcw1.appendCheckpoints(currentRuntime, author);
+
+                // Trim the log
+                currentRuntime.getAddressSpaceView().prefixTrim(checkpointAddress - 1);
+                currentRuntime.getAddressSpaceView().gc();
+                currentRuntime.getAddressSpaceView().invalidateServerCaches();
+                currentRuntime.getAddressSpaceView().invalidateClientCache();
+
+            }
+        });
+
+        scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LOW, ignored_task_num -> {
+            setRuntime();
+            Map<String, Long> localm2A = instantiateMap(streamNameA);
+            Map<String, Long> localm2B = instantiateMap(streamNameB);
+
+            int currentMapSize = localm2A.size() >= localm2B.size() ? localm2A.size() : localm2B.size();
+            for (int i = 0; i < currentMapSize; i++) {
+                assertThat(localm2A.get(String.valueOf(i))).isEqualTo((long) i);
+                assertThat(localm2B.get(String.valueOf(i))).isEqualTo((long) i);
+            }
+        });
+
+        executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
+
+        setRuntime();
+        Map<String, Long> localm2A = instantiateMap(streamNameA);
+        Map<String, Long> localm2B = instantiateMap(streamNameB);
+        for (int i = 0; i < mapSize; i++) {
+            assertThat(localm2A.get(String.valueOf(i)) ).isEqualTo((long)i);
+            assertThat(localm2A).hasSize(mapSize);
+            assertThat(localm2B.get(String.valueOf(i)) ).isEqualTo(0L);
+            assertThat(localm2B).hasSize(mapSize);
+        }
+
+    }
+
+
 }
