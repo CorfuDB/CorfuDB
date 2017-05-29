@@ -194,7 +194,7 @@ public class CheckpointTest extends AbstractObjectTest {
         scheduleConcurrently(1, ignored_task_num -> {
             for (int i = 0; i < mapSize; i++) {
                 m2A.put(String.valueOf(i), (long)i);
-                m2B.put(String.valueOf(i), (long)0);
+                m2B.put(String.valueOf(i), (long)i);
             }
         });
 
@@ -237,7 +237,7 @@ public class CheckpointTest extends AbstractObjectTest {
         for (int i = 0; i < mapSize; i++) {
             assertThat(localm2A.get(String.valueOf(i)) ).isEqualTo((long)i);
             assertThat(localm2A).hasSize(mapSize);
-            assertThat(localm2B.get(String.valueOf(i)) ).isEqualTo(0L);
+            assertThat(localm2B.get(String.valueOf(i)) ).isEqualTo((long)i);
             assertThat(localm2B).hasSize(mapSize);
         }
 

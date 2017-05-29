@@ -7,6 +7,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
 import javax.annotation.Nonnull;
@@ -244,8 +245,20 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             log.trace("Read_Fill_Queue[{}] Read {}", this, currentRead);
             // Read the entry in question.
-            ILogData currentEntry =
-                    runtime.getAddressSpaceView().read(currentRead);
+            ILogData currentEntry = null;
+
+            try {
+                currentEntry = runtime.getAddressSpaceView().read(currentRead);
+            } catch (TrimmedException te) {
+                if (considerCheckpoint && Address.isAddress(context.checkpointSuccessStartAddr)) {
+                    log.trace("Read_Fill_Queue[{}] Trim encountered, checkpoint available at {}", this,
+                            context.checkpointSuccessStartAddr);
+                    break;
+                } else {
+                    log.warn("Read_Fill_Queue[{}] Trim encountered and no checkpoint available!", this);
+                    throw te;
+                }
+            }
 
             // If the entry contains this context's stream,
             // we add it to the read queue.
