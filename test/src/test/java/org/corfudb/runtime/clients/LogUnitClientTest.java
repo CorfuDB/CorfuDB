@@ -18,6 +18,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.junit.Test;
 
@@ -81,6 +82,49 @@ public class LogUnitClientTest extends AbstractClientTest {
                 .isEqualTo(DataType.DATA);
         assertThat(r.getPayload(new CorfuRuntime()))
                 .isEqualTo(testString);
+    }
+
+    @Test
+    public void readingTrimmedAddress() throws Exception {
+        byte[] testString = "hello world".getBytes();
+        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
+        client.write(1, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
+        LogData r = client.read(0).get().getReadSet().get(0L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+        r = client.read(1).get().getReadSet().get(1L);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+
+        client.prefixTrim(0);
+        client.compact();
+
+        // For logunit cach flush
+        LogUnitServer server2 = new LogUnitServer(serverContext);
+        serverRouter.reset();
+        serverRouter.addServer(server2);
+
+        assertThatThrownBy(() -> client.read(0).get().getReadSet().get(0L))
+                .isInstanceOf(ExecutionException.class)
+                .hasCauseInstanceOf(TrimmedException.class);
+        assertThat(r.getType())
+                .isEqualTo(DataType.DATA);
+    }
+
+    @Test
+    public void flushLogunitCache() throws Exception {
+        LogUnitServer server2 = new LogUnitServer(serverContext);
+        serverRouter.reset();
+        serverRouter.addServer(server2);
+
+        assertThat(server2.getDataCache().asMap().size()).isEqualTo(0);
+        byte[] testString = "hello world".getBytes();
+        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
+        assertThat(server2.getDataCache().asMap().size()).isEqualTo(1);
+        client.flushCache();
+        assertThat(server2.getDataCache().asMap().size()).isEqualTo(0);
+        LogData r = client.read(0).get().getReadSet().get(0L);
+        assertThat(server2.getDataCache().asMap().size()).isEqualTo(1);
     }
 
     @Test
@@ -255,7 +299,7 @@ public class LogUnitClientTest extends AbstractClientTest {
 
         // Try to read a corrupted log entry
         assertThatThrownBy(() -> client.read(0).get())
-                .isInstanceOf(RuntimeException.class)
+                .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(DataCorruptionException.class);
     }
 }

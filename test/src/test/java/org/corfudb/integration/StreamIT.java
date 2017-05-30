@@ -27,7 +27,10 @@ public class StreamIT extends AbstractIT {
 //    @Test
     public void simpleStreamTest() throws Exception {
 
-        Process corfuServerProcess = runCorfuServer();
+        Process corfuServerProcess = new CorfuServerRunner()
+                .setHost(corfuSingleNodeHost)
+                .setPort(corfuSingleNodePort)
+                .runServer();
 
         CorfuRuntime rt = createDefaultRuntime();
         rt.setCacheDisabled(true);

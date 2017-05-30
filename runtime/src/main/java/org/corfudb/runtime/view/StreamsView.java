@@ -15,21 +15,17 @@ import javax.annotation.Nullable;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/11/15.
  */
 @Slf4j
-public class StreamsView {
+public class StreamsView extends AbstractView {
 
-    /**
-     * The org.corfudb.runtime which backs this view.
-     */
-    CorfuRuntime runtime;
-
-    public StreamsView(CorfuRuntime runtime) {
-        this.runtime = runtime;
+    public StreamsView(final CorfuRuntime runtime) {
+        super(runtime);
     }
 
     /**
@@ -119,18 +115,24 @@ public class StreamsView {
                 // If we're here, we succeeded, return the acquired token
                 return tokenResponse.getTokenValue();
             } catch (OverwriteException oe) {
+                // We were overwritten, get a new token and try again.
                 log.trace("Overwrite[{}]: streams {}", tokenResponse.getTokenValue(),
                         streamIDs.stream().map(Utils::toReadableID).collect(Collectors.toSet()));
-                // On retry, check for conflicts only from the previous
-                // attempt position
-                conflictInfo.setSnapshotTimestamp(tokenResponse.getToken().getTokenValue());
 
-                // We were overwritten, get a new token and try again.
-                TokenResponse temp = conflictInfo == null ?
-                        // Token w/o conflict info
-                        runtime.getSequencerView().nextToken(streamIDs, 1) :
-                        // Token w/ conflict info
-                        runtime.getSequencerView().nextToken(streamIDs, 1, conflictInfo);
+                TokenResponse temp;
+                if (conflictInfo == null)
+                    // Token w/o conflict info
+                    temp = runtime.getSequencerView().nextToken(streamIDs, 1);
+                else {
+
+                    // On retry, check for conflicts only from the previous
+                    // attempt position
+                    conflictInfo.setSnapshotTimestamp(tokenResponse.getToken().getTokenValue());
+
+                    // Token w/ conflict info
+                    temp = runtime.getSequencerView().nextToken(streamIDs,
+                            1, conflictInfo);
+                }
 
                 // We need to fix the token (to use the stream addresses- may
                 // eventually be deprecated since these are no longer used)

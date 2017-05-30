@@ -36,7 +36,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     public void testCompact() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
 
-        LogAddress address = new LogAddress(0l, null);
+        long address = 0;
         for (long x = 0; x < RECORDS_TO_WRITE; x++) {
             writeToLog(log, address, DataType.DATA, "Payload", x);
         }
@@ -52,7 +52,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     @Test
     public void testHigherRank() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        LogAddress address = new LogAddress(0l, null);
+        long address = 0;
         writeToLog(log, address, DataType.DATA, "v-1", 1);
         LogData value1 = log.read(address);
         assertTrue(new String(value1.getData()).contains("v-1"));
@@ -65,7 +65,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     @Test
     public void testLowerRank() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        LogAddress address = new LogAddress(0l, null);
+        long address = 0;
         writeToLog(log, address, DataType.DATA, "v-1", 2);
         LogData value1 = log.read(address);
         assertTrue(new String(value1.getData()).contains("v-1"));
@@ -83,7 +83,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     @Test
     public void testHigherRankAgainstProposal() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        LogAddress address = new LogAddress(0l, null);
+        long address = 0;
         writeToLog(log, address, DataType.RANK_ONLY, "v-1", 1);
         LogData value1 = log.read(address);
         assertTrue(new String(value1.getData()).contains("v-1"));
@@ -96,7 +96,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     @Test
     public void testLowerRankAgainstProposal() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        LogAddress address = new LogAddress(0l, null);
+        long address = 0;
         writeToLog(log, address, DataType.RANK_ONLY, "v-1", 2);
         LogData value1 = log.read(address);
         assertTrue(new String(value1.getData()).contains("v-1"));
@@ -114,7 +114,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     @Test
     public void testProposalWithHigherRankAgainstData() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        LogAddress address = new LogAddress(0l, null);
+        long address = 0;
         writeToLog(log, address, DataType.DATA, "v-1", 1);
         LogData value1 = log.read(address);
         assertTrue(new String(value1.getData()).contains("v-1"));
@@ -134,7 +134,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     @Test
     public void testProposalWithLowerRankAgainstData() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        LogAddress address = new LogAddress(0l, null);
+        long address = 0;
         writeToLog(log, address, DataType.DATA, "v-1", 2);
         LogData value1 = log.read(address);
         assertTrue(new String(value1.getData()).contains("v-1"));
@@ -153,7 +153,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     @Test
     public void testProposalsHigherRank() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        LogAddress address = new LogAddress(0l, null);
+        long address = 0;
         writeToLog(log, address, DataType.RANK_ONLY, "v-1", 1);
         LogData value1 = log.read(address);
         assertTrue(new String(value1.getData()).contains("v-1"));
@@ -166,7 +166,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     @Test
     public void testProposalsLowerRank() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        LogAddress address = new LogAddress(0l, null);
+        long address = 0;
         writeToLog(log, address, DataType.RANK_ONLY, "v-1", 2);
         LogData value1 = log.read(address);
         assertTrue(new String(value1.getData()).contains("v-1"));
@@ -184,7 +184,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     @Test
     public void checkProposalIsIdempotent() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        LogAddress address = new LogAddress(0l, null);
+        long address = 0;
         IMetadata.DataRank sameRank = new IMetadata.DataRank(1);
         writeToLog(log, address, DataType.DATA, "v-1", sameRank);
         LogData value1 = log.read(address);
@@ -194,11 +194,11 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
         assertTrue(new String(value2.getData()).contains("v-1"));
     }
 
-    private void writeToLog(StreamLog log, LogAddress address, DataType dataType, String payload, long rank) {
+    private void writeToLog(StreamLog log, long address, DataType dataType, String payload, long rank) {
         this.writeToLog(log, address, dataType, payload, new IMetadata.DataRank(rank));
     }
 
-    private void writeToLog(StreamLog log, LogAddress address, DataType dataType, String payload, IMetadata.DataRank rank) {
+    private void writeToLog(StreamLog log, long address, DataType dataType, String payload, IMetadata.DataRank rank) {
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = payload.getBytes();
         Serializers.CORFU.serialize(streamEntry, b);

@@ -42,7 +42,7 @@ Options:
       ; Send trigger to everyone in the layout
       (let [layout (.. (get-layout-view) (getLayout))]
            (doseq [server (.getAllServers layout)]
-                (send-trigger layout))
+                (send-trigger server))
 
            (println "Initiation completed !")
        ))

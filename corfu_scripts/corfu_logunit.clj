@@ -2,6 +2,9 @@
 (in-ns 'org.corfudb.shell) ; so our IDE knows what NS we are using
 
 (import org.docopt.Docopt) ; parse some cmdline opts
+(import org.corfudb.protocols.wireprotocol.TokenResponse)
+(import org.corfudb.protocols.wireprotocol.LogData)
+(import org.corfudb.protocols.wireprotocol.ILogData)
 
 (def usage "corfu_logunit, directly interact with Corfu logunits.
 Usage:
@@ -54,13 +57,9 @@ Options:
     (.toByteArray out)))
 
 ; a function which reads a logunit entry to stdout
-(defn read-logunit [stream, address] (let [obj
-         (if (nil? stream)
-             (.. (.. (get-logunit-client)
-                     (read address)) (get))
-             (.. (.. (get-logunit-client)
-                     (read stream (com.google.common.collect.Range/closedOpen address address))) (get)
-         ))]
+(defn read-logunit [address] (let [obj
+         (.. (.. (get-logunit-client) (read address)) (get))]
+
          (let [read-response (.. (.. obj (getReadSet)) (get address))]
          (if (.equals (.. read-response (getType)) org.corfudb.protocols.wireprotocol.DataType/DATA)
          (let [bytes (.. read-response (getPayload *r))]
@@ -70,15 +69,19 @@ Options:
 
 ; a function which writes a logunit entry from stdin
 (defn write-logunit [stream, address] (let [in (slurp-bytes System/in)]
-  (if (nil? stream)
+  (let [logData (new LogData in)]
+    (do
+      (if (nil? stream)
+          (.. logData (useToken (new TokenResponse address 0 (java.util.Collections/emptyMap))))
+          (.. logData (useToken (new TokenResponse address 0 (java.util.Collections/singletonMap stream (long -5)))))
+          )
+
       (.. (.. (get-logunit-client)
-              (write address (java.util.Collections/emptySet) 0 in (java.util.Collections/emptyMap))) (get))
-      (.. (.. (get-logunit-client)
-              (write address (java.util.Collections/singleton stream) 0 in (java.util.Collections/emptyMap))) (get)
+              (write logData)) (get))
 ))))
 
 ; determine whether to read or write
-(cond (.. localcmd (get "read")) (read-logunit stream (Long/parseLong (.. localcmd (get "<address>"))))
+(cond (.. localcmd (get "read")) (read-logunit (Long/parseLong (.. localcmd (get "<address>"))))
   (.. localcmd (get "write")) (write-logunit stream (Long/parseLong (.. localcmd (get "<address>"))))
   :else (println "Unknown arguments.")
   )

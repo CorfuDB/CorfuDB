@@ -51,11 +51,11 @@ public enum CorfuMsgType {
     READ_RESPONSE(32, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
     TRIM(33, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
     FILL_HOLE(34, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
-    FORCE_GC(35, TypeToken.of(CorfuMsg.class)),
-    GC_INTERVAL(36, new TypeToken<CorfuPayloadMsg<Long>>() {}),
-    FORCE_COMPACT(37, TypeToken.of(CorfuMsg.class)),
+    PREFIX_TRIM(38, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
     TAIL_REQUEST(41, TypeToken.of(CorfuMsg.class), true),
     TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
+    COMPACT_REQUEST(43, TypeToken.of(CorfuMsg.class), true),
+    FLUSH_CACHE(44, TypeToken.of(CorfuMsg.class), true),
 
     WRITE_OK(50, TypeToken.of(CorfuMsg.class)),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),
@@ -63,7 +63,7 @@ public enum CorfuMsgType {
     ERROR_OOS(53, TypeToken.of(CorfuMsg.class)),
     ERROR_RANK(54, TypeToken.of(CorfuMsg.class)),
     ERROR_NOENTRY(55, TypeToken.of(CorfuMsg.class)),
-    ERROR_DATA_CORRUPTION(57, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
+    ERROR_DATA_CORRUPTION(57, TypeToken.of(CorfuMsg.class)),
     ERROR_DATA_OUTRANKED(58, TypeToken.of(CorfuMsg.class)),
     ERROR_VALUE_ADOPTED(59,new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
 

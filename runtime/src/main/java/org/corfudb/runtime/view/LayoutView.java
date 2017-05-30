@@ -8,6 +8,7 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
 
+import javax.annotation.Nonnull;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -22,7 +23,7 @@ import static java.util.Arrays.stream;
 @Slf4j
 public class LayoutView extends AbstractView {
 
-    public LayoutView(CorfuRuntime runtime) {
+    public LayoutView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
     }
 

@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 
+import javax.annotation.Nonnull;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
@@ -23,9 +24,9 @@ import java.util.concurrent.TimeoutException;
 @Slf4j
 public abstract class AbstractView {
 
-    CorfuRuntime runtime;
+    final CorfuRuntime runtime;
 
-    public AbstractView(CorfuRuntime runtime) {
+    public AbstractView(@Nonnull final CorfuRuntime runtime) {
         this.runtime = runtime;
     }
 

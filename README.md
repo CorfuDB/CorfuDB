@@ -231,10 +231,20 @@ You'll want to add localhost:9001 as a new logunit to the existing segment:
 This adds the log unit at localhost:9001 to the only segment in the system.
 to learn more about segments, see the [Corfu wiki](https://github.com/CorfuDB/CorfuDB/wiki).
 
-To scale Corfu, we add additional ``stripes''. To add an additional stripe, 
-start a new ```corfu_server``` on port 9002 and edit the layout again:
+To scale Corfu, we add additional ``stripes''. To add an additional stripe, first 
+start a new ```corfu_server``` on port 9002:
+```
+./CorfuDB/bin/corfu_server -m -M localhost:9000 9002
+```
+Add this layout server to the previous deployment by editing the layout:
 ```
 $ ./CorfuDB/bin/corfu_layouts edit -c localhost:9000,localhost:9001
+```
+The layoutServers line should read:
+```json
+  "layoutServers": [
+    "localhost:9000", "localhost:9001", "localhost:9002"
+  ],
 ```
 This time we add localhost:9002 as a new stripe.
 
