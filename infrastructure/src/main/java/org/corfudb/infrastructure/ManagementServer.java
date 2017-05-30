@@ -280,7 +280,7 @@ public class ManagementServer extends AbstractServer {
         // This server has not been bootstrapped yet, ignore all requests.
         if (!checkBootstrap(msg, ctx, r)) { return; }
 
-        log.info("Received Failures : {}", msg.getPayload().getNodes());
+        System.out.println("Node : " + getLocalEndpoint() + "Received Failures : " + msg.getPayload().getNodes());
         try {
             failureHandlerDispatcher.dispatchHandler(failureHandlerPolicy, (Layout) latestLayout.clone(), getCorfuRuntime(), msg.getPayload().getNodes());
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
