@@ -254,7 +254,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     if (context.checkpointSuccessStartAddr < currentRead) {
                         // We have never seen a successful checkpoint END (-1)
                         // or else the CP we've seen starts beyond the observed
-                        // trim point @ currentRead,
+                        // trim here at currentRead,
                         // so throw this exception again so we can look at
                         // more of the log to find a successful checkpoint END.
                         log.trace("Read_Fill_Queue[{}] Trim encountered at {}, checkpoint at {} is not available",

@@ -1,12 +1,12 @@
 package org.corfudb.runtime.checkpoint;
 
+import lombok.extern.slf4j.Slf4j;
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.AbstractObjectTest;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Map;
@@ -16,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Created by dmalkhi on 5/25/17.
  */
+@Slf4j
 public class CheckpointTest extends AbstractObjectTest {
 
     @Getter
@@ -38,6 +39,8 @@ public class CheckpointTest extends AbstractObjectTest {
         final String streamNameA = "mystreamA";
         final String streamNameB = "mystreamB";
         final String author = "periodicCkpoint";
+        final int sizeAdjustment = 16; // size reduction to accomodate TRACE level debugging
+        final int mapSize = PARAMETERS.NUM_ITERATIONS_MODERATE / sizeAdjustment;
 
         myRuntime = getDefaultRuntime().connect();
 
@@ -45,7 +48,7 @@ public class CheckpointTest extends AbstractObjectTest {
         Map<String, Long> m2B = instantiateMap(streamNameB);
 
         scheduleConcurrently(1, ignored_task_num -> {
-            for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            for (int i = 0; i < mapSize; i++) {
                 m2A.put(String.valueOf(i), (long)i);
                 m2B.put(String.valueOf(i), (long)0);
             }
@@ -65,7 +68,7 @@ public class CheckpointTest extends AbstractObjectTest {
             setRuntime();
             Map<String, Long> localm2A = instantiateMap(streamNameA);
             Map<String, Long> localm2B = instantiateMap(streamNameB);
-            for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            for (int i = 0; i < mapSize; i++) {
                 assertThat(localm2A.get(String.valueOf(i)) == null ||
                         localm2A.get(String.valueOf(i)) == (long) i
                 ).isTrue();
@@ -80,7 +83,7 @@ public class CheckpointTest extends AbstractObjectTest {
         setRuntime();
         Map<String, Long> localm2A = instantiateMap(streamNameA);
         Map<String, Long> localm2B = instantiateMap(streamNameB);
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+        for (int i = 0; i < mapSize; i++) {
             assertThat(localm2A.get(String.valueOf(i)) ).isEqualTo((long)i);
             assertThat(localm2B.get(String.valueOf(i)) ).isEqualTo(0L);
         }
@@ -92,6 +95,8 @@ public class CheckpointTest extends AbstractObjectTest {
         final String streamNameA = "mystreamA";
         final String streamNameB = "mystreamB";
         final String author = "periodicCkpoint";
+        final int sizeAdjustment = 16; // size reduction to accomodate TRACE level debugging
+        final int mapSize = PARAMETERS.NUM_ITERATIONS_MODERATE / sizeAdjustment;
 
         myRuntime = getDefaultRuntime().connect();
 
@@ -112,7 +117,7 @@ public class CheckpointTest extends AbstractObjectTest {
             setRuntime();
             Map<String, Long> localm2A = instantiateMap(streamNameA);
             Map<String, Long> localm2B = instantiateMap(streamNameB);
-            for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            for (int i = 0; i < mapSize; i++) {
                 assertThat(localm2A.get(String.valueOf(i)) ).isNull();
                 assertThat(localm2B.get(String.valueOf(i)) ).isNull();
             }
@@ -135,6 +140,8 @@ public class CheckpointTest extends AbstractObjectTest {
         final String streamNameA = "mystreamA";
         final String streamNameB = "mystreamB";
         final String author = "periodicCkpoint";
+        final int sizeAdjustment = 16; // size reduction to accomodate TRACE level debugging
+        final int mapSize = PARAMETERS.NUM_ITERATIONS_MODERATE / sizeAdjustment;
 
         myRuntime = getDefaultRuntime().connect();
 
@@ -142,7 +149,7 @@ public class CheckpointTest extends AbstractObjectTest {
         Map<String, Long> m2B = instantiateMap(streamNameB);
 
         // pre-populate map
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+        for (int i = 0; i < mapSize; i++) {
             m2A.put(String.valueOf(i), (long)i);
             m2B.put(String.valueOf(i), (long)0);
         }
@@ -161,7 +168,7 @@ public class CheckpointTest extends AbstractObjectTest {
             setRuntime();
             Map<String, Long> localm2A = instantiateMap(streamNameA);
             Map<String, Long> localm2B = instantiateMap(streamNameB);
-            for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            for (int i = 0; i < mapSize; i++) {
                 assertThat(localm2A.get(String.valueOf(i))).isEqualTo((long) i);
                 assertThat(localm2B.get(String.valueOf(i)) ).isEqualTo((long) 0);
             }
@@ -172,7 +179,7 @@ public class CheckpointTest extends AbstractObjectTest {
         setRuntime();
         Map<String, Long> localm2A = instantiateMap(streamNameA);
         Map<String, Long> localm2B = instantiateMap(streamNameB);
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+        for (int i = 0; i < mapSize; i++) {
             assertThat(localm2A.get(String.valueOf(i)) ).isEqualTo((long)i);
             assertThat(localm2B.get(String.valueOf(i)) ).isEqualTo(0L);
         }
@@ -184,7 +191,8 @@ public class CheckpointTest extends AbstractObjectTest {
         final String streamNameA = "mystreamA";
         final String streamNameB = "mystreamB";
         final String author = "periodicCkpoint";
-        final int mapSize = PARAMETERS.NUM_ITERATIONS_MODERATE;
+        final int sizeAdjustment = 16; // size reduction to accomodate TRACE level debugging
+        final int mapSize = PARAMETERS.NUM_ITERATIONS_MODERATE / sizeAdjustment;
 
         myRuntime = getDefaultRuntime().connect();
 
@@ -222,10 +230,25 @@ public class CheckpointTest extends AbstractObjectTest {
             Map<String, Long> localm2A = instantiateMap(streamNameA);
             Map<String, Long> localm2B = instantiateMap(streamNameB);
 
-            int currentMapSize = localm2A.size() >= localm2B.size() ? localm2A.size() : localm2B.size();
+            int currentMapSize = Integer.min(localm2A.size(), localm2B.size());
             for (int i = 0; i < currentMapSize; i++) {
-                assertThat(localm2A.get(String.valueOf(i))).isEqualTo((long) i);
-                assertThat(localm2B.get(String.valueOf(i))).isEqualTo(0L);
+                Object gotval; // Use intermediate var for logging in error cases
+
+                gotval = localm2A.get(String.valueOf(i));
+                log.trace("Check localm2A.get({}) -> {} by {}", i, gotval, Thread.currentThread().getName());
+                if (gotval == null) {
+                    log.error("Null value at key {}, localm2A = {}", i, localm2A.toString());
+                }
+                assertThat((Long) gotval).describedAs(Thread.currentThread().getName() + " A index " + i)
+                        .isEqualTo((long) i);
+
+                gotval = localm2B.get(String.valueOf(i));
+                log.trace("Check localm2B.get({}) -> {} by {} {}", i, gotval, Thread.currentThread().getName(), Thread.currentThread().hashCode());
+                if (gotval == null) {
+                    log.error("Null value at key {}, localm2B = {}", i, localm2B.toString());
+                }
+                assertThat((Long) gotval).describedAs(Thread.currentThread().getName() + " B index " + i)
+                        .isEqualTo((long) 0);
             }
         });
 
@@ -240,8 +263,5 @@ public class CheckpointTest extends AbstractObjectTest {
             assertThat(localm2B.get(String.valueOf(i)) ).isEqualTo(0L);
             assertThat(localm2B).hasSize(mapSize);
         }
-
     }
-
-
 }
