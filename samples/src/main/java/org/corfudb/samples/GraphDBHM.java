@@ -266,49 +266,38 @@ public class GraphDBHM {
     public static void main(String[] args) {
         GraphDBHM d = new GraphDBHM();
 
-        d.addNode("A");
-        d.addNode("B");
-        d.addNode("C");
-        d.addNode("D");
-        d.addNode("E");
-        d.addNode("F");
-        d.addNode("G");
-        d.addNode("H");
-        d.addNode("I");
-        d.addNode("J");
+        for (int i = 0; i < 1000; i++) {
+            d.addNode("" + i);
+        }
 
-        d.addEdge("A", "B");
-        d.addEdge("A", "C");
-        d.addEdge("B", "D");
-        d.addEdge("B", "E");
-        d.addEdge("B", "F");
-        d.addEdge("E", "H");
-        d.addEdge("E", "I");
-        d.addEdge("C", "G");
-        d.addEdge("J", "G");
+        for (int i = 0; i < 999; i++) {
+            int temp = i + 1;
+            d.addEdge("" + i, "" + temp);
+            System.out.println(i);
+        }
 
         d.startMethodTrace();
-        for (String friend : d.adjacent("B")) {
+        for (String friend : d.adjacent("2")) {
             System.out.println(friend);
         } // expect: ADEF
         d.endMethodTrace();
 
         d.startMethodTrace();
-        ArrayList<Node> pre = d.preDFS(d.getNode("A"));
+        ArrayList<Node> pre = d.preDFS(d.getNode("0"));
         for (Node item : pre) {
             System.out.println(item.getName());
         } // expect: ABDEHIFCGJ
         d.endMethodTrace();
 
         d.startMethodTrace();
-        ArrayList<Node> post = d.postDFS(d.getNode("A"));
+        ArrayList<Node> post = d.postDFS(d.getNode("0"));
         for (Node item : post) {
             System.out.println(item.getName());
         } // expect: DHIEFBJGCA
         d.endMethodTrace();
 
         d.startMethodTrace();
-        ArrayList<Node> bfs = d.BFS(d.getNode("C"));
+        ArrayList<Node> bfs = d.BFS(d.getNode("0"));
         for (Node item : bfs) {
             System.out.println(item.getName());
         } // expect: CAGBJDEFHI

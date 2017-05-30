@@ -8,6 +8,10 @@ import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.*;
 
 /**
@@ -17,12 +21,88 @@ import java.util.*;
 public class GraphDB {
     private SMRMap<String, Node> vertices;
 
+    private Tracer t;
+    private boolean isTracing;
+
+    public class Tracer {
+        String cat;
+        String name;
+        int pid;
+        long tid;
+        long ts;
+        String ph;
+        String[] args;
+        File log;
+
+        public Tracer() {
+            cat = "";
+            name = "";
+            pid = -1;
+            tid = -1;
+            ts = -1;
+            ph = "";
+            args = null;
+            log = new File("performanceLog.json");
+            try {
+                if (!log.exists()) {
+                    log.createNewFile();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        public void updateArgs(String c, String n, int p1, long t1, long t2, String p2, String[] a) {
+            cat = c;
+            name = n;
+            pid = p1;
+            tid = t1;
+            ts = t2;
+            ph = p2;
+            args = a;
+            writeToLog();
+        }
+
+        public void writeToLog() {
+            try {
+                FileWriter fw = new FileWriter(log.getAbsoluteFile(), true);
+                BufferedWriter bw = new BufferedWriter(fw);
+
+                bw.write("{");
+                bw.write("\"cat\": " + "\"" + t.cat + "\",");
+                bw.write("\"pid\": " + t.pid + ",");
+                bw.write("\"tid\": " + t.tid + ",");
+                bw.write("\"ts\": " + t.ts + ",");
+                bw.write("\"ph\": " + "\""  + t.ph + "\",");
+                bw.write("\"name\": " + "\""  + t.name + "\",");
+                bw.write("\"args\": " + t.args + "},\n");
+
+                bw.close();
+                fw.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            System.out.println("Done");
+        }
+    }
+
+    public void startMethodTrace() {
+        isTracing = true;
+    }
+
+    public void endMethodTrace() {
+        isTracing = false;
+    }
+
     public GraphDB(CorfuRuntime runtime) {
         vertices = runtime.getObjectsView()
                 .build()
                 .setStreamName("A")     // stream name
                 .setType(SMRMap.class)  // object class backed by this stream
                 .open();                // instantiate the object!
+        t = new Tracer();
+        isTracing = false;
     }
 
     @Override
@@ -59,7 +139,13 @@ public class GraphDB {
     }
 
     /** Returns an iterable of names of all vertices adjacent to v. */
-    Iterable<String> adjacent(String v) {
+    Iterable<String> adjacent(String v) { // modify with pointers
+        if (isTracing) {
+            t.updateArgs("GraphDBTest", "adjacent", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "B", null);
+        }
+
+        // begin method
         ArrayList<Edge> edgeList = vertices.get(v).getEdges();
         ArrayList<String> returnVal = new ArrayList<>();
         for (Edge e : edgeList) {
@@ -68,6 +154,12 @@ public class GraphDB {
             } else {
                 returnVal.add(e.getTo().getName());
             }
+        }
+        // end method
+
+        if (isTracing) {
+            t.updateArgs("GraphDBTest", "adjacent", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "E", null);
         }
         return returnVal;
     }
@@ -115,14 +207,46 @@ public class GraphDB {
     }
 
     ArrayList<Node> preDFS(Node f) {
-        return dfsHelper(f, "pre", new ArrayList<Node>(), new ArrayList<Node>());
+        if (isTracing) {
+            t.updateArgs("GraphDBTest", "preDFS", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "B", null);
+        }
+
+        // begin method
+        ArrayList<Node> returnVal = dfsHelper(f, "pre", new ArrayList<Node>(), new ArrayList<Node>());
+        // end method
+
+        if (isTracing) {
+            t.updateArgs("GraphDBTest", "preDFS", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "E", null);
+        }
+        return returnVal;
     }
 
     ArrayList<Node> postDFS(Node f) {
-        return dfsHelper(f, "post", new ArrayList<Node>(), new ArrayList<Node>());
+        if (isTracing) {
+            t.updateArgs("GraphDBTest", "postDFS", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "B", null);
+        }
+
+        // begin method
+        ArrayList<Node> returnVal = dfsHelper(f, "post", new ArrayList<Node>(), new ArrayList<Node>());
+        // end method
+
+        if (isTracing) {
+            t.updateArgs("GraphDBTest", "postDFS", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "E", null);
+        }
+        return returnVal;
     }
 
-    ArrayList<Node> BFS(Node f) { // not tested!
+    ArrayList<Node> BFS(Node f) {
+        if (isTracing) {
+            t.updateArgs("GraphDBTest", "BFS", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "B", null);
+        }
+
+        // begin method
         ArrayList<Node> ordered = new ArrayList<>();
         ArrayList<Node> fringe = new ArrayList<>();
         fringe.add(f);
@@ -138,6 +262,12 @@ public class GraphDB {
                     }
                 }
             }
+        }
+        // end method
+
+        if (isTracing) {
+            t.updateArgs("GraphDBTest", "BFS", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "E", null);
         }
         return ordered;
     }
@@ -178,45 +308,42 @@ public class GraphDB {
 
         GraphDB d = new GraphDB(runtime);
 
-        d.addNode("A");
-        d.addNode("B");
-        d.addNode("C");
-        d.addNode("D");
-        d.addNode("E");
-        d.addNode("F");
-        d.addNode("G");
-        d.addNode("H");
-        d.addNode("I");
-        d.addNode("J");
-
-        d.addEdge("A", "B");
-        d.addEdge("A", "C");
-        d.addEdge("B", "D");
-        d.addEdge("B", "E");
-        d.addEdge("B", "F");
-        d.addEdge("E", "H");
-        d.addEdge("E", "I");
-        d.addEdge("C", "G");
-        d.addEdge("J", "G");
-
-        for (String friend : d.adjacent("B")) {
-            System.out.println(friend);
+        for (int i = 0; i < 1000; i++) {
+            d.addNode("" + i);
         }
 
-        ArrayList<Node> pre = d.preDFS(d.getNode("A"));
+        for (int i = 0; i < 999; i++) {
+            int temp = i + 1;
+            d.addEdge("" + i, "" + temp);
+            System.out.println(i);
+        }
+
+        d.startMethodTrace();
+        for (String friend : d.adjacent("2")) {
+            System.out.println(friend);
+        } // expect: ADEF
+        d.endMethodTrace();
+
+        d.startMethodTrace();
+        ArrayList<Node> pre = d.preDFS(d.getNode("0"));
         for (Node item : pre) {
             System.out.println(item.getName());
-        }
+        } // expect: ABDEHIFCGJ
+        d.endMethodTrace();
 
-        ArrayList<Node> post = d.postDFS(d.getNode("A"));
+        d.startMethodTrace();
+        ArrayList<Node> post = d.postDFS(d.getNode("0"));
         for (Node item : post) {
             System.out.println(item.getName());
-        }
+        } // expect: DHIEFBJGCA
+        d.endMethodTrace();
 
-        ArrayList<Node> bfs = d.BFS(d.getNode("C"));
+        d.startMethodTrace();
+        ArrayList<Node> bfs = d.BFS(d.getNode("0"));
         for (Node item : bfs) {
             System.out.println(item.getName());
-        }
+        } // expect: CAGBJDEFHI
+        d.endMethodTrace();
 
         d.clear();
     }
