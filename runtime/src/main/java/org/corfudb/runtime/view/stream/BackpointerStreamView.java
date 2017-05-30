@@ -250,12 +250,23 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             try {
                 currentEntry = runtime.getAddressSpaceView().read(currentRead);
             } catch (TrimmedException te) {
-                if (Address.isAddress(context.checkpointSuccessStartAddr)) {
-                    log.trace("Read_Fill_Queue[{}] Trim encountered, checkpoint available at {}", this,
-                            context.checkpointSuccessStartAddr);
-                    break;
+                if (considerCheckpoint) {
+                    if (context.checkpointSuccessStartAddr < currentRead) {
+                        // We have never seen a successful checkpoint END (-1)
+                        // or else the CP we've seen starts beyond the observed
+                        // trim point @ currentRead,
+                        // so throw this exception again so we can look at
+                        // more of the log to find a successful checkpoint END.
+                        log.trace("Read_Fill_Queue[{}] Trim encountered at {}, checkpoint at {} is not available",
+                                this, currentRead, context.checkpointSuccessStartAddr);
+                        throw te;
+                    } else {
+                        log.trace("Read_Fill_Queue[{}] Trim encountered at {}, checkpoint available at {}", this, currentRead,
+                                context.checkpointSuccessStartAddr);
+                        break;
+                    }
                 } else {
-                    log.warn("Read_Fill_Queue[{}] Trim encountered and no checkpoint available!", this);
+                    log.warn("Read_Fill_Queue[{}] Trim encountered at {} and no checkpoint available!", this, currentRead);
                     throw te;
                 }
             }
