@@ -380,6 +380,13 @@ public abstract class AbstractQueuedStreamView extends
             super.reset();
             readCpQueue.clear();
             readQueue.clear();
+
+            checkpointSuccessID = null;
+            checkpointSuccessStartAddr = Address.NEVER_READ;
+            checkpointSuccessEndAddr = Address.NEVER_READ;
+            checkpointSuccessNumEntries = 0;
+            checkpointSuccessBytes = 0;
+            resolvedEstBytes = 0;
         }
 
         /** {@inheritDoc} */
