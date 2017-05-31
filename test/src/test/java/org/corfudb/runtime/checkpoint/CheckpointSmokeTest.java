@@ -61,7 +61,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      * @throws Exception
      */
     @Test
-    @SuppressWarnings("checkstyle:magicnumber")
 	public void smoke1Test() throws Exception {
         final String streamName = "mystream";
         final UUID streamId = CorfuRuntime.getStreamID(streamName);
@@ -132,7 +131,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      */
 
     @Test
-    @SuppressWarnings("checkstyle:magicnumber")
     public void smoke2Test() throws Exception {
         final String streamName = "mystream2";
         final UUID streamId = CorfuRuntime.getStreamID(streamName);
@@ -193,7 +191,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     /** Test the CheckpointWriter class, part 1.
      */
     @Test
-    @SuppressWarnings("checkstyle:magicnumber")
     public void checkpointWriterTest() throws Exception {
         final String streamName = "mystream4";
         final UUID streamId = CorfuRuntime.getStreamID(streamName);
@@ -201,6 +198,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         final int numKeys = 5;
         final String author = "Me, myself, and I";
         final Long fudgeFactor = 75L;
+        final int smallBatchSize = 4;
 
         Map<String, Long> m = instantiateMap(streamName);
         for (int i = 0; i < numKeys; i++) {
@@ -221,7 +219,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // also used for assertion checks later.
         CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, (SMRMap) m);
         cpw.setValueMutator((l) -> (Long) l + fudgeFactor);
-        cpw.setBatchSize(4);
+        cpw.setBatchSize(smallBatchSize);
 
         // Write all CP data.
         long txBeginGlobalAddress = CheckpointWriter.startGlobalSnapshotTxn(r);
@@ -262,7 +260,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      *  check.
      */
     @Test
-    @SuppressWarnings("checkstyle:magicnumber")
     public void checkpointWriterInterleavedTest() throws Exception {
         final String streamName = "mystream3";
         final UUID streamId = CorfuRuntime.getStreamID(streamName);
@@ -371,7 +368,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 l, l, true, true, true);
     }
 
-    @SuppressWarnings("checkstyle:magicnumber")
     private void writeCheckpointRecords(UUID streamId, String checkpointAuthor, UUID checkpointId,
                                         Object[] objects, Runnable l1, Runnable l2,
                                         boolean write1, boolean write2, boolean write3)
