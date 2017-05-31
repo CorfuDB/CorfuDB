@@ -1,8 +1,10 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.ObjectOpenOptions;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.junit.Before;
 import org.junit.Test;
@@ -57,14 +59,14 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
         assertThat(keys.contains(0L))
                 .isTrue();
 
-        // manipulate the map, verify that keys set is modified,
+        // manipulate the map, verify that keys set is not modified,
         // the original map is modified
         testMap.remove(0L);
 
         assertThat(keys.size())
-                .isEqualTo(PARAMETERS.NUM_ITERATIONS_LOW-1);
+                .isEqualTo(PARAMETERS.NUM_ITERATIONS_LOW);
         assertThat(keys.contains(0L))
-                .isFalse();
+                .isTrue();
 
         assertThat(testMap.containsKey(0L))
                 .isFalse();
@@ -123,14 +125,18 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
             // we don't know at which point the snapshot will be,
             // relative to the other thread
             Set<Long> keys = testMap.keySet();
+            Set<Long> copy = ImmutableSet.copyOf(keys);
+            assertThat(copy)
+                    .hasSameSizeAs(keys);
 
             // signal that one snapshot was taken already
             l2.countDown();
 
-            // verify that the view reflects the changes
             l3.await();
-            assertThat(keys.size())
-                    .isEqualTo(PARAMETERS.NUM_ITERATIONS_LOW-1);
+            //make sure that the contents are the same
+            assertThat(keys)
+                    .hasSameElementsAs(copy);
+
         } );
 
         scheduleConcurrently(t -> {
@@ -146,13 +152,14 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
 
     }
 
+
     @Test
-    public void concurrentModificationThrowsException() {
+    public void concurrentModificationDoesNotThrowException() {
         Map<String, String> map = getDefaultRuntime().getObjectsView()
-                                    .build()
-                                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
-                                    .setStreamName("test")
-                                    .open();
+                .build()
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setStreamName("test")
+                .open();
 
         // Add some elements to the map
         t1(() -> map.put("a", "a"));
@@ -185,8 +192,13 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
 
         // Now continue iteration
         t1(() -> keyIterator.get().next())
-                .assertThrows()
-                .isInstanceOf(ConcurrentModificationException.class);
+                .assertResult()
+                .isEqualTo("c");
+
+        // and continue again to deleted item
+        t1(() -> keyIterator.get().next())
+                .assertResult()
+                .isEqualTo("d");
     }
 
 }

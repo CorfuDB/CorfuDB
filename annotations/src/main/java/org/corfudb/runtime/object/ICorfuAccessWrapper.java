@@ -13,9 +13,18 @@ import java.util.function.BiFunction;
 public interface ICorfuAccessWrapper<T, P> {
 
     /** Get the object which is being wrapped.
+     *
      * @return The object that was wrapped.
      * */
     T getObject$CORFUSMR();
+
+    /** Get the version of the wrapper snapshot,
+     * if NO_TX_OBJECT_WRAP is set, this will be
+     * always Version.MAX.
+     *
+     * @return  The version of the wrapper snapshot.
+     */
+    long getSnapshot$CORFUSMR();
 
     /** Get a proxy to synchronize accesses against.
      * @return  The proxy this wrapped object came from. */
@@ -32,8 +41,8 @@ public interface ICorfuAccessWrapper<T, P> {
     default <R> R wrappedAccess$CORFUSMR(
             final BiFunction<T, P, R> wrapFunction,
                                final Object[] conflictObjects) {
-        return getProxy$CORFUSMR().access(o ->
+        return getProxy$CORFUSMR().wrappedAccess(o ->
                         wrapFunction.apply(getObject$CORFUSMR(), o),
-                conflictObjects);
+                conflictObjects, getSnapshot$CORFUSMR());
     }
 }

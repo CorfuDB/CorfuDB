@@ -1,14 +1,13 @@
 package org.corfudb.runtime.collections;
 
-import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.CorfuObject;
+import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.TransactionalMethod;
 
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.function.Predicate;
 import java.util.ConcurrentModificationException;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
@@ -19,7 +18,7 @@ import java.util.function.Function;
  * Created by mwei on 1/7/16.
  */
 @CorfuObject
-public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
+public class SMRMap<K, V> extends CorfuHashMap<K, V> implements ISMRMap<K,V> {
 
     /**
      * Returns a filtered {@link List} view of the values contained in this map.

@@ -563,7 +563,8 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                         "return null;" : "",
                                 (m.hasConflictAnnotations ?
                                         conflictField : "null"),
-                                (isWrapped ? ", proxy" + CORFUSMR_FIELD + ")" : "")
+                                (isWrapped ? ", proxy" + CORFUSMR_FIELD + ", proxy" + CORFUSMR_FIELD +
+                                        ".TXSnapshot())" : "")
                         );
                     }
                     typeSpecBuilder.addMethod(ms.build());
@@ -618,6 +619,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         innerTypeSpec.addField(ParameterizedTypeName.get(
                 ClassName.get(ICorfuSMRProxy.class),
                 originalName), "proxy" + CORFUSMR_FIELD);
+        innerTypeSpec.addField(TypeName.LONG, "snapshot" + CORFUSMR_FIELD, Modifier.FINAL);
 
         // The original field contains the object to be wrapped.
         innerTypeSpec.addMethod(
@@ -629,8 +631,12 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 ParameterizedTypeName.get(ClassName.get(ICorfuSMRProxy.class),
                                         originalName)
                                 , "proxy").build())
+                        .addParameter(ParameterSpec.builder(TypeName.LONG, "snapshot")
+                                                .build())
                         .addStatement("this.original" + CORFUSMR_FIELD +
-                                " = $L;this.proxy" + CORFUSMR_FIELD + " = $L;",  "original", "proxy")
+                                " = $L;this.proxy" + CORFUSMR_FIELD + " = $L;" +
+                                "snapshot" + CORFUSMR_FIELD + " = $L;",
+                                "original", "proxy", "snapshot")
                         .build());
 
 
@@ -662,6 +668,13 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 ClassName.get(ICorfuSMRProxy.class),
                                 originalName))
                         .build());
+        innerTypeSpec.addMethod(
+                MethodSpec.methodBuilder("getSnapshot$CORFUSMR")
+                        .addStatement("return snapshot" + CORFUSMR_FIELD)
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PUBLIC)
+                        .returns(TypeName.LONG)
+                        .build());
 
         // Implement each of the calls of the interface by proxying to the
         // original.
@@ -682,7 +695,8 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                             wrapperMethod.addStatement("return new " + ((TypeElement) ((Type) e.getReturnType())
                                             .asElement()).getSimpleName().toString() + "$$"
                                             + e.getSimpleName().toString() + "$$Wrapper(" +
-                                            "wrappedAccess$$CORFUSMR((w,p) -> w.$L($L), null), getProxy$$CORFUSMR())",
+                                            "wrappedAccess$$CORFUSMR((w,p) -> w.$L($L), null), getProxy$$CORFUSMR()," +
+                                            "getSnapshot$$CORFUSMR())",
                                     e.getSimpleName(),
                                     e.getParameters().stream()
                                             .map(x -> x.getSimpleName())

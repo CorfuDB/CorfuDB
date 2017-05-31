@@ -62,6 +62,31 @@ public interface ICorfuSMRProxy<T> {
      */
     <R> R TXExecute(Supplier<R> txFunction);
 
+    /** Get the current address to run in a snapshot.
+     *
+     * @return              An global address to run in a snapshot.
+     */
+    long TXSnapshot();
+
+
+    /** Perform a wrapped access, which accesses the state of the
+     * object, like in access, but if the snapshot address is set
+     * to a value than Address.MAX, performs that access at the
+     * snapshot address requested.
+     *
+     * @param accessMethod      The method to execute when accessing
+     *                          the object.
+     * @param conflictObject    The set of conflict parameters for
+     *                          the access.
+     * @param snapshot          The snapshot timestamp.
+     * @param <R>               The return type.
+     * @return                  The value returned by the access
+     *                          method.
+     */
+    <R> R wrappedAccess(ICorfuSMRAccess<R, T> accessMethod,
+                        Object[] conflictObject,
+                        long snapshot);
+
     /** Get an object builder to build new objects.
      *
      * @return  An object which permits the construction of new objects.
@@ -79,6 +104,5 @@ public interface ICorfuSMRProxy<T> {
      * @return              The latest version read by the proxy.
      */
     long getVersion();
-
 
 }
