@@ -141,7 +141,7 @@ public class GraphDB {
     /** Returns an iterable of names of all vertices adjacent to v. */
     Iterable<String> adjacent(String v) { // modify with pointers
         if (isTracing) {
-            t.updateArgs("GraphDBTest", "adjacent", 0, Thread.currentThread().getId(),
+            t.updateArgs("GraphDBTest", "adjacent", 1, Thread.currentThread().getId(),
                     System.currentTimeMillis(), "B", null);
         }
 
@@ -158,7 +158,7 @@ public class GraphDB {
         // end method
 
         if (isTracing) {
-            t.updateArgs("GraphDBTest", "adjacent", 0, Thread.currentThread().getId(),
+            t.updateArgs("GraphDBTest", "adjacent", 1, Thread.currentThread().getId(),
                     System.currentTimeMillis(), "E", null);
         }
         return returnVal;
@@ -208,7 +208,7 @@ public class GraphDB {
 
     ArrayList<Node> preDFS(Node f) {
         if (isTracing) {
-            t.updateArgs("GraphDBTest", "preDFS", 0, Thread.currentThread().getId(),
+            t.updateArgs("GraphDBTest", "preDFS", 1, Thread.currentThread().getId(),
                     System.currentTimeMillis(), "B", null);
         }
 
@@ -217,7 +217,7 @@ public class GraphDB {
         // end method
 
         if (isTracing) {
-            t.updateArgs("GraphDBTest", "preDFS", 0, Thread.currentThread().getId(),
+            t.updateArgs("GraphDBTest", "preDFS", 1, Thread.currentThread().getId(),
                     System.currentTimeMillis(), "E", null);
         }
         return returnVal;
@@ -225,7 +225,7 @@ public class GraphDB {
 
     ArrayList<Node> postDFS(Node f) {
         if (isTracing) {
-            t.updateArgs("GraphDBTest", "postDFS", 0, Thread.currentThread().getId(),
+            t.updateArgs("GraphDBTest", "postDFS", 1, Thread.currentThread().getId(),
                     System.currentTimeMillis(), "B", null);
         }
 
@@ -234,7 +234,7 @@ public class GraphDB {
         // end method
 
         if (isTracing) {
-            t.updateArgs("GraphDBTest", "postDFS", 0, Thread.currentThread().getId(),
+            t.updateArgs("GraphDBTest", "postDFS", 1, Thread.currentThread().getId(),
                     System.currentTimeMillis(), "E", null);
         }
         return returnVal;
@@ -242,7 +242,7 @@ public class GraphDB {
 
     ArrayList<Node> BFS(Node f) {
         if (isTracing) {
-            t.updateArgs("GraphDBTest", "BFS", 0, Thread.currentThread().getId(),
+            t.updateArgs("GraphDBTest", "BFS", 1, Thread.currentThread().getId(),
                     System.currentTimeMillis(), "B", null);
         }
 
@@ -266,7 +266,7 @@ public class GraphDB {
         // end method
 
         if (isTracing) {
-            t.updateArgs("GraphDBTest", "BFS", 0, Thread.currentThread().getId(),
+            t.updateArgs("GraphDBTest", "BFS", 1, Thread.currentThread().getId(),
                     System.currentTimeMillis(), "E", null);
         }
         return ordered;
@@ -308,11 +308,11 @@ public class GraphDB {
 
         GraphDB d = new GraphDB(runtime);
 
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 2000; i++) {
             d.addNode("" + i);
         }
 
-        for (int i = 0; i < 999; i++) {
+        for (int i = 0; i < 1999; i++) {
             int temp = i + 1;
             d.addEdge("" + i, "" + temp);
             System.out.println(i);

@@ -266,11 +266,11 @@ public class GraphDBHM {
     public static void main(String[] args) {
         GraphDBHM d = new GraphDBHM();
 
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 2000; i++) {
             d.addNode("" + i);
         }
 
-        for (int i = 0; i < 999; i++) {
+        for (int i = 0; i < 1999; i++) {
             int temp = i + 1;
             d.addEdge("" + i, "" + temp);
             System.out.println(i);

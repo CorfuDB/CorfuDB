@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.log;
 
 import java.io.File;
-import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -44,15 +43,15 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.filefilter.WildcardFileFilter;
+import org.codehaus.groovy.runtime.powerassert.SourceText;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.TrimEntry;
 import org.corfudb.format.Types.DataType;
 import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
+import org.corfudb.infrastructure.Client;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -60,8 +59,6 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
 import javax.annotation.Nullable;
-
-import static org.apache.tools.ant.types.resources.MultiRootFileSet.SetType.file;
 
 
 /**
@@ -74,6 +71,7 @@ import static org.apache.tools.ant.types.resources.MultiRootFileSet.SetType.file
 
 @Slf4j
 public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpace {
+    Client n;
 
     static public final short RECORD_DELIMITER = 0x4C45;
     static public int VERSION = 1;
@@ -93,9 +91,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     final private ServerContext serverContext;
     final private AtomicLong globalTail = new AtomicLong(0L);
     private long lastSegment;
-    private volatile long startingAddress;
 
     public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
+        n = new Client();
+
         logDir = serverContext.getServerConfig().get("--log-path") + File.separator + "log";
         File dir = new File(logDir);
         if (!dir.exists()) {
@@ -107,11 +106,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         this.noVerify = noVerify;
         this.serverContext = serverContext;
         verifyLogs();
-        // Starting address initialization should happen before
-        // initializing the tail segment (i.e. initializeMaxGlobalAddress)
-        initializeStartingAddress();
         initializeMaxGlobalAddress();
-        int a;
     }
 
     @Override
@@ -129,32 +124,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             serverContext.setTailSegment(segment);
             lastSegment = segment;
         }
-    }
-
-    @Override
-    public void prefixTrim(LogAddress logAddress) {
-        if (logAddress.getAddress() < startingAddress) {
-            throw new TrimmedException();
-        } else {
-            // TODO(Maithem): Although this operation is persisted to disk,
-            // the startingAddress can be lost even after the method has completed.
-            // This is due to the fact that updates on the local datastore don't
-            // expose disk sync functionalty.
-            long newStartingAddress = logAddress.getAddress() + 1;
-            serverContext.setStartingAddress(newStartingAddress);
-            startingAddress = newStartingAddress;
-            log.debug("Trimmed prefix, new starting address {}", newStartingAddress);
-        }
-    }
-
-    private void checkAddress(long address) {
-        if (address < startingAddress) {
-            throw new TrimmedException();
-        }
-    }
-
-    private void initializeStartingAddress() {
-        startingAddress = serverContext.getStartingAddress();
     }
 
     private void initializeMaxGlobalAddress() {
@@ -238,6 +207,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     @Override
     public void sync(boolean force) throws IOException {
+        if (n.isTracing()) {
+            n.getTracer().updateArgs("InitialTracerTest", "sync", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "B", null);
+        }
+        // start method
+        System.out.println("Hi!!!!!1");
         if(force) {
             for (FileChannel ch : channelsToSync) {
                 ch.force(true);
@@ -245,10 +220,21 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
         log.debug("Sync'd {} channels", channelsToSync.size());
         channelsToSync.clear();
+        // end method
+        if (n.isTracing()) {
+            n.getTracer().updateArgs("InitialTracerTest", "sync", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "E", null);
+        }
     }
 
     @Override
     public void trim(LogAddress logAddress) {
+        if (n.isTracing()) {
+            n.getTracer().updateArgs("InitialTracerTest", "trim", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "B", null);
+        }
+        // start method
+        System.out.println("Hi!!!!!2");
         SegmentHandle handle = getSegmentHandleForAddress(logAddress);
         if (!handle.getKnownAddresses().containsKey(logAddress.getAddress()) ||
                 handle.getPendingTrims().contains(logAddress.getAddress())) {
@@ -269,44 +255,21 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         } catch (IOException e) {
             log.warn("Exception while writing a trim entry {} : {}", logAddress.toString(), e.toString());
         }
+        // end method
+        if (n.isTracing()) {
+            n.getTracer().updateArgs("InitialTracerTest", "trim", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "E", null);
+        }
     }
 
     @Override
-    public synchronized void compact() {
-        if (startingAddress == 0) {
-            spaseCompact();
-        } else {
-            trimPrefix();
+    public void compact() {
+        if (n.isTracing()) {
+            n.getTracer().updateArgs("InitialTracerTest", "compact", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "B", null);
         }
-    }
-
-    private void trimPrefix() {
-        // Trim all segments up till the segment that contains the starting address
-        // (i.e. trim only complete segments)
-        long endSegment = (startingAddress / RECORDS_PER_LOG_FILE) - 1;
-
-        if (endSegment <= 0) {
-            log.debug("Only one segment detected, ignoring trim");
-            return;
-        }
-
-        File dir = new File(logDir);
-        FileFilter fileFilter = new FileFilter() {
-            public boolean accept(File file) {
-                String segmentStr = file.getName().split("\\.")[0];
-                return Long.parseLong(segmentStr) <= endSegment;
-            }};
-        File[] files = dir.listFiles(fileFilter);
-
-        for(File file : files) {
-            if(!file.delete()) {
-                log.error("Couldn't delete/trim file {}", file.getName());
-            }
-        }
-        log.info("Prefix trim completed, delete segments 0 to {}", endSegment);
-    }
-
-    private void spaseCompact() {
+        // start method
+        System.out.println("Hi!!!!!3");
         //TODO(Maithem) Open all segment handlers?
         for (SegmentHandle sh : writeChannels.values()) {
             Set<Long> pending = new HashSet(sh.getPendingTrims());
@@ -331,6 +294,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             } catch (IOException e) {
                 log.error("Compact operation failed for file {}", sh.getFileName());
             }
+        }
+        // end method
+        if (n.isTracing()) {
+            n.getTracer().updateArgs("InitialTracerTest", "compact", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "E", null);
         }
     }
 
@@ -494,7 +462,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         LogData logData = new LogData(org.corfudb.protocols.wireprotocol.
                 DataType.typeMap.get((byte) entry.getDataType().getNumber()), data);
 
-        // Checkpoint-related metadata are set by LogData constructor.
         logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());
         logData.setRank(createDataRank(entry));
@@ -651,8 +618,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      */
     @VisibleForTesting
     synchronized SegmentHandle getSegmentHandleForAddress(LogAddress logAddress) {
-        checkAddress(logAddress.getAddress());
-
         String filePath = logDir + File.separator;
         long segment = logAddress.address / RECORDS_PER_LOG_FILE;
 
@@ -787,15 +752,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         if (rank.isPresent()) {
             logEntryBuilder.setRank(rank.get());
         }
-        if (entry.hasCheckpointMetadata()) {
-            logEntryBuilder.setCheckpointEntryType(
-                    Types.CheckpointEntryType.forNumber(
-                            entry.getCheckpointType().ordinal()));
-            logEntryBuilder.setCheckpointIDMostSignificant(
-                    entry.getCheckpointID().getMostSignificantBits());
-            logEntryBuilder.setCheckpointIDLeastSignificant(
-                    entry.getCheckpointID().getLeastSignificantBits());
-        }
 
         return logEntryBuilder.build();
     }
@@ -872,6 +828,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     @Override
     public void append(LogAddress logAddress, LogData entry) {
+        if (n.isTracing()) {
+            n.getTracer().updateArgs("InitialTracerTest", "append", 0, Thread.currentThread().getId(),
+                    System.currentTimeMillis(), "B", null);
+        }
+        // start method
         //evict the data by getting the next pointer.
         try {
             // make sure the entry doesn't currently exist...
@@ -892,23 +853,37 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 fh.getKnownAddresses().put(logAddress.address, addressMetaData);
             }
             log.trace("Disk_write[{}]: Written to disk.", logAddress);
+            // end method
+            if (n.isTracing()) {
+                n.getTracer().updateArgs("InitialTracerTest", "append", 0, Thread.currentThread().getId(),
+                        System.currentTimeMillis(), "E", null);
+            }
         } catch (IOException e) {
             log.error("Disk_write[{}]: Exception", logAddress, e);
             throw new RuntimeException(e);
-        } catch (TrimmedException e) {
-            throw new OverwriteException();
         }
     }
 
     @Override
     public LogData read(LogAddress logAddress) {
         try {
+            if (n.isTracing()) {
+                n.getTracer().updateArgs("InitialTracerTest", "read", 0, Thread.currentThread().getId(),
+                        System.currentTimeMillis(), "B", null);
+            }
+            // start method
             SegmentHandle sh = getSegmentHandleForAddress(logAddress);
             if (sh.getPendingTrims().contains(logAddress.getAddress())) {
                 throw new TrimmedException();
             }
-            return readRecord(sh, logAddress.address);
-        } catch (IOException e) {
+            LogData returnVal = readRecord(sh, logAddress.address);
+            // end method
+            if (n.isTracing()) {
+                n.getTracer().updateArgs("InitialTracerTest", "read", 0, Thread.currentThread().getId(),
+                        System.currentTimeMillis(), "E", null);
+            }
+            return returnVal;
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
