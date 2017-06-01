@@ -6,6 +6,7 @@ import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.junit.Test;
 
@@ -201,8 +202,14 @@ public class CheckpointTest extends AbstractObjectTest {
 
         scheduleConcurrently(1, ignored_task_num -> {
             for (int i = 0; i < mapSize; i++) {
-                m2A.put(String.valueOf(i), (long)i);
-                m2B.put(String.valueOf(i), 0L);
+                // If TrimmedException, it happens during syncStreamUnsafe.
+                // We assume that the put is always successful.
+                try {
+                    m2A.put(String.valueOf(i), (long) i);
+                } catch (TrimmedException te) { }
+                try {
+                    m2B.put(String.valueOf(i), 0L);
+                } catch (TrimmedException te) { }
             }
         });
 
