@@ -9,7 +9,6 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -22,7 +21,6 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -44,7 +42,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.filefilter.WildcardFileFilter;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.TrimEntry;
 import org.corfudb.format.Types.DataType;
@@ -60,8 +57,6 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
 import javax.annotation.Nullable;
-
-import static org.apache.tools.ant.types.resources.MultiRootFileSet.SetType.file;
 
 
 /**
@@ -494,22 +489,26 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         LogData logData = new LogData(org.corfudb.protocols.wireprotocol.
                 DataType.typeMap.get((byte) entry.getDataType().getNumber()), data);
 
-        // Checkpoint-related metadata are set by LogData constructor.
         logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());
         logData.setRank(createDataRank(entry));
+        
+        if (entry.hasCheckpointEntryType()) {
+            logData.setCheckpointType(CheckpointEntry.CheckpointEntryType
+                    .typeMap.get((byte) entry.getCheckpointEntryType().ordinal()));
 
-        return logData;
-    }
+            if (!entry.hasCheckpointIDLeastSignificant() || !entry.hasCheckpointIDMostSignificant()) {
+                log.error("Checkpoint has missing information {}", entry);
+            }
 
-    Set<UUID> getStreamsSet(List<ByteString> list) {
-        Set<UUID> set = new HashSet();
+            long lsd = entry.getCheckpointIDLeastSignificant();
+            long msd = entry.getCheckpointIDMostSignificant();
+            UUID checkpointId = new UUID(msd, lsd);
 
-        for (ByteString string : list) {
-            set.add(UUID.fromString(string.toString(StandardCharsets.UTF_8)));
+            logData.setCheckpointID(checkpointId);
         }
 
-        return set;
+        return logData;
     }
 
     /**
