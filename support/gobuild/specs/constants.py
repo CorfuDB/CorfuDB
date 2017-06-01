@@ -1,5 +1,5 @@
-RELEASENAME = 'crosshairs'
-BRANCH = 'nsx-corfu'
+RELEASENAME = 'dropkick'
+BRANCH = 'nsx-dropkick'
 
 UBUNTU_MIRROR = "http://ubtmirror.nicira.eng.vmware.com/ubuntu"
 APT_MIRROR = "http://apt.nicira.eng.vmware.com/apt/%s" % RELEASENAME
