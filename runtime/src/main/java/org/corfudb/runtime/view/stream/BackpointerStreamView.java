@@ -7,6 +7,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
 import javax.annotation.Nonnull;
@@ -244,8 +245,31 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             log.trace("Read_Fill_Queue[{}] Read {}", this, currentRead);
             // Read the entry in question.
-            ILogData currentEntry =
-                    runtime.getAddressSpaceView().read(currentRead);
+            ILogData currentEntry = null;
+
+            try {
+                currentEntry = runtime.getAddressSpaceView().read(currentRead);
+            } catch (TrimmedException te) {
+                if (considerCheckpoint) {
+                    if (context.checkpointSuccessStartAddr < currentRead) {
+                        // We have never seen a successful checkpoint END (-1)
+                        // or else the CP we've seen starts beyond the observed
+                        // trim here at currentRead,
+                        // so throw this exception again so we can look at
+                        // more of the log to find a successful checkpoint END.
+                        log.trace("Read_Fill_Queue[{}] Trim encountered at {}, checkpoint at {} is not available",
+                                this, currentRead, context.checkpointSuccessStartAddr);
+                        throw te;
+                    } else {
+                        log.trace("Read_Fill_Queue[{}] Trim encountered at {}, checkpoint available at {}", this, currentRead,
+                                context.checkpointSuccessStartAddr);
+                        break;
+                    }
+                } else {
+                    log.warn("Read_Fill_Queue[{}] Trim encountered at {} and no checkpoint available!", this, currentRead);
+                    throw te;
+                }
+            }
 
             // If the entry contains this context's stream,
             // we add it to the read queue.
@@ -260,7 +284,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             // If we've reached the beginning of a successful checkpoint
             // that the caller wants us to us, then we're done here.
-            if (considerCheckpoint && currentRead <= context.checkpointSuccessStartAddr) {
+            if (considerCheckpoint && currentRead <= context.checkpointSuccessStartAddr ) {
                 log.trace("Read_Fill_Queue[{}]: currentRead {} checkpointSuccessStartAddr {}",
                         this, currentRead, context.checkpointSuccessStartAddr);
                 break;

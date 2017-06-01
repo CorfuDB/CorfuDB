@@ -9,6 +9,7 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
@@ -105,7 +106,16 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     // inside syncObjectUnsafe, depending on the object
                     // version, we may need to undo or redo
                     // committed changes, or apply forward committed changes.
-                    o.syncObjectUnsafe(getSnapshotTimestamp());
+                    try {
+                        o.syncObjectUnsafe(getSnapshotTimestamp());
+                    } catch (TrimmedException te) {
+                        // If a trim is encountered, we must reset the object
+                        o.resetUnsafe();
+                        // and abort the transaction
+                        abortTransaction(new TransactionAbortedException(
+                                new TxResolutionInfo(getTransactionID(),
+                                getSnapshotTimestamp()), null, AbortCause.TRIM));
+                    }
                 },
                 o -> accessFunction.access(o)
         );

@@ -3,6 +3,7 @@ package org.corfudb.runtime.view;
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
@@ -11,6 +12,7 @@ import java.util.Collections;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 1/8/16.
@@ -319,4 +321,26 @@ public class StreamViewTest extends AbstractViewTest {
                 .isEqualTo(testPayload2);
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    public void prefixTrimThrowsException()
+            throws Exception {
+        //begin tests
+        UUID streamA = CorfuRuntime.getStreamID("stream A");
+        byte[] testPayload = "hello world".getBytes();
+
+        // Write to the stream
+        IStreamView sv = r.getStreamsView().get(streamA);
+        sv.append(testPayload);
+
+        // Trim the entry
+        runtime.getAddressSpaceView().prefixTrim(0);
+        runtime.getAddressSpaceView().gc();
+        runtime.getAddressSpaceView().invalidateServerCaches();
+        runtime.getAddressSpaceView().invalidateClientCache();
+
+        // We should get a prefix trim exception when we try to read
+        assertThatThrownBy(() -> sv.next())
+                .isInstanceOf(TrimmedException.class);
+    }
 }
