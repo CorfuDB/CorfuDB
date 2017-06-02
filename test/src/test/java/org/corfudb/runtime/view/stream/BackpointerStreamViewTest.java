@@ -20,16 +20,51 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
      */
     @Test
     public void testGetHasNext() {
-        addServer(SERVERS.PORT_0);
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
-        bootstrapAllServers(layout);
+        CorfuRuntime runtime = getDefaultRuntime();
 
-        CorfuRuntime runtime = getRuntime(layout).connect();
         IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
         sv.append("hello world".getBytes());
 
         assertThat(sv.hasNext()).isTrue();
         sv.next();
         assertThat(sv.hasNext()).isFalse();
+    }
+
+    @Test
+    public void testReadQueue() {
+        CorfuRuntime runtime = getDefaultRuntime();
+        IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
+        final int ten = 10;
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++)
+            sv.append(String.valueOf(i).getBytes());
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
+            assertThat(sv.hasNext()).isTrue();
+            byte[] payLoad = (byte[]) sv.next().getPayload(runtime);
+            assertThat(new String(payLoad).equals(String.valueOf(i)) )
+                    .isTrue();
+            assertThat(sv.getCurrentGlobalPosition()).isEqualTo(i);
+
+            if (i % ten == 1) {
+                for (int j = 0; j < PARAMETERS.NUM_ITERATIONS_VERY_LOW; j++)
+                    sv.append(String.valueOf(i).getBytes());
+
+            }
+        }
+
+        for (int i = PARAMETERS.NUM_ITERATIONS_LOW-1; i >= 0; i--) {
+            byte[] payLoad = (byte[]) sv.current().getPayload(runtime);
+            assertThat(new String(payLoad).equals(String.valueOf(i)) )
+                    .isTrue();
+            assertThat(sv.getCurrentGlobalPosition()).isEqualTo(i);
+            sv.previous();
+
+            if (i % ten == 1) {
+                for (int j = 0; j < PARAMETERS.NUM_ITERATIONS_VERY_LOW; j++)
+                    sv.append(String.valueOf(i).getBytes());
+
+            }
+        }
     }
 }
