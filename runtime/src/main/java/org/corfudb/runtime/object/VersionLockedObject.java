@@ -506,6 +506,12 @@ public class VersionLockedObject<T> {
      * applied until the current tail of the stream. If Address.OPTIMISTIC
      * is given, updates will be applied to the end of the stream, and
      * upcall results will be stored in the resulting entries.
+     *
+     * When the stream is trimmed, this exception is passed up to the caller,
+     * unless the timestamp was Address.MAX, in which the entire object is
+     * reset and re-try the sync, which should pick up any checkpoint that
+     * was inserted.
+     *
      * @param stream        The stream to sync forward
      * @param timestamp     The timestamp to sync up to.
      */
