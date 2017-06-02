@@ -19,7 +19,7 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
      * Tests the hasNext functionality of the streamView.
      */
     @Test
-    public void testGetHasNext() {
+    public void hasNextTest() {
         CorfuRuntime runtime = getDefaultRuntime();
 
         IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
@@ -31,7 +31,7 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
     }
 
     @Test
-    public void testReadQueue() {
+    public void readQueueTest() {
         CorfuRuntime runtime = getDefaultRuntime();
         IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
         final int ten = 10;
@@ -42,7 +42,7 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             assertThat(sv.hasNext()).isTrue();
             byte[] payLoad = (byte[]) sv.next().getPayload(runtime);
-            assertThat(new String(payLoad).equals(String.valueOf(i)) )
+            assertThat(new String(payLoad).equals(String.valueOf(i)))
                     .isTrue();
             assertThat(sv.getCurrentGlobalPosition()).isEqualTo(i);
 
@@ -53,9 +53,9 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
             }
         }
 
-        for (int i = PARAMETERS.NUM_ITERATIONS_LOW-1; i >= 0; i--) {
+        for (int i = PARAMETERS.NUM_ITERATIONS_LOW - 1; i >= 0; i--) {
             byte[] payLoad = (byte[]) sv.current().getPayload(runtime);
-            assertThat(new String(payLoad).equals(String.valueOf(i)) )
+            assertThat(new String(payLoad).equals(String.valueOf(i)))
                     .isTrue();
             assertThat(sv.getCurrentGlobalPosition()).isEqualTo(i);
             sv.previous();
@@ -65,6 +65,32 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
                     sv.append(String.valueOf(i).getBytes());
 
             }
+        }
+    }
+
+
+    @Test
+    public void moreReadQueueTest() {
+        CorfuRuntime runtime = getDefaultRuntime();
+        IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
+        final int ten = 10;
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++)
+            sv.append(String.valueOf(i).getBytes());
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+            assertThat(sv.hasNext()).isTrue();
+            sv.next();
+        }
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+            if (i % 2 == 0) {
+                assertThat(sv.hasNext()).isFalse();
+                sv.append(String.valueOf(i).getBytes());
+                sv.append(String.valueOf(i).getBytes());
+            }
+            byte[] payLoad = (byte[]) sv.next().getPayload(runtime);
+            assertThat(new String(payLoad).equals(String.valueOf(i)));
         }
     }
 }
