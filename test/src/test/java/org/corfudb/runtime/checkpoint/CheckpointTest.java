@@ -8,6 +8,7 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.AbstractObjectTest;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Map;
@@ -186,7 +187,6 @@ public class CheckpointTest extends AbstractObjectTest {
         }
 
     }
-
     @Test
     public void periodicCkpointTrimTest() throws Exception {
         final String streamNameA = "mystreamA";
