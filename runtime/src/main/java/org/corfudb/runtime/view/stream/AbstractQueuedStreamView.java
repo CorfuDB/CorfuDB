@@ -77,18 +77,7 @@ public abstract class AbstractQueuedStreamView extends
         NavigableSet<Long> getFrom;
         if (context.readCpQueue.size() > 0) {
             getFrom = context.readCpQueue;
-            if (context.readQueue.isEmpty()) {
-                // readQueue is empty, readCpQueue is not.
-                // This is a case where we have had 2 checkpoints
-                // adjacent to each other, and no non-checkpoint
-                // entries in the stream in between the checkpoints
-                // or during the 2nd checkpoint.  Processing of
-                // checkpoint entries will not advance our context
-                // globalPointer, only regular entries in readQueue.
-                // However, we know that readQueue is *empty*, so
-                // we advance globalPointer here.
-                context.globalPointer = maxGlobal;
-            }
+            context.globalPointer = context.checkpointSuccessStartAddr;
         } else {
             getFrom = context.readQueue;
         }
@@ -105,13 +94,10 @@ public abstract class AbstractQueuedStreamView extends
         while (getFrom.size() > 0) {
             final long thisRead = getFrom.pollFirst();
             ILogData ld = read(thisRead);
-            if (ld.containsStream(context.id)) {
-                // Only add to resolved if ld is from readQueue
-                if (getFrom == context.readQueue) {
-                    addToResolvedQueue(context, thisRead, ld);
-                }
-                return ld;
+            if (getFrom == context.readQueue) {
+                addToResolvedQueue(context, thisRead, ld);
             }
+            return ld;
         }
 
         // None of the potential reads ended up being part of this
