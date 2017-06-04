@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
 import javax.annotation.Nonnull;
@@ -73,6 +74,12 @@ public abstract class AbstractQueuedStreamView extends
             return null;
         }
 
+        // If maxGlobal is before the checkpoint position, throw a
+        // trimmed exception
+        if (maxGlobal < context.checkpointSuccessStartAddr) {
+            throw new TrimmedException();
+        }
+
         // If checkpoint data is available, get from readCpQueue first
         NavigableSet<Long> getFrom;
         if (context.readCpQueue.size() > 0) {
@@ -91,7 +98,7 @@ public abstract class AbstractQueuedStreamView extends
         // Otherwise we remove entries one at a time from the read queue.
         // The entry may not actually be part of the stream, so we might
         // have to perform several reads.
-        while (getFrom.size() > 0) {
+        if (getFrom.size() > 0) {
             final long thisRead = getFrom.pollFirst();
             ILogData ld = read(thisRead);
             if (getFrom == context.readQueue) {
@@ -120,6 +127,12 @@ public abstract class AbstractQueuedStreamView extends
         // log records less than or equal to maxGlobal.
         // Boolean includes both CHECKPOINT & DATA entries.
         boolean readQueueIsEmpty = !fillReadQueue(maxGlobal, context);
+
+        // If maxGlobal is before the checkpoint position, throw a
+        // trimmed exception
+        if (maxGlobal < context.checkpointSuccessStartAddr) {
+            throw new TrimmedException();
+        }
 
         // We always have to fill to the read queue to ensure we read up to
         // max global.
@@ -254,9 +267,18 @@ public abstract class AbstractQueuedStreamView extends
         log.trace("Previous[{}] max={} min={}", this,
                 context.maxResolution,
                 context.minResolution);
+
         // If never read, there would be no pointer to the previous entry.
         if (context.globalPointer == Address.NEVER_READ) {
             return null;
+        }
+
+        // If we're attempt to go prior to most recent checkpoint, we
+        // throw a TrimmedException.
+        if (context.globalPointer - 1 <
+                context.checkpointSuccessStartAddr)
+        {
+            throw new TrimmedException();
         }
 
         // Otherwise, the previous entry should be resolved, so get

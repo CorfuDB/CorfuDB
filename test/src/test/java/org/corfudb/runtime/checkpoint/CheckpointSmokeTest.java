@@ -1,6 +1,7 @@
 package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
@@ -12,6 +13,7 @@ import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
@@ -338,19 +340,34 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             }
 
             // Instantiate new runtime & map @ snapshot of globalAddress
-            /*
             setRuntime();
             Map<String, Long> m2 = instantiateMap(streamName);
-            r.getObjectsView().TXBuild()
-                    .setType(TransactionType.SNAPSHOT)
-                    .setSnapshot(globalAddr)
-                    .begin();
 
-            assertThat(m2.entrySet())
-                    .describedAs("Snapshot at global log address " + globalAddr)
-                    .isEqualTo(expectedHistory.entrySet());
-            r.getObjectsView().TXEnd();
-            */
+            // If the snapshot is prior to the checkpoint start,
+            // a trimmed exception will be thrown.
+            if (globalAddr < startAddress - 1) {
+                final long thisAddress = globalAddr;
+                assertThatThrownBy(() ->
+                        {
+                            r.getObjectsView().TXBuild()
+                                .setType(TransactionType.SNAPSHOT)
+                                .setSnapshot(thisAddress)
+                                .begin();
+                            m2.size(); // Just call any accessor
+                        })
+                        .describedAs("Snapshot at global log address " + globalAddr)
+                        .isInstanceOf(TransactionAbortedException.class);
+            } else {
+                r.getObjectsView().TXBuild()
+                        .setType(TransactionType.SNAPSHOT)
+                        .setSnapshot(globalAddr)
+                        .begin();
+
+                assertThat(m2.entrySet())
+                        .describedAs("Snapshot at global log address " + globalAddr)
+                        .isEqualTo(expectedHistory.entrySet());
+                r.getObjectsView().TXEnd();
+            }
         }
     }
 

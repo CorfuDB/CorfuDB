@@ -53,9 +53,12 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                         // If a trim is encountered, we must reset the object
                         o.resetUnsafe();
                         // and abort the transaction
-                        abortTransaction(new TransactionAbortedException(
-                                new TxResolutionInfo(getTransactionID(),
-                                        getSnapshotTimestamp()), null, AbortCause.TRIM));
+                        TransactionAbortedException tae =
+                                new TransactionAbortedException(
+                                        new TxResolutionInfo(getTransactionID(),
+                                                getSnapshotTimestamp()), null, AbortCause.TRIM);
+                        abortTransaction(tae);
+                        throw tae;
                     }
                 },
                 o -> accessFunction.access(o));
