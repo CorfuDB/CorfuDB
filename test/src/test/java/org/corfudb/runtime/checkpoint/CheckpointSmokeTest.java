@@ -1,6 +1,7 @@
 package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
@@ -12,6 +13,7 @@ import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
@@ -305,7 +307,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                     saveHist.accept(k, middleTracker);
                 });
                 t.start();
-                try { t.join(); } catch (Exception e) { System.err.printf("BAD: exception %s\n", e); }
+                try { t.join(); } catch (Exception e) { throw new RuntimeException(e); }
                 middleTracker++;
             }
         });
@@ -340,15 +342,32 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             // Instantiate new runtime & map @ snapshot of globalAddress
             setRuntime();
             Map<String, Long> m2 = instantiateMap(streamName);
-            r.getObjectsView().TXBuild()
-                    .setType(TransactionType.SNAPSHOT)
-                    .setSnapshot(globalAddr)
-                    .begin();
 
-            assertThat(m2.entrySet())
-                    .describedAs("Snapshot at global log address " + globalAddr)
-                    .isEqualTo(expectedHistory.entrySet());
-            r.getObjectsView().TXEnd();
+            // If the snapshot is prior to the checkpoint start,
+            // a trimmed exception will be thrown.
+            if (globalAddr < startAddress - 1) {
+                final long thisAddress = globalAddr;
+                assertThatThrownBy(() ->
+                        {
+                            r.getObjectsView().TXBuild()
+                                .setType(TransactionType.SNAPSHOT)
+                                .setSnapshot(thisAddress)
+                                .begin();
+                            m2.size(); // Just call any accessor
+                        })
+                        .describedAs("Snapshot at global log address " + globalAddr)
+                        .isInstanceOf(TransactionAbortedException.class);
+            } else {
+                r.getObjectsView().TXBuild()
+                        .setType(TransactionType.SNAPSHOT)
+                        .setSnapshot(globalAddr)
+                        .begin();
+
+                assertThat(m2.entrySet())
+                        .describedAs("Snapshot at global log address " + globalAddr)
+                        .isEqualTo(expectedHistory.entrySet());
+                r.getObjectsView().TXEnd();
+            }
         }
     }
 
@@ -372,13 +391,15 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                                         Object[] objects, Runnable l1, Runnable l2,
                                         boolean write1, boolean write2, boolean write3)
             throws Exception {
-        BackpointerStreamView sv = new BackpointerStreamView(r, streamId);
+        final UUID checkpointStreamID = CorfuRuntime.getStreamID(streamId.toString() + "_cp");
+        BackpointerStreamView sv = new BackpointerStreamView(r, checkpointStreamID);
         Map<CheckpointEntry.CheckpointDictKey, String> mdKV = new HashMap<>();
         mdKV.put(CheckpointEntry.CheckpointDictKey.START_TIME, "The perfect time");
 
         // Write cp #1 of 3
         if (write1) {
-            TokenResponse tokResp1 = r.getSequencerView().nextToken(Collections.singleton(streamId), 0);
+            TokenResponse tokResp1 = r.getSequencerView().nextToken(Collections.singleton(streamId)
+                    , 0);
             long addr1 = tokResp1.getToken().getTokenValue();
             mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1 + 1));
             CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
