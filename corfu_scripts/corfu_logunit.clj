@@ -4,6 +4,7 @@
 (import org.docopt.Docopt) ; parse some cmdline opts
 (import org.corfudb.protocols.wireprotocol.TokenResponse)
 (import org.corfudb.protocols.wireprotocol.LogData)
+(import org.corfudb.protocols.wireprotocol.DataType)
 (import org.corfudb.protocols.wireprotocol.ILogData)
 
 (def usage "corfu_logunit, directly interact with Corfu logunits.
@@ -69,7 +70,7 @@ Options:
 
 ; a function which writes a logunit entry from stdin
 (defn write-logunit [stream, address] (let [in (slurp-bytes System/in)]
-  (let [logData (new LogData in)]
+  (let [logData (new LogData DataType/DATA in)]
     (do
       (if (nil? stream)
           (.. logData (useToken (new TokenResponse address 0 (java.util.Collections/emptyMap))))
