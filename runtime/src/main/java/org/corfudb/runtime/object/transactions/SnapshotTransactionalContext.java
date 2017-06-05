@@ -12,6 +12,8 @@ import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 
 import java.util.*;
 
+import static org.corfudb.runtime.object.transactions.TransactionalContext.getRootContext;
+
 /**
  * A snapshot transactional context.
  *
@@ -99,8 +101,14 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
 
     @Override
     public long obtainSnapshotTimestamp() {
-        return getBuilder().getSnapshot();
+        final AbstractTransactionalContext atc = getRootContext();
+        if (atc != null && atc != this) {
+            // If we're in a nested transaction, the first read timestamp
+            // needs to come from the root.
+            return atc.getSnapshotTimestamp();
+        } else {
+            return getBuilder().getSnapshot();
+        }
     }
-
 
 }
