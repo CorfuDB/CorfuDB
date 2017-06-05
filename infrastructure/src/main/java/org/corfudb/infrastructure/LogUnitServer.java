@@ -2,10 +2,10 @@ package org.corfudb.infrastructure;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 
 import com.codahale.metrics.MetricRegistry;
@@ -22,13 +22,13 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
-import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
@@ -49,9 +49,6 @@ import org.corfudb.util.Utils;
  */
 @Slf4j
 public class LogUnitServer extends AbstractServer {
-
-    private final ServerContext serverContext;
-
     /**
      * A scheduler, which is used to schedule periodic tasks like garbage collection.
      */
@@ -63,13 +60,7 @@ public class LogUnitServer extends AbstractServer {
                             .setNameFormat("LogUnit-Maintenance-%d")
                             .build());
 
-    /**
-     * GC parameters
-     * TODO: entire GC handling needs updating, currently not being activated
-     */
-    private final Thread gcThread = null;
-    private Long gcRetryInterval;
-    private AtomicBoolean running = new AtomicBoolean(true);
+    private ScheduledFuture<?> compactor;
 
     /**
      * The options map.
@@ -87,18 +78,17 @@ public class LogUnitServer extends AbstractServer {
      * This cache services requests for data at various addresses. In a memory implementation,
      * it is not backed by anything, but in a disk implementation it is backed by persistent storage.
      */
-    private final LoadingCache<LogAddress, ILogData> dataCache;
+    private final LoadingCache<Long, ILogData> dataCache;
     private final long maxCacheSize;
 
     private final StreamLog streamLog;
 
-    private final BatchWriter<LogAddress, ILogData> batchWriter;
+    private final BatchWriter<Long, ILogData> batchWriter;
 
     private static final String metricsPrefix = "corfu.server.logunit.";
 
     public LogUnitServer(ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
-        this.serverContext = serverContext;
         double cacheSizeHeapRatio = Double.parseDouble((String) opts.get("--cache-heap-ratio"));
 
         maxCacheSize = (long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio);
@@ -115,8 +105,8 @@ public class LogUnitServer extends AbstractServer {
 
         batchWriter = new BatchWriter(streamLog);
 
-        dataCache = Caffeine.<LogAddress, ILogData>newBuilder()
-                .<LogAddress, ILogData>weigher((k, v) -> ((LogData)v).getData() == null ? 1 : ((LogData)v).getData().length)
+        dataCache = Caffeine.<Long, ILogData>newBuilder()
+                .<Long, ILogData>weigher((k, v) -> ((LogData)v).getData() == null ? 1 : ((LogData)v).getData().length)
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
                 .writer(batchWriter)
@@ -125,6 +115,9 @@ public class LogUnitServer extends AbstractServer {
 
         MetricRegistry metrics = serverContext.getMetrics();
         MetricsUtils.addCacheGauges(metrics, metricsPrefix + "cache.", dataCache);
+
+        Runnable task = () -> streamLog.compact();
+        compactor = scheduler.scheduleAtFixedRate(task, 10,45, TimeUnit.MINUTES);
     }
 
     /**
@@ -146,7 +139,7 @@ public class LogUnitServer extends AbstractServer {
                 .getPayload().getGlobalAddress(), msg.getPayload().getData().getBackpointerMap());
 
         try {
-            dataCache.put(new LogAddress(msg.getPayload().getGlobalAddress(), null), msg.getPayload().getData());
+            dataCache.put(msg.getPayload().getGlobalAddress(), msg.getPayload().getData());
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
 
         } catch (OverwriteException ex) {
@@ -168,8 +161,7 @@ public class LogUnitServer extends AbstractServer {
         try {
             for (Long l = msg.getPayload().getRange().lowerEndpoint();
                  l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
-                LogAddress logAddress = new LogAddress(l, msg.getPayload().getStreamID());
-                ILogData e = dataCache.get(logAddress);
+                ILogData e = dataCache.get(l);
                 if (e == null) {
                     rr.put(l, LogData.EMPTY);
                 } else if (e.getType() == DataType.HOLE) {
@@ -179,31 +171,18 @@ public class LogUnitServer extends AbstractServer {
                 }
             }
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
+        } catch (TrimmedException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
         } catch (DataCorruptionException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.GC_INTERVAL, opTimer = metricsPrefix + "gc-interval")
-    private void setGcInterval(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r,
-                               boolean isMetricsEnabled) {
-        gcRetryInterval = msg.getPayload();
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-    }
-
-    @ServerHandler(type = CorfuMsgType.FORCE_GC, opTimer = metricsPrefix + "force-gc")
-    private void forceGc(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r,
-                         boolean isMetricsEnabled) {
-        gcThread.interrupt();
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-    }
-
     @ServerHandler(type = CorfuMsgType.FILL_HOLE, opTimer = metricsPrefix + "fill-hole")
     private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
                           boolean isMetricsEnabled) {
-        LogAddress l = new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream());
         try {
-            dataCache.put(l, LogData.HOLE);
+            dataCache.put(msg.getPayload().getAddress(), LogData.HOLE);
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
 
         } catch (OverwriteException e) {
@@ -216,32 +195,70 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.TRIM)
-    private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        batchWriter.trim(new LogAddress(msg.getPayload().getPrefix(), msg.getPayload().getStream()));
+    @ServerHandler(type = CorfuMsgType.TRIM, opTimer = metricsPrefix + "fill-hole")
+    private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
+                      boolean isMetricsEnabled) {
+        batchWriter.trim(msg.getPayload().getAddress());
         //TODO(Maithem): should we return an error if the write fails
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
+    @ServerHandler(type = CorfuMsgType.PREFIX_TRIM)
+    private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
+                            boolean isMetricsEnabled) {
+        try {
+            batchWriter.prefixTrim(msg.getPayload().getAddress());
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        } catch (TrimmedException ex) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
+        }
+    }
+
+    @ServerHandler(type = CorfuMsgType.COMPACT_REQUEST, opTimer = metricsPrefix + "compact")
+    private void compact(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+        try {
+            streamLog.compact();
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        } catch (RuntimeException ex) {
+            log.error("Internal Error");
+            //TODO(Maithem) Need an internal error return type
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        }
+    }
+
+    @ServerHandler(type = CorfuMsgType.FLUSH_CACHE, opTimer = metricsPrefix + "flush-cache")
+    private void flushCache(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+        try {
+            dataCache.invalidateAll();
+        } catch (RuntimeException e) {
+            log.error("Encountered error while flushing cache {}", e);
+        }
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+
+
+
+
     /**
      * Retrieve the LogUnitEntry from disk, given an address.
      *
-     * @param logAddress The address to retrieve the entry from.
+     * @param address The address to retrieve the entry from.
      * @return The log unit entry to retrieve into the cache.
      * This function should not care about trimmed addresses, as that is handled in
      * the read() and append(). Any address that cannot be retrieved should be returned as
      * unwritten (null).
      */
-    public synchronized ILogData handleRetrieval(LogAddress logAddress) {
-        LogData entry = streamLog.read(logAddress);
-        log.trace("Retrieved[{} : {}]", logAddress, entry);
+    public synchronized ILogData handleRetrieval(long address) {
+        LogData entry = streamLog.read(address);
+        log.trace("Retrieved[{} : {}]", address, entry);
         return entry;
     }
 
 
-    public synchronized void handleEviction(LogAddress logAddress, ILogData entry, RemovalCause cause) {
-        log.trace("Eviction[{}]: {}", logAddress, cause);
-        streamLog.release(logAddress, (LogData) entry);
+    public synchronized void handleEviction(long address, ILogData entry, RemovalCause cause) {
+        log.trace("Eviction[{}]: {}", address, cause);
+        streamLog.release(address, (LogData) entry);
     }
 
     /**
@@ -249,12 +266,13 @@ public class LogUnitServer extends AbstractServer {
      */
     @Override
     public void shutdown() {
+        compactor.cancel(true);
         scheduler.shutdownNow();
         batchWriter.close();
     }
 
     @VisibleForTesting
-    LoadingCache<LogAddress, ILogData> getDataCache() {
+    public LoadingCache<Long, ILogData> getDataCache() {
         return dataCache;
     }
 

@@ -15,13 +15,13 @@ import java.util.UUID;
 public class TrimRequest implements ICorfuPayload<TrimRequest> {
 
     final UUID stream;
-    final Long prefix;
+    final Long address;
 
     public TrimRequest(ByteBuf buf) {
         if (ICorfuPayload.fromBuffer(buf, Boolean.class))
             stream = ICorfuPayload.fromBuffer(buf, UUID.class);
         else stream = null;
-        prefix = ICorfuPayload.fromBuffer(buf, Long.class);
+        address = ICorfuPayload.fromBuffer(buf, Long.class);
     }
 
     @Override
@@ -29,6 +29,6 @@ public class TrimRequest implements ICorfuPayload<TrimRequest> {
         ICorfuPayload.serialize(buf, stream != null);
         if (stream != null)
             ICorfuPayload.serialize(buf, stream);
-        ICorfuPayload.serialize(buf, prefix);
+        ICorfuPayload.serialize(buf, address);
     }
 }

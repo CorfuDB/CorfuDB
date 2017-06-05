@@ -3,12 +3,16 @@ package org.corfudb.protocols.wireprotocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_ID;
+import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_TYPE;
 
 /**
  * Created by mwei on 8/15/16.
@@ -112,19 +116,25 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
     }
 
-    public LogData(final Object object) {
-        this.type = DataType.DATA;
-        this.data = null;
-        this.payload.set(object);
-        if (object instanceof LogEntry) {
-            ((LogEntry) object).setEntry(this);
+    public LogData(DataType type, final Object object) {
+        if (object instanceof ByteBuf) {
+            this.type = type;
+            this.data = byteArrayFromBuf((ByteBuf) object);
+            this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
+        } else {
+            this.type = type;
+            this.data = null;
+            this.payload.set(object);
+            if (object instanceof LogEntry) {
+                ((LogEntry) object).setEntry(this);
+            }
+            this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
+            if (object instanceof CheckpointEntry) {
+                CheckpointEntry cp = (CheckpointEntry) object;
+                setCheckpointType(cp.getCpType());
+                setCheckpointID(cp.getCheckpointID());
+            }
         }
-        this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
-    }
-    public LogData(final DataType type, final ByteBuf buf) {
-        this.type = type;
-        this.data = byteArrayFromBuf(buf);
-        this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
     }
 
     public byte[] byteArrayFromBuf(final ByteBuf buf) {

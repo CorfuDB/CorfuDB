@@ -17,7 +17,7 @@ PREFIX=/usr/local/bin
 PORT=9000
 # WARNING: -s => single node corfu, need to revert this change later.
 # OPTS="-l /var/corfu $PORT"
-OPTS="-s -l /var/corfu $PORT"
+OPTS="-s -l /common/nsxapi/data/corfu $PORT"
 LOGFILE="/var/log/corfu.$PORT.log"
 . /lib/lsb/init-functions
 

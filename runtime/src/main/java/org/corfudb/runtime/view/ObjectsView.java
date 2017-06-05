@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
@@ -18,6 +19,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 
+import javax.annotation.Nonnull;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
@@ -44,7 +46,7 @@ public class ObjectsView extends AbstractView {
     @Getter
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
 
-    public ObjectsView(CorfuRuntime runtime) {
+    public ObjectsView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
     }
 
@@ -165,6 +167,30 @@ public class ObjectsView extends AbstractView {
             // TODO up to here
                 try {
                     return TransactionalContext.getCurrentContext().commitTransaction();
+                } catch (TransactionAbortedException e) {
+                    TransactionalContext.getCurrentContext().abortTransaction(e);
+                    throw e;
+                } catch (Exception e) {
+                    log.trace("TXCommit[{}] Exception {}", context, e);
+                    AbortCause abortCause;
+
+                    if (e instanceof NetworkException) {
+                        abortCause = AbortCause.NETWORK;
+                    } else {
+                        abortCause = AbortCause.UNDEFINED;
+                    }
+
+                    long snapshot_timestamp;
+                    try {
+                        snapshot_timestamp = context.getSnapshotTimestamp();
+                    } catch (NetworkException ne) {
+                        snapshot_timestamp = -1L;
+                    }
+
+                    TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(), snapshot_timestamp);
+                    TransactionAbortedException tae = new TransactionAbortedException(txInfo, null, abortCause);
+                    context.abortTransaction(tae);
+                    throw tae;
                 } finally {
                     TransactionalContext.removeContext();
                 }

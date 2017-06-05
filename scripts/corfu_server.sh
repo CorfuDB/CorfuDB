@@ -42,7 +42,10 @@ export JVMFLAGS="-Xmx${CORFUDB_HEAP}m $SERVER_JVMFLAGS"
 
 while true; do
 "$JAVA" -cp "$CLASSPATH" $JVMFLAGS org.corfudb.infrastructure.CorfuServer $*
-if [ $? -ne 100 ]; then
+JAVA_RET_CODE=$?
+# watchdog: only exit on INTERNAL_ERROR (1), SIGHUP (129), SIGINT (130), SIGKILL (137) and SIGTERM (143)
+EXIT_CONDITION="1 129 130 137 143"
+if [[ " $EXIT_CONDITION " =~ " $JAVA_RET_CODE " ]]; then
 break
 fi
 done

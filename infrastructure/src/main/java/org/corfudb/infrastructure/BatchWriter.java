@@ -4,11 +4,11 @@ import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.log.LogAddress;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 
 import javax.annotation.Nonnull;
 import java.util.LinkedList;
@@ -45,7 +45,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
         try {
             CompletableFuture<Void> cf = new CompletableFuture();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.WRITE,
-                    (LogAddress) key, (LogData) value, cf));
+                    (Long) key, (LogData) value, cf));
             cf.get();
         } catch (Exception e) {
             log.trace("Write Exception {}", e);
@@ -57,10 +57,20 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
         }
     }
 
-    public void trim(@Nonnull LogAddress logAddress) {
+    public void trim(@Nonnull long address) {
         try {
             CompletableFuture<Void> cf = new CompletableFuture();
-            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.TRIM, logAddress, null, cf));
+            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.TRIM, address, null, cf));
+            cf.get();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void prefixTrim(@Nonnull long address) {
+        try {
+            CompletableFuture<Void> cf = new CompletableFuture();
+            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.PREFIX_TRIM, address, null, cf));
             cf.get();
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -115,12 +125,22 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                 }
 
                 if (currOp.getType() == BatchWriterOperation.Type.TRIM) {
-                    streamLog.trim(currOp.getLogAddress());
+                    streamLog.trim(currOp.getAddress());
                     currOp.setException(null);
                     res.add(currOp);
+                } else if (currOp.getType() == BatchWriterOperation.Type.PREFIX_TRIM) {
+                    try {
+                        streamLog.prefixTrim(currOp.getAddress());
+                        currOp.setException(null);
+                        res.add(currOp);
+                    } catch (TrimmedException e) {
+                        currOp.setException(e);
+                        res.add(currOp);
+                    }
+
                 } else if (currOp.getType() == BatchWriterOperation.Type.WRITE) {
                     try {
-                        streamLog.append(currOp.getLogAddress(), currOp.getLogData());
+                        streamLog.append(currOp.getAddress(), currOp.getLogData());
                         currOp.setException(null);
                         res.add(currOp);
                     } catch (OverwriteException | DataOutrankedException e) {

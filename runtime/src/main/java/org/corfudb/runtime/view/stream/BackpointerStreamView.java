@@ -1,8 +1,10 @@
 package org.corfudb.runtime.view.stream;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
@@ -123,7 +125,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
      */
     @Override
     public boolean getHasNext(QueuedStreamContext context) {
-        return  context.readQueue.isEmpty() ||
+        return  !context.readQueue.isEmpty() ||
                 runtime.getSequencerView()
                 .nextToken(Collections.singleton(context.id), 0).getToken().getTokenValue()
                         > context.globalPointer;
@@ -160,6 +162,23 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                                  final QueuedStreamContext context) {
         log.trace("Read_Fill_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}", this,
                 maxGlobal, context.globalPointer, context.maxResolution, context.minResolution);
+
+        // considerCheckpoint: Use context.globalPointer as a signal of caller's intent:
+        // if globalPointer == -1, then the caller needs to replay the stream from the
+        // beginning because the caller has never read anything from the stream before.
+        // Thus, it could be a significant time & I/O saving for the client to playback
+        // from the latest checkpoint.
+        // On the other hand, if not -1, then we assume that the caller has already
+        // found the stream head and replayed some/all of it.
+        //
+        // We assume a "typical" case where the client probably needs to discover & replay
+        // just a few log entries, whereas the checkpoint data that this method may discover
+        // may be "huge" ... thus we favor ignoring the checkpoint data.  Such an assumption
+        // may be invalid for very small SMR objects, such as a simple counter, where
+        // checkpoint size would always be small enough to use checkpoint data instead of
+        // continuing backward to find individual updates.
+        boolean considerCheckpoint = context.globalPointer == -1;
+
         // The maximum address we will fill to.
         final long maxAddress =
                 Long.min(maxGlobal, context.maxGlobalAddress);
@@ -231,7 +250,20 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // If the entry contains this context's stream,
             // we add it to the read queue.
             if (currentEntry.containsStream(context.id)) {
-                context.readQueue.add(currentRead);
+                if (currentEntry.hasCheckpointMetadata()) {
+                    examineCheckpointRecord(context, currentEntry,
+                            considerCheckpoint, currentRead);
+                } else {
+                    context.readQueue.add(currentRead);
+                }
+            }
+
+            // If we've reached the beginning of a successful checkpoint
+            // that the caller wants us to us, then we're done here.
+            if (considerCheckpoint && currentRead <= context.checkpointSuccessStartAddr) {
+                log.trace("Read_Fill_Queue[{}]: currentRead {} checkpointSuccessStartAddr {}",
+                        this, currentRead, context.checkpointSuccessStartAddr);
+                break;
             }
 
             // If everything left is available in the resolved
@@ -268,7 +300,56 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         }
 
+        log.debug("Read_Fill_Queue[{}] Filled CP queue with {}", this, context.readCpQueue);
         log.debug("Read_Fill_Queue[{}] Filled queue with {}", this, context.readQueue);
-        return !context.readQueue.isEmpty();
+        return ! context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
+    }
+
+    private void examineCheckpointRecord(final QueuedStreamContext context,
+                                         ILogData currentEntry,
+                                         boolean considerCheckpoint, long currentRead) {
+        CheckpointEntry.CheckpointEntryType cpType = currentEntry.getCheckpointType();
+        UUID cpID = currentEntry.getCheckpointID();
+
+        if (context.checkpointSuccessID == null &&
+                cpType == CheckpointEntry.CheckpointEntryType.END) {
+            CheckpointEntry cpEntry = (CheckpointEntry) currentEntry.getPayload(runtime);
+            log.trace("Checkpoint: address {} found END, id {} author {}",
+                    currentRead, cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
+            if (considerCheckpoint) {
+                context.checkpointSuccessID = cpEntry.getCheckpointID();
+                context.checkpointSuccessNumEntries = 1L;
+                context.checkpointSuccessBytes = (long) currentEntry.getSizeEstimate();
+                context.checkpointSuccessEndAddr = currentRead;
+            }
+        }
+        if (context.checkpointSuccessID != null &&
+                context.checkpointSuccessID.equals(cpID)) {
+            CheckpointEntry cpEntry = (CheckpointEntry) currentEntry.getPayload(runtime);
+            log.trace("Checkpoint: address {} type {} id {} author {}",
+                    currentRead, cpEntry.getCpType(),
+                    cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
+            if (considerCheckpoint) {
+                context.readCpQueue.add(currentEntry.getGlobalAddress());
+                context.checkpointSuccessNumEntries++;
+                context.checkpointSuccessBytes += cpEntry.getSmrEntriesBytes();
+                if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
+                    long cpStartAddr;
+                    if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS) != null) {
+                        cpStartAddr = Long.decode(cpEntry.getDict()
+                                .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS));
+                    } else {
+                        cpStartAddr = currentRead;
+                    }
+                    context.checkpointSuccessStartAddr = cpStartAddr;
+                    log.trace("Checkpoint: halt backpointer fill at address {} type {} id {} author {}",
+                            cpStartAddr, cpEntry.getCpType(),
+                            cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
+                    return;
+                }
+            }
+        } else {
+            log.trace("Checkpoint: skip address {} type {} id {}", currentRead, cpType, cpID);
+        }
     }
 }

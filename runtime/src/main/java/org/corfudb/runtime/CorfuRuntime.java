@@ -105,6 +105,13 @@ public class CorfuRuntime {
     public long maxCacheSize = 4_000_000_000L;
 
     /**
+     * Sets expireAfterAccess and expireAfterWrite in seconds.
+     */
+    @Getter
+    @Setter
+    public long cacheExpiryTime = Long.MAX_VALUE;
+
+    /**
      * Whether or not to disable backpointers.
      */
     @Getter
