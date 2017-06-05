@@ -283,21 +283,21 @@ public class LogUnitClient implements IClient {
      * Send a prefix trim request that will trim the log up to a certian address
      * @param address An address to trim up to (i.e. [0, address))
      */
-    public void prefixTrim(long address) {
-        router.sendMessage(CorfuMsgType.PREFIX_TRIM.payloadMsg(new TrimRequest(null, address)));
+    public CompletableFuture<Void> prefixTrim(long address) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.PREFIX_TRIM.payloadMsg(new TrimRequest(null, address)));
     }
 
     /**
      * Send a compact request that will delete the trimmed parts of the log
      */
-    public void compact() {
-        router.sendMessage(CorfuMsgType.COMPACT_REQUEST.msg());
+    public CompletableFuture<Void> compact() {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.COMPACT_REQUEST.msg());
     }
 
     /**
      * Send a flush cache request that will flush the logunit cache
      */
-    public CompletableFuture flushCache() {
+    public CompletableFuture<Void> flushCache() {
         return router.sendMessageAndGetCompletable(CorfuMsgType.FLUSH_CACHE.msg());
     }
 

@@ -9,6 +9,7 @@ import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -39,6 +40,10 @@ public class CheckpointWriter {
     private LocalDateTime startTime;
     private long startAddress, endAddress;
     private long numEntries = 0, numBytes = 0;
+
+    final UUID checkpointStreamID;
+
+
     Map<CheckpointEntry.CheckpointDictKey, String> mdKV = new HashMap<>();
 
     /** Mutator lambda to change map key.  Typically used for
@@ -91,6 +96,7 @@ public class CheckpointWriter {
         this.author = author;
         this.map = map;
         checkpointID = UUID.randomUUID();
+        checkpointStreamID = CorfuRuntime.getStreamID(streamID.toString() + "_cp");
         sv = rt.getStreamsView();
     }
 
@@ -140,12 +146,16 @@ public class CheckpointWriter {
         long txBeginGlobalAddress = context.getSnapshotTimestamp();
 
         this.mdKV.put(CheckpointEntry.CheckpointDictKey.START_TIME, startTime.toString());
-        this.mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(txBeginGlobalAddress));
+        // Need the actual object's version
+        ICorfuSMR<SMRMap> corfuObject = (ICorfuSMR<SMRMap>) this.map;
+        this.mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS,
+                Long.toString(corfuObject.getCorfuSMRProxy().getVersion()));
 
         ImmutableMap<CheckpointEntry.CheckpointDictKey,String> mdKV = ImmutableMap.copyOf(this.mdKV);
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                 author, checkpointID, mdKV, null);
-        startAddress = sv.append(Collections.singleton(streamID), cp, null);
+        startAddress = sv.append(Collections.singleton(checkpointStreamID), cp, null);
+
         postAppendFunc.accept(cp, startAddress);
         return startAddress;
     }
@@ -192,7 +202,7 @@ public class CheckpointWriter {
                     }
                     CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
                             author, checkpointID, mdKV, smrEntries);
-                    long pos = sv.append(Collections.singleton(streamID), cp, null);
+                    long pos = sv.append(Collections.singleton(checkpointStreamID), cp, null);
 
                     postAppendFunc.accept(cp, pos);
                     continuationAddresses.add(pos);
@@ -223,7 +233,7 @@ public class CheckpointWriter {
 
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
                 author, checkpointID, mdKV, null);
-        endAddress = sv.append(Collections.singleton(streamID), cp, null);
+        endAddress = sv.append(Collections.singleton(checkpointStreamID), cp, null);
 
         postAppendFunc.accept(cp, endAddress);
         return endAddress;
