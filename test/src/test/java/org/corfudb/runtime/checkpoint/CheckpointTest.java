@@ -483,7 +483,7 @@ public class CheckpointTest extends AbstractObjectTest {
         final String streamNameA = "mystreamA";
         final String author = "delayCkpoint";
         final int mapSize = 10;
-        final int additional = 0; // FIXME change to mapSize / 2;
+        final int additional = mapSize / 2;
 
         myRuntime = getDefaultRuntime().connect();
         Map<String, Long> m2A = instantiateMap(streamNameA);
@@ -498,6 +498,7 @@ public class CheckpointTest extends AbstractObjectTest {
             // start a snapshot TX at position snapshotPosition
             getMyRuntime().getObjectsView().TXBuild()
                     .setType(TransactionType.SNAPSHOT)
+                    .setForceSnapshot(false) // force snapshot when nesting
                     .setSnapshot(mapSize - 1)
                     .begin();
                 }
@@ -519,16 +520,13 @@ public class CheckpointTest extends AbstractObjectTest {
             mcw1.addMap((SMRMap) m2A);
             long checkpointAddress = mcw1.appendCheckpoints(getMyRuntime(), author);
 
-            assertThat(checkpointAddress)
-                    .isEqualTo(mapSize-1);
-
             // Trim the log
             getMyRuntime().getAddressSpaceView().prefixTrim(checkpointAddress);
             getMyRuntime().getAddressSpaceView().gc();
             getMyRuntime().getAddressSpaceView().invalidateServerCaches();
             getMyRuntime().getAddressSpaceView().invalidateClientCache();
 
-            //getMyRuntime().getObjectsView().TXEnd();
+            getMyRuntime().getObjectsView().TXEnd();
 
         });
 

@@ -102,7 +102,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     @Override
     public long obtainSnapshotTimestamp() {
         final AbstractTransactionalContext atc = getRootContext();
-        if (atc != null && atc != this) {
+        if (atc != null && atc != this && !getBuilder().isForceSnapshot()) {
             // If we're in a nested transaction, the first read timestamp
             // needs to come from the root.
             return atc.getSnapshotTimestamp();
