@@ -286,15 +286,15 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         final long maxAddress =
                 Long.min(maxGlobal, context.maxGlobalAddress);
 
-        // If the maximum address is less than the current pointer,
+        // If we already reached maxAddress ,
         // we return since there is nothing left to do.
-        if (context.globalPointer > maxAddress) {
+        if (context.globalPointer >= maxAddress) {
             return false;
         }
 
         // If everything is available in the resolved
         // queue, use it
-        if (context.maxResolution > maxAddress &&
+        if (context.maxResolution >= maxAddress &&
                 context.minResolution < context.globalPointer) {
             return fillFromResolved(maxGlobal, context);
         }
@@ -314,7 +314,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     .getToken().getTokenValue();
         }
 
-        // If there is no infomation on the tail of the stream, return, there is nothing to do
+        // If there is no information on the tail of the stream, return,
+        // there is nothing to do
         if (Address.nonAddress(latestTokenValue)) {
 
             // sanity check:
@@ -327,7 +328,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // If everything is available in the resolved
         // queue, use it
-        if (context.maxResolution > latestTokenValue &&
+        if (context.maxResolution >= latestTokenValue &&
                 context.minResolution < context.globalPointer) {
             return fillFromResolved(latestTokenValue, context);
         }
