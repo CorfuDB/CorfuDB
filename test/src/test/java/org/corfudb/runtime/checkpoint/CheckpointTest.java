@@ -138,7 +138,7 @@ public class CheckpointTest extends AbstractObjectTest {
     }
 
     @Test
-    public void periodicCkpointTestNoUpdates() throws Exception {
+    public void periodicCkpointNoUpdatesTest() throws Exception {
         final String streamNameA = "mystreamA";
         final String streamNameB = "mystreamB";
         final String author = "periodicCkpoint";

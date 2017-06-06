@@ -19,7 +19,7 @@ public class MapsAsMQsTest extends AbstractTransactionsTest {
     public void TXBegin() { OptimisticTXBegin(); }
 
 
-    protected int numIterations = PARAMETERS.NUM_ITERATIONS_MODERATE;
+    protected int numIterations = PARAMETERS.NUM_ITERATIONS_LOW;
 
     /**
      * This test verifies commit atomicity against concurrent -read- activity,
