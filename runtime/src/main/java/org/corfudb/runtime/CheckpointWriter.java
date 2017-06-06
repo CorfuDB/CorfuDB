@@ -146,14 +146,11 @@ public class CheckpointWriter {
      */
     public long startCheckpoint() {
         startTime = LocalDateTime.now();
-        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
-        long txBeginGlobalAddress = context.getSnapshotTimestamp();
-
         this.mdKV.put(CheckpointEntry.CheckpointDictKey.START_TIME, startTime.toString());
-        // Need the actual object's version
-        ICorfuSMR<SMRMap> corfuObject = (ICorfuSMR<SMRMap>) this.map;
+
+        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
         this.mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS,
-                Long.toString(corfuObject.getCorfuSMRProxy().getVersion()));
+                Long.toString(context.getSnapshotTimestamp()));
 
         ImmutableMap<CheckpointEntry.CheckpointDictKey,String> mdKV = ImmutableMap.copyOf(this.mdKV);
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
@@ -248,7 +245,7 @@ public class CheckpointWriter {
         if (forceAddress == null) {
             TokenResponse tokenResponse =
                     rt.getSequencerView().nextToken(Collections.EMPTY_SET, 0);
-         globalTail = tokenResponse.getToken().getTokenValue();
+            globalTail = tokenResponse.getToken().getTokenValue();
         } else{
             globalTail = forceAddress;
         }
