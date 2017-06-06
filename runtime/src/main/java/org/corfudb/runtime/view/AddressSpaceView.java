@@ -180,7 +180,8 @@ public class AddressSpaceView extends AbstractView {
                             .map(endpoint ->
                                     runtime.getRouter(endpoint)
                                             .getClient(LogUnitClient.class))
-                            .forEach(client -> client.prefixTrim(address));
+                            .map(client -> client.prefixTrim(address))
+                            .forEach(CFUtils::getUninterruptibly);
                     return null;    // No return value
                 }
         );
@@ -200,7 +201,8 @@ public class AddressSpaceView extends AbstractView {
                     .map(endpoint ->
                             runtime.getRouter(endpoint)
                                     .getClient(LogUnitClient.class))
-                    .forEach(LogUnitClient::compact);
+                    .map(LogUnitClient::compact)
+                    .forEach(CFUtils::getUninterruptibly);
             return null;
         });
     }

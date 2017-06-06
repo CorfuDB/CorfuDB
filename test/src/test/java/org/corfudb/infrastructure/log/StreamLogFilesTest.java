@@ -422,4 +422,19 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Address 0 is not reflected in trimAddress
         assertThat(trimmedExceptions).isEqualTo(trimAddress + 1);
     }
+
+    @Test
+    public void testPrefixTrimAndStartUp() {
+        StreamLog log = new StreamLogFiles(getContext(), false);
+        log.prefixTrim(StreamLogFiles.RECORDS_PER_LOG_FILE / 2);
+        log.compact();
+        log = new StreamLogFiles(getContext(), false);
+        final long midSegmentAddress = StreamLogFiles.RECORDS_PER_LOG_FILE + 5;
+        log.prefixTrim(midSegmentAddress);
+        log.compact();
+        log = new StreamLogFiles(getContext(), false);
+
+        assertThat(log.getGlobalTail()).isEqualTo(midSegmentAddress);
+        assertThat(((StreamLogFiles)log).getStartingAddress()).isEqualTo(midSegmentAddress + 1);
+    }
 }

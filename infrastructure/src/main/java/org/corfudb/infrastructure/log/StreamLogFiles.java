@@ -106,7 +106,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         // initializing the tail segment (i.e. initializeMaxGlobalAddress)
         initializeStartingAddress();
         initializeMaxGlobalAddress();
-        int a;
+
+        // This can happen if a prefix trim happens on
+        // addresses that haven't been written
+        if(getGlobalTail() < getStartingAddress()) {
+            syncTailSegment(getStartingAddress() - 1);
+        }
     }
 
     @Override
@@ -138,6 +143,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             long newStartingAddress = address + 1;
             serverContext.setStartingAddress(newStartingAddress);
             startingAddress = newStartingAddress;
+            syncTailSegment(address);
             log.debug("Trimmed prefix, new starting address {}", newStartingAddress);
         }
     }
@@ -273,6 +279,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         } else {
             trimPrefix();
         }
+    }
+
+    @VisibleForTesting
+    long getStartingAddress() {
+        return startingAddress;
     }
 
     private void trimPrefix() {
@@ -650,8 +661,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      */
     @VisibleForTesting
     synchronized SegmentHandle getSegmentHandleForAddress(long address) {
-        checkAddress(address);
-
         String filePath = logDir + File.separator;
         long segment = address / RECORDS_PER_LOG_FILE;
         filePath += segment;
@@ -867,6 +876,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     public void append(long address, LogData entry) {
         //evict the data by getting the next pointer.
         try {
+            checkAddress(address);
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
             SegmentHandle fh = getSegmentHandleForAddress(address);
@@ -896,6 +906,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public LogData read(long address) {
         try {
+            checkAddress(address);
             SegmentHandle sh = getSegmentHandleForAddress(address);
             if (sh.getPendingTrims().contains(address)) {
                 throw new TrimmedException();

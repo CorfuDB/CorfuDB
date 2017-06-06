@@ -361,7 +361,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Override
     public long getVersion() {
-        return underlyingObject.getVersionUnsafe();
+        return access(o -> underlyingObject.getVersionUnsafe(),
+                null);
     }
 
     /** Get a new instance of the real underlying object.
