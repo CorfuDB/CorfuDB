@@ -150,6 +150,8 @@ public class CheckpointWriter {
         ICorfuSMR<SMRMap> corfuObject = (ICorfuSMR<SMRMap>) this.map;
         this.mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS,
                 Long.toString(corfuObject.getCorfuSMRProxy().getVersion()));
+        this.mdKV.put(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS,
+                Long.toString(txBeginGlobalAddress));
 
         ImmutableMap<CheckpointEntry.CheckpointDictKey,String> mdKV = ImmutableMap.copyOf(this.mdKV);
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,

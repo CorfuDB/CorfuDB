@@ -6,6 +6,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
@@ -241,6 +242,10 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         cpStartAddr = data.getGlobalAddress();
                     }
                     context.checkpointSuccessStartAddr = cpStartAddr;
+                    if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS) != null) {
+                        context.checkpointSnapshotAddress = Long.decode(cpEntry.getDict()
+                                .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
+                    }
                     log.trace("Checkpoint[{}] HALT due to START at address {} startAddr {} type {} id {} author {}",
                             this, data.getGlobalAddress(), cpStartAddr, cpEntry.getCpType(),
                             Utils.toReadableID(cpEntry.getCheckpointID()), cpEntry.getCheckpointAuthorID());
@@ -271,14 +276,20 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             final UUID checkpointID = CorfuRuntime
                     .getStreamID(context.id.toString() + "_cp");
             // Find the checkpoint, if present
-            if (followBackpointers(checkpointID, context.readCpQueue,
-                    runtime.getSequencerView()
-                            .nextToken(Collections.singleton(checkpointID), 0)
-                            .getToken().getTokenValue()
-                    , Address.NEVER_READ, d -> resolveCheckpoint(context, d))) {
-                log.trace("Read_Fill_Queue[{}] Using checkpoint with {} entries",
-                        this, context.readCpQueue.size());
-                return true;
+            try {
+                if (followBackpointers(checkpointID, context.readCpQueue,
+                        runtime.getSequencerView()
+                                .nextToken(Collections.singleton(checkpointID), 0)
+                                .getToken().getTokenValue()
+                        , Address.NEVER_READ, d -> resolveCheckpoint(context, d))) {
+                    log.trace("Read_Fill_Queue[{}] Using checkpoint with {} entries",
+                            this, context.readCpQueue.size());
+                    return true;
+                }
+            } catch (TrimmedException te) {
+                // If we reached a trim and didn't hit a checkpoint, this might be okay,
+                // if the stream was created recently and no checkpoint exists yet.
+                log.trace("Read_Fill_Queue[{}] Trim encountered and no checkpoint detected.", this);
             }
         }
 
@@ -335,12 +346,14 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // Now we start traversing backpointers, if they are available. We
         // start at the latest token and go backward, until we reach the
-        // log pointer. For each address which is less than
+        // log pointer -or- the checkpoint snapshot address, because all
+        // values from the beginning of the stream up to the snapshot address
+        // should be reflected. For each address which is less than
         // maxGlobalAddress, we insert it into the read queue.
 
         followBackpointers(context.id, context.readQueue,
                 latestTokenValue,
-                context.globalPointer,
+                Long.max(context.globalPointer, context.checkpointSnapshotAddress),
                 d -> BackpointerOp.INCLUDE);
 
         return ! context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();

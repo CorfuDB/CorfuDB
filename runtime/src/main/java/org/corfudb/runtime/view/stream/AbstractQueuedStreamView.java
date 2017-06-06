@@ -371,6 +371,11 @@ public abstract class AbstractQueuedStreamView extends
         long checkpointSuccessBytes = 0L;
         // No need to keep track of # of DATA entries, use context.resolvedQueue.size()?
         long resolvedEstBytes = 0L;
+        /** The address the current checkpoint snapshot was taken at.
+         *  The checkpoint guarantees for this stream there are no entries
+         *  between checkpointSuccessStartAddr and checkpointSnapshotAddress.
+         */
+        long checkpointSnapshotAddress = Address.NEVER_READ;
 
         /** Create a new stream context with the given ID and maximum address
          * to read to.
@@ -395,6 +400,7 @@ public abstract class AbstractQueuedStreamView extends
             checkpointSuccessID = null;
             checkpointSuccessStartAddr = Address.NEVER_READ;
             checkpointSuccessEndAddr = Address.NEVER_READ;
+            checkpointSnapshotAddress = Address.NEVER_READ;
             checkpointSuccessNumEntries = 0;
             checkpointSuccessBytes = 0;
             resolvedEstBytes = 0;
