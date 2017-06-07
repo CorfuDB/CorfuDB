@@ -404,7 +404,8 @@ public class CheckpointTest extends AbstractObjectTest {
      * <p>
      * Finally, we start a snapshot-TX at timestamp 77. We verify that the map state is [0, 1, 2, 3, ..., 76].
      */
-    @Test
+
+    /* Undo prior to checkpoint is not implemented yet: @Test */
     public void undoCkpointTest() throws Exception {
         final String streamNameA = "mystreamA";
         final String author = "undoCkpoint";
