@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -28,7 +29,7 @@ import java.util.function.Consumer;
 /**
  * Basic smoke tests for checkpoint-in-stream PoC.
  */
-
+@Slf4j
 public class CheckpointSmokeTest extends AbstractViewTest {
 
     public CorfuRuntime r;
@@ -343,31 +344,15 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             setRuntime();
             Map<String, Long> m2 = instantiateMap(streamName);
 
-            // If the snapshot is prior to the checkpoint start,
-            // a trimmed exception will be thrown.
-            if (globalAddr < startAddress - 1) {
-                final long thisAddress = globalAddr;
-                assertThatThrownBy(() ->
-                        {
-                            r.getObjectsView().TXBuild()
-                                .setType(TransactionType.SNAPSHOT)
-                                .setSnapshot(thisAddress)
-                                .begin();
-                            m2.size(); // Just call any accessor
-                        })
-                        .describedAs("Snapshot at global log address " + globalAddr)
-                        .isInstanceOf(TransactionAbortedException.class);
-            } else {
-                r.getObjectsView().TXBuild()
-                        .setType(TransactionType.SNAPSHOT)
-                        .setSnapshot(globalAddr)
-                        .begin();
+            r.getObjectsView().TXBuild()
+                    .setType(TransactionType.SNAPSHOT)
+                    .setSnapshot(globalAddr)
+                    .begin();
 
-                assertThat(m2.entrySet())
-                        .describedAs("Snapshot at global log address " + globalAddr)
-                        .isEqualTo(expectedHistory.entrySet());
-                r.getObjectsView().TXEnd();
-            }
+            assertThat(m2.entrySet())
+                    .describedAs("Snapshot at global log address " + globalAddr)
+                    .isEqualTo(expectedHistory.entrySet());
+            r.getObjectsView().TXEnd();
         }
     }
 
@@ -486,6 +471,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         long firstGlobalAddress2 = mcw2.appendCheckpoints(r, author);
         assertThat(firstGlobalAddress2).isGreaterThan(firstGlobalAddress1);
 
+        log.trace("Start instantiation at end of test");
         setRuntime();
         Map<String, Long> m2A = instantiateMap(streamNameA);
         Map<String, Long> m2B = instantiateMap(streamNameB);

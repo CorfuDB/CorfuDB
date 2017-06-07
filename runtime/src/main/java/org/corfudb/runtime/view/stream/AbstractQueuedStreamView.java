@@ -74,16 +74,12 @@ public abstract class AbstractQueuedStreamView extends
             return null;
         }
 
-        // If maxGlobal is before the checkpoint position, throw a
-        // trimmed exception
-        if (maxGlobal < context.checkpointSuccessStartAddr) {
-            throw new TrimmedException();
-        }
-
         // If checkpoint data is available, get from readCpQueue first
         NavigableSet<Long> getFrom;
         if (context.readCpQueue.size() > 0) {
             getFrom = context.readCpQueue;
+            log.trace("getNextEntry: context.globalPointer was {}, set to {}",
+                    context.globalPointer, context.checkpointSuccessStartAddr);
             context.globalPointer = context.checkpointSuccessStartAddr;
         } else {
             getFrom = context.readQueue;
@@ -96,8 +92,6 @@ public abstract class AbstractQueuedStreamView extends
         }
 
         // Otherwise we remove entries one at a time from the read queue.
-        // The entry may not actually be part of the stream, so we might
-        // have to perform several reads.
         if (getFrom.size() > 0) {
             final long thisRead = getFrom.pollFirst();
             ILogData ld = read(thisRead);
@@ -127,12 +121,6 @@ public abstract class AbstractQueuedStreamView extends
         // log records less than or equal to maxGlobal.
         // Boolean includes both CHECKPOINT & DATA entries.
         boolean readQueueIsEmpty = !fillReadQueue(maxGlobal, context);
-
-        // If maxGlobal is before the checkpoint position, throw a
-        // trimmed exception
-        if (maxGlobal < context.checkpointSuccessStartAddr) {
-            throw new TrimmedException();
-        }
 
         // We always have to fill to the read queue to ensure we read up to
         // max global.

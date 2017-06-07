@@ -368,6 +368,22 @@ public class CheckpointTest extends AbstractObjectTest {
         }
     }
 
+    /** We have some non-determinism that needs more runtime to
+     *  try to find buggy executions.  These tests (and the wall
+     *  clock time they consume on each test run) can go away
+     *  sometime, after "soak time" and another round of review.
+     */
+    @Test public void periodicCkpointTrimTest0() throws Exception { periodicCkpointTrimTest(); }
+    @Test public void periodicCkpointTrimTest1() throws Exception { periodicCkpointTrimTest(); }
+    @Test public void periodicCkpointTrimTest2() throws Exception { periodicCkpointTrimTest(); }
+    @Test public void periodicCkpointTrimTest3() throws Exception { periodicCkpointTrimTest(); }
+    @Test public void periodicCkpointTrimTest4() throws Exception { periodicCkpointTrimTest(); }
+    @Test public void periodicCkpointTrimTest5() throws Exception { periodicCkpointTrimTest(); }
+    @Test public void periodicCkpointTrimTest6() throws Exception { periodicCkpointTrimTest(); }
+    @Test public void periodicCkpointTrimTest7() throws Exception { periodicCkpointTrimTest(); }
+    @Test public void periodicCkpointTrimTest8() throws Exception { periodicCkpointTrimTest(); }
+    @Test public void periodicCkpointTrimTest9() throws Exception { periodicCkpointTrimTest(); }
+
     /**
      * This test verifies that a client that recovers a map from checkpoint,
      * but wants the map at a snapshot -earlier- than the snapshot,

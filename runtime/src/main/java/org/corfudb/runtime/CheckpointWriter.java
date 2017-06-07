@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -14,6 +15,7 @@ import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -30,6 +32,7 @@ import java.util.function.Function;
  *
  * TODO: Generalize to all SMR objects.
  */
+@Slf4j
 public class CheckpointWriter {
     /** Metadata to be stored in the CP's 'dict' map.
      */
@@ -146,10 +149,10 @@ public class CheckpointWriter {
         long txBeginGlobalAddress = context.getSnapshotTimestamp();
 
         this.mdKV.put(CheckpointEntry.CheckpointDictKey.START_TIME, startTime.toString());
-        // Need the actual object's version
-        ICorfuSMR<SMRMap> corfuObject = (ICorfuSMR<SMRMap>) this.map;
+        log.trace("checkpoint START_LOG_ADDRESS = {} cpID {}",
+                txBeginGlobalAddress, Utils.toReadableID(checkpointID));
         this.mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS,
-                Long.toString(corfuObject.getCorfuSMRProxy().getVersion()));
+                Long.toString(txBeginGlobalAddress));
 
         ImmutableMap<CheckpointEntry.CheckpointDictKey,String> mdKV = ImmutableMap.copyOf(this.mdKV);
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
