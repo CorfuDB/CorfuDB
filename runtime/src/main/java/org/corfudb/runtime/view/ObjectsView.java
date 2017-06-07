@@ -105,8 +105,16 @@ public class ObjectsView extends AbstractView {
      * to other threads or clients until TXEnd is called.
      */
     public void TXBegin() {
+        TransactionType type = TransactionType.OPTIMISTIC;
+
+        /* If it is a nested transaction, inherit type of parent */
+        if (TransactionalContext.isInTransaction()) {
+            type = TransactionalContext.getCurrentContext().getBuilder().getType();
+            log.trace("Inheriting parent's transaction type {}", type);
+        }
+
         TXBuild()
-                .setType(TransactionType.OPTIMISTIC)
+                .setType(type)
                 .begin();
     }
 
