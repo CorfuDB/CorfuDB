@@ -7,6 +7,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.junit.Before;
@@ -76,16 +77,22 @@ public class CheckpointTest extends AbstractObjectTest {
     void mapCkpointAndTrim() throws Exception {
         CorfuRuntime currentRuntime = getMyRuntime();
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
-            MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-            mcw1.addMap((SMRMap) m2A);
-            mcw1.addMap((SMRMap) m2B);
-            long checkpointAddress = mcw1.appendCheckpoints(currentRuntime, author);
+            try {
+                MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
+                mcw1.addMap((SMRMap) m2A);
+                mcw1.addMap((SMRMap) m2B);
+                long checkpointAddress = mcw1.appendCheckpoints(currentRuntime, author);
 
-            // Trim the log
-            currentRuntime.getAddressSpaceView().prefixTrim(checkpointAddress - 1);
-            currentRuntime.getAddressSpaceView().gc();
-            currentRuntime.getAddressSpaceView().invalidateServerCaches();
-            currentRuntime.getAddressSpaceView().invalidateClientCache();
+                // Trim the log
+                currentRuntime.getAddressSpaceView().prefixTrim(checkpointAddress - 1);
+                currentRuntime.getAddressSpaceView().gc();
+                currentRuntime.getAddressSpaceView().invalidateServerCaches();
+                currentRuntime.getAddressSpaceView().invalidateClientCache();
+            } catch (TrimmedException te) {
+                // shouldn't happen
+                te.printStackTrace();
+                throw te;
+            }
 
         }
     }
@@ -98,17 +105,23 @@ public class CheckpointTest extends AbstractObjectTest {
      */
     void validateMapRebuild(int mapSize, boolean expectedFullsize) {
         setRuntime();
-        Map<String, Long> localm2A = instantiateMap(streamNameA);
-        Map<String, Long> localm2B = instantiateMap(streamNameB);
-        for (int i = 0; i < localm2A.size(); i++) {
-            assertThat(localm2A.get(String.valueOf(i))).isEqualTo((long) i);
-        }
-        for (int i = 0; i < localm2B.size(); i++) {
-            assertThat(localm2B.get(String.valueOf(i))).isEqualTo(0L);
-        }
-        if (expectedFullsize) {
-            assertThat(localm2A.size()).isEqualTo(mapSize);
-            assertThat(localm2B.size()).isEqualTo(mapSize);
+        try {
+            Map<String, Long> localm2A = instantiateMap(streamNameA);
+            Map<String, Long> localm2B = instantiateMap(streamNameB);
+            for (int i = 0; i < localm2A.size(); i++) {
+                assertThat(localm2A.get(String.valueOf(i))).isEqualTo((long) i);
+            }
+            for (int i = 0; i < localm2B.size(); i++) {
+                assertThat(localm2B.get(String.valueOf(i))).isEqualTo(0L);
+            }
+            if (expectedFullsize) {
+                assertThat(localm2A.size()).isEqualTo(mapSize);
+                assertThat(localm2B.size()).isEqualTo(mapSize);
+            }
+        } catch (TrimmedException te) {
+            // shouldn't happen
+            te.printStackTrace();
+            throw te;
         }
     }
 
@@ -118,8 +131,14 @@ public class CheckpointTest extends AbstractObjectTest {
      */
     void populateMaps(int mapSize) {
         for (int i = 0; i < mapSize; i++) {
-            m2A.put(String.valueOf(i), (long) i);
-            m2B.put(String.valueOf(i), (long) 0);
+            try {
+                m2A.put(String.valueOf(i), (long) i);
+                m2B.put(String.valueOf(i), (long) 0);
+            } catch (TrimmedException te) {
+                // shouldn't happen
+                te.printStackTrace();
+                throw te;
+            }
         }
     }
 
@@ -147,7 +166,10 @@ public class CheckpointTest extends AbstractObjectTest {
                 });
 
         // thread 2: periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times
-
+        // thread 1: perform a periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times
+        scheduleConcurrently(1, ignored_task_num -> {
+            mapCkpoint();
+        });
 
         // thread 3: repeated ITERATION_LOW times starting a fresh runtime, and instantiating the maps.
         // they should rebuild from the latest checkpoint (if available).
