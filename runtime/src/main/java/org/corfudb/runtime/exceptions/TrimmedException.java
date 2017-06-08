@@ -5,4 +5,10 @@ package org.corfudb.runtime.exceptions;
  * that has been trimmed.
  */
 public class TrimmedException extends LogUnitException {
+    public TrimmedException() {
+
+    }
+    public TrimmedException(String message) {
+        super(message);
+    }
 }

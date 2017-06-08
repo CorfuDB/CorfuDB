@@ -8,10 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.AbortCause;
-import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.*;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.MetricsUtils;
@@ -252,24 +249,28 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
         }
 
-        return underlyingObject.update(o-> {
-            o.syncObjectUnsafe(timestamp);
-            if (o.upcallResults.containsKey(timestamp)) {
-                log.trace("Upcall[{}] {} Sync'd", this,  timestamp);
-                R ret = (R) o.upcallResults.get(timestamp);
-                o.upcallResults.remove(timestamp);
-                return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
-            }
+        try {
+            return underlyingObject.update(o -> {
+                o.syncObjectUnsafe(timestamp);
+                if (o.upcallResults.containsKey(timestamp)) {
+                    log.trace("Upcall[{}] {} Sync'd", this, timestamp);
+                    R ret = (R) o.upcallResults.get(timestamp);
+                    o.upcallResults.remove(timestamp);
+                    return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
+                }
 
-            // The version is already ahead, but we don't have the result.
-            // The only way to get the correct result
-            // of the upcall would be to rollback. For now, we throw an exception
-            // since this is generally not expected. --- and probably a bug if it happens.
-            throw new RuntimeException("Attempted to get the result " +
-                    "of an upcall@" + timestamp + " but we are @"
-                    + underlyingObject.getVersionUnsafe() +
-                    " and we don't have a copy");
-        });
+                // The version is already ahead, but we don't have the result.
+                // The only way to get the correct result
+                // of the upcall would be to rollback. For now, we throw an exception
+                // since this is generally not expected. --- and probably a bug if it happens.
+                throw new RuntimeException("Attempted to get the result " +
+                        "of an upcall@" + timestamp + " but we are @"
+                        + underlyingObject.getVersionUnsafe() +
+                        " and we don't have a copy");
+            });
+        } catch (TrimmedException ex) {
+            throw new TrimmedUpcallException(timestamp);
+        }
     }
 
     /**
