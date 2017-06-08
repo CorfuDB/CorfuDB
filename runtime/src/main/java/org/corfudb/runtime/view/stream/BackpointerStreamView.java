@@ -244,6 +244,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     log.trace("Checkpoint[{}] HALT due to START at address {} startAddr {} type {} id {} author {}",
                             this, data.getGlobalAddress(), cpStartAddr, cpEntry.getCpType(),
                             Utils.toReadableID(cpEntry.getCheckpointID()), cpEntry.getCheckpointAuthorID());
+                    log.trace("context.checkpointSuccessStartAddr is now {}", context.checkpointSuccessStartAddr);
                     return BackpointerOp.INCLUDE_STOP;
                 }
             } else {
@@ -259,8 +260,10 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     @Override
     protected boolean fillReadQueue(final long maxGlobal,
                                  final QueuedStreamContext context) {
-        log.trace("Read_Fill_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}", this,
-                maxGlobal, context.globalPointer, context.maxResolution, context.minResolution);
+        log.trace("Read_Fill_Queue[{}] Max: {}, Current: {}, " +
+                  "Resolved: {} - {}, checkpointSuccessStartAddr: {}",
+                this, maxGlobal, context.globalPointer,
+                context.maxResolution, context.minResolution, context.checkpointSuccessStartAddr);
 
         // If the stream has just been reset and we don't have
         // any checkpoint entries, we should consult

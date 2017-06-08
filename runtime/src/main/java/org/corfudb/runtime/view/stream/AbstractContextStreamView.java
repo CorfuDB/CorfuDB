@@ -113,12 +113,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      */
     @Override
     final public synchronized ILogData nextUpTo(final long maxGlobal) {
-        // Don't do anything if we've already exceeded the global
-        // pointer.
-        if (getCurrentContext().globalPointer > maxGlobal) {
-            return null;
-        }
-
         // Pop the context if it has changed.
         if (getCurrentContext().globalPointer >=
                 getCurrentContext().maxGlobalAddress) {
@@ -130,6 +124,15 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         // Get the next entry from the underlying implementation.
         final ILogData entry =
                 getNextEntry(getCurrentContext(), maxGlobal);
+
+        // Don't do anything if a non-checkpoint entry exceeds the global
+        // pointer.
+        if (entry == null ||
+                (!entry.hasCheckpointMetadata() && getCurrentContext().globalPointer > maxGlobal)) {
+            log.trace("nextUpTo: null-entry {} globalPointer {} > maxGlobal {}",
+                    entry == null, getCurrentContext().globalPointer, maxGlobal);
+            return null;
+        }
 
         if (entry != null) {
             // Update the pointer.

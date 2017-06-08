@@ -29,6 +29,12 @@ public class TransactionBuilder {
      */
     public long snapshot = -1L;
 
+    /**
+     * for snapshot transactions, the default behavior when setting the
+     * snapshot in a nested TX is to force new snapshot.
+     */
+    public boolean forceSnapshot = true;
+
     public TransactionBuilder(CorfuRuntime runtime) {
         this.runtime = runtime;
     }
