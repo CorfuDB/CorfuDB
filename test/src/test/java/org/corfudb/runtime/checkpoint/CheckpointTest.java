@@ -83,6 +83,11 @@ public class CheckpointTest extends AbstractObjectTest {
                 mcw1.addMap((SMRMap) m2B);
                 long checkpointAddress = mcw1.appendCheckpoints(currentRuntime, author);
 
+                try {
+                    Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+                } catch (InterruptedException ie) {
+                    //
+                }
                 // Trim the log
                 currentRuntime.getAddressSpaceView().prefixTrim(checkpointAddress - 1);
                 currentRuntime.getAddressSpaceView().gc();
