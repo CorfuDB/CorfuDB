@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
 import javax.annotation.Nonnull;
@@ -73,22 +74,17 @@ public abstract class AbstractQueuedStreamView extends
             return null;
         }
 
+        // If maxGlobal is before the checkpoint position, throw a
+        // trimmed exception
+        if (maxGlobal < context.checkpointSuccessStartAddr) {
+            throw new TrimmedException();
+        }
+
         // If checkpoint data is available, get from readCpQueue first
         NavigableSet<Long> getFrom;
         if (context.readCpQueue.size() > 0) {
             getFrom = context.readCpQueue;
-            if (context.readQueue.isEmpty()) {
-                // readQueue is empty, readCpQueue is not.
-                // This is a case where we have had 2 checkpoints
-                // adjacent to each other, and no non-checkpoint
-                // entries in the stream in between the checkpoints
-                // or during the 2nd checkpoint.  Processing of
-                // checkpoint entries will not advance our context
-                // globalPointer, only regular entries in readQueue.
-                // However, we know that readQueue is *empty*, so
-                // we advance globalPointer here.
-                context.globalPointer = maxGlobal;
-            }
+            context.globalPointer = context.checkpointSuccessStartAddr;
         } else {
             getFrom = context.readQueue;
         }
@@ -102,16 +98,13 @@ public abstract class AbstractQueuedStreamView extends
         // Otherwise we remove entries one at a time from the read queue.
         // The entry may not actually be part of the stream, so we might
         // have to perform several reads.
-        while (getFrom.size() > 0) {
+        if (getFrom.size() > 0) {
             final long thisRead = getFrom.pollFirst();
             ILogData ld = read(thisRead);
-            if (ld.containsStream(context.id)) {
-                // Only add to resolved if ld is from readQueue
-                if (getFrom == context.readQueue) {
-                    addToResolvedQueue(context, thisRead, ld);
-                }
-                return ld;
+            if (getFrom == context.readQueue) {
+                addToResolvedQueue(context, thisRead, ld);
             }
+            return ld;
         }
 
         // None of the potential reads ended up being part of this
@@ -134,6 +127,12 @@ public abstract class AbstractQueuedStreamView extends
         // log records less than or equal to maxGlobal.
         // Boolean includes both CHECKPOINT & DATA entries.
         boolean readQueueIsEmpty = !fillReadQueue(maxGlobal, context);
+
+        // If maxGlobal is before the checkpoint position, throw a
+        // trimmed exception
+        if (maxGlobal < context.checkpointSuccessStartAddr) {
+            throw new TrimmedException();
+        }
 
         // We always have to fill to the read queue to ensure we read up to
         // max global.
@@ -268,9 +267,18 @@ public abstract class AbstractQueuedStreamView extends
         log.trace("Previous[{}] max={} min={}", this,
                 context.maxResolution,
                 context.minResolution);
+
         // If never read, there would be no pointer to the previous entry.
         if (context.globalPointer == Address.NEVER_READ) {
             return null;
+        }
+
+        // If we're attempt to go prior to most recent checkpoint, we
+        // throw a TrimmedException.
+        if (context.globalPointer - 1 <
+                context.checkpointSuccessStartAddr)
+        {
+            throw new TrimmedException();
         }
 
         // Otherwise, the previous entry should be resolved, so get
@@ -363,6 +371,11 @@ public abstract class AbstractQueuedStreamView extends
         long checkpointSuccessBytes = 0L;
         // No need to keep track of # of DATA entries, use context.resolvedQueue.size()?
         long resolvedEstBytes = 0L;
+        /** The address the current checkpoint snapshot was taken at.
+         *  The checkpoint guarantees for this stream there are no entries
+         *  between checkpointSuccessStartAddr and checkpointSnapshotAddress.
+         */
+        long checkpointSnapshotAddress = Address.NEVER_READ;
 
         /** Create a new stream context with the given ID and maximum address
          * to read to.
@@ -380,6 +393,17 @@ public abstract class AbstractQueuedStreamView extends
             super.reset();
             readCpQueue.clear();
             readQueue.clear();
+            resolvedQueue.clear();
+            minResolution = Address.NON_ADDRESS;
+            maxResolution = Address.NON_ADDRESS;
+
+            checkpointSuccessID = null;
+            checkpointSuccessStartAddr = Address.NEVER_READ;
+            checkpointSuccessEndAddr = Address.NEVER_READ;
+            checkpointSnapshotAddress = Address.NEVER_READ;
+            checkpointSuccessNumEntries = 0;
+            checkpointSuccessBytes = 0;
+            resolvedEstBytes = 0;
         }
 
         /** {@inheritDoc} */

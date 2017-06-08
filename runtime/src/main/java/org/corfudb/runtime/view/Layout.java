@@ -12,6 +12,7 @@ import org.corfudb.runtime.view.replication.*;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 
+import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.HashSet;
 import java.util.List;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static java.util.Objects.requireNonNull;
@@ -207,6 +209,24 @@ public class Layout implements Cloneable {
             }
         }
         throw new RuntimeException("Unmapped address!");
+    }
+
+    /** Return a list of segments which contain global
+     * addresses less than or equal to the given address
+     * (known as the prefix).
+     *
+     * @param globalAddress The global address prefix
+     *                      to use.
+     * @return              A list of segments which
+     *                      contain addresses less than
+     *                      or equal to the global
+     *                      address.
+     */
+    public @Nonnull
+    List<LayoutSegment> getPrefixSegments(long globalAddress) {
+        return segments.stream()
+                .filter(p -> p.getEnd() <= globalAddress)
+                .collect(Collectors.toList());
     }
 
     public LayoutStripe getStripe(long globalAddress) {

@@ -12,12 +12,16 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.util.CFUtils;
+import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -158,6 +162,74 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
+     * Prefix trim the address space.
+     *
+     * At the end of a prefix trim, all addresses equal to or
+     * less than the address given will be marked for trimming,
+     * which means that they may return either the original
+     * data, or a trimmed exception.
+     *
+     * @param address
+     */
+    public void prefixTrim(final long address) {
+        log.debug("PrefixTrim[{}]", address);
+        layoutHelper(l ->{
+                    l.getPrefixSegments(address).stream()
+                            .flatMap(seg -> seg.getStripes().stream())
+                            .flatMap(stripe -> stripe.getLogServers().stream())
+                            .map(endpoint ->
+                                    runtime.getRouter(endpoint)
+                                            .getClient(LogUnitClient.class))
+                            .map(client -> client.prefixTrim(address))
+                            .forEach(CFUtils::getUninterruptibly);
+                    return null;    // No return value
+                }
+        );
+    }
+
+    /** Force compaction on an address space, which will force
+     * all log units to free space, and process any outstanding
+     * trim requests.
+     *
+     */
+    public void gc() {
+        log.debug("GarbageCollect");
+        layoutHelper(l -> {
+            l.segments.stream()
+                    .flatMap(seg -> seg.getStripes().stream())
+                    .flatMap(stripe -> stripe.getLogServers().stream())
+                    .map(endpoint ->
+                            runtime.getRouter(endpoint)
+                                    .getClient(LogUnitClient.class))
+                    .map(LogUnitClient::compact)
+                    .forEach(CFUtils::getUninterruptibly);
+            return null;
+        });
+    }
+
+    /** Force all server caches to be invalidated.
+     */
+    public void invalidateServerCaches() {
+        log.debug("InvalidateServerCaches");
+        layoutHelper(l -> {
+            l.segments.stream()
+                    .flatMap(seg -> seg.getStripes().stream())
+                    .flatMap(stripe -> stripe.getLogServers().stream())
+                    .map(endpoint ->
+                            runtime.getRouter(endpoint)
+                                    .getClient(LogUnitClient.class))
+                    .map(LogUnitClient::flushCache)
+                    .forEach(CFUtils::getUninterruptibly);
+            return null;
+        });
+    }
+
+    /** Force the client cache to be invalidated. */
+    public void invalidateClientCache() {
+        readCache.invalidateAll();
+    }
+
+    /**
      * Fetch an address for insertion into the cache.
      *
      * @param address An address to read from.
@@ -165,7 +237,7 @@ public class AddressSpaceView extends AbstractView {
      * This entry will be scheduled to self invalidate.
      */
     private @Nonnull ILogData cacheFetch(long address) {
-        log.trace("Cache miss @ {}, fetching.", address);
+        log.trace("CacheMiss[{}]", address);
         ILogData result = fetch(address);
         if (result.getType() == DataType.EMPTY) {
             throw new RuntimeException("Unexpected empty return at " +  address + " from fetch");

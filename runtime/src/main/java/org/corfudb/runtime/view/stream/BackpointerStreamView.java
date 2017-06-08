@@ -1,13 +1,14 @@
 package org.corfudb.runtime.view.stream;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
 import java.util.*;
@@ -154,6 +155,109 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         return !context.readQueue.isEmpty();
     }
 
+    protected enum BackpointerOp {
+        INCLUDE,    /** Include this address. */
+        EXCLUDE,    /** Exclude this address. */
+        INCLUDE_STOP    /** Stop, but also include this address. */
+    }
+
+    protected boolean followBackpointers(final UUID streamId,
+                                      final NavigableSet<Long> queue,
+                                      final long startAddress,
+                                      final long stopAddress,
+                                      final Function<ILogData, BackpointerOp> filter) {
+        // Whether or not we added entries to the queue.
+        boolean entryAdded = false;
+        // The current address which we are reading from.
+        long currentAddress = startAddress;
+
+        // Loop until we have reached the stop address.
+        while (currentAddress > stopAddress) {
+            // The queue already contains an address from this
+            // range, terminate.
+            if (queue.contains(currentAddress)) {
+                log.trace("FollowBackpointers[{}] Terminate due to {} " +
+                        "already in queue", currentAddress);
+                return entryAdded;
+            }
+
+            // Read the current address
+            ILogData d = read(currentAddress);
+
+            // If it contains the stream we are interested in
+            if (d.containsStream(streamId)) {
+                // Check whether we should include the address
+                BackpointerOp op = filter.apply(d);
+                if (op == BackpointerOp.INCLUDE ||
+                        op == BackpointerOp.INCLUDE_STOP) {
+                    queue.add(currentAddress);
+                    entryAdded = true;
+                    // Check if we need to stop
+                    if (op == BackpointerOp.INCLUDE_STOP) {
+                        return entryAdded;
+                    }
+                }
+            }
+
+            // Now calculate the next address
+            // Try using backpointers first
+            if (!runtime.isBackpointersDisabled() &&
+                    d.hasBackpointer(streamId)) {
+                currentAddress = d.getBackpointer(streamId);
+            }
+            // backpointers failed, so we're
+            // downgrading to a linear scan
+            else {
+                currentAddress = currentAddress - 1;
+            }
+        }
+
+        return entryAdded;
+    }
+
+    protected BackpointerOp resolveCheckpoint(final QueuedStreamContext context, ILogData data) {
+        if (data.hasCheckpointMetadata()) {
+            CheckpointEntry cpEntry = (CheckpointEntry)
+                    data.getPayload(runtime);
+            if (context.checkpointSuccessID == null &&
+                    cpEntry.getCpType() == CheckpointEntry.CheckpointEntryType.END) {
+                log.trace("Checkpoint[{}] END found at address {} type {} id {} author {}",
+                        this, data.getGlobalAddress(), cpEntry.getCpType(),
+                        Utils.toReadableID(cpEntry.getCheckpointID()),
+                        cpEntry.getCheckpointAuthorID());
+                context.checkpointSuccessID = cpEntry.getCheckpointID();
+                context.checkpointSuccessNumEntries = 1L;
+                context.checkpointSuccessBytes = (long) data.getSizeEstimate();
+                context.checkpointSuccessEndAddr = data.getGlobalAddress();
+            }
+            else if (data.getCheckpointID().equals(context.checkpointSuccessID)) {
+                context.checkpointSuccessNumEntries++;
+                context.checkpointSuccessBytes += cpEntry.getSmrEntriesBytes();
+                if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
+                    long cpStartAddr;
+                    if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS) != null) {
+                        cpStartAddr = Long.decode(cpEntry.getDict()
+                                .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS));
+                    } else {
+                        cpStartAddr = data.getGlobalAddress();
+                    }
+                    context.checkpointSuccessStartAddr = cpStartAddr;
+                    if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS) != null) {
+                        context.checkpointSnapshotAddress = Long.decode(cpEntry.getDict()
+                                .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
+                    }
+                    log.trace("Checkpoint[{}] HALT due to START at address {} startAddr {} type {} id {} author {}",
+                            this, data.getGlobalAddress(), cpStartAddr, cpEntry.getCpType(),
+                            Utils.toReadableID(cpEntry.getCheckpointID()), cpEntry.getCheckpointAuthorID());
+                    return BackpointerOp.INCLUDE_STOP;
+                }
+            } else {
+                return BackpointerOp.EXCLUDE;
+            }
+        }
+        return BackpointerOp.INCLUDE;
+    }
+
     /**
      * {@inheritDoc}
      */
@@ -163,35 +267,45 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         log.trace("Read_Fill_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}", this,
                 maxGlobal, context.globalPointer, context.maxResolution, context.minResolution);
 
-        // considerCheckpoint: Use context.globalPointer as a signal of caller's intent:
-        // if globalPointer == -1, then the caller needs to replay the stream from the
-        // beginning because the caller has never read anything from the stream before.
-        // Thus, it could be a significant time & I/O saving for the client to playback
-        // from the latest checkpoint.
-        // On the other hand, if not -1, then we assume that the caller has already
-        // found the stream head and replayed some/all of it.
-        //
-        // We assume a "typical" case where the client probably needs to discover & replay
-        // just a few log entries, whereas the checkpoint data that this method may discover
-        // may be "huge" ... thus we favor ignoring the checkpoint data.  Such an assumption
-        // may be invalid for very small SMR objects, such as a simple counter, where
-        // checkpoint size would always be small enough to use checkpoint data instead of
-        // continuing backward to find individual updates.
-        boolean considerCheckpoint = context.globalPointer == -1;
+        // If the stream has just been reset and we don't have
+        // any checkpoint entries, we should consult
+        // a checkpoint first.
+        if (context.globalPointer == Address.NEVER_READ &&
+                context.checkpointSuccessID == null) {
+            // The checkpoint stream ID is the UUID appended with CP
+            final UUID checkpointID = CorfuRuntime
+                    .getStreamID(context.id.toString() + "_cp");
+            // Find the checkpoint, if present
+            try {
+                if (followBackpointers(checkpointID, context.readCpQueue,
+                        runtime.getSequencerView()
+                                .nextToken(Collections.singleton(checkpointID), 0)
+                                .getToken().getTokenValue()
+                        , Address.NEVER_READ, d -> resolveCheckpoint(context, d))) {
+                    log.trace("Read_Fill_Queue[{}] Using checkpoint with {} entries",
+                            this, context.readCpQueue.size());
+                    return true;
+                }
+            } catch (TrimmedException te) {
+                // If we reached a trim and didn't hit a checkpoint, this might be okay,
+                // if the stream was created recently and no checkpoint exists yet.
+                log.trace("Read_Fill_Queue[{}] Trim encountered and no checkpoint detected.", this);
+            }
+        }
 
         // The maximum address we will fill to.
         final long maxAddress =
                 Long.min(maxGlobal, context.maxGlobalAddress);
 
-        // If the maximum address is less than the current pointer,
+        // If we already reached maxAddress ,
         // we return since there is nothing left to do.
-        if (context.globalPointer > maxAddress) {
+        if (context.globalPointer >= maxAddress) {
             return false;
         }
 
         // If everything is available in the resolved
         // queue, use it
-        if (context.maxResolution > maxAddress &&
+        if (context.maxResolution >= maxAddress &&
                 context.minResolution < context.globalPointer) {
             return fillFromResolved(maxGlobal, context);
         }
@@ -211,7 +325,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     .getToken().getTokenValue();
         }
 
-        // If there is no infomation on the tail of the stream, return, there is nothing to do
+        // If there is no information on the tail of the stream, return,
+        // there is nothing to do
         if (Address.nonAddress(latestTokenValue)) {
 
             // sanity check:
@@ -224,132 +339,23 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // If everything is available in the resolved
         // queue, use it
-        if (context.maxResolution > latestTokenValue &&
+        if (context.maxResolution >= latestTokenValue &&
                 context.minResolution < context.globalPointer) {
             return fillFromResolved(latestTokenValue, context);
         }
 
         // Now we start traversing backpointers, if they are available. We
         // start at the latest token and go backward, until we reach the
-        // log pointer. For each address which is less than
+        // log pointer -or- the checkpoint snapshot address, because all
+        // values from the beginning of the stream up to the snapshot address
+        // should be reflected. For each address which is less than
         // maxGlobalAddress, we insert it into the read queue.
-        long currentRead = latestTokenValue;
 
-        while (currentRead > context.globalPointer &&
-                Address.isAddress(currentRead)) {
-            // We've somehow reached a read we already know about.
-            if (context.readQueue.contains(currentRead)) {
-                break;
-            }
+        followBackpointers(context.id, context.readQueue,
+                latestTokenValue,
+                Long.max(context.globalPointer, context.checkpointSnapshotAddress),
+                d -> BackpointerOp.INCLUDE);
 
-            log.trace("Read_Fill_Queue[{}] Read {}", this, currentRead);
-            // Read the entry in question.
-            ILogData currentEntry =
-                    runtime.getAddressSpaceView().read(currentRead);
-
-            // If the entry contains this context's stream,
-            // we add it to the read queue.
-            if (currentEntry.containsStream(context.id)) {
-                if (currentEntry.hasCheckpointMetadata()) {
-                    examineCheckpointRecord(context, currentEntry,
-                            considerCheckpoint, currentRead);
-                } else {
-                    context.readQueue.add(currentRead);
-                }
-            }
-
-            // If we've reached the beginning of a successful checkpoint
-            // that the caller wants us to us, then we're done here.
-            if (considerCheckpoint && currentRead <= context.checkpointSuccessStartAddr) {
-                log.trace("Read_Fill_Queue[{}]: currentRead {} checkpointSuccessStartAddr {}",
-                        this, currentRead, context.checkpointSuccessStartAddr);
-                break;
-            }
-
-            // If everything left is available in the resolved
-            // queue, use it
-            if (context.maxResolution > currentRead &&
-                    context.minResolution < context.globalPointer) {
-                return fillFromResolved(latestTokenValue, context);
-            }
-
-            // If the start is available in the resolved queue,
-            // use it.
-            if (context.minResolution <= context.globalPointer) {
-                fillFromResolved(maxGlobal, context);
-            }
-
-            // Now we calculate the next entry to read.
-            // If we have a backpointer, we'll use that for our next read.
-            if (!runtime.backpointersDisabled &&
-                    currentEntry.hasBackpointer(context.id)) {
-                log.trace("Read_Fill_Queue[{}] Backpointer {}->{}", this,
-                        currentRead, currentEntry.getBackpointer(context.id));
-                currentRead = currentEntry.getBackpointer(context.id);
-            }
-            // Otherwise, our next read is the previous entry.
-            else {
-                currentRead = currentRead - 1L;
-            }
-
-            // If the next read is before or equal to the max resolved
-            // we need to stop.
-            if (context.maxResolution >= currentRead) {
-                break;
-            }
-
-        }
-
-        log.debug("Read_Fill_Queue[{}] Filled CP queue with {}", this, context.readCpQueue);
-        log.debug("Read_Fill_Queue[{}] Filled queue with {}", this, context.readQueue);
         return ! context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
-    }
-
-    private void examineCheckpointRecord(final QueuedStreamContext context,
-                                         ILogData currentEntry,
-                                         boolean considerCheckpoint, long currentRead) {
-        CheckpointEntry.CheckpointEntryType cpType = currentEntry.getCheckpointType();
-        UUID cpID = currentEntry.getCheckpointID();
-
-        if (context.checkpointSuccessID == null &&
-                cpType == CheckpointEntry.CheckpointEntryType.END) {
-            CheckpointEntry cpEntry = (CheckpointEntry) currentEntry.getPayload(runtime);
-            log.trace("Checkpoint: address {} found END, id {} author {}",
-                    currentRead, cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
-            if (considerCheckpoint) {
-                context.checkpointSuccessID = cpEntry.getCheckpointID();
-                context.checkpointSuccessNumEntries = 1L;
-                context.checkpointSuccessBytes = (long) currentEntry.getSizeEstimate();
-                context.checkpointSuccessEndAddr = currentRead;
-            }
-        }
-        if (context.checkpointSuccessID != null &&
-                context.checkpointSuccessID.equals(cpID)) {
-            CheckpointEntry cpEntry = (CheckpointEntry) currentEntry.getPayload(runtime);
-            log.trace("Checkpoint: address {} type {} id {} author {}",
-                    currentRead, cpEntry.getCpType(),
-                    cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
-            if (considerCheckpoint) {
-                context.readCpQueue.add(currentEntry.getGlobalAddress());
-                context.checkpointSuccessNumEntries++;
-                context.checkpointSuccessBytes += cpEntry.getSmrEntriesBytes();
-                if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
-                    long cpStartAddr;
-                    if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS) != null) {
-                        cpStartAddr = Long.decode(cpEntry.getDict()
-                                .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS));
-                    } else {
-                        cpStartAddr = currentRead;
-                    }
-                    context.checkpointSuccessStartAddr = cpStartAddr;
-                    log.trace("Checkpoint: halt backpointer fill at address {} type {} id {} author {}",
-                            cpStartAddr, cpEntry.getCpType(),
-                            cpEntry.getCheckpointID(), cpEntry.getCheckpointAuthorID());
-                    return;
-                }
-            }
-        } else {
-            log.trace("Checkpoint: skip address {} type {} id {}", currentRead, cpType, cpID);
-        }
     }
 }

@@ -9,7 +9,6 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -22,7 +21,6 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -44,7 +42,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.filefilter.WildcardFileFilter;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.TrimEntry;
 import org.corfudb.format.Types.DataType;
@@ -60,8 +57,6 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
 import javax.annotation.Nullable;
-
-import static org.apache.tools.ant.types.resources.MultiRootFileSet.SetType.file;
 
 
 /**
@@ -111,7 +106,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         // initializing the tail segment (i.e. initializeMaxGlobalAddress)
         initializeStartingAddress();
         initializeMaxGlobalAddress();
-        int a;
+
+        // This can happen if a prefix trim happens on
+        // addresses that haven't been written
+        if(getGlobalTail() < getStartingAddress()) {
+            syncTailSegment(getStartingAddress() - 1);
+        }
     }
 
     @Override
@@ -143,6 +143,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             long newStartingAddress = address + 1;
             serverContext.setStartingAddress(newStartingAddress);
             startingAddress = newStartingAddress;
+            syncTailSegment(address);
             log.debug("Trimmed prefix, new starting address {}", newStartingAddress);
         }
     }
@@ -278,6 +279,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         } else {
             trimPrefix();
         }
+    }
+
+    @VisibleForTesting
+    long getStartingAddress() {
+        return startingAddress;
     }
 
     private void trimPrefix() {
@@ -494,22 +500,26 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         LogData logData = new LogData(org.corfudb.protocols.wireprotocol.
                 DataType.typeMap.get((byte) entry.getDataType().getNumber()), data);
 
-        // Checkpoint-related metadata are set by LogData constructor.
         logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());
         logData.setRank(createDataRank(entry));
+        
+        if (entry.hasCheckpointEntryType()) {
+            logData.setCheckpointType(CheckpointEntry.CheckpointEntryType
+                    .typeMap.get((byte) entry.getCheckpointEntryType().ordinal()));
 
-        return logData;
-    }
+            if (!entry.hasCheckpointIDLeastSignificant() || !entry.hasCheckpointIDMostSignificant()) {
+                log.error("Checkpoint has missing information {}", entry);
+            }
 
-    Set<UUID> getStreamsSet(List<ByteString> list) {
-        Set<UUID> set = new HashSet();
+            long lsd = entry.getCheckpointIDLeastSignificant();
+            long msd = entry.getCheckpointIDMostSignificant();
+            UUID checkpointId = new UUID(msd, lsd);
 
-        for (ByteString string : list) {
-            set.add(UUID.fromString(string.toString(StandardCharsets.UTF_8)));
+            logData.setCheckpointID(checkpointId);
         }
 
-        return set;
+        return logData;
     }
 
     /**
@@ -651,8 +661,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      */
     @VisibleForTesting
     synchronized SegmentHandle getSegmentHandleForAddress(long address) {
-        checkAddress(address);
-
         String filePath = logDir + File.separator;
         long segment = address / RECORDS_PER_LOG_FILE;
         filePath += segment;
@@ -868,6 +876,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     public void append(long address, LogData entry) {
         //evict the data by getting the next pointer.
         try {
+            checkAddress(address);
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
             SegmentHandle fh = getSegmentHandleForAddress(address);
@@ -897,6 +906,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public LogData read(long address) {
         try {
+            checkAddress(address);
             SegmentHandle sh = getSegmentHandleForAddress(address);
             if (sh.getPendingTrims().contains(address)) {
                 throw new TrimmedException();

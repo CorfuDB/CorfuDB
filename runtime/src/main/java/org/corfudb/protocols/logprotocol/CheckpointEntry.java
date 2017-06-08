@@ -47,7 +47,8 @@ public class CheckpointEntry extends LogEntry {
         END_TIME(1),
         START_LOG_ADDRESS(2),
         ENTRY_COUNT(3),
-        BYTE_COUNT(4);
+        BYTE_COUNT(4),
+        SNAPSHOT_ADDRESS(5);
 
         public final int type;
 

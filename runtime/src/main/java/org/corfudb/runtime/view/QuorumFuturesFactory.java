@@ -157,8 +157,17 @@ public class QuorumFuturesFactory {
                 boolean noMoreHope = numIncompleteFutures+greatestNumCompleteFutures < quorum;
                 if (noMoreHope) {
                     done = canceled = true;
+                    // Check if we have a quorum over any exception type
+                    Multiset<Throwable> exceptionCounter = HashMultiset.create();
                     for (Throwable t: getThrowables()) {
-                        log.debug(t.getMessage(), t);
+                        log.debug("QuorumGet: Exception {}", t.getClass().getSimpleName());
+                        exceptionCounter.add(t);
+                    }
+                    // Iterate over each exception type, and throw the first one with a quorum
+                    for (Throwable t : exceptionCounter.elementSet()) {
+                        if (exceptionCounter.count(t) >= quorum) {
+                            throw new ExecutionException(t);
+                        }
                     }
                     throw new ExecutionException(
                             new QuorumUnreachableException(greatestNumCompleteFutures, quorum));
