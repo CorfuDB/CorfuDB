@@ -13,6 +13,7 @@ import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -90,6 +91,9 @@ public class CheckpointWriter {
     @Setter
     ISerializer serializer = Serializers.JSON;
 
+    @Setter
+    Long snapshotAddress = null;
+
     public CheckpointWriter(CorfuRuntime rt, UUID streamID, String author, SMRMap map) {
         this.rt = rt;
         this.streamID = streamID;
@@ -122,7 +126,7 @@ public class CheckpointWriter {
         List<Long> addrs = new ArrayList<>();
         setupWriter.accept(this);
 
-        startGlobalSnapshotTxn(rt);
+        startGlobalSnapshotTxn(rt, snapshotAddress);
         try {
             addrs.add(startCheckpoint());
             addrs.addAll(appendObjectState());
@@ -142,14 +146,11 @@ public class CheckpointWriter {
      */
     public long startCheckpoint() {
         startTime = LocalDateTime.now();
-        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
-        long txBeginGlobalAddress = context.getSnapshotTimestamp();
-
         this.mdKV.put(CheckpointEntry.CheckpointDictKey.START_TIME, startTime.toString());
-        // Need the actual object's version
-        ICorfuSMR<SMRMap> corfuObject = (ICorfuSMR<SMRMap>) this.map;
+
+        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
         this.mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS,
-                Long.toString(corfuObject.getCorfuSMRProxy().getVersion()));
+                Long.toString(context.getSnapshotTimestamp()));
 
         ImmutableMap<CheckpointEntry.CheckpointDictKey,String> mdKV = ImmutableMap.copyOf(this.mdKV);
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
@@ -239,10 +240,15 @@ public class CheckpointWriter {
         return endAddress;
     }
 
-    public static long startGlobalSnapshotTxn(CorfuRuntime rt) {
-        TokenResponse tokenResponse =
-                rt.getSequencerView().nextToken(Collections.EMPTY_SET, 0);
-        long globalTail = tokenResponse.getToken().getTokenValue();
+    public static long startGlobalSnapshotTxn(CorfuRuntime rt, Long forceAddress) {
+        long globalTail;
+        if (forceAddress == null) {
+            TokenResponse tokenResponse =
+                    rt.getSequencerView().nextToken(Collections.EMPTY_SET, 0);
+            globalTail = tokenResponse.getToken().getTokenValue();
+        } else{
+            globalTail = forceAddress;
+        }
         rt.getObjectsView().TXBuild()
                 .setType(TransactionType.SNAPSHOT)
                 .setSnapshot(globalTail)

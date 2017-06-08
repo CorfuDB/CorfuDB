@@ -1,6 +1,7 @@
 package org.corfudb.runtime;
 
 import lombok.Getter;
+import lombok.Setter;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuCompileProxy;
@@ -23,6 +24,9 @@ public class MultiCheckpointWriter {
     private List<ICorfuSMR<Map>> maps = new ArrayList<>();
     @Getter
     private List<Long> checkpointLogAddresses = new ArrayList<>();
+    @Setter
+    Long snapshotAddress = null;
+
 
     /** Add a map to the list of maps to be checkpointed by this class. */
     @SuppressWarnings("unchecked")
@@ -63,8 +67,7 @@ public class MultiCheckpointWriter {
     public long appendCheckpoints(CorfuRuntime rt, String author,
                                   BiConsumer<CheckpointEntry,Long> postAppendFunc)
             throws Exception {
-        long globalAddress = CheckpointWriter.startGlobalSnapshotTxn(rt);
-
+        long globalAddress = CheckpointWriter.startGlobalSnapshotTxn(rt, snapshotAddress);
         try {
             for (ICorfuSMR<Map> map : maps) {
                 UUID streamID = map.getCorfuStreamID();
@@ -74,6 +77,7 @@ public class MultiCheckpointWriter {
                                 .getSerializer();
                 cpw.setSerializer(serializer);
                 cpw.setPostAppendFunc(postAppendFunc);
+                cpw.setSnapshotAddress(snapshotAddress);
                 List<Long> addresses = cpw.appendCheckpoint();
                 checkpointLogAddresses.addAll(addresses);
             }
