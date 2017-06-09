@@ -1,16 +1,24 @@
 package org.corfudb.runtime.clients;
 
-import com.google.common.collect.ImmutableSet;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.protocols.wireprotocol.*;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
+import org.corfudb.protocols.wireprotocol.LayoutCommittedRequest;
+import org.corfudb.protocols.wireprotocol.LayoutMsg;
+import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
+import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
+import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
+import org.corfudb.protocols.wireprotocol.LayoutProposeResponse;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
 
-import java.util.Set;
+import java.lang.invoke.MethodHandles;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -24,63 +32,51 @@ import java.util.concurrent.CompletableFuture;
  */
 public class LayoutClient implements IClient {
 
-    /**
-     * The messages this client should handle.
-     */
-    @Getter
-    public final Set<CorfuMsgType> HandledTypes =
-            new ImmutableSet.Builder<CorfuMsgType>()
-                    .add(CorfuMsgType.LAYOUT_REQUEST)
-                    .add(CorfuMsgType.LAYOUT_RESPONSE)
-                    .add(CorfuMsgType.LAYOUT_PREPARE)
-                    .add(CorfuMsgType.LAYOUT_BOOTSTRAP)
-                    .add(CorfuMsgType.LAYOUT_NOBOOTSTRAP)
-                    .add(CorfuMsgType.LAYOUT_PREPARE_ACK)
-                    .add(CorfuMsgType.LAYOUT_PREPARE_REJECT)
-                    .add(CorfuMsgType.LAYOUT_PROPOSE_REJECT)
-                    .add(CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP)
-                    .build();
-
     @Setter
     @Getter
     IClientRouter router;
 
-    /**
-     * Handle a incoming message on the channel
-     *
-     * @param msg The incoming message
-     * @param ctx The channel handler context
-     */
-    @Override
-    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
-        switch (msg.getMsgType()) {
-            case LAYOUT_RESPONSE:
-                router.completeRequest(msg.getRequestID(), ((LayoutMsg) msg).getLayout());
-                break;
-            case LAYOUT_NOBOOTSTRAP:
-                router.completeExceptionally(msg.getRequestID(), new NoBootstrapException());
-                break;
-            case LAYOUT_PREPARE_ACK: {
-                router.completeRequest(msg.getRequestID(), ((CorfuPayloadMsg<LayoutPrepareResponse>) msg).getPayload());
-            }
-                break;
-            case LAYOUT_PREPARE_REJECT: {
-                LayoutPrepareResponse response = ((CorfuPayloadMsg<LayoutPrepareResponse>) msg).getPayload();
-                router.completeExceptionally(msg.getRequestID(), new OutrankedException(response.getRank(), response.getLayout()));
-            }
-                break;
-            case LAYOUT_PROPOSE_REJECT: {
-                LayoutProposeResponse response = ((CorfuPayloadMsg<LayoutProposeResponse>) msg).getPayload();
-                router.completeExceptionally(msg.getRequestID(), new OutrankedException(response.getRank()));
-            }
-                break;
-            case LAYOUT_ALREADY_BOOTSTRAP:
-                router.completeExceptionally(msg.getRequestID(), new AlreadyBootstrappedException());
-                break;
-        }
+    /** The handler and handlers which implement this client. */
+    @Getter
+    public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
+            .generateHandlers(MethodHandles.lookup(), this);
+
+
+    @ClientHandler(type=CorfuMsgType.LAYOUT_RESPONSE)
+    private static Object handleLayoutResponse(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+        return ((LayoutMsg) msg).getLayout();
     }
 
+    @ClientHandler(type=CorfuMsgType.LAYOUT_PREPARE_ACK)
+    private static Object handleLayoutPrepareAck(CorfuPayloadMsg<LayoutPrepareRequest> msg, ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
 
+    @ClientHandler(type=CorfuMsgType.LAYOUT_NOBOOTSTRAP)
+    private static Object handleNoBootstrap(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+        throw new NoBootstrapException();
+    }
+
+    @ClientHandler(type=CorfuMsgType.LAYOUT_PREPARE_REJECT)
+    private static Object handlePrepareReject(CorfuPayloadMsg<LayoutPrepareResponse> msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+        LayoutPrepareResponse response = msg.getPayload();
+        throw new OutrankedException(response.getRank(), response.getLayout());
+    }
+
+    @ClientHandler(type=CorfuMsgType.LAYOUT_PROPOSE_REJECT)
+    private static Object handleProposeReject(CorfuPayloadMsg<LayoutProposeResponse> msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+        LayoutProposeResponse response = msg.getPayload();
+        throw new OutrankedException(response.getRank());
+    }
+
+    @ClientHandler(type=CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP)
+    private static Object handleAlreadyBootstrap(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+        throw new AlreadyBootstrappedException();
+    }
 
     /**
      * Retrieves the layout from the endpoint, asynchronously.
