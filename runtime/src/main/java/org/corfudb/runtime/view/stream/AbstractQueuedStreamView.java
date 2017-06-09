@@ -96,8 +96,6 @@ public abstract class AbstractQueuedStreamView extends
         }
 
         // Otherwise we remove entries one at a time from the read queue.
-        // The entry may not actually be part of the stream, so we might
-        // have to perform several reads.
         if (getFrom.size() > 0) {
             final long thisRead = getFrom.pollFirst();
             ILogData ld = read(thisRead);
