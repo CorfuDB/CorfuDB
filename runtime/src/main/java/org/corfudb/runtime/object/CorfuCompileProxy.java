@@ -330,9 +330,10 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"}) // Due to deprecation
     private <R> R TXExecuteInner(Supplier<R> txFunction, boolean isMetricsEnabled) {
-        long sleepTime = 1L;
         final long maxSleepTime = 1000L;
+        long sleepTime = 1L;
         int retries = 1;
+
         while (true) {
             try {
                 rt.getObjectsView().TXBegin();
@@ -352,10 +353,20 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                     }
                 }
 
+                if (e.getAbortCause() == AbortCause.UNSUPPORTED_OPERATION) {
+                    // No need to deal with TransactionalContext in this case.
+                    throw e;
+                }
+
                 if (retries == 1) {
                     MetricsUtils
                             .incConditionalCounter(isMetricsEnabled, counterTxnRetry1, 1);
                 }
+
+                if (retries > rt.getParameters().getMaxNumOfImplicitTxRetries()) {
+                    throw e; // Give up.
+                }
+
                 MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTxnRetryN, 1);
                 log.debug("Transactional function aborted due to {}, retrying after {} msec",
                         e, sleepTime);
@@ -454,6 +465,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             // as a TransactionAbortedException.
             snapshotTimestamp = -1L;
             abortCause = AbortCause.NETWORK;
+        } else if (e instanceof UnsupportedOperationException) {
+            snapshotTimestamp = context.getSnapshotTimestamp();
+            abortCause = AbortCause.UNSUPPORTED_OPERATION;
         } else {
             snapshotTimestamp = context.getSnapshotTimestamp();
             abortCause = AbortCause.UNDEFINED;

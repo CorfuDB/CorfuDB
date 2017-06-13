@@ -58,6 +58,9 @@ public class CorfuRuntime {
 
         /** Number of times to attempt to read before hole filling. */
         int holeFillRetry = 10;
+
+        /** Maximum number of retries before we give up retrying an implicit transaction. */
+        int maxNumOfImplicitTxRetries = 20;
     }
 
     @Getter

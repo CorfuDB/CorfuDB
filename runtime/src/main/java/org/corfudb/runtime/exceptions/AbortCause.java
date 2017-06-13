@@ -11,6 +11,7 @@ public enum AbortCause {
     NEW_SEQUENCER,
     USER,
     NETWORK,
+    UNSUPPORTED_OPERATION,
     TRIM, /** Aborted because an access to this snapshot resulted in a trim exception. */
     UNDEFINED;
 }
