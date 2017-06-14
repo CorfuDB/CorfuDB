@@ -83,10 +83,6 @@ public class SequencerServer extends AbstractServer {
      */
     private final Map<String, Object> opts;
 
-    private static final String KEY_GLOBAL_LOG_TAIL = "GLOBAL_LOG_TAIL";
-    private static final String KEY_STREAM_TAIL_MAP = "STREAM_TAIL_MAP";
-    private static final String KEY_STREAM_TAIL_TO_GLOBAL_TAIL_MAP = "STREAM_TAIL_TO_GLOBAL_TAIL_MAP";
-
     /**  - {@link SequencerServer::globalLogTail}:
      *      global log first available position (initially, 0). */
     @Getter

@@ -2,7 +2,6 @@ package org.corfudb.protocols.wireprotocol;
 
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.Address;
 
 import java.util.UUID;
 
@@ -82,8 +81,7 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
      */
     default boolean hasBackpointer(UUID streamID) {
         return getBackpointerMap() != null
-                && getBackpointerMap().containsKey(streamID) &&
-                Address.isAddress(getBackpointerMap().get(streamID));
+                && getBackpointerMap().containsKey(streamID);
     }
 
     /**

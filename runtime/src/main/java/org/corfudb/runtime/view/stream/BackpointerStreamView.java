@@ -1,9 +1,9 @@
 package org.corfudb.runtime.view.stream;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -161,6 +161,10 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         INCLUDE_STOP    /** Stop, but also include this address. */
     }
 
+    private long backpointerCount = 0L;
+
+    public long getBackpointerCount() {return backpointerCount;}
+
     protected boolean followBackpointers(final UUID streamId,
                                       final NavigableSet<Long> queue,
                                       final long startAddress,
@@ -172,7 +176,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         long currentAddress = startAddress;
 
         // Loop until we have reached the stop address.
-        while (currentAddress > stopAddress) {
+        while (currentAddress > stopAddress  && Address.isAddress(currentAddress)) {
             // The queue already contains an address from this
             // range, terminate.
             if (queue.contains(currentAddress)) {
@@ -180,7 +184,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         "already in queue", currentAddress);
                 return entryAdded;
             }
-
+            backpointerCount++;
             // Read the current address
             ILogData d = read(currentAddress);
 
@@ -199,20 +203,29 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 }
             }
 
+            boolean singleStep = true;
             // Now calculate the next address
             // Try using backpointers first
-            if (!runtime.isBackpointersDisabled() &&
-                    d.hasBackpointer(streamId)) {
-                currentAddress = d.getBackpointer(streamId);
+
+            if (!runtime.isBackpointersDisabled() && d.hasBackpointer(streamId)) {
+                long tmp = d.getBackpointer(streamId);
+                // if backpointer is a valid log address or Address.NON_EXIST (beginning of the stream),
+                // do not single step back on the log
+                if (Address.isAddress(tmp) || tmp == Address.NON_EXIST) {
+                    currentAddress = tmp;
+                    singleStep = false;
+                }
             }
-            // backpointers failed, so we're
-            // downgrading to a linear scan
-            else {
+
+            if (singleStep) {
+                // backpointers failed, so we're
+                // downgrading to a linear scan
                 currentAddress = currentAddress - 1;
             }
         }
 
         return entryAdded;
+
     }
 
     protected BackpointerOp resolveCheckpoint(final QueuedStreamContext context, ILogData data) {
