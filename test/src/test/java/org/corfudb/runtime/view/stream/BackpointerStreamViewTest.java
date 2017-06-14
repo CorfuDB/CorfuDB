@@ -1,9 +1,7 @@
 package org.corfudb.runtime.view.stream;
 
-import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -114,6 +112,29 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         }
     }
 
+    /**
+     *  test proper backpointer termination at the head of a stream
+     *
+     * */
+    @Test
+    public void headOfStreamBackpointerTermination() {
 
+        final int totalEntries = PARAMETERS.NUM_ITERATIONS_LOW + 1;
+        CorfuRuntime runtime = getDefaultRuntime();
+
+        // Create StreamA (100 entries)
+        IStreamView svA = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
+            svA.append(String.valueOf(i).getBytes());
+        }
+
+        // Create StreamB (1 entry)
+        IStreamView svB = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamB"));
+        svB.append(String.valueOf(0).getBytes());
+
+        // Fetch Stream B and verify backpointer count (which requires 1 read = 1 entry)
+        svB.remainingUpTo(totalEntries);
+        assertThat(((BackpointerStreamView) svB).getBackpointerCount()).isEqualTo(1L);
+    }
 
 }
