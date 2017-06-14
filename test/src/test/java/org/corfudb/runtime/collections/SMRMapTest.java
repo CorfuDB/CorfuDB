@@ -10,11 +10,16 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
+import org.corfudb.runtime.view.stream.BackpointerStreamView;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -733,6 +738,45 @@ public class SMRMapTest extends AbstractViewTest {
         testStatus += "Time to sync whole stream=" + String.format("%d us",
                 (endTime - startTime) / MILLISECONDS_TO_MICROSECONDS);
     }
+
+    /**
+     *  test proper backpointer termination at the head of the stream\
+     *
+     * */
+    @Test
+    public void headOfStreamBackpointerTermination() {
+        UUID streamA = UUID.nameUUIDFromBytes("streamA".getBytes());
+        UUID streamB= UUID.nameUUIDFromBytes("streamB".getBytes());
+        // Create StreamA (100 entries)
+        Map<String, String> testMap = getRuntime()
+                .getObjectsView()
+                .build()
+                .setStreamID(streamA)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .open();
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
+            assertThat(testMap.put(Integer.toString(i), Integer.toString(i)))
+                    .isNull();
+        }
+
+        // Create StreamB (1 entry)
+        Map<String, String> testMapNew = getRuntime()
+                .getObjectsView()
+                .build()
+                .setStreamID(streamB)
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .open();
+
+        assertThat(testMapNew.put(Integer.toString(0), Integer.toString(0)))
+                .isNull();
+
+        // Fetch Stream B and verify backpointer count (which requires 1 read = 1 entry)
+        IStreamView sv = getRuntime().getStreamsView().get(CorfuRuntime.getStreamID("streamB"));
+        sv.remainingUpTo(101);
+        assertThat(((BackpointerStreamView) sv).getBackpointerCount()).isEqualTo(1L);
+    }
+
 
     @Data
     @ToString
