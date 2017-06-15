@@ -127,7 +127,9 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
             } else {
                 if (validateEpoch(m, ctx)) {
                     // Route the message to the handler.
-                    log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
+                    if (log.isTraceEnabled()) {
+                        log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
+                    }
                     handlerWorkers.submit(() -> handler.handleMessage(m, ctx, this));
                 }
             }
