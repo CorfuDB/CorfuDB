@@ -594,7 +594,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             } else {
                 if (validateEpochAndClientID(m, ctx)) {
                     // Route the message to the handler.
-                    log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), m);
+                    if (log.isTraceEnabled()) {
+                        log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), m);
+                    }
                     handler.handleMessage(m, ctx);
                 }
             }
