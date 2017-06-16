@@ -72,7 +72,7 @@ RUN set -ex && \
            /tmp/* /var/cache/apk/* && \
     echo 'hosts: files mdns4_minimal [NOTFOUND=return] dns mdns4' >> /etc/nsswitch.conf
 
-COPY  cmdlets/target/cmdlets-0.1-SNAPSHOT-shaded.jar /usr/share/corfu/lib/cmdlets-0.1-SNAPSHOT-shaded.jar
+COPY  cmdlets/target/cmdlets-*-shaded.jar /usr/share/corfu/lib/cmdlets-0.1-SNAPSHOT-shaded.jar
 COPY  corfu_scripts /usr/share/corfu/corfu_scripts
 COPY  scripts /usr/share/corfu/scripts
 COPY  bin /usr/share/corfu/bin
