@@ -1,13 +1,18 @@
 package org.corfudb.runtime.view.replication;
 
+import com.google.common.collect.Range;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 
 import javax.annotation.Nullable;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Created by mwei on 4/6/17.
@@ -59,6 +64,42 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                                     .read(globalAddress)).getReadSet()
                 .getOrDefault(globalAddress, null);
         return ret == null || ret.isEmpty() ? null : ret;
+    }
+
+    /**
+     * Read data from a range created from the given addresses.
+     *
+     * This will be changed when an API is added to support multiple of ranges
+     *
+     * @param layout                The layout to use for the readAll.
+     * @param globalAddresses       A set of addresses to read from.
+     * @return                      A map of addresses to committed
+     *                              addresses, hole filling if necessary.
+     */
+    @Override
+    public Map<Long, ILogData> readAll(Layout layout, Set<Long> globalAddresses) {
+        Range<Long> range = Range.encloseAll(globalAddresses);
+        long startAddress = range.lowerEndpoint();
+        long endAddress = range.upperEndpoint();
+        int numUnits = layout.getSegmentLength(startAddress);
+        log.trace("ReadAll[{}-{}]: chain {}/{}", startAddress, endAddress, numUnits, numUnits);
+
+        Map<Long, LogData> logResult = CFUtils.getUninterruptibly(layout
+                .getLogUnitClient(startAddress, numUnits - 1)
+                .read(null, range)).getReadSet();
+
+        //in case of a hole, do a normal read and use its hole fill policy
+        Map<Long, ILogData> returnResult = new HashMap<>();
+        for (Map.Entry<Long, LogData> entry: logResult.entrySet()){
+            ILogData value = entry.getValue();
+            if (value == null){
+                value = read(layout, entry.getKey());
+            }
+
+            returnResult.put(entry.getKey(), value);
+        }
+
+        return returnResult;
     }
 
     /** Propagate a write down the chain, ignoring
