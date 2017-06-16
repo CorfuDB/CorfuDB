@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.log;
 
+import io.netty.util.internal.ConcurrentSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -7,25 +8,27 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import io.netty.util.internal.ConcurrentSet;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
 /**
- * This class implements the StreamLog interface using a Java hash map. The stream log is only stored in-memory and not
- * persisted and thus should only be used for testing.
- *
+ * This class implements the StreamLog interface using a Java hash map.
+ * The stream log is only stored in-memory and not persisted.
+ * This should only be used for testing.
  * Created by maithem on 7/21/16.
  */
 public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressSpace {
 
+    private final AtomicLong globalTail = new AtomicLong(0L);
     private Map<Long, LogData> logCache;
     private Map<UUID, Map<Long, LogData>> streamCache;
     private Set<Long> trimmed;
-    final private AtomicLong globalTail = new AtomicLong(0L);
     private volatile long startingAddress;
 
+    /**
+     * Returns an object that stores a stream log in memory.
+     */
     public InMemoryStreamLog() {
         logCache = new ConcurrentHashMap();
         streamCache = new HashMap();
@@ -47,11 +50,12 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         logCache.put(address, entry);
 
 
-        globalTail.getAndUpdate(maxTail -> entry.getGlobalAddress() > maxTail ? entry.getGlobalAddress() : maxTail);
+        globalTail.getAndUpdate(maxTail -> entry.getGlobalAddress() > maxTail
+                ? entry.getGlobalAddress() : maxTail);
     }
 
     private void checkRange(long address) {
-        if(address < startingAddress) {
+        if (address < startingAddress) {
             throw new TrimmedException();
         }
     }
@@ -68,7 +72,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     private void throwLogUnitExceptionsIfNecessary(long address, LogData entry) {
-        if (entry.getRank()==null) {
+        if (entry.getRank() == null) {
             throw new OverwriteException();
         } else {
             // the method below might throw DataOutrankedException or ValueAdoptedException
@@ -84,7 +88,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public LogData read(long address) {
         checkRange(address);
-        if(trimmed.contains(address)) {
+        if (trimmed.contains(address)) {
             throw new TrimmedException();
         }
 
@@ -110,7 +114,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public synchronized void compact() {
         // Prefix Trim
-        for(long address : logCache.keySet()){
+        for (long address : logCache.keySet()) {
             if (address < startingAddress) {
                 logCache.remove(address);
             }
