@@ -17,6 +17,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
+import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
@@ -30,7 +31,8 @@ import java.util.function.Consumer;
  */
 
 public class CheckpointSmokeTest extends AbstractViewTest {
-
+    final byte serilizerByte = (byte) 20;
+    ISerializer serializer = new CPSerializer(serilizerByte);
     public CorfuRuntime r;
 
     @Before
@@ -220,6 +222,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // Set up CP writer.  Add fudgeFactor to all CP data,
         // also used for assertion checks later.
         CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, (SMRMap) m);
+        cpw.setSerializer(serializer);
         cpw.setValueMutator((l) -> (Long) l + fudgeFactor);
         cpw.setBatchSize(smallBatchSize);
 
@@ -290,6 +293,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // Set up CP writer, with interleaved writes for middle keys
         middleTracker = -1;
         CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, (SMRMap) m);
+        cpw.setSerializer(serializer);
         cpw.setBatchSize(1);
         cpw.setPostAppendFunc((cp, pos) -> {
             // No mutation, be we need to add a history snapshot at this START/END location.
@@ -372,10 +376,12 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     }
 
     private Map<String, Long> instantiateMap(String streamName) {
+        Serializers.registerSerializer(serializer);
         return r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<SMRMap<String, Long>>() {})
+                .setSerializer(serializer)
                 .open();
     }
 
@@ -415,7 +421,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             MultiSMREntry smrEntries = new MultiSMREntry();
             if (objects != null) {
                 for (int i = 0; i < objects.length; i++) {
-                    smrEntries.addTo(new SMREntry("put", (Object[]) objects[i], Serializers.JSON));
+                    smrEntries.addTo(new SMREntry("put", (Object[]) objects[i], serializer));
                 }
             }
             CheckpointEntry cp2 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
