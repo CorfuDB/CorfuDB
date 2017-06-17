@@ -413,8 +413,8 @@ public abstract class AbstractQueuedStreamView extends
             log.trace("Seek[{}]({}), min={} max={}", this,  globalAddress, minResolution, maxResolution);
             // Update minResolution if necessary
             if (globalAddress >= maxResolution) {
-                log.warn("set min res to {}" , globalAddress);
-                minResolution = globalAddress; // TODO SLF wha? minResolution can be greater than maxResolution
+                log.trace("set min res to {}" , globalAddress);
+                minResolution = globalAddress;
             }
             // remove anything in the read queue LESS
             // than global address.

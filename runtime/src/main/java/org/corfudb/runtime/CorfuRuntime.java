@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.recovery.FastSmrMapsLoader;
 import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
@@ -31,6 +32,9 @@ import java.util.stream.Collectors;
 @Slf4j
 @Accessors(chain = true)
 public class CorfuRuntime {
+
+    static final long DEFAULT_BATCH_FOR_FAST_LOADER = 5;
+    static final int DEFAULT_TIMEOUT_MINUTES_FAST_LOADING = 30;
 
     @Data
     public static class CorfuRuntimeParameters {
@@ -140,6 +144,38 @@ public class CorfuRuntime {
     private boolean saslPlainTextEnabled = false;
     private String usernameFile;
     private String passwordFile;
+
+
+    /**
+     * Trigger the loading of all the SmrMaps upon connect.
+     *
+     * If using this utility, you need to be sure that no one
+     * is acessing objects until the tables are loaded
+     * (i.e. when connect return)
+     */
+    @Setter
+    @Getter
+    private boolean loadSmrMapsAtConnect = false;
+
+
+    /**
+     * Set the bulk read size for the Fast Laoder
+     */
+    @Setter
+    @Getter
+    private long bulkReadSizeForFastLoader = DEFAULT_BATCH_FOR_FAST_LOADER;
+
+
+    /**
+     * How much time the Fast Loader has to get the maps up to date
+     *
+     * Once the timeout is reached, the Fast Loader give up. Every maps that are
+     * not up to date will be loaded through normal path.
+     *
+     */
+    @Getter
+    @Setter
+    private int timeoutInMinutesForFastLoading = DEFAULT_TIMEOUT_MINUTES_FAST_LOADING;
 
     /**
      * Metrics: meter (counter), histogram
@@ -445,6 +481,13 @@ public class CorfuRuntime {
                 log.error("Fatal error connecting to Corfu server instance.", e);
                 throw new RuntimeException(e);
             }
+        }
+
+        if (loadSmrMapsAtConnect) {
+            FastSmrMapsLoader fastLoader = new FastSmrMapsLoader(this)
+                    .setBatchReadSize(bulkReadSizeForFastLoader)
+                    .setTimeoutInMinutesForLoading(timeoutInMinutesForFastLoading);
+            fastLoader.loadMaps();
         }
         return this;
     }
