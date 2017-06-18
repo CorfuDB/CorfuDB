@@ -13,6 +13,7 @@ import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * Created by mwei on 4/6/17.
@@ -89,10 +90,10 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                 .read(null, range)).getReadSet();
 
         //in case of a hole, do a normal read and use its hole fill policy
-        Map<Long, ILogData> returnResult = new HashMap<>();
+        Map<Long, ILogData> returnResult = new TreeMap<>();
         for (Map.Entry<Long, LogData> entry: logResult.entrySet()){
             ILogData value = entry.getValue();
-            if (value == null){
+            if (value == null || value.isEmpty()){
                 value = read(layout, entry.getKey());
             }
 
