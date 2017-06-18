@@ -10,8 +10,10 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ObjectBuilder;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -44,7 +46,7 @@ public class ObjectsView extends AbstractView {
 
 
     @Getter
-    Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
+    public Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
 
     public ObjectsView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
@@ -77,7 +79,8 @@ public class ObjectsView extends AbstractView {
             try {
                 return
                         CorfuCompileWrapperBuilder.getWrapper(proxy.getCorfuSMRProxy().getObjectType(),
-                                runtime, sv.getID(), null, Serializers.JSON);
+                                runtime, sv.getID(), null, Serializers.JSON,
+                                ((CorfuCompileProxy)proxy.getCorfuSMRProxy()).getBuilder());
             }
             catch (Exception ex) {
                 throw new RuntimeException(ex);

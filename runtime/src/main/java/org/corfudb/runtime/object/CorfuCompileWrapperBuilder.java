@@ -14,7 +14,7 @@ public class CorfuCompileWrapperBuilder {
     @SuppressWarnings("unchecked")
     public static <T> T getWrapper(Class<T> type, CorfuRuntime rt,
                                    UUID streamID, Object[] args,
-                                   ISerializer serializer)
+                                   ISerializer serializer , ObjectBuilder<T> builder)
         throws ClassNotFoundException, IllegalAccessException,
             InstantiationException {
         // Do we have a compiled wrapper for this type?
@@ -48,7 +48,7 @@ public class CorfuCompileWrapperBuilder {
                 wrapperObject.getCorfuSMRUpcallMap(),
                 wrapperObject.getCorfuUndoMap(),
                 wrapperObject.getCorfuUndoRecordMap(),
-                wrapperObject.getCorfuResetSet()));
+                wrapperObject.getCorfuResetSet(), builder));
 
         if (wrapperObject instanceof ICorfuSMRProxyWrapper) {
             ((ICorfuSMRProxyWrapper) wrapperObject)

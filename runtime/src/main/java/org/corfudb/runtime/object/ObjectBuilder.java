@@ -1,4 +1,4 @@
-package org.corfudb.runtime.view;
+package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
 import lombok.AccessLevel;
@@ -7,8 +7,7 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
-import org.corfudb.runtime.object.IObjectBuilder;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -83,13 +82,13 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
         try {
             if (options.contains(ObjectOpenOptions.NO_CACHE)) {
                 return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
-                        arguments, serializer);
+                        arguments, serializer, this);
             } else {
                 ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
                 return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
                             try {
                                 return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
-                                        arguments, serializer);
+                                        arguments, serializer, this);
                             } catch (Exception ex) {
                                 throw new RuntimeException(ex);
                             }

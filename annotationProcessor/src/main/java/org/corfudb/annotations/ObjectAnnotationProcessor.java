@@ -8,14 +8,15 @@ import org.corfudb.runtime.object.*;
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.*;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.type.*;
+import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.*;
+import com.sun.tools.javac.code.Type;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -413,6 +414,28 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 + e.getMessage());
                     }
 
+                    // also deal with the return type if we came from an interface
+                    Optional<ExecutableElement> oe = ElementFilter.methodsIn(
+                            processingEnv.getTypeUtils().asElement(classElement.getSuperclass()).getEnclosedElements())
+                            .stream()
+                            .filter(e -> e.getSimpleName().toString().equals(smrMethod.getSimpleName().toString()))
+                            .filter(e -> e.getParameters().size() == smrMethod.getParameters().size())
+                            .filter(e -> {
+                                        for (int i = 0; i < e.getParameters().size(); i++) {
+                                            if (!e.getParameters().get(i).asType().equals(
+                                                    smrMethod.getParameters().get(i).asType()
+                                            )) {
+                                                return false;
+                                            }
+                                        }
+                                        return true;
+                                    })
+                            .findAny();
+
+                    if (oe.isPresent()) {
+                        ms.returns(ParameterizedTypeName.get(oe.get().getReturnType()));
+                    }
+
                     // If there is conflict information, calculate the conflict set
                     boolean hasConflictData = false;
                     final String conflictField = "conflictField" + CORFUSMR_FIELD;
@@ -425,6 +448,25 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     else if (m.hasConflictAnnotations) {
                         hasConflictData = true;
                         addConflictFieldToMethod(ms, conflictField, smrMethod);
+                    }
+
+                    // If wrapping was requested, generate a wrapper class
+                    // Currently, we assume that the return type is an interface
+                    // If it's not an interface we can't yet process anything
+                    boolean isWrapped = false;
+                    try {
+                        if ((accessor != null && accessor.accessWrapReturn() ||
+                                mutatorAccessor != null && mutatorAccessor.accessWrapReturn())) {
+                            String[] deepWrap = accessor != null ? accessor.deepAccessWrap() :
+                                    mutatorAccessor.deepAccessWrap();
+                            generateAccessWrapper(smrMethod, typeSpecBuilder,
+                                    originalName, classElement, Arrays.asList(deepWrap),
+                                    (DeclaredType) smrMethod.getEnclosingElement().asType(),
+                                    oe.isPresent() ? oe.get().getReturnType() : null);
+                            isWrapped = true;
+                        }
+                    } catch (Exception e) {
+                        messager.printMessage(Diagnostic.Kind.ERROR, e.toString());
                     }
 
                     // If a mutator, then log the update.
@@ -504,9 +546,13 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     else if (mutator == null) {
                         // Otherwise, just force the access to access the underlying call.
                         ms.addStatement((smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ? "" :
-                                        "return ") +"proxy" + CORFUSMR_FIELD + ".access(" +
+                                        "return ") +
+                                        "$Lproxy" + CORFUSMR_FIELD + ".access(" +
                                         "o" + CORFUSMR_FIELD + " -> {$Lo" + CORFUSMR_FIELD + ".$L($L);$L}," +
-                                        "$L)",
+                                        "$L)$L",
+                                (isWrapped ? "new " + ((Type)smrMethod.getReturnType())
+                                        .asElement().getSimpleName() + "$" +
+                                        smrMethod.getSimpleName() + "$Wrapper(" : "" ),
                                 smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ?
                                         "" : "return ",
                                 smrMethod.getSimpleName(),
@@ -516,7 +562,9 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 smrMethod.getReturnType().getKind().equals(TypeKind.VOID) ?
                                         "return null;" : "",
                                 (m.hasConflictAnnotations ?
-                                        conflictField : "null")
+                                        conflictField : "null"),
+                                (isWrapped ? ", proxy" + CORFUSMR_FIELD + ", proxy" + CORFUSMR_FIELD +
+                                        ".TXSnapshot())" : "")
                         );
                     }
                     typeSpecBuilder.addMethod(ms.build());
@@ -539,6 +587,143 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 .build();
 
         javaFile.writeTo(filer);
+    }
+
+    void generateAccessWrapper(ExecutableElement method,
+                               TypeSpec.Builder typeSpecBuilder,
+                               TypeName originalName,
+                               TypeElement classElement, List<String> deepWrap, DeclaredType parentType,
+                               TypeMirror originalType) {
+        // Get the "fixed version" of the enclosing type.
+        ExecutableType newRetType = (ExecutableType) processingEnv.getTypeUtils()
+                .asMemberOf(parentType, method);
+
+        TypeMirror retType = newRetType.getReturnType();
+        TypeElement element = (TypeElement) ((Type) retType).asElement();
+
+        // Check if it's an interface
+        if (element.getKind() != ElementKind.INTERFACE) {
+            messager.printMessage(Diagnostic.Kind.ERROR,
+                    "Can't process accessWrapReturn for " + method.getSimpleName() +
+                            ", not a interface");
+        }
+
+        // Generate the wrapper class
+        TypeSpec.Builder innerTypeSpec = TypeSpec.classBuilder(
+                element.getSimpleName().toString() + "$"
+                        + method.getSimpleName().toString() + "$Wrapper");
+        ;
+
+
+        innerTypeSpec.addField(TypeName.get(retType), "original" + CORFUSMR_FIELD);
+        innerTypeSpec.addField(ParameterizedTypeName.get(
+                ClassName.get(ICorfuSMRProxy.class),
+                originalName), "proxy" + CORFUSMR_FIELD);
+        innerTypeSpec.addField(TypeName.LONG, "snapshot" + CORFUSMR_FIELD, Modifier.FINAL);
+
+        // The original field contains the object to be wrapped.
+        innerTypeSpec.addMethod(
+                MethodSpec.constructorBuilder().addParameter(
+                        ParameterSpec.builder(TypeName.get(retType),
+                                "original"
+                        ).build())
+                        .addParameter(ParameterSpec.builder(
+                                ParameterizedTypeName.get(ClassName.get(ICorfuSMRProxy.class),
+                                        originalName)
+                                , "proxy").build())
+                        .addParameter(ParameterSpec.builder(TypeName.LONG, "snapshot")
+                                                .build())
+                        .addStatement("this.original" + CORFUSMR_FIELD +
+                                " = $L;this.proxy" + CORFUSMR_FIELD + " = $L;" +
+                                "snapshot" + CORFUSMR_FIELD + " = $L;",
+                                "original", "proxy", "snapshot")
+                        .build());
+
+
+        if (originalType != null && !processingEnv.getTypeUtils()
+                .asElement(originalType).getKind().isInterface()) {
+            innerTypeSpec.superclass(ParameterizedTypeName.get(originalType));
+        } else {
+            innerTypeSpec.addSuperinterface(ParameterizedTypeName.get(retType));
+        }
+        innerTypeSpec.addSuperinterface(ParameterizedTypeName.get(
+                ClassName.get(ICorfuAccessWrapper.class),
+                ParameterizedTypeName.get(retType),
+                ParameterizedTypeName.get(classElement.asType())));
+
+        // Implement ICorfuWrapper classes
+        innerTypeSpec.addMethod(
+                MethodSpec.methodBuilder("getObject$CORFUSMR")
+                        .addModifiers(Modifier.PUBLIC)
+                        .addAnnotation(Override.class)
+                        .addStatement("return original" + CORFUSMR_FIELD)
+                        .returns(TypeName.get(retType))
+                        .build());
+        innerTypeSpec.addMethod(
+                MethodSpec.methodBuilder("getProxy$CORFUSMR")
+                        .addStatement("return proxy" + CORFUSMR_FIELD)
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PUBLIC)
+                        .returns(ParameterizedTypeName.get(
+                                ClassName.get(ICorfuSMRProxy.class),
+                                originalName))
+                        .build());
+        innerTypeSpec.addMethod(
+                MethodSpec.methodBuilder("getSnapshot$CORFUSMR")
+                        .addStatement("return snapshot" + CORFUSMR_FIELD)
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PUBLIC)
+                        .returns(TypeName.LONG)
+                        .build());
+
+        // Implement each of the calls of the interface by proxying to the
+        // original.
+        for (ExecutableElement e :
+                ElementFilter.methodsIn(element.getEnclosedElements())) {
+            if (e.getModifiers().contains(Modifier.PUBLIC)) {
+                MethodSpec.Builder wrapperMethod =
+                        newRetType.getReturnType() instanceof DeclaredType ?
+                        MethodSpec.overriding(e, (DeclaredType) newRetType.getReturnType(),
+                                processingEnv.getTypeUtils()) : MethodSpec.overriding(e);
+                if (e.getReturnType().getKind() != TypeKind.VOID) {
+                    try {
+                        if (deepWrap.contains(e.getSimpleName().toString())) {
+                            // Need to deep wrap this object
+                            generateAccessWrapper(e, innerTypeSpec, originalName, classElement, deepWrap,
+                                    newRetType.getReturnType() instanceof DeclaredType ?
+                                    (DeclaredType) newRetType.getReturnType() : parentType, null);
+                            wrapperMethod.addStatement("return new " + ((TypeElement) ((Type) e.getReturnType())
+                                            .asElement()).getSimpleName().toString() + "$$"
+                                            + e.getSimpleName().toString() + "$$Wrapper(" +
+                                            "wrappedAccess$$CORFUSMR((w,p) -> w.$L($L), null), getProxy$$CORFUSMR()," +
+                                            "getSnapshot$$CORFUSMR())",
+                                    e.getSimpleName(),
+                                    e.getParameters().stream()
+                                            .map(x -> x.getSimpleName())
+                                            .collect(Collectors.joining(",")));
+                        } else {
+                            wrapperMethod.addStatement("return wrappedAccess$$CORFUSMR((w,p) -> w.$L($L), null)",
+                                    e.getSimpleName(),
+                                    e.getParameters().stream()
+                                            .map(x -> x.getSimpleName())
+                                            .collect(Collectors.joining(",")));
+                        }
+                    } catch (Exception ex) {
+                        messager.printMessage(Diagnostic.Kind.ERROR, ex.getMessage());
+                    }
+                } else {
+                    wrapperMethod.addStatement(
+                            "wrappedAccess$$CORFUSMR((w,p) -> {$L($L); return null;}, null)",
+                            e.getSimpleName(),
+                            e.getParameters().stream()
+                                    .map(x -> x.getSimpleName())
+                                    .collect(Collectors.joining(",")));
+                }
+                innerTypeSpec.addMethod(wrapperMethod.build());
+            }
+        }
+
+        typeSpecBuilder.addType(innerTypeSpec.build());
     }
 
     /*

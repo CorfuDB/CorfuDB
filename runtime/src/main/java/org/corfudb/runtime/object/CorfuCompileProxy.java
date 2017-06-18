@@ -10,7 +10,9 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.*;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
@@ -80,6 +82,11 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      *
      */
     final Object[] args;
+
+    /** The builder this object was built with. */
+    @Getter
+    private ObjectBuilder<T> builder;
+
     /**
      * Metrics: meter (counter), histogram
      */
@@ -99,7 +106,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                              Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
                              Map<String, IUndoFunction<T>> undoTargetMap,
                              Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
-                             Set<String> resetSet
+                             Set<String> resetSet, ObjectBuilder<T> builder
                              ) {
         this.rt = rt;
         this.streamID = streamID;
@@ -111,6 +118,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().get(streamID)),
                 upcallTargetMap, undoRecordTargetMap,
                 undoTargetMap, resetSet);
+
+        this.builder = builder;
     }
 
     /**
@@ -294,6 +303,45 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerTxn)) {
             return TXExecuteInner(txFunction, isEnabled);
+        }
+    }
+
+    @Override
+    public long TXSnapshot() {
+        // If TX wrapping is disabled, the snapshot is
+        // always Address.MAX
+        if (builder.getOptions()
+                .contains(ObjectOpenOptions.NO_TX_OBJECT_WRAP)) {
+            return Address.MAX;
+        }
+        // Create a new transaction which will
+        // reflect any nested TXs
+        try {
+            rt.getObjectsView().TXBegin();
+            long snapshot = TransactionalContext.getCurrentContext()
+                                    .getSnapshotTimestamp();
+            log.trace("TXSnapshot[{}] Wrapped object snapshot {}", this, snapshot);
+            return snapshot;
+        } finally {
+            rt.getObjectsView().TXEnd();
+        }
+
+    }
+
+    @Override
+    public <R> R wrappedAccess(ICorfuSMRAccess<R, T> accessMethod, Object[] conflictObject, long snapshot) {
+        if (snapshot == Address.MAX) {
+            return access(accessMethod, conflictObject);
+        }
+        else {
+            log.trace("TXSnapshot[{}] Wrapped access @ {}", this, snapshot);
+            rt.getObjectsView().TXBuild()
+                    .setType(TransactionType.SNAPSHOT)
+                    .setSnapshot(snapshot)
+                    .begin();
+            R ret = access(accessMethod, conflictObject);
+            rt.getObjectsView().TXEnd();
+            return ret;
         }
     }
 

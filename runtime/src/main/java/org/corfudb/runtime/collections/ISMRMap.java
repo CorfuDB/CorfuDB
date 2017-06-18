@@ -231,39 +231,30 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     /**
      * {@inheritDoc}
      *
-     * This function currently does not return a view like the java.util implementation,
-     * and changes to the keySet will *not* be reflected in the map.
-     *
      * Conflicts: This operation currently conflicts with any modification
      * to the map.
      */
-    @Accessor
+    @Accessor(accessWrapReturn = true, deepAccessWrap = {"iterator", "spliterator"})
     @Override
     Set<K> keySet();
 
     /**
      * {@inheritDoc}
      *
-     * This function currently does not return a view like the java.util implementation,
-     * and changes to the values will *not* be reflected in the map.
-     *
      * Conflicts: This operation currently conflicts with any modification
      * to the map.
      */
-    @Accessor
+    @Accessor(accessWrapReturn = true, deepAccessWrap = {"iterator", "spliterator"})
     @Override
     Collection<V> values();
 
     /**
      * {@inheritDoc}
      *
-     * This function currently does not return a view like the java.util implementation,
-     * and changes to the entrySet will *not* be reflected in the map.
-     *
      * Conflicts: This operation currently conflicts with any modification
      * to the map.
      */
-    @Accessor
+    @Accessor(accessWrapReturn = true, deepAccessWrap = {"iterator", "spliterator"})
     @Override
     Set<Entry<K, V>> entrySet();
 
