@@ -1,10 +1,11 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
-import lombok.AllArgsConstructor;
-import lombok.Data;
 
 import java.util.Set;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
 
 /**
  * Trigger sent to the management server with the failures detected.

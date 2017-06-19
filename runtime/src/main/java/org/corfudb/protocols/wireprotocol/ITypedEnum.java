@@ -9,6 +9,7 @@ import io.netty.buffer.ByteBuf;
 public interface ITypedEnum<T extends Enum<T>> extends ICorfuPayload<T>  {
 
     TypeToken<?> getComponentType();
+
     byte asByte();
 
     @Override

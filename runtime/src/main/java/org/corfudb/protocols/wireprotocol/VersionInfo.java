@@ -1,9 +1,9 @@
 package org.corfudb.protocols.wireprotocol;
 
-import lombok.Getter;
-
 import java.lang.management.ManagementFactory;
 import java.util.Map;
+
+import lombok.Getter;
 
 /**
  * Created by mwei on 7/27/16.
