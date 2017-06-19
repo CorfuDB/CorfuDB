@@ -30,8 +30,12 @@ import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ThreadFactory;
 import java.util.regex.Pattern;
@@ -40,6 +44,7 @@ import javax.net.ssl.SSLEngine;
 
 import static org.fusesource.jansi.Ansi.Color.*;
 import static org.fusesource.jansi.Ansi.ansi;
+import com.google.common.collect.ImmutableList;
 
 /**
  * This is the new Corfu server single-process executable.
@@ -302,7 +307,10 @@ public class CorfuServer {
 
 
         // Register shutdown handler
-        Runtime.getRuntime().addShutdownHook(new Thread(CorfuServer::cleanShutdown));
+        Thread shutdownThread =  new Thread(CorfuServer::cleanShutdown);
+        shutdownThread.setName("ShutdownThread");
+        Runtime.getRuntime().addShutdownHook(
+                shutdownThread);
 
         try {
             ServerBootstrap b = new ServerBootstrap();
@@ -347,10 +355,10 @@ public class CorfuServer {
 
         } catch (Exception ex) {
             log.error("Corfu server shut down unexpectedly due to exception", ex);
-            cleanShutdown();
         } finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
+            cleanShutdown();
         }
 
     }
@@ -358,10 +366,38 @@ public class CorfuServer {
     /** Attempt to cleanly shutdown all the servers. */
     public static void cleanShutdown() {
         log.info("CleanShutdown: Starting Cleanup.");
-        sequencerServer.shutdown();
-        managementServer.shutdown();
-        layoutServer.shutdown();
-        logUnitServer.shutdown();
+        // Create a list of servers
+        final List<AbstractServer> servers =
+                ImmutableList.of(sequencerServer,
+                                 managementServer,
+                                 layoutServer,
+                                 logUnitServer);
+
+        // A executor service to create the shutdown threads
+        // plus name the threads correctly.
+        final ExecutorService shutdownService =
+                Executors.newFixedThreadPool(servers.size());
+
+        // Turn into a list of futures on the shutdown, returning
+        // generating a log message to inform of the result.
+        CompletableFuture<Void>[] shutdownFutures = servers.stream()
+                .map(s -> CompletableFuture.runAsync(() -> {
+                    try {
+                        Thread.currentThread().setName(s.getClass().getSimpleName()
+                                + "-shutdown");
+                        log.info("CleanShutdown: Shutting down {}",
+                                s.getClass().getSimpleName());
+                        s.shutdown();
+                        log.info("CleanShutdown: Cleanly shutdown {}",
+                                s.getClass().getSimpleName());
+                    } catch (Exception e) {
+                        log.error("CleanShutdown: Failed to cleanly shutdown {}",
+                                s.getClass().getSimpleName(), e);
+                    }
+                }, shutdownService))
+                .toArray(CompletableFuture[]::new);
+
+        CompletableFuture.allOf(shutdownFutures).join();
         log.info("CleanShutdown: Shutdown Complete.");
     }
 
