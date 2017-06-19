@@ -1,10 +1,11 @@
 package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 
 import java.util.Set;
+
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 
 /**
  * This is an interface which all clients to a ClientRouter must implement.
@@ -21,16 +22,16 @@ public interface IClient {
 
     /**
      * Get the router used by the Netty client.
-     *
      */
     IClientRouter getRouter();
 
     default ClientMsgHandler getMsgHandler() {
-        throw new UnsupportedOperationException("Message handler not provided, please override handleMessage!");
+        throw new UnsupportedOperationException("Message handler not provided, "
+                + "please override handleMessage!");
     }
 
     /**
-     * Handle a incoming message on the channel
+     * Handle a incoming message on the channel.
      *
      * @param msg The incoming message
      * @param ctx The channel handler context

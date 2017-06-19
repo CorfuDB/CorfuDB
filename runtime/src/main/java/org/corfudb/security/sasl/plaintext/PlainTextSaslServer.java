@@ -1,7 +1,5 @@
 package org.corfudb.security.sasl.plaintext;
 
-import lombok.extern.slf4j.Slf4j;
-
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.Map;
@@ -13,6 +11,7 @@ import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
 import javax.security.sasl.SaslServerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Created by sneginhal on 01/27/2017.
@@ -41,7 +40,7 @@ public class PlainTextSaslServer implements SaslServer {
     }
 
     private void verify(String authzid, String authcid, String passwd)
-        throws SaslException {
+            throws SaslException {
 
         if (authcid.isEmpty()) {
             throw new SaslException("Authentication failed due to empty username");
@@ -58,7 +57,7 @@ public class PlainTextSaslServer implements SaslServer {
 
         try {
             LoginContext lc = new LoginContext("CorfuDB",
-                new PlainTextCallbackHandler(authcid, passwd));
+                    new PlainTextCallbackHandler(authcid, passwd));
             lc.login();
         } catch (LoginException le) {
             throw new SaslException("Login attempt by '" + authcid + "' failed");
@@ -70,7 +69,7 @@ public class PlainTextSaslServer implements SaslServer {
 
     @Override
     public byte[] evaluateResponse(byte[] response)
-        throws SaslException {
+            throws SaslException {
         String[] tokens;
         try {
             tokens = new String(response, "UTF-8").split("\u0000");
@@ -132,8 +131,9 @@ public class PlainTextSaslServer implements SaslServer {
 
         @Override
         public SaslServer createSaslServer(String mechanism, String protocol,
-            String serverName, Map<String, ?> props, CallbackHandler cbh)
-            throws SaslException {
+                                           String serverName, Map<String, ?> props,
+                                           CallbackHandler cbh)
+                throws SaslException {
 
             if (!mechanism.equals(MECHANISM)) {
                 throw new SaslException("Unsupported mechanism: " + mechanism);
@@ -144,10 +144,11 @@ public class PlainTextSaslServer implements SaslServer {
         @Override
         public String[] getMechanismNames(Map<String, ?> props) {
             String noPlainText = (String) props.get(Sasl.POLICY_NOPLAINTEXT);
-            if (noPlainText.equals("true"))
+            if (noPlainText.equals("true")) {
                 return new String[]{};
-            else
+            } else {
                 return new String[]{MECHANISM};
+            }
         }
     }
 }
