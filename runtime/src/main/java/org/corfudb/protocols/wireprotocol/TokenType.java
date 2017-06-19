@@ -1,12 +1,13 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
-import lombok.RequiredArgsConstructor;
 
 import java.util.Arrays;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import lombok.RequiredArgsConstructor;
 
 /** An enum for distinguishing different response from the sequencer.
  * Created by dalia on 4/8/17.

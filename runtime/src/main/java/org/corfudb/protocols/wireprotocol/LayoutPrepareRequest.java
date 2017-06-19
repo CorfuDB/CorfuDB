@@ -1,12 +1,12 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
 /**
- *  Request in first phase of paxos.
- *
+ * Request in first phase of paxos.
  * Created by mdhawan on 10/24/16.
  */
 @Data

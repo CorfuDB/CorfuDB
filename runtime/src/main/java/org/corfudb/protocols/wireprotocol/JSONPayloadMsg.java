@@ -2,16 +2,19 @@ package org.corfudb.protocols.wireprotocol;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+
 import io.netty.buffer.ByteBuf;
-import lombok.NoArgsConstructor;
 
 import java.lang.reflect.ParameterizedType;
 import java.nio.charset.StandardCharsets;
+
+import lombok.NoArgsConstructor;
 
 /**
  * Created by mwei on 7/27/16.
  */
 @NoArgsConstructor
+@SuppressWarnings({"checkstyle:abbreviationaswordinname", "checkstyle:membername"})
 public class JSONPayloadMsg<T> extends CorfuMsg {
 
     static final Gson parser = new GsonBuilder().create();
@@ -48,7 +51,7 @@ public class JSONPayloadMsg<T> extends CorfuMsg {
      * Parse the rest of the message from the buffer. Classes that extend CorfuMsg
      * should parse their fields in this method.
      *
-     * @param buffer
+     * @param buffer to parse message from
      */
     @Override
     public void fromBuffer(ByteBuf buffer) {

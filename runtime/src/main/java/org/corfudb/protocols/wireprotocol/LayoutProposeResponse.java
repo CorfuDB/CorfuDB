@@ -6,10 +6,10 @@ import lombok.Data;
 
 /**
  * {@link org.corfudb.infrastructure.LayoutServer} response in second phase of paxos.
- * {@link org.corfudb.infrastructure.LayoutServer} will reject the proposal if the last accepted prepare
- * was not for this propose.
+ * {@link org.corfudb.infrastructure.LayoutServer} will reject the proposal
+ * if the last accepted prepare was not for this propose.
  *
- * Created by mdhawan on 10/24/16.
+ * <p>Created by mdhawan on 10/24/16.</p>
  */
 @Data
 @AllArgsConstructor
