@@ -1,13 +1,6 @@
 package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.UnpooledByteBufAllocator;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
-import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -15,6 +8,14 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
+import org.corfudb.runtime.CorfuRuntime;
+
 
 /**
  * Object & serialization methods for in-stream checkpoint
@@ -38,8 +39,9 @@ public class CheckpointEntry extends LogEntry {
 
         public static final Map<Byte, CheckpointEntryType> typeMap =
                 Arrays.stream(CheckpointEntryType.values())
-                        .collect(Collectors.toMap(CheckpointEntryType::asByte, Function.identity()));
-    };
+                        .collect(Collectors.toMap(
+                                CheckpointEntryType::asByte, Function.identity()));
+    }
 
     @RequiredArgsConstructor
     public enum CheckpointDictKey {
@@ -58,10 +60,11 @@ public class CheckpointEntry extends LogEntry {
 
         public static final Map<Byte, CheckpointDictKey> typeMap =
                 Arrays.stream(CheckpointDictKey.values())
-                        .collect(Collectors.toMap(CheckpointDictKey::asByte, Function.identity()));
+                        .collect(Collectors.toMap(
+                                CheckpointDictKey::asByte, Function.identity()));
     }
 
-    /** Type of entry
+    /** Type of entry.
      */
     @Getter
     CheckpointEntryType cpType;
@@ -70,16 +73,22 @@ public class CheckpointEntry extends LogEntry {
      * Unique identifier for this checkpoint.  All entries
      * for the same checkpoint state must use the same ID.
      */
+    @Deprecated // TODO: Add replacement method that conforms to style
+    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     @Getter
     UUID checkpointID;
 
-    /** Author/cause/trigger of this checkpoint
+    /** Author/cause/trigger of this checkpoint.
      */
+    @Deprecated // TODO: Add replacement method that conforms to style
+    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     @Getter
     String checkpointAuthorID;
 
-    /** Map of checkpoint metadata, see key constants above
+    /** Map of checkpoint metadata, see key constants above.
      */
+    @Deprecated // TODO: Add replacement method that conforms to style
+    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     @Getter
     Map<CheckpointDictKey, String> dict;
 
@@ -98,12 +107,13 @@ public class CheckpointEntry extends LogEntry {
     @Getter
     int smrEntriesBytes = 0;
 
-    public CheckpointEntry(CheckpointEntryType type, String authorID, UUID checkpointID,
+    /** CheckpointEntry constructor. */
+    public CheckpointEntry(CheckpointEntryType type, String authorId, UUID checkpointId,
                            Map<CheckpointDictKey,String> dict, MultiSMREntry smrEntries) {
         super(LogEntryType.CHECKPOINT);
         this.cpType = type;
-        this.checkpointID = checkpointID;
-        this.checkpointAuthorID = authorID;
+        this.checkpointID = checkpointId;
+        this.checkpointAuthorID = authorId;
         this.dict = dict;
         this.smrEntries = smrEntries;
     }
@@ -130,8 +140,8 @@ public class CheckpointEntry extends LogEntry {
             dict.put(k, v);
         }
         smrEntries = null;
-        byte hasSMREntries = b.readByte();
-        if (hasSMREntries > 0) {
+        byte hasSmrEntries = b.readByte();
+        if (hasSmrEntries > 0) {
             smrEntries = (MultiSMREntry) MultiSMREntry.deserialize(b, runtime);
         }
         smrEntriesBytes = b.readInt();
@@ -140,8 +150,8 @@ public class CheckpointEntry extends LogEntry {
     /**
      * Serialize the given LogEntry into a given byte buffer.
      *
-     * NOTE: This method has a side-effect of updating the
-     *       this.smrEntriesBytes field.
+     * <p>NOTE: This method has a side-effect of updating the
+     *          this.smrEntriesBytes field.
      *
      * @param b The buffer to serialize into.
      */
@@ -174,19 +184,19 @@ public class CheckpointEntry extends LogEntry {
 
     /** Helper function to deserialize a String.
      *
-     * @param b
+     * @param b Source buffer
      * @return A String.
      */
     private String deserializeString(ByteBuf b) {
         short len = b.readShort();
-        byte bytes[] = new byte[len];
+        byte[] bytes = new byte[len];
         b.readBytes(bytes, 0, len);
         return new String(bytes);
     }
 
     /** Helper function to serialize a String.
      *
-     * @param b
+     * @param b Target buffer
      */
     private void serializeString(String s, ByteBuf b) {
         b.writeShort(s.length());

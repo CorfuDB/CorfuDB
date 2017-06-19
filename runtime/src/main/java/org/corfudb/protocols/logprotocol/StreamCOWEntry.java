@@ -1,17 +1,19 @@
 package org.corfudb.protocols.logprotocol;
 
-
 import io.netty.buffer.ByteBuf;
+
+import java.util.UUID;
+
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
 
-import java.util.UUID;
-
 /**
  * Created by mwei on 2/18/16.
  */
+@Deprecated // TODO: Add replacement method that conforms to style
+@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
 @ToString(callSuper = true)
 @NoArgsConstructor
 public class StreamCOWEntry extends LogEntry {
@@ -22,6 +24,7 @@ public class StreamCOWEntry extends LogEntry {
     @Getter
     long followUntil;
 
+    /** StreamCOWEntry constructor. */
     public StreamCOWEntry(UUID originalStream, long followUntil) {
         super(LogEntryType.STREAM_COW);
         this.originalStream = originalStream;
@@ -45,7 +48,7 @@ public class StreamCOWEntry extends LogEntry {
      * Parse the rest of the message from the buffer. Classes that extend CorfuMsg
      * should parse their fields in this method.
      *
-     * @param buffer
+     * @param buffer Source buffer
      */
     @Override
     @SuppressWarnings("unchecked")
