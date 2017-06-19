@@ -43,7 +43,7 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
     /** Extract a particular stream's entry from this object.
      *
      * @param streamID StreamID
-     * @return the MultiSMREntry corresponding to streamID
+     * @return the MultiSMREntry corresponding to streamId
      */
     protected MultiSMREntry getStreamEntry(UUID streamID) {
         return getEntryMap().computeIfAbsent(streamID, u -> {

@@ -20,6 +20,7 @@ import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
+//TODO Discard TransactionStream for building maps but not for constructing tails
 
 /**
  * The VersionLockedObject maintains a versioned object which is
@@ -626,10 +627,9 @@ public class VersionLockedObject<T> {
      *
      * @param entry
      */
-    public void applyUpdateToStreamUnsafe(SMREntry entry) {
-        long entryAddress = entry.getEntry().getGlobalAddress();
-
+    public void applyUpdateToStreamUnsafe(SMREntry entry, long globalAddress) {
         applyUpdateUnsafe(entry);
-        seek(entryAddress + 1);
+        seek(globalAddress + 1);
     }
+
 }

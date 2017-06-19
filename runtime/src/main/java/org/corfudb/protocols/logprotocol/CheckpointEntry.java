@@ -76,14 +76,17 @@ public class CheckpointEntry extends LogEntry {
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     @Getter
-    UUID checkpointID;
+    UUID checkpointId;
 
-    /** Author/cause/trigger of this checkpoint.
+    @Getter
+    UUID streamId;
+
+    /** Author/cause/trigger of this checkpoint
      */
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     @Getter
-    String checkpointAuthorID;
+    String checkpointAuthorId;
 
     /** Map of checkpoint metadata, see key constants above.
      */
@@ -107,13 +110,13 @@ public class CheckpointEntry extends LogEntry {
     @Getter
     int smrEntriesBytes = 0;
 
-    /** CheckpointEntry constructor. */
     public CheckpointEntry(CheckpointEntryType type, String authorId, UUID checkpointId,
-                           Map<CheckpointDictKey,String> dict, MultiSMREntry smrEntries) {
+                           UUID streamId, Map<CheckpointDictKey,String> dict, MultiSMREntry smrEntries) {
         super(LogEntryType.CHECKPOINT);
         this.cpType = type;
-        this.checkpointID = checkpointId;
-        this.checkpointAuthorID = authorId;
+        this.checkpointId = checkpointId;
+        this.streamId = streamId;
+        this.checkpointAuthorId = authorId;
         this.dict = dict;
         this.smrEntries = smrEntries;
     }
@@ -130,8 +133,9 @@ public class CheckpointEntry extends LogEntry {
     void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
         super.deserializeBuffer(b, rt);
         cpType = CheckpointEntryType.typeMap.get(b.readByte());
-        checkpointID = new UUID(b.readLong(), b.readLong());
-        checkpointAuthorID = deserializeString(b);
+        checkpointId = new UUID(b.readLong(), b.readLong());
+        streamId = new UUID(b.readLong(), b.readLong());
+        checkpointAuthorId = deserializeString(b);
         dict = new HashMap<>();
         short mapEntries = b.readShort();
         for (short i = 0; i < mapEntries; i++) {
@@ -159,9 +163,11 @@ public class CheckpointEntry extends LogEntry {
     public void serialize(ByteBuf b) {
         super.serialize(b);
         b.writeByte(cpType.asByte());
-        b.writeLong(checkpointID.getMostSignificantBits());
-        b.writeLong(checkpointID.getLeastSignificantBits());
-        serializeString(checkpointAuthorID, b);
+        b.writeLong(checkpointId.getMostSignificantBits());
+        b.writeLong(checkpointId.getLeastSignificantBits());
+        b.writeLong(streamId.getMostSignificantBits());
+        b.writeLong(streamId.getLeastSignificantBits());
+        serializeString(checkpointAuthorId, b);
         b.writeShort(dict == null ? 0 : dict.size());
         if (dict != null) {
             dict.entrySet().stream()
