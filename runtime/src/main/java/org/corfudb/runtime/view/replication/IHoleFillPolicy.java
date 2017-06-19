@@ -1,10 +1,10 @@
 package org.corfudb.runtime.view.replication;
 
+import java.util.function.Function;
+import javax.annotation.Nonnull;
+
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
-
-import javax.annotation.Nonnull;
-import java.util.function.Function;
 
 /**
  * Created by mwei on 4/6/17.

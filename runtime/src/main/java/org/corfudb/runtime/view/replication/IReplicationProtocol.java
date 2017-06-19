@@ -1,31 +1,34 @@
 package org.corfudb.runtime.view.replication;
 
+import java.util.AbstractMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
+
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Layout;
 
-import javax.annotation.Nonnull;
-import java.util.*;
-import java.util.stream.Collectors;
 
 /** The public interface to a replication protocol.
  *
- * A replication protocol exposes three public functions, which
+ * <p>A replication protocol exposes three public functions, which
  * permit reading and writing to the log.
  *
- * Created by mwei on 4/6/17.
+ * <p>Created by mwei on 4/6/17.
  */
 public interface IReplicationProtocol {
 
     /** Write data to the log at the given address.
      *
-     * This function blocks until -a- write at the global address
+     * <p>This function blocks until -a- write at the global address
      * is committed to the log.
      *
-     * If the write which is committed to the log was this write,
+     * <p>If the write which is committed to the log was this write,
      * the function returns normally.
      *
-     * If the write which was committed to the log was not the result
+     * <p>If the write which was committed to the log was not the result
      * of this call, an OverwriteException is thrown.
      *
      * @param  layout               The layout to use for the write.
@@ -37,7 +40,7 @@ public interface IReplicationProtocol {
 
     /** Read data from a given address.
      *
-     * This function only returns committed data. If the
+     * <p>This function only returns committed data. If the
      * address given has not committed, the implementation may
      * either block until it is committed, or commit a hole filling
      * entry to that address.
@@ -52,10 +55,10 @@ public interface IReplicationProtocol {
 
     /** Read data from all the given addresses.
      *
-     * This method functions exactly like a read, except
+     * <p>This method functions exactly like a read, except
      * that it returns the result for multiple addresses.
      *
-     * An implementation may optimize for this type of
+     * <p>An implementation may optimize for this type of
      * bulk request, but the default implementation
      * just performs multiple reads (possible in parallel).
      *
@@ -64,7 +67,8 @@ public interface IReplicationProtocol {
      * @return                      A map of addresses to committed
      *                              addresses, hole filling if necessary.
      */
-    default @Nonnull Map<Long, ILogData> readAll(Layout layout, Set<Long> globalAddresses) {
+    default @Nonnull
+            Map<Long, ILogData> readAll(Layout layout, Set<Long> globalAddresses) {
         return globalAddresses.parallelStream()
                 .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(layout, a)))
                 .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
@@ -72,7 +76,7 @@ public interface IReplicationProtocol {
 
     /** Peek data from a given address.
      *
-     * This function -may- return null if there was no entry
+     * <p>This function -may- return null if there was no entry
      * committed at the given global address, otherwise it
      * returns committed data at the given global address. It
      * does not attempt to hole fill if there was no entry.
@@ -87,10 +91,10 @@ public interface IReplicationProtocol {
 
     /** Peek data from all the given addresses.
      *
-     * This method functions exactly like a peek, except
+     * <p>This method functions exactly like a peek, except
      * that it returns the result for multiple addresses.
      *
-     * An implementation may optimize for this type of
+     * <p>An implementation may optimize for this type of
      * bulk request, but the default implementation
      * just performs multiple peeks (possibly in parallel).
      *
