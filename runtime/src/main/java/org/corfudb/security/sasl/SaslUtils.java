@@ -13,6 +13,12 @@ import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
  */
 public class SaslUtils {
 
+    /**
+     * Parse username and password files for SASL authentication.
+     * @param usernameFile Username file path string.
+     * @param passwordFile Password file path string.
+     * @return PlainTextSaslNettyClient or RuntimeException on error
+     */
     public static PlainTextSaslNettyClient enableSaslPlainText(
             String usernameFile, String passwordFile) {
         if (usernameFile == null) {
@@ -27,8 +33,8 @@ public class SaslUtils {
             username =
                 (new String(Files.readAllBytes(Paths.get(usernameFile)))).trim();
         } catch (Exception e) {
-            throw new RuntimeException("Error reading the username file: " +
-                e.getClass().getSimpleName(), e);
+            throw new RuntimeException("Error reading the username file: "
+                + e.getClass().getSimpleName(), e);
         }
 
 
@@ -37,8 +43,8 @@ public class SaslUtils {
             password =
                 (new String(Files.readAllBytes(Paths.get(passwordFile)))).trim();
         } catch (Exception e) {
-            throw new RuntimeException("Error reading the password file: " +
-                e.getClass().getSimpleName(), e);
+            throw new RuntimeException("Error reading the password file: "
+                + e.getClass().getSimpleName(), e);
         }
 
         PlainTextSaslNettyClient saslNettyClient = null;
@@ -46,8 +52,8 @@ public class SaslUtils {
         try {
             saslNettyClient = new PlainTextSaslNettyClient(username, password);
         } catch (SaslException se) {
-            throw new RuntimeException("Could not create a SASL Plain Text Netty client" +
-                    se.getClass().getSimpleName(), se);
+            throw new RuntimeException("Could not create a SASL Plain Text Netty client"
+                    + se.getClass().getSimpleName(), se);
         }
 
         return saslNettyClient;

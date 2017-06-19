@@ -3,14 +3,14 @@ package org.corfudb.security.tls;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.TrustManagerFactory;
 import java.io.FileInputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.KeyStore;
 import java.util.Map;
 import java.util.function.Consumer;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.TrustManagerFactory;
 
 /**
  * Utilities for common options parsing and session configuration for
@@ -18,8 +18,19 @@ import java.util.function.Consumer;
  */
 
 public class TlsUtils {
-    public enum SslContextType { SERVER_CONTEXT, CLIENT_CONTEXT };
+    public enum SslContextType { SERVER_CONTEXT, CLIENT_CONTEXT }
 
+    /**
+     * Create SslContext object based on Getopt-style parameter spec.
+     *
+     * @param desiredType Server or client context
+     * @param opts Getopt-style parameters
+     * @param keyStoreException Consumer for key store error
+     * @param ksPasswordFileException Consumer for ks password file error
+     * @param trustStoreException Consumer for trust store error
+     * @param tsPasswordFileException Consumer for ts password file error
+     * @return SslContext object or null on error
+     */
     public static SslContext enableTls(SslContextType desiredType,
                                        Map<String, Object> opts,
                                        Consumer<Exception> keyStoreException,
@@ -33,11 +44,29 @@ public class TlsUtils {
                 (String) opts.get("--truststore-password-file"), tsPasswordFileException);
     }
 
+    /**
+     * Create SslContext object based on a spec of individual configuration strings.
+     *
+     * @param desiredType Server or client context
+     * @param keyStore Key store path string
+     * @param keyStoreException Consumer for key store error
+     * @param ksPasswordFile Key store password file string
+     * @param ksPasswordFileException Consumer for ks password file error
+     * @param trustStore Trust store path string
+     * @param trustStoreException Consumer for trust store error
+     * @param tsPasswordFile Trust store password file path string
+     * @param tsPasswordFileException Consumer for ts password file error
+     * @return SslContext object or null on error
+     */
     public static SslContext enableTls(SslContextType desiredType,
-                                       String keyStore, Consumer<Exception> keyStoreException,
-                                       String ksPasswordFile, Consumer<Exception> ksPasswordFileException,
-                                       String trustStore, Consumer<Exception> trustStoreException,
-                                       String tsPasswordFile, Consumer<Exception> tsPasswordFileException) {
+                                       String keyStore,
+                                       Consumer<Exception> keyStoreException,
+                                       String ksPasswordFile,
+                                       Consumer<Exception> ksPasswordFileException,
+                                       String trustStore,
+                                       Consumer<Exception> trustStoreException,
+                                       String tsPasswordFile,
+                                       Consumer<Exception> tsPasswordFileException) {
         // Get the key store password
         String ksp = "";
         if (ksPasswordFile != null) {
@@ -100,9 +129,9 @@ public class TlsUtils {
                     throw new RuntimeException("Bad SSL context type: " + desiredType);
             }
         } catch (Exception e) {
-            throw new RuntimeException("Could not build SslContext type " +
-                    desiredType.toString() + ": " +
-                    e.getClass().getSimpleName(), e);
+            throw new RuntimeException("Could not build SslContext type "
+                    + desiredType.toString() + ": "
+                    + e.getClass().getSimpleName(), e);
         }
     }
 
