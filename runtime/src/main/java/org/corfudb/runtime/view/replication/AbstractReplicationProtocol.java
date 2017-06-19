@@ -1,11 +1,11 @@
 package org.corfudb.runtime.view.replication;
 
+import javax.annotation.Nonnull;
+
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
 import org.corfudb.runtime.view.Layout;
-
-import javax.annotation.Nonnull;
 
 /**
  * Created by mwei on 4/6/17.
@@ -14,21 +14,20 @@ import javax.annotation.Nonnull;
 public abstract class AbstractReplicationProtocol implements IReplicationProtocol {
 
     /** The hole fill policy to apply. */
-    final protected IHoleFillPolicy holeFillPolicy;
+    protected final IHoleFillPolicy holeFillPolicy;
 
     /** Build the replication protocol using the given hole filling policy.
      *
      * @param holeFillPolicy    The hole filling policy to be applied when
      *                          a read returns uncommitted data.
      */
-    public AbstractReplicationProtocol(IHoleFillPolicy holeFillPolicy)
-    {
+    public AbstractReplicationProtocol(IHoleFillPolicy holeFillPolicy) {
         this.holeFillPolicy = holeFillPolicy;
     }
 
     /** {@inheritDoc}
      *
-     *  In the base implementation, we attempt to read data
+     *  <p>In the base implementation, we attempt to read data
      *  using the peek method. If data is returned by peek,
      *  we use it. Otherwise, we invoke the hole filling
      *  protocol.
@@ -58,5 +57,5 @@ public abstract class AbstractReplicationProtocol implements IReplicationProtoco
      *
      * @param globalAddress  The address to hole fill.
      */
-    abstract protected void holeFill(Layout layout, long globalAddress);
+    protected abstract void holeFill(Layout layout, long globalAddress);
 }

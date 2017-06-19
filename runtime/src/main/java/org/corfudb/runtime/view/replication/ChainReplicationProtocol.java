@@ -1,5 +1,7 @@
 package org.corfudb.runtime.view.replication;
 
+import javax.annotation.Nullable;
+
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -7,7 +9,6 @@ import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 
-import javax.annotation.Nullable;
 
 /**
  * Created by mwei on 4/6/17.
@@ -19,7 +20,9 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         super(holeFillPolicy);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void write(Layout layout, ILogData data) throws OverwriteException {
         final long globalAddress = data.getGlobalAddress();
@@ -31,23 +34,25 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                      data.getSerializedForm()) {
             log.trace("Write[{}]: chain head {}/{}", globalAddress, 1, numUnits);
             // In chain replication, we start at the chain head.
-                try {
-                    CFUtils.getUninterruptibly(
-                            layout.getLogUnitClient(globalAddress, 0)
-                                    .write(sh.getSerialized())
-                            , OverwriteException.class);
-                    propagate(layout, globalAddress, sh.getSerialized());
-                } catch (OverwriteException oe) {
-                    // Some other wrote here (usually due to hole fill)
-                    // We need to invoke the recovery protocol, in case
-                    // the write wasn't driven to completion.
-                    recover(layout, globalAddress);
-                    throw oe;
-                }
+            try {
+                CFUtils.getUninterruptibly(
+                        layout.getLogUnitClient(globalAddress, 0)
+                                .write(sh.getSerialized()),
+                        OverwriteException.class);
+                propagate(layout, globalAddress, sh.getSerialized());
+            } catch (OverwriteException oe) {
+                // Some other wrote here (usually due to hole fill)
+                // We need to invoke the recovery protocol, in case
+                // the write wasn't driven to completion.
+                recover(layout, globalAddress);
+                throw oe;
+            }
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public ILogData peek(Layout layout, long globalAddress) {
         int numUnits = layout.getSegmentLength(globalAddress);
@@ -83,8 +88,8 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                 if (data != null) {
                     CFUtils.getUninterruptibly(
                             layout.getLogUnitClient(globalAddress, i)
-                                    .write(data)
-                            , OverwriteException.class);
+                                    .write(data),
+                            OverwriteException.class);
                 } else {
                     CFUtils.getUninterruptibly(layout.getLogUnitClient(globalAddress, i)
                             .fillHole(globalAddress), OverwriteException.class);
@@ -99,10 +104,10 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
      * driving it to completion by invoking the recovery
      * protocol.
      *
-     * When this function returns the given globalAddress
+     * <p>When this function returns the given globalAddress
      * is guaranteed to contain a committed value.
      *
-     * If there was no data previously written at the address,
+     * <p>If there was no data previously written at the address,
      * this function will throw a runtime exception. The
      * recovery protocol should -only- be invoked if we
      * previously were overwritten.
@@ -140,8 +145,8 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
             try {
                 CFUtils.getUninterruptibly(
                         layout.getLogUnitClient(globalAddress, i)
-                                .write(ld)
-                        , OverwriteException.class);
+                                .write(ld),
+                        OverwriteException.class);
                 // We successfully recovered a write to this member of the chain
                 log.debug("Recover[{}]: recovered write at chain {}/{}", layout, i + 1, numUnits);
             } catch (OverwriteException oe) {
@@ -152,7 +157,9 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     protected void holeFill(Layout layout, long globalAddress) {
         int numUnits = layout.getSegmentLength(globalAddress);
