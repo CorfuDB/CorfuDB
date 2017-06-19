@@ -10,6 +10,8 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -32,12 +34,15 @@ public class CheckpointTest extends AbstractObjectTest {
     }
 
     Map<String, Long> instantiateMap(String mapName) {
+        final byte serializerByte = (byte) 20;
+        ISerializer serializer = new CPSerializer(serializerByte);
+        Serializers.registerSerializer(serializer);
         return (SMRMap<String, Long>)
                 instantiateCorfuObject(
                         getMyRuntime(),
-                        new TypeToken<SMRMap<String, Long>>() {
-                        },
-                        mapName);
+                        new TypeToken<SMRMap<String, Long>>() {},
+                        mapName,
+                        serializer);
     }
 
     final String streamNameA = "mystreamA";
