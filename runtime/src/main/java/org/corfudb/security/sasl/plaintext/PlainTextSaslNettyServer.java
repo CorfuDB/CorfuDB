@@ -35,7 +35,7 @@ public class PlainTextSaslNettyServer extends SimpleChannelInboundHandler<ByteBu
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, ByteBuf buf)
-        throws Exception {
+            throws Exception {
 
         byte[] msg = new byte[buf.readableBytes()];
         buf.getBytes(0, msg);
