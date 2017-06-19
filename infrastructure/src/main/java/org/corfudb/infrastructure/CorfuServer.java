@@ -301,6 +301,9 @@ public class CorfuServer {
         });
 
 
+        // Register shutdown handler
+        Runtime.getRuntime().addShutdownHook(new Thread(CorfuServer::cleanShutdown));
+
         try {
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
@@ -344,11 +347,22 @@ public class CorfuServer {
 
         } catch (Exception ex) {
             log.error("Corfu server shut down unexpectedly due to exception", ex);
+            cleanShutdown();
         } finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
         }
 
+    }
+
+    /** Attempt to cleanly shutdown all the servers. */
+    public static void cleanShutdown() {
+        log.info("CleanShutdown: Starting Cleanup.");
+        sequencerServer.shutdown();
+        managementServer.shutdown();
+        layoutServer.shutdown();
+        logUnitServer.shutdown();
+        log.info("CleanShutdown: Shutdown Complete.");
     }
 
     public static void addSequencer() {
