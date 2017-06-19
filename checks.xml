@@ -34,8 +34,9 @@
         <module name="FileTabCharacter">
             <property name="eachLine" value="true"/>
         </module>
-
+    <module name="SuppressWarningsFilter" />
     <module name="TreeWalker">
+	<module name="SuppressWarningsHolder" />
         <module name="OuterTypeFilename"/>
         <module name="IllegalTokenText">
             <property name="tokens" value="STRING_LITERAL, CHAR_LITERAL"/>
@@ -171,6 +172,7 @@
             <property name="arrayInitIndent" value="4"/>
         </module>
         <module name="AbbreviationAsWordInName">
+            <property name="id" value="abbreviation"/>
             <property name="ignoreFinal" value="false"/>
             <property name="allowedAbbreviationLength" value="1"/>
         </module>
@@ -227,5 +229,11 @@
             <property name="exceptionVariableName" value="expected"/>
         </module>
         <module name="CommentsIndentation"/>
+
+        <module name="SuppressWarnings">
+            <property name="id" value="checkstyle:suppresswarnings"/>
+        </module>
     </module>
+
+    <module name="SuppressWarningsFilter"/>
 </module>
