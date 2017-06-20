@@ -1,20 +1,22 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
+
+import java.util.EnumSet;
+import java.util.Set;
+import java.util.UUID;
+
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.IObjectBuilder;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
-
-import java.util.EnumSet;
-import java.util.Set;
-import java.util.UUID;
 
 /**
  * Created by mwei on 4/6/16.
@@ -29,6 +31,7 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
     Class<T> type;
 
     @Setter
+    @SuppressWarnings("checkstyle:abbreviation")
     UUID streamID;
 
     @Setter
@@ -55,6 +58,11 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
         return (ObjectBuilder<R>) this;
     }
 
+    /**
+     * Add option to object builder.
+     *
+     * @param option object builder open option (e.g., No-Cache).
+     */
     public ObjectBuilder<T> addOption(ObjectOpenOptions option) {
         if (options == null) {
             options = EnumSet.noneOf(ObjectOpenOptions.class);
@@ -73,6 +81,9 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
         return this;
     }
 
+    /**
+     * Open an Object.
+     */
     @SuppressWarnings("unchecked")
     public T open() {
 
@@ -88,8 +99,8 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
                 ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
                 return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
                             try {
-                                return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
-                                        arguments, serializer);
+                                return CorfuCompileWrapperBuilder.getWrapper(type, runtime,
+                                        streamID, arguments, serializer);
                             } catch (Exception ex) {
                                 throw new RuntimeException(ex);
                             }
@@ -97,7 +108,8 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
                 );
             }
         } catch (Exception ex) {
-            log.error("Runtime instrumentation no longer supported and no compiled class found for {}", type);
+            log.error("Runtime instrumentation no longer supported and no compiled class found"
+                    + " for {}", type);
             throw new RuntimeException(ex);
         }
     }

@@ -1,23 +1,24 @@
 package org.corfudb.runtime.view;
 
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.util.CFUtils;
 
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.Arrays;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeoutException;
-
 /**
  * Helper class to seal requested servers.
- * <p>
- * Created by zlokhandwala on 3/10/17.
+ *
+ * <p>Created by zlokhandwala on 3/10/17.</p>
  */
 @Slf4j
 public class SealServersHelper {
@@ -32,7 +33,8 @@ public class SealServersHelper {
         Map<String, CompletableFuture<Boolean>> resultMap = new HashMap<>();
         // Seal layout servers
         layout.getAllServers().forEach(server -> {
-            BaseClient baseClient = layout.getRuntime().getRouter(server).getClient(BaseClient.class);
+            BaseClient baseClient = layout.getRuntime().getRouter(server)
+                    .getClient(BaseClient.class);
             CompletableFuture<Boolean> cf = new CompletableFuture<>();
             try {
                 cf = baseClient.setRemoteEpoch(layout.getEpoch());
@@ -50,9 +52,11 @@ public class SealServersHelper {
      *
      * @param layoutServers        List of layout servers.
      * @param completableFutureMap A map of completableFutures for every remoteSetEpoch call.
-     * @throws QuorumUnreachableException Thrown if responses not received from a majority of layout servers.
+     * @throws QuorumUnreachableException Thrown if responses not received from a majority of
+     *                                    layout servers.
      */
-    public static void waitForLayoutSeal(List<String> layoutServers, Map<String, CompletableFuture<Boolean>> completableFutureMap)
+    public static void waitForLayoutSeal(List<String> layoutServers, Map<String,
+            CompletableFuture<Boolean>> completableFutureMap)
             throws QuorumUnreachableException {
         CompletableFuture<Boolean>[] completableFutures = completableFutureMap.entrySet().stream()
                 .filter(pair -> layoutServers.contains(pair.getKey()))
@@ -66,12 +70,15 @@ public class SealServersHelper {
      *
      * @param layoutSegment        Layout segment to be sealed.
      * @param completableFutureMap A map of completableFutures for every remoteSetEpoch call.
-     * @throws QuorumUnreachableException Thrown if responses not received from all the log unit servers.
+     * @throws QuorumUnreachableException Thrown if responses not received from all the
+     *                                    log unit servers.
      */
-    public static void waitForChainSegmentSeal(Layout.LayoutSegment layoutSegment, Map<String, CompletableFuture<Boolean>> completableFutureMap)
+    public static void waitForChainSegmentSeal(Layout.LayoutSegment layoutSegment, Map<String,
+            CompletableFuture<Boolean>> completableFutureMap)
             throws QuorumUnreachableException {
         for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {
-            CompletableFuture<Boolean>[] completableFutures = completableFutureMap.entrySet().stream()
+            CompletableFuture<Boolean>[] completableFutures =
+                    completableFutureMap.entrySet().stream()
                     .filter(pair -> layoutStripe.getLogServers().contains(pair.getKey()))
                     .map(pair -> pair.getValue())
                     .toArray(CompletableFuture[]::new);
@@ -90,12 +97,15 @@ public class SealServersHelper {
      *
      * @param layoutSegment        Layout segment to be sealed.
      * @param completableFutureMap A map of completableFutures for every remoteSetEpoch call.
-     * @throws QuorumUnreachableException Thrown if responses not received from all the log unit servers.
+     * @throws QuorumUnreachableException Thrown if responses not received from all the
+     *                                    log unit servers.
      */
-    public static void waitForQuorumSegmentSeal(Layout.LayoutSegment layoutSegment, Map<String, CompletableFuture<Boolean>> completableFutureMap)
+    public static void waitForQuorumSegmentSeal(Layout.LayoutSegment layoutSegment, Map<String,
+            CompletableFuture<Boolean>> completableFutureMap)
             throws QuorumUnreachableException {
         for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {
-            CompletableFuture<Boolean>[] completableFutures = completableFutureMap.entrySet().stream()
+            CompletableFuture<Boolean>[] completableFutures =
+                    completableFutureMap.entrySet().stream()
                     .filter(pair -> layoutStripe.getLogServers().contains(pair.getKey()))
                     .map(pair -> pair.getValue())
                     .toArray(CompletableFuture[]::new);
@@ -109,7 +119,8 @@ public class SealServersHelper {
      * @param completableFutures An array of completableFutures of which a quorum is required.
      * @throws QuorumUnreachableException Thrown if enough responses not received.
      */
-    public static void waitForQuorum(CompletableFuture<Boolean>[] completableFutures) throws QuorumUnreachableException {
+    public static void waitForQuorum(CompletableFuture<Boolean>[] completableFutures)
+            throws QuorumUnreachableException {
         Boolean success = false;
         QuorumFuturesFactory.CompositeFuture<Boolean> quorumFuture =
                 QuorumFuturesFactory.getQuorumFuture(Boolean::compareTo, completableFutures);
@@ -121,9 +132,13 @@ public class SealServersHelper {
             }
         }
         int reachableServers = (int) Arrays.stream(completableFutures)
-                .filter(booleanCompletableFuture -> !booleanCompletableFuture.isCompletedExceptionally()).count();
+                .filter(booleanCompletableFuture ->
+                        !booleanCompletableFuture.isCompletedExceptionally()).count();
 
-        if (!success) throw new QuorumUnreachableException(reachableServers, completableFutures.length);
+        if (!success) {
+            throw new QuorumUnreachableException(reachableServers,
+                    completableFutures.length);
+        }
     }
 
 }
