@@ -1,21 +1,23 @@
 package org.corfudb.runtime.view;
 
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.OutrankedException;
-import org.corfudb.runtime.exceptions.QuorumUnreachableException;
-import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.util.CFUtils;
+import static java.util.Arrays.stream;
 
-import javax.annotation.Nonnull;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
-import static java.util.Arrays.stream;
+import javax.annotation.Nonnull;
+
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.OutrankedException;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.util.CFUtils;
 
 /**
  * Created by mwei on 12/10/15.
@@ -27,6 +29,9 @@ public class LayoutView extends AbstractView {
         super(runtime);
     }
 
+    /**
+     * Retrieves current layout.
+     **/
     public Layout getLayout() {
         return layoutHelper(l -> {
             return l;
@@ -45,14 +50,18 @@ public class LayoutView extends AbstractView {
 
     /**
      * Drives the consensus protocol for persisting the new Layout.
-     * TODO currently the code can drive only one Layout change. If it has to drive a previously incomplete round
+     * TODO currently the code can drive only one Layout change.
+     * If it has to drive a previously incomplete round
      * TODO it will drop it's own set of changes. Need to revisit this.
+     * A change of layout proposal consists of a rank and the desired layout.
      *
-     * @param layout
-     * @param rank
-     * @throws QuorumUnreachableException
-     * @throws OutrankedException
-     * @throws WrongEpochException
+     * @param layout The layout to propose.
+     * @param rank The rank for the proposed layout.
+     *
+     * @throws QuorumUnreachableException Thrown if responses not received from a majority of
+     *                                    layout servers.
+     * @throws OutrankedException outranked exception, i.e., higher rank.
+     * @throws WrongEpochException wrong epoch number.
      */
     @SuppressWarnings("unchecked")
     public void updateLayout(Layout layout, long rank)
@@ -75,13 +84,14 @@ public class LayoutView extends AbstractView {
 
     /**
      * Sends prepare to the current layout and can proceed only if it is accepted by a quorum.
-     * // TODO Gets stuck if quorum is not achieved. Need to figure out if this is the correct solution.
+     * // TODO Gets stuck if quorum is not achieved. Figure out if this is the correct solution.
      *
-     * @param rank
-     * @return
-     * @throws QuorumUnreachableException
-     * @throws OutrankedException
-     * @throws WrongEpochException
+     * @param rank The rank for the proposed layout.
+     * @return layout
+     * @throws QuorumUnreachableException Thrown if responses not received from a majority of
+     *                                    layout servers.
+     * @throws OutrankedException outranked exception, i.e., higher rank.
+     * @throws WrongEpochException wrong epoch number.
      */
     @SuppressWarnings("unchecked")
     public Layout prepare(long epoch, long rank, Layout layout)
@@ -95,7 +105,8 @@ public class LayoutView extends AbstractView {
         while (true) {
             // do we still have enough for a quorum?
             if (prepareList.length < getQuorumNumber()) {
-                log.debug("Quorum unreachable, remaining={}, required={}", prepareList, getQuorumNumber());
+                log.debug("Quorum unreachable, remaining={}, required={}", prepareList,
+                        getQuorumNumber());
                 throw new QuorumUnreachableException(prepareList.length, getQuorumNumber());
             }
 
@@ -117,7 +128,8 @@ public class LayoutView extends AbstractView {
                     .filter(x -> x != null)
                     .toArray(LayoutPrepareResponse[]::new);
 
-            log.debug("Successful responses={}, needed={}, timeouts={}", acceptList.length, getQuorumNumber(), timeouts);
+            log.debug("Successful responses={}, needed={}, timeouts={}", acceptList.length,
+                    getQuorumNumber(), timeouts);
 
             if (acceptList.length >= getQuorumNumber()) {
                 break;
@@ -133,13 +145,11 @@ public class LayoutView extends AbstractView {
 
     /**
      * Proposes new layout to all the servers in the current layout.
-     * // TODO Gets stuck if quorum is not achieved. Need to figure out if this is the correct solution.
+     * // TODO Gets stuck if quorum is not achieved. Figure out if this is the correct solution.
      *
-     * @param rank
-     * @param layout
-     * @return
-     * @throws QuorumUnreachableException
-     * @throws OutrankedException
+     * @throws QuorumUnreachableException Thrown if responses not received from a majority of
+     *                                    layout servers.
+     * @throws OutrankedException outranked exception, i.e., higher rank.
      */
     @SuppressWarnings("unchecked")
     public Layout propose(long epoch, long rank, Layout layout)
@@ -152,7 +162,8 @@ public class LayoutView extends AbstractView {
         while (true) {
             // do we still have enough for a quorum?
             if (proposeList.length < getQuorumNumber()) {
-                log.debug("Quorum unreachable, remaining={}, required={}", proposeList, getQuorumNumber());
+                log.debug("Quorum unreachable, remaining={}, required={}", proposeList,
+                        getQuorumNumber());
                 throw new QuorumUnreachableException(proposeList.length, getQuorumNumber());
             }
 
@@ -175,7 +186,8 @@ public class LayoutView extends AbstractView {
                     .filter(x -> true)
                     .count();
 
-            log.debug("Successful responses={}, needed={}, timeouts={}", count, getQuorumNumber(), timeouts);
+            log.debug("Successful responses={}, needed={}, timeouts={}", count, getQuorumNumber(),
+                    timeouts);
 
             if (count >= getQuorumNumber()) {
                 break;
@@ -187,12 +199,12 @@ public class LayoutView extends AbstractView {
 
     /**
      * Send committed layout to the old Layout servers and the new Layout Servers.
-     * TODO Current policy is to send the committed layout once. Need to revisit this in order to drive the
-     * TODO new layout to all the involved LayoutServers.
-     * TODO The new layout servers are not bootstrapped and will reject committed messages. Need to fix this.
+     * TODO Current policy is to send the committed layout once. Need to revisit this in order
+     * TODO to drive the new layout to all the involved LayoutServers.
+     * TODO The new layout servers are not bootstrapped and will reject committed messages.
+     * TODO Need to fix this.
      *
-     * @param layout
-     * @throws WrongEpochException
+     * @throws WrongEpochException wrong epoch number.
      */
     public void committed(long epoch, Layout layout)
             throws WrongEpochException {

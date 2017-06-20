@@ -1,10 +1,20 @@
 package org.corfudb.runtime.view;
 
+import com.sun.xml.internal.bind.v2.TODO;
+
+import java.util.Arrays;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+import javax.annotation.Nonnull;
+
 import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -19,12 +29,6 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 
-import javax.annotation.Nonnull;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
 /**
  * A view of the objects inside a Corfu instance.
  * Created by mwei on 1/7/16.
@@ -36,7 +40,7 @@ public class ObjectsView extends AbstractView {
      * The Transaction stream is used to log/write successful transactions from different clients.
      * Transaction data and meta data can be obtained by reading this stream.
      */
-    static public UUID TRANSACTION_STREAM_ID = CorfuRuntime.getStreamID("Transaction_Stream");
+    public static UUID TRANSACTION_STREAM_ID = CorfuRuntime.getStreamID("Transaction_Stream");
 
     @Getter
     @Setter
@@ -76,10 +80,10 @@ public class ObjectsView extends AbstractView {
                     destination, proxy.getCorfuSMRProxy().getVersion());
             try {
                 return
-                        CorfuCompileWrapperBuilder.getWrapper(proxy.getCorfuSMRProxy().getObjectType(),
-                                runtime, sv.getID(), null, Serializers.JSON);
-            }
-            catch (Exception ex) {
+                        CorfuCompileWrapperBuilder.getWrapper(proxy.getCorfuSMRProxy()
+                                        .getObjectType(), runtime, sv.getID(), null,
+                                Serializers.JSON);
+            } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
         });
@@ -104,6 +108,7 @@ public class ObjectsView extends AbstractView {
      * Modifications to objects will not be visible
      * to other threads or clients until TXEnd is called.
      */
+    @SuppressWarnings({"checkstyle:methodname", "checkstyle:abbreviation"})
     public void TXBegin() {
         TransactionType type = TransactionType.OPTIMISTIC;
 
@@ -122,6 +127,7 @@ public class ObjectsView extends AbstractView {
      * builder.
      * @return  A transaction builder to build a transaction with.
      */
+    @SuppressWarnings({"checkstyle:methodname", "checkstyle:abbreviation"})
     public TransactionBuilder TXBuild() {
         return new TransactionBuilder(runtime);
     }
@@ -131,6 +137,7 @@ public class ObjectsView extends AbstractView {
      * Modifications to objects in the current transactional
      * context will be discarded.
      */
+    @SuppressWarnings({"checkstyle:methodname", "checkstyle:abbreviation"})
     public void TXAbort() {
         AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
         if (context == null) {
@@ -148,8 +155,9 @@ public class ObjectsView extends AbstractView {
      * Query whether a transaction is currently running.
      *
      * @return True, if called within a transactional context,
-     * False, otherwise.
+     *         False, otherwise.
      */
+    @SuppressWarnings({"checkstyle:methodname", "checkstyle:abbreviation"})
     public boolean TXActive() {
         return TransactionalContext.isInTransaction();
     }
@@ -157,10 +165,11 @@ public class ObjectsView extends AbstractView {
     /**
      * End a transaction on the current thread.
      *
-     * @throws TransactionAbortedException If the transaction could not be executed successfully.
-     *
      * @return The address of the transaction, if it commits.
+     *
+     * @throws TransactionAbortedException If the transaction could not be executed successfully.
      */
+    @SuppressWarnings({"checkstyle:methodname", "checkstyle:abbreviation"})
     public long TXEnd()
             throws TransactionAbortedException {
         AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
@@ -173,35 +182,37 @@ public class ObjectsView extends AbstractView {
             log.trace("TXCommit[{}] time={} ms",
                     context, totalTime);
             // TODO up to here
-                try {
-                    return TransactionalContext.getCurrentContext().commitTransaction();
-                } catch (TransactionAbortedException e) {
-                    TransactionalContext.getCurrentContext().abortTransaction(e);
-                    throw e;
-                } catch (Exception e) {
-                    log.trace("TXCommit[{}] Exception {}", context, e);
-                    AbortCause abortCause;
+            try {
+                return TransactionalContext.getCurrentContext().commitTransaction();
+            } catch (TransactionAbortedException e) {
+                TransactionalContext.getCurrentContext().abortTransaction(e);
+                throw e;
+            } catch (Exception e) {
+                log.trace("TXCommit[{}] Exception {}", context, e);
+                AbortCause abortCause;
 
-                    if (e instanceof NetworkException) {
-                        abortCause = AbortCause.NETWORK;
-                    } else {
-                        abortCause = AbortCause.UNDEFINED;
-                    }
-
-                    long snapshot_timestamp;
-                    try {
-                        snapshot_timestamp = context.getSnapshotTimestamp();
-                    } catch (NetworkException ne) {
-                        snapshot_timestamp = -1L;
-                    }
-
-                    TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(), snapshot_timestamp);
-                    TransactionAbortedException tae = new TransactionAbortedException(txInfo, null, abortCause);
-                    context.abortTransaction(tae);
-                    throw tae;
-                } finally {
-                    TransactionalContext.removeContext();
+                if (e instanceof NetworkException) {
+                    abortCause = AbortCause.NETWORK;
+                } else {
+                    abortCause = AbortCause.UNDEFINED;
                 }
+
+                long snapshotTimestamp;
+                try {
+                    snapshotTimestamp = context.getSnapshotTimestamp();
+                } catch (NetworkException ne) {
+                    snapshotTimestamp = -1L;
+                }
+
+                TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
+                        snapshotTimestamp);
+                TransactionAbortedException tae = new TransactionAbortedException(txInfo, null,
+                        abortCause);
+                context.abortTransaction(tae);
+                throw tae;
+            } finally {
+                TransactionalContext.removeContext();
+            }
         }
     }
 
@@ -229,6 +240,7 @@ public class ObjectsView extends AbstractView {
     }
 
     @Data
+    @SuppressWarnings({"checkstyle:abbreviation"})
     public static class ObjectID<T> {
         final UUID streamID;
         final Class<T> type;
