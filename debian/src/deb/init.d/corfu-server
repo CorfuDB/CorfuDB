@@ -21,18 +21,9 @@ LOGFILE="/var/log/corfu.$PORT.log"
 
 export PATH="${PATH:+$PATH:}/usr/sbin/:usr/bin"
 
-terminate_java_process () {
-    # save default shell delimiter
-    SAVED_IFS=$IFS
-    IFS=$'\n'
-    ALL_PROCESSES=$(ps aux)
-    for line in $ALL_PROCESSES; do
-        if [[ $line == *"org.corfudb.infrastructure.CorfuServer"* ]]; then
-            # send SIGTERM to JVM
-            kill -15 $(echo $line | awk '{print $2}')
-        fi
-    done
-    IFS=$SAVED_IFS
+terminate_corfu_process () {
+    # send SIGTERM to each process under corfu-server systemd service.
+    ps awx -eo pid,cgroup | grep corfu-server.service | awk '{print $1}' | xargs -n 1 kill &> /dev/null
 }
 
 case "$1" in
@@ -47,7 +38,7 @@ case "$1" in
         ;;
     stop)
         log_daemon_msg "Stopping $ROLENAME on port $PORT"
-        terminate_java_process
+        terminate_corfu_process
         if start-stop-daemon --stop --quiet  --oknodo --pidfile $PIDFILE; then
             log_end_msg 0
         else
@@ -57,7 +48,7 @@ case "$1" in
     restart)
         log_daemon_msg "Restarting $ROLENAME on port $PORT"
         set +e
-        terminate_java_process
+        terminate_corfu_process
         start-stop-daemon --stop --quiet --retry 30 --pidfile $PIDFILE
         RET="$?"
         set -e
