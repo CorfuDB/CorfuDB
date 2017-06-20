@@ -1,6 +1,11 @@
 package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
@@ -9,9 +14,6 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.Serializers;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
 
 
 /**
@@ -19,6 +21,8 @@ import java.util.UUID;
  * Its primary use case is to alow a single log entry to
  * hold a sequence of updates made by a transaction, which are applied atomically.
  */
+@Deprecated // TODO: Add replacement method that conforms to style
+@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
 @ToString
 @Slf4j
 public class MultiSMREntry extends LogEntry implements ISMRConsumable {
@@ -26,16 +30,22 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
     @Getter
     List<SMREntry> updates = new ArrayList<>();
 
-    public MultiSMREntry() { this.type = LogEntryType.MULTISMR; }
+    public MultiSMREntry() {
+        this.type = LogEntryType.MULTISMR;
+    }
 
     public MultiSMREntry(List<SMREntry> updates) {
         this.type = LogEntryType.MULTISMR;
         this.updates = updates;
     }
 
-    public void addTo(SMREntry entry) { getUpdates().add(entry); }
+    public void addTo(SMREntry entry) {
+        getUpdates().add(entry);
+    }
 
-    public void mergeInto(MultiSMREntry other) { getUpdates().addAll(other.getUpdates()); }
+    public void mergeInto(MultiSMREntry other) {
+        getUpdates().addAll(other.getUpdates());
+    }
 
     /**
      * This function provides the remaining buffer.
