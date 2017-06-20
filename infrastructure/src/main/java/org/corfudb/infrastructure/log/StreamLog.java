@@ -49,6 +49,11 @@ public interface StreamLog {
     long getGlobalTail();
 
     /**
+     * Get the first untrimmed address in the address space.
+     */
+    long getTrimMark();
+
+    /**
      * Sync the stream log file to secondary storage.
      *
      * @param force force data to secondary storage if true

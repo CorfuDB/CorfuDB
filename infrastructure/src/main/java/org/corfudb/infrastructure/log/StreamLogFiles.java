@@ -114,8 +114,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         // This can happen if a prefix trim happens on
         // addresses that haven't been written
-        if (getGlobalTail() < getStartingAddress()) {
-            syncTailSegment(getStartingAddress() - 1);
+        if (getGlobalTail() < getTrimMark()) {
+            syncTailSegment(getTrimMark() - 1);
         }
     }
 
@@ -356,8 +356,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
     }
 
-    @VisibleForTesting
-    long getStartingAddress() {
+    @Override
+    public long getTrimMark() {
         return startingAddress;
     }
 

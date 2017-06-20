@@ -122,11 +122,18 @@ public class LogUnitServer extends AbstractServer {
 
     /**
      * Service an incoming request for maximum global address the log unit server has written.
-     * This value is not persisted and only maintained in memory.
      */
     @ServerHandler(type = CorfuMsgType.TAIL_REQUEST, opTimer = metricsPrefix + "tailReq")
     public void handleTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
         r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(streamLog.getGlobalTail()));
+    }
+
+    /**
+     * Service an incoming request to retrieve the starting address of this logging unit.
+     */
+    @ServerHandler(type = CorfuMsgType.TRIM_MARK_REQUEST, opTimer = metricsPrefix + "headReq")
+    public void handleHeadRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+        r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(streamLog.getTrimMark()));
     }
 
     /**
