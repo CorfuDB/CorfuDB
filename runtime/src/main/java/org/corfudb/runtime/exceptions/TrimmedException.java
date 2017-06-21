@@ -8,6 +8,7 @@ public class TrimmedException extends LogUnitException {
     public TrimmedException() {
 
     }
+
     public TrimmedException(String message) {
         super(message);
     }

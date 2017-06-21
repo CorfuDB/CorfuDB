@@ -13,14 +13,24 @@ public class OutrankedException extends Exception {
     @Getter
     Layout layout;
 
+    /**
+     * Constructor.
+     * @param newRank rank encountered
+     */
     public OutrankedException(long newRank) {
         super("Higher rank " + newRank + " encountered, layout = null");
         this.newRank = newRank;
         this.layout = null;
     }
 
+    /**
+     * Constructor.
+     * @param newRank rank encountered
+     * @param layout layout
+     */
     public OutrankedException(long newRank, Layout layout) {
-        super("Higher rank " + newRank + " encountered, layout = " + ((layout == null) ? "null" : layout.toString()));
+        super("Higher rank " + newRank + " encountered, layout = " + ((layout == null)
+                ? "null" : layout.toString()));
         this.newRank = newRank;
         this.layout = layout;
     }
