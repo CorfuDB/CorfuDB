@@ -1,20 +1,21 @@
 package org.corfudb.infrastructure;
 
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.Layout;
 
-import java.util.Set;
-import java.util.concurrent.ExecutionException;
-
 /**
  * The FailureHandlerDispatcher handles the trigger provided by any source
  * or policy detecting a failure in the cluster.
- * <p>
- * Created by zlokhandwala on 11/18/16.
+ *
+ * <p>Created by zlokhandwala on 11/18/16.
  */
 @Slf4j
 public class FailureHandlerDispatcher {
@@ -26,9 +27,10 @@ public class FailureHandlerDispatcher {
 
     /**
      * Recover cluster from layout.
-     * @param recoveryLayout    Layout to use to recover
-     * @param corfuRuntime      Connected runtime
-     * @return
+     *
+     * @param recoveryLayout Layout to use to recover
+     * @param corfuRuntime   Connected runtime
+     * @return True if the cluster was recovered, False otherwise
      */
     public boolean recoverCluster(Layout recoveryLayout, CorfuRuntime corfuRuntime) {
 
@@ -78,12 +80,14 @@ public class FailureHandlerDispatcher {
      * @param corfuRuntime  Connected corfu runtime instance
      * @param failedServers Set of failed server addresses
      */
-    public void dispatchHandler(IFailureHandlerPolicy failureHandlerPolicy, Layout currentLayout, CorfuRuntime corfuRuntime, Set<String> failedServers) {
+    public void dispatchHandler(IFailureHandlerPolicy failureHandlerPolicy, Layout currentLayout,
+                                CorfuRuntime corfuRuntime, Set<String> failedServers) {
 
         try {
 
             // Generates a new layout by removing the failed nodes from the existing layout
-            Layout newLayout = failureHandlerPolicy.generateLayout(currentLayout, corfuRuntime, failedServers);
+            Layout newLayout = failureHandlerPolicy.generateLayout(currentLayout, corfuRuntime,
+                    failedServers);
 
             // Seals and increments the epoch.
             currentLayout.setRuntime(corfuRuntime);
@@ -114,7 +118,7 @@ public class FailureHandlerDispatcher {
     }
 
     /**
-     * Seals the epoch
+     * Seals the epoch.
      * Set local epoch and then attempt to move all servers to new epoch
      *
      * @param layout Layout to be sealed
@@ -127,12 +131,13 @@ public class FailureHandlerDispatcher {
     /**
      * Reconfigures the servers in the new layout if reconfiguration required.
      *
-     * @param runtime           Runtime to reconfigure new servers.
-     * @param originalLayout    Current layout to get the latest state of servers.
-     * @param newLayout         New Layout to be reconfigured.
-     * @param forceReconfigure  Flag to force reconfiguration.
+     * @param runtime          Runtime to reconfigure new servers.
+     * @param originalLayout   Current layout to get the latest state of servers.
+     * @param newLayout        New Layout to be reconfigured.
+     * @param forceReconfigure Flag to force reconfiguration.
      */
-    private void reconfigureServers(CorfuRuntime runtime, Layout originalLayout, Layout newLayout, boolean forceReconfigure)
+    private void reconfigureServers(CorfuRuntime runtime, Layout originalLayout, Layout
+            newLayout, boolean forceReconfigure)
             throws ExecutionException {
 
         // Reconfigure the primary Sequencer Server if changed.
@@ -147,26 +152,30 @@ public class FailureHandlerDispatcher {
      * the global tail of the log units are queried and used to set
      * the initial token of the new primary sequencer.
      *
-     * @param runtime           Runtime to reconfigure new servers.
-     * @param originalLayout    Current layout to get the latest state of servers.
-     * @param newLayout         New Layout to be reconfigured.
-     * @param forceReconfigure  Flag to force reconfiguration.
+     * @param runtime          Runtime to reconfigure new servers.
+     * @param originalLayout   Current layout to get the latest state of servers.
+     * @param newLayout        New Layout to be reconfigured.
+     * @param forceReconfigure Flag to force reconfiguration.
      */
-    private void reconfigureSequencerServers(CorfuRuntime runtime, Layout originalLayout, Layout newLayout, boolean forceReconfigure)
+    private void reconfigureSequencerServers(CorfuRuntime runtime, Layout originalLayout, Layout
+            newLayout, boolean forceReconfigure)
             throws ExecutionException {
 
         // Reconfigure Primary Sequencer if required
-        if (forceReconfigure ||
-                !originalLayout.getSequencers().get(0).equals(newLayout.getSequencers().get(0))) {
+        if (forceReconfigure
+                || !originalLayout.getSequencers().get(0).equals(newLayout.getSequencers()
+                .get(0))) {
             long maxTokenRequested = 0;
             for (Layout.LayoutSegment segment : originalLayout.getSegments()) {
                 // Query the tail of every log unit in every stripe.
                 for (Layout.LayoutStripe stripe : segment.getStripes()) {
                     for (String logServer : stripe.getLogServers()) {
                         try {
-                            long tail = runtime.getRouter(logServer).getClient(LogUnitClient.class).getTail().get();
+                            long tail = runtime.getRouter(logServer).getClient(LogUnitClient
+                                    .class).getTail().get();
                             if (tail != 0) {
-                                maxTokenRequested = maxTokenRequested > tail ? maxTokenRequested : tail;
+                                maxTokenRequested = maxTokenRequested > tail ? maxTokenRequested
+                                        : tail;
                             }
                         } catch (Exception e) {
                             log.error("Exception while fetching log unit tail : {}", e);

@@ -3,17 +3,19 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 
 
 /**
@@ -29,7 +31,8 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     public static final String PREFIX_EPOCH = "SERVER_EPOCH";
     public static final String KEY_EPOCH = "CURRENT";
 
-    ExecutorService handlerWorkers = Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors());
+    ExecutorService handlerWorkers = Executors.newWorkStealingPool(Runtime.getRuntime()
+            .availableProcessors());
 
     /**
      * This map stores the mapping from message type to netty server handler.
@@ -45,6 +48,10 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     @Setter
     long serverEpoch;
 
+    /**
+     * Returns a new NettyServerRouter.
+     * @param opts map of options (FIXME: unused)
+     */
     public NettyServerRouter(Map<String, Object> opts) {
         handlerMap = new ConcurrentHashMap<>();
         baseServer = new BaseServer();
@@ -65,6 +72,10 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
                 });
     }
 
+    /**
+     * Remove a server from the router.
+     * @param server  server to remove
+     */
     public void removeServer(AbstractServer server) {
         // Iterate through all types of CorfuMsgType, un-registering the handler
         server.getHandler().getHandledTypes()
@@ -117,7 +128,8 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         try {
-            // The incoming message should have been transformed to a CorfuMsg earlier in the pipeline.
+            // The incoming message should have been transformed to a CorfuMsg earlier in the
+            // pipeline.
             CorfuMsg m = ((CorfuMsg) msg);
             // We get the handler for this message from the map
             AbstractServer handler = handlerMap.get(m.getMsgType());
@@ -128,7 +140,8 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
                 if (validateEpoch(m, ctx)) {
                     // Route the message to the handler.
                     if (log.isTraceEnabled()) {
-                        log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
+                        log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(),
+                                msg);
                     }
                     handlerWorkers.submit(() -> handler.handleMessage(m, ctx, this));
                 }

@@ -20,7 +20,7 @@ public interface IServerRouter {
     void setServerEpoch(long newEpoch);
 
     /**
-     * Register a server to route messages to
+     * Register a server to route messages to.
      * @param server    The server to route messages to
      */
     void addServer(AbstractServer server);
