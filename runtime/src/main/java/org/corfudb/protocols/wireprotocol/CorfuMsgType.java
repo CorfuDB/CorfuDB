@@ -7,6 +7,8 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
+import java.util.Map;
+import java.util.UUID;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -47,6 +49,7 @@ public enum CorfuMsgType {
     TOKEN_REQ(20, new TypeToken<CorfuPayloadMsg<TokenRequest>>(){}),
     TOKEN_RES(21, new TypeToken<CorfuPayloadMsg<TokenResponse>>(){}),
     RESET_SEQUENCER(22, new TypeToken<CorfuPayloadMsg<Long>>(){}),
+    TAILS_HINT(23, new TypeToken<CorfuPayloadMsg<StreamTailsHintMsg>>(){}),
 
     // Logging Unit Messages
     WRITE(30, new TypeToken<CorfuPayloadMsg<WriteRequest>>() {}),

@@ -316,6 +316,34 @@ public class SequencerServer extends AbstractServer {
     }
 
     /**
+     * Consider a hint given by a runtime about the loction of the stream tails
+     *
+     * If the stream tail hinted is lower that the current one, the hint will be discarded.
+     *
+     * @param msg
+     * @param ctx
+     * @param r
+     * @param isMetricsEnabled
+     */
+    @ServerHandler(type=CorfuMsgType.TAILS_HINT, opTimer=metricsPrefix + "tails-hint")
+    public synchronized void considerTailsHint(CorfuPayloadMsg<StreamTailsHintMsg> msg, ChannelHandlerContext ctx, IServerRouter r,
+                                         boolean isMetricsEnabled) {
+        final StreamTailsHintMsg req = msg.getPayload();
+
+        for (Map.Entry<UUID, Long> tailEntry : req.getStreamTailHint().entrySet()) {
+            UUID streamId = tailEntry.getKey();
+            Long hintTail = tailEntry.getValue();
+            streamTailToGlobalTailMap.compute(streamId,
+                    (id, tail) -> hintTail > tail ? hintTail : tail
+            );
+        }
+
+        log.info("Sequencer Received hints");
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+    /**
+     *
      * Service an incoming token request.
      */
     @ServerHandler(type=CorfuMsgType.TOKEN_REQ, opTimer=metricsPrefix + "token-req")
