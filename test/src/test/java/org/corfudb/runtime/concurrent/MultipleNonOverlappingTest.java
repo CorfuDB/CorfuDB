@@ -3,17 +3,22 @@ package org.corfudb.runtime.concurrent;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
+import org.corfudb.util.CoopScheduler;
+import org.corfudb.util.CoopUtil;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.util.CoopScheduler.sched;
+
 @Slf4j
 public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
+    private String scheduleString;
+
     @Override
     public void TXBegin() { WWTXBegin(); }
-
-
 
     /**
      * High level:
@@ -35,8 +40,13 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
      */
     @Test
     public void testStress() throws Exception {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+            testStress(i);
+        }
+    }
 
-        String mapName = "testMapA";
+    private void testStress(int iter) throws Exception {
+        String mapName = "testMapA" + iter;
         Map<Long, Long> testMap = instantiateCorfuObject(SMRMap.class, mapName);
 
         final int VAL = 1;
@@ -48,21 +58,32 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
         final int FINAL_SUM = OBJECT_NUM;
         final int STEP = OBJECT_NUM / THREAD_NUM;
 
+        final int nThreads = OBJECT_NUM;
+        final int schedLength = 300;
+        int[] schedule = CoopScheduler.makeSchedule(nThreads, schedLength);
+        scheduleString = "Schedule is: " + CoopScheduler.formatSchedule(schedule);
+
         // test all objects advance in lock-step to FINAL_SUM
         for (int i = 0; i < FINAL_SUM; i++) {
+            CoopUtil m = new CoopUtil();
+            CoopScheduler.reset(nThreads);
+            CoopScheduler.setSchedule(schedule);
 
             for (int j = 0; j < OBJECT_NUM; j += STEP) {
-                NonOverlappingWriter n = new NonOverlappingWriter(i + 1, j, j + STEP, VAL);
-                scheduleConcurrently(t -> { n.dowork();});
+                NonOverlappingWriter n = new NonOverlappingWriter(iter, i + 1, j, j + STEP, VAL);
+                m.scheduleCoopConcurrently((thr, t) -> { n.dowork();});
             }
-            executeScheduled(THREAD_NUM, PARAMETERS.TIMEOUT_NORMAL);
+            m.executeScheduled();
         }
 
-        Assert.assertEquals(testMap.size(), FINAL_SUM);
+        assertThat(testMap.size())
+                .describedAs(scheduleString)
+                .isEqualTo(FINAL_SUM);
         for (Long value : testMap.values()) {
-            Assert.assertEquals((long) FINAL_SUM, (long) value);
+            assertThat(value)
+                    .describedAs(scheduleString)
+                    .isEqualTo(FINAL_SUM);
         }
-
     }
 
     /**
@@ -71,10 +92,15 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
      */
     @Test
     public void testStress2() throws Exception {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+            testStress2(i);
+        }
+    }
 
-        String mapName1 = "testMapA";
+    public void testStress2(int iter) throws Exception {
+        String mapName1 = "testMapA" + iter;
         Map<Long, Long> testMap1 = instantiateCorfuObject(SMRMap.class, mapName1);
-        String mapName2 = "testMapB";
+        String mapName2 = "testMapB" + iter;
         Map<Long, Long> testMap2 = instantiateCorfuObject(SMRMap.class, mapName2);
 
 
@@ -88,36 +114,49 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
         final int FINAL_SUM2 = OBJECT_NUM/2+1;
         final int STEP = OBJECT_NUM / THREAD_NUM;
 
+        final int nThreads = OBJECT_NUM;
+        final int schedLength = 300;
+        int[] schedule = CoopScheduler.makeSchedule(nThreads, schedLength);
+        scheduleString = "Schedule is: " + CoopScheduler.formatSchedule(schedule);
+
         // test all objects advance in lock-step to FINAL_SUM
         for (int i = 0; i < FINAL_SUM1; i++) {
+            CoopUtil m = new CoopUtil();
+            CoopScheduler.reset(nThreads);
+            CoopScheduler.setSchedule(schedule);
 
             for (int j = 0; j < OBJECT_NUM; j += STEP) {
-                NonOverlappingWriter n = new NonOverlappingWriter(i + 1, j, j + STEP, VAL);
-                scheduleConcurrently(t -> { n.dowork2();});
+                NonOverlappingWriter n = new NonOverlappingWriter(iter, i + 1, j, j + STEP, VAL);
+                m.scheduleCoopConcurrently((thr, t) -> { n.dowork2();});
             }
-            executeScheduled(THREAD_NUM, PARAMETERS.TIMEOUT_NORMAL);
-
+            m.executeScheduled();
         }
 
-        Assert.assertEquals(testMap2.size(), FINAL_SUM1);
+        assertThat(testMap2.size())
+                .describedAs(scheduleString)
+                .isEqualTo(FINAL_SUM1);
         for (long i = 0; i < OBJECT_NUM; i++) {
             log.debug("final testmap1.get({}) = {}", i, testMap1.get(i));
             log.debug("final testmap2.get({}) = {}", i, testMap2.get(i));
-            if (i % 2 == 0)
-                Assert.assertEquals((long)testMap2.get(i), (long) FINAL_SUM2);
-            else
-                Assert.assertEquals((long)testMap2.get(i), (long) FINAL_SUM1);
+            if (i % 2 == 0) {
+                assertThat(testMap2.get(i))
+                        .describedAs(scheduleString)
+                        .isEqualTo(FINAL_SUM2);
+            } else {
+                assertThat(testMap2.get(i))
+                        .describedAs(scheduleString)
+                        .isEqualTo(FINAL_SUM1);
+            }
         }
-
     }
 
 
     public class NonOverlappingWriter {
 
-        String mapName1 = "testMapA";
-        Map<Long, Long> testMap1 = instantiateCorfuObject(SMRMap.class, mapName1);
-        String mapName2 = "testMapB";
-        Map<Long, Long> testMap2 = instantiateCorfuObject(SMRMap.class, mapName2);
+        String mapName1;
+        Map<Long, Long> testMap1;
+        String mapName2;
+        Map<Long, Long> testMap2;
 
 
         int start;
@@ -125,7 +164,11 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
         int val;
         int expectedSum;
 
-        public NonOverlappingWriter(int expectedSum, int start, int end, int val) {
+        public NonOverlappingWriter(int iter, int expectedSum, int start, int end, int val) {
+            mapName1 = "testMapA" + iter;
+            testMap1 = instantiateCorfuObject(SMRMap.class, mapName1);
+            mapName2 = "testMapB" + iter;
+            testMap2 = instantiateCorfuObject(SMRMap.class, mapName2);
             this.expectedSum = expectedSum;
             this.start = start;
             this.end = end;
@@ -159,23 +202,27 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
         private void simpleCreateImpl(long idx, long val) {
 
             TXBegin();
+            sched();
 
             if (!testMap1.containsKey(idx)) {
                 if (expectedSum - 1 > 0)
                     log.debug("OBJ FAIL {} doesn't exist expected={}",
                             idx, expectedSum);
                 log.debug("OBJ {} PUT {}", idx, val);
+                sched();
                 testMap1.put(idx, val);
             } else {
                 log.debug("OBJ {} GET", idx);
+                sched();
                 Long value = testMap1.get(idx);
                 if (value != (expectedSum - 1))
                     log.debug("OBJ FAIL {} value={} expected={}", idx, value,
                             expectedSum - 1);
                 log.debug("OBJ {} PUT {}+{}", idx, value, val);
+                sched();
                 testMap1.put(idx, value + val);
             }
-
+            sched();
             TXEnd();
         }
 
@@ -188,25 +235,30 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
         private void duoCreateImpl(long idx, long val) {
 
             TXBegin();
-
+            sched();
             if (!testMap1.containsKey(idx)) {
                 if (expectedSum - 1 > 0)
                     log.debug("OBJ FAIL {} doesn't exist expected={}",
                             idx, expectedSum);
                 log.debug("OBJ {} PUT {}", idx, val);
+                sched();
                 testMap1.put(idx, val);
+                sched();
                 testMap2.put(idx, val);
             } else {
                 log.debug("OBJ {} GET", idx);
+                sched();
                 Long value = testMap1.get(idx);
                 if (value != (expectedSum - 1))
                     log.debug("OBJ FAIL {} value={} expected={}", idx, value,
                             expectedSum - 1);
                 log.debug("OBJ {} PUT {}+{}", idx, value, val);
+                sched();
                 testMap1.put(idx, value + val);
 
                 // in map 2, on even rounds, do this on for every other entry
                 log.debug("OBJ2 {} GET", idx);
+                sched();
                 Long value2 = testMap2.get(idx);
                 if (idx % 2 == 0) {
                     if (value2 != (expectedSum/2))
@@ -214,6 +266,7 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
                                 expectedSum/2);
                     if (expectedSum % 2 == 0) {
                         log.debug("OBJ2 {} PUT {}+{}", idx, value2, val);
+                        sched();
                         testMap2.put(idx, value2 + val);
                     }
                 } else {
@@ -221,10 +274,11 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
                         log.debug("OBJ2 FAIL {} value={} expected={}", idx, value2,
                                 expectedSum - 1);
                     log.debug("OBJ2 {} PUT {}+{}", idx, value2, val);
+                    sched();
                     testMap2.put(idx, value2 + val);
                 }
             }
-
+            sched();
             TXEnd();
         }
     }

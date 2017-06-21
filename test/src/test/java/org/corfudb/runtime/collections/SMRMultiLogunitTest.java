@@ -7,14 +7,19 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.util.CoopScheduler;
+import org.corfudb.util.CoopUtil;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.util.CoopScheduler.sched;
 import static org.junit.Assert.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by kjames88 on 3/23/17.
@@ -23,7 +28,7 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
     public static final int ONE_THOUSAND = 1000;
     public static final int ONE_HUNDRED = 100;
     public CorfuRuntime runtime;
-
+    private String scheduleString;
 
     @Before
     public void setRuntime() {
@@ -127,61 +132,78 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
      * @throws TransactionAbortedException
      */
 
-    @Test(expected = TransactionAbortedException.class)
-    public void transactionalManyWritesThenRead() throws TransactionAbortedException {
+    @Test
+    public void transactionalManyWritesThenRead() throws Exception {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+            transactionalManyWritesThenRead(i);
+        }
+    }
+
+    public void transactionalManyWritesThenRead(int iter) throws Exception {
         int numKeys = ONE_THOUSAND;
         ObjectsView view = getRuntime().getObjectsView();
-        final CountDownLatch barrier = new CountDownLatch(2);
+        final int numThreads = 2;
+        final int schedLength = 200;
+        CoopUtil m = new CoopUtil();
+        AtomicInteger barrier = new AtomicInteger(2);
+        AtomicBoolean aborted = new AtomicBoolean(false);
+        AtomicBoolean otherException = new AtomicBoolean(false);
+
+        CoopScheduler.reset(numThreads);
+        int[] schedule = CoopScheduler.makeSchedule(numThreads, schedLength);
+        CoopScheduler.setSchedule(schedule);
+        scheduleString = "Schedule is: " + CoopScheduler.formatSchedule(schedule);
 
         Map<String, String> testMap = getRuntime()
                 .getObjectsView()
                 .build()
-                .setStreamName("test")
+                .setStreamName("test" + iter)
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .open();
 
         // concurrently run two conflicting transactions:  one or the other should succeed without overlap
-        scheduleConcurrently((ignored_step) -> {
+        m.scheduleCoopConcurrently((thr, ignored_step) -> {
             view.TXBegin();
             for (int i=0; i < numKeys; i++) {
+                sched();
                 String key = "key" + String.valueOf(i);
                 String val = "value0_" + String.valueOf(i);
                 testMap.put(key, val);
                 if (i == 0) {
-                    barrier.countDown();
-                    barrier.await();
-                }
-                if (i % ONE_HUNDRED == 0) {
-                    Thread.yield();
+                    barrier.incrementAndGet();
+                    while (barrier.get() < 2) { sched(); }
                 }
             }
             view.TXEnd();
         });
 
-        scheduleConcurrently((ignored_step) -> {
+        m.scheduleCoopConcurrently((thr, ignored_step) -> {
             view.TXBegin();
             for (int i = 0; i < numKeys; i++) {
+                sched();
                 String key = "key" + String.valueOf(i);
                 String val = "value1_" + String.valueOf(i);
                 testMap.put(key, val);
                 if (i == 0) {
-                    barrier.countDown();
-                    barrier.await();
-                }
-                if (i % ONE_HUNDRED == 0) {
-                    Thread.yield();
+                    barrier.incrementAndGet();
+                    while (barrier.get() < 2) { sched(); }
                 }
             }
             view.TXEnd();
         });
 
         try {
-            executeScheduled(2, PARAMETERS.TIMEOUT_NORMAL);
-        } catch (TransactionAbortedException e) {
-            throw e;
+            m.executeScheduled((e, failedSignal) -> {
+                if (e.getClass().equals(TransactionAbortedException.class)) {
+                    aborted.set(true);
+                } else {
+                    otherException.set(true);
+                }
+            });
         } catch (Exception e) {
-            e.printStackTrace();
+            throw e;
         }
+
         // check that all the values are either value0_ or value1_ not a mix
         String base = "invalid";
         for (int i=0; i < numKeys; i++) {
@@ -190,13 +212,22 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
             if (val != null) {
                 if (i == 0) {
                     int underscore = val.indexOf("_");
-                    assertNotEquals(-1, underscore);
+                    assertThat(underscore)
+                            .describedAs(scheduleString)
+                            .isNotEqualTo(-1);
                     base = val.substring(0, underscore);
-                    System.out.println("base is " + base);
                 }
             }
-            assertEquals(true, val.contains(base));
+            assertThat(val)
+                    .describedAs(scheduleString)
+                    .contains(base);
         }
+        assertThat(otherException.get())
+                .describedAs(scheduleString)
+                .isFalse();
+        assertThat(aborted.get())
+                .describedAs(scheduleString)
+                .isTrue();
     }
 
     /**

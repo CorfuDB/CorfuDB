@@ -5,6 +5,8 @@ import javax.annotation.Nonnull;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
+import lombok.Getter;
+import lombok.Setter;
 
 
 /** A hole filling policy which reads several times,
@@ -19,7 +21,9 @@ public class ReadWaitHoleFillPolicy implements IHoleFillPolicy {
     final int waitMs;
 
     /** The amount of times to retry before requiring a hole fill. */
-    final int numRetries;
+    @Getter
+    @Setter
+    int numRetries;
 
     /** Create a ReadWaitHoleFillPolicy with the given wait times
      * and retries.
