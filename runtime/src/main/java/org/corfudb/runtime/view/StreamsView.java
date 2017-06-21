@@ -38,9 +38,19 @@ public class StreamsView extends AbstractView {
      * @return A view
      */
     public IStreamView get(UUID stream) {
+        return this.get(stream, StreamOptions.DEFAULT);
+    }
+
+    /**
+     * Get a view on a stream. The view has its own pointer to the stream.
+     *
+     * @param stream The UUID of the stream to get a view on.
+     * @return A view
+     */
+    public IStreamView get(UUID stream, StreamOptions options) {
         return runtime.getLayoutView().getLayout().getSegments().get(
                 runtime.getLayoutView().getLayout().getSegments().size() - 1)
-                .getReplicationMode().getStreamView(runtime, stream);
+                .getReplicationMode().getStreamView(runtime, stream, options);
     }
 
     /**
