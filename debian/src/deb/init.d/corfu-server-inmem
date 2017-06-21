@@ -1,23 +1,22 @@
 #! /usr/bin/env bash
 
 ### BEGIN INIT INFO
-# Provides:             corfu_server
+# Provides:             corfu_server_inmem
 # Required-Start:       $remote_fs $syslog
 # Required-Stop:        $remote_fs $syslog
 # Default-Start:        2 3 4 5
 # Default-Stop:         0 1 6
-# Short-Description:    Corfu Infrastructure Server
+# Short-Description:    Corfu In-Memory Infrastructure Server
 ### END INIT INFO
 
 umask 022
 
-ROLENAME="Corfu Infrastructure Server"
-PIDFILE=/var/run/corfu.pid
+ROLENAME="Corfu In-Memory Infrastructure Server"
+PIDFILE=/var/run/corfu_inmem.pid
 PREFIX=/usr/local/bin
-PORT=9000
+PORT=9001
 # WARNING: -s => single node corfu, need to revert this change later.
-# OPTS="-l /var/corfu $PORT"
-OPTS="-s -l /common/nsxapi/data/corfu $PORT"
+OPTS="-ms $PORT"
 LOGFILE="/var/log/corfu.$PORT.log"
 . /lib/lsb/init-functions
 
@@ -28,9 +27,9 @@ terminate_corfu_process () {
     # this PID will be excluded from the list of processes to kill.
     exclude=$1
     if [[ ! -z "$exclude" ]]; then
-        ps xawf -eo pid,cgroup | grep corfu-server.service | awk '{print $1}' | egrep -v ^${exclude}$ | xargs -n 1 kill &> /dev/null
+        ps xawf -eo pid,cgroup | grep corfu-server-inmem.service | awk '{print $1}' | egrep -v ^${exclude}$ | xargs -n 1 kill &> /dev/null
     else
-        ps xawf -eo pid,cgroup | grep corfu-server.service | awk '{print $1}' | xargs -n 1 kill &> /dev/null
+        ps xawf -eo pid,cgroup | grep corfu-server-inmem.service | awk '{print $1}' | xargs -n 1 kill &> /dev/null
     fi
 }
 

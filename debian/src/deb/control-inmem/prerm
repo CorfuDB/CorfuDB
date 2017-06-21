@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+if [[ -n $(which systemctl) ]]; then
+    systemctl disable corfu-server-inmem
+else
+    update-rc.d corfu-server-inmem remove
+fi

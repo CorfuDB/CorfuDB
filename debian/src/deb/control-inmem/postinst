@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+# enable corfu-server-inmem service at boot time
+if [[ -n $(which systemctl) ]]; then
+    systemctl enable corfu-server-inmem
+else
+    update-rc.d corfu-server-inmem defaults
+fi
