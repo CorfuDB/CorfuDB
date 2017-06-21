@@ -20,6 +20,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     public static final LogData EMPTY = new LogData(DataType.EMPTY);
     public static final LogData HOLE = new LogData(DataType.HOLE);
+    public static final LogData TRIMMED = new LogData(DataType.TRIMMED);
 
     @Getter
     final DataType type;

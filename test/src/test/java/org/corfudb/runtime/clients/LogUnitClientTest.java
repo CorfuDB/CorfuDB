@@ -104,9 +104,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         serverRouter.reset();
         serverRouter.addServer(server2);
 
-        assertThatThrownBy(() -> client.read(0).get().getReadSet().get(0L))
-                .isInstanceOf(ExecutionException.class)
-                .hasCauseInstanceOf(TrimmedException.class);
+        assertThat(client.read(0).get().getReadSet().get(0L).isTrimmed()).isTrue();
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
     }

@@ -195,15 +195,11 @@ public class LogUnitServer extends AbstractServer {
                 ILogData e = dataCache.get(l);
                 if (e == null) {
                     rr.put(l, LogData.EMPTY);
-                } else if (e.getType() == DataType.HOLE) {
-                    rr.put(l, LogData.HOLE);
                 } else {
                     rr.put(l, (LogData) e);
                 }
             }
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
-        } catch (TrimmedException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
         } catch (DataCorruptionException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
         }

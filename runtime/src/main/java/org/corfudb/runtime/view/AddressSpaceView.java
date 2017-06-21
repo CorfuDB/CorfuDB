@@ -23,6 +23,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
 
@@ -152,6 +153,8 @@ public class AddressSpaceView extends AbstractView {
             if (data == null || data.getType() == DataType.EMPTY) {
                 throw new RuntimeException("Unexpected return of empty data at address "
                         + address + " on read");
+            } else if (data.isTrimmed()) {
+                throw new TrimmedException();
             }
             return data;
         }
