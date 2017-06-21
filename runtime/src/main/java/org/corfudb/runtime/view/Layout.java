@@ -420,8 +420,8 @@ public class Layout implements Cloneable {
             }
 
             @Override
-            public IStreamView  getStreamView(CorfuRuntime r, UUID streamId) {
-                return new BackpointerStreamView(r, streamId);
+            public IStreamView  getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
+                return new BackpointerStreamView(r, streamId, options);
             }
 
             @Override
@@ -446,8 +446,8 @@ public class Layout implements Cloneable {
 
 
             @Override
-            public IStreamView getStreamView(CorfuRuntime r, UUID streamId) {
-                return new BackpointerStreamView(r, streamId);
+            public IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
+                return new BackpointerStreamView(r, streamId, options);
             }
 
             @Override
@@ -470,7 +470,7 @@ public class Layout implements Cloneable {
             }
 
             @Override
-            public IStreamView getStreamView(CorfuRuntime r, UUID streamId) {
+            public IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
                 throw new UnsupportedOperationException("Stream view used without a"
                         + " replication mode");
             }
@@ -484,7 +484,7 @@ public class Layout implements Cloneable {
                                                          completableFutureMap)
                 throws QuorumUnreachableException;
 
-        public abstract IStreamView getStreamView(CorfuRuntime r, UUID streamId);
+        public abstract IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options);
 
         public IReplicationProtocol getReplicationProtocol(CorfuRuntime r) {
             throw new UnsupportedOperationException();
