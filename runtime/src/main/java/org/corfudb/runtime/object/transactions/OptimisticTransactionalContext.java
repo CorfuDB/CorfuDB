@@ -259,7 +259,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * @param computeConflictSet  conflict set used to check whether transaction can commit
      * @return  the commit address
      */
-    public long getConflictSetAndCommit(Supplier<Map<UUID, Set<Integer>>>
+    public long getConflictSetAndCommit(Supplier<Map<UUID, Set<Long>>>
                                        computeConflictSet) {
 
         if (TransactionalContext.isInNestedTransaction()) {
@@ -305,7 +305,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                         new TxResolutionInfo(getTransactionID(),
                                 getSnapshotTimestamp(),
                                 computeConflictSet.get(),
-                                collectWriteConflictParams())
+                                collectWriteConflictParams(),
+                                getWriteSetInfo().getPoisonedStreams())
                 );
 
         log.trace("Commit[{}] Acquire address {}", this, address);
