@@ -123,6 +123,11 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
         return getType() == DataType.EMPTY;
     }
 
+    /** Return true if and only if the entry represents a trimmed address.*/
+    default boolean isTrimmed() {
+        return getType() == DataType.TRIMMED;
+    }
+
     /** Assign a given token to this log data.
      *
      * @param token     The token to use.
