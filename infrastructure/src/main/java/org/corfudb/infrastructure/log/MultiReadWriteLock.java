@@ -1,31 +1,34 @@
 /**
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance
- * with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  */
-package org.corfudb.infrastructure.log;
-import lombok.AllArgsConstructor;
-import lombok.Data;
 
-import java.util.*;
+package org.corfudb.infrastructure.log;
+
+import java.util.LinkedList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
 /**
- * Allows acquiring different read/write locks for different addresses
+ * Allows acquiring different read/write locks for different addresses.
  *
- * Created by Konstantin Spirov on 1/22/2015
+ * <p>Created by Konstantin Spirov on 1/22/2015
  */
 public class MultiReadWriteLock {
 
+    // lock references per thread
+    private final ThreadLocal<LinkedList<LockMetadata>> threadLockReferences = new ThreadLocal<>();
     // all used locks
     private ConcurrentHashMap<Long, LockReference> locks = new ConcurrentHashMap<>();
 
-    // lock references per thread
-    private final ThreadLocal<LinkedList<LockMetadata>> threadLockReferences = new ThreadLocal<>();
-
     /**
      * Acquire a read lock. The recommended use of this method is in try-with-resources statement.
+     *
      * @param address id of the lock to acquire.
      * @return A closable that will free the allocations for this lock if necessary
      */
@@ -50,6 +53,7 @@ public class MultiReadWriteLock {
 
     /**
      * Acquire a write lock. The recommended use of this method is in try-with-resources statement.
+     *
      * @param address id of the lock to acquire.
      * @return A closable that will free the allocations for this lock if necessary
      */
@@ -73,22 +77,23 @@ public class MultiReadWriteLock {
 
     private ReentrantReadWriteLock constructLockFor(Long name) {
         return locks.compute(name, (key, ref) -> {
-                if (ref == null) {
-                    ref = new LockReference(new ReentrantReadWriteLock());
+                    if (ref == null) {
+                        ref = new LockReference(new ReentrantReadWriteLock());
+                    }
+                    ref.referenceCount++;
+                    return ref;
                 }
-                ref.referenceCount++;
-                return ref;
-            }
         ).getLock();
     }
 
     private void clearEventuallyLockFor(Long name) {
-        locks.compute(name, (aLong, ref) -> {
+        locks.compute(name, (unusedLong, ref) -> {
             if (ref == null) {
-                throw new IllegalStateException("Lock is wrongly used " + ref+" "+System.identityHashCode(Thread.currentThread()));
+                throw new IllegalStateException("Lock is wrongly used " + ref + " "
+                        + System.identityHashCode(Thread.currentThread()));
             }
             ref.referenceCount--;
-            if (ref.getReferenceCount()==0) {
+            if (ref.getReferenceCount() == 0) {
                 return null;
             } else {
                 return ref;
@@ -97,20 +102,21 @@ public class MultiReadWriteLock {
     }
 
 
-
     private void registerLockReference(long address, boolean writeLock) {
         LinkedList<LockMetadata> threadLocks = threadLockReferences.get();
-        if (threadLocks==null) {
+        if (threadLocks == null) {
             threadLocks = new LinkedList<>();
             threadLockReferences.set(threadLocks);
         } else {
             LockMetadata last = threadLocks.getLast();
-            if (last.getAddress()>address) {
-                throw new IllegalStateException("Wrong lock acquisition order "+last.getAddress()+" > "+address);
+            if (last.getAddress() > address) {
+                throw new IllegalStateException("Wrong lock acquisition order " + last.getAddress()
+                        + " > " + address);
             }
             if (writeLock) {
-                if (last.getAddress()==address && !last.isWriteLock()) {
-                    throw new IllegalStateException("Write lock in the scope of read lock for "+address);
+                if (last.getAddress() == address && !last.isWriteLock()) {
+                    throw new IllegalStateException("Write lock in the scope of read lock for "
+                            + address);
                 }
             }
         }
@@ -128,6 +134,12 @@ public class MultiReadWriteLock {
         }
     }
 
+    public interface AutoCloseableLock extends AutoCloseable {
+        @Override
+        void close();
+
+    }
+
     @Data
     @AllArgsConstructor
     private class LockMetadata {
@@ -137,16 +149,11 @@ public class MultiReadWriteLock {
 
     @Data
     private class LockReference {
+        private ReentrantReadWriteLock lock;
+        private int referenceCount;
+
         public LockReference(ReentrantReadWriteLock lock) {
             this.lock = lock;
         }
-        private ReentrantReadWriteLock lock;
-        private int referenceCount;
-    }
-
-    public interface AutoCloseableLock extends AutoCloseable {
-        @Override
-        void close();
-
     }
 }

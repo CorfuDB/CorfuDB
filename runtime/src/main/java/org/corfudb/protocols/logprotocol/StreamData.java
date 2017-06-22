@@ -6,7 +6,7 @@ import java.util.UUID;
  * in a single global address. There may be at most one stream data per stream
  * per global address.
  *
- * Created by mwei on 4/6/17.
+ * <p>Created by mwei on 4/6/17.
  */
 public class StreamData {
 

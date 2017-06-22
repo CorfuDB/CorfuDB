@@ -1,16 +1,19 @@
 package org.corfudb.runtime.object.transactions;
 
-import lombok.extern.slf4j.Slf4j;
-
-import java.util.*;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.stream.Collectors;
+
+import lombok.extern.slf4j.Slf4j;
 
 /** A class which allows access to transactional contexts, which manage
  * transactions. The static methods of this class provide access to the
  * thread's transaction stack, which is a stack of transaction contexts
  * active for a particular thread.
  *
- * Created by mwei on 1/11/16.
+ * <p>Created by mwei on 1/11/16.
  */
 @Slf4j
 public class TransactionalContext {
@@ -26,7 +29,9 @@ public class TransactionalContext {
      *
      * @return  True, if the current thread is in a nested transaction.
      */
-    public static boolean isInNestedTransaction() {return threadTransactionStack.get().size() > 1;}
+    public static boolean isInNestedTransaction() {
+        return threadTransactionStack.get().size() > 1;
+    }
 
     /**
      * Returns the transaction stack for the calling thread.
@@ -58,8 +63,7 @@ public class TransactionalContext {
     /**
      * Returns whether or not the calling thread is in a transaction.
      *
-     * @return True, if the calling thread is in a transaction.
-     * False otherwise.
+     * @return True, if the calling thread is in a transaction.  False otherwise.
      */
     public static boolean isInTransaction() {
         return getTransactionStack().peekFirst() != null;
@@ -83,8 +87,7 @@ public class TransactionalContext {
     public static AbstractTransactionalContext removeContext() {
         AbstractTransactionalContext r = getTransactionStack().pollFirst();
         if (getTransactionStack().isEmpty()) {
-            synchronized (getTransactionStack())
-            {
+            synchronized (getTransactionStack()) {
                 getTransactionStack().notifyAll();
             }
         }

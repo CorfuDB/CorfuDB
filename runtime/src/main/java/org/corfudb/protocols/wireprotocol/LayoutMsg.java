@@ -2,14 +2,17 @@ package org.corfudb.protocols.wireprotocol;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+
 import io.netty.buffer.ByteBuf;
+
+import java.nio.charset.StandardCharsets;
+
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
-import org.corfudb.runtime.view.Layout;
 
-import java.nio.charset.StandardCharsets;
+import org.corfudb.runtime.view.Layout;
 
 /**
  * Created by mwei on 12/14/15.
@@ -48,7 +51,7 @@ public class LayoutMsg extends CorfuMsg {
      * Parse the rest of the message from the buffer. Classes that extend CorfuMsg
      * should parse their fields in this method.
      *
-     * @param buffer
+     * @param buffer The buffer to deserialize.
      */
     @Override
     public void fromBuffer(ByteBuf buffer) {

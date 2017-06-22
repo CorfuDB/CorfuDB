@@ -1,9 +1,14 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
-import lombok.*;
 
-import java.util.*;
+import java.util.EnumMap;
+import java.util.Map;
+import java.util.UUID;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
 
 /**
  * Created by mwei on 8/9/16.
@@ -28,7 +33,8 @@ public class WriteRequest implements ICorfuPayload<WriteRequest>, IMetadata {
         this(writeMode, DataType.DATA, streamAddresses, buf);
     }
 
-    public WriteRequest(WriteMode writeMode, DataType dataType, Map<UUID, Long> streamAddresses, ByteBuf buf) {
+    public WriteRequest(WriteMode writeMode, DataType dataType, Map<UUID, Long> streamAddresses,
+                        ByteBuf buf) {
         this.writeMode = writeMode;
         this.data = new LogData(dataType, buf);
     }

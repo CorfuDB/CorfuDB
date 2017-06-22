@@ -1,31 +1,35 @@
 package org.corfudb.runtime.object.transactions;
 
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Stream;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.object.ISMRStream;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
-import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Stream;
-
 /**
  * Created by mwei on 3/13/17.
  *
- * SMRStreamAdapter wraps an optimistic transaction execution context, per
+ * <p>SMRStreamAdapter wraps an optimistic transaction execution context, per
  * object, with an SMRStream API.
  *
- * The main purpose of wrapping the write-set of optimistic transactions as an
+ * <p>The main purpose of wrapping the write-set of optimistic transactions as an
  * SMRStream is to provide the abstraction of a stream of SMREntries. The
  * SMRStream maintains for us a position in the sequence. We can consume it
  * in a forward direction, and scroll back to previously read entries.
  *
- * First, forget about nested transactions for now, and neglect the contexts
+ * <p>First, forget about nested transactions for now, and neglect the contexts
  * stack; that is, assume the stack has size 1.
  *
- * A reminder from AbstractTransactionalContext about the write-set of a
+ * <p>A reminder from AbstractTransactionalContext about the write-set of a
  * transaction:
  * * A write-set is a key component of a transaction.
  * * We collect the write-set as a map, organized by streams.
@@ -35,25 +39,27 @@ import java.util.stream.Stream;
  * *  - a list of SMR updates by this transcation on the stream.
  * *
  *
- * The implementation of the current() method looks at the write-set, picks
+ * <p>The implementation of the current() method looks at the write-set, picks
  * the list of SMRentries corresponding to the current object id, and returns
  * the entry in the list corredponding the the current SMRStream position.
  *
- * previous() decrements the current SMRStream position and returns the entry
+ * <p>previous() decrements the current SMRStream position and returns the entry
  * corresponding to it.
  *
- * RemainingUpTo() returns a list of entries.
+ * <p>RemainingUpTo() returns a list of entries.
  *
- * WriteSetSMRStream does not support the full API - neither append nor seek are
+ * <p>WriteSetSMRStream does not support the full API - neither append nor seek are
  * supported.
  *
- * Enter nested transactions.
+ * <p>Enter nested transactions.
  *
- * WriteSetSMRStream maintains the abstractions also across nested transactions.
+ * <p>WriteSetSMRStream maintains the abstractions also across nested transactions.
  * It supports navigating forward/backward across the SMREntries in the entire transcation stack.
  *
  */
 @Slf4j
+@Deprecated
+@SuppressWarnings("checkstyle:abbreviationaswordinname")
 public class WriteSetSMRStream implements ISMRStream {
 
     List<AbstractTransactionalContext> contexts;
@@ -69,6 +75,11 @@ public class WriteSetSMRStream implements ISMRStream {
     // the specific stream-id for which this SMRstream wraps the write-set
     final UUID id;
 
+    /**
+     * Returns a new WriteSetSMRStream containing transactional contexts and stream id.
+     * @param contexts  list of transactional contexts
+     * @param id  stream id
+     */
     public WriteSetSMRStream(List<AbstractTransactionalContext> contexts,
                              UUID id) {
         this.contexts = contexts;
@@ -78,7 +89,7 @@ public class WriteSetSMRStream implements ISMRStream {
 
     /** Return whether stream current transaction is the thread current transaction.
      *
-     * This is validated by checking whether the current context
+     * <p>This is validated by checking whether the current context
      * for this stream is the same as the current context for this thread.
      *
      * @return  True, if the stream current context is the thread current context.
@@ -91,7 +102,7 @@ public class WriteSetSMRStream implements ISMRStream {
 
     /** Return whether we are the stream for this current thread
      *
-     * This is validated by checking whether the root context
+     * <p>This is validated by checking whether the root context
      * for this stream is the same as the root context for this thread.
      *
      * @return  True, if the thread owns the optimistic stream
@@ -103,7 +114,7 @@ public class WriteSetSMRStream implements ISMRStream {
     }
 
     void mergeTransaction() {
-        contexts.remove(contexts.size()-1);
+        contexts.remove(contexts.size() - 1);
         if (currentContext == contexts.size()) {
             // recalculate the pos based on the write pointer
             // TODO add explanation, code below very confusing!
@@ -122,11 +133,11 @@ public class WriteSetSMRStream implements ISMRStream {
     @Override
     public List<SMREntry> remainingUpTo(long maxGlobal) {
         // Check for any new contexts
-        if (TransactionalContext.getTransactionStack().size() >
-                contexts.size()) {
+        if (TransactionalContext.getTransactionStack().size()
+                > contexts.size()) {
             contexts = TransactionalContext.getTransactionStackAsList();
-        } else if (TransactionalContext.getTransactionStack().size() <
-                contexts.size()) {
+        } else if (TransactionalContext.getTransactionStack().size()
+                < contexts.size()) {
             mergeTransaction();
         }
         List<SMREntry> entryList = new LinkedList<>();
@@ -135,7 +146,7 @@ public class WriteSetSMRStream implements ISMRStream {
         for (int i = currentContext; i < contexts.size(); i++) {
             final List<SMREntry> writeSet = contexts.get(i)
                     .getWriteSetEntryList(id);
-            long readContextStart = i == currentContext ? currentContextPos + 1: 0;
+            long readContextStart = i == currentContext ? currentContextPos + 1 : 0;
             for (long j = readContextStart; j < writeSet.size(); j++) {
                 entryList.add(writeSet.get((int) j));
                 writePos++;
@@ -153,8 +164,9 @@ public class WriteSetSMRStream implements ISMRStream {
         if (Address.nonAddress(writePos)) {
             return null;
         }
-        if (Address.nonAddress(currentContextPos))
+        if (Address.nonAddress(currentContextPos)) {
             currentContextPos = -1;
+        }
         return Collections.singletonList(contexts
                 .get(currentContext)
                 .getWriteSetEntryList(id)
@@ -175,7 +187,8 @@ public class WriteSetSMRStream implements ISMRStream {
         if (currentContextPos <= Address.maxNonAddress()) {
             do {
                 if (currentContext == 0) {
-                    throw new RuntimeException("Attempted to pop first context (pos=" + pos() + ")");
+                    throw new RuntimeException(
+                            "Attempted to pop first context (pos=" + pos() + ")");
                 } else {
                     currentContext--;
                 }
@@ -184,7 +197,7 @@ public class WriteSetSMRStream implements ISMRStream {
                     .getWriteSetEntrySize(id) == 0);
             currentContextPos = contexts
                     .get(currentContext)
-                    .getWriteSetEntrySize(id)-1 ;
+                    .getWriteSetEntrySize(id) - 1 ;
         }
 
         return current();
@@ -232,6 +245,6 @@ public class WriteSetSMRStream implements ISMRStream {
 
     @Override
     public String toString() {
-        return "WSSMRStream[" + Utils.toReadableID(getID()) +"]";
+        return "WSSMRStream[" + Utils.toReadableID(getID()) + "]";
     }
 }

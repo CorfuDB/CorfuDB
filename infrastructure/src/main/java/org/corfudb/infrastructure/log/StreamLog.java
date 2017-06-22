@@ -1,39 +1,39 @@
 package org.corfudb.infrastructure.log;
 
-import org.corfudb.protocols.wireprotocol.LogData;
-
 import java.io.IOException;
+
+import org.corfudb.protocols.wireprotocol.LogData;
 
 /**
  * An interface definition that specifies an api to interact with a StreamLog.
  *
- * Created by maithem on 7/15/16.
+ * <p>Created by maithem on 7/15/16.
  */
 
 public interface StreamLog {
 
     /**
      * Append an entry to the stream log.
-     * @param address
-     * @param entry
+     * @param address  address of append entry
+     * @param entry    entry to append to the log
      */
     void append(long address, LogData entry);
 
     /**
      * Given an address, read the corresponding stream entry.
-     * @param address
+     * @param address  address to read from the log
      * @return Stream entry if it exists, otherwise return null
      */
     LogData read(long address);
 
     /**
      * Mark a StreamLog address as trimmed.
-     * @param address
+     * @param address  address to trim from the log
      */
     void trim(long address);
 
     /**
-     * Prefix trim the global log
+     * Prefix trim the global log.
      * @param address address to trim the log up to
      */
     void prefixTrim(long address);
@@ -61,9 +61,9 @@ public interface StreamLog {
     void close();
 
     /**
-     * unmap/release the memory for entry
+     * unmap/release the memory for entry.
      *
-     * @param address
+     * @param address  address to release
      */
     void release(long address, LogData entry);
 }

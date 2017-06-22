@@ -1,15 +1,18 @@
 package org.corfudb.protocols.wireprotocol;
 
 import com.google.common.reflect.TypeToken;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import org.corfudb.runtime.view.Layout;
+
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+import org.corfudb.runtime.view.Layout;
 
 /**
  * Created by mwei on 8/8/16.
@@ -101,7 +104,7 @@ public enum CorfuMsgType {
         T construct();
     }
 
-    @Getter(lazy=true)
+    @Getter(lazy = true)
     private final MessageConstructor<? extends CorfuMsg> constructor = resolveConstructor();
 
     public byte asByte() {
@@ -120,8 +123,9 @@ public enum CorfuMsgType {
             MethodHandle mh = lookup.unreflectConstructor(t);
             MethodType mt = MethodType.methodType(Object.class);
             try {
-                return (MessageConstructor<? extends CorfuMsg>) LambdaMetafactory.metafactory(lookup,
-                        "construct", MethodType.methodType(MessageConstructor.class),
+                return (MessageConstructor<? extends CorfuMsg>) LambdaMetafactory.metafactory(
+                        lookup, "construct",
+                        MethodType.methodType(MessageConstructor.class),
                         mt, mh, mh.type())
                         .getTarget().invokeExact();
             } catch (Throwable th) {

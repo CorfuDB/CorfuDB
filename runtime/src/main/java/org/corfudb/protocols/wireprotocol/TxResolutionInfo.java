@@ -1,12 +1,18 @@
 package org.corfudb.protocols.wireprotocol;
 
 import com.google.common.collect.ImmutableMap;
+
 import io.netty.buffer.ByteBuf;
+
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.util.Utils;
 
-import java.util.*;
+import org.corfudb.util.Utils;
 
 /**
  * Created by dmalkhi on 12/26/16.
@@ -15,6 +21,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
 
     @Getter
     @Setter
+    @SuppressWarnings({"checkstyle:abbreviationaswordinname", "checkstyle:membername"})
     UUID TXid; // transaction ID, mostly for debugging purposes
 
     /* snapshot timestamp of the txn. */
@@ -28,17 +35,31 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     @Getter
     final Map<UUID, Set<Integer>>  writeConflictParams;
 
-    public TxResolutionInfo(UUID TXid, long snapshotTS) {
-        this.TXid = TXid;
-        this.snapshotTimestamp = snapshotTS;
+    /**
+     * Constructor for TxResolutionInfo.
+     *
+     * @param txId transaction identifier
+     * @param snapshotTimestamp transaction snapshot timestamp
+     */
+    public TxResolutionInfo(UUID txId, long snapshotTimestamp) {
+        this.TXid = txId;
+        this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = Collections.emptyMap();
         this.writeConflictParams = Collections.emptyMap();
     }
 
-    public TxResolutionInfo(UUID TXid, long snapshotTS, Map<UUID, Set<Integer>>
+    /**
+     * Constructor for TxResolutionInfo.
+     *
+     * @param txId transaction identifier
+     * @param snapshotTimestamp transaction snapshot timestamp
+     * @param conflictMap map of conflict parameters, arranged by stream IDs
+     * @param writeConflictParams map of write conflict parameters, arranged by stream IDs
+     */
+    public TxResolutionInfo(UUID txId, long snapshotTimestamp, Map<UUID, Set<Integer>>
             conflictMap, Map<UUID, Set<Integer>> writeConflictParams) {
-        this.TXid = TXid;
-        this.snapshotTimestamp = snapshotTS;
+        this.TXid = txId;
+        this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = conflictMap;
         this.writeConflictParams = writeConflictParams;
     }
@@ -46,9 +67,10 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     /**
      * fast, specialized deserialization constructor, from a ByteBuf to this object
      *
-     * The first entry is a long, the snapshot timestamp.
+     * <p>The first entry is a long, the snapshot timestamp.
      * The second is an int, the size of the map.
-     * Next, entries are serialized one by one, first the key, then each value, itself a set of objects.
+     * Next, entries are serialized one by one, first the key, then each value,
+     * itself a set of objects.</p>
      *
      * @param buf        The buffer to deserialize.
      */
@@ -60,9 +82,9 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
         int numEntries = buf.readInt();
         ImmutableMap.Builder<UUID, Set<Integer>> conflictMapBuilder = new ImmutableMap.Builder<>();
         for (int i = 0; i < numEntries; i++) {
-            UUID K = ICorfuPayload.fromBuffer(buf, UUID.class);
-            Set<Integer> V = ICorfuPayload.setFromBuffer(buf, Integer.class);
-            conflictMapBuilder.put(K, V);
+            UUID k = ICorfuPayload.fromBuffer(buf, UUID.class);
+            Set<Integer> v = ICorfuPayload.setFromBuffer(buf, Integer.class);
+            conflictMapBuilder.put(k, v);
         }
         conflictSet = conflictMapBuilder.build();
 
@@ -70,16 +92,17 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
         numEntries = buf.readInt();
         ImmutableMap.Builder<UUID, Set<Integer>> writeMapBuilder = new ImmutableMap.Builder<>();
         for (int i = 0; i < numEntries; i++) {
-            UUID K = ICorfuPayload.fromBuffer(buf, UUID.class);
-            Set<Integer> V = ICorfuPayload.setFromBuffer(buf, Integer.class);
-            writeMapBuilder.put(K, V);
+            UUID k = ICorfuPayload.fromBuffer(buf, UUID.class);
+            Set<Integer> v = ICorfuPayload.setFromBuffer(buf, Integer.class);
+            writeMapBuilder.put(k, v);
         }
         writeConflictParams = writeMapBuilder.build();
     }
 
     /**
-     * fast , specialized serialization of object into ByteBuf
-     * @param buf
+     * fast , specialized serialization of object into ByteBuf.
+     *
+     * @param buf The buffer to serialize object into
      */
     @Override
     public void doSerialize(ByteBuf buf) {

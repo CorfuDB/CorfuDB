@@ -1,15 +1,17 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
+
 import org.corfudb.runtime.view.Layout;
 
 /**
  * If the first two phases (prepare and propose)  of paxos have been accepted,
  * the proposer sends a Committed message to commit the proposed {@link Layout}.
  *
- * Created by mdhawan on 10/24/16.
+ * <p>Created by mdhawan on 10/24/16.</p>
  */
 @Data
 @AllArgsConstructor

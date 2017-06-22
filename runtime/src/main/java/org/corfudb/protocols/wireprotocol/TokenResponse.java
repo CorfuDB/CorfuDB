@@ -1,11 +1,12 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
-import lombok.AllArgsConstructor;
-import lombok.Data;
 
 import java.util.Map;
 import java.util.UUID;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
 
 /**
  * Created by mwei on 8/8/16.
@@ -16,13 +17,21 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
 
     public static Integer NO_CONFLICT_KEY = Integer.MIN_VALUE;
 
+    /**
+     * Constructor for TokenResponse.
+     *
+     * @param tokenValue token value
+     * @param epoch current epoch
+     * @param backpointerMap  map of backpointers for all requested streams
+     */
     public TokenResponse(long tokenValue, long epoch, Map<UUID, Long> backpointerMap) {
         respType = TokenType.NORMAL;
         conflictKey = NO_CONFLICT_KEY;
         token = new Token(tokenValue, epoch);
         this.backpointerMap = backpointerMap;
     }
-    /** the cause/type of response */
+
+    /** the cause/type of response. */
     final TokenType respType;
 
     /**
@@ -37,7 +46,11 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     /** The backpointer map, if available. */
     final Map<UUID, Long> backpointerMap;
 
-
+    /**
+     * Deserialization Constructor from a Bytebuf to TokenResponse.
+     *
+     * @param buf The buffer to deserialize
+     */
     public TokenResponse(ByteBuf buf) {
         respType = TokenType.values()[ICorfuPayload.fromBuffer(buf, Byte.class)];
         conflictKey = ICorfuPayload.fromBuffer(buf, Integer.class);

@@ -16,9 +16,9 @@ public class PlainTextSaslServerProvider extends Provider {
 
     protected PlainTextSaslServerProvider() {
         super("PlainTextSaslServerProvider", 1.0,
-            "Plain Text Sasl Server Provider for CorfuDB");
+                "Plain Text Sasl Server Provider for CorfuDB");
         super.put("SaslServerFactory." + PlainTextSaslServer.MECHANISM,
-            PlainTextSaslServerFactory.class.getName());
+                PlainTextSaslServerFactory.class.getName());
     }
 
     public static void initialize() {

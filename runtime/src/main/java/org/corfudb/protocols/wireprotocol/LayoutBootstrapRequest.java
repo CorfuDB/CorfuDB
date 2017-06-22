@@ -1,9 +1,12 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
+
 import org.corfudb.runtime.view.Layout;
+
 
 /**
  * Request sent to bootstrap the server with a {@link Layout}.

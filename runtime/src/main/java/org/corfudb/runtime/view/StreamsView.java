@@ -1,22 +1,25 @@
 package org.corfudb.runtime.view;
 
+import java.util.Collections;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
-import org.corfudb.protocols.wireprotocol.*;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.TokenType;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Utils;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.util.Collections;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/11/15.
@@ -35,9 +38,19 @@ public class StreamsView extends AbstractView {
      * @return A view
      */
     public IStreamView get(UUID stream) {
+        return this.get(stream, StreamOptions.DEFAULT);
+    }
+
+    /**
+     * Get a view on a stream. The view has its own pointer to the stream.
+     *
+     * @param stream The UUID of the stream to get a view on.
+     * @return A view
+     */
+    public IStreamView get(UUID stream, StreamOptions options) {
         return runtime.getLayoutView().getLayout().getSegments().get(
                 runtime.getLayoutView().getLayout().getSegments().size() - 1)
-                .getReplicationMode().getStreamView(runtime, stream);
+                .getReplicationMode().getStreamView(runtime, stream, options);
     }
 
     /**
@@ -52,15 +65,16 @@ public class StreamsView extends AbstractView {
         while (!written) {
             TokenResponse tokenResponse =
                     runtime.getSequencerView().nextToken(Collections.singleton(destination), 1);
-            if (tokenResponse.getBackpointerMap().get(destination) != null &&
-                    Address.isAddress(tokenResponse.getBackpointerMap().get(destination))) {
+            if (tokenResponse.getBackpointerMap().get(destination) != null
+                    && Address.isAddress(tokenResponse.getBackpointerMap().get(destination))) {
                 // Reading from this address will cause a hole fill
                 runtime.getAddressSpaceView().read(tokenResponse.getTokenValue());
                 throw new RuntimeException("Stream already exists!");
             }
             StreamCOWEntry entry = new StreamCOWEntry(source, timestamp);
-            TokenResponse cowToken = new TokenResponse(tokenResponse.getTokenValue(), tokenResponse.getEpoch(),
-                    Collections.singletonMap(destination, Address.COW_BACKPOINTER));
+            TokenResponse cowToken = new TokenResponse(tokenResponse.getTokenValue(),
+                    tokenResponse.getEpoch(), Collections.singletonMap(destination,
+                    Address.COW_BACKPOINTER));
             try {
                 runtime.getAddressSpaceView().write(cowToken, entry);
                 written = true;
@@ -81,33 +95,34 @@ public class StreamsView extends AbstractView {
      *                                          the sequencer.
      */
     public long append(@Nonnull Set<UUID> streamIDs, @Nonnull Object object,
-                       @Nullable TxResolutionInfo conflictInfo)
-        throws TransactionAbortedException {
+                       @Nullable TxResolutionInfo conflictInfo) throws TransactionAbortedException {
 
         // Go to the sequencer, grab an initial token.
-        TokenResponse tokenResponse = conflictInfo == null ?
-                // Token w/o conflict info
-                runtime.getSequencerView().nextToken(streamIDs, 1) :
-                // Token w/ conflict info
-                runtime.getSequencerView().nextToken(streamIDs, 1, conflictInfo);
+        TokenResponse tokenResponse = conflictInfo == null
+                ? runtime.getSequencerView().nextToken(streamIDs, 1) // Token w/o conflict info
+                : runtime.getSequencerView().nextToken(streamIDs, 1,
+                conflictInfo); // Token w/ conflict info
+
 
         // Until we've succeeded
         while (true) {
 
             // Is our token a valid type?
-            if (tokenResponse.getRespType() == TokenType.TX_ABORT_CONFLICT)
+            if (tokenResponse.getRespType() == TokenType.TX_ABORT_CONFLICT) {
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.CONFLICT
                 );
+            }
 
-            if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ)
+            if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ) {
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.NEW_SEQUENCER
                 );
+            }
 
             // Attempt to write to the log
             try {
@@ -120,10 +135,10 @@ public class StreamsView extends AbstractView {
                         streamIDs.stream().map(Utils::toReadableID).collect(Collectors.toSet()));
 
                 TokenResponse temp;
-                if (conflictInfo == null)
+                if (conflictInfo == null) {
                     // Token w/o conflict info
                     temp = runtime.getSequencerView().nextToken(streamIDs, 1);
-                else {
+                } else {
 
                     // On retry, check for conflicts only from the previous
                     // attempt position
@@ -143,6 +158,4 @@ public class StreamsView extends AbstractView {
         }
 
     }
-
-
 }

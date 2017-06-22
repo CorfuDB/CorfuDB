@@ -7,7 +7,6 @@ import org.corfudb.runtime.view.Layout;
 
 /**
  * Request in second phase of Paxos.
- *
  * Created by mdhawan on 10/24/16.
  */
 @Data
@@ -20,6 +19,9 @@ public class LayoutProposeRequest implements ICorfuPayload<LayoutProposeRequest>
     // Value proposed
     private Layout layout;
 
+    /**
+     * Constructor for layout request in second phase of Paxos.
+     */
     public LayoutProposeRequest(ByteBuf buf) {
         epoch = ICorfuPayload.fromBuffer(buf, Long.class);
         rank = ICorfuPayload.fromBuffer(buf, Long.class);

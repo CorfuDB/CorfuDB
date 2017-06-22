@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.util.serializer.ISerializer;
 
 /**
  * Created by dalia on 4/11/17.
@@ -58,6 +59,16 @@ public class AbstractObjectTest extends AbstractViewTest {
     }
     protected <T> Object instantiateCorfuObject(TypeToken<T> tType, String name) {
         return instantiateCorfuObject(getRuntime(), tType, name);
+    }
+
+    protected <T> Object instantiateCorfuObject(CorfuRuntime r, TypeToken<T> tType, String name, ISerializer serializer) {
+        return (T)
+                r.getObjectsView()
+                        .build()
+                        .setStreamName(name)     // stream name
+                        .setTypeToken(tType)    // a TypeToken of the specified class
+                        .setSerializer(serializer)
+                        .open();                // instantiate the object!
     }
 
 }

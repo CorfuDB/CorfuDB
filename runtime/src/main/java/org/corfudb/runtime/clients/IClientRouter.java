@@ -1,18 +1,19 @@
 package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
 import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
+
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
 /**
  * This is an interface in which all client routers must implement.
  * Client routers are classes which talk to server routers. Clients are registered
  * on client routers using the addClient() interface, and can be retrieved using the
  * getClient() inteface.
- * <p>
- * Created by mwei on 12/13/15.
+ *
+ * <p>Created by mwei on 12/13/15.
  */
 public interface IClientRouter {
 
@@ -44,15 +45,17 @@ public interface IClientRouter {
      * @return A completable future which will be fulfilled by the reply,
      * or a timeout in the case there is no response.
      */
-    <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message);
+    <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx,
+                                                          CorfuMsg message);
 
     /**
-     * Send a message using the router channel handler and get a completable future to be fulfilled by the reply.
+     * Send a message using the router channel handler and
+     * get a completable future to be fulfilled by the reply.
      *
      * @param message The message to send.
      * @param <T>     The type of completable to return.
      * @return A completable future which will be fulfilled by the reply,
-     * or a timeout in the case there is no response.
+     *      or a timeout in the case there is no response.
      */
     default <T> CompletableFuture<T> sendMessageAndGetCompletable(CorfuMsg message) {
         return sendMessageAndGetCompletable(null, message);
@@ -67,7 +70,8 @@ public interface IClientRouter {
     void sendMessage(ChannelHandlerContext ctx, CorfuMsg message);
 
     /**
-     * Send a one way message using the default channel handler, without adding a completable future.
+     * Send a one way message using the default channel handler,
+     * without adding a completable future.
      *
      * @param message The message to send.
      */
@@ -110,7 +114,8 @@ public interface IClientRouter {
      * Stops routing requests.
      */
     void stop();
-    void stop(boolean shutdown_p);
+
+    void stop(boolean shutdown);
 
     /**
      * The host that this router is routing requests for.

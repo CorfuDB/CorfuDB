@@ -1,29 +1,43 @@
 package org.corfudb.runtime.view;
 
+import static java.util.Objects.requireNonNull;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import lombok.*;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.*;
-import org.corfudb.runtime.exceptions.QuorumUnreachableException;
-import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.view.replication.*;
-import org.corfudb.runtime.view.stream.BackpointerStreamView;
-import org.corfudb.runtime.view.stream.IStreamView;
 
-import javax.annotation.Nonnull;
-import java.util.Map;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.ArrayList;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static java.util.Objects.requireNonNull;
+import javax.annotation.Nonnull;
+
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.Setter;
+import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.replication.ChainReplicationProtocol;
+import org.corfudb.runtime.view.replication.IReplicationProtocol;
+import org.corfudb.runtime.view.replication.NeverHoleFillPolicy;
+import org.corfudb.runtime.view.replication.QuorumReplicationProtocol;
+import org.corfudb.runtime.view.replication.ReadWaitHoleFillPolicy;
+import org.corfudb.runtime.view.stream.BackpointerStreamView;
+import org.corfudb.runtime.view.stream.IStreamView;
 
 /**
  * This class represents the layout of a Corfu instance.
@@ -74,11 +88,13 @@ public class Layout implements Cloneable {
     @Setter
     transient CorfuRuntime runtime;
 
-    /* Defensive constructor since we can create a Layout from a JSON file. JSON deserialize is forced through
-     * this constructor.
+    /**
+     * Defensive constructor since we can create a Layout from a JSON file.
+     * JSON deserialize is forced through this constructor.
      */
     public Layout(@NonNull List<String> layoutServers, @NonNull List<String> sequencers,
-                  @NonNull List<LayoutSegment> segments, @NonNull List<String> unresponsiveServers, long epoch) {
+                  @NonNull List<LayoutSegment> segments, @NonNull List<String> unresponsiveServers,
+                  long epoch) {
 
         this.layoutServers = layoutServers;
         this.sequencers = sequencers;
@@ -87,22 +103,32 @@ public class Layout implements Cloneable {
         this.epoch = epoch;
 
         /* Assert that we constructed a valid Layout */
-        if (this.layoutServers.size() == 0) throw new IllegalArgumentException("Empty list of LayoutServers");
-        if (this.sequencers.size() == 0) throw new IllegalArgumentException("Empty list of Sequencers");
-        if (this.segments.size() == 0) throw new IllegalArgumentException("Empty list of segments");
+        if (this.layoutServers.size() == 0) {
+            throw new IllegalArgumentException("Empty list of LayoutServers");
+        }
+        if (this.sequencers.size() == 0) {
+            throw new IllegalArgumentException("Empty list of Sequencers");
+        }
+        if (this.segments.size() == 0) {
+            throw new IllegalArgumentException("Empty list of segments");
+        }
         for (Layout.LayoutSegment segment : segments) {
             requireNonNull(segment.stripes);
-            if (segment.stripes.size() == 0) throw new IllegalArgumentException("One segment has an empty list of stripes");
+            if (segment.stripes.size() == 0) {
+                throw new IllegalArgumentException("One segment has an empty list of stripes");
+            }
         }
     }
 
-    public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments, long epoch) {
+    public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments,
+                  long epoch) {
         this(layoutServers, sequencers, segments, new ArrayList<String>(), epoch);
     }
 
     /**
      * Get a layout from a JSON string.
      */
+    @SuppressWarnings({"checkstyle:abbreviation"})
     public static Layout fromJSONString(String json) {
         /* Empty Json file creates an null Layout */
         return requireNonNull(parser.fromJson(json, Layout.class));
@@ -116,14 +142,17 @@ public class Layout implements Cloneable {
      */
     public void moveServersToEpoch()
             throws WrongEpochException, QuorumUnreachableException {
-        log.debug("Requested move of servers to new epoch {} servers are {}", epoch, getAllServers());
+        log.debug("Requested move of servers to new epoch {} servers are {}", epoch,
+                getAllServers());
 
         // Set remote epoch on all servers in layout.
-        Map<String, CompletableFuture<Boolean>> resultMap = SealServersHelper.asyncSetRemoteEpoch(this);
+        Map<String, CompletableFuture<Boolean>> resultMap =
+                SealServersHelper.asyncSetRemoteEpoch(this);
 
         // Validate if we received enough layout server responses.
         SealServersHelper.waitForLayoutSeal(layoutServers, resultMap);
-        // Validate if we received enough log unit server responses depending on the replication mode.
+        // Validate if we received enough log unit server responses depending on the
+        // replication mode.
         for (LayoutSegment layoutSegment : getSegments()) {
             layoutSegment.getReplicationMode().validateSegmentSeal(layoutSegment, resultMap);
         }
@@ -150,7 +179,7 @@ public class Layout implements Cloneable {
      *
      * @param index The index to return a layout client for.
      * @return The layout client at that index, or null, if there is
-     * no client at that index.
+     *         no client at that index.
      */
     public LayoutClient getLayoutClient(int index) {
         try {
@@ -177,7 +206,7 @@ public class Layout implements Cloneable {
      *
      * @param index The index to return a sequencer client for.
      * @return The sequencer client at that index, or null, if there is
-     * no client at that index.
+     *         no client at that index.
      */
     public SequencerClient getSequencer(int index) {
         try {
@@ -188,6 +217,11 @@ public class Layout implements Cloneable {
         }
     }
 
+    /**
+     * Given the log's global address, return equivalent local address for a striped log segment.
+     *
+     * @param globalAddress The global address
+     */
     public long getLocalAddress(long globalAddress) {
         for (LayoutSegment ls : segments) {
             if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1)) {
@@ -198,6 +232,12 @@ public class Layout implements Cloneable {
         throw new RuntimeException("Unmapped address!");
     }
 
+    /**
+     * Return global address for a given stripe.
+     *
+     * @param stripe The layout stripe.
+     * @param localAddress The local address.
+     */
     public long getGlobalAddress(LayoutStripe stripe, long localAddress) {
         for (LayoutSegment ls : segments) {
             if (ls.getStripes().contains(stripe)) {
@@ -222,13 +262,17 @@ public class Layout implements Cloneable {
      *                      or equal to the global
      *                      address.
      */
-    public @Nonnull
-    List<LayoutSegment> getPrefixSegments(long globalAddress) {
+    public @Nonnull List<LayoutSegment> getPrefixSegments(long globalAddress) {
         return segments.stream()
                 .filter(p -> p.getEnd() <= globalAddress)
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Return layout segment stripe.
+     *
+     * @param globalAddress The global address.
+     */
     public LayoutStripe getStripe(long globalAddress) {
         for (LayoutSegment ls : segments) {
             if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1)) {
@@ -239,6 +283,11 @@ public class Layout implements Cloneable {
         throw new RuntimeException("Unmapped address!");
     }
 
+    /**
+     * Return layout segment.
+     *
+     * @param globalAddress The global address.
+     */
     public LayoutSegment getSegment(long globalAddress) {
         for (LayoutSegment ls : segments) {
             if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1)) {
@@ -281,13 +330,15 @@ public class Layout implements Cloneable {
      * @return A log unit client, if present. Null otherwise.
      */
     public LogUnitClient getLogUnitClient(long address, int index) {
-        return runtime.getRouter(getStripe(address).getLogServers().get(index)).getClient(LogUnitClient.class);
+        return runtime.getRouter(getStripe(address).getLogServers()
+                .get(index)).getClient(LogUnitClient.class);
     }
 
 
     /**
      * Get the layout as a JSON string.
      */
+    @SuppressWarnings({"checkstyle:abbreviation"})
     public String asJSONString() {
         return parser.toJson(this);
     }
@@ -310,12 +361,12 @@ public class Layout implements Cloneable {
      * x.clone().equals(x)</pre></blockquote>
      * will be {@code true}, this is not an absolute requirement.
      *
-     * By convention, the returned object should be obtained by calling
+     * <p>By convention, the returned object should be obtained by calling
      * {@code super.clone}.  If a class and all of its superclasses (except
      * {@code Object}) obey this convention, it will be the case that
-     * {@code x.clone().getClass() == x.getClass()}.
+     * {@code x.clone().getClass() == x.getClass()}.</p>
      *
-     * By convention, the object returned by this method should be independent
+     * <p>By convention, the object returned by this method should be independent
      * of this object (which is being cloned).  To achieve this independence,
      * it may be necessary to modify one or more fields of the object returned
      * by {@code super.clone} before returning it.  Typically, this means
@@ -324,9 +375,9 @@ public class Layout implements Cloneable {
      * objects with references to the copies.  If a class contains only
      * primitive fields or references to immutable objects, then it is usually
      * the case that no fields in the object returned by {@code super.clone}
-     * need to be modified.
+     * need to be modified.</p>
      *
-     * The method {@code clone} for class {@code Object} performs a
+     * <p>The method {@code clone} for class {@code Object} performs a
      * specific cloning operation. First, if the class of this object does
      * not implement the interface {@code Cloneable}, then a
      * {@code CloneNotSupportedException} is thrown. Note that all arrays
@@ -337,12 +388,12 @@ public class Layout implements Cloneable {
      * object and initializes all its fields with exactly the contents of
      * the corresponding fields of this object, as if by assignment; the
      * contents of the fields are not themselves cloned. Thus, this method
-     * performs a "shallow copy" of this object, not a "deep copy" operation.
+     * performs a "shallow copy" of this object, not a "deep copy" operation.</p>
      *
-     * The class {@code Object} does not itself implement the interface
+     * <p>The class {@code Object} does not itself implement the interface
      * {@code Cloneable}, so calling the {@code clone} method on an object
      * whose class is {@code Object} will result in throwing an
-     * exception at run time.
+     * exception at run time.</p>
      *
      * @return a clone of this instance.
      * @throws CloneNotSupportedException if the object's class does not
@@ -362,14 +413,15 @@ public class Layout implements Cloneable {
         CHAIN_REPLICATION {
             @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,
-                                            Map<String, CompletableFuture<Boolean>> completableFutureMap)
+                                            Map<String, CompletableFuture<Boolean>>
+                                                    completableFutureMap)
                     throws QuorumUnreachableException {
                 SealServersHelper.waitForChainSegmentSeal(layoutSegment, completableFutureMap);
             }
 
             @Override
-            public IStreamView  getStreamView(CorfuRuntime r, UUID streamId) {
-                return new BackpointerStreamView(r, streamId);
+            public IStreamView  getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
+                return new BackpointerStreamView(r, streamId, options);
             }
 
             @Override
@@ -385,7 +437,8 @@ public class Layout implements Cloneable {
         QUORUM_REPLICATION {
             @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,
-                                            Map<String, CompletableFuture<Boolean>> completableFutureMap)
+                                            Map<String, CompletableFuture<Boolean>>
+                                                    completableFutureMap)
                     throws QuorumUnreachableException {
                 //TODO: Take care of log unit servers which were not sealed.
                 SealServersHelper.waitForQuorumSegmentSeal(layoutSegment, completableFutureMap);
@@ -393,8 +446,8 @@ public class Layout implements Cloneable {
 
 
             @Override
-            public IStreamView getStreamView(CorfuRuntime r, UUID streamId) {
-                return new BackpointerStreamView(r, streamId);
+            public IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
+                return new BackpointerStreamView(r, streamId, options);
             }
 
             @Override
@@ -410,14 +463,16 @@ public class Layout implements Cloneable {
         }, NO_REPLICATION {
             @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,
-                                            Map<String, CompletableFuture<Boolean>> completableFutureMap)
+                                            Map<String, CompletableFuture<Boolean>>
+                                                    completableFutureMap)
                     throws QuorumUnreachableException {
                 throw new UnsupportedOperationException("unsupported seal");
             }
 
             @Override
-            public IStreamView getStreamView(CorfuRuntime r, UUID streamId) {
-                throw new UnsupportedOperationException("Stream view used without a replication mode");
+            public IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
+                throw new UnsupportedOperationException("Stream view used without a"
+                        + " replication mode");
             }
         };
 
@@ -425,10 +480,11 @@ public class Layout implements Cloneable {
          * Seals the layout segment.
          */
         public abstract void validateSegmentSeal(LayoutSegment layoutSegment,
-                                                 Map<String, CompletableFuture<Boolean>> completableFutureMap)
+                                                 Map<String, CompletableFuture<Boolean>>
+                                                         completableFutureMap)
                 throws QuorumUnreachableException;
 
-        public abstract IStreamView getStreamView(CorfuRuntime r, UUID streamId);
+        public abstract IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options);
 
         public IReplicationProtocol getReplicationProtocol(CorfuRuntime r) {
             throw new UnsupportedOperationException();
@@ -444,19 +500,33 @@ public class Layout implements Cloneable {
          * The replication mode of the segment.
          */
         ReplicationMode replicationMode;
+
         /**
          * The address the layout segment starts at.
          */
         long start;
+
         /**
          * The address the layout segment ends at.
          */
         long end;
+
         /**
          * A list of log servers for this segment.
          */
         List<LayoutStripe> stripes;
 
+        /**
+         * Constructor Layout Segment, contiguous partition in a Corfu Log.
+         *
+         * <p>For example, [1...100], [101...200], [201...), where the last segment is active and
+         * open ended.</p>
+         *
+         * @param replicationMode The layout segment replication mode.
+         * @param start The start address for layout segment (e.g., 1).
+         * @param end  The end address for layout segment. (e.g., 100)
+         * @param stripes List of stripes for layout segment.
+         */
         public LayoutSegment(@NonNull ReplicationMode replicationMode, long start, long end,
                              @NonNull List<LayoutStripe> stripes) {
             this.replicationMode = replicationMode;
@@ -466,7 +536,9 @@ public class Layout implements Cloneable {
 
         }
 
-        public int getNumberOfStripes() { return stripes.size(); }
+        public int getNumberOfStripes() {
+            return stripes.size();
+        }
     }
 
     @Data
