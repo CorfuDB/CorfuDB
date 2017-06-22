@@ -85,6 +85,16 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     }
 
     @Test
+    public void testGetTrimMark() {
+        CorfuRuntime r = getRuntime().connect();
+        assertThat(r.getAddressSpaceView().getTrimMark()).isEqualTo(0);
+        final long trimAddress = 10;
+
+        r.getAddressSpaceView().prefixTrim(trimAddress);
+        assertThat(r.getAddressSpaceView().getTrimMark()).isEqualTo(trimAddress + 1);
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     public void ensureStripingReadAllWorks()
             throws Exception {

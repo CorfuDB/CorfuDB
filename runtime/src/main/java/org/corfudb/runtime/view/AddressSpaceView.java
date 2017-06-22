@@ -26,6 +26,9 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
 
+import java.util.Comparator;
+
+
 
 /**
  * A view of the address space implemented by Corfu.
@@ -166,6 +169,23 @@ public class AddressSpaceView extends AbstractView {
             return readCache.getAll(addresses);
         }
         return this.cacheFetch(addresses);
+    }
+
+    /**
+     * Get the first address in the address space.
+     */
+    public long getTrimMark() {
+        return layoutHelper(l -> {
+            return l.segments.stream()
+                    .flatMap(seg -> seg.getStripes().stream())
+                    .flatMap(stripe -> stripe.getLogServers().stream())
+                    .map(endpoint ->
+                            runtime.getRouter(endpoint)
+                                    .getClient(LogUnitClient.class))
+                    .map(LogUnitClient::getTrimMark)
+                    .map(CFUtils::getUninterruptibly)
+                    .max(Comparator.naturalOrder()).get();
+        });
     }
 
     /**

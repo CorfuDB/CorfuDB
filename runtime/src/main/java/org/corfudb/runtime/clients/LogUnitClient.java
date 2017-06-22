@@ -217,6 +217,18 @@ public class LogUnitClient implements IClient {
     }
 
     /**
+     * Handle a HEAD_RESPONSE message
+     * @param msg   Incoming Message
+     * @param ctx   Context
+     * @param r     Router
+     */
+    @ClientHandler(type=CorfuMsgType.TRIM_MARK_RESPONSE)
+    private static Object handleTrimMarkResponse(CorfuPayloadMsg<Long> msg,
+                                             ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    /**
      * Asynchronously write to the logging unit.
      *
      * @param address        The address to write to.
@@ -328,6 +340,14 @@ public class LogUnitClient implements IClient {
      */
     public CompletableFuture<Long> getTail() {
         return router.sendMessageAndGetCompletable(CorfuMsgType.TAIL_REQUEST.msg());
+    }
+
+    /**
+     * Get the starting address of a loggining unit.
+     * @return A CompletableFuture for the starting address
+     */
+    public CompletableFuture<Long> getTrimMark() {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.TRIM_MARK_REQUEST.msg());
     }
 
     /**
