@@ -4,6 +4,7 @@ org.corfudb.infrastructure.log
 org.corfudb.logReader
 org.corfudb.protocols.logprotocol
 org.corfudb.protocols.wireprotocol
+org.corfudb.recovery
 org.corfudb.runtime
 org.corfudb.runtime.clients
 org.corfudb.runtime.collections
