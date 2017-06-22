@@ -38,9 +38,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
 
     @Override
     public synchronized void append(long address, LogData entry) {
-        try {
-            checkRange(address);
-        } catch (TrimmedException e) {
+        if(isTrimmed(address)) {
             throw new OverwriteException();
         }
 
@@ -54,15 +52,18 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
                 ? entry.getGlobalAddress() : maxTail);
     }
 
-    private void checkRange(long address) {
+    private boolean isTrimmed(long address) {
         if (address < startingAddress) {
-            throw new TrimmedException();
+            return true;
         }
+        return false;
     }
 
     @Override
     public synchronized void prefixTrim(long address) {
-        checkRange(address);
+        if(isTrimmed(address)){
+            throw new TrimmedException();
+        }
         startingAddress = address + 1;
     }
 
@@ -90,9 +91,11 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
 
     @Override
     public LogData read(long address) {
-        checkRange(address);
+        if(isTrimmed(address)){
+            return LogData.TRIMMED;
+        }
         if (trimmed.contains(address)) {
-            throw new TrimmedException();
+            return LogData.TRIMMED;
         }
 
         return logCache.get(address);
