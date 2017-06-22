@@ -177,6 +177,11 @@ public class SequencerServer extends AbstractServer {
     private static Counter counterTokenSum;
     private static Counter counterToken0;
 
+    @Override
+    public boolean isServerReady() {
+        return serverContext.isReady();
+    }
+
     /**
      * Returns a new SequencerServer.
      * @param serverContext context object providing parameters and objects

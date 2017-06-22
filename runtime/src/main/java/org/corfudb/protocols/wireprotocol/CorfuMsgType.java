@@ -30,6 +30,7 @@ public enum CorfuMsgType {
     NACK(6, TypeToken.of(CorfuMsg.class)),
     VERSION_REQUEST(7, TypeToken.of(CorfuMsg.class), true),
     VERSION_RESPONSE(8, new TypeToken<JSONPayloadMsg<VersionInfo>>() {}, true),
+    NOT_READY(9, TypeToken.of(CorfuMsg.class), true),
 
     // Layout Messages
     LAYOUT_REQUEST(10, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
