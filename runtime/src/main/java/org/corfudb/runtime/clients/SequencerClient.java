@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -72,5 +73,15 @@ public class SequencerClient implements IClient {
     public CompletableFuture<Boolean> reset(Long initialToken) {
         return router.sendMessageAndGetCompletable(CorfuMsgType.RESET_SEQUENCER
                 .payloadMsg(initialToken));
+    }
+
+    /**
+     * Provide a hint to the sequencer about stream tail addresses.
+     *
+     * @param tokenHints
+     * @return
+     */
+    public CompletableFuture<Boolean> tokenHint(Map<UUID, Long> tokenHints) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.TAILS_HINT.payloadMsg(tokenHints));
     }
 }
