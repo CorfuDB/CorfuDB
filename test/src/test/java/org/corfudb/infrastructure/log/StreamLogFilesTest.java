@@ -435,6 +435,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log = new StreamLogFiles(getContext(), false);
 
         assertThat(log.getGlobalTail()).isEqualTo(midSegmentAddress);
-        assertThat(((StreamLogFiles)log).getStartingAddress()).isEqualTo(midSegmentAddress + 1);
+        assertThat(((StreamLogFiles)log).getTrimMark()).isEqualTo(midSegmentAddress + 1);
     }
 }

@@ -8,6 +8,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
@@ -26,14 +27,24 @@ import java.util.stream.Collectors;
 @Slf4j
 public class BackpointerStreamView extends AbstractQueuedStreamView {
 
+    final StreamOptions options;
+
     /** Create a new backpointer stream view.
      *
      * @param runtime   The runtime to use for accessing the log.
      * @param streamID  The ID of the stream to view.
      */
     public BackpointerStreamView(final CorfuRuntime runtime,
+                                 final UUID streamID,
+                                 @Nonnull final StreamOptions options) {
+        super(runtime, streamID);
+        this.options = options;
+    }
+
+    public BackpointerStreamView(final CorfuRuntime runtime,
                                  final UUID streamID) {
         super(runtime, streamID);
+        this.options = StreamOptions.DEFAULT;
     }
 
     /**
@@ -185,8 +196,18 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 return entryAdded;
             }
             backpointerCount++;
+
             // Read the current address
-            ILogData d = read(currentAddress);
+            ILogData d;
+            try {
+                d = read(currentAddress);
+            } catch (TrimmedException e) {
+                if (options.ignoreTrimmed) {
+                    return entryAdded;
+                } else {
+                    throw e;
+                }
+            }
 
             // If it contains the stream we are interested in
             if (d.containsStream(streamId)) {

@@ -1,24 +1,25 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableMap;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Set;
 import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.ConflictParameter;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
 
-import java.util.Collection;
-import java.util.Map;
-import java.util.Set;
-
 /**
  * Created by mwei on 1/9/16.
  */
+@Deprecated // TODO: Add replacement method that conforms to style
+@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
 public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
 
     /**
      * {@inheritDoc}
      *
-     * Conflicts: this operation conflicts with any modification to
+     * <p>Conflicts: this operation conflicts with any modification to
      * the map, since the size of the map could be potentially changed.
      */
     @Accessor
@@ -28,7 +29,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     /**
      * {@inheritDoc}
      *
-     * Conflicts: this operation conflicts with any modification to
+     * <p>Conflicts: this operation conflicts with any modification to
      * the map, since the size of the map could be potentially changed.
      */
     @Accessor
@@ -38,7 +39,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     /**
      * {@inheritDoc}
      *
-     * Conflicts: this operation conflicts with any operation on the
+     * <p>Conflicts: this operation conflicts with any operation on the
      * given key.
      */
     @Accessor
@@ -48,7 +49,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     /**
      * {@inheritDoc}
      *
-     * Conflicts: this operation conflicts with any modification to
+     * <p>Conflicts: this operation conflicts with any modification to
      * the map, since the presence of values could be potentially changed.
      */
     @Accessor
@@ -58,7 +59,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     /**
      * {@inheritDoc}
      *
-     * Conflicts: this operation conflicts with any operation on the
+     * <p>Conflicts: this operation conflicts with any operation on the
      * given key.
      */
     @Accessor
@@ -68,7 +69,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     /**
      * {@inheritDoc}
      *
-     * Conflicts: this operation produces a conflict with any other
+     * <p>Conflicts: this operation produces a conflict with any other
      * operation on the given key.
      */
     @MutatorAccessor(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord")
@@ -81,11 +82,11 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      * return the previous value, and does not result in a read
      * of the map.
      *
-     * Calling this operation produces the same put record as calling
+     * <p>Calling this operation produces the same put record as calling
      * "put" directly. However, the runtime will not try to sync
      * the object to obtain an upcall.
      *
-     * Conflicts: this operation produces a conflict with any other
+     * <p>Conflicts: this operation produces a conflict with any other
      * operation on the given key.
      */
     @Mutator(name = "put", noUpcall = true)
@@ -119,8 +120,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     default void undoPut(ISMRMap<K,V> map, V undoRecord, K key, V value) {
         if (undoRecord == null) {
             map.remove(key);
-        }
-        else {
+        } else {
             map.put(key, undoRecord);
         }
     }
@@ -128,10 +128,11 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     /**
      * {@jnheritDoc}
      *
-     * Conflicts: this operation produces a conflict with any other
+     * <p>Conflicts: this operation produces a conflict with any other
      * operation on the given key.
      */
-    @MutatorAccessor(name="remove", undoFunction = "undoRemove", undoRecordFunction = "undoRemoveRecord")
+    @MutatorAccessor(name = "remove", undoFunction = "undoRemove",
+            undoRecordFunction = "undoRemoveRecord")
     @Override
     V remove(@ConflictParameter Object key);
 
@@ -156,8 +157,7 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     default void undoRemove(ISMRMap<K,V> map, V undoRecord, K key) {
         if (undoRecord == null) {
             map.remove(key);
-        }
-        else {
+        } else {
             map.put(key, undoRecord);
         }
     }
@@ -165,10 +165,11 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     /**
      * {@inheritDoc}
      *
-     * Conflicts: this operation conflicts on any keys that are in the map given.
+     * <p>Conflicts: this operation conflicts on any keys that are in the map given.
      */
-    @Mutator(name="putAll", undoFunction="undoPutAll",
-            undoRecordFunction="undoPutAllRecord", conflictParameterFunction="putAllConflictFunction")
+    @Mutator(name = "putAll", undoFunction = "undoPutAll",
+            undoRecordFunction = "undoPutAllRecord",
+            conflictParameterFunction = "putAllConflictFunction")
     @Override
     void putAll(Map<? extends K, ? extends V> m);
 
@@ -210,31 +211,36 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      * @param map           The state of the map after the put to undo
      * @param undoRecord    The undo record generated by undoRemoveRecord
      */
-    default void undoPutAll(ISMRMap<K,V> map, Map<K,V> undoRecord, Map<? extends K, ? extends V> m) {
+    default void undoPutAll(ISMRMap<K,V> map, Map<K,V> undoRecord,
+                            Map<? extends K, ? extends V> m) {
         undoRecord.entrySet().forEach(e -> {
-            if (e.getValue() == UndoNullable.NULL) { map.remove(e.getKey()); }
-            else { map.put(e.getKey(), e.getValue()); }
-        });
+            if (e.getValue() == UndoNullable.NULL) {
+                map.remove(e.getKey());
+            } else {
+                map.put(e.getKey(), e.getValue());
+            }
+        }
+        );
     }
 
 
     /**
      * {@inheritDoc}
      *
-     * Conflicts: this operation conflicts with the entire map, since it drops
+     * <p>Conflicts: this operation conflicts with the entire map, since it drops
      * all mappings which are present.
      */
-    @Mutator(name="clear", reset=true)
+    @Mutator(name = "clear", reset = true)
     @Override
     void clear();
 
     /**
      * {@inheritDoc}
      *
-     * This function currently does not return a view like the java.util implementation,
+     * <p>This function currently does not return a view like the java.util implementation,
      * and changes to the keySet will *not* be reflected in the map.
      *
-     * Conflicts: This operation currently conflicts with any modification
+     * <p>Conflicts: This operation currently conflicts with any modification
      * to the map.
      */
     @Accessor
@@ -244,10 +250,10 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     /**
      * {@inheritDoc}
      *
-     * This function currently does not return a view like the java.util implementation,
+     * <p>This function currently does not return a view like the java.util implementation,
      * and changes to the values will *not* be reflected in the map.
      *
-     * Conflicts: This operation currently conflicts with any modification
+     * <p>Conflicts: This operation currently conflicts with any modification
      * to the map.
      */
     @Accessor
@@ -257,10 +263,10 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     /**
      * {@inheritDoc}
      *
-     * This function currently does not return a view like the java.util implementation,
+     * <p>This function currently does not return a view like the java.util implementation,
      * and changes to the entrySet will *not* be reflected in the map.
      *
-     * Conflicts: This operation currently conflicts with any modification
+     * <p>Conflicts: This operation currently conflicts with any modification
      * to the map.
      */
     @Accessor

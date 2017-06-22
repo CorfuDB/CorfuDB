@@ -33,7 +33,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         logCache = new ConcurrentHashMap();
         streamCache = new HashMap();
         trimmed = new ConcurrentSet<>();
-        startingAddress = -1;
+        startingAddress = 0;
     }
 
     @Override
@@ -70,6 +70,9 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     public long getGlobalTail() {
         return globalTail.get();
     }
+
+    @Override
+    public long getTrimMark() { return startingAddress; }
 
     private void throwLogUnitExceptionsIfNecessary(long address, LogData entry) {
         if (entry.getRank() == null) {

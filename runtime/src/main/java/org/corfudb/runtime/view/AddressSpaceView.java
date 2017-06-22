@@ -5,10 +5,11 @@ import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -24,6 +25,9 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
+
+import java.util.Comparator;
+
 
 
 /**
@@ -168,6 +172,23 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
+     * Get the first address in the address space.
+     */
+    public long getTrimMark() {
+        return layoutHelper(l -> {
+            return l.segments.stream()
+                    .flatMap(seg -> seg.getStripes().stream())
+                    .flatMap(stripe -> stripe.getLogServers().stream())
+                    .map(endpoint ->
+                            runtime.getRouter(endpoint)
+                                    .getClient(LogUnitClient.class))
+                    .map(LogUnitClient::getTrimMark)
+                    .map(CFUtils::getUninterruptibly)
+                    .max(Comparator.naturalOrder()).get();
+        });
+    }
+
+    /**
      * Prefix trim the address space.
      *
      * <p>At the end of a prefix trim, all addresses equal to or
@@ -252,18 +273,23 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
-     * Fetch an address for insertion into the cache.
+     * Fetch a collection of addresses for insertion into the cache.
      *
-     * @param addresses An address to read from.
-     * @return A result to be cached. If the readresult is empty,
-     *         This entry will be scheduled to self invalidate.
+     * @param addresses collection of addresses to read from.
+     * @return A result to be cached
      */
     private @Nonnull Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
-        return StreamSupport.stream(addresses.spliterator(), true)
-                .map(address -> layoutHelper(l ->
-                        l.getReplicationMode(address).getReplicationProtocol(runtime)
-                        .read(l, address)))
-                .collect(Collectors.toMap(ILogData::getGlobalAddress, r -> r));
+        //turn the addresses into Set for now to satisfy signature requirement down the line
+        Set<Long> readAddresses = new TreeSet<>();
+        Iterator<Long> iterator = addresses.iterator();
+        while(iterator.hasNext()){
+            readAddresses.add(iterator.next());
+        }
+
+        //doesn't handle the case where some address have a different replication mode
+        return layoutHelper(l -> l.getReplicationMode(readAddresses.iterator().next())
+                .getReplicationProtocol(runtime)
+                .readAll(l, readAddresses));
     }
 
 
