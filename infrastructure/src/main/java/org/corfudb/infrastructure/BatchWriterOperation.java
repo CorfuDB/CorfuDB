@@ -1,9 +1,10 @@
 package org.corfudb.infrastructure;
 
-import lombok.Data;
-import org.corfudb.protocols.wireprotocol.LogData;
-
 import java.util.concurrent.CompletableFuture;
+
+import lombok.Data;
+
+import org.corfudb.protocols.wireprotocol.LogData;
 
 /**
  * Created by maithem on 11/28/16.
@@ -24,5 +25,6 @@ public class BatchWriterOperation {
     private final CompletableFuture future;
     private Exception exception;
 
-    public static BatchWriterOperation SHUTDOWN = new BatchWriterOperation(Type.SHUTDOWN,null, null, null);
+    public static BatchWriterOperation SHUTDOWN = new BatchWriterOperation(Type.SHUTDOWN,
+            null, null, null);
 }

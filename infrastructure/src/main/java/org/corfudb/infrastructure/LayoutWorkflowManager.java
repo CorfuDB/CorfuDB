@@ -1,23 +1,24 @@
 package org.corfudb.infrastructure;
 
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.exceptions.LayoutModificationException;
-import org.corfudb.runtime.view.Layout;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.runtime.exceptions.LayoutModificationException;
+import org.corfudb.runtime.view.Layout;
+
 /**
  * Allows us to make modifications to a layout.
- * <p>
- * Created by zlokhandwala on 10/12/16.
+ *
+ * <p>Created by zlokhandwala on 10/12/16.
  */
 @Slf4j
 public class LayoutWorkflowManager {
 
     /**
-     * Updated layout
+     * Updated layout.
      */
     private Layout layout;
     /**
@@ -39,7 +40,7 @@ public class LayoutWorkflowManager {
      * Adds unresponsive servers in the list.
      *
      * @param endpoints Endpoints to be added.
-     * @return
+     * @return updated LayoutWorkflowManager including unresponsive servers
      */
     public LayoutWorkflowManager addUnresponsiveServers(Set<String> endpoints) {
         List<String> unresponsiveServers = layout.getUnresponsiveServers();
@@ -62,7 +63,8 @@ public class LayoutWorkflowManager {
         for (int i = 0; i < layoutServers.size(); i++) {
             if (layoutServers.get(i).equals(endpoint)) {
                 if (layoutServers.size() == 1) {
-                    throw new LayoutModificationException("Attempting to remove all layout servers.");
+                    throw new LayoutModificationException(
+                            "Attempting to remove all layout servers.");
                 }
                 layoutServers.remove(i);
                 return this;
@@ -87,7 +89,8 @@ public class LayoutWorkflowManager {
         for (int i = 0; i < modifiedLayoutServers.size(); ) {
             if (endpoints.contains(modifiedLayoutServers.get(i))) {
                 if (modifiedLayoutServers.size() == 1) {
-                    throw new LayoutModificationException("Attempting to remove all layout servers.");
+                    throw new LayoutModificationException(
+                            "Attempting to remove all layout servers.");
                 }
                 modifiedLayoutServers.remove(i);
             } else {
@@ -174,7 +177,7 @@ public class LayoutWorkflowManager {
     }
 
     /**
-     * Removes the logunit endpoint from the layout
+     * Removes the logunit endpoint from the layout.
      *
      * @param endpoint Log unit server to be removed
      * @return Workflow manager
@@ -192,8 +195,9 @@ public class LayoutWorkflowManager {
                 for (int k = 0; k < loguintServers.size(); k++) {
                     if (loguintServers.get(k).equals(endpoint)) {
                         if (loguintServers.size() == 1) {
-                            throw new LayoutModificationException("Attempting to remove all logunit. " +
-                                    "No replicas available.");
+                            throw new LayoutModificationException(
+                                    "Attempting to remove all logunit. "
+                                            + "No replicas available.");
                         }
                         loguintServers.remove(k);
                         return this;
@@ -207,7 +211,7 @@ public class LayoutWorkflowManager {
     }
 
     /**
-     * Removes the logunit endpoints from the layout
+     * Removes the logunit endpoints from the layout.
      *
      * @param endpoints Log unit servers to be removed
      * @return Workflow manager
@@ -229,8 +233,9 @@ public class LayoutWorkflowManager {
                     String logunitServer = loguintServers.get(k);
                     if (endpoints.contains(logunitServer)) {
                         if (loguintServers.size() == 1) {
-                            throw new LayoutModificationException("Attempting to remove all logunit. " +
-                                    "No replicas available.");
+                            throw new LayoutModificationException(
+                                    "Attempting to remove all logunit. "
+                                            + "No replicas available.");
                         }
                         loguintServers.remove(k);
                     } else {
