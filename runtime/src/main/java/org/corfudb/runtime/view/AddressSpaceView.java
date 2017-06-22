@@ -278,7 +278,7 @@ public class AddressSpaceView extends AbstractView {
      * @param addresses collection of addresses to read from.
      * @return A result to be cached
      */
-    private @Nonnull Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
+    public @Nonnull Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
         //turn the addresses into Set for now to satisfy signature requirement down the line
         Set<Long> readAddresses = new TreeSet<>();
         Iterator<Long> iterator = addresses.iterator();

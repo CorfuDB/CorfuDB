@@ -481,7 +481,7 @@ public class VersionLockedObject<T> {
      *
      * @param entry The entry to apply.
      */
-    protected Object applyUpdateUnsafe(SMREntry entry) {
+    public Object applyUpdateUnsafe(SMREntry entry) {
         log.trace("Apply[{}] of {}@{} ({})", this, entry.getSMRMethod(),
                 entry.getEntry() != null ? entry.getEntry().getGlobalAddress() : "OPT",
                 entry.getSMRArguments());
@@ -619,5 +619,17 @@ public class VersionLockedObject<T> {
             log.debug("OptimisticRollback[{}] failed", this);
             resetUnsafe();
         }
+    }
+
+    /** Apply an SMREntry to the version object, while
+     * doing bookkeeping for the underlying stream.
+     *
+     * @param entry
+     */
+    public void applyUpdateToStreamUnsafe(SMREntry entry) {
+        long entryAddress = entry.getEntry().getGlobalAddress();
+
+        applyUpdateUnsafe(entry);
+        seek(entryAddress + 1);
     }
 }
