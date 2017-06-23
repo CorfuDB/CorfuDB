@@ -1,4 +1,4 @@
-package org.corfudb.logReader;
+package org.corfudb.logreader;
 
 import lombok.Getter;
 import org.corfudb.format.Types.LogEntry;
@@ -13,10 +13,13 @@ public class LogEntryExtended {
         bytesLength = length;
         checksum = cksum;
     }
+
     @Getter
     private LogEntry entryBody;
+
     @Getter
     private int bytesLength;
+
     @Getter
     private int checksum;
 }

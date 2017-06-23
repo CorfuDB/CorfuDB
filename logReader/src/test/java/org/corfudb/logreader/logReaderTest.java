@@ -1,4 +1,4 @@
-package org.corfudb.logReader;
+package org.corfudb.logreader;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -20,7 +20,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Created by kjames88 on 3/1/17.
@@ -71,7 +70,7 @@ public class logReaderTest {
     }
     @Test(expected = DocoptExitException.class)
     public void TestArgumentsRequired() {
-        logReader reader = new logReader();
+        LogReader reader = new LogReader();
         String[] args = {};
         boolean ret = reader.init(args);
         assertEquals(false, ret);
@@ -80,14 +79,14 @@ public class logReaderTest {
     public void TestRecordCount() {
         final int totalRecordCnt = 3;
 
-        logReader reader = new logReader();
+        LogReader reader = new LogReader();
         String[] args = {"report", LOG_PATH + "/" + "0.log"};
         int cnt = reader.run(args);
         assertEquals(totalRecordCnt, cnt);
     }
     @Test
     public void TestDisplayOne() {
-        logReader reader = new logReader();
+        LogReader reader = new LogReader();
         String[] args = {"display", "--from=1", "--to=1", LOG_PATH + "/" + "0.log"};
         reader.init(args);
         try {
@@ -105,7 +104,7 @@ public class logReaderTest {
     }
     @Test
     public void TestDisplayAll() {
-        logReader reader = new logReader();
+        LogReader reader = new LogReader();
         String[] args = {"display", "--from=0", "--to=2", LOG_PATH + "/" + "0.log"};
         reader.init(args);
         try {
@@ -123,12 +122,12 @@ public class logReaderTest {
     }
     @Test
     public void TestEraseOne() {
-        logReader reader = new logReader();
+        LogReader reader = new LogReader();
         String[] args = {"erase", "--from=1", "--to=1", LOG_PATH + "/" + "0.log"};
         reader.run(args);
 
         // Read back the new modified log file and confirm the expected change
-        reader = new logReader();
+        reader = new LogReader();
         args = new String[]{"display", LOG_PATH + "/" + "0.log.modified"};
         reader.init(args);
         try {
@@ -146,12 +145,12 @@ public class logReaderTest {
     }
     @Test
     public void TestEraseTail() {
-        logReader reader = new logReader();
+        LogReader reader = new LogReader();
         String[] args = {"erase", "--from=1", LOG_PATH + "/" + "0.log"};
         reader.run(args);
 
         // Read back the new modified log file and confirm the expected change
-        reader = new logReader();
+        reader = new LogReader();
         args = new String[]{"display", LOG_PATH + "/" + "0.log.modified"};
         reader.init(args);
         try {
