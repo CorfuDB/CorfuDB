@@ -160,7 +160,7 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
   [string-param] (try (java.util.UUID/fromString string-param)
    (catch Exception e (org.corfudb.runtime.CorfuRuntime/getStreamID string-param))))
 (defn pprint-json "Pretty prints a JSON string. Used because of issues due to AOT compilation."
-  [string] (println (org.corfudb.util.JSONUtils/prettyPrint string)))
+  [string] (println (org.corfudb.util.JsonUtils/prettyPrint string)))
 (defn edit-file
   "Open a file in an editor, blocking until completion"
   [path]

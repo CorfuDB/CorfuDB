@@ -8,12 +8,12 @@ import lombok.Data;
 /**
  * A class for dealing with automatically closing allocated bytebufs.
  *
- * Created by mwei on 4/7/17.
+ * <p>Created by mwei on 4/7/17.
  */
 @Data
 public class AutoClosableByteBuf implements AutoCloseable {
 
-    /** The underlying bytebuf */
+    /** The underlying bytebuf. */
     final ByteBuf buf;
 
     /** Grab a bytebuf from the default unpooled buffer. */

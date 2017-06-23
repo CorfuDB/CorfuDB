@@ -1,8 +1,9 @@
 package org.corfudb.util.retry;
 
+import java.util.function.Consumer;
+
 import lombok.SneakyThrows;
 
-import java.util.function.Consumer;
 
 /**
  * The IRetry interface is used to support retry loops by using different strategies
@@ -10,38 +11,60 @@ import java.util.function.Consumer;
  * correct strategy and the lambda to be executed. The code in the run function is responsible
  * to handle the exceptions and to decide whether a retry is needed or the exception should be
  * thrown outside.
- * <p>
- * Created by mwei on 9/1/15
+ *
+ * <p>Created by mwei on 9/1/15
  */
 
-public interface IRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception, O, A extends IRetry> {
+public interface IRetry<E extends Exception, F extends Exception, G extends Exception,
+        H extends Exception, O, A extends IRetry> {
 
 
-    static <R, Z extends IRetry> IRetry<RuntimeException, RuntimeException, RuntimeException, RuntimeException, R, Z>
-    build(Class<Z> retryType, IRetryable<RuntimeException, RuntimeException, RuntimeException, RuntimeException, R> runFunction) {
-        return build(retryType, RuntimeException.class, RuntimeException.class, RuntimeException.class, RuntimeException.class, runFunction);
+    static <R, Z extends IRetry> IRetry<RuntimeException, RuntimeException, RuntimeException,
+            RuntimeException, R, Z> build(Class<Z> retryType, IRetryable<RuntimeException,
+            RuntimeException, RuntimeException, RuntimeException, R> runFunction) {
+        return build(retryType, RuntimeException.class, RuntimeException.class,
+                RuntimeException.class, RuntimeException.class, runFunction);
     }
 
-    static <T extends Exception, R, Z extends IRetry> IRetry<T, RuntimeException, RuntimeException, RuntimeException, R, Z>
-    build(Class<Z> retryType, Class<? extends T> firstExceptionType, IRetryable<T, RuntimeException, RuntimeException, RuntimeException, R> runFunction) {
-        return build(retryType, firstExceptionType, RuntimeException.class, RuntimeException.class, RuntimeException.class, runFunction);
+    static <T extends Exception, R, Z extends IRetry> IRetry<T, RuntimeException, RuntimeException,
+            RuntimeException, R, Z> build(Class<Z> retryType, Class<? extends T> firstExceptionType,
+                                          IRetryable<T, RuntimeException, RuntimeException,
+                                                  RuntimeException, R> runFunction) {
+        return build(retryType, firstExceptionType, RuntimeException.class, RuntimeException.class,
+                RuntimeException.class, runFunction);
     }
 
-    static <T extends Exception, U extends Exception, R, Z extends IRetry> IRetry<T, U, RuntimeException, RuntimeException, R, Z>
-    build(Class<Z> retryType, Class<? extends T> firstExceptionType, Class<? extends U> secondExceptionType, IRetryable<T, U, RuntimeException, RuntimeException, R> runFunction) {
-        return build(retryType, firstExceptionType, secondExceptionType, RuntimeException.class, RuntimeException.class, runFunction);
+    static <T extends Exception, U extends Exception, R, Z extends IRetry> IRetry<T, U,
+            RuntimeException, RuntimeException, R, Z> build(Class<Z> retryType,
+                                                            Class<? extends T> firstExceptionType,
+            Class<? extends U> secondExceptionType, IRetryable<T, U, RuntimeException,
+            RuntimeException, R> runFunction) {
+        return build(retryType, firstExceptionType, secondExceptionType, RuntimeException.class,
+                RuntimeException.class, runFunction);
     }
 
-    static <T extends Exception, U extends Exception, V extends Exception, R, Z extends IRetry> IRetry<T, U, V, RuntimeException, R, Z>
-    build(Class<Z> retryType, Class<? extends T> firstExceptionType, Class<? extends U> secondExceptionType, Class<? extends V> thirdExceptionType, IRetryable<T, U, V, RuntimeException, R> runFunction) {
-        return build(retryType, firstExceptionType, secondExceptionType, thirdExceptionType, RuntimeException.class, runFunction);
+    static <T extends Exception, U extends Exception, V extends Exception, R,
+            Z extends IRetry> IRetry<T, U, V, RuntimeException, R,
+            Z> build(Class<Z> retryType,Class<? extends T> firstExceptionType,
+                                                Class<? extends U> secondExceptionType,
+            Class<? extends V> thirdExceptionType, IRetryable<T, U, V,
+            RuntimeException, R> runFunction) {
+        return build(retryType, firstExceptionType, secondExceptionType, thirdExceptionType,
+                RuntimeException.class, runFunction);
     }
 
     @SneakyThrows
-    static <T extends Exception, U extends Exception, V extends Exception, W extends Exception, R, Z extends IRetry>
-    IRetry<T, U, V, W, R, Z> build(Class<Z> retryType, Class<? extends T> firstExceptionType, Class<? extends U> secondExceptionType,
-                                   Class<? extends V> thirdExceptionType, Class<? extends W> fourthExceptionType, IRetryable<T, U, V, W, R> runFunction) {
-        return (IRetry<T, U, V, W, R, Z>) retryType.getConstructor(IRetryable.class).newInstance(runFunction);
+    static <T extends Exception, U extends Exception, V extends Exception, W extends Exception, R,
+            Z extends IRetry>
+                IRetry<T, U, V, W, R, Z> build(Class<Z> retryType,
+                                               Class<? extends T> firstExceptionType,
+                                               Class<? extends U> secondExceptionType,
+                                               Class<? extends V> thirdExceptionType,
+                                               Class<? extends W> fourthExceptionType, IRetryable<T,
+            U, V,
+            W, R> runFunction) {
+        return (IRetry<T, U, V, W, R, Z>) retryType.getConstructor(IRetryable.class)
+                .newInstance(runFunction);
     }
 
 
@@ -68,7 +91,8 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
 
     /**
      * Configure settings for the underlying class.
-     * The consumer will be given access to the underlying retry type to configure type-specific options.
+     * The consumer will be given access to the underlying retry type to configure
+     * type-specific options.
      *
      * @param settingsFunction A consumer with access to the underlying retry type.
      * @return An IRetry, to support a fluent API interface.
@@ -81,8 +105,6 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
 
     /**
      * Apply the retry logic.
-     *
-     * @return True, if we should continue retrying, false otherwise.
      */
     void nextWait() throws InterruptedException;
 

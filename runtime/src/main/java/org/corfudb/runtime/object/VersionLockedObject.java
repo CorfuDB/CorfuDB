@@ -440,7 +440,7 @@ public class VersionLockedObject<T> {
     @Override
     public String toString() {
         return object.getClass().getSimpleName()
-                + "[" + Utils.toReadableID(smrStream.getID()) + "]@"
+                + "[" + Utils.toReadableId(smrStream.getID()) + "]@"
                 + (getVersionUnsafe() == Address.NEVER_READ ? "NR" : getVersionUnsafe())
                 + (optimisticStream == null ? "" : "+" + optimisticStream.pos());
     }

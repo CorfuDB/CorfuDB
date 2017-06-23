@@ -471,7 +471,7 @@ public class FastSmrMapsLoader {
                     CheckPoint checkPoint = entry.getValue().getLatestCheckPoint();
                     if (checkPoint == null) {
                         log.info("resurrectCheckpoints[{}]: Truncated checkpoint for this stream",
-                                Utils.toReadableID(entry.getKey()));
+                                Utils.toReadableId(entry.getKey()));
                         return;
                     }
 

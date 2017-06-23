@@ -1,9 +1,8 @@
 package org.corfudb.util;
 
-import lombok.extern.slf4j.Slf4j;
-
 import java.io.IOException;
 import java.util.Properties;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Created by mwei on 8/12/15.
@@ -59,11 +58,16 @@ public class GitRepositoryState {
         this.buildVersion = properties.get("git.build.version").toString();
     }
 
+    /**
+     * Return git repo state.
+     * @return git repo state
+     */
     public static GitRepositoryState getRepositoryState() {
         if (_gitRepositoryState == null) {
             Properties properties = new Properties();
             try {
-                properties.load(GitRepositoryState.class.getClassLoader().getResourceAsStream("git.properties"));
+                properties.load(GitRepositoryState.class.getClassLoader()
+                        .getResourceAsStream("git.properties"));
             } catch (IOException ie) {
                 log.error("Failed to get repository state", ie);
             }

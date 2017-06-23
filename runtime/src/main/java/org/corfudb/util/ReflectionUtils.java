@@ -1,7 +1,6 @@
 package org.corfudb.util;
 
 import com.google.common.collect.ImmutableMap;
-import lombok.extern.slf4j.Slf4j;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -11,6 +10,8 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Created by mwei on 3/29/16.
@@ -52,6 +53,11 @@ public class ReflectionUtils {
         return primitiveTypeMap.get(s);
     }
 
+    /**
+     * Get arguments from method signature.
+     * @param s String representation of signature
+     * @return Array of types
+     */
     public static Class[] getArgumentTypesFromString(String s) {
         String argList = s.contains("(") ? s.substring(s.indexOf("(") + 1, s.length() - 1) : s;
         return Arrays.stream(argList.split(","))
@@ -70,6 +76,12 @@ public class ReflectionUtils {
                 .toArray(Class[]::new);
     }
 
+    /**
+     * Extract argument types from a string that reperesents the method
+     * signature.
+     * @param args Signature string
+     * @return Array of types
+     */
     public static Class[] getArgumentTypesFromArgumentList(Object[] args) {
         return Arrays.stream(args)
                 .map(Object::getClass)
@@ -78,7 +90,8 @@ public class ReflectionUtils {
 
     public static <T> T newInstanceFromUnknownArgumentTypes(Class<T> cls, Object[] args) {
         try {
-            return cls.getDeclaredConstructor(getArgumentTypesFromArgumentList(args)).newInstance(args);
+            return cls.getDeclaredConstructor(getArgumentTypesFromArgumentList(args))
+                    .newInstance(args);
         } catch (InstantiationException | InvocationTargetException | IllegalAccessException ie) {
             throw new RuntimeException(ie);
         } catch (NoSuchMethodException nsme) {
@@ -105,11 +118,16 @@ public class ReflectionUtils {
                     .map(Constructor::toString)
                     .collect(Collectors.joining(", "));
 
-            throw new RuntimeException("Couldn't find a matching ctor for " +
-                    argTypes + "; available ctors are " + availableCtors);
+            throw new RuntimeException("Couldn't find a matching ctor for "
+                    + argTypes + "; available ctors are " + availableCtors);
         }
     }
 
+    /**
+     * Extract method name from to string path.
+     * @param methodString Method signature in the form of a string
+     * @return Method object
+     */
     public static Method getMethodFromToString(String methodString) {
         Class<?> cls = getClassFromMethodToString(methodString);
         Matcher m = methodExtractor.matcher(methodString);
@@ -121,6 +139,11 @@ public class ReflectionUtils {
         }
     }
 
+    /**
+     * Extract class name from method to string path.
+     * @param methodString toString method path
+     * @return String representation of the class name
+     */
     public static Class getClassFromMethodToString(String methodString) {
         Matcher m = classExtractor.matcher(methodString);
         m.find();
