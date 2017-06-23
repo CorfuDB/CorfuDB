@@ -1,5 +1,15 @@
 package org.corfudb.runtime.view.stream;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import javax.annotation.Nonnull;
+
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -11,18 +21,14 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.util.Utils;
 
-import javax.annotation.Nonnull;
-import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /** A view of a stream implemented with backpointers.
  *
- * In this implementation, all addresses are global (log) addresses.
+ * <p>In this implementation, all addresses are global (log) addresses.
  *
- * All method calls of this class are thread-safe.
+ * <p>All method calls of this class are thread-safe.
  *
- * Created by mwei on 12/11/15.
+ * <p>Created by mwei on 12/11/15.
  */
 @Slf4j
 public class BackpointerStreamView extends AbstractQueuedStreamView {
@@ -32,25 +38,25 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     /** Create a new backpointer stream view.
      *
      * @param runtime   The runtime to use for accessing the log.
-     * @param streamID  The ID of the stream to view.
+     * @param streamId  The ID of the stream to view.
      */
     public BackpointerStreamView(final CorfuRuntime runtime,
-                                 final UUID streamID,
+                                 final UUID streamId,
                                  @Nonnull final StreamOptions options) {
-        super(runtime, streamID);
+        super(runtime, streamId);
         this.options = options;
     }
 
     public BackpointerStreamView(final CorfuRuntime runtime,
-                                 final UUID streamID) {
-        super(runtime, streamID);
+                                 final UUID streamId) {
+        super(runtime, streamId);
         this.options = StreamOptions.DEFAULT;
     }
 
     /**
      * {@inheritDoc}
      *
-     * In the backpointer-based implementation, we loop forever trying to
+     * <p>In the backpointer-based implementation, we loop forever trying to
      * write, and automatically retrying if we get overwritten (hole filled).
      */
     @Override
@@ -59,7 +65,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                        Function<TokenResponse, Boolean> deacquisitionCallback) {
         // First, we get a token from the sequencer.
         TokenResponse tokenResponse = runtime.getSequencerView()
-                .nextToken(Collections.singleton(ID), 1);
+                .nextToken(Collections.singleton(id), 1);
 
         // We loop forever until we are interrupted, since we may have to
         // acquire an address several times until we are successful.
@@ -98,7 +104,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 // Request a new token, informing the sequencer we were
                 // overwritten.
                 tokenResponse = runtime.getSequencerView()
-                        .nextToken(Collections.singleton(ID),
+                        .nextToken(Collections.singleton(id),
                              1);
             }
         }
@@ -106,7 +112,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
     /** {@inheritDoc}
      *
-     * The backpointer version of remaining() calls nextUpTo() multiple times,
+     * <p>The backpointer version of remaining() calls nextUpTo() multiple times,
      * as it uses the default implementation in IStreamView. While this may
      * appear to be non-optimized, these reads will most likely hit in the
      * address space cache since the entries were read in order to resolve the
@@ -115,14 +121,14 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
      * */
     @Override
     protected ILogData read(final long address) {
-            return runtime.getAddressSpaceView().read(address);
+        return runtime.getAddressSpaceView().read(address);
     }
 
     @Nonnull
     @Override
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
         Map<Long, ILogData> dataMap =
-            runtime.getAddressSpaceView().read(addresses);
+                runtime.getAddressSpaceView().read(addresses);
         return addresses.stream()
                 .map(x -> dataMap.get(x))
                 .collect(Collectors.toList());
@@ -131,14 +137,14 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     /**
      * {@inheritDoc}
      *
-     * In the backpointer based implementation, we indicate we may have
+     * <p>In the backpointer based implementation, we indicate we may have
      * entries available if the read queue contains entries to read -or-
      * if the next token is greater than our log pointer.
      */
     @Override
     public boolean getHasNext(QueuedStreamContext context) {
-        return  !context.readQueue.isEmpty() ||
-                runtime.getSequencerView()
+        return  !context.readQueue.isEmpty()
+                || runtime.getSequencerView()
                 .nextToken(Collections.singleton(context.id), 0).getToken().getTokenValue()
                         > context.globalPointer;
     }
@@ -174,7 +180,9 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
     private long backpointerCount = 0L;
 
-    public long getBackpointerCount() {return backpointerCount;}
+    public long getBackpointerCount() {
+        return backpointerCount;
+    }
 
     protected boolean followBackpointers(final UUID streamId,
                                       final NavigableSet<Long> queue,
@@ -191,8 +199,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // The queue already contains an address from this
             // range, terminate.
             if (queue.contains(currentAddress)) {
-                log.trace("FollowBackpointers[{}] Terminate due to {} " +
-                        "already in queue", currentAddress);
+                log.trace("FollowBackpointers[{}] Terminate due to {} "
+                        + "already in queue", currentAddress);
                 return entryAdded;
             }
             backpointerCount++;
@@ -213,8 +221,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             if (d.containsStream(streamId)) {
                 // Check whether we should include the address
                 BackpointerOp op = filter.apply(d);
-                if (op == BackpointerOp.INCLUDE ||
-                        op == BackpointerOp.INCLUDE_STOP) {
+                if (op == BackpointerOp.INCLUDE
+                        || op == BackpointerOp.INCLUDE_STOP) {
                     queue.add(currentAddress);
                     entryAdded = true;
                     // Check if we need to stop
@@ -230,8 +238,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             if (!runtime.isBackpointersDisabled() && d.hasBackpointer(streamId)) {
                 long tmp = d.getBackpointer(streamId);
-                // if backpointer is a valid log address or Address.NON_EXIST (beginning of the stream),
-                // do not single step back on the log
+                // if backpointer is a valid log address or Address.NON_EXIST
+                // (beginning of the stream), do not single step back on the log
                 if (Address.isAddress(tmp) || tmp == Address.NON_EXIST) {
                     currentAddress = tmp;
                     singleStep = false;
@@ -253,36 +261,39 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         if (data.hasCheckpointMetadata()) {
             CheckpointEntry cpEntry = (CheckpointEntry)
                     data.getPayload(runtime);
-            if (context.checkpointSuccessID == null &&
-                    cpEntry.getCpType() == CheckpointEntry.CheckpointEntryType.END) {
+            if (context.checkpointSuccessId == null
+                    && cpEntry.getCpType() == CheckpointEntry.CheckpointEntryType.END) {
                 log.trace("Checkpoint[{}] END found at address {} type {} id {} author {}",
                         this, data.getGlobalAddress(), cpEntry.getCpType(),
                         Utils.toReadableID(cpEntry.getCheckpointID()),
                         cpEntry.getCheckpointAuthorID());
-                context.checkpointSuccessID = cpEntry.getCheckpointID();
+                context.checkpointSuccessId = cpEntry.getCheckpointID();
                 context.checkpointSuccessNumEntries = 1L;
                 context.checkpointSuccessBytes = (long) data.getSizeEstimate();
                 context.checkpointSuccessEndAddr = data.getGlobalAddress();
-            }
-            else if (data.getCheckpointID().equals(context.checkpointSuccessID)) {
+            } else if (data.getCheckpointID().equals(context.checkpointSuccessId)) {
                 context.checkpointSuccessNumEntries++;
                 context.checkpointSuccessBytes += cpEntry.getSmrEntriesBytes();
                 if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
                     long cpStartAddr;
-                    if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS) != null) {
+                    if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey
+                            .START_LOG_ADDRESS) != null) {
                         cpStartAddr = Long.decode(cpEntry.getDict()
                                 .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS));
                     } else {
                         cpStartAddr = data.getGlobalAddress();
                     }
                     context.checkpointSuccessStartAddr = cpStartAddr;
-                    if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS) != null) {
+                    if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey
+                            .SNAPSHOT_ADDRESS) != null) {
                         context.checkpointSnapshotAddress = Long.decode(cpEntry.getDict()
                                 .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
                     }
-                    log.trace("Checkpoint[{}] HALT due to START at address {} startAddr {} type {} id {} author {}",
+                    log.trace("Checkpoint[{}] HALT due to START at address {} startAddr"
+                            + " {} type {} id {} author {}",
                             this, data.getGlobalAddress(), cpStartAddr, cpEntry.getCpType(),
-                            Utils.toReadableID(cpEntry.getCheckpointID()), cpEntry.getCheckpointAuthorID());
+                            Utils.toReadableID(cpEntry.getCheckpointID()),
+                            cpEntry.getCheckpointAuthorID());
                     return BackpointerOp.INCLUDE_STOP;
                 }
             } else {
@@ -304,18 +315,18 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         // If the stream has just been reset and we don't have
         // any checkpoint entries, we should consult
         // a checkpoint first.
-        if (context.globalPointer == Address.NEVER_READ &&
-                context.checkpointSuccessID == null) {
+        if (context.globalPointer == Address.NEVER_READ
+                && context.checkpointSuccessId == null) {
             // The checkpoint stream ID is the UUID appended with CP
-            final UUID checkpointID = CorfuRuntime
+            final UUID checkpointId = CorfuRuntime
                     .getStreamID(context.id.toString() + "_cp");
             // Find the checkpoint, if present
             try {
-                if (followBackpointers(checkpointID, context.readCpQueue,
+                if (followBackpointers(checkpointId, context.readCpQueue,
                         runtime.getSequencerView()
-                                .nextToken(Collections.singleton(checkpointID), 0)
-                                .getToken().getTokenValue()
-                        , Address.NEVER_READ, d -> resolveCheckpoint(context, d))) {
+                                .nextToken(Collections.singleton(checkpointId), 0)
+                                .getToken().getTokenValue(),
+                        Address.NEVER_READ, d -> resolveCheckpoint(context, d))) {
                     log.trace("Read_Fill_Queue[{}] Using checkpoint with {} entries",
                             this, context.readCpQueue.size());
                     return true;
@@ -339,8 +350,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // If everything is available in the resolved
         // queue, use it
-        if (context.maxResolution >= maxAddress &&
-                context.minResolution < context.globalPointer) {
+        if (context.maxResolution >= maxAddress
+                && context.minResolution < context.globalPointer) {
             return fillFromResolved(maxGlobal, context);
         }
 
@@ -364,17 +375,19 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         if (Address.nonAddress(latestTokenValue)) {
 
             // sanity check:
-            // curretly, the only possible non-address return value for a token-query is Address.NON_EXIST
-            if (latestTokenValue != Address.NON_EXIST)
+            // curretly, the only possible non-address return value for a token-query
+            // is Address.NON_EXIST
+            if (latestTokenValue != Address.NON_EXIST) {
                 log.warn("TOKEN[{}] unexpected return value", latestTokenValue);
+            }
 
             return false;
         }
 
         // If everything is available in the resolved
         // queue, use it
-        if (context.maxResolution >= latestTokenValue &&
-                context.minResolution < context.globalPointer) {
+        if (context.maxResolution >= latestTokenValue
+                && context.minResolution < context.globalPointer) {
             return fillFromResolved(latestTokenValue, context);
         }
 

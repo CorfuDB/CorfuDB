@@ -81,7 +81,7 @@ public class ObjectsView extends AbstractView {
             try {
                 return
                         CorfuCompileWrapperBuilder.getWrapper(proxy.getCorfuSMRProxy()
-                                        .getObjectType(), runtime, sv.getID(), null,
+                                        .getObjectType(), runtime, sv.getId(), null,
                                 Serializers.JSON);
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
