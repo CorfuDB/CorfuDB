@@ -8,10 +8,16 @@ import com.google.gson.JsonParser;
 /**
  * Created by mdhawan on 6/28/16.
  */
-public class JSONUtils {
+public class JsonUtils {
     public static final Gson parser = new GsonBuilder().setPrettyPrinting()
                                             .create();
 
+
+    /**
+     * Return an intedented json string.
+     * @param jsonString Json String
+     * @return           Pretty json string
+     */
     public static String prettyPrint(String jsonString) {
         JsonParser p = new JsonParser();
         JsonElement e = p.parse(jsonString);

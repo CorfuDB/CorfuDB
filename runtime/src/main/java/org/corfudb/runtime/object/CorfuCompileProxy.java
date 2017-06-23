@@ -438,7 +438,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
     @Override
     public String toString() {
-        return type.getSimpleName() + "[" + Utils.toReadableID(streamID) + "]";
+        return type.getSimpleName() + "[" + Utils.toReadableId(streamID) + "]";
     }
 
     private void abortTransaction(Exception e) {

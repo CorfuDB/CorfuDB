@@ -1,9 +1,9 @@
 package org.corfudb.util;
 
-import lombok.Getter;
-
 import java.io.InputStream;
 import java.util.Properties;
+import lombok.Getter;
+
 
 /**
  * Created by mwei on 1/29/16.
@@ -23,11 +23,11 @@ public class Version {
                 return p.getProperty("version", "");
             }
         } catch (Exception e) {
-            Package aPackage = Version.class.getPackage();
-            if (aPackage != null) {
-                String o = aPackage.getImplementationVersion();
+            Package thisPackage = Version.class.getPackage();
+            if (thisPackage != null) {
+                String o = thisPackage.getImplementationVersion();
                 if (o == null) {
-                    o = aPackage.getSpecificationVersion();
+                    o = thisPackage.getSpecificationVersion();
                 }
                 return o;
             }

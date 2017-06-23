@@ -81,16 +81,16 @@ public class MultiCheckpointWriter {
                     cpw.setSerializer(serializer);
                     cpw.setPostAppendFunc(postAppendFunc);
                     log.trace("appendCheckpoints: checkpoint map {} begin",
-                            Utils.toReadableID(map.getCorfuStreamID()));
+                            Utils.toReadableId(map.getCorfuStreamID()));
                     try {
                         List<Long> addresses = cpw.appendCheckpoint();
                         log.trace("appendCheckpoints: checkpoint map {} end",
-                                Utils.toReadableID(map.getCorfuStreamID()));
+                                Utils.toReadableId(map.getCorfuStreamID()));
                         checkpointLogAddresses.addAll(addresses);
                         break;
                     } catch (TransactionAbortedException ae) {
                         log.trace("appendCheckpoints: checkpoint map {} TransactionAbortedException, retry",
-                                Utils.toReadableID(map.getCorfuStreamID()));
+                                Utils.toReadableId(map.getCorfuStreamID()));
                         // Don't break!
                     }
                 }

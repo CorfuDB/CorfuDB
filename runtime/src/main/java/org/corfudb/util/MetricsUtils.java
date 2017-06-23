@@ -1,13 +1,17 @@
 package org.corfudb.util;
 
-import com.codahale.metrics.*;
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.CsvReporter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.MetricFilter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.MetricSet;
+import com.codahale.metrics.Timer;
 import com.codahale.metrics.jvm.FileDescriptorRatioGauge;
 import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
 import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
 import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
 import com.github.benmanes.caffeine.cache.Cache;
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -15,9 +19,14 @@ import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+
+
 @Slf4j
 public class MetricsUtils {
-    private static final FileDescriptorRatioGauge metricsJVMFdGauge = new FileDescriptorRatioGauge();
+    private static final FileDescriptorRatioGauge metricsJVMFdGauge =
+            new FileDescriptorRatioGauge();
     private static final MetricSet metricsJVMGC = new GarbageCollectorMetricSet();
     private static final MetricSet metricsJVMMem = new MemoryUsageGaugeSet();
     private static final MetricSet metricsJVMThread = new ThreadStatesGaugeSet();
@@ -30,16 +39,16 @@ public class MetricsUtils {
 
     /**
      * Load a metrics properties file.
-     * <p>
-     * The expected properties in this properties file are:
+     *
+     * <p>The expected properties in this properties file are:
      * <ul>
      * <li> collection-enabled: Boolean for whether metrics collection is enabled.
      * <li> reporting-enabled: Boolean for whether CSV output will be generated.
      * <li> directory: String for the path to the CSV output subdirectory
      * <li> nterval: Long for the reporting interval for CSV output
      * </ul>
-     * <p>
-     * For each reporting interval, this function will be
+     *
+     * <p>For each reporting interval, this function will be
      * called to re-parse the properties file and to
      * re-evaluate the value of 'collection-enabled' and
      * 'reporting-enabled'.  Changes to any other property
@@ -51,10 +60,13 @@ public class MetricsUtils {
         if ((propPath = System.getenv("METRICS_PROPERTIES")) != null) {
             try (FileInputStream is = new FileInputStream(propPath)) {
                 metricsProperties.load(is);
-                metricsCollectionEnabled = Boolean.valueOf((String) metricsProperties.get("collection-enabled"));
-                metricsReportingEnabled = Boolean.valueOf((String) metricsProperties.get("reporting-enabled"));
+                metricsCollectionEnabled = Boolean.valueOf((String) metricsProperties
+                        .get("collection-enabled"));
+                metricsReportingEnabled = Boolean.valueOf((String) metricsProperties
+                        .get("reporting-enabled"));
             } catch (Exception e) {
-                log.error("Error processing METRICS_PROPERTIES {}: {}", propPath, e.toString());
+                log.error("Error processing METRICS_PROPERTIES {}: {}", propPath,
+                        e.toString());
             }
         }
     }
@@ -63,7 +75,7 @@ public class MetricsUtils {
      * Check if the metricsReportingSetup() function has been called
      * on 'metrics' before now.
      *
-     * @param metrics
+     * @param metrics Metric Registry
      * @return True if metricsReportingSetup() function has been called earlier
      */
     public static boolean isMetricsReportingSetUp(MetricRegistry metrics) {
@@ -76,7 +88,7 @@ public class MetricsUtils {
      * in loadPropertiesFile()'s docs.  The report interval and report
      * directory cannot be altered at runtime.
      *
-     * @param metrics
+     * @param metrics Metrics registry
      */
     public static void metricsReportingSetup(MetricRegistry metrics) {
         metrics.counter(mpTrigger);
@@ -115,7 +127,8 @@ public class MetricsUtils {
         }
     }
 
-    public static void addJVMMetrics(MetricRegistry metrics, String pfx) {
+
+    public static void addJvmMetrics(MetricRegistry metrics, String pfx) {
         try {
             metrics.register(pfx + "jvm.gc", metricsJVMGC);
             metrics.register(pfx + "jvm.memory", metricsJVMMem);

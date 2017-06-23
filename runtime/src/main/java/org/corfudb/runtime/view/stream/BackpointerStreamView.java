@@ -265,7 +265,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     && cpEntry.getCpType() == CheckpointEntry.CheckpointEntryType.END) {
                 log.trace("Checkpoint[{}] END found at address {} type {} id {} author {}",
                         this, data.getGlobalAddress(), cpEntry.getCpType(),
-                        Utils.toReadableID(cpEntry.getCheckpointID()),
+                        Utils.toReadableId(cpEntry.getCheckpointID()),
                         cpEntry.getCheckpointAuthorID());
                 context.checkpointSuccessId = cpEntry.getCheckpointID();
                 context.checkpointSuccessNumEntries = 1L;
@@ -292,7 +292,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     log.trace("Checkpoint[{}] HALT due to START at address {} startAddr"
                             + " {} type {} id {} author {}",
                             this, data.getGlobalAddress(), cpStartAddr, cpEntry.getCpType(),
-                            Utils.toReadableID(cpEntry.getCheckpointID()),
+                            Utils.toReadableId(cpEntry.getCheckpointID()),
                             cpEntry.getCheckpointAuthorID());
                     return BackpointerOp.INCLUDE_STOP;
                 }

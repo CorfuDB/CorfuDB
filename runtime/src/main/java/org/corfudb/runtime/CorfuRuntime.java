@@ -239,7 +239,7 @@ public class CorfuRuntime {
         retryRate = 5;
         synchronized (metrics) {
             if (metrics.getNames().isEmpty()) {
-                MetricsUtils.addJVMMetrics(metrics, mp);
+                MetricsUtils.addJvmMetrics(metrics, mp);
                 MetricsUtils.metricsReportingSetup(metrics);
             }
         }

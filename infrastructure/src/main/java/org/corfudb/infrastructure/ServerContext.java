@@ -10,7 +10,7 @@ import lombok.Setter;
 
 import org.corfudb.util.MetricsUtils;
 
-import static org.corfudb.util.MetricsUtils.addJVMMetrics;
+import static org.corfudb.util.MetricsUtils.addJvmMetrics;
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
 /**
@@ -78,7 +78,7 @@ public class ServerContext {
         String mp = "corfu.server.";
         synchronized (metrics) {
             if (!isMetricsReportingSetUp(metrics)) {
-                addJVMMetrics(metrics, mp);
+                addJvmMetrics(metrics, mp);
                 MetricsUtils.addCacheGauges(metrics, mp + "datastore.cache.", dataStore.getCache());
                 MetricsUtils.metricsReportingSetup(metrics);
             }
