@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+
 import java.util.Collection;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
@@ -70,14 +71,29 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
     /**
      * Returns a filtered {@link List} view of the values contained in this map.
      * This method has a memory/CPU advantage over the map iterators as no deep copy
-     * is actually performed. 
+     * is actually performed.
      *
      * @param p java predicate (function to evaluate)
-     * @return a view of the values contained in this map meeting the predicate condition.   
+     * @return a view of the values contained in this map meeting the predicate condition.
      */
+    @Deprecated
     @Accessor
     public List<V> scanAndFilter(Predicate<? super V> p) {
         return super.values().parallelStream().filter(p).collect(Collectors.toList());
+    }
+
+    /**
+     * Returns a {@link Map} filtered by entries (keys and/or values).
+     * This method has a memory/CPU advantage over the map iterators as no deep copy
+     * is actually performed.
+     *
+     * @param entryPredicate java predicate (function to evaluate)
+     * @return a view of the entries contained in this map meeting the predicate condition.
+     */
+    @Accessor
+    public Map<K, V> scanAndFilterByEntry(Predicate<? super Map.Entry<K, V>> entryPredicate) {
+        return super.entrySet().parallelStream().filter(entryPredicate).collect(Collectors
+                .toMap(p -> p.getKey(), p -> p.getValue()));
     }
 
     /**
