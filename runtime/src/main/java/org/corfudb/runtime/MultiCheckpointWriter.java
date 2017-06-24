@@ -1,7 +1,15 @@
 package org.corfudb.runtime;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.BiConsumer;
+
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -9,13 +17,6 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.function.BiConsumer;
 
 /**
  * Checkpoint multiple SMRMaps serially as a prerequisite for a later log trim.
@@ -46,11 +47,10 @@ public class MultiCheckpointWriter {
      * @param rt CorfuRuntime
      * @param author Author's name, stored in checkpoint metadata
      * @return Global log address of the first record of
-     * @throws Exception
      */
     public long appendCheckpoints(CorfuRuntime rt, String author)
             throws Exception {
-        return appendCheckpoints(rt, author, (x,y) -> {});
+        return appendCheckpoints(rt, author, (x,y) -> { });
     }
 
     /** Checkpoint multiple SMRMaps serially.
@@ -60,7 +60,6 @@ public class MultiCheckpointWriter {
      * @param postAppendFunc User-supplied lambda for post-append action on each
      *                       checkpoint entry type.
      * @return Global log address of the first record of
-     * @throws Exception
      */
 
     public long appendCheckpoints(CorfuRuntime rt, String author,
@@ -72,9 +71,9 @@ public class MultiCheckpointWriter {
 
         try {
             for (ICorfuSMR<Map> map : maps) {
-                UUID streamID = map.getCorfuStreamID();
+                UUID streamId = map.getCorfuStreamID();
                 while (true) {
-                    CheckpointWriter cpw = new CheckpointWriter(rt, streamID, author, (SMRMap) map);
+                    CheckpointWriter cpw = new CheckpointWriter(rt, streamId, author, (SMRMap) map);
                     ISerializer serializer =
                             ((CorfuCompileProxy<Map>) map.getCorfuSMRProxy())
                                     .getSerializer();
@@ -89,7 +88,8 @@ public class MultiCheckpointWriter {
                         checkpointLogAddresses.addAll(addresses);
                         break;
                     } catch (TransactionAbortedException ae) {
-                        log.trace("appendCheckpoints: checkpoint map {} TransactionAbortedException, retry",
+                        log.trace("appendCheckpoints: checkpoint map {} "
+                                        + "TransactionAbortedException, retry",
                                 Utils.toReadableID(map.getCorfuStreamID()));
                         // Don't break!
                     }
