@@ -132,7 +132,7 @@ public class StreamsView extends AbstractView {
             } catch (OverwriteException oe) {
                 // We were overwritten, get a new token and try again.
                 log.trace("Overwrite[{}]: streams {}", tokenResponse.getTokenValue(),
-                        streamIDs.stream().map(Utils::toReadableID).collect(Collectors.toSet()));
+                        streamIDs.stream().map(Utils::toReadableId).collect(Collectors.toSet()));
 
                 TokenResponse temp;
                 if (conflictInfo == null) {

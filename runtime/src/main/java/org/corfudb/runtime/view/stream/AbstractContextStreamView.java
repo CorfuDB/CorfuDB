@@ -1,5 +1,12 @@
 package org.corfudb.runtime.view.stream;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.NavigableSet;
+import java.util.TreeSet;
+import java.util.UUID;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
@@ -9,21 +16,18 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
-import java.util.*;
-import java.util.function.BiFunction;
-import java.util.function.Function;
 
 /** An abstract context stream view maintains contexts, which are used to
  * implement copy-on-write entries.
  *
- *  This implementation uses "contexts" to properly deal with copy-on-write
+ *  <p>This implementation uses "contexts" to properly deal with copy-on-write
  * streams. Every time a stream is copied, a new context is created which
  * redirects requests to the source stream for the copy - each context
  * contains its own queue and pointers. Implementers of fillReadQueue() and
  * readAndUpdatePointers should be careful to use the id of the context,
  * rather than that of the stream view itself.
  *
- * Created by mwei on 1/6/17.
+ * <p>Created by mwei on 1/6/17.
  */
 @Slf4j
 public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
@@ -33,7 +37,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      * The ID of the stream.
      */
     @Getter
-    final UUID ID;
+    final UUID id;
 
     /**
      * The runtime the stream view was created with.
@@ -66,7 +70,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
                                      final UUID id,
                                      final BiFunction<UUID, Long, T>
                                              contextFactory) {
-        this.ID = id;
+        this.id = id;
         this.runtime = runtime;
         this.streamContexts = new TreeSet<>();
         this.contextFactory = contextFactory;
@@ -91,9 +95,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         // pop any stream context which has a max address
         // less than the global address
         while (this.streamContexts.size() > 1) {
-            if (this.streamContexts.first().maxGlobalAddress <
-                    globalAddress)
-            {
+            if (this.streamContexts.first().maxGlobalAddress < globalAddress) {
                 this.streamContexts.pollFirst();
             }
         }
@@ -112,7 +114,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      * {@inheritDoc}
      */
     @Override
-    final public synchronized ILogData nextUpTo(final long maxGlobal) {
+    public final synchronized ILogData nextUpTo(final long maxGlobal) {
         // Don't do anything if we've already exceeded the global
         // pointer.
         if (getCurrentContext().globalPointer > maxGlobal) {
@@ -120,8 +122,8 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         }
 
         // Pop the context if it has changed.
-        if (getCurrentContext().globalPointer >=
-                getCurrentContext().maxGlobalAddress) {
+        if (getCurrentContext().globalPointer
+                >= getCurrentContext().maxGlobalAddress) {
             final T last = streamContexts.pollFirst();
             log.trace("Completed context {}@{}, removing.",
                     last.id, last.maxGlobalAddress);
@@ -154,8 +156,8 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
     public final synchronized List<ILogData> remainingUpTo(long maxGlobal) {
 
         // Pop the context if it has changed.
-        if (getCurrentContext().globalPointer >=
-                getCurrentContext().maxGlobalAddress) {
+        if (getCurrentContext().globalPointer
+                >= getCurrentContext().maxGlobalAddress) {
             final T last = streamContexts.pollFirst();
             log.trace("Completed context {}@{}, removing.",
                     last.id, last.maxGlobalAddress);
@@ -174,8 +176,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         }
 
         // Check if the last entry updates the context.
-        if (doesEntryUpdateContext(entries.get(entries.size() - 1)))
-        {
+        if (doesEntryUpdateContext(entries.get(entries.size() - 1))) {
             // The entry which updates the context must be the last one, so
             // process it
             processEntryForContext(entries.get(entries.size() - 1));
@@ -216,30 +217,31 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      * @return              True, if getNextEntry() may return an entry.
      *                      False otherwise.
      */
-    abstract protected boolean getHasNext(T context);
+    protected abstract boolean getHasNext(T context);
 
     /** Retrieve the next entry in the stream, given the context.
      *
      * @param context       The context to retrieve the next entry from.
      * @param maxGlobal     The maximum global address to read to.
-     * @return
+     * @return              Next ILogData for this context
      */
-    abstract protected ILogData getNextEntry(T context, long maxGlobal);
+    protected abstract ILogData getNextEntry(T context, long maxGlobal);
 
     /** Retrieve the next entries in the stream, given the context.
      *
-     * This function is designed to implement a bulk read. In a bulk read,
+     * <p>This function is designed to implement a bulk read. In a bulk read,
      * one of the entries may cause the context to change - the implementation
      * should check if the entry changes the context and stop reading
      * if this occurs, returning the entry that caused contextCheckFn to return
      * true.
      *
-     * The default implementation simply calls getNextEntry.
+     * <p>The default implementation simply calls getNextEntry.
      *
      * @param context           The context to retrieve the next entry from.
      * @param maxGlobal         The maximum global address to read to.
-     * @param contextCheckFn    A function which returns true if the entry changes the stream context.
-     * @return
+     * @param contextCheckFn    A function which returns true if the entry changes the
+     *                          stream context.
+     * @return                  A list of the next entries for this context
      */
     protected List<ILogData> getNextEntries(T context, long maxGlobal,
                                                      Function<ILogData, Boolean> contextCheckFn) {
@@ -267,8 +269,8 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      * @return      True, if the entry will update the context.
      */
     protected boolean doesEntryUpdateContext(final ILogData data) {
-        return data.hasBackpointer(getCurrentContext().id) &&
-                data.getBackpointer(getCurrentContext().id)
+        return data.hasBackpointer(getCurrentContext().id)
+                && data.getBackpointer(getCurrentContext().id)
                         .equals(Address.COW_BACKPOINTER);
     }
 
@@ -287,10 +289,10 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
     /** Check if the given entry adds a new context, and update
      * the global pointer.
      *
-     * If it does, add it to the context stack. Otherwise,
+     * <p>If it does, add it to the context stack. Otherwise,
      * pop the context.
      *
-     * It is important that this method be called in order, since
+     * <p>It is important that this method be called in order, since
      * it updates the global pointer and can change the global pointer.
      *
      * @param data  The entry to process.
@@ -312,7 +314,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
 
     /** Get the current context.
      *
-     * Should never throw a NoSuchElement exception because streamContexts should
+     * <p>Should never throw a NoSuchElement exception because streamContexts should
      * always at least have one element.
      *
      * */
@@ -327,13 +329,14 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
 
     protected void popContext() {
         if (streamContexts.size() <= 1) {
-            throw new RuntimeException("Attempted to pop context with less than 1 context remaining!");
+            throw new RuntimeException("Attempted to pop context with less"
+                    + " than 1 context remaining!");
         }
         streamContexts.pollFirst();
     }
 
     @Override
     public String toString() {
-        return Utils.toReadableID(baseContext.id) + "@" + getCurrentContext().globalPointer;
+        return Utils.toReadableId(baseContext.id) + "@" + getCurrentContext().globalPointer;
     }
 }

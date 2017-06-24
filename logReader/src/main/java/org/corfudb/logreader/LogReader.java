@@ -1,15 +1,6 @@
-package org.corfudb.logReader;
+package org.corfudb.logreader;
 
 import com.google.protobuf.ByteString;
-import org.corfudb.format.Types;
-import org.corfudb.format.Types.DataType;
-import org.corfudb.format.Types.LogEntry;
-import org.corfudb.format.Types.LogHeader;
-import org.corfudb.format.Types.Metadata;
-import org.corfudb.infrastructure.log.StreamLogFiles;
-import org.docopt.Docopt;
-import org.docopt.DocoptExitException;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -18,15 +9,24 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Map;
 import java.util.UUID;
+import org.corfudb.format.Types;
+import org.corfudb.format.Types.DataType;
+import org.corfudb.format.Types.LogEntry;
+import org.corfudb.format.Types.Metadata;
+import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.docopt.Docopt;
+import org.docopt.DocoptExitException;
 
-public class logReader {
+
+public class LogReader {
     private static int metadataSize;
     private static final int NON_ZERO = 16;
     private static final String USAGE =
             "Usage:\n"
-                    + "\tlogReader report <log_file>\n"
-                    + "\tlogReader display <log_file> [--from=<address> --to=<address> --show_binary]\n"
-                    + "\tlogReader erase <log_file> [--from=<address> --to=<address>]\n"
+                    + "\tlogreader report <log_file>\n"
+                    + "\tlogreader display <log_file> [--from=<address> "
+                    + "--to=<address> --show_binary]\n"
+                    + "\tlogreader erase <log_file> [--from=<address> --to=<address>]\n"
                     + "\n"
                     + "Options:\n"
                     + "\t--show_binary      display binary data\n"
@@ -42,16 +42,21 @@ public class logReader {
     private long remSize = 0;
 
     public static void main(final String[] args) {
-        logReader reader = new logReader();
+        LogReader reader = new LogReader();
         reader.run(args);
         reader.cleanUp();
     }
 
-    public logReader() {
+    public LogReader() {
         fileStreamIn = null;
         fileStreamOut = null;
     }
 
+    /**
+     * Run log reader tool.
+     * @param args options
+     * @return true if it ran successfuly
+     */
     public final int run(final String[] args) {
         try {
             boolean ret = init(args);
@@ -62,6 +67,11 @@ public class logReader {
         return readAll();
     }
 
+    /**
+     * Initialize reader tool.
+     * @param args Options to pass
+     * @return true iff options were parsed correctly
+     */
     public final boolean init(final String[] args) {
         Docopt parser = new Docopt(USAGE);
         parser.withExit(false);
@@ -87,7 +97,8 @@ public class logReader {
         }
         if ((Boolean) opts.get("display")) {
             Boolean showBinary = (Boolean) opts.get("--show_binary");
-            System.out.format("display from %d to %d show_binary=%s\n", startAddr, finalAddr, showBinary.toString());
+            System.out.format("display from %d to %d show_binary=%s\n", startAddr,
+                    finalAddr, showBinary.toString());
             if (showBinary) {
                 op = new Operation(Operation.OperationType.DISPLAY, startAddr, finalAddr);
             } else {
@@ -105,14 +116,14 @@ public class logReader {
                 .build();
         metadataSize = md.getSerializedSize();
 
-        File fIn = new File(logFileName);
-        File fOut = useOutputFile ? new File(logFileName + ".modified") : null;
-        if (fIn.canRead()) {
+        File fileIn = new File(logFileName);
+        File fileOut = useOutputFile ? new File(logFileName + ".modified") : null;
+        if (fileIn.canRead()) {
             try {
-                fileStreamIn = new FileInputStream(fIn);
+                fileStreamIn = new FileInputStream(fileIn);
                 fileChannelIn = fileStreamIn.getChannel();
                 if (useOutputFile) {
-                    fileStreamOut = new FileOutputStream(fOut);
+                    fileStreamOut = new FileOutputStream(fileOut);
                     fileChannelOut = fileStreamOut.getChannel();
                 }
             } catch (IOException e) {
@@ -185,6 +196,11 @@ public class logReader {
         fcOut.write(recordBuffer);
     }
 
+    /**
+     * Prints a log entry.
+     * @param entry entry to print
+     * @param showBinary prints binary if true
+     */
     public final void printLogEntry(final LogEntry entry, final boolean showBinary) {
         System.out.format("Global address: %d\n", entry.getGlobalAddress());
         System.out.format("Log Entry streams (%d):  ", entry.getStreamsCount());
@@ -256,7 +272,7 @@ public class logReader {
         return le;
     }
 
-    final logHeader processHeader() throws IOException {
+    final LogHeader processHeader() throws IOException {
         fileChannelIn.position(0);
         ByteBuffer mdBuffer = ByteBuffer.allocate(metadataSize);
         int r = fileChannelIn.read(mdBuffer);
@@ -265,7 +281,7 @@ public class logReader {
             fileChannelOut.write(mdBuffer);
         }
         if (r > 0) {
-            logHeader header = new logHeader();
+            LogHeader header = new LogHeader();
             Metadata md = Metadata.parseFrom(mdBuffer.array());
             int logHeaderSize = md.getLength();
             header.setChecksum(md.getChecksum());
@@ -277,18 +293,18 @@ public class logReader {
                 fileChannelOut.write(lhBuffer);
             }
             if (r > 0) {
-                LogHeader lh = LogHeader.parseFrom(lhBuffer.array());
+                org.corfudb.format.Types.LogHeader lh = org.corfudb.format.Types
+                        .LogHeader.parseFrom(lhBuffer.array());
                 header.setVersion(lh.getVersion());
                 header.setVerifyChecksum(lh.getVerifyChecksum());
             }
             return header;
         }
-        return new logHeader();
+        return new LogHeader();
     }
 
     final LogEntryExtended processRecord() throws IOException {
         ByteBuffer commaBuffer = ByteBuffer.allocate(2);
-        int bytesRead = fileChannelIn.read(commaBuffer);
         commaBuffer.flip();
         Short delim = commaBuffer.getShort();
         commaBuffer.flip();
@@ -296,6 +312,7 @@ public class logReader {
             System.out.println("Incorrect delimiter");
         }
         ByteBuffer mdBuffer = ByteBuffer.allocate(metadataSize);
+        int bytesRead = fileChannelIn.read(commaBuffer);
         bytesRead += fileChannelIn.read(mdBuffer);
         mdBuffer.flip();
         Metadata md = Metadata.parseFrom(mdBuffer.array());
@@ -311,7 +328,7 @@ public class logReader {
     }
 
     final void openLogFile(final int display) throws IOException {
-        logHeader hdr = processHeader();
+        LogHeader hdr = processHeader();
         if (display > 0) {
             System.out.println("file size " + fileChannelIn.size());
             System.out.println("checksum " + String.format("%08x", hdr.getChecksum()));
@@ -319,25 +336,30 @@ public class logReader {
             System.out.println("version " + Integer.toString(hdr.getVersion()));
             System.out.println("verify " + Boolean.toString(hdr.isVerifyChecksum()));
         }
-        remSize = fileChannelIn.size() - fileChannelIn.position();  // if size == position then file pointer is off the end
+
+        // if size == position then file pointer is off the end
+        remSize = fileChannelIn.size() - fileChannelIn.position();
     }
 
     final LogEntryExtended nextRecord() throws IOException {
         LogEntryExtended leNew = processRecord();
         long addr = leNew.getEntryBody().getGlobalAddress();
         boolean display = (op.getOpType() == Operation.OperationType.DISPLAY
-            || op.getOpType() == Operation.OperationType.DISPLAY_ALL) && op.isInRange(addr);
+                || op.getOpType() == Operation.OperationType.DISPLAY_ALL) && op.isInRange(addr);
         if (display) {
-            System.out.format("Record length %d checksum %08x\n", leNew.getBytesLength(), leNew.getChecksum());
-            printLogEntry(leNew.getEntryBody(), op.getOpType() == Operation.OperationType.DISPLAY_ALL);
+            System.out.format("Record length %d checksum %08x\n", leNew.getBytesLength(),
+                    leNew.getChecksum());
+            printLogEntry(leNew.getEntryBody(),
+                    op.getOpType() == Operation.OperationType.DISPLAY_ALL);
         }
         if (fileChannelOut != null) {
             writeBuffer(leNew.getEntryBody(), fileChannelOut);
         }
         recordCnt++;
         remSize -= leNew.getBytesLength();
-        if (display)
+        if (display) {
             return leNew;
+        }
         return null;
     }
 

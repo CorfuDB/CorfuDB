@@ -40,7 +40,7 @@ public class StreamsViewTest extends AbstractViewTest {
         SequencerView sequencerView = r.getSequencerView();
         IStreamView svCopy = r.getStreamsView().copy(streamA, streamACopy,
                 sequencerView.nextToken(
-                        Collections.singleton(sv.getID()),
+                        Collections.singleton(sv.getId()),
                         0).getToken().getTokenValue());
 
         assertThat(svCopy.next().getPayload(getRuntime()))

@@ -1,23 +1,30 @@
 package org.corfudb.runtime.view.stream;
 
+import java.util.Iterator;
+import java.util.List;
+import java.util.Spliterator;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.view.Address;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
+
+
 
 /** This interface represents a view on a stream. A stream is an ordered
  * set of log entries which can only be appended to and read in sequential
  * order.
  *
- * Created by mwei on 1/5/17.
+ * <p>Created by mwei on 1/5/17.
  */
 public interface IStreamView extends
         Iterator<ILogData> {
@@ -25,7 +32,7 @@ public interface IStreamView extends
     /** Return the ID of the stream this view is for.
      * @return  The ID of the stream.
      */
-    UUID getID();
+    UUID getId();
 
     /** Reset the state of this stream view, causing the next read to
      * start from the beginning of this stream.
@@ -34,7 +41,7 @@ public interface IStreamView extends
 
     /** Seek to the requested maxGlobal address. The next read will
      * begin at the given global address, inclusive.
-     * @param globalAddress
+     * @param globalAddress Address to seek to
      */
     void seek(long globalAddress);
 
@@ -90,12 +97,12 @@ public interface IStreamView extends
      * @return  The (global) address the object was written at.
      */
     long append(Object object,
-     Function<TokenResponse, Boolean> acquisitionCallback,
-     Function<TokenResponse, Boolean> deacquisitionCallback);
+                Function<TokenResponse, Boolean> acquisitionCallback,
+                Function<TokenResponse, Boolean> deacquisitionCallback);
 
     /** Append an object to the stream, returning the global address it was
      * written at.
-     * @param   object
+     * @param   object Object to append/write
      * @return  The (global) address the object was written at.
      */
     default long append(Object object) {
@@ -146,14 +153,16 @@ public interface IStreamView extends
      *  will return an empty list. If there  are holes present in the log,
      *  they will be filled.
      *
-     *  Note: the default implementation is thread-safe only if the
+     *  <p>Note: the default implementation is thread-safe only if the
      *  implementation of read is synchronized.
      *
      * @return          The next entries in the stream, or an empty list,
      *                  if no entries are available.
      */
     @Nonnull
-    default List<ILogData> remaining() { return remainingUpTo(Address.MAX); }
+    default List<ILogData> remaining() {
+        return remainingUpTo(Address.MAX);
+    }
 
     /** Retrieve all of the entries from this stream, up to the address given or
      *  the tail of the stream. If there are no entries present, this function

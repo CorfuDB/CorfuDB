@@ -1,27 +1,27 @@
 package org.corfudb.runtime.view.stream;
 
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.runtime.view.Address;
-
 import java.util.Comparator;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.function.Consumer;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.view.Address;
+
 
 /** A spliterator for streams, which supports limiting the
  * spliterator's scope to a maximum global address.
  *
- * This spliterator is guaranteed to never read PAST the
+ * <p>This spliterator is guaranteed to never read PAST the
  * maximum global address given. This is necessary because
  * reading from a stream MODIFIES the stream pointer, and
  * streams provide the guarantee that they will return
  * entries in order exactly once.
  *
- * Concurrent modification of the stream during iteration
+ * <p>Concurrent modification of the stream during iteration
  * is NOT supported.
  *
- * Created by mwei on 4/24/17.
+ * <p>Created by mwei on 4/24/17.
  */
 @Slf4j
 public class StreamSpliterator extends Spliterators.AbstractSpliterator<ILogData> {
@@ -50,7 +50,9 @@ public class StreamSpliterator extends Spliterators.AbstractSpliterator<ILogData
         this.maxGlobal = maxGlobal;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     * */
     @Override
     public boolean tryAdvance(Consumer<? super ILogData> action) {
         // Get the next entry in the stream.
@@ -64,7 +66,9 @@ public class StreamSpliterator extends Spliterators.AbstractSpliterator<ILogData
         return true;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     * */
     @Override
     public Comparator<? super ILogData> getComparator() {
         return ILogData::compareTo;
