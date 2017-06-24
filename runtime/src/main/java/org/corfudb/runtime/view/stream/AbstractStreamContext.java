@@ -1,8 +1,8 @@
 package org.corfudb.runtime.view.stream;
 
+import java.util.UUID;
 import org.corfudb.runtime.view.Address;
 
-import java.util.UUID;
 
 /** A data class which keeps data for each stream context.
  * Stream contexts represent a copy-on-write context - for each source
@@ -57,7 +57,8 @@ public abstract class AbstractStreamContext implements
         // by default we just need to update the pointer.
         // we subtract by one, since the NEXT read will
         // have to include globalAddress.
-        // FIXME change this; what if globalAddress==0? somewhere down the line, some code will compare this with NEVER_READ
+        // FIXME change this; what if globalAddress==0? somewhere down the line,
+        // some code will compare this with NEVER_READ
         globalPointer = globalAddress - 1;
     }
 
