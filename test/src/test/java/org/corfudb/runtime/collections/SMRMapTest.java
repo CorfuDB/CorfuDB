@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -86,13 +87,15 @@ public class SMRMapTest extends AbstractViewTest {
                 .isNull();
 
         // ScanAndFilterByEntry
-        Predicate<Map.Entry<String, String>> valuePredicate = p -> p.getValue().equals("CorfuServer");
-        Map<String, String> filteredMap = ((SMRMap)corfuInstancesMap).scanAndFilterByEntry(valuePredicate);
+        Predicate<Map.Entry<String, String>> valuePredicate =
+                p -> p.getValue().equals("CorfuServer");
+        Collection<Map.Entry<String, String>> filteredMap = ((SMRMap)corfuInstancesMap)
+                .scanAndFilterByEntry(valuePredicate);
 
         assertThat(filteredMap.size()).isEqualTo(2);
 
-        for(String corfuInstance : filteredMap.values()) {
-            assertThat(corfuInstance).isEqualTo("CorfuServer");
+        for(Map.Entry<String, String> corfuInstance : filteredMap) {
+            assertThat(corfuInstance.getValue()).isEqualTo("CorfuServer");
         }
 
         // ScanAndFilter (Deprecated Method)
