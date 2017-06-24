@@ -17,7 +17,7 @@ import lombok.Getter;
 class ReadSetInfo {
     // fine-grained conflict information regarding accessed-objects;
     // captures values passed using @conflict annotations in @corfuObject
-    Map<UUID, Set<Integer>> readSetConflicts = new HashMap<>();
+    Map<UUID, Set<Long>> readSetConflicts = new HashMap<>();
 
     public void mergeInto(ReadSetInfo other) {
         other.getReadSetConflicts().forEach((streamId, cset) -> {
@@ -30,12 +30,12 @@ class ReadSetInfo {
             return;
         }
 
-        Set<Integer> streamConflicts = getConflictSet(streamId);
+        Set<Long> streamConflicts = getConflictSet(streamId);
         Arrays.asList(conflictObjects).stream()
-                .forEach(V -> streamConflicts.add(Integer.valueOf(V.hashCode())));
+                .forEach(V -> streamConflicts.add(Long.valueOf(V.hashCode())));
     }
 
-    public Set<Integer> getConflictSet(UUID streamId) {
+    public Set<Long> getConflictSet(UUID streamId) {
         return getReadSetConflicts().computeIfAbsent(streamId, u -> {
             return new HashSet<>();
         });

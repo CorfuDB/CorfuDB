@@ -15,7 +15,7 @@ public class TransactionAbortedException extends RuntimeException {
     TxResolutionInfo txResolutionInfo;
 
     @Getter
-    Integer conflictKey;
+    Long conflictKey;
 
     /**
      * Constructor.
@@ -25,7 +25,7 @@ public class TransactionAbortedException extends RuntimeException {
      */
     public TransactionAbortedException(
             TxResolutionInfo txResolutionInfo,
-            Integer conflictKey, AbortCause abortCause) {
+            Long conflictKey, AbortCause abortCause) {
         super("TX ABORT "
                 + " | Snapshot Time = " + txResolutionInfo.getSnapshotTimestamp()
                 + " | Transaction ID = " + txResolutionInfo.getTXid()

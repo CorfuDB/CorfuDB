@@ -2,23 +2,21 @@ package org.corfudb.infrastructure;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.collect.ImmutableMap;
 
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
+import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -125,20 +123,42 @@ public class SequencerServer extends AbstractServer {
      * all the confict keys which were evicted from the cache
      */
     private long maxConflictWildcard = Address.NOT_FOUND;
-    private final long maxConflictCacheSize = 1_000_000;
-    private final Cache<Integer, Long>
-            conflictToGlobalTailCache = Caffeine.newBuilder()
-            .maximumSize(maxConflictCacheSize)
-            .removalListener((Integer k, Long v, RemovalCause cause) -> {
-                if (!RemovalCause.REPLACED.equals(cause)) {
-                    log.trace("Updating maxConflictWildcard. Old value = '{}', new value = '{}', "
-                                    + "conflictParam = '{}'. Removal cause = '{}'",
-                            maxConflictWildcard, v, k, cause);
-                    maxConflictWildcard = Math.max(v, maxConflictWildcard);
+
+    /** A class which holds the sequencer's per-stream data. */
+    @Data
+    static class SequencerStreamInfo {
+        /** A map of conflict parameters to their most recent updates. */
+        private final Map<Long, Long> conflictMap = new HashMap<>();
+
+        /** The minimum address which has been poisoned.
+         *  Any address which has been poisoned has a conflict
+         *  against all updates.
+         */
+        long minPoisoned = Address.NEVER_READ;
+
+        /** For a given conflict parameter, get the most recent update
+         * considering poisoned addresses.
+         * @param conflictParameter     The conflict parameter
+         * @return                      The address of the most recent update to
+         *                              the conflict parameter.
+         */
+        Long getLatestUpdate(long conflictParameter) {
+            Long mapAddress = conflictMap.get(conflictParameter);
+            if (mapAddress == null) {
+                if (minPoisoned != Address.NEVER_READ) {
+                    // No conflict info, but the stream was poisoned.
+                    return minPoisoned;
+                } else {
+                    // Null means there was no conflict param
+                    return null;
                 }
-            })
-            .recordStats()
-            .build();
+            }
+            return Math.max(minPoisoned, mapAddress);
+        }
+    }
+
+    private final Map<UUID, SequencerStreamInfo>
+            conflictToGlobalTailCache = new HashMap<>();
 
     /**
      * flag indicating whether this sequencer is the bootstrap
@@ -175,18 +195,6 @@ public class SequencerServer extends AbstractServer {
         MetricRegistry metrics = serverContext.getMetrics();
         counterTokenSum = metrics.counter(metricsPrefix + "token-sum");
         counterToken0 = metrics.counter(metricsPrefix + "token-query");
-        addCacheGauges(metrics, metricsPrefix + "conflict.cache.", conflictToGlobalTailCache);
-    }
-
-    /**
-     * Get the conflict hash code for a stream ID and conflict param.
-     *
-     * @param streamId      The stream ID.
-     * @param conflictParam The conflict parameter.
-     * @return A conflict hash code.
-     */
-    public int getConflictHashCode(UUID streamId, int conflictParam) {
-        return Objects.hash(streamId, conflictParam);
     }
 
     /**
@@ -204,7 +212,7 @@ public class SequencerServer extends AbstractServer {
      *     cause.
      */
     public TokenType txnCanCommit(TxResolutionInfo txInfo, /** Input. */
-                                  AtomicReference<Integer> conflictKey /** Output. */) {
+                                  AtomicReference<Long> conflictKey /** Output. */) {
         log.trace("Commit-req[{}]", txInfo);
         final long txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
 
@@ -216,21 +224,22 @@ public class SequencerServer extends AbstractServer {
 
         AtomicReference<TokenType> response = new AtomicReference<>(TokenType.NORMAL);
 
-        for (Map.Entry<UUID, Set<Integer>> entry : txInfo.getConflictSet().entrySet()) {
+        for (Map.Entry<UUID, Set<Long>> entry : txInfo.getConflictSet().entrySet()) {
             if (response.get() != TokenType.NORMAL) {
                 break;
             }
 
             // if conflict-parameters are present, check for conflict based on conflict-parameter
             // updates
-            Set<Integer> conflictParamSet = entry.getValue();
+            Set<Long> conflictParamSet = entry.getValue();
             if (conflictParamSet != null && conflictParamSet.size() > 0) {
                 // for each key pair, check for conflict;
                 // if not present, check against the wildcard
                 conflictParamSet.forEach(conflictParam -> {
-                    int conflictKeyHash = getConflictHashCode(entry.getKey(),
-                            conflictParam);
-                    Long v = conflictToGlobalTailCache.getIfPresent(conflictKeyHash);
+                    SequencerStreamInfo streamInfo =
+                            conflictToGlobalTailCache.get(entry.getKey());
+                    Long v = streamInfo == null ? null :
+                             streamInfo.getLatestUpdate(conflictParam);
 
                     log.trace("Commit-ck[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
 
@@ -337,7 +346,7 @@ public class SequencerServer extends AbstractServer {
             globalLogTail.set(initialToken);
             globalLogStart.set(initialToken);
             maxConflictWildcard = initialToken - 1;
-            conflictToGlobalTailCache.invalidateAll();
+            conflictToGlobalTailCache.clear();
         }
 
         log.info("Sequencer reset with token = {}", initialToken);
@@ -421,7 +430,7 @@ public class SequencerServer extends AbstractServer {
         // Since Java does not allow an easy way for a function to return multiple values, this
         // variable is passed to the consumer that will use it to indicate to us if/what key was
         // responsible for an aborted transaction.
-        AtomicReference<Integer> conflictKey = new AtomicReference(TokenResponse.NO_CONFLICT_KEY);
+        AtomicReference<Long> conflictKey = new AtomicReference(TokenResponse.NO_CONFLICT_KEY);
 
         // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
         // Token allocation is conditioned on commit.
@@ -485,26 +494,41 @@ public class SequencerServer extends AbstractServer {
 
         // update the cache of conflict parameters
         if (req.getTxnResolution() != null) {
+            req.getTxnResolution().getPoisonedStreams()
+                    .stream()
+                    .forEach(id -> {
+                        SequencerStreamInfo streamInfo =
+                                conflictToGlobalTailCache
+                                        .computeIfAbsent(id,
+                                                k -> new SequencerStreamInfo());
+                        streamInfo.minPoisoned = newTail - 1;
+                        streamInfo.conflictMap.clear();
+                    });
             req.getTxnResolution().getWriteConflictParams().entrySet()
                     .stream()
                     // for each entry
                     .forEach(txEntry ->
                             // and for each conflict param
-                            txEntry.getValue().stream().forEach(conflictParam ->
-                                    // insert an entry with the new timestamp
-                                    // using the hash code based on the param
-                                    // and the stream id.
-                                    conflictToGlobalTailCache.put(
-                                            getConflictHashCode(txEntry
-                                                    .getKey(), conflictParam),
-                                            newTail - 1)));
+                            txEntry.getValue().stream().forEach(conflictParam -> {
+                                // insert an entry with the new timestamp
+                                // using the hash code based on the param
+                                // and the stream id.
+                                SequencerStreamInfo streamInfo =
+                                        conflictToGlobalTailCache
+                                                .computeIfAbsent(txEntry.getKey(),
+                                                        k -> new SequencerStreamInfo());
+                                streamInfo.conflictMap.put(Long.valueOf(conflictParam),
+                                        newTail - 1);
+                            }));
         }
+
         log.trace("token {} backpointers {}",
                 currentTail, backPointerMap.build());
         // return the token response with the new global tail
         // and the streams backpointers
         Token token = new Token(currentTail, serverEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, backPointerMap.build())));
+                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token,
+                backPointerMap.build())));
     }
 }

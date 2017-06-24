@@ -23,7 +23,7 @@ class WriteSetInfo {
 
     // fine-grained conflict information regarding mutated-objects;
     // captures values passed using @conflict annotations in @corfuObject
-    Map<UUID, Set<Integer>> writeSetConflicts = new HashMap<>();
+    Map<UUID, Set<Long>> writeSetConflicts = new HashMap<>();
 
     // the set of mutated objects
     Set<UUID> affectedStreams = new HashSet<>();
@@ -31,10 +31,19 @@ class WriteSetInfo {
     // teh actual updates to mutated objects
     MultiObjectSMREntry writeSet = new MultiObjectSMREntry();
 
-    Set<Integer> getConflictSet(UUID streamId) {
+    // The set of poisoned streams. Poisoned streams contain an update
+    // which conflicts with everything (some object inserted a conflict
+    // set containing NULL), so the conflict set must be ignored.
+    Set<UUID> poisonedStreams = new HashSet<>();
+
+    Set<Long> getConflictSet(UUID streamId) {
         return getWriteSetConflicts().computeIfAbsent(streamId, u -> {
             return new HashSet<>();
         });
+    }
+
+    public void poisonStream(UUID streamId) {
+        poisonedStreams.add(streamId);
     }
 
     public void mergeInto(WriteSetInfo other) {
@@ -47,6 +56,9 @@ class WriteSetInfo {
 
             // copy all the writeSet SMR entries
             writeSet.mergeInto(other.getWriteSet());
+
+            // copy the list of poisoned streams
+            poisonedStreams.addAll(other.poisonedStreams);
         }
     }
 
@@ -59,9 +71,11 @@ class WriteSetInfo {
 
             // add all the conflict params to the conflict-params set for this stream
             if (conflictObjects != null) {
-                Set<Integer> streamConflicts = getConflictSet(streamId);
+                Set<Long> streamConflicts = getConflictSet(streamId);
                 Arrays.asList(conflictObjects).stream()
-                        .forEach(V -> streamConflicts.add(Integer.valueOf(V.hashCode())));
+                        .forEach(V -> streamConflicts.add(Long.valueOf(V.hashCode())));
+            } else {
+                poisonStream(streamId);
             }
 
             return writeSet.getSMRUpdates(streamId).size() - 1;
