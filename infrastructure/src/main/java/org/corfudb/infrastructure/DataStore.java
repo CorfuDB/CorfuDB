@@ -1,11 +1,10 @@
 package org.corfudb.infrastructure;
 
-import com.github.benmanes.caffeine.cache.*;
-import lombok.Getter;
-import org.corfudb.util.JSONUtils;
+import com.github.benmanes.caffeine.cache.CacheWriter;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -15,22 +14,29 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
+import lombok.Getter;
+
+import org.corfudb.util.JSONUtils;
+
 /**
  * Stores data as JSON.
  *
- * Handle in-memory and persistent case differently:
+ * <p>Handle in-memory and persistent case differently:
  *
- * In in-memory mode, the "cache" is actually the store, so we never evict anything from it.
+ * <p>In in-memory mode, the "cache" is actually the store, so we never evict anything from it.
  *
- * In persistent mode, we use a {@link LoadingCache}, where an in-memory map is backed by disk.
+ * <p>In persistent mode, we use a {@link LoadingCache}, where an in-memory map is backed by disk.
  * In this scheme, the key for each value is also the name of the file where the value is stored.
  * The key is determined as (prefix + "_" + key).
  * The cache here serves mostly for easily managed synchronization of in-memory/file.
- * <p>
- * If 'opts' either has '--memory=true' or a log-path for storing files is not provided,
+ *
+ * <p>If 'opts' either has '--memory=true' or a log-path for storing files is not provided,
  * the store is just an in memory cache.
- * <p>
- * Created by mdhawan on 7/27/16.
+ *
+ * <p>Created by mdhawan on 7/27/16.
  */
 public class DataStore implements IDataStore {
 
@@ -41,9 +47,12 @@ public class DataStore implements IDataStore {
     private final String logDir;
 
     @Getter
-    private final long DS_CACHE_SZ = 1_000; // size bound for in-memory cache for dataStore
+    private final long dsCacheSize = 1_000; // size bound for in-memory cache for dataStore
 
-
+    /**
+     * Return a new DataStore object.
+     * @param opts  map of option strings
+     */
     public DataStore(Map<String, Object> opts) {
         this.opts = opts;
 
@@ -52,20 +61,20 @@ public class DataStore implements IDataStore {
             // in-memory dataSture case
             isPersistent = false;
             this.logDir = null;
-            cache = buildMemoryDS();
+            cache = buildMemoryDs();
         } else {
             // persistent dataSture case
             isPersistent = true;
             this.logDir = (String) opts.get("--log-path");
-            cache = buildPersistentDS();
+            cache = buildPersistentDs();
         }
     }
 
     /**
      * obtain an in-memory cache, no content loader, no writer, no size limit.
-     * @return
+     * @return  new LoadingCache for the DataStore
      */
-    private LoadingCache<String, String> buildMemoryDS() {
+    private LoadingCache<String, String> buildMemoryDs() {
         LoadingCache<String, String> cache = Caffeine
                 .newBuilder()
                 .recordStats()
@@ -76,11 +85,11 @@ public class DataStore implements IDataStore {
     /**
      * obtain a {@link LoadingCache}.
      * The cache is backed up by file-per-key uner {@link DataStore::logDir}.
-     * The cache size is bounded by {@link DataStore::DS_CACHE_SZ}.
+     * The cache size is bounded by {@link DataStore::dsCacheSize}.
      *
      * @return the cache object
      */
-    private LoadingCache<String, String> buildPersistentDS() {
+    private LoadingCache<String, String> buildPersistentDs() {
         LoadingCache<String, String> cache = Caffeine.newBuilder()
                 .recordStats()
                 .writer(new CacheWriter<String, String>() {
@@ -95,7 +104,9 @@ public class DataStore implements IDataStore {
                     }
 
                     @Override
-                    public synchronized void delete(@Nonnull String key, @Nullable String value, @Nonnull RemovalCause cause) {
+                    public synchronized void delete(@Nonnull String key,
+                                                    @Nullable String value,
+                                                    @Nonnull RemovalCause cause) {
                         try {
                             Path path = Paths.get(logDir + File.separator + key);
                             Files.deleteIfExists(path);
@@ -104,8 +115,8 @@ public class DataStore implements IDataStore {
                         }
                     }
                 })
-            .maximumSize(DS_CACHE_SZ)
-            .build(key -> {
+                .maximumSize(dsCacheSize)
+                .build(key -> {
                     try {
                         Path path = Paths.get(logDir + File.separator + key);
                         if (Files.notExists(path)) {
@@ -121,52 +132,54 @@ public class DataStore implements IDataStore {
     }
 
     @Override
-    public synchronized  <T> void put(Class<T> tClass, String prefix, String key, T value) {
-        cache.put(getKey(prefix, key), JSONUtils.parser.toJson(value, tClass));
+    public synchronized  <T> void put(Class<T> tclass, String prefix, String key, T value) {
+        cache.put(getKey(prefix, key), JSONUtils.parser.toJson(value, tclass));
     }
 
     @Override
-    public synchronized  <T> T get(Class<T> tClass, String prefix, String key) {
+    public synchronized  <T> T get(Class<T> tclass, String prefix, String key) {
         String json = cache.get(getKey(prefix, key));
-        return getObject(json, tClass);
+        return getObject(json, tclass);
     }
 
     /**
-     * This is an atomic conditional get/put: If the key is not found, then the specified value is inserted.
-     * It returns the latest value, either the original one found, or the newly inserted value
-     * @param tClass type of value
+     * This is an atomic conditional get/put: If the key is not found,
+     * then the specified value is inserted.
+     * It returns the latest value, either the original one found,
+     * or the newly inserted value
+     * @param tclass type of value
      * @param prefix prefix part of key
      * @param key suffice part of key
      * @param value value to be conditionally accepted
      * @param <T> value class
      * @return the latest value in the cache
      */
-    public <T> T get(Class<T> tClass, String prefix, String key, T value) {
+    public <T> T get(Class<T> tclass, String prefix, String key, T value) {
         String keyString = getKey(prefix, key);
-        String json = cache.get(keyString, k -> JSONUtils.parser.toJson(value, tClass));
-        return getObject(json, tClass);
+        String json = cache.get(keyString, k -> JSONUtils.parser.toJson(value, tclass));
+        return getObject(json, tclass);
     }
 
     @Override
-    public synchronized  <T> List<T> getAll(Class<T> tClass, String prefix) {
+    public synchronized  <T> List<T> getAll(Class<T> tclass, String prefix) {
         List<T> list = new ArrayList<T>();
         for (Map.Entry<String, String> entry : cache.asMap().entrySet()) {
             if (entry.getKey().startsWith(prefix)) {
-                list.add(getObject(entry.getValue(), tClass));
+                list.add(getObject(entry.getValue(), tclass));
             }
         }
         return list;
     }
 
     @Override
-    public synchronized <T> void delete(Class<T> tClass, String prefix, String key) {
+    public synchronized <T> void delete(Class<T> tclass, String prefix, String key) {
         cache.invalidate(getKey(prefix, key));
     }
 
     // Helper methods
 
-    private <T> T getObject(String json, Class<T> tClass) {
-        return isNotNull(json) ? JSONUtils.parser.fromJson(json, tClass) : null;
+    private <T> T getObject(String json, Class<T> tclass) {
+        return isNotNull(json) ? JSONUtils.parser.fromJson(json, tclass) : null;
     }
 
     private String getKey(String prefix, String key) {

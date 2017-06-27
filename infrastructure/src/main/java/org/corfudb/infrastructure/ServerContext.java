@@ -1,12 +1,14 @@
 package org.corfudb.infrastructure;
 
 import com.codahale.metrics.MetricRegistry;
-import lombok.Getter;
-import lombok.Setter;
-import org.corfudb.util.MetricsUtils;
 
 import java.time.Duration;
 import java.util.Map;
+
+import lombok.Getter;
+import lombok.Setter;
+
+import org.corfudb.util.MetricsUtils;
 
 import static org.corfudb.util.MetricsUtils.addJVMMetrics;
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
@@ -19,11 +21,11 @@ import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
  * <li>Should contain common services/utilities that the different Servers in a node require.</li>
  * </ul>
  *
- * Note:
+ * <p>Note:
  * It is created in {@link CorfuServer} and then
  * passed to all the servers including {@link NettyServerRouter}.
  *
- * Created by mdhawan on 8/5/16.
+ * <p>Created by mdhawan on 8/5/16.
  */
 public class ServerContext {
     private static final String PREFIX_EPOCH = "SERVER_EPOCH";
@@ -34,7 +36,7 @@ public class ServerContext {
     private static final String KEY_STARTING_ADDRESS = "CURRENT";
 
     /**
-     * various duration constants
+     * various duration constants.
      */
     public static final Duration SMALL_INTERVAL = Duration.ofMillis(60_000);
     public static final Duration SHUTDOWN_TIMER = Duration.ofSeconds(5);
@@ -60,6 +62,11 @@ public class ServerContext {
     @Getter
     public static final MetricRegistry metrics = new MetricRegistry();
 
+    /**
+     * Returns a new ServerContext.
+     * @param serverConfig map of configuration strings to objects
+     * @param serverRouter server router
+     */
     public ServerContext(Map<String, Object> serverConfig, IServerRouter serverRouter) {
         this.serverConfig = serverConfig;
         this.dataStore = new DataStore(serverConfig);
@@ -70,7 +77,7 @@ public class ServerContext {
         // Metrics setup & reporting configuration
         String mp = "corfu.server.";
         synchronized (metrics) {
-            if (! isMetricsReportingSetUp(metrics)) {
+            if (!isMetricsReportingSetUp(metrics)) {
                 addJVMMetrics(metrics, mp);
                 MetricsUtils.addCacheGauges(metrics, mp + "datastore.cache.", dataStore.getCache());
                 MetricsUtils.metricsReportingSetup(metrics);
@@ -86,6 +93,10 @@ public class ServerContext {
         return epoch == null ? 0 : epoch;
     }
 
+    /**
+     * Set the serverRouter epoch.
+     * @param serverEpoch the epoch to set
+     */
     public void setServerEpoch(long serverEpoch) {
         dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
         // Set the epoch in the router as well.
@@ -102,8 +113,13 @@ public class ServerContext {
         dataStore.put(Long.class, PREFIX_TAIL_SEGMENT, KEY_TAIL_SEGMENT, tailSegment);
     }
 
+    /**
+     * Returns the dataStore starting address.
+     * @return the starting address
+     */
     public long getStartingAddress() {
-        Long startingAddress = dataStore.get(Long.class, PREFIX_STARTING_ADDRESS, KEY_STARTING_ADDRESS);
+        Long startingAddress = dataStore.get(Long.class, PREFIX_STARTING_ADDRESS,
+                KEY_STARTING_ADDRESS);
         return startingAddress == null ? 0 : startingAddress;
     }
 

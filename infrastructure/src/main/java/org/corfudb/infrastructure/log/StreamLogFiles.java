@@ -114,8 +114,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         // This can happen if a prefix trim happens on
         // addresses that haven't been written
-        if (getGlobalTail() < getStartingAddress()) {
-            syncTailSegment(getStartingAddress() - 1);
+        if (getGlobalTail() < getTrimMark()) {
+            syncTailSegment(getTrimMark() - 1);
         }
     }
 
@@ -228,10 +228,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
     }
 
-    private void checkAddress(long address) {
+    private boolean isTrimmed(long address) {
         if (address < startingAddress) {
-            throw new TrimmedException();
+            return true;
         }
+        return false;
     }
 
     private void initializeStartingAddress() {
@@ -356,8 +357,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
     }
 
-    @VisibleForTesting
-    long getStartingAddress() {
+    @Override
+    public long getTrimMark() {
         return startingAddress;
     }
 
@@ -902,7 +903,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     public void append(long address, LogData entry) {
         //evict the data by getting the next pointer.
         try {
-            checkAddress(address);
+            if(isTrimmed(address)) {
+                throw new OverwriteException();
+            }
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
             SegmentHandle fh = getSegmentHandleForAddress(address);
@@ -924,18 +927,18 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         } catch (IOException e) {
             log.error("Disk_write[{}]: Exception", address, e);
             throw new RuntimeException(e);
-        } catch (TrimmedException e) {
-            throw new OverwriteException();
         }
     }
 
     @Override
     public LogData read(long address) {
         try {
-            checkAddress(address);
+            if(isTrimmed(address)){
+                return LogData.TRIMMED;
+            }
             SegmentHandle sh = getSegmentHandleForAddress(address);
             if (sh.getPendingTrims().contains(address)) {
-                throw new TrimmedException();
+                return LogData.TRIMMED;
             }
             return readRecord(sh, address);
         } catch (IOException e) {

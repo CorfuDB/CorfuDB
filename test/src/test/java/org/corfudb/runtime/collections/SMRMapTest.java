@@ -1,19 +1,11 @@
 package org.corfudb.runtime.collections;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
-import lombok.Data;
-import lombok.Getter;
-import lombok.ToString;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.ObjectOpenOptions;
-import org.corfudb.util.serializer.Serializers;
-import org.junit.Before;
-import org.junit.Test;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -22,10 +14,21 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 import java.util.stream.IntStream;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import lombok.Data;
+import lombok.Getter;
+import lombok.ToString;
+
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.ObjectOpenOptions;
+import org.corfudb.util.serializer.Serializers;
+import org.junit.Before;
+import org.junit.Test;
 
 /**
  * Created by mwei on 1/7/16.
@@ -82,6 +85,20 @@ public class SMRMapTest extends AbstractViewTest {
                 .isNull();
         assertThat(corfuInstancesMap.put("d", "CorfuServer"))
                 .isNull();
+
+        // ScanAndFilterByEntry
+        Predicate<Map.Entry<String, String>> valuePredicate =
+                p -> p.getValue().equals("CorfuServer");
+        Collection<Map.Entry<String, String>> filteredMap = ((SMRMap)corfuInstancesMap)
+                .scanAndFilterByEntry(valuePredicate);
+
+        assertThat(filteredMap.size()).isEqualTo(2);
+
+        for(Map.Entry<String, String> corfuInstance : filteredMap) {
+            assertThat(corfuInstance.getValue()).isEqualTo("CorfuServer");
+        }
+
+        // ScanAndFilter (Deprecated Method)
         List<String> corfuServerList = ((SMRMap)corfuInstancesMap).scanAndFilter(p -> p.equals("CorfuServer"));
 
         assertThat(corfuServerList.size()).isEqualTo(2);

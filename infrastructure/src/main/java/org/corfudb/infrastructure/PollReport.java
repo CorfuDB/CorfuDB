@@ -1,10 +1,11 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableMap;
-import lombok.Data;
 
 import java.util.Map;
 import java.util.Set;
+
+import lombok.Data;
 
 /**
  * Created by zlokhandwala on 3/21/17.
@@ -33,6 +34,11 @@ public class PollReport {
             return this;
         }
 
+        /**
+         * Returns a PollReportBuilder configured for failing nodes.
+         * @param failingNodes set of failing nodes
+         * @return builder for a PollReport containing failing nodes
+         */
         public PollReportBuilder setFailingNodes(Set<String> failingNodes) {
             if (!failingNodes.isEmpty()) {
                 isFailurePresent = true;
@@ -41,6 +47,11 @@ public class PollReport {
             return this;
         }
 
+        /**
+         * Returns a PollReportBuilder configured for nodes with out of phase epoch.
+         * @param outOfPhaseEpochNodes map of nodes to epoch
+         * @return builder for a PollReport containing nodes with out of phase epoch
+         */
         public PollReportBuilder setOutOfPhaseEpochNodes(Map<String, Long> outOfPhaseEpochNodes) {
             if (!outOfPhaseEpochNodes.isEmpty()) {
                 isFailurePresent = true;

@@ -34,7 +34,9 @@ public abstract class AbstractServer {
      * @param r   The router that took in the message.
      */
     public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        if (isShutdown()) return;
+        if (isShutdown()) {
+            return;
+        }
         boolean isMetricsEnabled = MetricsUtils.isMetricsCollectionEnabled();
         if (!getHandler().handle(msg, ctx, r, isMetricsEnabled)) {
             log.warn("Received unhandled message type {}" , msg.getMsgType());

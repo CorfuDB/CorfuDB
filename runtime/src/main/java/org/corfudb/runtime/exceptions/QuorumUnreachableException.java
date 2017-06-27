@@ -13,6 +13,11 @@ public class QuorumUnreachableException extends Exception {
     @Getter
     public int required;
 
+    /**
+     * Constuctor.
+     * @param reachable number of quorum reachable
+     * @param required number of required quorum
+     */
     public QuorumUnreachableException(int reachable, int required) {
         super("Couldn't reach quorum, reachable=" + reachable + ", required=" + required);
         this.reachable = reachable;

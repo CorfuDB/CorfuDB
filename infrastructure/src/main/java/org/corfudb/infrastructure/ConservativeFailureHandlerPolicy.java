@@ -1,15 +1,15 @@
 package org.corfudb.infrastructure;
 
+import java.util.Set;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.view.Layout;
 
-import java.util.Set;
-
 /**
  * Conserves the failures.
- * <p>
- * Created by zlokhandwala on 11/21/16.
+ *
+ * <p>Created by zlokhandwala on 11/21/16.
  */
 public class ConservativeFailureHandlerPolicy implements IFailureHandlerPolicy {
 
@@ -25,7 +25,8 @@ public class ConservativeFailureHandlerPolicy implements IFailureHandlerPolicy {
      * @throws CloneNotSupportedException  Clone not supported for layout.
      */
     @Override
-    public Layout generateLayout(Layout originalLayout, CorfuRuntime corfuRuntime, Set<String> failedNodes)
+    public Layout generateLayout(Layout originalLayout, CorfuRuntime corfuRuntime,
+                                 Set<String> failedNodes)
             throws LayoutModificationException, CloneNotSupportedException {
         LayoutWorkflowManager layoutManager = new LayoutWorkflowManager(originalLayout);
         Layout newLayout = layoutManager

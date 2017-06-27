@@ -1,30 +1,36 @@
 package org.corfudb.infrastructure;
 
 import com.codahale.metrics.Timer;
-import io.netty.channel.ChannelHandlerContext;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.util.MetricsUtils;
 
-import java.lang.invoke.*;
+import io.netty.channel.ChannelHandlerContext;
+
+import java.lang.invoke.LambdaMetafactory;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.util.MetricsUtils;
+
 /**
  * This class simplifies writing switch(msg.getType()) statements.
  *
- * For maximum performance, make the handlers static whenever possible.
+ * <p>For maximum performance, make the handlers static whenever possible.
  *
- * Created by mwei on 7/26/16.
+ * <p>Created by mwei on 7/26/16.
  */
 public class CorfuMsgHandler {
 
     @FunctionalInterface
     interface Handler<T extends CorfuMsg> {
-        void handle(T CorfuMsg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled);
+        void handle(T corfuMsg, ChannelHandlerContext ctx, IServerRouter r,
+                    boolean isMetricsEnabled);
     }
 
     /** The handler map. */
@@ -51,8 +57,8 @@ public class CorfuMsgHandler {
      * @return                  This handler, to support chaining.
      */
     @SuppressWarnings("unchecked")
-    public <T extends CorfuMsg> CorfuMsgHandler
-    addHandler(CorfuMsgType messageType, Handler<T> handler) {
+    public <T extends CorfuMsg> CorfuMsgHandler addHandler(CorfuMsgType messageType,
+                                                           Handler<T> handler) {
         handlerMap.put(messageType, handler);
         return this;
     }
@@ -66,7 +72,8 @@ public class CorfuMsgHandler {
      *                  False otherwise.
      */
     @SuppressWarnings("unchecked")
-    public boolean handle(CorfuMsg message, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+    public boolean handle(CorfuMsg message, ChannelHandlerContext ctx, IServerRouter r,
+                          boolean isMetricsEnabled) {
         if (handlerMap.containsKey(message.getMsgType())) {
             handlerMap.get(message.getMsgType()).handle(message, ctx, r, isMetricsEnabled);
             return true;
@@ -78,7 +85,7 @@ public class CorfuMsgHandler {
      *
      * @param caller    The context that is being used. Call MethodHandles.lookup() to obtain.
      * @param o         The object that implements the server.
-     * @return
+     * @return          new message handler for caller class
      */
     public CorfuMsgHandler generateHandlers(final MethodHandles.Lookup caller, final Object o) {
         Arrays.stream(o.getClass().getDeclaredMethods())
@@ -86,13 +93,15 @@ public class CorfuMsgHandler {
                 .forEach(x -> {
                     ServerHandler a = x.getAnnotation(ServerHandler.class);
 
-                    if (!x.getParameterTypes()[0].isAssignableFrom(a.type().messageType.getRawType()))
-                    {
-                        throw new RuntimeException("Incorrect message type, expected " +
-                                a.type().messageType.getRawType() + " but provided " + x.getParameterTypes()[0]);
+                    if (!x.getParameterTypes()[0].isAssignableFrom(a.type().messageType
+                            .getRawType())) {
+                        throw new RuntimeException("Incorrect message type, expected "
+                                + a.type().messageType.getRawType() + " but provided "
+                                + x.getParameterTypes()[0]);
                     }
                     if (handlerMap.containsKey(a.type())) {
-                        throw new RuntimeException("Handler for " + a.type() + " already registered!");
+                        throw new RuntimeException("Handler for " + a.type()
+                                + " already registered!");
                     }
                     // convert the method into a Java8 Lambda for maximum execution speed...
                     try {
@@ -107,13 +116,15 @@ public class CorfuMsgHandler {
 
                         } else {
                             // instance method, so we need to capture the type.
-                            MethodType mt = MethodType.methodType(x.getReturnType(), x.getParameterTypes());
+                            MethodType mt = MethodType.methodType(x.getReturnType(),
+                                    x.getParameterTypes());
                             MethodHandle mh = caller.findVirtual(o.getClass(), x.getName(), mt);
                             MethodType mtGeneric = mh.type().changeParameterType(1, CorfuMsg.class);
                             h = (Handler) LambdaMetafactory.metafactory(caller,
                                     "handle", MethodType.methodType(Handler.class, o.getClass()),
-                                    mtGeneric.dropParameterTypes(0,1), mh, mh.type().dropParameterTypes(0,1))
-                                    .getTarget().bindTo(o).invoke();
+                                    mtGeneric.dropParameterTypes(0,1), mh,
+                                    mh.type().dropParameterTypes(0,1)).getTarget()
+                                    .bindTo(o).invoke();
                         }
 
                         // If there is an annotation element for opTimer that is not "", then
@@ -129,12 +140,14 @@ public class CorfuMsgHandler {
                         // Now create the lambda that wraps the lambda-like-thing that's
                         // stored in 'h' and insert it into the handlerMap.
                         handlerMap.put(a.type(),
-                                (CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) -> {
-                                    try (Timer.Context timerCxt = MetricsUtils.getConditionalContext(
+                                (CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r,
+                                 boolean isMetricsEnabled) -> {
+                                    try (Timer.Context timerCxt
+                                                 = MetricsUtils.getConditionalContext(
                                             t != null && isMetricsEnabled, t)) {
                                         h.handle(msg, ctx, r, isMetricsEnabled);
                                     }
-                        });
+                            });
                     } catch (Throwable e) {
                         throw new RuntimeException(e);
                     }

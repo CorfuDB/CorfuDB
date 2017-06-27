@@ -64,7 +64,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
                 return (List<SMREntry>) Collections.EMPTY_LIST;
             }
         } else {
-            return ((ISMRConsumable) logData.getPayload(runtime)).getSMRUpdates(streamView.getID());
+            return ((ISMRConsumable) logData.getPayload(runtime)).getSMRUpdates(streamView.getId());
         }
     }
 
@@ -96,7 +96,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
             if (data.getType() == DataType.DATA
                     && data.getPayload(runtime) instanceof ISMRConsumable) {
                 return ((ISMRConsumable) data.getPayload(runtime))
-                        .getSMRUpdates(streamView.getID());
+                        .getSMRUpdates(streamView.getId());
             }
         }
         return null;
@@ -115,7 +115,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
             if (data.getType() == DataType.DATA
                     && data.getPayload(runtime) instanceof ISMRConsumable) {
                 return ((ISMRConsumable) data.getPayload(runtime))
-                        .getSMRUpdates(streamView.getID());
+                        .getSMRUpdates(streamView.getId());
             }
             data = streamView.previous();
         }
@@ -179,7 +179,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
      */
     @Override
     public UUID getID() {
-        return streamView.getID();
+        return streamView.getId();
     }
 
 }

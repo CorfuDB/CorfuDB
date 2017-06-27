@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import lombok.Data;
+
 import org.corfudb.format.Types.NodeMetrics;
 
 
@@ -10,8 +11,8 @@ import org.corfudb.format.Types.NodeMetrics;
  * This state is utilized by the management server to
  * make decisions on the state of the cluster and handle
  * failures if needed.
- * <p>
- * Created by zlokhandwala on 1/13/17.
+ *
+ * <p>Created by zlokhandwala on 1/13/17.
  */
 @Data
 public class NodeHealth {
@@ -29,7 +30,7 @@ public class NodeHealth {
     }
 
     /**
-     * Builder for the NodeHealth
+     * Builder for the NodeHealth.
      */
     public static class NodeHealthBuilder {
 

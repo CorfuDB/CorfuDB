@@ -1,8 +1,12 @@
 package org.corfudb.infrastructure;
 
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Inherited;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-import java.lang.annotation.*;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 
 /**
  * Created by mwei on 8/8/16.
@@ -11,6 +15,15 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 public @interface ServerHandler {
+    /**
+     * Returns the message type
+     * @return the type of corfu message
+     */
     CorfuMsgType type();
-    String opTimer() default ""; // Registry's name of timer to be used for this operation
+
+    /**
+     * Returns registry's name of timer to be used for this operation.
+     * @return the timer name
+     */
+    String opTimer() default ""; //
 }
