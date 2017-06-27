@@ -79,7 +79,7 @@ public class StreamsView extends AbstractView {
                 runtime.getAddressSpaceView().write(cowToken, entry);
                 written = true;
             } catch (OverwriteException oe) {
-                log.debug("hole fill during COW entry append, retrying...");
+                log.warn("hole fill during COW entry append, retrying...");
             }
         }
         return get(destination);
@@ -131,7 +131,7 @@ public class StreamsView extends AbstractView {
                 return tokenResponse.getTokenValue();
             } catch (OverwriteException oe) {
                 // We were overwritten, get a new token and try again.
-                log.trace("Overwrite[{}]: streams {}", tokenResponse.getTokenValue(),
+                log.warn("Overwrite[{}]: streams {}", tokenResponse.getTokenValue(),
                         streamIDs.stream().map(Utils::toReadableID).collect(Collectors.toSet()));
 
                 TokenResponse temp;

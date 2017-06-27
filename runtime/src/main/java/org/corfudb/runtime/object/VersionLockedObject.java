@@ -194,7 +194,7 @@ public class VersionLockedObject<T> {
                     }
                     // Otherwise, it is not on a correct view of the object (the object was
                     // modified) and we should try again by upgrading the lock.
-                    log.trace("Access [{}] Direct (optimistic-read) exception, upgrading lock",
+                    log.warn("Access [{}] Direct (optimistic-read) exception, upgrading lock",
                             this);
                 }
             }
@@ -292,6 +292,7 @@ public class VersionLockedObject<T> {
                     try {
                         rollbackObjectUnsafe(timestamp);
                     } catch (NoRollbackException nre) {
+                        log.warn("SyncObjectUnsafe[{}] failed {}", this, nre);
                         resetUnsafe();
                     }
                 }
@@ -320,6 +321,7 @@ public class VersionLockedObject<T> {
                         return;
                     }
                 } catch (NoRollbackException nre) {
+                    log.warn("OptimisticRollback[{}] failed {}", this, nre);
                     resetUnsafe();
                 }
             }
@@ -617,7 +619,7 @@ public class VersionLockedObject<T> {
                     Address.NEVER_READ);
             log.trace("OptimisticRollback[{}] complete", this);
         } catch (NoRollbackException nre) {
-            log.debug("OptimisticRollback[{}] failed", this);
+            log.warn("OptimisticRollback[{}] failed", this);
             resetUnsafe();
         }
     }
