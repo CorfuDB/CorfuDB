@@ -233,11 +233,11 @@ public class logReader {
         if (entry.hasCheckpointEntryType()) {
             System.out.format("Checkpoint type: %s, ID %s\n",
                     entry.getCheckpointEntryType(),
-                    new UUID(entry.hasCheckpointIDMostSignificant()
-                             ? entry.getCheckpointIDMostSignificant()
+                    new UUID(entry.hasCheckpointIdMostSignificant()
+                             ? entry.getCheckpointIdMostSignificant()
                              : 0L,
-                             entry.hasCheckpointIDLeastSignificant()
-                             ? entry.getCheckpointIDLeastSignificant()
+                             entry.hasCheckpointIdLeastSignificant()
+                             ? entry.getCheckpointIdLeastSignificant()
                              : 0L));
         }
     }

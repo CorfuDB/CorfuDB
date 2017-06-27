@@ -30,6 +30,13 @@ import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
+
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Function;
+
 /** Checkpoint writer for SMRMaps: take a snapshot of the
  *  object via TXBegin(), then dump the frozen object's
  *  state into CheckpointEntry records into the object's
@@ -39,12 +46,13 @@ import org.corfudb.util.serializer.Serializers;
 public class CheckpointWriter {
     /** Metadata to be stored in the CP's 'dict' map.
      */
-    @SuppressWarnings("checkstyle:abbreviation")
-    private UUID streamID;
-    private String author;
     @Getter
     @SuppressWarnings("checkstyle:abbreviation")
     private UUID checkpointID;
+    private UUID streamId;
+    private String author;
+    @Getter
+    private UUID checkpointId;
     private LocalDateTime startTime;
     private long startAddress;
     private long endAddress;
@@ -107,10 +115,10 @@ public class CheckpointWriter {
      */
     public CheckpointWriter(CorfuRuntime rt, UUID streamId, String author, SMRMap map) {
         this.rt = rt;
-        this.streamID = streamId;
+        this.streamId = streamId;
         this.author = author;
         this.map = map;
-        checkpointID = UUID.randomUUID();
+        checkpointId = UUID.randomUUID();
         checkpointStreamID = CorfuRuntime.getStreamID(streamId.toString() + "_cp");
         sv = rt.getStreamsView();
     }
@@ -169,7 +177,7 @@ public class CheckpointWriter {
         ImmutableMap<CheckpointEntry.CheckpointDictKey,String> mdkv =
                 ImmutableMap.copyOf(this.mdkv);
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
-                author, checkpointID, mdkv, null);
+                author, checkpointId, streamId, mdkv, null);
         startAddress = sv.append(Collections.singleton(checkpointStreamID), cp, null);
 
         postAppendFunc.accept(cp, startAddress);
@@ -218,9 +226,8 @@ public class CheckpointWriter {
             MultiSMREntry smrEntries = new MultiSMREntry();
             smrEntries.addTo(smrEntry);
 
-            CheckpointEntry cp = new CheckpointEntry(
-                    CheckpointEntry.CheckpointEntryType.CONTINUATION,
-                    author, checkpointID, mdkv, smrEntries);
+            CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
+                    author, checkpointId, streamId, mdkv, smrEntries);
 
             long pos = sv.append(Collections.singleton(checkpointStreamID), cp, null);
 
@@ -252,7 +259,8 @@ public class CheckpointWriter {
         mdkv.put(CheckpointEntry.CheckpointDictKey.BYTE_COUNT, Long.toString(numBytes));
 
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
-                author, checkpointID, mdkv, null);
+                author, checkpointId, streamId, mdkv, null);
+
         endAddress = sv.append(Collections.singleton(checkpointStreamID), cp, null);
 
         postAppendFunc.accept(cp, endAddress);

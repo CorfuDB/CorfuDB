@@ -543,16 +543,22 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             logData.setCheckpointType(CheckpointEntry.CheckpointEntryType
                     .typeMap.get((byte) entry.getCheckpointEntryType().ordinal()));
 
-            if (!entry.hasCheckpointIDLeastSignificant()
-                    || !entry.hasCheckpointIDMostSignificant()) {
+            if (!entry.hasCheckpointIdLeastSignificant()
+                    || !entry.hasCheckpointIdMostSignificant()) {
                 log.error("Checkpoint has missing information {}", entry);
             }
 
-            long lsd = entry.getCheckpointIDLeastSignificant();
-            long msd = entry.getCheckpointIDMostSignificant();
+            long lsd = entry.getCheckpointIdLeastSignificant();
+            long msd = entry.getCheckpointIdMostSignificant();
             UUID checkpointId = new UUID(msd, lsd);
 
-            logData.setCheckpointID(checkpointId);
+            logData.setCheckpointId(checkpointId);
+
+            lsd = entry.getCheckpointedStreamdIdLeastSignificant();
+            msd = entry.getCheckpointedStreamIdMostSignificant();
+            UUID streamId = new UUID(msd, lsd);
+
+            logData.setCheckpointedStreamId(streamId);
         }
 
         return logData;
@@ -833,10 +839,14 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             logEntryBuilder.setCheckpointEntryType(
                     Types.CheckpointEntryType.forNumber(
                             entry.getCheckpointType().ordinal()));
-            logEntryBuilder.setCheckpointIDMostSignificant(
-                    entry.getCheckpointID().getMostSignificantBits());
-            logEntryBuilder.setCheckpointIDLeastSignificant(
-                    entry.getCheckpointID().getLeastSignificantBits());
+            logEntryBuilder.setCheckpointIdMostSignificant(
+                    entry.getCheckpointId().getMostSignificantBits());
+            logEntryBuilder.setCheckpointIdLeastSignificant(
+                    entry.getCheckpointId().getLeastSignificantBits());
+            logEntryBuilder.setCheckpointedStreamdIdLeastSignificant(
+                    entry.getCheckpointedStreamId().getLeastSignificantBits());
+            logEntryBuilder.setCheckpointedStreamIdMostSignificant(
+                    entry.getCheckpointedStreamId().getMostSignificantBits());
         }
 
         return logEntryBuilder.build();
