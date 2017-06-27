@@ -7,7 +7,6 @@ import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 import io.netty.buffer.ByteBuf;
 
 import java.io.File;
-import java.io.FileFilter;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -15,7 +14,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 import io.netty.buffer.Unpooled;
-import org.apache.commons.io.filefilter.WildcardFileFilter;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
@@ -237,7 +235,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.trim(address);
 
         // Verify that the unwritten address trim is not persisted
-        StreamLogFiles.SegmentHandle sh = log.getSegmentHandleForAddress(address);
+        SegmentHandle sh = log.getSegmentHandleForAddress(address);
         assertThat(sh.getPendingTrims().size()).isEqualTo(0);
 
         // Write to the same address
@@ -287,7 +285,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         log.compact();
 
-        StreamLogFiles.SegmentHandle sh = log.getSegmentHandleForAddress(logChunk);
+        SegmentHandle sh = log.getSegmentHandleForAddress(logChunk);
 
         assertThat(logChunk).isGreaterThan(StreamLogFiles.TRIM_THRESHOLD);
         assertThat(sh.getPendingTrims().size()).isEqualTo(logChunk);
