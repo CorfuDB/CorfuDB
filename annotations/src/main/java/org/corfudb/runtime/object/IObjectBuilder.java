@@ -5,17 +5,18 @@ import com.google.common.reflect.TypeToken;
 import java.util.UUID;
 
 /** The interface to the builder for an object.
+ *
+ * <p>Created by mwei on 11/12/16.
  * @param <T> The type of the object to build.
- * Created by mwei on 11/12/16.
  */
 public interface IObjectBuilder<T> {
 
     /** Set the stream ID of the object.
      *
-     * @param streamID  The stream ID of the object.
+     * @param streamId  The stream ID of the object.
      * @return  This object builder, to support chaining.
      */
-    IObjectBuilder<T> setStreamID(UUID streamID);
+    IObjectBuilder<T> setStreamId(UUID streamId);
 
     /** Set the name of the stream for this object.
      *

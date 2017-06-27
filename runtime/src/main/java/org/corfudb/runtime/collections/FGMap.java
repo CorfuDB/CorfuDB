@@ -48,7 +48,7 @@ public class FGMap<K, V> extends AbstractCorfuWrapper<FGMap<K,V>> implements Map
     Map<K, V> getPartitionMap(int partition) {
         return getBuilder()
                 .setTypeToken(new TypeToken<SMRMap<K,V>>() {})
-                .setStreamID(getStreamID(partition))
+                .setStreamId(getStreamID(partition))
                 .open();
     }
 

@@ -1,6 +1,14 @@
 package org.corfudb.recovery;
 
-import javax.annotation.Nonnull;
+import static org.corfudb.recovery.RecoveryUtils.createSmrMapIfNotExist;
+import static org.corfudb.recovery.RecoveryUtils.deserializeLogData;
+import static org.corfudb.recovery.RecoveryUtils.getCorfuCompileProxy;
+import static org.corfudb.recovery.RecoveryUtils.getLogData;
+import static org.corfudb.recovery.RecoveryUtils.getSnapShotAddressOfCheckPoint;
+import static org.corfudb.recovery.RecoveryUtils.getStartAddressOfCheckPoint;
+import static org.corfudb.recovery.RecoveryUtils.isCheckPointEntry;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -14,12 +22,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.experimental.Accessors;
-import lombok.extern.slf4j.Slf4j;
+import javax.annotation.Nonnull;
+
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -31,7 +35,11 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
-import static org.corfudb.recovery.RecoveryUtils.*;
+import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.experimental.Accessors;
+import lombok.extern.slf4j.Slf4j;
 
 /** The FastSmrMapsLoader reconstructs the coalesced state of SMRMaps through sequential log read
  *

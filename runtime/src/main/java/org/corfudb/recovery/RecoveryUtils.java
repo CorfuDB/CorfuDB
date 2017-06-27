@@ -9,7 +9,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuSmr;
 import org.corfudb.runtime.view.ObjectsView;
 
 import java.util.Map;
@@ -46,7 +46,7 @@ public class RecoveryUtils {
         if (!runtime.getObjectsView().getObjectCache()
                 .containsKey(RecoveryUtils.getObjectIdFromStreamId(streamId))) {
             runtime.getObjectsView().build()
-                    .setStreamID(streamId)
+                    .setStreamId(streamId)
                     .setType(SMRMap.class)
                     .open();
         }
@@ -107,7 +107,7 @@ public class RecoveryUtils {
      */
     static CorfuCompileProxy getCorfuCompileProxy(CorfuRuntime runtime, UUID streamId) {
         ObjectsView.ObjectID thisObjectId = new ObjectsView.ObjectID(streamId, SMRMap.class);
-        return ((CorfuCompileProxy) ((ICorfuSMR) runtime.getObjectsView().getObjectCache().get(thisObjectId)).
-                getCorfuSMRProxy());
+        return ((CorfuCompileProxy) ((ICorfuSmr) runtime.getObjectsView().getObjectCache().get(thisObjectId)).
+                getCorfuSmrProxy());
     }
 }

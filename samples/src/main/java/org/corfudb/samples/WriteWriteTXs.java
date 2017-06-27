@@ -239,7 +239,7 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
         // obtain the current snapshot time, before any transaction activity starts
         long snapTime = getCorfuRuntime()
                 .getStreamsView()
-                .get(getCorfuRuntime().getStreamID("A"))
+                .get(getCorfuRuntime().getStreamId("A"))
                 .;
 
         for (int i = 0; i < NUM_BATCHES; i++) synchronized (map1) {

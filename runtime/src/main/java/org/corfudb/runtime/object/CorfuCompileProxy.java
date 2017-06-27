@@ -125,7 +125,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
                              ISerializer serializer,
-                             Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
+                             Map<String, ICorfuSmrUpcallTarget<T>> upcallTargetMap,
                              Map<String, IUndoFunction<T>> undoTargetMap,
                              Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
                              Set<String> resetSet
@@ -146,7 +146,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * {@inheritDoc}
      */
     @Override
-    public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
+    public <R> R access(ICorfuSmrAccess<R, T> accessMethod,
                         Object[] conflictObject) {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerAccess)) {
@@ -154,7 +154,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         }
     }
 
-    private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
+    private <R> R accessInner(ICorfuSmrAccess<R, T> accessMethod,
                               Object[] conflictObject, boolean isMetricsEnabled) {
         if (TransactionalContext.isInTransaction()) {
             try {
@@ -309,7 +309,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * @return The UUID of the stream this proxy is subscribed to.
      */
     @Override
-    public UUID getStreamID() {
+    public UUID getStreamId() {
         return streamID;
     }
 
@@ -320,7 +320,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * @return The value supplied by the function.
      */
     @Override
-    public <R> R TXExecute(Supplier<R> txFunction) {
+    public <R> R txExecute(Supplier<R> txFunction) {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerTxn)) {
             return TXExecuteInner(txFunction, isEnabled);
@@ -427,8 +427,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                     }
                 }
             }
-            if (ret instanceof ICorfuSMRProxyWrapper) {
-                ((ICorfuSMRProxyWrapper<T>) ret).setProxy$CORFUSMR(this);
+            if (ret instanceof ICorfuSmrProxyWrapper) {
+                ((ICorfuSmrProxyWrapper<T>) ret).setProxy$CORFUSMR(this);
             }
             return ret;
         } catch (InstantiationException | IllegalAccessException e) {

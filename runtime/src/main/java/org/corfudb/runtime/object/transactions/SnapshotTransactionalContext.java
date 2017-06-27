@@ -11,7 +11,7 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.object.ICorfuSMRAccess;
+import org.corfudb.runtime.object.ICorfuSmrAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 
 /**
@@ -40,7 +40,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      */
     @Override
     public <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
-                           ICorfuSMRAccess<R, T> accessFunction,
+                           ICorfuSmrAccess<R, T> accessFunction,
                            Object[] conflictObject) {
 
         // In snapshot transactions, there are no conflicts.

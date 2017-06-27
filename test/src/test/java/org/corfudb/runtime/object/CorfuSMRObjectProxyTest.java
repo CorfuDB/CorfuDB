@@ -86,7 +86,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         }
 
         Map<String, String> testMap2 = getRuntime().getObjectsView().open(
-                CorfuRuntime.getStreamID("test"), TreeMap.class);
+                CorfuRuntime.getStreamId("test"), TreeMap.class);
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
 
             assertThat(testMap2.get(Integer.toString(i)))

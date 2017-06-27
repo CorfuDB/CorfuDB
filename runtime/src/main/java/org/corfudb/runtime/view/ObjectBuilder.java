@@ -52,6 +52,12 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
         return (ObjectBuilder<R>) this;
     }
 
+    @Override
+    public ObjectBuilder<T> setStreamId(UUID streamId) {
+        this.streamID = streamId;
+        return this;
+    }
+
     @SuppressWarnings("unchecked")
     public <R> ObjectBuilder<R> setTypeToken(TypeToken<R> typeToken) {
         this.type = (Class<T>)typeToken.getRawType();

@@ -22,7 +22,7 @@ import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuSmr;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -168,9 +168,9 @@ public class CheckpointWriter {
 
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_TIME, startTime.toString());
         // Need the actual object's version
-        ICorfuSMR<SMRMap> corfuObject = (ICorfuSMR<SMRMap>) this.map;
+        ICorfuSmr<SMRMap> corfuObject = (ICorfuSmr<SMRMap>) this.map;
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS,
-                Long.toString(corfuObject.getCorfuSMRProxy().getVersion()));
+                Long.toString(corfuObject.getCorfuSmrProxy().getVersion()));
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS,
                 Long.toString(txBeginGlobalAddress));
 

@@ -28,7 +28,7 @@ Options:
 (def stream (uuid-from-string (.. localcmd (get "--stream-id"))))
 (def cls (Class/forName (.. localcmd (get "<class>"))))
 (defn get-corfu-object [class, stream]
-  (.open (.setType (.setStreamID (.. (get-objects-view) (build)) stream) class)))
+  (.open (.setType (.setStreamId (.. (get-objects-view) (build)) stream) class)))
 (defn get-java-method [class, method]
   (first (filter (fn [x] (and (.equals (.getName x) method)
                            (.equals (.getParameterCount x)

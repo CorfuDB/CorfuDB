@@ -13,7 +13,7 @@ import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuSmr;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -50,10 +50,10 @@ public class FastSmrMapsLoaderTest extends AbstractViewTest {
         ObjectsView.ObjectID mapId = new ObjectsView.
                 ObjectID(CorfuRuntime.getStreamID(streamName), SMRMap.class);
 
-        CorfuCompileProxy cp = ((CorfuCompileProxy) ((ICorfuSMR) cr.getObjectsView().
+        CorfuCompileProxy cp = ((CorfuCompileProxy) ((ICorfuSmr) cr.getObjectsView().
                 getObjectCache().
                 get(mapId)).
-                getCorfuSMRProxy());
+                getCorfuSmrProxy());
         return cp.getUnderlyingObject();
     }
 

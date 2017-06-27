@@ -7,7 +7,7 @@ import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuSmr;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -54,7 +54,7 @@ public class JSONSerializer implements ISerializer {
             String SMRClassName = new String(SMRClassNameBytes);
             try {
                 return rt.getObjectsView().build()
-                        .setStreamID(new UUID(b.readLong(), b.readLong()))
+                        .setStreamId(new UUID(b.readLong(), b.readLong()))
                         .setType(Class.forName(SMRClassName))
                         .open();
             } catch (ClassNotFoundException cnfe) {
@@ -82,7 +82,7 @@ public class JSONSerializer implements ISerializer {
     @Override
     public void serialize(Object o, ByteBuf b) {
         String className = o == null ? "null" : o.getClass().getName();
-        if (className.endsWith(ICorfuSMR.CORFUSMR_SUFFIX)) {
+        if (className.endsWith(ICorfuSmr.CORFUSMR_SUFFIX)) {
             String SMRClass = className.split("\\$")[0];
             className = "CorfuObject";
             byte[] classNameBytes = className.getBytes();
@@ -91,7 +91,7 @@ public class JSONSerializer implements ISerializer {
             byte[] SMRClassNameBytes = SMRClass.getBytes();
             b.writeShort(SMRClassNameBytes.length);
             b.writeBytes(SMRClassNameBytes);
-            UUID id = ((ICorfuSMR) o).getCorfuStreamID();
+            UUID id = ((ICorfuSmr) o).getCorfuStreamId();
             log.trace("Serializing a CorfuObject of type {} as a stream pointer to {}", SMRClass, id);
             b.writeLong(id.getMostSignificantBits());
             b.writeLong(id.getLeastSignificantBits());

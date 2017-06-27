@@ -5,10 +5,12 @@ import java.util.function.Supplier;
 
 /** An interface for accessing a proxy, which
  * manages an SMR object.
+ *
+ * <p>Created by mwei on 11/10/16.
+ *
  * @param <T>   The type of the SMR object.
- * Created by mwei on 11/10/16.
  */
-public interface ICorfuSMRProxy<T> {
+public interface ICorfuSmrProxy<T> {
 
     /** Access the state of the object.
      * @param accessMethod      The method to execute when accessing an object.
@@ -16,7 +18,7 @@ public interface ICorfuSMRProxy<T> {
      * @param <R>               The type to return.
      * @return                  The result of the accessMethod
      */
-    <R> R access(ICorfuSMRAccess<R, T> accessMethod, Object[] conflictObject);
+    <R> R access(ICorfuSmrAccess<R, T> accessMethod, Object[] conflictObject);
 
     /**
      * Record an SMR function to the log before returning.
@@ -52,7 +54,7 @@ public interface ICorfuSMRProxy<T> {
      *
      * @return  The UUID of the stream this proxy is subscribed to.
      */
-    UUID getStreamID();
+    UUID getStreamId();
 
     /** Run in a transactional context.
      *
@@ -60,7 +62,7 @@ public interface ICorfuSMRProxy<T> {
      * @param <R>           The return type.
      * @return              The value supplied by the function.
      */
-    <R> R TXExecute(Supplier<R> txFunction);
+    <R> R txExecute(Supplier<R> txFunction);
 
     /** Get an object builder to build new objects.
      *

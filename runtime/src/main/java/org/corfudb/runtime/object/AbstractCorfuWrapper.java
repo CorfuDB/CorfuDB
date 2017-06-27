@@ -10,9 +10,9 @@ import java.util.UUID;
  * <p>Created by mwei on 11/12/16.
  */
 
-public abstract class AbstractCorfuWrapper<T> implements ICorfuSMRProxyWrapper<T> {
+public abstract class AbstractCorfuWrapper<T> implements ICorfuSmrProxyWrapper<T> {
 
-    ICorfuSMRProxy<T> proxy;
+    ICorfuSmrProxy<T> proxy;
 
     /**
      * Get a builder, which allows the construction of
@@ -30,11 +30,11 @@ public abstract class AbstractCorfuWrapper<T> implements ICorfuSMRProxyWrapper<T
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     protected UUID getStreamID() {
-        return proxy.getStreamID();
+        return proxy.getStreamId();
     }
 
     @Override
-    public void setProxy$CORFUSMR(ICorfuSMRProxy<T> proxy) {
+    public void setProxy$CORFUSMR(ICorfuSmrProxy<T> proxy) {
         this.proxy = proxy;
     }
 }

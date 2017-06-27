@@ -10,7 +10,7 @@ import java.lang.annotation.Target;
  * to be recorded in the Corfu log. Mutators modify
  * the state of an object but do not access it.
  *
- * Created by mwei on 1/7/16.
+ * <p>Created by mwei on 1/7/16.
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
