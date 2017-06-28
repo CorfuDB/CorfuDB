@@ -45,7 +45,7 @@ public class BaseClient implements IClient {
         try {
             return ping().get();
         } catch (Exception e) {
-            log.trace("Ping failed due to exception", e);
+            log.error("Ping failed due to exception", e);
             return false;
         }
     }
