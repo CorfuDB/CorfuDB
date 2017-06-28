@@ -4,6 +4,8 @@ import org.corfudb.protocols.wireprotocol.*;
 import org.junit.Test;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -155,4 +157,56 @@ public class SequencerServerTest extends AbstractServerTest {
         }
     }
 
+    @Test
+    public void SequencerWillResetTails() throws Exception {
+        UUID streamA = UUID.nameUUIDFromBytes("streamA".getBytes());
+        UUID streamB = UUID.nameUUIDFromBytes("streamB".getBytes());
+        UUID streamC = UUID.nameUUIDFromBytes("streamC".getBytes());
+
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                new TokenRequest(1L, Collections.singleton(streamA))));
+        long tailA = getLastPayloadMessageAs(TokenResponse.class).getToken().getTokenValue();
+
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                new TokenRequest(1L, Collections.singleton(streamB))));
+        long tailB = getLastPayloadMessageAs(TokenResponse.class).getToken().getTokenValue();
+
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                new TokenRequest(1L, Collections.singleton(streamC))));
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                new TokenRequest(1L, Collections.singleton(streamC))));
+
+        long tailC = getLastPayloadMessageAs(TokenResponse.class).getToken().getTokenValue();
+
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                new TokenRequest(0L, Collections.EMPTY_SET)));
+        long globalTail = getLastPayloadMessageAs(TokenResponse.class).getToken().getTokenValue();
+
+        // Construct new tails
+        Map<UUID, Long> tailMap = new HashMap<>();
+        long newTailA = tailA + 2;
+        long newTailB = tailB + 1;
+        // This one should not be updated
+        long newTailC = tailC - 1;
+
+        tailMap.put(streamA, newTailA);
+        tailMap.put(streamB, newTailB);
+        tailMap.put(streamC, newTailC);
+
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.RESET_SEQUENCER,
+                new SequencerTailsRecoveryMsg(globalTail + 2, tailMap)));
+
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                new TokenRequest(0L, Collections.singleton(streamA))));
+        assertThat(getLastPayloadMessageAs(TokenResponse.class).getToken().getTokenValue()).isEqualTo(newTailA);
+
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                new TokenRequest(0L, Collections.singleton(streamB))));
+        assertThat(getLastPayloadMessageAs(TokenResponse.class).getToken().getTokenValue()).isEqualTo(newTailB);
+
+        // We should have the same value than before
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                new TokenRequest(0L, Collections.singleton(streamC))));
+        assertThat(getLastPayloadMessageAs(TokenResponse.class).getToken().getTokenValue()).isEqualTo(newTailC);
+    }
 }

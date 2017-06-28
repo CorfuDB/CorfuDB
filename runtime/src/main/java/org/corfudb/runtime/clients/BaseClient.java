@@ -14,6 +14,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
+import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 
 /**
@@ -176,6 +177,11 @@ public class BaseClient implements IClient {
     private static Object handleVersionResponse(JSONPayloadMsg<VersionInfo> msg,
                                                 ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
+    }
+
+    @ClientHandler(type = CorfuMsgType.NOT_READY)
+    private static Object handleNotReady(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+        throw new ServerNotReadyException();
     }
 
 }

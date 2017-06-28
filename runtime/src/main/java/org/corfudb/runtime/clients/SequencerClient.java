@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -11,6 +12,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -69,8 +71,8 @@ public class SequencerClient implements IClient {
      * @param initialToken Token Number which the sequencer starts distributing.
      * @return A CompletableFuture which completes once the sequencer is reset.
      */
-    public CompletableFuture<Boolean> reset(Long initialToken) {
+    public CompletableFuture<Boolean> reset(Long initialToken, Map<UUID, Long> sequencerTails) {
         return router.sendMessageAndGetCompletable(CorfuMsgType.RESET_SEQUENCER
-                .payloadMsg(initialToken));
+                .payloadMsg(new SequencerTailsRecoveryMsg(initialToken, sequencerTails)));
     }
 }

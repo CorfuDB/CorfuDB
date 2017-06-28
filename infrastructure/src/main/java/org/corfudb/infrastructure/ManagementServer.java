@@ -94,6 +94,11 @@ public class ManagementServer extends AbstractServer {
     private Future failureDetectorFuture = null;
     private AtomicBoolean recovered = new AtomicBoolean(false);
 
+    @Override
+    public boolean isServerReady() {
+        return true;
+    }
+
     /**
      * Returns new ManagementServer.
      * @param serverContext context object providing parameters and objects
@@ -110,6 +115,7 @@ public class ManagementServer extends AbstractServer {
         // If no state was preserved, there is no layout to recover.
         if (latestLayout == null) {
             recovered.set(true);
+            serverContext.setReady(true);
         }
 
         if ((Boolean) opts.get("--single")) {
@@ -158,11 +164,12 @@ public class ManagementServer extends AbstractServer {
 
     private void recover() {
         try {
-            failureHandlerDispatcher.recoverCluster((Layout) latestLayout.clone(),
+            failureHandlerDispatcher.recoverCluster(serverContext, (Layout) latestLayout.clone(),
                     getCorfuRuntime());
             safeUpdateLayout(corfuRuntime.getLayoutView().getLayout());
         } catch (CloneNotSupportedException e) {
             log.error("Failure Handler could not clone layout: {}", e);
+            log.error("Recover: Node will remain blocked until recovered successfully.");
         }
     }
 
