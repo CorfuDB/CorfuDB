@@ -81,6 +81,11 @@ public class LayoutServer extends AbstractServer {
     private CorfuMsgHandler handler = new CorfuMsgHandler()
             .generateHandlers(MethodHandles.lookup(), this);
 
+    @Override
+    public boolean isServerReady() {
+        return true;
+    }
+
     private static final String metricsPrefix = "corfu.server.layout.";
 
     /**

@@ -32,13 +32,17 @@ public class FailureHandlerDispatcher {
      * @param corfuRuntime   Connected runtime
      * @return True if the cluster was recovered, False otherwise
      */
-    public boolean recoverCluster(Layout recoveryLayout, CorfuRuntime corfuRuntime) {
+    public boolean recoverCluster(ServerContext serverContext, Layout recoveryLayout,
+                                  CorfuRuntime corfuRuntime) {
 
         try {
             // Seals and increments the epoch.
             recoveryLayout.setRuntime(corfuRuntime);
             sealEpoch(recoveryLayout);
             log.info("After seal: {}", recoveryLayout.asJSONString());
+
+            // Mark all components on node as ready after sealing.
+            serverContext.setReady(true);
 
             // Reconfigure servers if required
             reconfigureServers(corfuRuntime, recoveryLayout, recoveryLayout, true);
