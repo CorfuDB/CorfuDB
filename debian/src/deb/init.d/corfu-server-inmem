@@ -16,97 +16,55 @@ export CORFU_HEAP_SIZE_PERCENT=1
 umask 022
 
 ROLENAME="Corfu In-Memory Infrastructure Server"
-PIDFILE=/var/run/corfu_inmem.pid
-PREFIX=/usr/local/bin
+PIDDIR=/var/run/corfu_inmem
 PORT=9001
-# -m => in memory mode
-# -s => single node
-# -d => logging level
-OPTS="-m -s -d DEBUG $PORT"
 LOGFILE="/var/log/corfu.$PORT.log"
 . /lib/lsb/init-functions
 
 export PATH="${PATH:+$PATH:}/usr/sbin/:usr/bin"
 
-terminate_corfu_process () {
-    # A single optional PID may be passed as a parameter in which case
-    # this PID will be excluded from the list of processes to kill.
-    exclude=$1
-    if [[ ! -z "$exclude" ]]; then
-        ps xawf -eo pid,cgroup | grep corfu-server-inmem.service | awk '{print $1}' | egrep -v ^${exclude}$ | xargs -n 1 kill &> /dev/null
-    else
-        ps xawf -eo pid,cgroup | grep corfu-server-inmem.service | awk '{print $1}' | xargs -n 1 kill &> /dev/null
+ensure_pid_dir () {
+    if [ ! -d $PIDDIR ]; then
+        mkdir -p $PIDDIR
+        chmod 755 $PIDDIR
     fi
 }
 
 ensure_profile_port () {
     op=$1
     set +e
-    iptables -C INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
+    iptables -w -C INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
     port_stat=$?
     set -e
-    if [ "$op" = "open" ] && [ "$port_stat" -ne "0" ]; then
-        iptables -A INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
-    elif [ "$op" = "close" ] && [ "$port_stat" -eq "0" ]; then
-        iptables -D INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
+    if [ $op = "profile" ] && [ ${port_stat} -ne 0 ]; then
+        iptables -w -A INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
+    elif [ $op = "stop" ] && [ ${port_stat} -eq 0 ]; then
+        iptables -w -D INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
     fi
 }
 
 case "$1" in
-    start)
+    start|profile)
         log_daemon_msg "Starting $ROLENAME on port $PORT"
-        if [ ! -z $CORFU_ENABLE_PROFILER ]; then
-            ensure_profile_port open
-        else
-            ensure_profile_port close
-        fi
-        if start-stop-daemon --start --quiet  --background --make-pidfile --oknodo --pidfile $PIDFILE \
-        --startas /bin/bash -- -c "exec $PREFIX/corfu_server $OPTS > $LOGFILE 2>&1"; then
-            log_end_msg 0
-        else
-            log_end_msg 1
-        fi
+        ensure_pid_dir
+        ensure_profile_port $1
+        /usr/tanuki/bin/corfu-server-inmem-wrapper $1
         ;;
     stop)
         log_daemon_msg "Stopping $ROLENAME on port $PORT"
-        terminate_corfu_process $PIDFILE
-        if start-stop-daemon --stop --quiet  --oknodo --pidfile $PIDFILE; then
-            log_end_msg 0
-        else
-            log_end_msg 1
-        fi
+        /usr/tanuki/bin/corfu-server-inmem-wrapper $1
+        ensure_profile_port $1
         ;;
     restart)
-        log_daemon_msg "Restarting $ROLENAME on port $PORT"
-        set +e
-        terminate_corfu_process $PIDFILE
-        start-stop-daemon --stop --quiet --retry 30 --pidfile $PIDFILE
-        RET="$?"
-        set -e
-        case $RET in
-            0)
-                if start-stop-daemon --start --quiet  --background --make-pidfile --oknodo --pidfile $PIDFILE \
-                --startas /bin/bash -- -c "exec $PREFIX/corfu_server $OPTS > $LOGFILE 2>&1"; then
-                    log_end_msg 0
-                else
-                    log_end_msg 1
-                fi
-                ;;
-            1)
-                log_progress_msg "(not running)"
-                log_end_msg 0
-                ;;
-            *)
-                log_progress_msg "(failed to stop)"
-                log_end_msg 1
-                ;;
-            esac
+        $0 stop
+        sleep 1
+        $0 start
         ;;
     status)
-        status_of_proc -p $PIDFILE ${JAVA_HOME}/bin/java $ROLENAME && exit 0 || exit $?
+        /usr/tanuki/bin/corfu-server-inmem-wrapper $1
         ;;
     *)
-        log_action_msg "Usage $0 {start|stop|restart|status}"
+        log_action_msg "Usage $0 {start|profile|stop|restart|status}"
         exit 1
         ;;
 esac
