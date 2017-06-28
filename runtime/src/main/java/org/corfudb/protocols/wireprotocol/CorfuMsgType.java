@@ -30,6 +30,7 @@ public enum CorfuMsgType {
     NACK(6, TypeToken.of(CorfuMsg.class)),
     VERSION_REQUEST(7, TypeToken.of(CorfuMsg.class), true),
     VERSION_RESPONSE(8, new TypeToken<JSONPayloadMsg<VersionInfo>>() {}, true),
+    NOT_READY(9, TypeToken.of(CorfuMsg.class), true),
 
     // Layout Messages
     LAYOUT_REQUEST(10, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
@@ -46,7 +47,7 @@ public enum CorfuMsgType {
     // Sequencer Messages
     TOKEN_REQ(20, new TypeToken<CorfuPayloadMsg<TokenRequest>>(){}),
     TOKEN_RES(21, new TypeToken<CorfuPayloadMsg<TokenResponse>>(){}),
-    RESET_SEQUENCER(22, new TypeToken<CorfuPayloadMsg<Long>>(){}),
+    RESET_SEQUENCER(22, new TypeToken<CorfuPayloadMsg<SequencerTailsRecoveryMsg>>(){}),
 
     // Logging Unit Messages
     WRITE(30, new TypeToken<CorfuPayloadMsg<WriteRequest>>() {}),

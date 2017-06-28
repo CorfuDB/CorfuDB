@@ -22,6 +22,7 @@ import lombok.Value;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 
+import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_ID;
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_ID;
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_TYPE;
 
@@ -121,7 +122,7 @@ public interface IMetadata {
     }
 
     default boolean hasCheckpointMetadata() {
-        return getCheckpointType() != null && getCheckpointID() != null;
+        return getCheckpointType() != null && getCheckpointId() != null;
     }
 
     /**
@@ -140,14 +141,23 @@ public interface IMetadata {
 
     @Nullable
     @SuppressWarnings({"checkstyle:abbreviationaswordinname", "checkstyle:membername"})
-    default UUID getCheckpointID() {
+    default UUID getCheckpointId() {
         return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CHECKPOINT_ID,
                 null);
     }
 
     @SuppressWarnings({"checkstyle:abbreviationaswordinname", "checkstyle:membername"})
-    default void setCheckpointID(UUID id) {
+    default void setCheckpointId(UUID id) {
         getMetadataMap().put(CHECKPOINT_ID, id);
+    }
+
+    default UUID getCheckpointedStreamId() {
+        return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CHECKPOINTED_STREAM_ID,
+                null);
+    }
+
+    default void setCheckpointedStreamId(UUID Id) {
+        getMetadataMap().put(CHECKPOINTED_STREAM_ID, Id);
     }
 
     @RequiredArgsConstructor
@@ -157,7 +167,8 @@ public interface IMetadata {
         GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
         COMMIT(5, TypeToken.of(Boolean.class)),
         CHECKPOINT_TYPE(6, TypeToken.of(CheckpointEntry.CheckpointEntryType.class)),
-        CHECKPOINT_ID(7, TypeToken.of(UUID.class))
+        CHECKPOINT_ID(7, TypeToken.of(UUID.class)),
+        CHECKPOINTED_STREAM_ID(8, TypeToken.of(UUID.class))
         ;
         final int type;
         @Getter

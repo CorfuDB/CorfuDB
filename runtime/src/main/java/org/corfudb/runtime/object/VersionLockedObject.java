@@ -20,6 +20,7 @@ import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
+//TODO Discard TransactionStream for building maps but not for constructing tails
 
 /**
  * The VersionLockedObject maintains a versioned object which is
@@ -193,7 +194,7 @@ public class VersionLockedObject<T> {
                     }
                     // Otherwise, it is not on a correct view of the object (the object was
                     // modified) and we should try again by upgrading the lock.
-                    log.trace("Access [{}] Direct (optimistic-read) exception, upgrading lock",
+                    log.warn("Access [{}] Direct (optimistic-read) exception, upgrading lock",
                             this);
                 }
             }
@@ -291,6 +292,7 @@ public class VersionLockedObject<T> {
                     try {
                         rollbackObjectUnsafe(timestamp);
                     } catch (NoRollbackException nre) {
+                        log.warn("SyncObjectUnsafe[{}] failed {}", this, nre);
                         resetUnsafe();
                     }
                 }
@@ -319,6 +321,7 @@ public class VersionLockedObject<T> {
                         return;
                     }
                 } catch (NoRollbackException nre) {
+                    log.warn("OptimisticRollback[{}] failed {}", this, nre);
                     resetUnsafe();
                 }
             }
@@ -616,7 +619,7 @@ public class VersionLockedObject<T> {
                     Address.NEVER_READ);
             log.trace("OptimisticRollback[{}] complete", this);
         } catch (NoRollbackException nre) {
-            log.debug("OptimisticRollback[{}] failed", this);
+            log.warn("OptimisticRollback[{}] failed", this);
             resetUnsafe();
         }
     }
@@ -626,10 +629,9 @@ public class VersionLockedObject<T> {
      *
      * @param entry
      */
-    public void applyUpdateToStreamUnsafe(SMREntry entry) {
-        long entryAddress = entry.getEntry().getGlobalAddress();
-
+    public void applyUpdateToStreamUnsafe(SMREntry entry, long globalAddress) {
         applyUpdateUnsafe(entry);
-        seek(entryAddress + 1);
+        seek(globalAddress + 1);
     }
+
 }

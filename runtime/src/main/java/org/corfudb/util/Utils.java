@@ -34,8 +34,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.recovery.RecoveryUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.recovery.FastSmrMapsLoader;
+import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.object.CorfuCompileProxy;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.view.ObjectsView;
 
 
 /**
@@ -388,10 +393,10 @@ public class Utils {
      *
      * @param logData
      */
-    private void printLogAnatomy(CorfuRuntime runtime, ILogData logData) {
+    public static void printLogAnatomy(CorfuRuntime runtime, ILogData logData) {
         FastSmrMapsLoader fastLoader = new FastSmrMapsLoader(runtime);
         try {
-            LogEntry le = fastLoader.deserializeLogData(logData);
+            LogEntry le = RecoveryUtils.deserializeLogData(runtime, logData);
             if (le.getType() == LogEntry.LogEntryType.SMR) {
                 log.info("printLogAnatomy: Number of Streams: 1");
                 log.info("printLogAnatomy: Number of Entries: 1");

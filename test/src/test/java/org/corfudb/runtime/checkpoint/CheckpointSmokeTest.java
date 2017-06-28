@@ -409,7 +409,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             long addr1 = tokResp1.getToken().getTokenValue();
             mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1 + 1));
             CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
-                    checkpointAuthor, checkpointId, mdKV, null);
+                    checkpointAuthor, checkpointId, streamId, mdKV, null);
             sv.append(cp1, null, null);
         }
 
@@ -425,7 +425,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 }
             }
             CheckpointEntry cp2 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
-                    checkpointAuthor, checkpointId, mdKV, smrEntries);
+                    checkpointAuthor, checkpointId, streamId, mdKV, smrEntries);
             sv.append(cp2, null, null);
         }
 
@@ -435,7 +435,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // Write cp #3 of 3
         if (write3) {
             CheckpointEntry cp3 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
-                    checkpointAuthor, checkpointId, mdKV, null);
+                    checkpointAuthor, checkpointId, streamId, mdKV, null);
             sv.append(cp3, null, null);
         }
     }
