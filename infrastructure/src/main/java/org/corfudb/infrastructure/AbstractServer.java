@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.util.MetricsUtils;
 
 /**
@@ -26,6 +27,8 @@ public abstract class AbstractServer {
      */
     public abstract CorfuMsgHandler getHandler();
 
+    public abstract boolean isServerReady();
+
     /**
      * Handle a incoming Netty message.
      *
@@ -38,6 +41,13 @@ public abstract class AbstractServer {
             return;
         }
         boolean isMetricsEnabled = MetricsUtils.isMetricsCollectionEnabled();
+
+        if (!this.isServerReady()) {
+            log.warn("Received message {} but Server not ready." , msg.getMsgType());
+            r.sendResponse(ctx, msg, CorfuMsgType.NOT_READY.msg());
+            return;
+        }
+
         if (!getHandler().handle(msg, ctx, r, isMetricsEnabled)) {
             log.warn("Received unhandled message type {}" , msg.getMsgType());
         }
