@@ -1,10 +1,13 @@
 package org.corfudb.infrastructure;
 
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.recovery.FastSmrMapsLoader;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -32,13 +35,17 @@ public class FailureHandlerDispatcher {
      * @param corfuRuntime   Connected runtime
      * @return True if the cluster was recovered, False otherwise
      */
-    public boolean recoverCluster(Layout recoveryLayout, CorfuRuntime corfuRuntime) {
+    public boolean recoverCluster(ServerContext serverContext, Layout recoveryLayout,
+                                  CorfuRuntime corfuRuntime) {
 
         try {
             // Seals and increments the epoch.
             recoveryLayout.setRuntime(corfuRuntime);
             sealEpoch(recoveryLayout);
             log.info("After seal: {}", recoveryLayout.asJSONString());
+
+            // Mark all components on node as ready after sealing.
+            serverContext.setReady(true);
 
             // Reconfigure servers if required
             reconfigureServers(corfuRuntime, recoveryLayout, recoveryLayout, true);
@@ -183,9 +190,20 @@ public class FailureHandlerDispatcher {
                     }
                 }
             }
+
             try {
+
+                FastSmrMapsLoader fastSmrMapsLoader = new FastSmrMapsLoader(runtime);
+                fastSmrMapsLoader.setRecoverSequencerMode(true);
+                fastSmrMapsLoader.setLoadInCache(false);
+
+                // FastSMRLoader sets the logHead based on trim mark.
+                fastSmrMapsLoader.setLogTail(maxTokenRequested);
+                fastSmrMapsLoader.loadMaps();
+                Map<UUID, Long> streamTails = fastSmrMapsLoader.getStreamTails();
+
                 // Configuring the new sequencer.
-                newLayout.getSequencer(0).reset(maxTokenRequested + 1).get();
+                newLayout.getSequencer(0).reset(maxTokenRequested + 1, streamTails).get();
             } catch (InterruptedException e) {
                 log.error("Sequencer Reset interrupted : {}", e);
             }

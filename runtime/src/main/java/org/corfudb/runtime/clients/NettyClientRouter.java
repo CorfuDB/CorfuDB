@@ -391,7 +391,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                     // shutdown EventLoopGroup
                     workerGroup.shutdownGracefully().sync();
                 } catch (InterruptedException ie) {
-                    log.trace("workerGroup shutdown interrupted : {}", ie);
+                    log.warn("workerGroup shutdown interrupted : {}", ie);
                 }
                 throw new NetworkException(e.getClass().getSimpleName()
                         + " connecting to endpoint failed", host + ":" + port, e);
@@ -429,7 +429,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                     } catch (Exception ex) {
                         MetricsUtils.incConditionalCounter(isEnabled,
                                 counterConnectFailed, 1);
-                        log.trace("Exception while reconnecting, retry in {} ms", timeoutRetry);
+                        log.warn("Exception while reconnecting, retry in {} ms", timeoutRetry);
                         Thread.sleep(timeoutRetry);
                     }
                 }

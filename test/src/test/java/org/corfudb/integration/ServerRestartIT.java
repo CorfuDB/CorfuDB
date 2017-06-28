@@ -1,6 +1,8 @@
 package org.corfudb.integration;
 
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -11,10 +13,12 @@ import java.io.File;
 import java.io.IOException;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -395,6 +399,68 @@ public class ServerRestartIT extends AbstractIT {
 
     private String getMapInsertion(int iteration, int streamId, String key, int value) {
         return "[" + iteration + "]: Map put => streamId=" + streamId + " key=" + key + " value=" + value;
+    }
+
+    /**
+     * Start the server, create 2 maps A and B.
+     * Putting 10 entries 0 -> 9 in mapA.
+     * Putting 10 entries 10 -> 19 in mapB.
+     * Restarting the server. On restart, the management server should run the
+     * FastSMRLoader and reset the SequencerServer with the stream tails.
+     * Now request for tokens in both streamA and streamB and assert on the correct backpointers.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void sequencerTailsRecoveryTest() throws Exception {
+
+        Process corfuServerProcess = runCorfuServer();
+        final int insertions = 10;
+        UUID streamNameA = CorfuRuntime.getStreamID("mapA");
+        UUID streamNameB = CorfuRuntime.getStreamID("mapB");
+
+        CorfuRuntime corfuRuntime = createDefaultRuntime();
+        Map<String, Integer> mapA = createMap(corfuRuntime, "mapA");
+        Map<String, Integer> mapB = createMap(corfuRuntime, "mapB");
+
+        for (int i = 0; i < insertions; i++) {
+            mapA.put(Integer.toString(i), i);
+        }
+        for (int i = 0; i < insertions; i++) {
+            mapB.put(Integer.toString(i), i);
+        }
+
+        // Now the stream tails are: mapA=9, mapB=19
+        final int newMapAStreamTail = 9;
+        final int newMapBStreamTail = 19;
+        final int newGlobalTail = 19;
+
+        corfuRuntime.shutdown();
+        assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
+
+        corfuServerProcess = runCorfuServer();
+        corfuRuntime = createDefaultRuntime();
+        TokenResponse tokenResponseA = corfuRuntime
+                .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                .getClient(SequencerClient.class)
+                .nextToken(Collections.singleton(streamNameA), 1)
+                .get();
+        TokenResponse tokenResponseB = corfuRuntime
+                .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                .getClient(SequencerClient.class)
+                .nextToken(Collections.singleton(streamNameB), 1)
+                .get();
+
+        assertThat(tokenResponseA.getToken().getTokenValue()).isEqualTo(newGlobalTail + 1);
+        assertThat(tokenResponseA.getBackpointerMap().get(streamNameA))
+                .isEqualTo(newMapAStreamTail);
+
+        assertThat(tokenResponseB.getToken().getTokenValue()).isEqualTo(newGlobalTail + 2);
+        assertThat(tokenResponseB.getBackpointerMap().get(streamNameB))
+                .isEqualTo(newMapBStreamTail);
+
+        assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
+
     }
 }
 
