@@ -12,6 +12,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.runtime.view.Layout;
 
 /**
@@ -201,11 +202,24 @@ public class FailureHandlerDispatcher {
                 fastSmrMapsLoader.setLogTail(maxTokenRequested);
                 fastSmrMapsLoader.loadMaps();
                 Map<UUID, Long> streamTails = fastSmrMapsLoader.getStreamTails();
+                verifyStreamTailsMap(streamTails);
 
                 // Configuring the new sequencer.
                 newLayout.getSequencer(0).reset(maxTokenRequested + 1, streamTails).get();
             } catch (InterruptedException e) {
                 log.error("Sequencer Reset interrupted : {}", e);
+            }
+        }
+    }
+
+    /**
+     * Verifies whether there are any invalid streamTails.
+     * @param streamTails Stream tails map obtained from the fastSMRLoader.
+     */
+    private void verifyStreamTailsMap(Map<UUID, Long> streamTails) {
+        for (Long value : streamTails.values()) {
+            if (value < 0) {
+                throw new RecoveryException("Invalid stream tails found in map.");
             }
         }
     }
