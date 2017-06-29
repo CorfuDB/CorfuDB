@@ -11,4 +11,9 @@ for filename in /usr/share/corfu/bin/*; do
     fi
 done
 
-update-rc.d corfu-server defaults
+# enable corfu-server service at boot time
+if [[ -n $(which systemctl) ]]; then
+    systemctl enable corfu-server
+else
+    update-rc.d corfu-server defaults
+fi

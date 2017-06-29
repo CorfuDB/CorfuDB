@@ -1,21 +1,27 @@
 package org.corfudb.runtime.object.transactions;
 
 import com.google.common.collect.ImmutableSet;
+
+import java.util.Set;
+
 import lombok.Getter;
+
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-
-import java.util.*;
 
 /**
  * A snapshot transactional context.
  *
- * Given the snapshot (log address) given by the TransactionBuilder,
+ * <p>Given the snapshot (log address) given by the TransactionBuilder,
  * access all objects within the same snapshot during the course of
  * this transactional context.
  *
- * Created by mwei on 11/22/16.
+ * <p>Created by mwei on 11/22/16.
  */
 public class SnapshotTransactionalContext extends AbstractTransactionalContext {
 
@@ -40,9 +46,24 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
         // In snapshot transactions, there are no conflicts.
         // Hence, we do not need to add this access to a conflict set
         // do not add: addToReadSet(proxy, conflictObject);
-        return proxy.getUnderlyingObject().access(o -> o.getVersionUnsafe() == getSnapshotTimestamp()
+        return proxy.getUnderlyingObject().access(o -> o.getVersionUnsafe()
+                        == getSnapshotTimestamp()
                         && !o.isOptimisticallyModifiedUnsafe(),
-                o -> o.syncObjectUnsafe(getSnapshotTimestamp()),
+                o -> {
+                    try {
+                        o.syncObjectUnsafe(getSnapshotTimestamp());
+                    } catch (TrimmedException te) {
+                        // If a trim is encountered, we must reset the object
+                        o.resetUnsafe();
+                        // and abort the transaction
+                        TransactionAbortedException tae =
+                                new TransactionAbortedException(
+                                        new TxResolutionInfo(getTransactionID(),
+                                                getSnapshotTimestamp()), null, AbortCause.TRIM);
+                        abortTransaction(tae);
+                        throw tae;
+                    }
+                },
                 o -> accessFunction.access(o));
     }
 
@@ -71,7 +92,8 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
                               SMREntry updateEntry,
                               Object[] conflictObject) {
-        throw new UnsupportedOperationException("Can't modify object during a read-only transaction!");
+        throw new UnsupportedOperationException(
+                "Can't modify object during a read-only transaction!");
     }
 
     @Override

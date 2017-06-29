@@ -1,13 +1,16 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
-import lombok.*;
 
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * Created by mwei on 9/15/15.
@@ -18,38 +21,43 @@ import java.util.stream.Collectors;
 public class CorfuMsg {
 
     /**
-     * Marker field value, should equal 0xC0FC0FC0
+     * Marker field value, should equal 0xC0FC0FC0.
      */
-    final static int markerField = 0xC0FC0FC0;
+    static final int markerField = 0xC0FC0FC0;
     static Map<Byte, CorfuMsgType> typeMap =
             Arrays.<CorfuMsgType>stream(CorfuMsgType.values())
                     .collect(Collectors.toMap(CorfuMsgType::asByte, Function.identity()));
     /**
-     * The unique id of the client making the request
+     * The unique id of the client making the request.
      */
+    @SuppressWarnings({"checkstyle:abbreviationaswordinname", "checkstyle:membername"})
     UUID clientID;
+
     /**
-     * The request id of this request/response
+     * The request id of this request/response.
      */
+    @SuppressWarnings({"checkstyle:abbreviationaswordinname", "checkstyle:membername"})
     long requestID;
+
     /**
-     * The epoch of this request/response
+     * The epoch of this request/response.
      */
     long epoch;
+
     /**
      * The underlying ByteBuf, if present.
      */
     ByteBuf buf;
 
-    ;
     /**
-     * The type of message
+     * The type of message.
      */
     CorfuMsgType msgType;
 
     /**
      * Constructor which generates a message based only the message type.
-     * Typically used for generating error messages, since sendmessage will populate the rest of the fields.
+     * Typically used for generating error messages, since sendmessage
+     * will populate the rest of the fields.
      *
      * @param type The type of message to send.
      */
@@ -57,10 +65,8 @@ public class CorfuMsg {
         this.msgType = type;
     }
 
-        /* The wire format of the NettyCorfuMessage message is below:
-        markerField(1) | client ID(8) | request ID(8) |  epoch(8)   |  type(1)  |
-*/
-
+    // The wire format of the NettyCorfuMessage message is below:
+    //    markerField(1) | client ID(8) | request ID(8) |  epoch(8)   |  type(1)  |
 
     /**
      * Take the given bytebuffer and deserialize it into a message.
@@ -74,14 +80,14 @@ public class CorfuMsg {
             throw new RuntimeException("Attempt to deserialize a message which is not a CorfuMsg, "
                     + "Marker = " + marker + " but expected 0xC0FC0FC0");
         }
-        UUID clientID = new UUID(buffer.readLong(), buffer.readLong());
-        long requestID = buffer.readLong();
+        UUID clientId = new UUID(buffer.readLong(), buffer.readLong());
+        long requestId = buffer.readLong();
         long epoch = buffer.readLong();
         CorfuMsgType message = typeMap.get(buffer.readByte());
         CorfuMsg msg = message.getConstructor().construct();
 
-        msg.clientID = clientID;
-        msg.requestID = requestID;
+        msg.clientID = clientId;
+        msg.requestID = requestId;
         msg.epoch = epoch;
         msg.msgType = message;
         msg.fromBuffer(buffer);
@@ -111,15 +117,13 @@ public class CorfuMsg {
     /**
      * Parse the rest of the message from the buffer. Classes that extend CorfuMsg
      * should parse their fields in this method.
-     *
-     * @param buffer
-     */
+     **/
     public void fromBuffer(ByteBuf buffer) {
         // we don't do anything here since in the base message, no fields remain.
     }
 
     /**
-     * Copy the base fields over to this message
+     * Copy the base fields over to this message.
      */
     public void copyBaseFields(CorfuMsg msg) {
         this.clientID = msg.clientID;

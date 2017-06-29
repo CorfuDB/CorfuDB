@@ -2,13 +2,7 @@ package org.corfudb.protocols.wireprotocol;
 
 import com.esotericsoftware.kryo.NotNull;
 import com.google.common.reflect.TypeToken;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.Value;
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
 
-import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -19,6 +13,16 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import javax.annotation.Nullable;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.Value;
+
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
+
+import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_ID;
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_ID;
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_TYPE;
 
@@ -95,12 +99,18 @@ public interface IMetadata {
         getMetadataMap().put(LogUnitMetadataType.GLOBAL_ADDRESS, address);
     }
 
+    /**
+     * Get Log's global address (global tail).
+     * @return global address
+     */
     @SuppressWarnings("unchecked")
     default Long getGlobalAddress() {
-        if (getMetadataMap() == null || getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS) == null) {
+        if (getMetadataMap() == null
+                || getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS) == null) {
             return -1L;
         }
-        return Optional.ofNullable((Long) getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse((long) -1);
+        return Optional.ofNullable((Long) getMetadataMap()
+                .get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse((long) -1);
     }
 
     default void clearCommit() {
@@ -112,10 +122,12 @@ public interface IMetadata {
     }
 
     default boolean hasCheckpointMetadata() {
-        return getCheckpointType() != null &&
-               getCheckpointID() != null;
+        return getCheckpointType() != null && getCheckpointId() != null;
     }
 
+    /**
+     * Get checkpoint type.
+     */
     @Nullable
     default CheckpointEntry.CheckpointEntryType getCheckpointType() {
         return (CheckpointEntry.CheckpointEntryType) getMetadataMap()
@@ -128,13 +140,24 @@ public interface IMetadata {
     }
 
     @Nullable
-    default UUID getCheckpointID() {
+    @SuppressWarnings({"checkstyle:abbreviationaswordinname", "checkstyle:membername"})
+    default UUID getCheckpointId() {
         return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CHECKPOINT_ID,
                 null);
     }
 
-    default void setCheckpointID(UUID ID) {
-        getMetadataMap().put(CHECKPOINT_ID, ID);
+    @SuppressWarnings({"checkstyle:abbreviationaswordinname", "checkstyle:membername"})
+    default void setCheckpointId(UUID id) {
+        getMetadataMap().put(CHECKPOINT_ID, id);
+    }
+
+    default UUID getCheckpointedStreamId() {
+        return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CHECKPOINTED_STREAM_ID,
+                null);
+    }
+
+    default void setCheckpointedStreamId(UUID Id) {
+        getMetadataMap().put(CHECKPOINTED_STREAM_ID, Id);
     }
 
     @RequiredArgsConstructor
@@ -144,7 +167,8 @@ public interface IMetadata {
         GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
         COMMIT(5, TypeToken.of(Boolean.class)),
         CHECKPOINT_TYPE(6, TypeToken.of(CheckpointEntry.CheckpointEntryType.class)),
-        CHECKPOINT_ID(7, TypeToken.of(UUID.class))
+        CHECKPOINT_ID(7, TypeToken.of(UUID.class)),
+        CHECKPOINTED_STREAM_ID(8, TypeToken.of(UUID.class))
         ;
         final int type;
         @Getter
@@ -156,7 +180,8 @@ public interface IMetadata {
 
         public static Map<Byte, LogUnitMetadataType> typeMap =
                 Arrays.<LogUnitMetadataType>stream(LogUnitMetadataType.values())
-                        .collect(Collectors.toMap(LogUnitMetadataType::asByte, Function.identity()));
+                        .collect(Collectors.toMap(LogUnitMetadataType::asByte,
+                                Function.identity()));
     }
 
     @Value
@@ -171,13 +196,13 @@ public interface IMetadata {
         }
 
         public DataRank buildHigherRank() {
-            return new DataRank(rank+1, uuid);
+            return new DataRank(rank + 1, uuid);
         }
 
         @Override
         public int compareTo(DataRank o) {
             int rankCompared = Long.compare(this.rank, o.rank);
-            if (rankCompared==0) {
+            if (rankCompared == 0) {
                 return uuid.compareTo(o.getUuid());
             } else {
                 return rankCompared;

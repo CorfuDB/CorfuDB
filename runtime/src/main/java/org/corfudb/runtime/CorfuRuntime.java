@@ -1,12 +1,32 @@
 package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.clients.*;
+
+import org.corfudb.recovery.FastSmrMapsLoader;
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutView;
@@ -17,20 +37,15 @@ import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Version;
 
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
 /**
  * Created by mwei on 12/9/15.
  */
 @Slf4j
 @Accessors(chain = true)
 public class CorfuRuntime {
+
+    static final long DEFAULT_BATCH_FOR_FAST_LOADER = 5;
+    static final int DEFAULT_TIMEOUT_MINUTES_FAST_LOADING = 30;
 
     @Data
     public static class CorfuRuntimeParameters {
@@ -141,20 +156,52 @@ public class CorfuRuntime {
     private String usernameFile;
     private String passwordFile;
 
+
     /**
-     * Metrics: meter (counter), histogram
+     * Trigger the loading of all the SmrMaps upon connect.
+     *
+     * <p>If using this utility, you need to be sure that no one
+     * is acessing objects until the tables are loaded
+     * (i.e. when connect return)</p>
      */
-    static private final String mp = "corfu.runtime.";
+    @Setter
     @Getter
-    static private final String mpASV = mp + "as-view.";
+    private boolean loadSmrMapsAtConnect = false;
+
+
+    /**
+     * Set the bulk read size for the Fast Laoder.
+     */
+    @Setter
     @Getter
-    static private final String mpLUC = mp + "log-unit-client.";
+    private long bulkReadSizeForFastLoader = DEFAULT_BATCH_FOR_FAST_LOADER;
+
+
+    /**
+     * How much time the Fast Loader has to get the maps up to date.
+     *
+     * <p>Once the timeout is reached, the Fast Loader give up. Every maps that are
+     * not up to date will be loaded through normal path.</p>
+     *
+     */
     @Getter
-    static private final String mpCR = mp + "client-router.";
+    @Setter
+    private int timeoutInMinutesForFastLoading = DEFAULT_TIMEOUT_MINUTES_FAST_LOADING;
+
+    /**
+     * Metrics: meter (counter), histogram.
+     */
+    private static final String mp = "corfu.runtime.";
     @Getter
-    static private final String mpObj = mp + "object.";
+    private static final String mpASV = mp + "as-view.";
     @Getter
-    static public final MetricRegistry metrics = new MetricRegistry();
+    private static final String mpLUC = mp + "log-unit-client.";
+    @Getter
+    private static final String mpCR = mp + "client-router.";
+    @Getter
+    private static final String mpObj = mp + "object.";
+    @Getter
+    private static final MetricRegistry metrics = new MetricRegistry();
 
     /**
      * When set, overrides the default getRouterFunction. Used by the testing
@@ -169,34 +216,37 @@ public class CorfuRuntime {
      */
     @Getter
     @Setter
-    public Function<String, IClientRouter> getRouterFunction = overrideGetRouterFunction != null ?
-            (address) -> overrideGetRouterFunction.apply(this, address) : (address) -> {
+    public Function<String, IClientRouter> getRouterFunction = overrideGetRouterFunction != null
+            ? (address) -> overrideGetRouterFunction.apply(this, address) : (address) -> {
 
-        // Return an existing router if we already have one.
-        if (nodeRouters.containsKey(address)) {
-            return nodeRouters.get(address);
-        }
-        // Parse the string in host:port format.
-        String host = address.split(":")[0];
-        Integer port = Integer.parseInt(address.split(":")[1]);
-        // Generate a new router, start it and add it to the table.
-        NettyClientRouter router = new NettyClientRouter(host, port,
-            tlsEnabled, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
-            saslPlainTextEnabled, usernameFile, passwordFile);
-        log.debug("Connecting to new router {}:{}", host, port);
-        try {
-            router.addClient(new LayoutClient())
-                    .addClient(new SequencerClient())
-                    .addClient(new LogUnitClient())
-                    .addClient(new ManagementClient())
-                    .start();
-            nodeRouters.put(address, router);
-        } catch (Exception e) {
-            log.warn("Error connecting to router", e);
-        }
-        return router;
-    };
+                // Return an existing router if we already have one.
+                if (nodeRouters.containsKey(address)) {
+                    return nodeRouters.get(address);
+                }
+                // Parse the string in host:port format.
+                String host = address.split(":")[0];
+                Integer port = Integer.parseInt(address.split(":")[1]);
+                // Generate a new router, start it and add it to the table.
+                NettyClientRouter router = new NettyClientRouter(host, port,
+                        tlsEnabled, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
+                        saslPlainTextEnabled, usernameFile, passwordFile);
+                log.debug("Connecting to new router {}:{}", host, port);
+                try {
+                    router.addClient(new LayoutClient())
+                            .addClient(new SequencerClient())
+                            .addClient(new LogUnitClient())
+                            .addClient(new ManagementClient())
+                            .start();
+                    nodeRouters.put(address, router);
+                } catch (Exception e) {
+                    log.warn("Error connecting to router", e);
+                }
+                return router;
+            };
 
+    /**
+     * Constructor for CorfuRuntime.
+     **/
     public CorfuRuntime() {
         layoutServers = new ArrayList<>();
         nodeRouters = new ConcurrentHashMap<>();
@@ -220,8 +270,11 @@ public class CorfuRuntime {
         this.parseConfigurationString(configurationString);
     }
 
+    /**
+     * Enable TLS.
+     **/
     public CorfuRuntime enableTls(String keyStore, String ksPasswordFile, String trustStore,
-        String tsPasswordFile) {
+                                  String tsPasswordFile) {
         this.keyStore = keyStore;
         this.ksPasswordFile = ksPasswordFile;
         this.trustStore = trustStore;
@@ -230,12 +283,16 @@ public class CorfuRuntime {
         return this;
     }
 
+    /**
+     * Enable SASL Plain Text.
+     **/
     public CorfuRuntime enableSaslPlainText(String usernameFile, String passwordFile) {
         this.usernameFile = usernameFile;
         this.passwordFile = passwordFile;
         this.saslPlainTextEnabled = true;
         return this;
     }
+
     /**
      * Shuts down the CorfuRuntime.
      * Stops async tasks from fetching the layout.
@@ -262,6 +319,9 @@ public class CorfuRuntime {
         stop(false);
     }
 
+    /**
+     * Stop all routers associated with this Corfu Runtime.
+     **/
     public void stop(boolean shutdown) {
         for (IClientRouter r: nodeRouters.values()) {
             r.stop(shutdown);
@@ -279,13 +339,19 @@ public class CorfuRuntime {
      * @param string The name of the stream.
      * @return The ID of the stream.
      */
+    @SuppressWarnings("checkstyle:abbreviation")
     public static UUID getStreamID(String string) {
         return UUID.nameUUIDFromBytes(string.getBytes());
     }
 
+    /**
+     * Get corfy runtime version.
+     **/
     public static String getVersionString() {
-        if (Version.getVersionString().contains("SNAPSHOT") || Version.getVersionString().contains("source")) {
-            return Version.getVersionString() + "(" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")";
+        if (Version.getVersionString().contains("SNAPSHOT")
+                || Version.getVersionString().contains("source")) {
+            return Version.getVersionString() + "("
+                    + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")";
         }
         return Version.getVersionString();
     }
@@ -313,9 +379,10 @@ public class CorfuRuntime {
     }
 
     /**
-     * If enabled, successful transactions will be written to a special transaction stream (i.e. TRANSACTION_STREAM_ID)
-     * @param enable
-     * @return
+     * If enabled, successful transactions will be written to a special transaction stream
+     * (i.e. TRANSACTION_STREAM_ID)
+     * @param enable indicates if transaction logging is enabled
+     * @return corfu runtime object
      */
     public CorfuRuntime setTransactionLogging(boolean enable) {
         this.getObjectsView().setTransactionLogging(enable);
@@ -375,8 +442,8 @@ public class CorfuRuntime {
 
     /**
      * Return a completable future which is guaranteed to contain a layout.
-     * This future will continue retrying until it gets a layout. If you need this completable future to fail,
-     * you should chain it with a timeout.
+     * This future will continue retrying until it gets a layout.
+     * If you need this completable future to fail, you should chain it with a timeout.
      *
      * @return A completable future containing a layout.
      */
@@ -384,7 +451,8 @@ public class CorfuRuntime {
         return CompletableFuture.<Layout>supplyAsync(() -> {
 
             while (true) {
-                List<String> layoutServersCopy =  layoutServers.stream().collect(Collectors.toList());
+                List<String> layoutServersCopy =  layoutServers.stream().collect(
+                        Collectors.toList());
                 Collections.shuffle(layoutServersCopy);
                 // Iterate through the layout servers, attempting to connect to one
                 for (String s : layoutServersCopy) {
@@ -392,20 +460,25 @@ public class CorfuRuntime {
                     try {
                         IClientRouter router = getRouter(s);
                         // Try to get a layout.
-                        CompletableFuture<Layout> layoutFuture = router.getClient(LayoutClient.class).getLayout();
+                        CompletableFuture<Layout> layoutFuture = router
+                                .getClient(LayoutClient.class).getLayout();
                         // Wait for layout
                         Layout l = layoutFuture.get();
                         l.setRuntime(this);
-                        // this.layout should only be assigned to the new layout future once it has been
-                        // completely constructed and initialized. For example, assigning this.layout = l
-                        // before setting the layout's runtime can result in other threads trying to access a layout
-                        // with  a null runtime.
-                        //FIXME Synchronization START
-                        // We are updating multiple variables and we need the update to be synchronized across all variables.
-                        // Since the variable layoutServers is used only locally within the class it is acceptable
-                        // (at least the code on 10/13/2016 does not have issues)
-                        // but setEpoch of routers needs to be synchronized as those variables are not local.
-                        l.getAllServers().stream().map(getRouterFunction).forEach(x -> x.setEpoch(l.getEpoch()));
+                        // this.layout should only be assigned to the new layout future
+                        // once it has been completely constructed and initialized.
+                        // For example, assigning this.layout = l
+                        // before setting the layout's runtime can result in other threads
+                        // trying to access a layout with  a null runtime.
+                        // FIXME Synchronization START
+                        // We are updating multiple variables and we need the update to be
+                        // synchronized across all variables.
+                        // Since the variable layoutServers is used only locally within the class
+                        // it is acceptable (at least the code on 10/13/2016 does not have issues)
+                        // but setEpoch of routers needs to be synchronized as those variables are
+                        // not local.
+                        l.getAllServers().stream().map(getRouterFunction).forEach(x ->
+                                x.setEpoch(l.getEpoch()));
                         layoutServers = l.getLayoutServers();
                         layout = layoutFuture;
                         //FIXME Synchronization END
@@ -445,6 +518,13 @@ public class CorfuRuntime {
                 log.error("Fatal error connecting to Corfu server instance.", e);
                 throw new RuntimeException(e);
             }
+        }
+
+        if (loadSmrMapsAtConnect) {
+            FastSmrMapsLoader fastLoader = new FastSmrMapsLoader(this)
+                    .setBatchReadSize(bulkReadSizeForFastLoader)
+                    .setTimeoutInMinutesForLoading(timeoutInMinutesForFastLoading);
+            fastLoader.loadMaps();
         }
         return this;
     }

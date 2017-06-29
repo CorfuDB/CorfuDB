@@ -104,9 +104,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         serverRouter.reset();
         serverRouter.addServer(server2);
 
-        assertThatThrownBy(() -> client.read(0).get().getReadSet().get(0L))
-                .isInstanceOf(ExecutionException.class)
-                .hasCauseInstanceOf(TrimmedException.class);
+        assertThat(client.read(0).get().getReadSet().get(0L).isTrimmed()).isTrue();
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
     }
@@ -121,7 +119,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         byte[] testString = "hello world".getBytes();
         client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
         assertThat(server2.getDataCache().asMap().size()).isEqualTo(1);
-        client.flushCache();
+        client.flushCache().get();
         assertThat(server2.getDataCache().asMap().size()).isEqualTo(0);
         LogData r = client.read(0).get().getReadSet().get(0L);
         assertThat(server2.getDataCache().asMap().size()).isEqualTo(1);

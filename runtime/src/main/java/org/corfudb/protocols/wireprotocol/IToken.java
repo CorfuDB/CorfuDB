@@ -6,10 +6,10 @@ import java.util.UUID;
 
 /** Represents a token, which is a reservation on the log.
  *
- * Clients must obtain a token to write to the log using the normal
- * writing protocol.
+ * <p>Clients must obtain a token to write to the log using the normal
+ * writing protocol.</p>
  *
- * Created by mwei on 4/14/17.
+ * <p>Created by mwei on 4/14/17.</p>
  */
 public interface IToken {
 

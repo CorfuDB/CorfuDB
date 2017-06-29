@@ -2,17 +2,16 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import lombok.Getter;
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
-import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.serializer.Serializers;
 
 import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_ID;
-import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_TYPE;
+import lombok.Getter;
+
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.Serializers;
 
 /**
  * Created by mwei on 8/15/16.
@@ -21,6 +20,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     public static final LogData EMPTY = new LogData(DataType.EMPTY);
     public static final LogData HOLE = new LogData(DataType.HOLE);
+    public static final LogData TRIMMED = new LogData(DataType.TRIMMED);
 
     @Getter
     final DataType type;
@@ -30,8 +30,11 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     private ByteBuf serializedCache = null;
 
-    private transient final AtomicReference<Object> payload = new AtomicReference<>();
+    private final transient AtomicReference<Object> payload = new AtomicReference<>();
 
+    /**
+     * Return the payload.
+     */
     public Object getPayload(CorfuRuntime runtime) {
         Object value = payload.get();
         if (value == null) {
@@ -77,8 +80,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         if (serializedCache == null) {
             serializedCache = Unpooled.buffer();
             doSerializeInternal(serializedCache);
-        }
-        else {
+        } else {
             serializedCache.retain();
         }
     }
@@ -94,6 +96,9 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     @Getter
     final EnumMap<LogUnitMetadataType, Object> metadataMap;
 
+    /**
+     * Return the payload.
+     */
     public LogData(ByteBuf buf) {
         type = ICorfuPayload.fromBuffer(buf, DataType.class);
         if (type == DataType.DATA) {
@@ -110,12 +115,23 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         }
     }
 
+    /**
+     * Constructor for generating LogData.
+     *
+     * @param type The type of log data to instantiate.
+     */
     public LogData(DataType type) {
         this.type = type;
         this.data = null;
         this.metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
     }
 
+    /**
+     * Constructor for generating LogData.
+     *
+     * @param type The type of log data to instantiate.
+     * @param object The actual data/value
+     */
     public LogData(DataType type, final Object object) {
         if (object instanceof ByteBuf) {
             this.type = type;
@@ -132,11 +148,17 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
             if (object instanceof CheckpointEntry) {
                 CheckpointEntry cp = (CheckpointEntry) object;
                 setCheckpointType(cp.getCpType());
-                setCheckpointID(cp.getCheckpointID());
+                setCheckpointId(cp.getCheckpointId());
+                setCheckpointedStreamId(cp.getStreamId());
             }
         }
     }
 
+    /**
+     * Return a byte array from buffer.
+     *
+     * @param buf The buffer to read from
+     */
     public byte[] byteArrayFromBuf(final ByteBuf buf) {
         ByteBuf readOnlyCopy = buf.asReadOnly();
         readOnlyCopy.resetReaderIndex();

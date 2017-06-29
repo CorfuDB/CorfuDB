@@ -13,10 +13,12 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
@@ -24,8 +26,7 @@ import java.util.Collections;
 import java.util.Map;
 
 import java.util.UUID;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.fail;
@@ -635,7 +636,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * <p>
      * Index  :  0  1  2  3  |          | 4  5  6  7  8
      * Stream :  A  B  A  B  | failover | A  C  A  B  B
-     * B.P    : -1 -1  0  1  |          | X  X  4  X  7
+     * B.P    : -1 -1  0  1  |          | 2  X  4  3  7
      * <p>
      * -1 : New StreamID so empty backpointers
      *  X : (null) Unknown backpointers as this is a failed-over sequencer.
@@ -650,8 +651,11 @@ public class ManagementViewTest extends AbstractViewTest {
         UUID streamB = UUID.nameUUIDFromBytes("stream B".getBytes());
         UUID streamC = UUID.nameUUIDFromBytes("stream C".getBytes());
 
-        final long streamA_backpointer = 4L;
-        final long streamB_backpointer = 7L;
+        final long streamA_backpointerRecovered = 2L;
+        final long streamB_backpointerRecovered = 3L;
+
+        final long streamA_backpointerFinal = 4L;
+        final long streamB_backpointerFinal = 7L;
 
         getTokenWriteAndAssertBackPointer(streamA, Address.NON_EXIST);
         getTokenWriteAndAssertBackPointer(streamB, Address.NON_EXIST);
@@ -660,11 +664,11 @@ public class ManagementViewTest extends AbstractViewTest {
 
         induceSequencerFailureAndWait();
 
-        getTokenWriteAndAssertBackPointer(streamA, Address.NO_BACKPOINTER);
-        getTokenWriteAndAssertBackPointer(streamC, Address.NO_BACKPOINTER);
-        getTokenWriteAndAssertBackPointer(streamA, streamA_backpointer);
-        getTokenWriteAndAssertBackPointer(streamB, Address.NO_BACKPOINTER);
-        getTokenWriteAndAssertBackPointer(streamB, streamB_backpointer);
+        getTokenWriteAndAssertBackPointer(streamA, streamA_backpointerRecovered);
+        getTokenWriteAndAssertBackPointer(streamC, Address.NON_EXIST);
+        getTokenWriteAndAssertBackPointer(streamA, streamA_backpointerFinal);
+        getTokenWriteAndAssertBackPointer(streamB, streamB_backpointerRecovered);
+        getTokenWriteAndAssertBackPointer(streamB, streamB_backpointerFinal);
     }
 
     /**
@@ -684,5 +688,57 @@ public class ManagementViewTest extends AbstractViewTest {
         }
         corfuRuntime.getAddressSpaceView().write(tokenResponse,
                 "test".getBytes());
+    }
+
+    /**
+     * Asserts that we cannot fetch a token after a failure but before sequencer reset.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void blockRecoverySequencerUntilReset() throws Exception {
+
+        final Semaphore resetDetected = new Semaphore(1);
+        getManagementTestLayout();
+
+        UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
+
+        getTokenWriteAndAssertBackPointer(streamA, Address.NON_EXIST);
+
+        resetDetected.acquire();
+        // Allow only SERVERS.PORT_0 to handle the failure.
+        // Shutting down PORT_2
+        getManagementServer(SERVERS.PORT_2).shutdown();
+        addClientRule(getManagementServer(SERVERS.PORT_0).getCorfuRuntime(),
+                new TestRule().matches(msg -> {
+                    if (msg.getMsgType().equals(CorfuMsgType.RESET_SEQUENCER)) {
+                        try {
+                            // There is a failure but the RESET_SEQUENCER message has not yet been
+                            // sent. So if we request a token now, we should be denied as the
+                            // server is sealed and we get a WrongEpochException.
+                            corfuRuntime
+                                    .getRouter(SERVERS.ENDPOINT_0)
+                                    .getClient(SequencerClient.class)
+                                    .nextToken(Collections.singleton(CorfuRuntime
+                                            .getStreamID("testStream")), 1).get();
+                            fail();
+                        } catch (InterruptedException | ExecutionException e) {
+                            resetDetected.release();
+                        }
+                    }
+                    return false;
+                }));
+        // Inducing failure on PORT_1
+        induceSequencerFailureAndWait();
+
+        assertThat(resetDetected
+                .tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toMillis(), TimeUnit.MILLISECONDS))
+                .isTrue();
+
+        // We should be able to request a token now.
+        corfuRuntime.getRouter(SERVERS.ENDPOINT_0).getClient(SequencerClient.class)
+                .nextToken(Collections.singleton(CorfuRuntime
+                        .getStreamID("testStream")), 1).get();
+
     }
 }

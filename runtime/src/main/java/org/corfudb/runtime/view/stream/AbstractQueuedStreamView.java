@@ -1,32 +1,41 @@
 package org.corfudb.runtime.view.stream;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.NavigableSet;
+import java.util.Optional;
+import java.util.TreeSet;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import javax.annotation.Nonnull;
+
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
-import javax.annotation.Nonnull;
-import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+
 
 /** The abstract queued stream view implements a stream backed by a read queue.
  *
- * A read queue is a priority queue where addresses can be inserted, and are
+ * <p>A read queue is a priority queue where addresses can be inserted, and are
  * dequeued in ascending order. Subclasses implement the fillReadQueue()
  * function, which defines how the read queue should be filled, and the
  * read() function, which reads an entry and updates the pointers for the
  * stream view.
  *
- * The addresses in the read queue must be global addresses.
+ * <p>The addresses in the read queue must be global addresses.
  *
- * This implementation does not handle bulk reads and depends on IStreamView's
+ * <p>This implementation does not handle bulk reads and depends on IStreamView's
  * implementation of remainingUpTo(), which simply calls nextUpTo() under a lock
  * until it returns null.
  *
- * Created by mwei on 1/6/17.
+ * <p>Created by mwei on 1/6/17.
  */
 @Slf4j
 public abstract class AbstractQueuedStreamView extends
@@ -35,12 +44,12 @@ public abstract class AbstractQueuedStreamView extends
 
     /** Create a new queued stream view.
      *
-     * @param streamID  The ID of the stream
+     * @param streamId  The ID of the stream
      * @param runtime   The runtime used to create this view.
      */
     public AbstractQueuedStreamView(final CorfuRuntime runtime,
-                                    final UUID streamID) {
-        super(runtime, streamID, QueuedStreamContext::new);
+                                    final UUID streamId) {
+        super(runtime, streamId, QueuedStreamContext::new);
     }
 
     /** Add the given address to the resolved queue of the
@@ -54,8 +63,7 @@ public abstract class AbstractQueuedStreamView extends
         context.resolvedQueue.add(globalAddress);
         context.resolvedEstBytes += ld.getSizeEstimate();
 
-        if (context.maxResolution < globalAddress)
-        {
+        if (context.maxResolution < globalAddress) {
             context.maxResolution = globalAddress;
         }
     }
@@ -68,27 +76,22 @@ public abstract class AbstractQueuedStreamView extends
                                     long maxGlobal) {
         // If we have no entries to read, fill the read queue.
         // Return if the queue is still empty.
-        if (context.readQueue.isEmpty() && context.readCpQueue.isEmpty() &&
-                !fillReadQueue(maxGlobal, context)) {
+        if (context.readQueue.isEmpty() && context.readCpQueue.isEmpty()
+                && !fillReadQueue(maxGlobal, context)) {
             return null;
+        }
+
+        // If maxGlobal is before the checkpoint position, throw a
+        // trimmed exception
+        if (maxGlobal < context.checkpointSuccessStartAddr) {
+            throw new TrimmedException();
         }
 
         // If checkpoint data is available, get from readCpQueue first
         NavigableSet<Long> getFrom;
         if (context.readCpQueue.size() > 0) {
             getFrom = context.readCpQueue;
-            if (context.readQueue.isEmpty()) {
-                // readQueue is empty, readCpQueue is not.
-                // This is a case where we have had 2 checkpoints
-                // adjacent to each other, and no non-checkpoint
-                // entries in the stream in between the checkpoints
-                // or during the 2nd checkpoint.  Processing of
-                // checkpoint entries will not advance our context
-                // globalPointer, only regular entries in readQueue.
-                // However, we know that readQueue is *empty*, so
-                // we advance globalPointer here.
-                context.globalPointer = maxGlobal;
-            }
+            context.globalPointer = context.checkpointSuccessStartAddr;
         } else {
             getFrom = context.readQueue;
         }
@@ -100,18 +103,13 @@ public abstract class AbstractQueuedStreamView extends
         }
 
         // Otherwise we remove entries one at a time from the read queue.
-        // The entry may not actually be part of the stream, so we might
-        // have to perform several reads.
-        while (getFrom.size() > 0) {
+        if (getFrom.size() > 0) {
             final long thisRead = getFrom.pollFirst();
             ILogData ld = read(thisRead);
-            if (ld.containsStream(context.id)) {
-                // Only add to resolved if ld is from readQueue
-                if (getFrom == context.readQueue) {
-                    addToResolvedQueue(context, thisRead, ld);
-                }
-                return ld;
+            if (getFrom == context.readQueue) {
+                addToResolvedQueue(context, thisRead, ld);
             }
+            return ld;
         }
 
         // None of the potential reads ended up being part of this
@@ -121,7 +119,7 @@ public abstract class AbstractQueuedStreamView extends
 
     /** {@inheritDoc}
      *
-     * In the queued implementation, we just read all entries in the read queue
+     * <p>In the queued implementation, we just read all entries in the read queue
      * in parallel. If there is any entry which changes the context, we cut the
      * list off there.
      * */
@@ -134,6 +132,12 @@ public abstract class AbstractQueuedStreamView extends
         // log records less than or equal to maxGlobal.
         // Boolean includes both CHECKPOINT & DATA entries.
         boolean readQueueIsEmpty = !fillReadQueue(maxGlobal, context);
+
+        // If maxGlobal is before the checkpoint position, throw a
+        // trimmed exception
+        if (maxGlobal < context.checkpointSuccessStartAddr) {
+            throw new TrimmedException();
+        }
 
         // We always have to fill to the read queue to ensure we read up to
         // max global.
@@ -168,7 +172,8 @@ public abstract class AbstractQueuedStreamView extends
         Optional<ILogData> contextEntry = readFrom.stream()
                 .filter(contextCheckFn::apply).findFirst();
         if (contextEntry.isPresent()) {
-            log.trace("getNextEntries[{}] context switch @ {}", this, contextEntry.get().getGlobalAddress());
+            log.trace("getNextEntries[{}] context switch @ {}", this,
+                    contextEntry.get().getGlobalAddress());
             int idx = readFrom.indexOf(contextEntry.get());
             readFrom = readFrom.subList(0, idx + 1);
             // NOTE: readSet's clear() changed underlying context.readQueue
@@ -197,7 +202,7 @@ public abstract class AbstractQueuedStreamView extends
      *
      * @param address       The address to read.
      */
-    abstract protected @Nonnull ILogData read(final long address);
+    protected abstract @Nonnull ILogData read(final long address);
 
     /**
      * Given a list of addresses, retrieve the data as a list in the same
@@ -217,7 +222,7 @@ public abstract class AbstractQueuedStreamView extends
      * whenever a client requests a read, but there are no addresses left in
      * the read queue.
      *
-     * This method returns true if entries were added to the read queue,
+     * <p>This method returns true if entries were added to the read queue,
      * false otherwise.
      *
      * @param maxGlobal     The maximum global address to read to.
@@ -226,7 +231,7 @@ public abstract class AbstractQueuedStreamView extends
      * @return              True, if entries were added to the read queue,
      *                      False, otherwise.
      */
-    abstract protected boolean fillReadQueue(final long maxGlobal,
+    protected abstract boolean fillReadQueue(final long maxGlobal,
                                           final QueuedStreamContext context);
 
     /**
@@ -244,8 +249,8 @@ public abstract class AbstractQueuedStreamView extends
 
         // Now we can do the search.
         // First, check for inclusive searches.
-        if (direction.isInclusive() &&
-                context.resolvedQueue.contains(globalAddress)) {
+        if (direction.isInclusive()
+                && context.resolvedQueue.contains(globalAddress)) {
             return globalAddress;
         }
         // Next, check all elements excluding
@@ -261,16 +266,25 @@ public abstract class AbstractQueuedStreamView extends
         return result == null ? Address.NOT_FOUND : result;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     * */
     @Override
     public synchronized ILogData previous() {
         final QueuedStreamContext context = getCurrentContext();
         log.trace("Previous[{}] max={} min={}", this,
                 context.maxResolution,
                 context.minResolution);
+
         // If never read, there would be no pointer to the previous entry.
         if (context.globalPointer == Address.NEVER_READ) {
             return null;
+        }
+
+        // If we're attempt to go prior to most recent checkpoint, we
+        // throw a TrimmedException.
+        if (context.globalPointer - 1 < context.checkpointSuccessStartAddr) {
+            throw new TrimmedException();
         }
 
         // Otherwise, the previous entry should be resolved, so get
@@ -281,9 +295,9 @@ public abstract class AbstractQueuedStreamView extends
         // to get the correct previous entry.
         if (prevAddress == null && Address.isAddress(context.minResolution)
                 || prevAddress != null && prevAddress <= context.minResolution) {
-            long oldPointer = context.globalPointer;
             context.globalPointer = prevAddress == null ? Address.NEVER_READ :
                                                 prevAddress - 1L;
+            long oldPointer = context.globalPointer;
             remainingUpTo(context.minResolution);
             context.minResolution = Address.NON_ADDRESS;
             context.globalPointer = oldPointer;
@@ -302,7 +316,10 @@ public abstract class AbstractQueuedStreamView extends
         return read(prevAddress);
     }
 
-   /** {@inheritDoc} */
+
+    /**
+    * {@inheritDoc}
+    * */
     @Override
     public synchronized ILogData current() {
         final QueuedStreamContext context = getCurrentContext();
@@ -313,7 +330,9 @@ public abstract class AbstractQueuedStreamView extends
         return read(context.globalPointer);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     * */
     @Override
     public long getCurrentGlobalPosition() {
         return getCurrentContext().globalPointer;
@@ -322,7 +341,7 @@ public abstract class AbstractQueuedStreamView extends
 
     /** {@inheritDoc}
      *
-     * For the queued stream context, we include just a queue of potential
+     * <p>For the queued stream context, we include just a queue of potential
      * global addresses to be read from.
      */
     @ToString
@@ -356,13 +375,18 @@ public abstract class AbstractQueuedStreamView extends
         /** Info on checkpoint we used for initial stream replay,
          *  other checkpoint-related info & stats.  Hodgepodge, clarify.
          */
-        UUID checkpointSuccessID = null;
+        UUID checkpointSuccessId = null;
         long checkpointSuccessStartAddr = Address.NEVER_READ;
         long checkpointSuccessEndAddr = Address.NEVER_READ;
         long checkpointSuccessNumEntries = 0L;
         long checkpointSuccessBytes = 0L;
         // No need to keep track of # of DATA entries, use context.resolvedQueue.size()?
         long resolvedEstBytes = 0L;
+        /** The address the current checkpoint snapshot was taken at.
+         *  The checkpoint guarantees for this stream there are no entries
+         *  between checkpointSuccessStartAddr and checkpointSnapshotAddress.
+         */
+        long checkpointSnapshotAddress = Address.NEVER_READ;
 
         /** Create a new stream context with the given ID and maximum address
          * to read to.
@@ -374,25 +398,42 @@ public abstract class AbstractQueuedStreamView extends
         }
 
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         * */
         @Override
         void reset() {
             super.reset();
             readCpQueue.clear();
             readQueue.clear();
+            resolvedQueue.clear();
+            minResolution = Address.NON_ADDRESS;
+            maxResolution = Address.NON_ADDRESS;
+
+            checkpointSuccessId = null;
+            checkpointSuccessStartAddr = Address.NEVER_READ;
+            checkpointSuccessEndAddr = Address.NEVER_READ;
+            checkpointSnapshotAddress = Address.NEVER_READ;
+            checkpointSuccessNumEntries = 0;
+            checkpointSuccessBytes = 0;
+            resolvedEstBytes = 0;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         * */
         @Override
         void seek(long globalAddress) {
             if (Address.nonAddress(globalAddress)) {
-                throw new IllegalArgumentException("globalAddress must be >= Address.maxNonAddress()");
+                throw new IllegalArgumentException("globalAddress must"
+                        + " be >= Address.maxNonAddress()");
             }
-            log.trace("Seek[{}]({}), min={} max={}", this,  globalAddress, minResolution, maxResolution);
+            log.trace("Seek[{}]({}), min={} max={}", this,  globalAddress,
+                    minResolution, maxResolution);
             // Update minResolution if necessary
             if (globalAddress >= maxResolution) {
-                log.warn("set min res to {}" , globalAddress);
-                minResolution = globalAddress; // TODO SLF wha? minResolution can be greater than maxResolution
+                log.trace("set min res to {}" , globalAddress);
+                minResolution = globalAddress;
             }
             // remove anything in the read queue LESS
             // than global address.

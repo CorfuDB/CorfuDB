@@ -1,16 +1,17 @@
 package org.corfudb.runtime.view.replication;
 
+import java.util.function.Function;
+import javax.annotation.Nonnull;
+
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
 
-import javax.annotation.Nonnull;
-import java.util.function.Function;
 
 /** A hole filling policy which reads several times,
  * waiting a static amount of time in between, before
  * requiring a hole fill.
  *
- * Created by mwei on 4/6/17.
+ * <p>Created by mwei on 4/6/17.
  */
 public class ReadWaitHoleFillPolicy implements IHoleFillPolicy {
 
@@ -31,11 +32,13 @@ public class ReadWaitHoleFillPolicy implements IHoleFillPolicy {
         this.numRetries = numRetries;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Nonnull
     @Override
-    public ILogData peekUntilHoleFillRequired(long address,
-           Function<Long, ILogData> peekFunction) throws HoleFillRequiredException {
+    public ILogData peekUntilHoleFillRequired(long address, Function<Long, ILogData> peekFunction)
+            throws HoleFillRequiredException {
         int tryNum = 0;
         do {
             // If this is not the first try, sleep before trying again

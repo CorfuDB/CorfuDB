@@ -29,8 +29,10 @@ message LogEntry {
     map<string, int64> backpointers = 8;
     optional DataRank rank = 9;
     optional CheckpointEntryType checkpointEntryType = 10;
-    optional int64 checkpointID_most_significant = 11;
-    optional int64 checkpointID_least_significant = 12;
+    optional int64 checkpointId_most_significant = 11;
+    optional int64 checkpointId_least_significant = 12;
+    optional int64 checkpointedStreamId_most_significant = 13;
+    optional int64 checkpointedStreamdId_least_significant = 14;
 }
 
 message LogHeader {

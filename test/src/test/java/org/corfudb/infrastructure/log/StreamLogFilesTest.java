@@ -21,6 +21,7 @@ import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -259,8 +260,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
                 .isInstanceOf(OverwriteException.class);
 
         // Read trimmed address
-        assertThatThrownBy(() -> log.read(address))
-                .isInstanceOf(TrimmedException.class);
+        assertThat(log.read(address).isTrimmed()).isTrue();
     }
 
     private void writeToLog(StreamLog log, long address) {
@@ -319,8 +319,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Verify that the trimmed addresses cannot be written to or read from after compaction
         for (long x = 0; x < logChunk; x++) {
             long address = x;
-            assertThatThrownBy(() -> log.read(address))
-                    .isInstanceOf(TrimmedException.class);
+            assertThat(log.read(address).isTrimmed()).isTrue();
             assertThatThrownBy(() -> writeToLog(log, address))
                     .isInstanceOf(OverwriteException.class);
         }
@@ -412,14 +411,28 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Try to read trimmed addresses
         for(long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
-            try {
-                log.read(x);
-            } catch (TrimmedException e) {
+            ILogData logData = log.read(x);
+            if(logData.isTrimmed()) {
                 trimmedExceptions++;
             }
         }
 
         // Address 0 is not reflected in trimAddress
         assertThat(trimmedExceptions).isEqualTo(trimAddress + 1);
+    }
+
+    @Test
+    public void testPrefixTrimAndStartUp() {
+        StreamLog log = new StreamLogFiles(getContext(), false);
+        log.prefixTrim(StreamLogFiles.RECORDS_PER_LOG_FILE / 2);
+        log.compact();
+        log = new StreamLogFiles(getContext(), false);
+        final long midSegmentAddress = StreamLogFiles.RECORDS_PER_LOG_FILE + 5;
+        log.prefixTrim(midSegmentAddress);
+        log.compact();
+        log = new StreamLogFiles(getContext(), false);
+
+        assertThat(log.getGlobalTail()).isEqualTo(midSegmentAddress);
+        assertThat(((StreamLogFiles)log).getTrimMark()).isEqualTo(midSegmentAddress + 1);
     }
 }

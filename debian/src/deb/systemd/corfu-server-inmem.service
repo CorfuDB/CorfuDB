@@ -1,0 +1,19 @@
+[Unit]
+Description=Corfu In-Memory Infrastructure Server
+Documentation=https://github.com/corfudb/corfudb
+After=remote-fs.target systemd-journald-dev-log.socket
+
+[Service]
+Type=forking
+PIDFile=/var/run/corfu_inmem.pid
+ExecStart=/etc/init.d/corfu-server-inmem start
+ExecStop=/etc/init.d/corfu-server-inmem stop
+ExecReload=/etc/init.d/corfu-server-inmem restart
+KillMode=process
+Restart=on-failure
+RestartSec=10
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
+WantedBy=graphical.target

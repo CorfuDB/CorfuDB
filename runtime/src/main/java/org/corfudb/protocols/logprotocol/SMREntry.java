@@ -1,19 +1,25 @@
 package org.corfudb.protocols.logprotocol;
 
 import io.netty.buffer.ByteBuf;
-import lombok.*;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.Serializers;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.NonNull;
+import lombok.ToString;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.Serializers;
+
 /**
  * Created by mwei on 1/8/16.
  */
+@Deprecated // TODO: Add replacement method that conforms to style
+@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
 @ToString(callSuper = true)
 @NoArgsConstructor
 public class SMREntry extends LogEntry implements ISMRConsumable {
@@ -21,12 +27,16 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     /**
      * The name of the SMR method. Note that this is limited to the size of a short.
      */
+    @Deprecated // TODO: Add replacement method that conforms to style
+    @SuppressWarnings("checkstyle:MemberName") // Due to deprecation
     @Getter
     private String SMRMethod;
 
     /**
      * The arguments to the SMR method, which could be 0.
      */
+    @Deprecated // TODO: Add replacement method that conforms to style
+    @SuppressWarnings("checkstyle:MemberName") // Due to deprecation
     @Getter
     private Object[] SMRArguments;
 
@@ -75,10 +85,11 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     }
 
 
-    public SMREntry(String SMRMethod, @NonNull Object[] SMRArguments, ISerializer serializer) {
+    /** SMREntry constructor. */
+    public SMREntry(String smrMethod, @NonNull Object[] smrArguments, ISerializer serializer) {
         super(LogEntryType.SMR);
-        this.SMRMethod = SMRMethod;
-        this.SMRArguments = SMRArguments;
+        this.SMRMethod = smrMethod;
+        this.SMRArguments = smrArguments;
         this.serializerType = serializer;
     }
 

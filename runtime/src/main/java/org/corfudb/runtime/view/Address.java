@@ -6,30 +6,46 @@ import lombok.Getter;
  * to represent addresses. In the future, it may replace the
  * use of long depending on performance.
  *
- * Created by mwei on 1/6/17.
+ * <p>Created by mwei on 1/6/17.</p>
  */
 public class Address {
 
     /**
-     * @param addr
+     * Returns whether a given address is a valid address or not.
+     *
+     * @param addr log address
      * @return true for all flag non-address constants
      */
-    public static boolean nonAddress(long addr) { return addr < 0; }
+    public static boolean nonAddress(long addr) {
+        return addr < 0;
+    }
 
     /**
-     * @param addr
+     * Returns whether a given address is a valid address or not.
+     *
+     * @param addr log address
      * @return true is addr is a legitimate address; false for all flag non-address constants
      */
-    public static boolean isAddress(long addr) { return addr >= 0; }
+    public static boolean isAddress(long addr) {
+        return addr >= 0;
+    }
 
     /**
+     * Returns minimum address (base value for iterations).
+     *
      * @return a constant which can be used as the base for address iterations
      */
     @Getter
     private static long minAddress = 0L;
-    public static boolean isMinAddress(long addr) { return addr == minAddress; }
+
+    public static boolean isMinAddress(long addr) {
+        return addr == minAddress;
+    }
+
     // TODO should clean this up soon
-    public static long maxNonAddress() { return -1L; }
+    public static long maxNonAddress() {
+        return -1L;
+    }
 
     /**
      * @return A constant which can be used in loops going down up to hitting a non-address.

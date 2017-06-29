@@ -1,12 +1,5 @@
 package org.corfudb.infrastructure;
 
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.BaseClient;
-import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.view.Layout;
-
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -16,15 +9,23 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.Layout;
+
 /**
  * Simple Polling policy.
  * Every node polls every other node.
- * <p>
- * Failure Condition:
+ *
+ * <p>Failure Condition:
  * Considers failure if server a node does not respond to the ping
  * more than 2 times in a row.
- * <p>
- * Created by zlokhandwala on 9/29/16.
+ *
+ * <p>Created by zlokhandwala on 9/29/16.
  */
 @Slf4j
 public class PeriodicPollPolicy implements IFailureDetectorPolicy {
@@ -36,7 +37,7 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
     private IClientRouter[] historyRouters = null;
 
     /**
-     * polling history
+     * polling history.
      */
     private int[] historyPollFailures = null;
     private long[] historyPollEpochExceptions = null;
@@ -94,7 +95,8 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
             pollCompletableFutures = new CompletableFuture[allServers.length];
             for (int i = 0; i < allServers.length; i++) {
                 if (!historyStatus.containsKey(allServers[i])) {
-                    historyStatus.put(allServers[i], true);  // Assume it's up until we think it isn't.
+                    historyStatus.put(allServers[i], true);  // Assume it's up until we think it
+                    // isn't.
                 }
                 historyRouters[i] = corfuRuntime.getRouterFunction.apply(allServers[i]);
                 historyRouters[i].start();
@@ -117,15 +119,18 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
         // We probably won't notice changes in this iteration; a future iteration will
         // eventually notice changes to historyPollFailures.
         for (int i = 0; i < historyRouters.length; i++) {
-            int ii = i;  // Intermediate var just for the sake of having a final for use inside the lambda below
+            int ii = i;  // Intermediate var just for the sake of having a final for use inside
+            // the lambda below
             pollCompletableFutures[ii] = CompletableFuture.runAsync(() -> {
                 try {
-                    boolean pingResult = historyRouters[ii].getClient(BaseClient.class).ping().get();
+                    boolean pingResult = historyRouters[ii].getClient(BaseClient.class).ping()
+                            .get();
                     historyPollFailures[ii] = pingResult ? 0 : historyPollFailures[ii] + 1;
-                } catch (Exception e ) {
+                } catch (Exception e) {
                     // If Wrong epoch exception is received, mark server as failed.
                     if (e.getCause() instanceof WrongEpochException) {
-                        historyPollEpochExceptions[ii] = ((WrongEpochException) e.getCause()).getCorrectEpoch();
+                        historyPollEpochExceptions[ii] = ((WrongEpochException) e.getCause())
+                                .getCorrectEpoch();
                     }
                     log.debug("Ping failed for " + historyServers[ii] + " with " + e);
                     historyPollFailures[ii]++;
@@ -148,7 +153,7 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
         HashMap<String, Long> outOfPhaseEpochNodes = new HashMap<>();
 
         if (historyPollCount > 3) {
-            Boolean is_up;
+            Boolean isUp;
 
             // Simple failure detector: Is there a change in health?
             for (int i = 0; i < historyServers.length; i++) {
@@ -160,25 +165,27 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
                 } catch (InterruptedException | ExecutionException | TimeoutException e) {
                     log.error("Error in polling task for server {} : {}", historyServers[i], e);
                     pollCompletableFutures[i].cancel(true);
-                    // Assuming server is unresponsive if ping task stuck or interrupted or throws exception.
+                    // Assuming server is unresponsive if ping task stuck or interrupted or
+                    // throws exception.
                     historyPollFailures[i]++;
                 }
 
                 // The count remains within the interval 0 <= failureCount <= failedPollLimit(3)
-                is_up = !(historyPollFailures[i] >= failedPollLimit);
+                isUp = !(historyPollFailures[i] >= failedPollLimit);
                 // Toggle if server was up and now not responding
-                if (!is_up) {
-                    log.debug("Change of status: " + historyServers[i] + " " +
-                            historyStatus.get(historyServers[i]) + " -> " + is_up);
+                if (!isUp) {
+                    log.debug("Change of status: " + historyServers[i] + " "
+                            + historyStatus.get(historyServers[i]) + " -> " + isUp);
                     failingNodes.add(historyServers[i]);
-                    historyStatus.put(historyServers[i], is_up);
+                    historyStatus.put(historyServers[i], isUp);
                     historyPollFailures[i]--;
                 } else if (!historyStatus.get(historyServers[i])) {
-                    // If server was down but now responsive so wait till reaches lower watermark (0).
+                    // If server was down but now responsive so wait till reaches lower watermark
+                    // (0).
                     if (historyPollFailures[i] > 0) {
                         if (--historyPollFailures[i] == 0) {
-                            log.debug("Change of status: " + historyServers[i] + " " +
-                                    historyStatus.get(historyServers[i]) + " -> " + true);
+                            log.debug("Change of status: " + historyServers[i] + " "
+                                    + historyStatus.get(historyServers[i]) + " -> " + true);
                             historyStatus.put(historyServers[i], true);
                         } else {
                             // Server still down

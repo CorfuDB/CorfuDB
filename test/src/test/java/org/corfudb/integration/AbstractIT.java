@@ -94,7 +94,6 @@ public class AbstractIT extends AbstractCorfuTest {
 
     /**
      * Shuts down all corfu instances.
-     * TODO: Should be able to gracefully kill a single specified corfu server.
      *
      * @param corfuServerProcess
      * @return

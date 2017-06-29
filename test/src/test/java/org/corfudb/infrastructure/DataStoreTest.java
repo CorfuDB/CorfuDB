@@ -1,10 +1,11 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableMap;
-import org.corfudb.AbstractCorfuTest;
-import org.junit.Test;
 
 import java.util.UUID;
+
+import org.corfudb.AbstractCorfuTest;
+import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -53,7 +54,7 @@ public class DataStoreTest extends AbstractCorfuTest {
                 .put("--log-path", serviceDir)
                 .build());
 
-        for (int i = 0; i < dataStore.getDS_CACHE_SZ() * 2; i++) {
+        for (int i = 0; i < dataStore.getDsCacheSize() * 2; i++) {
             String value = UUID.randomUUID().toString();
             dataStore.put(String.class, "test", "key", value);
 
@@ -89,7 +90,7 @@ public class DataStoreTest extends AbstractCorfuTest {
                 .put("--memory", true)
                 .build());
 
-        for (int i = 0; i < dataStore.getDS_CACHE_SZ() * 2; i++) {
+        for (int i = 0; i < dataStore.getDsCacheSize() * 2; i++) {
             String value = UUID.randomUUID().toString();
             dataStore.put(String.class, "test", "key", value);
             assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);

@@ -31,6 +31,16 @@ import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.recovery.RecoveryUtils;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.recovery.FastSmrMapsLoader;
+import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.object.CorfuCompileProxy;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.view.ObjectsView;
 
 
 /**
@@ -371,5 +381,37 @@ public class Utils {
      */
     public static String toReadableID(UUID id) {
         return Long.toHexString((id.getLeastSignificantBits()) & 0xFFFF);
+    }
+
+    /** Print the anatomy of a LogData
+     *
+     * Print how many streams are contained in the Metadata and
+     * how many entries per stream.
+     *
+     * Pretty useful for understanding how the the db is being used
+     * from the application perspective.
+     *
+     * @param logData
+     */
+    public static void printLogAnatomy(CorfuRuntime runtime, ILogData logData) {
+        FastSmrMapsLoader fastLoader = new FastSmrMapsLoader(runtime);
+        try {
+            LogEntry le = RecoveryUtils.deserializeLogData(runtime, logData);
+            if (le.getType() == LogEntry.LogEntryType.SMR) {
+                log.info("printLogAnatomy: Number of Streams: 1");
+                log.info("printLogAnatomy: Number of Entries: 1");
+                log.info("--------------------------");
+            }
+            else if (le.getType() == LogEntry.LogEntryType.MULTIOBJSMR) {
+                log.info("printLogAnatomy: Number of Streams: " + logData.getStreams().size());
+                ((MultiObjectSMREntry)le).getEntryMap().forEach((stream, multiSmrEntry) -> {
+                    log.info("printLogAnatomy: Number of Entries: " + multiSmrEntry.getSMRUpdates(stream).size());
+                });
+                log.info("--------------------------");
+            }
+
+        } catch (Exception e) {
+            log.warn("printLogAnatomy [logAddress={}] cannot be deserialized ", logData.getGlobalAddress());
+        }
     }
 }

@@ -1,6 +1,7 @@
 package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
@@ -12,9 +13,11 @@ import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
+import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
@@ -28,7 +31,8 @@ import java.util.function.Consumer;
  */
 
 public class CheckpointSmokeTest extends AbstractViewTest {
-
+    final byte serilizerByte = (byte) 20;
+    ISerializer serializer = new CPSerializer(serilizerByte);
     public CorfuRuntime r;
 
     @Before
@@ -61,7 +65,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      * @throws Exception
      */
     @Test
-    @SuppressWarnings("checkstyle:magicnumber")
 	public void smoke1Test() throws Exception {
         final String streamName = "mystream";
         final UUID streamId = CorfuRuntime.getStreamID(streamName);
@@ -132,7 +135,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      */
 
     @Test
-    @SuppressWarnings("checkstyle:magicnumber")
     public void smoke2Test() throws Exception {
         final String streamName = "mystream2";
         final UUID streamId = CorfuRuntime.getStreamID(streamName);
@@ -193,7 +195,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     /** Test the CheckpointWriter class, part 1.
      */
     @Test
-    @SuppressWarnings("checkstyle:magicnumber")
     public void checkpointWriterTest() throws Exception {
         final String streamName = "mystream4";
         final UUID streamId = CorfuRuntime.getStreamID(streamName);
@@ -201,6 +202,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         final int numKeys = 5;
         final String author = "Me, myself, and I";
         final Long fudgeFactor = 75L;
+        final int smallBatchSize = 4;
 
         Map<String, Long> m = instantiateMap(streamName);
         for (int i = 0; i < numKeys; i++) {
@@ -220,8 +222,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // Set up CP writer.  Add fudgeFactor to all CP data,
         // also used for assertion checks later.
         CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, (SMRMap) m);
+        cpw.setSerializer(serializer);
         cpw.setValueMutator((l) -> (Long) l + fudgeFactor);
-        cpw.setBatchSize(4);
+        cpw.setBatchSize(smallBatchSize);
 
         // Write all CP data.
         long txBeginGlobalAddress = CheckpointWriter.startGlobalSnapshotTxn(r);
@@ -262,7 +265,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      *  check.
      */
     @Test
-    @SuppressWarnings("checkstyle:magicnumber")
     public void checkpointWriterInterleavedTest() throws Exception {
         final String streamName = "mystream3";
         final UUID streamId = CorfuRuntime.getStreamID(streamName);
@@ -291,6 +293,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // Set up CP writer, with interleaved writes for middle keys
         middleTracker = -1;
         CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, (SMRMap) m);
+        cpw.setSerializer(serializer);
         cpw.setBatchSize(1);
         cpw.setPostAppendFunc((cp, pos) -> {
             // No mutation, be we need to add a history snapshot at this START/END location.
@@ -308,7 +311,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                     saveHist.accept(k, middleTracker);
                 });
                 t.start();
-                try { t.join(); } catch (Exception e) { System.err.printf("BAD: exception %s\n", e); }
+                try { t.join(); } catch (Exception e) { throw new RuntimeException(e); }
                 middleTracker++;
             }
         });
@@ -343,23 +346,42 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             // Instantiate new runtime & map @ snapshot of globalAddress
             setRuntime();
             Map<String, Long> m2 = instantiateMap(streamName);
-            r.getObjectsView().TXBuild()
-                    .setType(TransactionType.SNAPSHOT)
-                    .setSnapshot(globalAddr)
-                    .begin();
 
-            assertThat(m2.entrySet())
-                    .describedAs("Snapshot at global log address " + globalAddr)
-                    .isEqualTo(expectedHistory.entrySet());
-            r.getObjectsView().TXEnd();
+            // If the snapshot is prior to the checkpoint start,
+            // a trimmed exception will be thrown.
+            if (globalAddr < startAddress - 1) {
+                final long thisAddress = globalAddr;
+                assertThatThrownBy(() ->
+                        {
+                            r.getObjectsView().TXBuild()
+                                .setType(TransactionType.SNAPSHOT)
+                                .setSnapshot(thisAddress)
+                                .begin();
+                            m2.size(); // Just call any accessor
+                        })
+                        .describedAs("Snapshot at global log address " + globalAddr)
+                        .isInstanceOf(TransactionAbortedException.class);
+            } else {
+                r.getObjectsView().TXBuild()
+                        .setType(TransactionType.SNAPSHOT)
+                        .setSnapshot(globalAddr)
+                        .begin();
+
+                assertThat(m2.entrySet())
+                        .describedAs("Snapshot at global log address " + globalAddr)
+                        .isEqualTo(expectedHistory.entrySet());
+                r.getObjectsView().TXEnd();
+            }
         }
     }
 
     private Map<String, Long> instantiateMap(String streamName) {
+        Serializers.registerSerializer(serializer);
         return r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<SMRMap<String, Long>>() {})
+                .setSerializer(serializer)
                 .open();
     }
 
@@ -371,22 +393,23 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 l, l, true, true, true);
     }
 
-    @SuppressWarnings("checkstyle:magicnumber")
     private void writeCheckpointRecords(UUID streamId, String checkpointAuthor, UUID checkpointId,
                                         Object[] objects, Runnable l1, Runnable l2,
                                         boolean write1, boolean write2, boolean write3)
             throws Exception {
-        BackpointerStreamView sv = new BackpointerStreamView(r, streamId);
+        final UUID checkpointStreamID = CorfuRuntime.getStreamID(streamId.toString() + "_cp");
+        BackpointerStreamView sv = new BackpointerStreamView(r, checkpointStreamID);
         Map<CheckpointEntry.CheckpointDictKey, String> mdKV = new HashMap<>();
         mdKV.put(CheckpointEntry.CheckpointDictKey.START_TIME, "The perfect time");
 
         // Write cp #1 of 3
         if (write1) {
-            TokenResponse tokResp1 = r.getSequencerView().nextToken(Collections.singleton(streamId), 0);
+            TokenResponse tokResp1 = r.getSequencerView().nextToken(Collections.singleton(streamId)
+                    , 0);
             long addr1 = tokResp1.getToken().getTokenValue();
             mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1 + 1));
             CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
-                    checkpointAuthor, checkpointId, mdKV, null);
+                    checkpointAuthor, checkpointId, streamId, mdKV, null);
             sv.append(cp1, null, null);
         }
 
@@ -398,11 +421,11 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             MultiSMREntry smrEntries = new MultiSMREntry();
             if (objects != null) {
                 for (int i = 0; i < objects.length; i++) {
-                    smrEntries.addTo(new SMREntry("put", (Object[]) objects[i], Serializers.JSON));
+                    smrEntries.addTo(new SMREntry("put", (Object[]) objects[i], serializer));
                 }
             }
             CheckpointEntry cp2 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
-                    checkpointAuthor, checkpointId, mdKV, smrEntries);
+                    checkpointAuthor, checkpointId, streamId, mdKV, smrEntries);
             sv.append(cp2, null, null);
         }
 
@@ -412,7 +435,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // Write cp #3 of 3
         if (write3) {
             CheckpointEntry cp3 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
-                    checkpointAuthor, checkpointId, mdKV, null);
+                    checkpointAuthor, checkpointId, streamId, mdKV, null);
             sv.append(cp3, null, null);
         }
     }
@@ -480,3 +503,4 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         }
     }
 }
+

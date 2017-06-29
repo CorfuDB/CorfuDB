@@ -1,22 +1,20 @@
 package org.corfudb.protocols.wireprotocol;
 
-import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.Address;
-
 import java.util.UUID;
 
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.runtime.CorfuRuntime;
+
 /** An interface to log data entries.
- *
  * Log data entries represent data stored in the actual log,
  * with convenience methods for software to retrieve the
  * stored information.
- *
  * Created by mwei on 8/17/16.
  */
 public interface ILogData extends IMetadata, Comparable<ILogData> {
 
     Object getPayload(CorfuRuntime t);
+
     DataType getType();
 
     @Override
@@ -45,13 +43,14 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
          * to the log data.
          * @param data  The log data to manage.
          */
-        public SerializationHandle(ILogData data)
-        {
+        public SerializationHandle(ILogData data) {
             this.data = data;
             data.acquireBuffer();
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void close() {
             data.releaseBuffer();
@@ -59,10 +58,13 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     }
 
     void releaseBuffer();
+
     void acquireBuffer();
+
     default SerializationHandle getSerializedForm() {
         return new SerializationHandle(this);
     }
+
     /**
      * Return whether or not this entry is a log entry.
      */
@@ -80,25 +82,26 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     /**
      * Return if there is backpointer for a particular stream.
      */
-    default boolean hasBackpointer(UUID streamID) {
+    default boolean hasBackpointer(UUID streamId) {
         return getBackpointerMap() != null
-                && getBackpointerMap().containsKey(streamID) &&
-                Address.isAddress(getBackpointerMap().get(streamID));
+                && getBackpointerMap().containsKey(streamId);
     }
 
     /**
      * Return the backpointer for a particular stream.
      */
-    default Long getBackpointer(UUID streamID) {
-        if (!hasBackpointer(streamID)) return null;
-        return getBackpointerMap().get(streamID);
+    default Long getBackpointer(UUID streamId) {
+        if (!hasBackpointer(streamId)) {
+            return null;
+        }
+        return getBackpointerMap().get(streamId);
     }
 
     /**
      * Return if this is the first entry in a particular stream.
      */
-    default boolean isFirstEntry(UUID streamID) {
-        return getBackpointer(streamID) == -1L;
+    default boolean isFirstEntry(UUID streamId) {
+        return getBackpointer(streamId) == -1L;
     }
 
     /**
@@ -116,7 +119,14 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     }
 
     /** Return whether the entry represents an empty entry or not. */
-    default boolean isEmpty() { return getType() == DataType.EMPTY;}
+    default boolean isEmpty() {
+        return getType() == DataType.EMPTY;
+    }
+
+    /** Return true if and only if the entry represents a trimmed address.*/
+    default boolean isTrimmed() {
+        return getType() == DataType.TRIMMED;
+    }
 
     /** Assign a given token to this log data.
      *

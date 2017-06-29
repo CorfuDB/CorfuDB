@@ -2,16 +2,12 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import org.corfudb.annotations.CorfuObject;
-import org.corfudb.annotations.TransactionalMethod;
-import org.corfudb.annotations.Accessor;
 
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.function.Predicate;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -19,11 +15,19 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
+import org.corfudb.annotations.Accessor;
+import org.corfudb.annotations.CorfuObject;
+import org.corfudb.annotations.TransactionalMethod;
 
 /**
  * Created by mwei on 1/7/16.
  */
 @CorfuObject
+@Deprecated // TODO: Add replacement method that conforms to style
+@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
 public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
 
     /**
@@ -69,14 +73,29 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
     /**
      * Returns a filtered {@link List} view of the values contained in this map.
      * This method has a memory/CPU advantage over the map iterators as no deep copy
-     * is actually performed. 
+     * is actually performed.
      *
      * @param p java predicate (function to evaluate)
-     * @return a view of the values contained in this map meeting the predicate condition.   
+     * @return a view of the values contained in this map meeting the predicate condition.
      */
     @Accessor
     public List<V> scanAndFilter(Predicate<? super V> p) {
         return super.values().parallelStream().filter(p).collect(Collectors.toList());
+    }
+
+    /**
+     * Returns a {@link Collection} filtered by entries (keys and/or values).
+     * This method has a memory/CPU advantage over the map iterators as no deep copy
+     * is actually performed.
+     *
+     * @param entryPredicate java predicate (function to evaluate)
+     * @return a view of the entries contained in this map meeting the predicate condition.
+     */
+    @Accessor
+    public Collection<Map.Entry<K, V>> scanAndFilterByEntry(Predicate<? super Map.Entry<K, V>>
+                                                                        entryPredicate) {
+        return super.entrySet().parallelStream().filter(entryPredicate).collect(Collectors
+                .toCollection(ArrayList::new));
     }
 
     /**
@@ -114,10 +133,9 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      * @throws NullPointerException if the specified key is null and this map
      *                              does not permit null keys
      *                              (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
-     * @implSpec The default implementation makes no guarantees about synchronization
-     * or atomicity properties of this method. Any implementation providing
-     * atomicity guarantees must override this method and document its
-     * concurrency properties.
+     * @implSpec The default implementation makes no guarantees about synchronization or atomicity
+     *           properties of this method. Any implementation providing atomicity guarantees must
+     *           override this method and document its concurrency properties.
      * @since 1.8
      */
     @Override
@@ -141,15 +159,15 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      * @throws ConcurrentModificationException if an entry is found to be
      *                                         removed during iteration
      * @implSpec The default implementation is equivalent to, for this {@code map}:
-     * <pre> {@code
-     * for (Map.Entry<K, V> entry : map.entrySet())
-     *     action.accept(entry.getKey(), entry.getValue());
-     * }</pre>
-     * <p>
-     * The default implementation makes no guarantees about synchronization
-     * or atomicity properties of this method. Any implementation providing
-     * atomicity guarantees must override this method and document its
-     * concurrency properties.
+     *           <pre> {@code
+     *           for (Map.Entry<K, V> entry : map.entrySet())
+     *           action.accept(entry.getKey(), entry.getValue());
+     *           }</pre>
+     *
+     *           The default implementation makes no guarantees about synchronization or atomicity
+     *           properties of this method. Any implementation providing
+     *           atomicity guarantees must override this method and document its
+     *           concurrency properties.
      * @since 1.8
      */
     @Override
@@ -162,7 +180,7 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
             try {
                 k = entry.getKey();
                 v = entry.getValue();
-            } catch(IllegalStateException ise) {
+            } catch (IllegalStateException ise) {
                 // this usually means the entry is no longer in the map.
                 throw new ConcurrentModificationException(ise);
             }
@@ -181,9 +199,9 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      *                                         is not supported by this map's entry set iterator.
      * @throws ClassCastException              if the class of a replacement value
      *                                         prevents it from being stored in this map
-     * @throws NullPointerException            if the specified function is null, or the
-     *                                         specified replacement value is null, and this map does not permit null
-     *                                         values
+     * @throws NullPointerException            if the specified function is null, or the specified
+     *                                         replacement value is null, and this map does not
+     *                                         permit null values
      * @throws ClassCastException              if a replacement value is of an inappropriate
      *                                         type for this map
      *                                         (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
@@ -195,16 +213,16 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      *                                         (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      * @throws ConcurrentModificationException if an entry is found to be
      *                                         removed during iteration
-     * @implSpec <p>The default implementation is equivalent to, for this {@code map}:
-     * <pre> {@code
-     * for (Map.Entry<K, V> entry : map.entrySet())
-     *     entry.setValue(function.apply(entry.getKey(), entry.getValue()));
-     * }</pre>
-     * <p>
-     * <p>The default implementation makes no guarantees about synchronization
-     * or atomicity properties of this method. Any implementation providing
-     * atomicity guarantees must override this method and document its
-     * concurrency properties.
+     * @implSpec The default implementation is equivalent to, for this {@code map}:
+     *           <pre> {@code
+     *           for (Map.Entry<K, V> entry : map.entrySet())
+     *             entry.setValue(function.apply(entry.getKey(), entry.getValue()));
+     *           }</pre>
+     *
+     *           The default implementation makes no guarantees about synchronization
+     *           or atomicity properties of this method. Any implementation providing
+     *           atomicity guarantees must override this method and document its
+     *           concurrency properties.
      * @since 1.8
      */
     @Override
@@ -217,7 +235,7 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
             try {
                 k = entry.getKey();
                 v = entry.getValue();
-            } catch(IllegalStateException ise) {
+            } catch (IllegalStateException ise) {
                 // this usually means the entry is no longer in the map.
                 throw new ConcurrentModificationException(ise);
             }
@@ -227,7 +245,7 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
 
             try {
                 entry.setValue(v);
-            } catch(IllegalStateException ise) {
+            } catch (IllegalStateException ise) {
                 // this usually means the entry is no longer in the map.
                 throw new ConcurrentModificationException(ise);
             }
@@ -241,11 +259,10 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      *
      * @param key   key with which the specified value is to be associated
      * @param value value to be associated with the specified key
-     * @return the previous value associated with the specified key, or
-     * {@code null} if there was no mapping for the key.
-     * (A {@code null} return can also indicate that the map
-     * previously associated {@code null} with the key,
-     * if the implementation supports null values.)
+     * @return the previous value associated with the specified key, or {@code null} if there
+     *         was no mapping for the key. (A {@code null} return can also indicate that the map
+     *         previously associated {@code null} with the key, if the implementation supports
+     *         null values.)
      * @throws UnsupportedOperationException if the {@code put} operation
      *                                       is not supported by this map
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
@@ -258,21 +275,18 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      * @throws IllegalArgumentException      if some property of the specified key
      *                                       or value prevents it from being stored in this map
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
-     * @implSpec The default implementation is equivalent to, for this {@code
-     * map}:
-     * <p>
-     * <pre> {@code
-     * V v = map.get(key);
-     * if (v == null)
-     *     v = map.put(key, value);
+     * @implSpec The default implementation is equivalent to, for this {@code map}:
+     *           <pre> {@code
+     *           V v = map.get(key);
+     *           if (v == null)
+     *             v = map.put(key, value);
+     *             return v;
+     *           }</pre>
      *
-     * return v;
-     * }</pre>
-     * <p>
-     * <p>The default implementation makes no guarantees about synchronization
-     * or atomicity properties of this method. Any implementation providing
-     * atomicity guarantees must override this method and document its
-     * concurrency properties.
+     *           The default implementation makes no guarantees about synchronization
+     *           or atomicity properties of this method. Any implementation providing
+     *           atomicity guarantees must override this method and document its
+     *           concurrency properties.
      * @since 1.8
      */
     @Override
@@ -303,27 +317,26 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      *                                       and this map does not permit null keys or values
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      * @implSpec The default implementation is equivalent to, for this {@code map}:
-     * <p>
-     * <pre> {@code
-     * if (map.containsKey(key) && Objects.equals(map.get(key), value)) {
-     *     map.remove(key);
-     *     return true;
-     * } else
-     *     return false;
-     * }</pre>
-     * <p>
-     * <p>The default implementation makes no guarantees about synchronization
-     * or atomicity properties of this method. Any implementation providing
-     * atomicity guarantees must override this method and document its
-     * concurrency properties.
+     *           <pre> {@code
+     *           if (map.containsKey(key) && Objects.equals(map.get(key), value)) {
+     *             map.remove(key);
+     *             return true;
+     *           } else
+     *             return false;
+     *           }</pre>
+     *
+     *           The default implementation makes no guarantees about synchronization
+     *           or atomicity properties of this method. Any implementation providing
+     *           atomicity guarantees must override this method and document its
+     *           concurrency properties.
      * @since 1.8
      */
     @Override
     @TransactionalMethod
     public boolean remove(Object key, Object value) {
         Object curValue = get(key);
-        if (!Objects.equals(curValue, value) ||
-                (curValue == null && !containsKey(key))) {
+        if (!Objects.equals(curValue, value)
+                || (curValue == null && !containsKey(key))) {
             return false;
         }
         remove(key);
@@ -351,31 +364,29 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      * @throws IllegalArgumentException      if some property of a specified key
      *                                       or value prevents it from being stored in this map
      * @implSpec The default implementation is equivalent to, for this {@code map}:
-     * <p>
-     * <pre> {@code
-     * if (map.containsKey(key) && Objects.equals(map.get(key), value)) {
-     *     map.put(key, newValue);
-     *     return true;
-     * } else
-     *     return false;
-     * }</pre>
-     * <p>
-     * The default implementation does not throw NullPointerException
-     * for maps that do not support null values if oldValue is null unless
-     * newValue is also null.
-     * <p>
-     * <p>The default implementation makes no guarantees about synchronization
-     * or atomicity properties of this method. Any implementation providing
-     * atomicity guarantees must override this method and document its
-     * concurrency properties.
+     *           <pre> {@code
+     *           if (map.containsKey(key) && Objects.equals(map.get(key), value)) {
+     *             map.put(key, newValue);
+     *             return true;
+     *           } else
+     *             return false;
+     *           }</pre>
+     *
+     *           The default implementation does not throw NullPointerException
+     *           for maps that do not support null values if oldValue is null unless
+     *           newValue is also null.
+     *           The default implementation makes no guarantees about synchronization
+     *           or atomicity properties of this method. Any implementation providing
+     *           atomicity guarantees must override this method and document its
+     *           concurrency properties.
      * @since 1.8
      */
     @Override
     @TransactionalMethod
     public boolean replace(K key, V oldValue, V newValue) {
         Object curValue = get(key);
-        if (!Objects.equals(curValue, oldValue) ||
-                (curValue == null && !containsKey(key))) {
+        if (!Objects.equals(curValue, oldValue)
+                || (curValue == null && !containsKey(key))) {
             return false;
         }
         put(key, newValue);
@@ -389,10 +400,10 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      * @param key   key with which the specified value is associated
      * @param value value to be associated with the specified key
      * @return the previous value associated with the specified key, or
-     * {@code null} if there was no mapping for the key.
-     * (A {@code null} return can also indicate that the map
-     * previously associated {@code null} with the key,
-     * if the implementation supports null values.)
+     *         {@code null} if there was no mapping for the key.
+     *         (A {@code null} return can also indicate that the map
+     *         previously associated {@code null} with the key,
+     *         if the implementation supports null values.)
      * @throws UnsupportedOperationException if the {@code put} operation
      *                                       is not supported by this map
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
@@ -404,18 +415,17 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      * @throws IllegalArgumentException      if some property of the specified key
      *                                       or value prevents it from being stored in this map
      * @implSpec The default implementation is equivalent to, for this {@code map}:
-     * <p>
-     * <pre> {@code
-     * if (map.containsKey(key)) {
-     *     return map.put(key, value);
-     * } else
-     *     return null;
-     * }</pre>
-     * <p>
-     * <p>The default implementation makes no guarantees about synchronization
-     * or atomicity properties of this method. Any implementation providing
-     * atomicity guarantees must override this method and document its
-     * concurrency properties.
+     *           <pre> {@code
+     *           if (map.containsKey(key)) {
+     *             return map.put(key, value);
+     *           } else
+     *             return null;
+     *           }</pre>
+     *
+     *           The default implementation makes no guarantees about synchronization
+     *           or atomicity properties of this method. Any implementation providing
+     *           atomicity guarantees must override this method and document its
+     *           concurrency properties.
      * @since 1.8
      */
     @Override
@@ -432,20 +442,20 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      * If the specified key is not already associated with a value (or is mapped
      * to {@code null}), attempts to compute its value using the given mapping
      * function and enters it into this map unless {@code null}.
-     * <p>
+     *
      * <p>If the function returns {@code null} no mapping is recorded. If
      * the function itself throws an (unchecked) exception, the
      * exception is rethrown, and no mapping is recorded.  The most
      * common usage is to construct a new object serving as an initial
      * mapped value or memoized result, as in:
-     * <p>
+     *
      * <pre> {@code
      * map.computeIfAbsent(key, k -> new Value(f(k)));
      * }</pre>
-     * <p>
+     *
      * <p>Or to implement a multi-value map, {@code Map<K,Collection<V>>},
      * supporting multiple values per key:
-     * <p>
+     *
      * <pre> {@code
      * map.computeIfAbsent(key, k -> new HashSet<V>()).add(v);
      * }</pre>
@@ -453,9 +463,9 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      * @param key             key with which the specified value is to be associated
      * @param mappingFunction the function to compute a value
      * @return the current (existing or computed) value associated with
-     * the specified key, or null if the computed value is null
-     * @throws NullPointerException          if the specified key is null and
-     *                                       this map does not support null keys, or the mappingFunction
+     *         the specified key, or null if the computed value is null
+     * @throws NullPointerException          if the specified key is null and this map does not
+     *                                       support null keys, or the mappingFunction
      *                                       is null
      * @throws UnsupportedOperationException if the {@code put} operation
      *                                       is not supported by this map
@@ -464,24 +474,22 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      *                                       prevents it from being stored in this map
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      * @implSpec The default implementation is equivalent to the following steps for this
-     * {@code map}, then returning the current value or {@code null} if now
-     * absent:
-     * <p>
-     * <pre> {@code
-     * if (map.get(key) == null) {
-     *     V newValue = mappingFunction.apply(key);
-     *     if (newValue != null)
-     *         map.put(key, newValue);
-     * }
-     * }</pre>
-     * <p>
-     * <p>The default implementation makes no guarantees about synchronization
-     * or atomicity properties of this method. Any implementation providing
-     * atomicity guarantees must override this method and document its
-     * concurrency properties. In particular, all implementations of
-     * subinterface {@link ConcurrentMap} must document
-     * whether the function is applied once atomically only if the value is not
-     * present.
+     *           {@code map}, then returning the current value or {@code null} if now absent:
+     *           <pre> {@code
+     *           if (map.get(key) == null) {
+     *             V newValue = mappingFunction.apply(key);
+     *             if (newValue != null)
+     *               map.put(key, newValue);
+     *             }
+     *           }</pre>
+     *
+     *           The default implementation makes no guarantees about synchronization
+     *           or atomicity properties of this method. Any implementation providing
+     *           atomicity guarantees must override this method and document its
+     *           concurrency properties. In particular, all implementations of
+     *           subinterface {@link ConcurrentMap} must document
+     *           whether the function is applied once atomically only if the value is not
+     *           present.
      * @since 1.8
      */
     @Override
@@ -504,7 +512,7 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
     /**
      * If the value for the specified key is present and non-null, attempts to
      * compute a new mapping given the key and its current mapped value.
-     * <p>
+     *
      * <p>If the function returns {@code null}, the mapping is removed.  If the
      * function itself throws an (unchecked) exception, the exception is
      * rethrown, and the current mapping is left unchanged.
@@ -522,32 +530,32 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      *                                       prevents it from being stored in this map
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      * @implSpec The default implementation is equivalent to performing the following
-     * steps for this {@code map}, then returning the current value or
-     * {@code null} if now absent:
-     * <p>
-     * <pre> {@code
-     * if (map.get(key) != null) {
-     *     V oldValue = map.get(key);
-     *     V newValue = remappingFunction.apply(key, oldValue);
-     *     if (newValue != null)
-     *         map.put(key, newValue);
-     *     else
-     *         map.remove(key);
-     * }
-     * }</pre>
-     * <p>
-     * <p>The default implementation makes no guarantees about synchronization
-     * or atomicity properties of this method. Any implementation providing
-     * atomicity guarantees must override this method and document its
-     * concurrency properties. In particular, all implementations of
-     * subinterface {@link ConcurrentMap} must document
-     * whether the function is applied once atomically only if the value is not
-     * present.
+     *           steps for this {@code map}, then returning the current value or
+     *           {@code null} if now absent:
+     *           <pre> {@code
+     *           if (map.get(key) != null) {
+     *             V oldValue = map.get(key);
+     *             V newValue = remappingFunction.apply(key, oldValue);
+     *             if (newValue != null)
+     *               map.put(key, newValue);
+     *             else
+     *               map.remove(key);
+     *             }
+     *           }</pre>
+     *
+     *           The default implementation makes no guarantees about synchronization
+     *           or atomicity properties of this method. Any implementation providing
+     *           atomicity guarantees must override this method and document its
+     *           concurrency properties. In particular, all implementations of
+     *           subinterface {@link ConcurrentMap} must document
+     *           whether the function is applied once atomically only if the value is not
+     *           present.
      * @since 1.8
      */
     @Override
     @TransactionalMethod
-    public V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
+    public V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V>
+            remappingFunction) {
         Objects.requireNonNull(remappingFunction);
         V oldValue;
         if ((oldValue = get(key)) != null) {
@@ -569,11 +577,11 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      * mapped value (or {@code null} if there is no current mapping). For
      * example, to either create or append a {@code String} msg to a value
      * mapping:
-     * <p>
-     * <pre> {@code
+     *
+     * <p><pre> {@code
      * map.compute(key, (k, v) -> (v == null) ? msg : v.concat(msg))}</pre>
      * (Method {@link #merge merge()} is often simpler to use for such purposes.)
-     * <p>
+     *
      * <p>If the function returns {@code null}, the mapping is removed (or
      * remains absent if initially absent).  If the function itself throws an
      * (unchecked) exception, the exception is rethrown, and the current mapping
@@ -592,32 +600,31 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      *                                       prevents it from being stored in this map
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      * @implSpec The default implementation is equivalent to performing the following
-     * steps for this {@code map}, then returning the current value or
-     * {@code null} if absent:
-     * <p>
-     * <pre> {@code
-     * V oldValue = map.get(key);
-     * V newValue = remappingFunction.apply(key, oldValue);
-     * if (oldValue != null ) {
-     *    if (newValue != null)
-     *       map.put(key, newValue);
-     *    else
-     *       map.remove(key);
-     * } else {
-     *    if (newValue != null)
-     *       map.put(key, newValue);
-     *    else
-     *       return null;
-     * }
-     * }</pre>
-     * <p>
-     * <p>The default implementation makes no guarantees about synchronization
-     * or atomicity properties of this method. Any implementation providing
-     * atomicity guarantees must override this method and document its
-     * concurrency properties. In particular, all implementations of
-     * subinterface {@link ConcurrentMap} must document
-     * whether the function is applied once atomically only if the value is not
-     * present.
+     *           steps for this {@code map}, then returning the current value or
+     *           {@code null} if absent:
+     *           <pre> {@code
+     *           V oldValue = map.get(key);
+     *           V newValue = remappingFunction.apply(key, oldValue);
+     *           if (oldValue != null ) {
+     *             if (newValue != null)
+     *               map.put(key, newValue);
+     *             else
+     *               map.remove(key);
+     *           } else {
+     *             if (newValue != null)
+     *               map.put(key, newValue);
+     *             else
+     *               return null;
+     *           }
+     *           }</pre>
+     *
+     *           The default implementation makes no guarantees about synchronization
+     *           or atomicity properties of this method. Any implementation providing
+     *           atomicity guarantees must override this method and document its
+     *           concurrency properties. In particular, all implementations of
+     *           subinterface {@link ConcurrentMap} must document
+     *           whether the function is applied once atomically only if the value is not
+     *           present.
      * @since 1.8
      */
     @Override
@@ -654,11 +661,11 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      * method may be of use when combining multiple mapped values for a key.
      * For example, to either create or append a {@code String msg} to a
      * value mapping:
-     * <p>
-     * <pre> {@code
+     *
+     * <p><pre> {@code
      * map.merge(key, msg, String::concat)
      * }</pre>
-     * <p>
+     *
      * <p>If the function returns {@code null} the mapping is removed.  If the
      * function itself throws an (unchecked) exception, the exception is
      * rethrown, and the current mapping is left unchanged.
@@ -669,7 +676,7 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      *                          is associated with the key, to be associated with the key
      * @param remappingFunction the function to recompute a value if present
      * @return the new value associated with the specified key, or null if no
-     * value is associated with the key
+     *         value is associated with the key
      * @throws UnsupportedOperationException if the {@code put} operation
      *                                       is not supported by this map
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
@@ -677,40 +684,39 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      *                                       prevents it from being stored in this map
      *                                       (<a href="{@docRoot}/java/util/Collection.html#optional-restrictions">optional</a>)
      * @throws NullPointerException          if the specified key is null and this map
-     *                                       does not support null keys or the value or remappingFunction is
-     *                                       null
+     *                                       does not support null keys or the value or
+     *                                       remappingFunction is null
      * @implSpec The default implementation is equivalent to performing the following
-     * steps for this {@code map}, then returning the current value or
-     * {@code null} if absent:
-     * <p>
-     * <pre> {@code
-     * V oldValue = map.get(key);
-     * V newValue = (oldValue == null) ? value :
-     *              remappingFunction.apply(oldValue, value);
-     * if (newValue == null)
-     *     map.remove(key);
-     * else
-     *     map.put(key, newValue);
-     * }</pre>
-     * <p>
-     * <p>The default implementation makes no guarantees about synchronization
-     * or atomicity properties of this method. Any implementation providing
-     * atomicity guarantees must override this method and document its
-     * concurrency properties. In particular, all implementations of
-     * subinterface {@link ConcurrentMap} must document
-     * whether the function is applied once atomically only if the value is not
-     * present.
+     *           steps for this {@code map}, then returning the current value or
+     *           {@code null} if absent:
+     *           <pre> {@code
+     *           V oldValue = map.get(key);
+     *           V newValue = (oldValue == null) ? value : remappingFunction.apply(oldValue, value);
+     *           if (newValue == null)
+     *             map.remove(key);
+     *           else
+     *             map.put(key, newValue);
+     *           }</pre>
+     *
+     *           The default implementation makes no guarantees about synchronization
+     *           or atomicity properties of this method. Any implementation providing
+     *           atomicity guarantees must override this method and document its
+     *           concurrency properties. In particular, all implementations of
+     *           subinterface {@link ConcurrentMap} must document
+     *           whether the function is applied once atomically only if the value is not
+     *           present.
      * @since 1.8
      */
     @Override
     @TransactionalMethod
-    public V merge(K key, V value, BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
+    public V merge(K key, V value, BiFunction<? super V, ? super V, ? extends V>
+            remappingFunction) {
         Objects.requireNonNull(remappingFunction);
         Objects.requireNonNull(value);
         V oldValue = get(key);
         V newValue = (oldValue == null) ? value :
                 remappingFunction.apply(oldValue, value);
-        if(newValue == null) {
+        if (newValue == null) {
             remove(key);
         } else {
             put(key, newValue);

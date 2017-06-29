@@ -2,11 +2,11 @@ package org.corfudb.runtime.collections;
 
 import org.corfudb.annotations.Accessor;
 
-import java.util.HashMap;
-
 /**
  * Created by mwei on 11/12/16.
  */
+@Deprecated // TODO: Add replacement method that conforms to style
+@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
 public interface ISMRObject {
 
     /**

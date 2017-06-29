@@ -1,15 +1,18 @@
 package org.corfudb.protocols.wireprotocol;
 
 import com.google.common.reflect.TypeToken;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import org.corfudb.runtime.view.Layout;
+
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+import org.corfudb.runtime.view.Layout;
 
 /**
  * Created by mwei on 8/8/16.
@@ -27,6 +30,7 @@ public enum CorfuMsgType {
     NACK(6, TypeToken.of(CorfuMsg.class)),
     VERSION_REQUEST(7, TypeToken.of(CorfuMsg.class), true),
     VERSION_RESPONSE(8, new TypeToken<JSONPayloadMsg<VersionInfo>>() {}, true),
+    NOT_READY(9, TypeToken.of(CorfuMsg.class), true),
 
     // Layout Messages
     LAYOUT_REQUEST(10, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
@@ -43,7 +47,7 @@ public enum CorfuMsgType {
     // Sequencer Messages
     TOKEN_REQ(20, new TypeToken<CorfuPayloadMsg<TokenRequest>>(){}),
     TOKEN_RES(21, new TypeToken<CorfuPayloadMsg<TokenResponse>>(){}),
-    RESET_SEQUENCER(22, new TypeToken<CorfuPayloadMsg<Long>>(){}),
+    RESET_SEQUENCER(22, new TypeToken<CorfuPayloadMsg<SequencerTailsRecoveryMsg>>(){}),
 
     // Logging Unit Messages
     WRITE(30, new TypeToken<CorfuPayloadMsg<WriteRequest>>() {}),
@@ -56,6 +60,8 @@ public enum CorfuMsgType {
     TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
     COMPACT_REQUEST(43, TypeToken.of(CorfuMsg.class), true),
     FLUSH_CACHE(44, TypeToken.of(CorfuMsg.class), true),
+    TRIM_MARK_REQUEST(45, TypeToken.of(CorfuMsg.class), true),
+    TRIM_MARK_RESPONSE(46, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
 
     WRITE_OK(50, TypeToken.of(CorfuMsg.class)),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),
@@ -101,7 +107,7 @@ public enum CorfuMsgType {
         T construct();
     }
 
-    @Getter(lazy=true)
+    @Getter(lazy = true)
     private final MessageConstructor<? extends CorfuMsg> constructor = resolveConstructor();
 
     public byte asByte() {
@@ -120,8 +126,9 @@ public enum CorfuMsgType {
             MethodHandle mh = lookup.unreflectConstructor(t);
             MethodType mt = MethodType.methodType(Object.class);
             try {
-                return (MessageConstructor<? extends CorfuMsg>) LambdaMetafactory.metafactory(lookup,
-                        "construct", MethodType.methodType(MessageConstructor.class),
+                return (MessageConstructor<? extends CorfuMsg>) LambdaMetafactory.metafactory(
+                        lookup, "construct",
+                        MethodType.methodType(MessageConstructor.class),
                         mt, mh, mh.type())
                         .getTarget().invokeExact();
             } catch (Throwable th) {
