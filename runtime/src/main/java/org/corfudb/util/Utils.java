@@ -39,7 +39,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.recovery.FastSmrMapsLoader;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuSmr;
 import org.corfudb.runtime.view.ObjectsView;
 
 
