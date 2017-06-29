@@ -305,6 +305,7 @@ public class LogReader {
 
     final LogEntryExtended processRecord() throws IOException {
         ByteBuffer commaBuffer = ByteBuffer.allocate(2);
+        int bytesRead = fileChannelIn.read(commaBuffer);
         commaBuffer.flip();
         Short delim = commaBuffer.getShort();
         commaBuffer.flip();
@@ -312,7 +313,6 @@ public class LogReader {
             System.out.println("Incorrect delimiter");
         }
         ByteBuffer mdBuffer = ByteBuffer.allocate(metadataSize);
-        int bytesRead = fileChannelIn.read(commaBuffer);
         bytesRead += fileChannelIn.read(mdBuffer);
         mdBuffer.flip();
         Metadata md = Metadata.parseFrom(mdBuffer.array());
