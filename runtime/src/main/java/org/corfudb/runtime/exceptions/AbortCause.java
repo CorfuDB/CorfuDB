@@ -12,5 +12,6 @@ public enum AbortCause {
     USER,
     NETWORK,
     TRIM, /** Aborted because an access to this snapshot resulted in a trim exception. */
+    UNSUPPORTED,
     UNDEFINED;
 }
