@@ -30,11 +30,8 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
 
     Class<T> type;
 
-    @Setter
-    @SuppressWarnings("checkstyle:abbreviation")
     UUID streamID;
 
-    @Setter
     String streamName;
 
     @Setter
@@ -54,6 +51,13 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
 
     @Override
     public ObjectBuilder<T> setStreamId(UUID streamId) {
+        this.streamID = streamId;
+        return this;
+    }
+
+    @SuppressWarnings("checkstyle:abbreviation")
+    @Deprecated
+    public ObjectBuilder<T> setStreamID(UUID streamId) {
         this.streamID = streamId;
         return this;
     }
