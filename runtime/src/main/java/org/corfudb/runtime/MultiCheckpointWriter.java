@@ -88,7 +88,7 @@ public class MultiCheckpointWriter {
                         checkpointLogAddresses.addAll(addresses);
                         break;
                     } catch (TransactionAbortedException ae) {
-                        log.trace("appendCheckpoints: checkpoint map {} "
+                        log.warn("appendCheckpoints: checkpoint map {} "
                                         + "TransactionAbortedException, retry",
                                 Utils.toReadableID(map.getCorfuStreamId()));
                         // Don't break!

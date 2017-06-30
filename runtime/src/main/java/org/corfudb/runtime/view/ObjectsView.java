@@ -183,10 +183,11 @@ public class ObjectsView extends AbstractView {
             try {
                 return TransactionalContext.getCurrentContext().commitTransaction();
             } catch (TransactionAbortedException e) {
+                log.warn("TXCommit[{}] Exception {}", context, e);
                 TransactionalContext.getCurrentContext().abortTransaction(e);
                 throw e;
             } catch (Exception e) {
-                log.trace("TXCommit[{}] Exception {}", context, e);
+                log.warn("TXCommit[{}] Exception {}", context, e);
                 AbortCause abortCause;
 
                 if (e instanceof NetworkException) {

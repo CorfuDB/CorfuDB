@@ -161,7 +161,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 return TransactionalContext.getCurrentContext()
                         .access(this, accessMethod, conflictObject);
             } catch (Exception e) {
-                log.debug("Access[{}] Exception: {}", this, e);
+                log.warn("Access[{}] Exception: {}", this, e);
                 this.abortTransaction(e);
             }
         }
@@ -180,7 +180,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                     o -> o.syncObjectUnsafe(timestamp),
                     o -> accessMethod.access(o));
         } catch (TrimmedException te) {
-            log.debug("Access[{}] Encountered Trim, reset and retry", this);
+            log.warn("Access[{}] Encountered Trim, reset and retry", this);
             // We encountered a TRIM during sync, reset the object
             underlyingObject.update(o -> {
                 o.resetUnsafe();
@@ -213,7 +213,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 return TransactionalContext.getCurrentContext()
                         .logUpdate(this, entry, conflictObject);
             } catch (Exception e) {
-                log.debug("Update[{}] Exception: {}", this, e);
+                log.warn("Update[{}] Exception: {}", this, e);
                 this.abortTransaction(e);
             }
         }
@@ -265,7 +265,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 return (R) TransactionalContext.getCurrentContext()
                         .getUpcallResult(this, timestamp, conflictObject);
             } catch (Exception e) {
-                log.debug("UpcallResult[{}] Exception: {}", this, e);
+                log.warn("UpcallResult[{}] Exception: {}", this, e);
                 this.abortTransaction(e);
             }
         }
@@ -344,6 +344,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 // retrying a nested transaction indefinitely (this could go on forever).
                 // If this is part of an outer transaction abort and remove from context.
                 // Re-throw exception to client.
+                log.warn("TXExecute[{}] Abort with exception {}", this, e);
                 if (e.getAbortCause() == AbortCause.NETWORK) {
                     if (TransactionalContext.getCurrentContext() != null) {
                         TransactionalContext.getCurrentContext().abortTransaction(e);
@@ -367,7 +368,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 sleepTime = min(sleepTime * 2L, maxSleepTime);
                 retries++;
             } catch (Exception e) {
-                log.debug("TXExecute[{}] Abort with Exception: {}", this, e);
+                log.warn("TXExecute[{}] Abort with Exception: {}", this, e);
                 this.abortTransaction(e);
             }
         }

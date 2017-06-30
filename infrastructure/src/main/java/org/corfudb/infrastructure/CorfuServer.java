@@ -267,6 +267,8 @@ public class CorfuServer {
 
         // Create a common Server Context for all servers to access.
         serverContext = new ServerContext(opts, router);
+        // All servers wait for startup trigger from Management Server.
+        serverContext.setReady(false);
 
         // Add each role to the router.
         addSequencer();
