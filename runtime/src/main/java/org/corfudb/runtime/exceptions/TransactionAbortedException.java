@@ -17,6 +17,9 @@ public class TransactionAbortedException extends RuntimeException {
     @Getter
     Long conflictKey;
 
+    @Getter
+    Throwable cause;
+
     /**
      * Constructor.
      * @param txResolutionInfo transaction information
@@ -26,6 +29,12 @@ public class TransactionAbortedException extends RuntimeException {
     public TransactionAbortedException(
             TxResolutionInfo txResolutionInfo,
             Long conflictKey, AbortCause abortCause) {
+        this(txResolutionInfo, conflictKey, abortCause, null);
+    }
+
+    public TransactionAbortedException(
+            TxResolutionInfo txResolutionInfo,
+            Long conflictKey, AbortCause abortCause, Throwable cause) {
         super("TX ABORT "
                 + " | Snapshot Time = " + txResolutionInfo.getSnapshotTimestamp()
                 + " | Transaction ID = " + txResolutionInfo.getTXid()
@@ -34,6 +43,8 @@ public class TransactionAbortedException extends RuntimeException {
         this.txResolutionInfo = txResolutionInfo;
         this.conflictKey = conflictKey;
         this.abortCause = abortCause;
+        this.cause = cause;
+
     }
 
 }

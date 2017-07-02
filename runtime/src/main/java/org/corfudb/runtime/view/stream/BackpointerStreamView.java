@@ -200,7 +200,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // range, terminate.
             if (queue.contains(currentAddress)) {
                 log.trace("FollowBackpointers[{}] Terminate due to {} "
-                        + "already in queue", currentAddress);
+                        + "already in queue", this, currentAddress);
                 return entryAdded;
             }
             backpointerCount++;
@@ -210,6 +210,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             try {
                 d = read(currentAddress);
             } catch (TrimmedException e) {
+                log.warn("FollowBackpointers[{}] Trimmed Exception {}", this, e);
                 if (options.ignoreTrimmed) {
                     return entryAdded;
                 } else {
@@ -336,7 +337,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             } catch (TrimmedException te) {
                 // If we reached a trim and didn't hit a checkpoint, this might be okay,
                 // if the stream was created recently and no checkpoint exists yet.
-                log.trace("Read_Fill_Queue[{}] Trim encountered and no checkpoint detected.", this);
+                log.warn("Read_Fill_Queue[{}] Trim encountered and no checkpoint detected.", this);
             }
         }
 

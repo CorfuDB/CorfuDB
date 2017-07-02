@@ -121,7 +121,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                                         new TransactionAbortedException(
                                                 new TxResolutionInfo(getTransactionID(),
                                                         getSnapshotTimestamp()), null,
-                                                AbortCause.TRIM);
+                                                AbortCause.TRIM, te);
                                 abortTransaction(tae);
                                 throw tae;
                             }
