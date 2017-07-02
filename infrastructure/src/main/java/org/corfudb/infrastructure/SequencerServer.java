@@ -491,6 +491,7 @@ public class SequencerServer extends AbstractServer {
 
         // update the cache of conflict parameters
         if (req.getTxnResolution() != null) {
+            /**
             req.getTxnResolution().getPoisonedStreams()
                     .stream()
                     .forEach(id -> {
@@ -500,7 +501,7 @@ public class SequencerServer extends AbstractServer {
                                                 k -> new SequencerStreamInfo());
                         streamInfo.minPoisoned = newTail - 1;
                         streamInfo.conflictMap.clear();
-                    });
+                    });*/
             req.getTxnResolution().getWriteConflictParams().entrySet()
                     .stream()
                     // for each entry
