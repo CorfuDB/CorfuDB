@@ -52,7 +52,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .getReadSetConflicts().values().stream()
                 .flatMap(x -> x.stream())
                 .collect(Collectors.toList()))
-                .contains(Long.valueOf(TEST_0.hashCode()));
+                .contains(Integer.valueOf(TEST_0.hashCode()));
 
         // in optimistic mode, assert that the conflict set does NOT contain TEST_2, TEST_4
         assertThat(TransactionalContext.getCurrentContext()
@@ -60,7 +60,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .getReadSetConflicts().values().stream()
                 .flatMap(x -> x.stream())
                 .collect(Collectors.toList()))
-                .doesNotContain(Long.valueOf(TEST_3), Long.valueOf(TEST_4));
+                .doesNotContain(Integer.valueOf(TEST_3), Integer.valueOf(TEST_4));
 
         getRuntime().getObjectsView().TXAbort();
     }
@@ -311,48 +311,5 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         // of the most recent write.
         assertThat(getMap())
                 .containsEntry("k", "v2");
-    }
-
-    @Test
-    public void checkClearConflictsAll() {
-        Map<String, String> map = getDefaultRuntime().getObjectsView()
-                .build()
-                .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
-                .open();
-
-        // Holds the value t1 will read from "a"
-        final AtomicReference<String> valueHolder = new AtomicReference<>();
-
-        // Initially, map is "a", "a"
-        // Insert this in a transaction so a conflict parameter is created.
-        t1(this::TXBegin);
-        map.put("a", "a");
-        t1(this::TXEnd);
-
-        // Begin a TX on thread 1, read "a"
-        t1(this::TXBegin);
-        t1(() -> map.get("a"));
-
-        // Clear the map
-        t2(this::TXBegin);
-        t2(() -> map.clear());
-        t2(this::TXEnd);
-
-        // Save the value of "a" into valueHolder
-        t1(() -> map.get("a"))
-                .assertResult()
-                .isEqualTo("a");
-        t1(() -> valueHolder.set(map.get("a")));
-
-        // Write valueHolder (snapshot of "a") into "c"
-        t1(() -> map.put("c", valueHolder.get()));
-
-        // thread 1's TX should abort, since "a" is no longer "a"
-        // as the map has been reset,
-        // so writing "a" into "c" should be incorrect.
-        t1(this::TXEnd)
-                .assertThrows()
-                .isInstanceOf(TransactionAbortedException.class);
     }
 }
