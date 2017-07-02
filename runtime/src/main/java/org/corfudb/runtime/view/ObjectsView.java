@@ -208,7 +208,7 @@ public class ObjectsView extends AbstractView {
                 TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
                         snapshotTimestamp);
                 TransactionAbortedException tae = new TransactionAbortedException(txInfo, null,
-                        abortCause);
+                        abortCause, e);
                 context.abortTransaction(tae);
                 throw tae;
             } finally {

@@ -161,7 +161,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 return TransactionalContext.getCurrentContext()
                         .access(this, accessMethod, conflictObject);
             } catch (Exception e) {
-                log.warn("Access[{}] Exception: {}", this, e);
+                log.error("Access[{}] Exception: {}", this, e);
                 this.abortTransaction(e);
             }
         }
@@ -445,26 +445,35 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     private void abortTransaction(Exception e) {
         long snapshotTimestamp;
         AbortCause abortCause;
+        TransactionAbortedException tae;
 
         AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
 
-        if (e instanceof NetworkException) {
-            // If a 'NetworkException' was received within a transactional context, an attempt to
-            // 'getSnapshotTimestamp' will also fail (as it requests it to the Sequencer).
-            // A new NetworkException would prevent the earliest to be propagated and encapsulated
-            // as a TransactionAbortedException.
-            snapshotTimestamp = -1L;
-            abortCause = AbortCause.NETWORK;
+        if (e instanceof TransactionAbortedException) {
+            tae = (TransactionAbortedException) e;
         } else {
-            snapshotTimestamp = context.getSnapshotTimestamp();
-            abortCause = AbortCause.UNDEFINED;
+            if (e instanceof NetworkException) {
+                // If a 'NetworkException' was received within a transactional context, an attempt to
+                // 'getSnapshotTimestamp' will also fail (as it requests it to the Sequencer).
+                // A new NetworkException would prevent the earliest to be propagated and encapsulated
+                // as a TransactionAbortedException.
+                snapshotTimestamp = -1L;
+                abortCause = AbortCause.NETWORK;
+            } else if (e instanceof UnsupportedOperationException) {
+                snapshotTimestamp = context.getSnapshotTimestamp();
+                abortCause = AbortCause.UNSUPPORTED;
+            } else {
+                log.error("abortTransaction[{}] Abort Transaction with Exception {}", this, e);
+                snapshotTimestamp = context.getSnapshotTimestamp();
+                abortCause = AbortCause.UNDEFINED;
+            }
+
+            TxResolutionInfo txInfo = new TxResolutionInfo(
+                    context.getTransactionID(), snapshotTimestamp);
+            tae = new TransactionAbortedException(txInfo, null, abortCause, e);
+            context.abortTransaction(tae);
         }
 
-        TxResolutionInfo txInfo =
-                new TxResolutionInfo(context.getTransactionID(), snapshotTimestamp);
-        TransactionAbortedException tae =
-                new TransactionAbortedException(txInfo, null, abortCause);
-        context.abortTransaction(tae);
         TransactionalContext.removeContext();
         throw tae;
     }

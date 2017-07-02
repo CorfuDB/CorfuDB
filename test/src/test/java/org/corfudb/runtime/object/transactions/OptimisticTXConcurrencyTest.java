@@ -1,13 +1,13 @@
 package org.corfudb.runtime.object.transactions;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.collections.SMRMap;
-import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.corfudb.runtime.collections.SMRMap;
+import org.junit.Test;
 
 /**
  * Created by dalia on 12/8/16.
