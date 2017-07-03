@@ -38,7 +38,7 @@ case "$1" in
     start)
         log_daemon_msg "Starting $ROLENAME on port $PORT"
         if start-stop-daemon --start --quiet  --background --make-pidfile --oknodo --pidfile $PIDFILE \
-        --startas /bin/bash -- -c "exec $PREFIX/corfu_server $OPTS > $LOGFILE 2>&1"; then
+        --startas /bin/bash -- -c "exec $PREFIX/corfu_server $OPTS >> $LOGFILE 2>&1"; then
             log_end_msg 0
         else
             log_end_msg 1
@@ -63,7 +63,7 @@ case "$1" in
         case $RET in
             0)
                 if start-stop-daemon --start --quiet  --background --make-pidfile --oknodo --pidfile $PIDFILE \
-                --startas /bin/bash -- -c "exec $PREFIX/corfu_server $OPTS > $LOGFILE 2>&1"; then
+                --startas /bin/bash -- -c "exec $PREFIX/corfu_server $OPTS >> $LOGFILE 2>&1"; then
                     log_end_msg 0
                 else
                     log_end_msg 1

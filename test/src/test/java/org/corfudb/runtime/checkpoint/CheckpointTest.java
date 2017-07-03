@@ -3,6 +3,7 @@ package org.corfudb.runtime.checkpoint;
 import lombok.extern.slf4j.Slf4j;
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
+import org.assertj.core.api.ThrowableAssert;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
@@ -16,9 +17,11 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by dmalkhi on 5/25/17.
@@ -80,13 +83,16 @@ public class CheckpointTest extends AbstractObjectTest {
      * checkpoint the maps, and then trim the log
      */
     void mapCkpointAndTrim() throws Exception {
+        long checkpointAddress = -1;
+        long lastCheckpointAddress = -1;
         CorfuRuntime currentRuntime = getMyRuntime();
+
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
             try {
                 MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
                 mcw1.addMap((SMRMap) m2A);
                 mcw1.addMap((SMRMap) m2B);
-                long checkpointAddress = mcw1.appendCheckpoints(currentRuntime, author);
+                checkpointAddress = mcw1.appendCheckpoints(currentRuntime, author);
 
                 try {
                     Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
@@ -98,10 +104,17 @@ public class CheckpointTest extends AbstractObjectTest {
                 currentRuntime.getAddressSpaceView().gc();
                 currentRuntime.getAddressSpaceView().invalidateServerCaches();
                 currentRuntime.getAddressSpaceView().invalidateClientCache();
+                lastCheckpointAddress = checkpointAddress;
             } catch (TrimmedException te) {
                 // shouldn't happen
                 te.printStackTrace();
                 throw te;
+            } catch (ExecutionException ee) {
+                // We are the only thread performing trimming, therefore any
+                // prior trim must have been by our own action.  We assume
+                // that we don't go backward, so checking for equality will
+                // catch violations of that assumption.
+                assertThat(checkpointAddress).isEqualTo(lastCheckpointAddress);
             }
 
         }
@@ -490,5 +503,22 @@ public class CheckpointTest extends AbstractObjectTest {
         });
     }
 
-}
+    @Test
+    public void prefixTrimTwiceAtSameAddress() throws Exception {
+        final int mapSize = 5;
+        ThrowableAssert.ThrowingCallable trim = () -> getMyRuntime().getAddressSpaceView().prefixTrim(2);
 
+        populateMaps(mapSize);
+        try {
+            trim.call();
+        } catch (Throwable t) {
+            throw new Exception("First trim call shouldn't fail");
+        }
+        // Trim again in exactly the same place should fail
+        assertThatThrownBy(trim).hasCauseInstanceOf(ExecutionException.class);
+
+        // GC twice at the same place should be fine.
+        getMyRuntime().getAddressSpaceView().gc();
+        getMyRuntime().getAddressSpaceView().gc();
+    }
+}
