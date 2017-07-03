@@ -222,7 +222,7 @@ public class SequencerServer extends AbstractServer {
         final long txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
 
         if (txSnapshotTimestamp < globalLogStart.get() - 1) {
-            log.debug("ABORT[{}] snapshot-ts[{}] failover-ts[{}]",
+            log.debug("txnCanCommit ABORT[{}] snapshot-ts[{}] failover-ts[{}]",
                     txSnapshotTimestamp, globalLogStart.get());
             return TokenType.TX_ABORT_NEWSEQ;
         }
@@ -248,25 +248,28 @@ public class SequencerServer extends AbstractServer {
                     Long vWithPoisoning = streamInfo == null ? null :
                             streamInfo.getLatestUpdate(conflictParam, true);
 
-                    log.trace("Commit-ck[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
-
-                    if (vWithPoisoning != null && vWithPoisoning > txSnapshotTimestamp) {
-                        log.debug("ABORT[{}] due to poisoning conflict (disabled)", txInfo);
-                    }
+                    log.trace("txnCanCommit Commit-ck[{}] conflict-key[{}](ts={})",
+                            txInfo, conflictParam, v);
 
                     if (v != null && v > txSnapshotTimestamp) {
-                        log.debug("ABORT[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
+                        log.debug("txnCanCommit ABORT[{}] conflict-key[{}] (ts={})", txInfo,
+                                conflictParam, v);
                         conflictKey.set(conflictParam);
                         response.set(TokenType.TX_ABORT_CONFLICT);
                     }
 
                     if (v == null && maxConflictWildcard > txSnapshotTimestamp) {
-                        log.warn("ABORT[{}] conflict-key[{}](WILDCARD ts={})", txInfo,
-                                conflictParam,
-                                maxConflictWildcard);
+                        log.warn("txnCanCommit ABORT[{}] conflict-key[{}] (WILDCARD ts={})",
+                                txInfo, conflictParam, maxConflictWildcard);
                         conflictKey.set(conflictParam);
                         response.set(TokenType.TX_ABORT_CONFLICT);
                     }
+
+                    if (response.get().equals(TokenType.NORMAL) &&
+                            vWithPoisoning != null && vWithPoisoning > txSnapshotTimestamp) {
+                        log.debug("txnCanCommit poisoned ABORT[{}] currently disabled)", txInfo);
+                    }
+
                 });
             } else { // otherwise, check for conflict based on streams updates
                 UUID streamId = entry.getKey();
@@ -275,7 +278,7 @@ public class SequencerServer extends AbstractServer {
                         return null;
                     }
                     if (v > txSnapshotTimestamp) {
-                        log.debug("ABORT[{}] conflict-stream[{}](ts={})",
+                        log.debug("txnCanCommit ABORT[{}] conflict-stream[{}] (ts={})",
                                 txInfo, Utils.toReadableID(streamId), v);
                         response.set(TokenType.TX_ABORT_CONFLICT);
                     }
@@ -300,11 +303,6 @@ public class SequencerServer extends AbstractServer {
     public void handleTokenQuery(CorfuPayloadMsg<TokenRequest> msg,
                                  ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
-
-        // sanity backward-compatibility assertion; TODO: remove
-        if (req.getStreams().size() > 1) {
-            log.error("TOKEN-QUERY[{}]", req.getStreams());
-        }
 
         long maxStreamGlobalTail = Address.NON_EXIST;
 
@@ -502,7 +500,6 @@ public class SequencerServer extends AbstractServer {
 
         // update the cache of conflict parameters
         if (req.getTxnResolution() != null) {
-            /**
             req.getTxnResolution().getPoisonedStreams()
                     .stream()
                     .forEach(id -> {
@@ -511,8 +508,10 @@ public class SequencerServer extends AbstractServer {
                                         .computeIfAbsent(id,
                                                 k -> new SequencerStreamInfo());
                         streamInfo.minPoisoned = newTail - 1;
-                        streamInfo.conflictMap.clear();
-                    });*/
+                                /**
+                                 streamInfo.conflictMap.clear();
+                                 */
+                    });
             req.getTxnResolution().getWriteConflictParams().entrySet()
                     .stream()
                     // for each entry
@@ -531,7 +530,7 @@ public class SequencerServer extends AbstractServer {
                             }));
         }
 
-        log.trace("token {} backpointers {}",
+        log.trace("handleAllocation token {} backpointers {}",
                 currentTail, backPointerMap.build());
         // return the token response with the new global tail
         // and the streams backpointers
