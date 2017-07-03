@@ -385,8 +385,20 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         final long endSegment = 25;
         long trimAddress = endSegment * StreamLogFiles.RECORDS_PER_LOG_FILE + 1;
+
+        // Get references to the segments that will be trimmed
+        Set<StreamLogFiles.SegmentHandle> trimmedHandles = new HashSet();
+        for (StreamLogFiles.SegmentHandle sh : ((StreamLogFiles)log).getSegmentHandles()) {
+            if (sh.getSegment() < endSegment) {
+                trimmedHandles.add(sh);
+            }
+        }
+
         log.prefixTrim(trimAddress);
         log.compact();
+
+        // Verify that the segments have been removed
+        assertThat(((StreamLogFiles)log).getSegmentHandles().size()).isEqualTo((int) endSegment);
 
         // Verify that first 25 segments have been deleted
         String[] afterTrimFiles = logs.list();
@@ -415,6 +427,13 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             if(logData.isTrimmed()) {
                 trimmedExceptions++;
             }
+        }
+
+        // Verify that the trimmed segment channels are closed
+        for (StreamLogFiles.SegmentHandle sh : trimmedHandles) {
+            assertThat(sh.getLogChannel().isOpen()).isFalse();
+            assertThat(sh.getPendingTrimChannel().isOpen()).isFalse();
+            assertThat(sh.getTrimmedChannel().isOpen()).isFalse();
         }
 
         // Address 0 is not reflected in trimAddress
