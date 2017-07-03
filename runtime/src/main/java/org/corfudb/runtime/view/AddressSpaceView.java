@@ -5,11 +5,12 @@ import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -26,10 +27,7 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
-
-import java.util.Comparator;
-
-
+import org.corfudb.util.LogicalTicker;
 
 /**
  * A view of the address space implemented by Corfu.
@@ -40,13 +38,19 @@ import java.util.Comparator;
 public class AddressSpaceView extends AbstractView {
 
     /**
+     * Log address where this client has witnessed a TrimmedException,
+     * which we assume was due to an earlier prefixTrim() operation.
+     */
+    private AtomicLong trimmedWitnessed = new AtomicLong(-1);
+
+    /**
      * A cache for read results.
      */
     final LoadingCache<Long, ILogData> readCache = Caffeine.<Long, ILogData>newBuilder()
             .<Long, ILogData>weigher((k, v) -> v.getSizeEstimate())
             .maximumWeight(runtime.getMaxCacheSize())
-            .expireAfterAccess(runtime.getCacheExpiryTime(), TimeUnit.SECONDS)
-            .expireAfterWrite(runtime.getCacheExpiryTime(), TimeUnit.SECONDS)
+            .expireAfter(LogicalTicker.caffeineLogicalExpiryPolicy())
+            .ticker(new LogicalTicker(trimmedWitnessed))
             .recordStats()
             .build(new CacheLoader<Long, ILogData>() {
                 @Override
@@ -148,12 +152,22 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which be cached.
      */
     public @Nonnull ILogData read(long address) {
+        if (address <= trimmedWitnessed.get()) {
+            throw new TrimmedException();
+        }
         if (!runtime.isCacheDisabled()) {
             ILogData data = readCache.get(address);
             if (data == null || data.getType() == DataType.EMPTY) {
                 throw new RuntimeException("Unexpected return of empty data at address "
                         + address + " on read");
             } else if (data.isTrimmed()) {
+                if (address > trimmedWitnessed.get()) {
+                    synchronized (trimmedWitnessed) {
+                        if (address > trimmedWitnessed.get()) {
+                            trimmedWitnessed.set(address);
+                        }
+                    }
+                }
                 throw new TrimmedException();
             }
             return data;
@@ -285,7 +299,7 @@ public class AddressSpaceView extends AbstractView {
         //turn the addresses into Set for now to satisfy signature requirement down the line
         Set<Long> readAddresses = new TreeSet<>();
         Iterator<Long> iterator = addresses.iterator();
-        while(iterator.hasNext()){
+        while (iterator.hasNext()) {
             readAddresses.add(iterator.next());
         }
 

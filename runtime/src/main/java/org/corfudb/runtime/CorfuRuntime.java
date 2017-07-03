@@ -122,6 +122,7 @@ public class CorfuRuntime {
     /**
      * Sets expireAfterAccess and expireAfterWrite in seconds.
      */
+    @Deprecated
     @Getter
     @Setter
     public long cacheExpiryTime = Long.MAX_VALUE;

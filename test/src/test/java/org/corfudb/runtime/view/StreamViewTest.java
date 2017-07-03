@@ -382,4 +382,31 @@ public class StreamViewTest extends AbstractViewTest {
         assertThatThrownBy(() -> sv.next())
                 .isInstanceOf(TrimmedException.class);
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void trimCausesCacheEviction()
+            throws Exception {
+        UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
+        UUID streamB = UUID.nameUUIDFromBytes("stream B".getBytes());
+        byte[] testPayload = "hello world".getBytes();
+
+        IStreamView svA = r.getStreamsView().get(streamA);
+        IStreamView svB = r.getStreamsView().get(streamB);
+
+        svA.append(testPayload);
+        svB.append(testPayload);
+
+        getRuntime().getAddressSpaceView().prefixTrim(1);
+        getRuntime().getAddressSpaceView().invalidateClientCache();
+        getRuntime().getAddressSpaceView().invalidateServerCaches();
+
+        // First witness of TrimmedException by AddressSpaceView::read()
+        assertThatThrownBy(() -> svB.next().getPayload(getRuntime()))
+                .isInstanceOf(TrimmedException.class);
+        // Test short-cut in AddressSpaceView::read() by trying
+        // to read an earlier log address than svB's attempt.
+        assertThatThrownBy(() -> svA.next().getPayload(getRuntime()))
+                .isInstanceOf(TrimmedException.class);
+    }
 }

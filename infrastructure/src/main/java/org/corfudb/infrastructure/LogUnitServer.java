@@ -15,6 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -36,9 +37,9 @@ import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
+import org.corfudb.util.LogicalTicker;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
-
 
 /**
  * Created by mwei on 12/10/15.
@@ -103,6 +104,12 @@ public class LogUnitServer extends AbstractServer {
 
     private final ServerContext serverContext;
 
+    /**
+     * Log address where this server has implemented
+     * a prefixTrim() operation.
+     */
+    private AtomicLong prefixTrimAddress = new AtomicLong(-1);
+
     @Override
     public boolean isServerReady() {
         return serverContext.isReady();
@@ -139,6 +146,8 @@ public class LogUnitServer extends AbstractServer {
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
                 .writer(batchWriter)
+                .expireAfter(LogicalTicker.caffeineLogicalExpiryPolicy())
+                .ticker(new LogicalTicker(prefixTrimAddress))
                 .recordStats()
                 .build(this::handleRetrieval);
 
@@ -162,8 +171,10 @@ public class LogUnitServer extends AbstractServer {
      * Service an incoming request to retrieve the starting address of this logging unit.
      */
     @ServerHandler(type = CorfuMsgType.TRIM_MARK_REQUEST, opTimer = metricsPrefix + "headReq")
-    public void handleHeadRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
-        r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(streamLog.getTrimMark()));
+    public void handleHeadRequest(CorfuMsg msg, ChannelHandlerContext ctx,
+                                  IServerRouter r, boolean isMetricsEnabled) {
+        r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE
+                .payloadMsg(streamLog.getTrimMark()));
     }
 
     /**
@@ -244,7 +255,15 @@ public class LogUnitServer extends AbstractServer {
                             IServerRouter r,
                             boolean isMetricsEnabled) {
         try {
-            batchWriter.prefixTrim(msg.getPayload().getAddress());
+            long address = msg.getPayload().getAddress();
+            batchWriter.prefixTrim(address);
+            if (address > prefixTrimAddress.get()) {
+                synchronized (prefixTrimAddress) {
+                    if (address > prefixTrimAddress.get()) {
+                        prefixTrimAddress.set(address);
+                    }
+                }
+            }
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         } catch (TrimmedException ex) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
