@@ -23,7 +23,7 @@ class WriteSetInfo {
 
     // fine-grained conflict information regarding mutated-objects;
     // captures values passed using @conflict annotations in @corfuObject
-    Map<UUID, Set<Long>> writeSetConflicts = new HashMap<>();
+    Map<UUID, Set<Integer>> writeSetConflicts = new HashMap<>();
 
     // the set of mutated objects
     Set<UUID> affectedStreams = new HashSet<>();
@@ -36,15 +36,12 @@ class WriteSetInfo {
     // set containing NULL), so the conflict set must be ignored.
     Set<UUID> poisonedStreams = new HashSet<>();
 
-    Set<Long> getConflictSet(UUID streamId) {
+    Set<Integer> getConflictSet(UUID streamId) {
         return getWriteSetConflicts().computeIfAbsent(streamId, u -> {
             return new HashSet<>();
         });
     }
 
-    public void poisonStream(UUID streamId) {
-        poisonedStreams.add(streamId);
-    }
 
     public void mergeInto(WriteSetInfo other) {
         synchronized (getRootContext().getTransactionID()) {
@@ -56,9 +53,6 @@ class WriteSetInfo {
 
             // copy all the writeSet SMR entries
             writeSet.mergeInto(other.getWriteSet());
-
-            // copy the list of poisoned streams
-            poisonedStreams.addAll(other.poisonedStreams);
         }
     }
 
@@ -71,11 +65,9 @@ class WriteSetInfo {
 
             // add all the conflict params to the conflict-params set for this stream
             if (conflictObjects != null) {
-                Set<Long> streamConflicts = getConflictSet(streamId);
+                Set<Integer> streamConflicts = getConflictSet(streamId);
                 Arrays.asList(conflictObjects).stream()
-                        .forEach(V -> streamConflicts.add(Long.valueOf(V.hashCode())));
-            } else {
-                poisonStream(streamId);
+                        .forEach(V -> streamConflicts.add(Integer.valueOf(V.hashCode())));
             }
 
             return writeSet.getSMRUpdates(streamId).size() - 1;
