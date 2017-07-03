@@ -30,14 +30,12 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     Long snapshotTimestamp;
 
     /** A set of poisoned streams, which have a conflict against all updates. */
-    @Getter
-    final Set<UUID> poisonedStreams;
 
     @Getter
-    final Map<UUID, Set<Long>> conflictSet;
+    final Map<UUID, Set<Integer>> conflictSet;
 
     @Getter
-    final Map<UUID, Set<Long>>  writeConflictParams;
+    final Map<UUID, Set<Integer>>  writeConflictParams;
 
     /**
      * Constructor for TxResolutionInfo.
@@ -50,7 +48,6 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
         this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = Collections.emptyMap();
         this.writeConflictParams = Collections.emptyMap();
-        this.poisonedStreams = Collections.emptySet();
     }
 
     /**
@@ -60,16 +57,13 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
      * @param snapshotTimestamp transaction snapshot timestamp
      * @param conflictMap map of conflict parameters, arranged by stream IDs
      * @param writeConflictParams map of write conflict parameters, arranged by stream IDs
-     * @param poisonedStreams set of poisoned streams, which have a conflict against all updates
      */
-    public TxResolutionInfo(UUID txId, long snapshotTimestamp, Map<UUID, Set<Long>>
-            conflictMap, Map<UUID, Set<Long>> writeConflictParams,
-                            Set<UUID> poisonedStreams) {
+    public TxResolutionInfo(UUID txId, long snapshotTimestamp, Map<UUID, Set<Integer>>
+            conflictMap, Map<UUID, Set<Integer>> writeConflictParams) {
         this.TXid = txId;
         this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = conflictMap;
         this.writeConflictParams = writeConflictParams;
-        this.poisonedStreams = poisonedStreams;
     }
 
     /**
@@ -88,26 +82,24 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
 
         // conflictSet
         int numEntries = buf.readInt();
-        ImmutableMap.Builder<UUID, Set<Long>> conflictMapBuilder = new ImmutableMap.Builder<>();
+        ImmutableMap.Builder<UUID, Set<Integer>> conflictMapBuilder = new ImmutableMap.Builder<>();
         for (int i = 0; i < numEntries; i++) {
             UUID k = ICorfuPayload.fromBuffer(buf, UUID.class);
-            Set<Long> v = ICorfuPayload.setFromBuffer(buf, Long.class);
+            Set<Integer> v = ICorfuPayload.setFromBuffer(buf, Integer.class);
             conflictMapBuilder.put(k, v);
         }
         conflictSet = conflictMapBuilder.build();
 
         // writeConflictParams
         numEntries = buf.readInt();
-        ImmutableMap.Builder<UUID, Set<Long>> writeMapBuilder = new ImmutableMap.Builder<>();
+        ImmutableMap.Builder<UUID, Set<Integer>> writeMapBuilder = new ImmutableMap.Builder<>();
         for (int i = 0; i < numEntries; i++) {
             UUID k = ICorfuPayload.fromBuffer(buf, UUID.class);
-            Set<Long> v = ICorfuPayload.setFromBuffer(buf, Long.class);
+            Set<Integer> v = ICorfuPayload.setFromBuffer(buf, Integer.class);
             writeMapBuilder.put(k, v);
         }
 
         writeConflictParams = writeMapBuilder.build();
-
-        poisonedStreams = ICorfuPayload.setFromBuffer(buf, UUID.class);
     }
 
     /**
@@ -133,8 +125,6 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
             ICorfuPayload.serialize(buf, x.getKey());
             ICorfuPayload.serialize(buf, x.getValue());
         });
-
-        ICorfuPayload.serialize(buf, poisonedStreams);
     }
 
     @Override

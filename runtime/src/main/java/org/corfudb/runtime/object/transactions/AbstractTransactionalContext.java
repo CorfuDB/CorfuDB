@@ -247,7 +247,7 @@ public abstract class AbstractTransactionalContext implements
      *
      * @return A set of longs representing all the conflict params
      */
-    Map<UUID, Set<Long>> collectWriteConflictParams() {
+    Map<UUID, Set<Integer>> collectWriteConflictParams() {
         return getWriteSetInfo().getWriteSetConflicts();
     }
 

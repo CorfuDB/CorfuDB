@@ -15,7 +15,7 @@ import lombok.Data;
 @AllArgsConstructor
 public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
 
-    public static long NO_CONFLICT_KEY = Long.MIN_VALUE;
+    public static int NO_CONFLICT_KEY = Integer.MIN_VALUE;
 
     /**
      * Constructor for TokenResponse.
@@ -37,7 +37,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     /**
      * In case there is a conflict, signal to the client which key was responsible for the conflict.
      */
-    final Long conflictKey;
+    final int conflictKey;
 
     /** The current token,
      * or overload with "cause address" in case token request is denied. */
@@ -53,7 +53,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
      */
     public TokenResponse(ByteBuf buf) {
         respType = TokenType.values()[ICorfuPayload.fromBuffer(buf, Byte.class)];
-        conflictKey = ICorfuPayload.fromBuffer(buf, Long.class);
+        conflictKey = ICorfuPayload.fromBuffer(buf, Integer.class);
         Long tokenValue = ICorfuPayload.fromBuffer(buf, Long.class);
         Long epoch = ICorfuPayload.fromBuffer(buf, Long.class);
         token = new Token(tokenValue, epoch);
