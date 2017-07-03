@@ -129,7 +129,7 @@ public class SequencerServer extends AbstractServer {
     @Data
     static class SequencerStreamInfo {
         /** A map of conflict parameters to their most recent updates. */
-        private final Map<Long, Long> conflictMap = new HashMap<>();
+        private final Map<Long, Long> conflictMap = new ConcurrentHashMap<>();
 
         /** The minimum address which has been poisoned.
          *  Any address which has been poisoned has a conflict
@@ -144,9 +144,14 @@ public class SequencerServer extends AbstractServer {
          *                              the conflict parameter.
          */
         Long getLatestUpdate(long conflictParameter) {
+            return getLatestUpdate(conflictParameter, true);
+        }
+
+        Long getLatestUpdate(long conflictParameter, boolean considerPoisoning) {
             Long mapAddress = conflictMap.get(conflictParameter);
             if (mapAddress == null) {
-                if (minPoisoned != Address.NEVER_READ) {
+                if (considerPoisoning &&
+                        minPoisoned != Address.NEVER_READ) {
                     // No conflict info, but the stream was poisoned.
                     return minPoisoned;
                 } else {
@@ -159,7 +164,7 @@ public class SequencerServer extends AbstractServer {
     }
 
     private final Map<UUID, SequencerStreamInfo>
-            conflictToGlobalTailCache = new HashMap<>();
+            conflictToGlobalTailCache = new ConcurrentHashMap<>();
 
     /**
      * Handler for this server.
@@ -239,9 +244,15 @@ public class SequencerServer extends AbstractServer {
                     SequencerStreamInfo streamInfo =
                             conflictToGlobalTailCache.get(entry.getKey());
                     Long v = streamInfo == null ? null :
-                             streamInfo.getLatestUpdate(conflictParam);
+                             streamInfo.getLatestUpdate(conflictParam, false);
+                    Long vWithPoisoning = streamInfo == null ? null :
+                            streamInfo.getLatestUpdate(conflictParam, true);
 
                     log.trace("Commit-ck[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
+
+                    if (vWithPoisoning != null && vWithPoisoning > txSnapshotTimestamp) {
+                        log.debug("ABORT[{}] due to poisoning conflict (disabled)", txInfo);
+                    }
 
                     if (v != null && v > txSnapshotTimestamp) {
                         log.debug("ABORT[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
