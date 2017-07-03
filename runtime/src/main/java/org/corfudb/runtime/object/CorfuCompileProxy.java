@@ -470,7 +470,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
             TxResolutionInfo txInfo = new TxResolutionInfo(
                     context.getTransactionID(), snapshotTimestamp);
-            tae = new TransactionAbortedException(txInfo, null, abortCause, e);
+            tae = new TransactionAbortedException(txInfo, null, abortCause, e,
+                    context.getBuilder().getType());
             context.abortTransaction(tae);
         }
 
