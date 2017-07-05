@@ -17,7 +17,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -199,96 +198,6 @@ public class SequencerServer extends AbstractServer {
     }
 
     /**
-     * If the request submits a timestamp (a global offset) that is less than one of the
-     * global offsets of a streams specified in the request, then abort; otherwise commit.
-     *
-     * @param txInfo      info provided by corfuRuntime for conflict resolultion:
-     *                    - timestamp : the snapshot (global) offset that this TX reads
-     *                    - conflictSet: conflict set of the txn.
-     *                    if any conflict-param (or stream, if empty) in this set has a later
-     *                    timestamp than the snapshot, abort
-     * @param conflictKey is a return parameter that signals to the consumer which key was
-     *                    responsible for unsuccessful allocation af a token.
-     * @return Returns the type of token reponse based on whether the txn commits, or the abort
-     *     cause.
-     */
-    public TokenType txnCanCommit(TxResolutionInfo txInfo, /** Input. */
-                                  AtomicReference<byte[]> conflictKey /** Output. */,
-                                  AtomicReference<Long> conflictAddress /** Output. */) {
-        log.trace("Commit-req[{}]", txInfo);
-        final long txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
-
-        if (txSnapshotTimestamp < trimMark) {
-            log.debug("ABORT[{}] snapshot-ts[{}] trimMark-ts[{}]", txInfo,
-                    txSnapshotTimestamp, trimMark);
-            return TokenType.TX_ABORT_SEQ_TRIM;
-        }
-
-        AtomicReference<TokenType> response = new AtomicReference<>(TokenType.NORMAL);
-
-        for (Map.Entry<UUID, Set<byte[]>> entry : txInfo.getConflictSet().entrySet()) {
-            if (response.get() != TokenType.NORMAL) {
-                break;
-            }
-
-            // if conflict-parameters are present, check for conflict based on conflict-parameter
-            // updates
-            Set<byte[]> conflictParamSet = entry.getValue();
-            if (conflictParamSet != null && conflictParamSet.size() > 0) {
-                // for each key pair, check for conflict;
-                // if not present, check against the wildcard
-                for (byte[] conflictParam : conflictParamSet) {
-
-                    String conflictKeyHash = getConflictHashCode(entry.getKey(),
-                            conflictParam);
-                    Long v = conflictToGlobalTailCache.getIfPresent(conflictKeyHash);
-
-                    log.trace("Commit-ck[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
-
-                    if (v != null && v > txSnapshotTimestamp) {
-                        log.debug("ABORT[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
-                        conflictKey.set(conflictParam);
-                        response.set(TokenType.TX_ABORT_CONFLICT_KEY);
-                        break;
-                    }
-
-                    if (txSnapshotTimestamp < maxConflictWildcard) {
-                        log.debug("ABORT[{}] snapshot-ts[{}] WILDCARD ts=[{}]",
-                                txInfo, txSnapshotTimestamp, maxConflictWildcard);
-                        response.set(TX_ABORT_SEQ_OVERFLOW);
-                        break;
-                    }
-
-                    if (v == null && maxConflictWildcard > txSnapshotTimestamp) {
-                        log.warn("ABORT[{}] conflict-key[{}](WILDCARD ts={})", txInfo,
-                                conflictParam,
-                                maxConflictWildcard);
-                        conflictAddress.set(maxConflictWildcard);
-                        conflictKey.set(conflictParam);
-                        response.set(TokenType.TX_ABORT_CONFLICT_KEY);
-                    }
-                }
-            } else { // otherwise, check for conflict based on streams updates
-                UUID streamId = entry.getKey();
-                streamTailToGlobalTailMap.compute(streamId, (k, v) -> {
-                    if (v == null) {
-                        return null;
-                    }
-                    if (v > txSnapshotTimestamp) {
-                        log.debug("ABORT[{}] conflict-stream[{}](ts={})",
-                                txInfo, Utils.toReadableId(streamId), v);
-                        conflictAddress.set(v);
-                        response.set(TokenType.TX_ABORT_CONFLICT_STREAM);
-                    }
-                    return v;
-                });
-            }
-        }
-
-        return response.get();
-    }
-
-    /**
      * Service a query request.
      *
      * <p>This returns information about the tail of the
@@ -456,11 +365,12 @@ public class SequencerServer extends AbstractServer {
     }
 
     /**
-     * this method serves token-requests for transaction-commit entries.
+     * This method serves token-requests for transaction-commit entries.
      *
-     * <p>it checks if the transaction can commit.
-     * - if the transction must abort,
-     * then a 'error token' containing an Address.ABORTED address is returned.
+     * <p>It checks if the transaction can commit.
+     * - if the transaction must abort,
+     * then an abort token type is returned, with the address which caused the abort
+     * as the token, as well as the conflict key, if present.
      * - if the transaction may commit,
      * then a normal allocation of log position(s) is pursued.
      *
@@ -472,28 +382,75 @@ public class SequencerServer extends AbstractServer {
                                ChannelHandlerContext ctx, IServerRouter r) {
         final long serverEpoch = r.getServerEpoch();
         final TokenRequest req = msg.getPayload();
+        final TxResolutionInfo txInfo = req.getTxnResolution();
+        final long txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
 
-        // Since Java does not allow an easy way for a function to return multiple values, this
-        // variable is passed to the consumer that will use it to indicate to us if/what key was
-        // responsible for an aborted transaction.
-        AtomicReference<byte[]> conflictKey = new AtomicReference(TokenResponse.NO_CONFLICT_KEY);
-        AtomicReference<Long> conflictAddress = new AtomicReference<>(Address.ABORTED);
-
-        // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
-        // Token allocation is conditioned on commit.
-        // First, we check if the transaction can commit.
-        TokenType tokenType = txnCanCommit(req.getTxnResolution(), conflictKey, conflictAddress);
-        if (tokenType != TokenType.NORMAL) {
-            // If the txn aborts, then DO NOT hand out a token.
-            Token token = new Token(conflictAddress.get(), serverEpoch);
-            r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(tokenType,
-                    conflictKey.get(), token, Collections.emptyMap())));
+        if (txSnapshotTimestamp < trimMark) {
+            log.debug("ABORT[{}] snapshot-ts[{}] trimMark-ts[{}]", txInfo,
+                    txSnapshotTimestamp, trimMark);
+            r.sendResponse(ctx, msg,
+                    CorfuMsgType.TOKEN_RES.payloadMsg(
+                            new TokenResponse(TokenType.TX_ABORT_SEQ_TRIM, trimMark, serverEpoch)));
             return;
+        }
+
+        // Iterate over all of the streams in the conflict set
+        for (Map.Entry<UUID, Set<byte[]>> entry : txInfo.getConflictSet().entrySet()) {
+            final Set<byte[]> conflictParamSet = entry.getValue();
+            final UUID streamId = entry.getKey();
+
+            // if conflict-parameters are present, check for conflict
+            // based on conflict-parameter updates
+            if (conflictParamSet != null && conflictParamSet.size() > 0) {
+                // for each key pair, check for conflict;
+                // if not present, check against the wildcard
+                for (byte[] conflictParam : conflictParamSet) {
+                    final String conflictKeyHash = getConflictHashCode(streamId, conflictParam);
+                    final Long conflictTail = conflictToGlobalTailCache
+                            .getIfPresent(conflictKeyHash);
+
+
+                    if (txSnapshotTimestamp < maxConflictWildcard) {
+                        log.debug("ABORT[{}] snapshot-ts[{}] WILDCARD ts=[{}]",
+                                txInfo, txSnapshotTimestamp, maxConflictWildcard);
+                        r.sendResponse(ctx, msg,
+                                CorfuMsgType.TOKEN_RES.payloadMsg(
+                                        new TokenResponse(TokenType.TX_ABORT_SEQ_OVERFLOW,
+                                                conflictParam, Address.ABORTED, serverEpoch)));
+                        return;
+                    }
+
+                    if (conflictTail != null
+                            && (conflictTail > txSnapshotTimestamp)) {
+                        log.debug("handleTxToken: ABORT[{}] conflict-key[{}](ts={})", txInfo,
+                                conflictParam,
+                                conflictTail);
+                        r.sendResponse(ctx, msg,
+                                CorfuMsgType.TOKEN_RES.payloadMsg(
+                                        new TokenResponse(TokenType.TX_ABORT_CONFLICT_KEY,
+                                                conflictParam, conflictTail, serverEpoch)));
+                        return;
+                    }
+                    log.trace("handleTxToken: OK[{}] conflict-key[{}](ts={})", txInfo,
+                            conflictParam, conflictTail);
+                }
+            } else { // otherwise, check for conflict based on streams updates
+                final Long streamTail = streamTailToGlobalTailMap.get(streamId);
+                if (streamTail > txSnapshotTimestamp) {
+                    log.debug("handleTxToken: ABORT[{}] conflict-stream[{}](ts={})",
+                            txInfo, Utils.toReadableId(streamId), streamTail);
+                    r.sendResponse(ctx, msg,
+                            CorfuMsgType.TOKEN_RES.payloadMsg(
+                                    new TokenResponse(TokenType.TX_ABORT_CONFLICT_STREAM,
+                                            streamTail, serverEpoch)));
+                    return;
+                }
+            }
         }
 
         // if we get here, this means the transaction can commit.
         // handleAllocation() does the actual allocation of log position(s)
-        // and returns the reponse
+        // and returns the response
         handleAllocation(msg, ctx, r);
     }
 

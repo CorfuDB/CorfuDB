@@ -32,6 +32,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
         this.backpointerMap = backpointerMap;
     }
 
+
     /** the cause/type of response. */
     final TokenType respType;
 
