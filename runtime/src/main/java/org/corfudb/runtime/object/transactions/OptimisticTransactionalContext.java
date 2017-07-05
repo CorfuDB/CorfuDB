@@ -20,7 +20,7 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.object.ICorfuSMRAccess;
+import org.corfudb.runtime.object.ICorfuSmrAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
 
@@ -81,7 +81,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @Override
     public <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
-                           ICorfuSMRAccess<R, T> accessFunction,
+                           ICorfuSmrAccess<R, T> accessFunction,
                            Object[] conflictObject) {
         log.debug("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
         // First, we add this access to the read set
@@ -93,7 +93,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         return proxy
                 .getUnderlyingObject()
                 .access(o -> (
-                        getWriteSetEntrySize(proxy.getStreamID()) == 0 && // No updates
+                        getWriteSetEntrySize(proxy.getStreamId()) == 0 && // No updates
                         // And at the correct timestamp
                         o.getVersionUnsafe() == getSnapshotTimestamp()
                                 && (o.getOptimisticStreamUnsafe() == null
@@ -152,7 +152,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         addToReadSet(proxy, conflictObject);
 
         // if we have a result, return it.
-        SMREntry wrapper = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
+        SMREntry wrapper = getWriteSetEntryList(proxy.getStreamId()).get((int)timestamp);
         if (wrapper != null && wrapper.isHaveUpcallResult()) {
             return wrapper.getUpcallResult();
         }
@@ -161,14 +161,14 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             setAsOptimisticStream(o);
             log.trace("Upcall[{}] {} Sync'd", this,  timestamp);
             o.syncObjectUnsafe(getSnapshotTimestamp());
-            SMREntry wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
+            SMREntry wrapper2 = getWriteSetEntryList(proxy.getStreamId()).get((int)timestamp);
             if (wrapper2 != null && wrapper2.isHaveUpcallResult()) {
                 return wrapper2.getUpcallResult();
             }
             // If we still don't have the upcall, this must be a bug.
             throw new RuntimeException("Tried to get upcall during a transaction but"
                     + " we don't have it even after an optimistic sync (asked for " + timestamp
-                    + " we have 0-" + (getWriteSetEntryList(proxy.getStreamID()).size() - 1) + ")");
+                    + " we have 0-" + (getWriteSetEntryList(proxy.getStreamId()).size() - 1) + ")");
         });
     }
 
@@ -339,11 +339,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // for this to work the write sets better
             // be the same
             List<SMREntry> committedWrites =
-                    getWriteSetEntryList(x.getStreamID());
+                    getWriteSetEntryList(x.getStreamId());
             List<SMREntry> entryWrites =
                     ((ISMRConsumable) committedEntry
                             .getPayload(this.getBuilder().runtime))
-                    .getSMRUpdates(x.getStreamID());
+                    .getSMRUpdates(x.getStreamId());
             if (committedWrites.size()
                     == entryWrites.size()) {
                 IntStream.range(0, committedWrites.size())

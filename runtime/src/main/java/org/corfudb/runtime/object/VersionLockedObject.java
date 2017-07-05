@@ -88,7 +88,7 @@ public class VersionLockedObject<T> {
     /**
      * The upcall map for this object.
      */
-    private final Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap;
+    private final Map<String, ICorfuSmrUpcallTarget<T>> upcallTargetMap;
 
     /**
      * The undo record function map for this object.
@@ -123,7 +123,7 @@ public class VersionLockedObject<T> {
      */
     public VersionLockedObject(Supplier<T> newObjectFn,
                                StreamViewSMRAdapter smrStream,
-                               Map<String, ICorfuSMRUpcallTarget<T>> upcallTargets,
+                               Map<String, ICorfuSmrUpcallTarget<T>> upcallTargets,
                                Map<String, IUndoRecordFunction<T>> undoRecordTargets,
                                Map<String, IUndoFunction<T>> undoTargets,
                                Set<String> resetSet) {
@@ -489,7 +489,7 @@ public class VersionLockedObject<T> {
                 entry.getEntry() != null ? entry.getEntry().getGlobalAddress() : "OPT",
                 entry.getSMRArguments());
 
-        ICorfuSMRUpcallTarget<T> target = upcallTargetMap.get(entry.getSMRMethod());
+        ICorfuSmrUpcallTarget<T> target = upcallTargetMap.get(entry.getSMRMethod());
         if (target == null) {
             throw new RuntimeException("Unknown upcall " + entry.getSMRMethod());
         }

@@ -43,9 +43,9 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
 
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.ICorfuSMRProxy;
-import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
+import org.corfudb.runtime.object.ICorfuSmr;
+import org.corfudb.runtime.object.ICorfuSmrProxy;
+import org.corfudb.runtime.object.ICorfuSmrUpcallTarget;
 import org.corfudb.runtime.object.IUndoFunction;
 import org.corfudb.runtime.object.IUndoRecordFunction;
 
@@ -98,7 +98,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
             roundEnv.getRootElements().stream()
                     .filter(x -> x.getKind() == ElementKind.CLASS)
                     // Don't re-instrument instrumented classes
-                    .filter(x -> !x.getSimpleName().toString().endsWith(ICorfuSMR.CORFUSMR_SUFFIX))
+                    .filter(x -> !x.getSimpleName().toString().endsWith(ICorfuSmr.CORFUSMR_SUFFIX))
                     .map(x -> (TypeElement) x)
                     .forEach(this::processClass);
         } catch (Exception e) {
@@ -220,15 +220,15 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         ClassName proxyName = classElement.getNestingKind() == NestingKind.TOP_LEVEL
                 ?
                 // Top level classes can just use the name
-                ClassName.bestGuess(classElement.getSimpleName() + ICorfuSMR.CORFUSMR_SUFFIX) :
+                ClassName.bestGuess(classElement.getSimpleName() + ICorfuSmr.CORFUSMR_SUFFIX) :
                 // Otherwise we need to include the enclosing element as well.
                 ClassName.bestGuess(classElement.getEnclosingElement().getSimpleName()
-                        + "$" + classElement.getSimpleName() + ICorfuSMR.CORFUSMR_SUFFIX);
+                        + "$" + classElement.getSimpleName() + ICorfuSmr.CORFUSMR_SUFFIX);
         // Also get the class name of the original class.
         TypeName originalName = ParameterizedTypeName.get(classElement.asType());
 
         // Generate the proxy class. The proxy class extends the original class and implements
-        // ICorfuSMR.
+        // ICorfuSmr.
         TypeSpec.Builder typeSpecBuilder = TypeSpec
                 .classBuilder(proxyName)
                 .addTypeVariables(classElement.getTypeParameters()
@@ -237,7 +237,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                     .collect(Collectors.toList())
                 )
                 .addSuperinterface(ParameterizedTypeName
-                        .get(ClassName.get(ICorfuSMR.class), originalName))
+                        .get(ClassName.get(ICorfuSmr.class), originalName))
                 .superclass(originalName)
                 .addModifiers(Modifier.PUBLIC);
 
@@ -265,16 +265,16 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 });
 
         // Add the proxy field and an accessor/setter, which manages the state of the object.
-        typeSpecBuilder.addField(ParameterizedTypeName.get(ClassName.get(ICorfuSMRProxy.class),
+        typeSpecBuilder.addField(ParameterizedTypeName.get(ClassName.get(ICorfuSmrProxy.class),
                 originalName), "proxy" + CORFUSMR_FIELD, Modifier.PUBLIC);
-        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getCorfuSMRProxy")
+        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getCorfuSmrProxy")
                     .addModifiers(Modifier.PUBLIC)
-                    .returns(ParameterizedTypeName.get(ClassName.get(ICorfuSMRProxy.class),
+                    .returns(ParameterizedTypeName.get(ClassName.get(ICorfuSmrProxy.class),
                             originalName))
                     .addStatement("return $L", "proxy" + CORFUSMR_FIELD)
                     .build());
-        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("setCorfuSMRProxy")
-                .addParameter(ParameterizedTypeName.get(ClassName.get(ICorfuSMRProxy.class),
+        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("setCorfuSmrProxy")
+                .addParameter(ParameterizedTypeName.get(ClassName.get(ICorfuSmrProxy.class),
                         originalName), "proxy")
                 .addModifiers(Modifier.PUBLIC)
                 .returns(TypeName.VOID)
@@ -391,7 +391,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
 
         // remove any methods which end with $CORFUSMR
         methodSet.removeIf(x -> x.method.getSimpleName()
-                .toString().endsWith(ICorfuSMR.CORFUSMR_SUFFIX));
+                .toString().endsWith(ICorfuSmr.CORFUSMR_SUFFIX));
 
         // Verify that all methods that require an up call have specified as annotated name
         checkAnnotatedNames(methodSet);
@@ -499,8 +499,8 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     } else if (transactional != null) {
                         // If transactional, begin the transaction
                         ms.addCode(smrMethod.getReturnType().getKind().equals(TypeKind.VOID)
-                                ? "proxy" + CORFUSMR_FIELD + ".TXExecute(() -> {" :
-                                "return proxy" + CORFUSMR_FIELD + ".TXExecute(() -> {"
+                                ? "proxy" + CORFUSMR_FIELD + ".txExecute(() -> {" :
+                                "return proxy" + CORFUSMR_FIELD + ".txExecute(() -> {"
                         );
                         ms.addStatement("$Lsuper.$L($L)",
                                 smrMethod.getReturnType().getKind().equals(TypeKind.VOID)
@@ -704,25 +704,25 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
 
         FieldSpec upcallMap = FieldSpec.builder(ParameterizedTypeName.get(ClassName.get(Map.class),
                 ClassName.get(String.class),
-                ParameterizedTypeName.get(ClassName.get(ICorfuSMRUpcallTarget.class),
+                ParameterizedTypeName.get(ClassName.get(ICorfuSmrUpcallTarget.class),
                         originalName)), "upcallMap" + CORFUSMR_FIELD,
                 Modifier.PUBLIC, Modifier.FINAL)
                 .initializer("new $T()$L.build()",
                         ParameterizedTypeName.get(ClassName.get(ImmutableMap.Builder.class),
                                 ClassName.get(String.class),
                                 ParameterizedTypeName.get(ClassName
-                                                .get(ICorfuSMRUpcallTarget.class),
+                                                .get(ICorfuSmrUpcallTarget.class),
                                         originalName)), upcallString)
                 .build();
 
         typeSpecBuilder
                 .addField(upcallMap);
 
-        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getCorfuSMRUpcallMap")
+        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getCorfuSmrUpcallMap")
                 .addModifiers(Modifier.PUBLIC)
                 .returns(ParameterizedTypeName.get(ClassName.get(Map.class),
                         ClassName.get(String.class),
-                        ParameterizedTypeName.get(ClassName.get(ICorfuSMRUpcallTarget.class),
+                        ParameterizedTypeName.get(ClassName.get(ICorfuSmrUpcallTarget.class),
                                 originalName)))
                 .addStatement("return $L", "upcallMap" + CORFUSMR_FIELD)
                 .build());

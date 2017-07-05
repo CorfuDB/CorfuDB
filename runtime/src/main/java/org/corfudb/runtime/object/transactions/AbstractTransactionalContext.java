@@ -12,8 +12,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuSMRAccess;
-import org.corfudb.runtime.object.ICorfuSMRProxy;
+import org.corfudb.runtime.object.ICorfuSmrAccess;
+import org.corfudb.runtime.object.ICorfuSmrProxy;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.util.Utils;
 
@@ -147,7 +147,7 @@ public abstract class AbstractTransactionalContext implements
      * @return The return value of the access function.
      */
     public abstract <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
-                                    ICorfuSMRAccess<R, T> accessFunction,
+                                    ICorfuSmrAccess<R, T> accessFunction,
                                     Object[] conflictObject);
 
     /**
@@ -214,7 +214,7 @@ public abstract class AbstractTransactionalContext implements
      *                        available.
      */
     public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
-        getReadSetInfo().addToReadSet(proxy.getStreamID(), conflictObjects);
+        getReadSetInfo().addToReadSet(proxy.getStreamId(), conflictObjects);
     }
 
     /**
@@ -235,9 +235,9 @@ public abstract class AbstractTransactionalContext implements
      * @return a synthetic "address" in the write-set, to be used for
      *     checking upcall results
      */
-    long addToWriteSet(ICorfuSMRProxy proxy, SMREntry updateEntry, Object[]
+    long addToWriteSet(ICorfuSmrProxy proxy, SMREntry updateEntry, Object[]
             conflictObjects) {
-        return getWriteSetInfo().addToWriteSet(proxy.getStreamID(),
+        return getWriteSetInfo().addToWriteSet(proxy.getStreamId(),
                 updateEntry, conflictObjects);
     }
 

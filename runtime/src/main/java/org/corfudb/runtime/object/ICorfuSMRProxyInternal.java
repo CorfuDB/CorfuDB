@@ -11,7 +11,7 @@ package org.corfudb.runtime.object;
  */
 @Deprecated // TODO: Add replacement method that conforms to style
 @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-public interface ICorfuSMRProxyInternal<T> extends ICorfuSMRProxy<T> {
+public interface ICorfuSMRProxyInternal<T> extends ICorfuSmrProxy<T> {
 
     /**
      * Directly get the state of the object the proxy is managing,

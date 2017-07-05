@@ -1,7 +1,5 @@
 package org.corfudb.runtime.view;
 
-import com.sun.xml.internal.bind.v2.TODO;
-
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
@@ -21,7 +19,7 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuSmr;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -73,14 +71,14 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings("unchecked")
     public <T> T copy(@NonNull T obj, @NonNull UUID destination) {
-        ICorfuSMR<T> proxy = (ICorfuSMR<T>)obj;
-        ObjectID oid = new ObjectID(destination, proxy.getCorfuSMRProxy().getObjectType());
+        ICorfuSmr<T> proxy = (ICorfuSmr<T>)obj;
+        ObjectID oid = new ObjectID(destination, proxy.getCorfuSmrProxy().getObjectType());
         return (T) objectCache.computeIfAbsent(oid, x -> {
-            IStreamView sv = runtime.getStreamsView().copy(proxy.getCorfuStreamID(),
-                    destination, proxy.getCorfuSMRProxy().getVersion());
+            IStreamView sv = runtime.getStreamsView().copy(proxy.getCorfuStreamId(),
+                    destination, proxy.getCorfuSmrProxy().getVersion());
             try {
                 return
-                        CorfuCompileWrapperBuilder.getWrapper(proxy.getCorfuSMRProxy()
+                        CorfuCompileWrapperBuilder.getWrapper(proxy.getCorfuSmrProxy()
                                         .getObjectType(), runtime, sv.getId(), null,
                                 Serializers.JSON);
             } catch (Exception ex) {
@@ -222,9 +220,9 @@ public class ObjectsView extends AbstractView {
      * @param object    The Corfu object to sync.
      */
     public void syncObject(Object object) {
-        if (object instanceof ICorfuSMR<?>) {
-            ICorfuSMR<?> corfuObject = (ICorfuSMR<?>) object;
-            corfuObject.getCorfuSMRProxy().sync();
+        if (object instanceof ICorfuSmr<?>) {
+            ICorfuSmr<?> corfuObject = (ICorfuSmr<?>) object;
+            corfuObject.getCorfuSmrProxy().sync();
         }
     }
 
@@ -235,9 +233,9 @@ public class ObjectsView extends AbstractView {
     public void syncObject(Object... objects) {
         Arrays.stream(objects)
                 .parallel()
-                .filter(x -> x instanceof ICorfuSMR<?>)
-                .map(x -> (ICorfuSMR<?>) x)
-                .forEach(x -> x.getCorfuSMRProxy().sync());
+                .filter(x -> x instanceof ICorfuSmr<?>)
+                .map(x -> (ICorfuSmr<?>) x)
+                .forEach(x -> x.getCorfuSmrProxy().sync());
     }
 
     @Data

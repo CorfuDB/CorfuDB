@@ -26,8 +26,4 @@ public @interface CorfuObject {
     /** @return Where the state of the object is stored. Deprecated. */
     @Deprecated
     StateSource stateSource() default StateSource.SELF;
-
-    /** @return What the state source is. Deprecated. */
-    @Deprecated
-    Class stateType() default StaticMappingObject.class;
 }

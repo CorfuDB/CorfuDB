@@ -2,8 +2,9 @@ package org.corfudb.runtime.object;
 
 /** A functional interface which represents a function which generates an
  * undo record.
+ *
+ * <p>Created by mwei on 11/13/16.
  * @param <R> The type of the SMR object.
- * Created by mwei on 11/13/16.
  */
 @FunctionalInterface
 public interface IUndoRecordFunction<R> {

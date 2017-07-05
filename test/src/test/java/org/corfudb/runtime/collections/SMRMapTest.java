@@ -23,7 +23,7 @@ import lombok.ToString;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuSmr;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
@@ -113,14 +113,14 @@ public class SMRMapTest extends AbstractViewTest {
     public void canGetID()
             throws Exception {
         UUID id = UUID.randomUUID();
-        ICorfuSMR testMap = (ICorfuSMR) getRuntime().getObjectsView()
+        ICorfuSmr testMap = (ICorfuSmr) getRuntime().getObjectsView()
                 .build()
-                .setStreamID(id)
+                .setStreamId(id)
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .open();
 
         assertThat(id)
-                .isEqualTo(testMap.getCorfuStreamID());
+                .isEqualTo(testMap.getCorfuStreamId());
     }
 
     @Test
@@ -211,7 +211,7 @@ public class SMRMapTest extends AbstractViewTest {
             throws Exception {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
-                .setStreamID(UUID.randomUUID())
+                .setStreamId(UUID.randomUUID())
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .open();
 
@@ -259,7 +259,7 @@ public class SMRMapTest extends AbstractViewTest {
                 .mapToObj(i -> {
                     return getRuntime().getObjectsView()
                             .build()
-                            .setStreamID(UUID.randomUUID())
+                            .setStreamId(UUID.randomUUID())
                             .setTypeToken(new TypeToken<SMRMap<String, String>>() {
                             })
                             .addOption(ObjectOpenOptions.NO_CACHE)
@@ -641,7 +641,7 @@ public class SMRMapTest extends AbstractViewTest {
                         .mapToObj(i -> {
                             return getRuntime().getObjectsView()
                                     .build()
-                                    .setStreamID(mapStream)
+                                    .setStreamId(mapStream)
                                     .setTypeToken(new TypeToken<SMRMap<String, String>>() {
                                     })
                                     .addOption(ObjectOpenOptions.NO_CACHE)
@@ -725,7 +725,7 @@ public class SMRMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime()
                 .getObjectsView()
                 .build()
-                .setStreamID(stream)
+                .setStreamId(stream)
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .open();
 
@@ -741,7 +741,7 @@ public class SMRMapTest extends AbstractViewTest {
         long startTime = System.nanoTime();
         Map<String, String> testMap2 = getRuntime().getObjectsView().build()
                 .setType(SMRMap.class)
-                .setStreamID(stream)
+                .setStreamId(stream)
                 .addOption(ObjectOpenOptions.NO_CACHE)
                 .open();
         // Do a get to prompt the sync

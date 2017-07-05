@@ -13,7 +13,7 @@ import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuSmr;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -50,10 +50,10 @@ public class FastSmrMapsLoaderTest extends AbstractViewTest {
         ObjectsView.ObjectID mapId = new ObjectsView.
                 ObjectID(CorfuRuntime.getStreamID(streamName), SMRMap.class);
 
-        CorfuCompileProxy cp = ((CorfuCompileProxy) ((ICorfuSMR) cr.getObjectsView().
+        CorfuCompileProxy cp = ((CorfuCompileProxy) ((ICorfuSmr) cr.getObjectsView().
                 getObjectCache().
                 get(mapId)).
-                getCorfuSMRProxy());
+                getCorfuSmrProxy());
         return cp.getUnderlyingObject();
     }
 
@@ -65,14 +65,14 @@ public class FastSmrMapsLoaderTest extends AbstractViewTest {
                 .open();
     }
 
-    private void doCheckPointsAfterSnapshot(List<ICorfuSMR<Map>> maps, String author, CorfuRuntime rt){
+    private void doCheckPointsAfterSnapshot(List<ICorfuSmr<Map>> maps, String author, CorfuRuntime rt){
         try {
-            for (ICorfuSMR<Map> map : maps) {
-                UUID streamID = map.getCorfuStreamID();
+            for (ICorfuSmr<Map> map : maps) {
+                UUID streamID = map.getCorfuStreamId();
                 while (true) {
                     CheckpointWriter cpw = new CheckpointWriter(rt, streamID, author, (SMRMap) map);
                     ISerializer serializer =
-                            ((CorfuCompileProxy<Map>) map.getCorfuSMRProxy())
+                            ((CorfuCompileProxy<Map>) map.getCorfuSmrProxy())
                                     .getSerializer();
                     cpw.setSerializer(serializer);
                     try {
@@ -685,10 +685,10 @@ public class FastSmrMapsLoaderTest extends AbstractViewTest {
         map2.put("k2", "v2");
         map3.put("k3", "v3");
 
-        List<ICorfuSMR<Map>> maps = new ArrayList<>();
-        maps.add((ICorfuSMR<Map>) map1);
-        maps.add((ICorfuSMR<Map>) map2);
-        maps.add((ICorfuSMR<Map>) map3);
+        List<ICorfuSmr<Map>> maps = new ArrayList<>();
+        maps.add((ICorfuSmr<Map>) map1);
+        maps.add((ICorfuSmr<Map>) map2);
+        maps.add((ICorfuSmr<Map>) map3);
 
 
         ExecutorService checkPointThread = Executors.newFixedThreadPool(1);

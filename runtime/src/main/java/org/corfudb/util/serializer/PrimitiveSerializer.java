@@ -176,7 +176,7 @@ public class PrimitiveSerializer implements ISerializer {
                     String SMRClassName = new String(SMRClassNameBytes);
                     try {
                         return r.getObjectsView().build()
-                                .setStreamID(new UUID(b.readLong(), b.readLong()))
+                                .setStreamId(new UUID(b.readLong(), b.readLong()))
                                 .setType(Class.forName(SMRClassName))
                                 .open();
                     } catch (ClassNotFoundException cnfe) {

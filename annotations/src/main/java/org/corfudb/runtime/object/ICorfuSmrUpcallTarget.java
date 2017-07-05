@@ -2,11 +2,12 @@ package org.corfudb.runtime.object;
 
 /** An interface for SMR object upcalls, which
  * are recorded on the log.
+ *
+ * <p>Created by mwei on 11/10/16.
  * @param <R> The type of the object to upcall.
- * Created by mwei on 11/10/16.
  */
 @FunctionalInterface
-public interface ICorfuSMRUpcallTarget<R> {
+public interface ICorfuSmrUpcallTarget<R> {
 
     /** Do the upcall.
      * @param obj   The upcall target.

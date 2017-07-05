@@ -2,7 +2,6 @@ package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
 
@@ -10,7 +9,6 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -84,8 +82,8 @@ public class CompileProxyTest extends AbstractViewTest {
         executeScheduled(concurrency, PARAMETERS.TIMEOUT_NORMAL);
 
         // track the raw stream updates caused by the execution so far
-        ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = (ICorfuSMR<CorfuSharedCounter>) sharedCounter;
-        ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
+        ICorfuSmr<CorfuSharedCounter> compiledSharedCounter = (ICorfuSmr<CorfuSharedCounter>) sharedCounter;
+        ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSmrProxy();
         //IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
         int beforeSync, afterSync;
@@ -206,8 +204,8 @@ public class CompileProxyTest extends AbstractViewTest {
                 })
                 .open();
 
-        ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = (ICorfuSMR<CorfuSharedCounter>)  sharedCounter;
-        ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
+        ICorfuSmr<CorfuSharedCounter> compiledSharedCounter = (ICorfuSmr<CorfuSharedCounter>)  sharedCounter;
+        ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSmrProxy();
       //  IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
         int numTasks = PARAMETERS.NUM_ITERATIONS_LOW;
@@ -380,8 +378,8 @@ public class CompileProxyTest extends AbstractViewTest {
                 .open();
 
         // for tracking raw stream status
-        ICorfuSMR<CorfuCompoundObj> compiledCorfuCompound = (ICorfuSMR<CorfuCompoundObj>) sharedCorfuCompound;
-        ICorfuSMRProxyInternal<CorfuCompoundObj> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuCompoundObj>) compiledCorfuCompound.getCorfuSMRProxy();
+        ICorfuSmr<CorfuCompoundObj> compiledCorfuCompound = (ICorfuSmr<CorfuCompoundObj>) sharedCorfuCompound;
+        ICorfuSMRProxyInternal<CorfuCompoundObj> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuCompoundObj>) compiledCorfuCompound.getCorfuSmrProxy();
        // IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
         // initialization
