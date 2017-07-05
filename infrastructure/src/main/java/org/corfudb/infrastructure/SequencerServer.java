@@ -29,6 +29,7 @@ import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.protocols.wireprotocol.TxScanInfo;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
@@ -228,9 +229,8 @@ public class SequencerServer extends AbstractServer {
         // issued.
         long responseGlobalTail = (req.getStreams().size() == 0) ? globalLogTail.get() - 1 :
                 maxStreamGlobalTail;
-        Token token = new Token(responseGlobalTail, r.getServerEpoch());
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, Collections.emptyMap())));
+                responseGlobalTail, r.getServerEpoch(), Collections.emptyMap())));
     }
 
     /**
@@ -322,9 +322,8 @@ public class SequencerServer extends AbstractServer {
         final long serverEpoch = r.getServerEpoch();
         final TokenRequest req = msg.getPayload();
 
-        Token token = new Token(globalLogTail.getAndAdd(req.getNumTokens()), serverEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, Collections.emptyMap())));
+                globalLogTail.getAndAdd(req.getNumTokens()), serverEpoch, Collections.emptyMap())));
 
     }
 
@@ -374,18 +373,42 @@ public class SequencerServer extends AbstractServer {
                     final Long conflictTail = conflictToGlobalTailCache
                             .getIfPresent(conflictKeyHash);
 
-                    if ((conflictTail != null
-                            && conflictTail > txSnapshotTimestamp)
-                            || maxConflictWildcard > txSnapshotTimestamp) {
-                        log.debug("handleTxToken: ABORT[{}] conflict-key[{}]({}ts={})", txInfo,
-                                conflictParam,
-                                maxConflictWildcard > txSnapshotTimestamp ? "WILDCARD " : "",
-                                conflictTail);
-                        r.sendResponse(ctx, msg,
-                                CorfuMsgType.TOKEN_RES.payloadMsg(
-                                        new TokenResponse(TokenType.TX_ABORT_CONFLICT_KEY,
-                                            conflictParam, conflictTail, serverEpoch)));
-                        return;
+                    if (conflictTail != null
+                            && (conflictTail > txSnapshotTimestamp
+                            || maxConflictWildcard > txSnapshotTimestamp)) {
+                        // Do we have scan info which overrides this for this stream?
+                        TxScanInfo scanInfo =
+                                txInfo.getValidatedStreams().get(streamId);
+                        if (scanInfo != null) {
+                            if (scanInfo.getEndPos() >= conflictTail - 1) {
+                                log.warn("handleTxToken: ScanInfo stream {} {}-{} overrides {}",
+                                        Utils.toReadableId(streamId),
+                                        scanInfo.getStartPos(), scanInfo.getEndPos(),
+                                        conflictTail);
+                            } else {
+                                log.debug("handleTxToken: ABORT[{}] conflict-key[{}]({}ts={})," +
+                                                "scanInfo {}-{} fails", txInfo,
+                                        conflictParam,
+                                        maxConflictWildcard > txSnapshotTimestamp ? "WILDCARD " : "",
+                                        conflictTail, scanInfo.getStartPos(), scanInfo.getEndPos());
+                                r.sendResponse(ctx, msg,
+                                        CorfuMsgType.TOKEN_RES.payloadMsg(
+                                                new TokenResponse(TokenType.TX_ABORT_CONFLICT_KEY,
+                                                        conflictParam, streamId, conflictTail, serverEpoch)));
+                                return;
+                            }
+                        }
+                        else {
+                            log.debug("handleTxToken: ABORT[{}] conflict-key[{}]({}ts={})", txInfo,
+                                    conflictParam,
+                                    maxConflictWildcard > txSnapshotTimestamp ? "WILDCARD " : "",
+                                    conflictTail);
+                            r.sendResponse(ctx, msg,
+                                    CorfuMsgType.TOKEN_RES.payloadMsg(
+                                            new TokenResponse(TokenType.TX_ABORT_CONFLICT_KEY,
+                                                    conflictParam, streamId, conflictTail, serverEpoch)));
+                            return;
+                        }
                     }
                     log.trace("handleTxToken: OK[{}] conflict-key[{}](ts={})", txInfo,
                             conflictParam, conflictTail);
@@ -398,7 +421,7 @@ public class SequencerServer extends AbstractServer {
                     r.sendResponse(ctx, msg,
                             CorfuMsgType.TOKEN_RES.payloadMsg(
                                     new TokenResponse(TokenType.TX_ABORT_CONFLICT_STREAM,
-                                            streamTail, serverEpoch)));
+                                            streamId, streamTail, serverEpoch)));
                     return;
                 }
             }
@@ -469,9 +492,8 @@ public class SequencerServer extends AbstractServer {
                 currentTail, backPointerMap.build());
         // return the token response with the new global tail
         // and the streams backpointers
-        Token token = new Token(currentTail, serverEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token,
+                currentTail, serverEpoch,
                 backPointerMap.build())));
     }
 }

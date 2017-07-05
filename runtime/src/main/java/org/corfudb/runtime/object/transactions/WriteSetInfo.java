@@ -23,7 +23,7 @@ class WriteSetInfo {
 
     // fine-grained conflict information regarding mutated-objects;
     // captures values passed using @conflict annotations in @corfuObject
-    Map<UUID, Set<Integer>> writeSetConflicts = new HashMap<>();
+    Map<UUID, Set<Object>> writeSetConflicts = new HashMap<>();
 
     // the set of mutated objects
     Set<UUID> affectedStreams = new HashSet<>();
@@ -36,7 +36,7 @@ class WriteSetInfo {
     // set containing NULL), so the conflict set must be ignored.
     Set<UUID> poisonedStreams = new HashSet<>();
 
-    Set<Integer> getConflictSet(UUID streamId) {
+    Set<Object> getConflictSet(UUID streamId) {
         return getWriteSetConflicts().computeIfAbsent(streamId, u -> {
             return new HashSet<>();
         });
@@ -65,9 +65,9 @@ class WriteSetInfo {
 
             // add all the conflict params to the conflict-params set for this stream
             if (conflictObjects != null) {
-                Set<Integer> streamConflicts = getConflictSet(streamId);
+                Set<Object> streamConflicts = getConflictSet(streamId);
                 Arrays.asList(conflictObjects).stream()
-                        .forEach(V -> streamConflicts.add(Integer.valueOf(V.hashCode())));
+                        .forEach(streamConflicts::add);
             }
 
             return writeSet.getSMRUpdates(streamId).size() - 1;

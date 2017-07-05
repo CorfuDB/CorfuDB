@@ -1,28 +1,40 @@
 package org.corfudb.runtime.object.transactions;
 
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
+import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.protocols.wireprotocol.TxScanInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
+import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.ISMRStream;
+import org.corfudb.runtime.object.StreamViewSMRAdapter;
 import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.Utils;
 
 import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
@@ -229,29 +241,41 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     public long commitTransaction() throws TransactionAbortedException {
         log.debug("TX[{}] request optimistic commit", this);
 
-        return getConflictSetAndCommit(() -> getReadSetInfo().getReadSetConflicts());
+        return doCommit(getReadSetInfo().getReadSetConflicts());
+    }
+
+    protected Map<UUID, Set<Integer>> hashConflictSet(final Map<UUID, Set<Object>> conflictSet){
+        return conflictSet.entrySet()
+                .stream()
+                .collect(Collectors.toMap(Map.Entry::getKey,
+                                          e -> e.getValue().stream()
+                                                           .map(this::hashConflictObject)
+                                                           .collect(Collectors.toSet())));
+    }
+
+    protected int hashConflictObject(Object o) {
+        return o.hashCode();
     }
 
     /**
      * Commit with a given conflict set and return the address.
      *
-     * @param computeConflictSet  conflict set used to check whether transaction can commit
+     * @param conflictSet  conflict set used to check whether transaction can commit
      * @return  the commit address
      */
-    public long getConflictSetAndCommit(Supplier<Map<UUID, Set<Integer>>>
-                                       computeConflictSet) {
+    protected long doCommit(final Map<UUID, Set<Object>> conflictSet) {
 
         if (TransactionalContext.isInNestedTransaction()) {
             getParentContext().addTransaction(this);
             commitAddress = AbstractTransactionalContext.FOLDED_ADDRESS;
-            log.trace("Commit[{}] Folded into {}", this, getParentContext());
+            log.trace("doCommit[{}] Folded into {}", this, getParentContext());
             return commitAddress;
         }
 
         // If the write set is empty, we're done and just return
         // NOWRITE_ADDRESS.
         if (getWriteSetInfo().getWriteSet().getEntryMap().isEmpty()) {
-            log.trace("Commit[{}] Read-only commit (no write)", this);
+            log.trace("doCommit[{}] Read-only commit (no write)", this);
             return NOWRITE_ADDRESS;
         }
 
@@ -267,33 +291,154 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // address of -1L if it is rejected.
         long address = -1L;
 
-        address = this.builder.runtime.getStreamsView()
-                .append(
+        final Map<UUID, Set<Integer>> hashedConflictSet =
+                hashConflictSet(conflictSet);
+        try {
+            address = this.builder.runtime.getStreamsView()
+                    .append(
+                            // a set of stream-IDs that contains the affected streams
+                            affectedStreams,
 
-                        // a set of stream-IDs that contains the affected streams
-                        affectedStreams,
+                            // a MultiObjectSMREntry that contains the update(s) to objects
+                            collectWriteSetEntries(),
 
-                        // a MultiObjectSMREntry that contains the update(s) to objects
-                        collectWriteSetEntries(),
+                            // TxResolution info:
+                            // 1. snapshot timestamp
+                            // 2. a map of conflict params, arranged by streamID's
+                            // 3. a map of write conflict-params, arranged by
+                            // streamID's
+                            new TxResolutionInfo(getTransactionID(),
+                                    getSnapshotTimestamp(),
+                                    hashedConflictSet,
+                                    hashConflictSet(collectWriteConflictParams()))
+                    );
+        } catch (TransactionAbortedException tae) {
+            // If precise conflicts aren't required, or the
+            // abort was not due to conflict, re-throw
+            // the transaction.
+            if (!builder.isPreciseConflicts() ||
+                    tae.getAbortCause() != AbortCause.CONFLICT) {
+                throw tae;
+            }
 
-                        // TxResolution info:
-                        // 1. snapshot timestamp
-                        // 2. a map of conflict params, arranged by streamID's
-                        // 3. a map of write conflict-params, arranged by
-                        // streamID's
-                        new TxResolutionInfo(getTransactionID(),
-                                getSnapshotTimestamp(),
-                                computeConflictSet.get(),
-                                collectWriteConflictParams())
-                );
+            log.debug("doCommit[{}]: Imprecise conflict detected, resolving...");
+            TransactionAbortedException currentException = tae;
+            Map<UUID, TxScanInfo> scanData = new HashMap<>();
 
-        log.trace("Commit[{}] Acquire address {}", this, address);
+            // Otherwise, we resolve conflict keys until we have
+            // a -true- conflict
+            while (currentException.getConflictKey() !=
+                    TokenResponse.NO_CONFLICT_KEY) {
+                // Which entry in the conflict set corresponds to this
+                // conflict key?
+                Object conflictObject = null;
+                final UUID conflictStream = currentException.getConflictStream();
+
+                for (Object o : conflictSet.get(currentException.getConflictStream())) {
+                    if (hashConflictObject(o) == currentException.getConflictKey()) {
+                        log.debug("doCommit[{}]: conflictHash {} = {}", this,
+                                currentException.getConflictKey(), o);
+                        conflictObject = o;
+                        break;
+                    }
+                }
+
+                ICorfuSMRProxyInternal proxy;
+                Optional<ICorfuSMRProxyInternal> modifyProxy = getModifiedProxies().stream()
+                        .filter(p -> p.getStreamID().equals(conflictStream))
+                        .findFirst();
+                if (modifyProxy.isPresent()) {
+                    proxy = modifyProxy.get();
+                } else {
+                    proxy = getReadSetInfo().proxies.get(conflictStream);
+                    if (proxy == null) {
+                        log.warn("doCommit[{}]: precise conflict resolution requested but proxy" +
+                                "not found, aborting");
+                        throw currentException;
+                    }
+                }
+
+                if (conflictObject == null) {
+                    // We weren't able to find a conflict object for this hash,
+                    // this is a bug possibly, but it also means that we should
+                    // be able to ignore it.
+                    log.warn("doCommit[{}]: conflictHash {} had no match!");
+                } else {
+                    // Otherwise starting from the conflict address to the snapshot
+                    // address (following backpointers if possible), check if there
+                    // is any conflict
+                    long currentAddress = currentException.getConflictAddress();
+                    final TransactionAbortedException thisException = currentException;
+                    log.debug("doCommit[{}]: conflictHash {} searching {} to {}",
+                            this,
+                            conflictObject,
+                            currentAddress,
+                            getSnapshotTimestamp());
+                    IStreamView stream =
+                            builder.runtime.getStreamsView().get(conflictStream);
+                    ISMRStream smrStream = new StreamViewSMRAdapter(builder.runtime, stream);
+                    smrStream.seek(getSnapshotTimestamp());
+                    final Object thisConflictObject = conflictObject;
+                    smrStream.streamUpTo(currentAddress)
+                            .forEach(x -> {
+                                Object[] conflicts =
+                                        proxy.getConflictFromEntry(x.getSMRMethod(),
+                                                x.getSMRArguments());
+                                log.trace("doCommit[{}]: found conflicts {}", this,  conflicts);
+                                if (conflicts != null) {
+                                    for (Object o : conflicts) {
+                                        if (o.equals(thisConflictObject)) {
+                                            log.trace("doCommit[{}]: True conflict, aborting"
+                                                    , this);
+                                            throw thisException;
+                                        }
+                                    }
+                                }
+                            });
+                }
+
+                // If we got here, we now tell the sequencer we checked this
+                // object manually and it was a false conflict
+                log.info("doCommit[{}]: False conflict, stream {} checked from {} to {}",
+                        this, Utils.toReadableId(conflictStream), getSnapshotTimestamp(),
+                                currentException.getConflictAddress());
+                scanData.put(conflictStream, new TxScanInfo(getSnapshotTimestamp(),
+                        currentException.getConflictAddress()));
+                try {
+                    address = this.builder.runtime.getStreamsView()
+                            .append(
+                                    // a set of stream-IDs that contains the affected streams
+                                    affectedStreams,
+
+                                    // a MultiObjectSMREntry that contains the update(s) to objects
+                                    collectWriteSetEntries(),
+
+                                    // TxResolution info:
+                                    // 1. snapshot timestamp
+                                    // 2. a map of conflict params, arranged by streamID's
+                                    // 3. a map of write conflict-params, arranged by
+                                    // streamID's
+                                    new TxResolutionInfo(getTransactionID(),
+                                            getSnapshotTimestamp(),
+                                            hashedConflictSet,
+                                            hashConflictSet(collectWriteConflictParams()),
+                                            scanData
+                                            )
+                            );
+                    break;
+                } catch (TransactionAbortedException taeRetry) {
+                    currentException = taeRetry;
+                }
+            }
+        }
+
+        log.trace("doCommit[{}] Acquire address {}", this, address);
 
         super.commitTransaction();
         commitAddress = address;
 
         tryCommitAllProxies();
-        log.trace("Commit[{}] Written to {}", this, address);
+        log.trace("doCommit[{}] Written to {}", this, address);
         return address;
     }
 

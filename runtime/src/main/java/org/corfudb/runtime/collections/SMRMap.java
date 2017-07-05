@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.TransactionalMethod;
+import org.corfudb.runtime.object.IConflictFunction;
 
 /**
  * Created by mwei on 1/7/16.
@@ -29,7 +30,6 @@ import org.corfudb.annotations.TransactionalMethod;
 @Deprecated // TODO: Add replacement method that conforms to style
 @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
 public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
-
     /**
      * Returns a {@link Set} view of the keys contained in this map.
      * The set is backed by the map, so changes to the map are

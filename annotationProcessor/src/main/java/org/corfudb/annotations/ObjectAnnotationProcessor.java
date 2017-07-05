@@ -43,6 +43,7 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
 
+import org.corfudb.runtime.object.IConflictFunction;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
@@ -554,6 +555,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         addUndoRecordMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
         addUndoMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
         addResetSet(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
+        addEntryToConflictMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
 
         typeSpecBuilder
                 .addSuperinterfaces(interfacesToAdd);
@@ -901,6 +903,83 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                 .addStatement("return $L", "undoMap" + CORFUSMR_FIELD)
                 .build());
 
+    }
+
+    private void addEntryToConflictMap(TypeSpec.Builder typeSpecBuilder, TypeName originalName,
+                                        Set<TypeName> interfacesToAdd,
+                                        Set<SmrMethodInfo> methodSet) {
+        // Generate the conflict resolver string and associated map.
+        // We only need to resolve conflicts which actually can be
+        // written to as upcalls
+        String conflictResolverString = methodSet.stream()
+                .filter(x -> x.method.getAnnotation(MutatorAccessor.class) != null
+                        || (x.method.getAnnotation(Mutator.class) != null
+                        && !x.method.getAnnotation(Mutator.class).noUpcall()))
+                .map(x -> "\n.put(\"" + getSmrFunctionName(x.method) + "\", "
+                        + "(args) ->  " + (x.hasConflictAnnotations ?
+                        getConflictAnnotationsString("args", x) :
+                            getConflictMethodString("args", x)) + ")")
+                .collect(Collectors.joining());
+
+        FieldSpec conflictResolverMap =
+                FieldSpec.builder(ParameterizedTypeName.get(ClassName.get(Map.class),
+                ClassName.get(String.class),
+                ClassName.get(IConflictFunction.class)), "entryToConflictMap" + CORFUSMR_FIELD,
+                Modifier.PUBLIC, Modifier.FINAL)
+                .initializer("new $T()$L.build()",
+                        ParameterizedTypeName.get(ClassName.get(ImmutableMap.Builder.class),
+                                ClassName.get(String.class),
+                                ClassName.get(IConflictFunction.class)), conflictResolverString)
+                .build();
+
+        typeSpecBuilder.addField(conflictResolverMap);
+
+        typeSpecBuilder.addMethod(MethodSpec.methodBuilder("getCorfuEntryToConflictMap")
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(Map.class),
+                        ClassName.get(String.class),
+                        ClassName.get(IConflictFunction.class)))
+                .addStatement("return $L", "entryToConflictMap" + CORFUSMR_FIELD)
+                .build());
+    }
+
+    private String getConflictAnnotationsString(String paramName, SmrMethodInfo method) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("new Object[] {");
+        boolean firstArg = true;
+        for (int i = 0; i < method.method.getParameters().size(); i++) {
+            if (method.method.getParameters().get(i)
+                    .getAnnotation(ConflictParameter.class) != null) {
+                if (!firstArg) {
+                    sb.append(",");
+                } else {
+                    firstArg = false;
+                }
+                sb.append(paramName).append("[").append(i).append("]");
+            }
+        }
+        sb.append("}");
+        return sb.toString();
+    }
+
+    private String getConflictMethodString(String paramName, SmrMethodInfo method) {
+        if (method.conflictFunction == null) {
+            return "null";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(method.conflictFunction).append("(");
+        for (int i = 0; i < method.method.getParameters().size(); i++) {
+                if (i != 0) {
+                    sb.append(",");
+                }
+                sb.append("(").append(method.method.getParameters()
+                        .get(i).asType())
+                        .append(")").append(paramName)
+                        .append("[").append(i).append("]");
+        }
+        sb.append(")");
+        return sb.toString();
     }
 
     /** Add a conflict field to the method.

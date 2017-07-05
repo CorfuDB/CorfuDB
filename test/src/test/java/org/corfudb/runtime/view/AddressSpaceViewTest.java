@@ -7,12 +7,14 @@ import org.corfudb.infrastructure.LogUnitServerAssertions;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.OverwriteException;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 2/1/16.
@@ -161,5 +163,73 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 .isEqualTo("hello world".getBytes());
         assertThat(m.get(ADDRESS_1).isHole());
         assertThat(m.get(ADDRESS_2).isHole());
+    }
+
+    @SuppressWarnings("unchecked")
+    public void holeFillOverwriteIsNotCached()
+            throws Exception {
+        CorfuRuntime r = getRuntime()
+                .setCacheDisabled(false)
+                .connect();
+
+        byte[] testPayload = "hello world".getBytes();
+
+        final long ADDRESS_0 = 0;
+        final long ADDRESS_1 = 1;
+
+        Token token = new Token(ADDRESS_0, r.getLayoutView().getLayout().getEpoch());
+        r.getAddressSpaceView().write(token, testPayload);
+
+        assertThat(r.getAddressSpaceView().read(ADDRESS_0).getPayload(getRuntime()))
+                .isEqualTo("hello world".getBytes());
+
+        Range range = Range.closed(ADDRESS_0, ADDRESS_1);
+        ContiguousSet<Long> addresses = ContiguousSet.create(range, DiscreteDomain.longs());
+
+        Map<Long, ILogData> m = r.getAddressSpaceView().cacheFetch(addresses);
+
+        assertThat(m.get(ADDRESS_0).getPayload(getRuntime()))
+                .isEqualTo("hello world".getBytes());
+
+        Token tokenHoleFilled = new Token(ADDRESS_1, r.getLayoutView().getLayout().getEpoch());
+        assertThatThrownBy(() ->
+                r.getAddressSpaceView().write(tokenHoleFilled, testPayload))
+                .isInstanceOf(OverwriteException.class);
+
+        assertThat(m.get(ADDRESS_1).isHole());
+    }
+
+    @SuppressWarnings("unchecked")
+    public void holeFillOverwriteReadIsNotCached()
+            throws Exception {
+        CorfuRuntime r = getRuntime()
+                .setCacheDisabled(false)
+                .connect();
+
+        byte[] testPayload = "hello world".getBytes();
+
+        final long ADDRESS_0 = 0;
+        final long ADDRESS_1 = 1;
+
+        Token token = new Token(ADDRESS_0, r.getLayoutView().getLayout().getEpoch());
+        r.getAddressSpaceView().write(token, testPayload);
+
+        assertThat(r.getAddressSpaceView().read(ADDRESS_0).getPayload(getRuntime()))
+                .isEqualTo("hello world".getBytes());
+
+        Range range = Range.closed(ADDRESS_0, ADDRESS_1);
+        ContiguousSet<Long> addresses = ContiguousSet.create(range, DiscreteDomain.longs());
+
+        Map<Long, ILogData> m = r.getAddressSpaceView().cacheFetch(addresses);
+
+        assertThat(m.get(ADDRESS_0).getPayload(getRuntime()))
+                .isEqualTo("hello world".getBytes());
+
+        Token tokenHoleFilled = new Token(ADDRESS_1, r.getLayoutView().getLayout().getEpoch());
+        assertThatThrownBy(() ->
+                r.getAddressSpaceView().write(tokenHoleFilled, testPayload))
+                .isInstanceOf(OverwriteException.class);
+
+        assertThat(m.get(ADDRESS_1).isHole());
     }
 }

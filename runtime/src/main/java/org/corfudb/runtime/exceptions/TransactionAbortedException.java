@@ -5,6 +5,7 @@ import java.util.UUID;
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.view.Address;
 
 /**
  * Created by mwei on 1/11/16.
@@ -28,6 +29,12 @@ public class TransactionAbortedException extends RuntimeException {
 
     @Getter
     AbstractTransactionalContext context;
+
+    /** If available, the address where the conflict was detected,
+     *  otherwise, Address.NON_EXIST.
+     */
+    @Getter
+    long conflictAddress = Address.NON_EXIST;
 
     /**
      * Constructor.
@@ -60,6 +67,15 @@ public class TransactionAbortedException extends RuntimeException {
         this.cause = cause;
         this.conflictStream = conflictStream;
         this.context = context;
+    }
+
+    public TransactionAbortedException(TxResolutionInfo txResolutionInfo,
+                                       Integer conflictKey, UUID conflictStream,
+                                       AbortCause abortCause, Throwable cause,
+                                       long conflictAddress, AbstractTransactionalContext context) {
+        this(txResolutionInfo, conflictKey, conflictStream,
+                abortCause, cause, context);
+        this.conflictAddress = conflictAddress;
     }
 
 }

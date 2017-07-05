@@ -256,7 +256,7 @@ public abstract class AbstractTransactionalContext implements
      *                        available.
      */
     public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
-        getReadSetInfo().addToReadSet(proxy.getStreamID(), conflictObjects);
+        getReadSetInfo().addToReadSet(proxy, conflictObjects);
     }
 
     /**
@@ -289,7 +289,7 @@ public abstract class AbstractTransactionalContext implements
      *
      * @return A set of longs representing all the conflict params
      */
-    Map<UUID, Set<Integer>> collectWriteConflictParams() {
+    Map<UUID, Set<Object>> collectWriteConflictParams() {
         return getWriteSetInfo().getWriteSetConflicts();
     }
 

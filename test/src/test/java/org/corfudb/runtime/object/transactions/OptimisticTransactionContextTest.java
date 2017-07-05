@@ -1,10 +1,13 @@
 package org.corfudb.runtime.object.transactions;
 
+import org.corfudb.annotations.CorfuObject;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ConflictParameterClass;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -52,15 +55,15 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .getReadSetConflicts().values().stream()
                 .flatMap(x -> x.stream())
                 .collect(Collectors.toList()))
-                .contains(Integer.valueOf(TEST_0.hashCode()));
+                .contains(TEST_0, TEST_4);
 
-        // in optimistic mode, assert that the conflict set does NOT contain TEST_2, TEST_4
+        // in optimistic mode, assert that the conflict set does NOT contain TEST_1 - TEST_3
         assertThat(TransactionalContext.getCurrentContext()
                 .getReadSetInfo()
                 .getReadSetConflicts().values().stream()
                 .flatMap(x -> x.stream())
                 .collect(Collectors.toList()))
-                .doesNotContain(Integer.valueOf(TEST_3), Integer.valueOf(TEST_4));
+                .doesNotContain(TEST_1, TEST_2, TEST_3);
 
         getRuntime().getObjectsView().TXAbort();
     }
@@ -311,5 +314,31 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         // of the most recent write.
         assertThat(getMap())
                 .containsEntry("k", "v2");
+    }
+
+
+    @Test
+    public void preciseConflictsDoNotAbort() {
+        String k1 = "Aa";
+        String k2 = "BB";
+
+        t1(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t1(() -> put(k1, "a"));
+
+        t2(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t2(() -> put(k2, "a"));
+
+        t1(() -> TXEnd());
+        t2(() -> TXEnd());
     }
 }

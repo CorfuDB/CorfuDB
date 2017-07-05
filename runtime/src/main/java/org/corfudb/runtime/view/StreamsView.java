@@ -114,6 +114,7 @@ public class StreamsView extends AbstractView {
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
+                        tokenResponse.getConflictStream(),
                         tokenResponse.getRespType()
                                 == TokenType.TX_ABORT_CONFLICT_KEY ? AbortCause.CONFLICT :
                         tokenResponse.getRespType()
@@ -121,6 +122,8 @@ public class StreamsView extends AbstractView {
                         tokenResponse.getRespType()
                                 == TokenType.TX_ABORT_NEWSEQ ? AbortCause.NEW_SEQUENCER :
                         AbortCause.UNDEFINED,
+                        null,
+                        tokenResponse.getTokenValue(),
                         TransactionalContext.getCurrentContext()
                 );
             }
@@ -154,6 +157,7 @@ public class StreamsView extends AbstractView {
                 // eventually be deprecated since these are no longer used)
                 tokenResponse = new TokenResponse(
                         temp.getRespType(), tokenResponse.getConflictKey(),
+                        tokenResponse.getConflictStream(),
                         temp.getToken(), temp.getBackpointerMap());
             }
         }

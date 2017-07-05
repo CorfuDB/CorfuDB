@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+
 import lombok.Getter;
 
 /**
@@ -17,7 +19,9 @@ import lombok.Getter;
 class ReadSetInfo {
     // fine-grained conflict information regarding accessed-objects;
     // captures values passed using @conflict annotations in @corfuObject
-    Map<UUID, Set<Integer>> readSetConflicts = new HashMap<>();
+    Map<UUID, Set<Object>> readSetConflicts = new HashMap<>();
+
+    Map<UUID, ICorfuSMRProxyInternal> proxies = new HashMap<>();
 
     public void mergeInto(ReadSetInfo other) {
         other.getReadSetConflicts().forEach((streamId, cset) -> {
@@ -25,17 +29,19 @@ class ReadSetInfo {
         });
     }
 
-    public void addToReadSet(UUID streamId, Object[] conflictObjects) {
+    public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
         if (conflictObjects == null) {
             return;
         }
 
-        Set<Integer> streamConflicts = getConflictSet(streamId);
+        Set<Object> streamConflicts = getConflictSet(proxy.getStreamID());
         Arrays.asList(conflictObjects).stream()
-                .forEach(V -> streamConflicts.add(Integer.valueOf(V.hashCode())));
+                .forEach(streamConflicts::add);
+
+        proxies.put(proxy.getStreamID(), proxy);
     }
 
-    public Set<Integer> getConflictSet(UUID streamId) {
+    public Set<Object> getConflictSet(UUID streamId) {
         return getReadSetConflicts().computeIfAbsent(streamId, u -> {
             return new HashSet<>();
         });

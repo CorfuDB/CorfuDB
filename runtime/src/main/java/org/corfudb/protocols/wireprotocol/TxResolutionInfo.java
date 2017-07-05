@@ -37,6 +37,9 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     @Getter
     final Map<UUID, Set<Integer>>  writeConflictParams;
 
+    @Getter
+    final Map<UUID, TxScanInfo> validatedStreams;
+
     /**
      * Constructor for TxResolutionInfo.
      *
@@ -48,6 +51,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
         this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = Collections.emptyMap();
         this.writeConflictParams = Collections.emptyMap();
+        this.validatedStreams = Collections.emptyMap();
     }
 
     /**
@@ -64,7 +68,27 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
         this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = conflictMap;
         this.writeConflictParams = writeConflictParams;
+        this.validatedStreams = Collections.emptyMap();
     }
+
+    /**
+     * Constructor for TxResolutionInfo.
+     *
+     * @param txId transaction identifier
+     * @param snapshotTimestamp transaction snapshot timestamp
+     * @param conflictMap map of conflict parameters, arranged by stream IDs
+     * @param writeConflictParams map of write conflict parameters, arranged by stream IDs
+     */
+    public TxResolutionInfo(UUID txId, long snapshotTimestamp, Map<UUID, Set<Integer>>
+            conflictMap, Map<UUID, Set<Integer>> writeConflictParams,
+                            Map<UUID, TxScanInfo> validatedMap) {
+        this.TXid = txId;
+        this.snapshotTimestamp = snapshotTimestamp;
+        this.conflictSet = conflictMap;
+        this.writeConflictParams = writeConflictParams;
+        this.validatedStreams = validatedMap;
+    }
+
 
     /**
      * fast, specialized deserialization constructor, from a ByteBuf to this object
@@ -100,6 +124,8 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
         }
 
         writeConflictParams = writeMapBuilder.build();
+
+        this.validatedStreams = ICorfuPayload.mapFromBuffer(buf, UUID.class, TxScanInfo.class);
     }
 
     /**
@@ -125,6 +151,8 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
             ICorfuPayload.serialize(buf, x.getKey());
             ICorfuPayload.serialize(buf, x.getValue());
         });
+
+        ICorfuPayload.serialize(buf, validatedStreams);
     }
 
     @Override
