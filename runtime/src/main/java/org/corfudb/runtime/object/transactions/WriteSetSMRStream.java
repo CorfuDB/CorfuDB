@@ -245,6 +245,6 @@ public class WriteSetSMRStream implements ISMRStream {
 
     @Override
     public String toString() {
-        return "WSSMRStream[" + Utils.toReadableID(getID()) + "]";
+        return "WSSMRStream[" + Utils.toReadableId(getID()) + "]";
     }
 }

@@ -6,15 +6,17 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * This class implements a basic interval-based retry.
- * <p>
- * Created by mwei on 9/1/15.
+ *
+ * <p>Created by mwei on 9/1/15.
  */
 @Slf4j
-public class IntervalRetry<E extends Exception, F extends Exception, G extends Exception, H extends Exception, O> extends AbstractRetry<E, F, G, H, O, IntervalRetry> {
+public class IntervalRetry<E extends Exception, F extends Exception,
+        G extends Exception, H extends Exception, O> extends AbstractRetry<E, F,
+        G, H, O, IntervalRetry> {
 
 
     /**
-     * The interval, in milliseconds to wait for retry
+     * The interval, in milliseconds to wait for retry.
      **/
     @Getter
     @Setter
@@ -27,7 +29,6 @@ public class IntervalRetry<E extends Exception, F extends Exception, G extends E
     /**
      * Apply the retry logic.
      *
-     * @return True, if we should continue retrying, false otherwise.
      */
     @Override
     public void nextWait() throws InterruptedException {

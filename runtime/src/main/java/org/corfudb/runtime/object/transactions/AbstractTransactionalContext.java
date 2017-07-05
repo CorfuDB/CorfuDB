@@ -295,6 +295,6 @@ public abstract class AbstractTransactionalContext implements
 
     @Override
     public String toString() {
-        return "TX[" + Utils.toReadableID(transactionID) + "]";
+        return "TX[" + Utils.toReadableId(transactionID) + "]";
     }
 }

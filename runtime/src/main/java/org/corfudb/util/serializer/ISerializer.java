@@ -20,7 +20,8 @@ public interface ISerializer {
         protected Kryo initialValue() {
             Kryo kryo = new Kryo();
             // Use an instantiator that does not require no-args
-            kryo.setInstantiatorStrategy(new Kryo.DefaultInstantiatorStrategy(new StdInstantiatorStrategy()));
+            kryo.setInstantiatorStrategy(new Kryo.DefaultInstantiatorStrategy(
+                    new StdInstantiatorStrategy()));
             ImmutableListSerializer.registerSerializers(kryo);
             ImmutableSetSerializer.registerSerializers(kryo);
             ImmutableMapSerializer.registerSerializers(kryo);

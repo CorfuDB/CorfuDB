@@ -52,7 +52,8 @@ import java.util.function.UnaryOperator;
  */
 public class LambdaUtils {
 
-    private static final Map<Class<Object>, LambdaResolver<Object>> dispatchMap = generateDispatchMap();
+    private static final Map<Class<Object>,
+            LambdaResolver<Object>> dispatchMap = generateDispatchMap();
 
     @SuppressWarnings("unchecked")
     private static Map<Class<Object>, LambdaResolver<Object>> generateDispatchMap() {
@@ -71,7 +72,8 @@ public class LambdaUtils {
             f.accept(a[0]);
             return null;
         });
-        typedPut(builder, DoubleBinaryOperator.class, (f, a) -> f.applyAsDouble((double) a[0], (double) a[1]));
+        typedPut(builder, DoubleBinaryOperator.class, (f, a) -> f.applyAsDouble((double) a[0],
+                (double) a[1]));
         typedPut(builder, DoubleConsumer.class, (f, a) -> {
             f.accept((double) a[0]);
             return null;
@@ -94,7 +96,8 @@ public class LambdaUtils {
         typedPut(builder, IntToDoubleFunction.class, (f, a) -> f.applyAsDouble((int) a[0]));
         typedPut(builder, IntToLongFunction.class, (f, a) -> f.applyAsLong((int) a[0]));
         typedPut(builder, IntUnaryOperator.class, (f, a) -> f.applyAsInt((int) a[0]));
-        typedPut(builder, LongBinaryOperator.class, (f, a) -> f.applyAsLong((long) a[0], (long) a[1]));
+        typedPut(builder, LongBinaryOperator.class, (f, a) -> f.applyAsLong((long) a[0],
+                (long) a[1]));
         typedPut(builder, LongConsumer.class, (f, a) -> {
             f.accept((long) a[0]);
             return null;

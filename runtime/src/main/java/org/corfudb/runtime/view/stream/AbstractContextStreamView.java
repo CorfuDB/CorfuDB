@@ -337,6 +337,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
 
     @Override
     public String toString() {
-        return Utils.toReadableID(baseContext.id) + "@" + getCurrentContext().globalPointer;
+        return Utils.toReadableId(baseContext.id) + "@" + getCurrentContext().globalPointer;
     }
 }
