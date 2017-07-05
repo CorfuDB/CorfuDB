@@ -17,6 +17,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -165,6 +166,10 @@ public interface ICorfuPayload<T> {
      */
     static <K,V> Map<K,V> mapFromBuffer(ByteBuf buf, Class<K> keyClass, Class<V> valueClass) {
         int numEntries = buf.readInt();
+        // If there are no entries, return the empty immutable map.
+        if (numEntries == 0) {
+            return Collections.emptyMap();
+        }
         ImmutableMap.Builder<K,V> builder = ImmutableMap.builder();
         for (int i = 0; i < numEntries; i++) {
             builder.put(fromBuffer(buf, keyClass), fromBuffer(buf, valueClass));
@@ -181,6 +186,10 @@ public interface ICorfuPayload<T> {
      */
     static <V> Set<V> setFromBuffer(ByteBuf buf, Class<V> valueClass) {
         int numEntries = buf.readInt();
+        // If there are no entries, return the empty immutable set.
+        if (numEntries == 0) {
+            return Collections.emptySet();
+        }
         ImmutableSet.Builder<V> builder = ImmutableSet.builder();
         for (int i = 0; i < numEntries; i++) {
             builder.add(fromBuffer(buf, valueClass));
@@ -197,6 +206,10 @@ public interface ICorfuPayload<T> {
      */
     static <V> List<V> listFromBuffer(ByteBuf buf, Class<V> valueClass) {
         int numEntries = buf.readInt();
+        // If there are no entries, return the empty immutable list.
+        if (numEntries == 0) {
+            return Collections.emptyList();
+        }
         ImmutableList.Builder<V> builder = ImmutableList.builder();
         for (int i = 0; i < numEntries; i++) {
             builder.add(fromBuffer(buf, valueClass));
@@ -252,9 +265,9 @@ public interface ICorfuPayload<T> {
     static <K extends Enum<K> & ITypedEnum<K>,V> EnumMap<K,V> enumMapFromBuffer(ByteBuf buf,
                                                                                 Class<K> keyClass,
                                                                                 Class<V> objClass) {
+        byte numEntries = buf.readByte();
         EnumMap<K, V> metadataMap =
                 new EnumMap<>(keyClass);
-        byte numEntries = buf.readByte();
         while (numEntries > 0 && buf.isReadable()) {
             K type = fromBuffer(buf, keyClass);
             V value = (V)fromBuffer(buf, type.getComponentType());
