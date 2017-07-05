@@ -6,6 +6,8 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 
+import org.corfudb.runtime.view.Address;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
