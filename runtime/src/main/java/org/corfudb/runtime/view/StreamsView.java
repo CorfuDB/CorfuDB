@@ -110,20 +110,17 @@ public class StreamsView extends AbstractView {
         while (true) {
 
             // Is our token a valid type?
-            if (tokenResponse.getRespType() == TokenType.TX_ABORT_CONFLICT) {
+            if (tokenResponse.getRespType().isAborted()) {
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
-                        AbortCause.CONFLICT,
-                        TransactionalContext.getCurrentContext()
-                );
-            }
-
-            if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ) {
-                throw new TransactionAbortedException(
-                        conflictInfo,
-                        tokenResponse.getConflictKey(),
-                        AbortCause.NEW_SEQUENCER,
+                        tokenResponse.getRespType()
+                                == TokenType.TX_ABORT_CONFLICT_KEY ? AbortCause.CONFLICT :
+                        tokenResponse.getRespType()
+                                == TokenType.TX_ABORT_CONFLICT_STREAM ? AbortCause.CONFLICT :
+                        tokenResponse.getRespType()
+                                == TokenType.TX_ABORT_NEWSEQ ? AbortCause.NEW_SEQUENCER :
+                        AbortCause.UNDEFINED,
                         TransactionalContext.getCurrentContext()
                 );
             }

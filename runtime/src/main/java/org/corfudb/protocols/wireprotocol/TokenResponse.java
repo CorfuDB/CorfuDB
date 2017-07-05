@@ -2,6 +2,7 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 
@@ -30,6 +31,21 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
         token = new Token(tokenValue, epoch);
         this.backpointerMap = backpointerMap;
     }
+
+    public TokenResponse(TokenType type, long address, long epoch) {
+        respType = type;
+        conflictKey = NO_CONFLICT_KEY;
+        token = new Token(address, epoch);
+        this.backpointerMap = Collections.emptyMap();
+    }
+
+    public TokenResponse(TokenType type, int conflictKey, long address, long epoch) {
+        respType = type;
+        this.conflictKey = conflictKey;
+        token = new Token(address, epoch);
+        this.backpointerMap = Collections.emptyMap();
+    }
+
 
     /** the cause/type of response. */
     final TokenType respType;
