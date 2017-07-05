@@ -11,7 +11,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
 import java.io.File;
-import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -379,6 +378,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
 
         // Close segments before deleting their corresponding log files
+        int numFiles = 0;
+        long freedBytes = 0;
         for (SegmentHandle sh : writeChannels.values()) {
             if (sh.getSegment() <= endSegment) {
                 if (sh.getRefCount() != 0) {
@@ -393,23 +394,24 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 File trimmedFile = new File(getTrimmedFilePath(sh.getFileName()));
                 File pendingFile = new File(getPendingTrimsFilePath(sh.getFileName()));
 
-                if (!logFile.delete()) {
-                    log.error("trimPrefix: Couldn't delete/trim file {}", logFile.getName());
-                }
+                Set<File> files = new HashSet(Arrays.asList(logFile, trimmedFile, pendingFile));
 
-                if (!trimmedFile.delete()) {
-                    log.error("trimPrefix: Couldn't delete/trim file {}", trimmedFile.getName());
-                }
+                for (File file : files) {
+                    long delta = file.length();
 
-                if (!pendingFile.delete()) {
-                    log.error("trimPrefix: Couldn't delete/trim file {}", pendingFile.getName());
+                    if (!file.delete()) {
+                        log.error("trimPrefix: Couldn't delete file {}", file.getName());
+                    } else {
+                        freedBytes += delta;
+                        numFiles++;
+                    }
                 }
-
                 writeChannels.remove(sh.getFileName());
             }
         }
 
-        log.info("Prefix trim completed, delete segments 0 to {}", endSegment);
+        log.info("trimPrefix: completed, deleted {} files, freed {} bytes, end segment {}",
+                numFiles, freedBytes, endSegment);
     }
 
     private void spaseCompact() {
@@ -436,7 +438,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 log.info("Starting compaction, pending entries size {}", pending.size());
                 trimLogFile(sh.getFileName(), pending);
             } catch (IOException e) {
-                log.error("Compact operation failed for file {}", sh.getFileName());
+                log.error("Compact operation failed for file {}, {}", sh.getFileName(), e);
             }
         }
     }
@@ -943,7 +945,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         SegmentHandle fh = getSegmentHandleForAddress(address);
 
         try {
-
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
             if (fh.getKnownAddresses().containsKey(address)
