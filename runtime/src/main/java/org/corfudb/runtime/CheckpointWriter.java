@@ -48,7 +48,6 @@ public class CheckpointWriter {
      */
     @Getter
     @SuppressWarnings("checkstyle:abbreviation")
-    private UUID checkpointID;
     private UUID streamId;
     private String author;
     @Getter

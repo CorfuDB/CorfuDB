@@ -172,8 +172,7 @@ public abstract class AbstractTransactionalContext implements
      * @param <T>            The type of the proxy's underlying object.
      * @return The address the update was written at.
      */
-    public abstract <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
-                                       SMREntry updateEntry,
+    public abstract <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry,
                                        Object[] conflictObject);
 
     /**
