@@ -219,6 +219,7 @@ public class FailureHandlerDispatcher {
     private void verifyStreamTailsMap(Map<UUID, Long> streamTails) {
         for (Long value : streamTails.values()) {
             if (value < 0) {
+                log.error("Stream Tails map verification failed. Map = {}", streamTails);
                 throw new RecoveryException("Invalid stream tails found in map.");
             }
         }
