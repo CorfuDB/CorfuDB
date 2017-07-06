@@ -17,6 +17,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
@@ -40,6 +41,28 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // This module *really* needs separate & independent runtimes.
         r = getDefaultRuntime().connect(); // side-effect of using AbstractViewTest::getRouterFunction
         r = new CorfuRuntime(getDefaultEndpoint()).connect();
+    }
+
+    @Test
+    public void testEmptyMapCP() throws Exception {
+        SMRMap<String, String> map = r.getObjectsView().build()
+                .setType(SMRMap.class)
+                .setStreamName("Map1")
+                .open();
+
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap(map);
+
+        // Verify that a CP wasn't generated
+        long address = mcw.appendCheckpoints(r, "A1");
+        assertThat(address).isEqualTo(-1);
+
+        // Verify that nothing was written
+        IStreamView sv = r.getStreamsView().get(CorfuRuntime.getStreamID("S1"));
+        final int objSize = 100;
+        long a1 = sv.append(new byte[objSize]);
+        final long firstAddress = 0L;
+        assertThat(a1).isEqualTo(firstAddress);
     }
 
     /** First smoke test, steps:
