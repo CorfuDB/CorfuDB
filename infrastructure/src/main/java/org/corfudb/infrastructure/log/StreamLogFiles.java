@@ -254,6 +254,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             }
         } catch (IOException e) {
             throw new RuntimeException(e.getMessage(), e);
+        } finally {
+            sh.release();
         }
 
         lastSegment = tailSegment;
@@ -327,24 +329,28 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public void trim(long address) {
         SegmentHandle handle = getSegmentHandleForAddress(address);
-        if (!handle.getKnownAddresses().containsKey(address)
-                || handle.getPendingTrims().contains(address)) {
-            return;
-        }
-        TrimEntry entry = TrimEntry.newBuilder()
-                .setChecksum(getChecksum(address))
-                .setAddress(address)
-                .build();
-
-        // TODO(Maithem) possibly move this to SegmentHandle. Do we need to close and flush?
-        OutputStream outputStream = Channels.newOutputStream(handle.getPendingTrimChannel());
         try {
+            if (!handle.getKnownAddresses().containsKey(address)
+                    || handle.getPendingTrims().contains(address)) {
+                return;
+            }
+
+            TrimEntry entry = TrimEntry.newBuilder()
+                    .setChecksum(getChecksum(address))
+                    .setAddress(address)
+                    .build();
+
+            // TODO(Maithem) possibly move this to SegmentHandle. Do we need to close and flush?
+            OutputStream outputStream = Channels.newOutputStream(handle.getPendingTrimChannel());
+
             entry.writeDelimitedTo(outputStream);
             outputStream.flush();
             handle.pendingTrims.add(address);
             channelsToSync.add(handle.getPendingTrimChannel());
         } catch (IOException e) {
             log.warn("Exception while writing a trim entry {} : {}", address, e.toString());
+        } finally {
+            handle.release();
         }
     }
 
@@ -372,20 +378,37 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             return;
         }
 
-        File dir = new File(logDir);
-        FileFilter fileFilter = new FileFilter() {
-            public boolean accept(File file) {
-                String segmentStr = file.getName().split("\\.")[0];
-                return Long.parseLong(segmentStr) <= endSegment;
-            }
-        };
-        File[] files = dir.listFiles(fileFilter);
+        // Close segments before deleting their corresponding log files
+        for (SegmentHandle sh : writeChannels.values()) {
+            if (sh.getSegment() <= endSegment) {
+                if (sh.getRefCount() != 0) {
+                    log.warn("trimPrefix: Segment {} is trimmed, but refCount is {},"
+                                    + " attempting to trim anyways", sh.getSegment(),
+                            sh.getRefCount());
+                }
 
-        for (File file : files) {
-            if (!file.delete()) {
-                log.error("Couldn't delete/trim file {}", file.getName());
+                sh.close();
+
+                File logFile = new File(sh.getFileName());
+                File trimmedFile = new File(getTrimmedFilePath(sh.getFileName()));
+                File pendingFile = new File(getPendingTrimsFilePath(sh.getFileName()));
+
+                if (!logFile.delete()) {
+                    log.error("trimPrefix: Couldn't delete/trim file {}", logFile.getName());
+                }
+
+                if (!trimmedFile.delete()) {
+                    log.error("trimPrefix: Couldn't delete/trim file {}", trimmedFile.getName());
+                }
+
+                if (!pendingFile.delete()) {
+                    log.error("trimPrefix: Couldn't delete/trim file {}", pendingFile.getName());
+                }
+
+                writeChannels.remove(sh.getFileName());
             }
         }
+
         log.info("Prefix trim completed, delete segments 0 to {}", endSegment);
     }
 
@@ -712,8 +735,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         filePath += segment;
         filePath += ".log";
 
-        return writeChannels.computeIfAbsent(filePath, a -> {
-
+        SegmentHandle handle = writeChannels.computeIfAbsent(filePath, a -> {
             try {
                 boolean verify = true;
                 if (noVerify) {
@@ -740,6 +762,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 throw new RuntimeException(e);
             }
         });
+
+        handle.retain();
+        return handle;
     }
 
     private void loadTrimAddresses(SegmentHandle sh) throws IOException {
@@ -911,14 +936,16 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     @Override
     public void append(long address, LogData entry) {
-        //evict the data by getting the next pointer.
+        if(isTrimmed(address)) {
+            throw new OverwriteException();
+        }
+
+        SegmentHandle fh = getSegmentHandleForAddress(address);
+
         try {
-            if(isTrimmed(address)) {
-                throw new OverwriteException();
-            }
+
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
-            SegmentHandle fh = getSegmentHandleForAddress(address);
             if (fh.getKnownAddresses().containsKey(address)
                     || fh.getTrimmedAddresses().contains(address)) {
                 if (entry.getRank() == null) {
@@ -937,22 +964,27 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         } catch (IOException e) {
             log.error("Disk_write[{}]: Exception", address, e);
             throw new RuntimeException(e);
+        } finally {
+            fh.release();
         }
     }
 
     @Override
     public LogData read(long address) {
+        if (isTrimmed(address)) {
+            return LogData.TRIMMED;
+        }
+        SegmentHandle sh = getSegmentHandleForAddress(address);
+
         try {
-            if(isTrimmed(address)){
-                return LogData.TRIMMED;
-            }
-            SegmentHandle sh = getSegmentHandleForAddress(address);
             if (sh.getPendingTrims().contains(address)) {
                 return LogData.TRIMMED;
             }
             return readRecord(sh, address);
         } catch (IOException e) {
             throw new RuntimeException(e);
+        } finally {
+            sh.release();
         }
     }
 
@@ -972,6 +1004,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @VisibleForTesting
     Set<FileChannel> getChannelsToSync() {
         return channelsToSync;
+    }
+
+    @VisibleForTesting
+    Collection<SegmentHandle> getSegmentHandles() {
+        return writeChannels.values();
     }
 
     public static class CompactedEntry {
@@ -1008,10 +1045,23 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         private final FileChannel pendingTrimChannel;
         @NonNull
         private String fileName;
+
         private Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap();
         private Set<Long> trimmedAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
         private Set<Long> pendingTrims = Collections.newSetFromMap(new ConcurrentHashMap<>());
+        private volatile int refCount = 0;
 
+
+        public synchronized void retain() {
+            refCount++;
+        }
+
+        public synchronized void release() {
+            if (refCount == 0) {
+                throw new IllegalStateException("refCount cannot be less than 0, segment " + segment);
+            }
+            refCount--;
+        }
 
         public void close() {
             Set<FileChannel> channels =
