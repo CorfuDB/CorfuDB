@@ -557,12 +557,7 @@ public class VersionLockedObject<T> {
                 }
             } else {
                 Optional<SMREntry> entry = entries.stream().findFirst();
-                if (entry.isPresent()) {
-                    throw new NoRollbackException(entry.get(), stream.pos(), rollbackVersion);
-                }
-                else {
-                    throw new NoRollbackException(rollbackVersion);
-                }
+                throw new NoRollbackException(entry, stream.pos(), rollbackVersion);
             }
 
             entries = stream.previous();
