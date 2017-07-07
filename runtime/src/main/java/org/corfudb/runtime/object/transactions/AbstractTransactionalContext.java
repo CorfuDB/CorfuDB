@@ -84,7 +84,6 @@ public abstract class AbstractTransactionalContext implements
     public final TransactionBuilder builder;
 
     /**
-     * TODO remove this!
      * The start time of the context.
      */
     @Getter
@@ -127,7 +126,6 @@ public abstract class AbstractTransactionalContext implements
         transactionID = UUID.randomUUID();
         this.builder = builder;
 
-        // TODO remove this
         startTime = System.currentTimeMillis();
 
         parentContext = TransactionalContext.getCurrentContext();

@@ -7,12 +7,22 @@ import org.corfudb.protocols.logprotocol.SMREntry;
  */
 public class NoRollbackException extends RuntimeException {
 
-    public NoRollbackException() {
-        super("Can't roll back due to non-undoable exception");
+    public NoRollbackException(long rollbackVersion) {
+        super("Can't roll back due to non-undoable exception "
+                + " but need "
+                + rollbackVersion + " so can't undo");
     }
 
-    public NoRollbackException(SMREntry entry) {
-        super("Can't roll back due to " + entry.getSMRMethod() + "@"
-                + entry.getEntry().getGlobalAddress());
+    public NoRollbackException(long address, long rollbackVersion) {
+        super("Could only roll back to " + address + " but need "
+                + rollbackVersion + " so can't undo");
+    }
+
+    public NoRollbackException(SMREntry entry, long address, long rollbackVersion) {
+        super("Can't roll back due to " + entry.getSMRMethod()
+                + "@"
+                + address
+                + " but need "
+                + rollbackVersion + " so can't undo");
     }
 }

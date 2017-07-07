@@ -1,7 +1,10 @@
 package org.corfudb.runtime.exceptions;
 
+import java.util.UUID;
+
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 
 /**
  * Created by mwei on 1/11/16.
@@ -18,6 +21,9 @@ public class TransactionAbortedException extends RuntimeException {
     Integer conflictKey;
 
     @Getter
+    UUID conflictStream;
+
+    @Getter
     Throwable cause;
 
     /**
@@ -28,22 +34,28 @@ public class TransactionAbortedException extends RuntimeException {
      */
     public TransactionAbortedException(
             TxResolutionInfo txResolutionInfo,
-            Integer conflictKey, AbortCause abortCause) {
-        this(txResolutionInfo, conflictKey, abortCause, null);
+            Integer conflictKey, AbortCause abortCause, AbstractTransactionalContext context) {
+        this(txResolutionInfo, conflictKey, null, abortCause, null, context);
     }
 
     public TransactionAbortedException(
             TxResolutionInfo txResolutionInfo,
-            Integer conflictKey, AbortCause abortCause, Throwable cause) {
+            Integer conflictKey, UUID conflictStream,
+            AbortCause abortCause, Throwable cause, AbstractTransactionalContext context) {
         super("TX ABORT "
                 + " | Snapshot Time = " + txResolutionInfo.getSnapshotTimestamp()
                 + " | Transaction ID = " + txResolutionInfo.getTXid()
                 + " | Conflict Key = " + conflictKey
-                + " | Cause = " + abortCause);
+                + " | Conflict Stream = " + conflictStream
+                + " | Cause = " + abortCause
+                + " | Time = " + context == null ? "Unknown" :
+                System.currentTimeMillis() -
+                context.getStartTime() + " ms");
         this.txResolutionInfo = txResolutionInfo;
         this.conflictKey = conflictKey;
         this.abortCause = abortCause;
         this.cause = cause;
+        this.conflictStream = conflictStream;
 
     }
 

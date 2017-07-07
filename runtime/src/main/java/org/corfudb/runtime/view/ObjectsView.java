@@ -146,7 +146,7 @@ public class ObjectsView extends AbstractView {
             TxResolutionInfo txInfo = new TxResolutionInfo(
                     context.getTransactionID(), context.getSnapshotTimestamp());
             context.abortTransaction(new TransactionAbortedException(
-                    txInfo, null, AbortCause.USER));
+                    txInfo, null, AbortCause.USER, context));
             TransactionalContext.removeContext();
         }
     }
@@ -177,11 +177,9 @@ public class ObjectsView extends AbstractView {
             log.warn("Attempted to end a transaction, but no transaction active!");
             return AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
         } else {
-            // TODO remove this, doesn't belong here!
             long totalTime = System.currentTimeMillis() - context.getStartTime();
             log.trace("TXCommit[{}] time={} ms",
                     context, totalTime);
-            // TODO up to here
             try {
                 return TransactionalContext.getCurrentContext().commitTransaction();
             } catch (TransactionAbortedException e) {
@@ -207,8 +205,8 @@ public class ObjectsView extends AbstractView {
 
                 TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
                         snapshotTimestamp);
-                TransactionAbortedException tae = new TransactionAbortedException(txInfo, null,
-                        abortCause, e);
+                TransactionAbortedException tae = new TransactionAbortedException(txInfo,
+                        null, null, abortCause, e, context);
                 context.abortTransaction(tae);
                 throw tae;
             } finally {

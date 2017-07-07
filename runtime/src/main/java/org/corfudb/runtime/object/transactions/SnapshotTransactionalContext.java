@@ -59,7 +59,9 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                         TransactionAbortedException tae =
                                 new TransactionAbortedException(
                                         new TxResolutionInfo(getTransactionID(),
-                                                getSnapshotTimestamp()), null, AbortCause.TRIM, te);
+                                                getSnapshotTimestamp()), null,
+                                                proxy.getStreamID(),
+                                                AbortCause.TRIM, te, this);
                         abortTransaction(tae);
                         throw tae;
                     }

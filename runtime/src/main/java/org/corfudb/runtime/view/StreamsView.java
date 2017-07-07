@@ -18,6 +18,8 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Utils;
 
@@ -112,7 +114,8 @@ public class StreamsView extends AbstractView {
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
-                        AbortCause.CONFLICT
+                        AbortCause.CONFLICT,
+                        TransactionalContext.getCurrentContext()
                 );
             }
 
@@ -120,7 +123,8 @@ public class StreamsView extends AbstractView {
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
-                        AbortCause.NEW_SEQUENCER
+                        AbortCause.NEW_SEQUENCER,
+                        TransactionalContext.getCurrentContext()
                 );
             }
 
