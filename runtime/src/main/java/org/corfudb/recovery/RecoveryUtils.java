@@ -6,6 +6,7 @@ import com.google.common.collect.Range;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuCompileProxy;
@@ -34,8 +35,8 @@ public class RecoveryUtils {
         return Long.parseLong(logEntry.getDict().get(SNAPSHOT_ADDRESS));
     }
 
-    static long getStartAddressOfCheckPoint(CheckpointEntry logEntry) {
-        return Long.parseLong(logEntry.getDict().get(START_LOG_ADDRESS));
+    static long getStartAddressOfCheckPoint(ILogData logData) {
+        return logData.getCheckpointedStreamStartLogAddress();
     }
 
     /** Create a new object SMRMap as recipient of SMRUpdates (if doesn't exist yet)

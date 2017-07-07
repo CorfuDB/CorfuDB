@@ -22,7 +22,6 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
 
     private final AtomicLong globalTail = new AtomicLong(0L);
     private Map<Long, LogData> logCache;
-    private Map<UUID, Map<Long, LogData>> streamCache;
     private Set<Long> trimmed;
     private volatile long startingAddress;
 
@@ -31,7 +30,6 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
      */
     public InMemoryStreamLog() {
         logCache = new ConcurrentHashMap();
-        streamCache = new HashMap();
         trimmed = new ConcurrentSet<>();
         startingAddress = 0;
     }
@@ -109,7 +107,6 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public void close() {
         logCache = new HashMap();
-        streamCache = new HashMap();
     }
 
     @Override

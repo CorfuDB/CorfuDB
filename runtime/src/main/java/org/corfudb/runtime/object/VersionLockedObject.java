@@ -5,6 +5,7 @@ import io.netty.util.internal.ConcurrentSet;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -292,7 +293,7 @@ public class VersionLockedObject<T> {
                     try {
                         rollbackObjectUnsafe(timestamp);
                     } catch (NoRollbackException nre) {
-                        log.warn("SyncObjectUnsafe[{}] failed {}", this, nre);
+                        log.warn("SyncObjectUnsafe[{}] to {} failed {}", this, timestamp, nre);
                         resetUnsafe();
                     }
                 }
@@ -321,7 +322,7 @@ public class VersionLockedObject<T> {
                         return;
                     }
                 } catch (NoRollbackException nre) {
-                    log.warn("OptimisticRollback[{}] failed {}", this, nre);
+                    log.warn("OptimisticRollback[{}] to {} failed {}", this, timestamp, nre);
                     resetUnsafe();
                 }
             }
@@ -440,7 +441,7 @@ public class VersionLockedObject<T> {
     @Override
     public String toString() {
         return object.getClass().getSimpleName()
-                + "[" + Utils.toReadableID(smrStream.getID()) + "]@"
+                + "[" + Utils.toReadableId(smrStream.getID()) + "]@"
                 + (getVersionUnsafe() == Address.NEVER_READ ? "NR" : getVersionUnsafe())
                 + (optimisticStream == null ? "" : "+" + optimisticStream.pos());
     }
@@ -555,7 +556,8 @@ public class VersionLockedObject<T> {
                     applyUndoRecordUnsafe(it.previous());
                 }
             } else {
-                throw new NoRollbackException();
+                Optional<SMREntry> entry = entries.stream().findFirst();
+                throw new NoRollbackException(entry, stream.pos(), rollbackVersion);
             }
 
             entries = stream.previous();
@@ -565,7 +567,7 @@ public class VersionLockedObject<T> {
             }
         }
 
-        throw new NoRollbackException();
+        throw new NoRollbackException(stream.pos(), rollbackVersion);
     }
 
     /**

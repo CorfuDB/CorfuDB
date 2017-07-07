@@ -7,6 +7,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import lombok.Getter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -44,6 +45,7 @@ import org.corfudb.util.Utils;
  * <p>Created by mwei on 4/4/16.
  */
 @Slf4j
+@ToString
 public abstract class AbstractTransactionalContext implements
         Comparable<AbstractTransactionalContext> {
 
@@ -84,7 +86,6 @@ public abstract class AbstractTransactionalContext implements
     public final TransactionBuilder builder;
 
     /**
-     * TODO remove this!
      * The start time of the context.
      */
     @Getter
@@ -127,7 +128,6 @@ public abstract class AbstractTransactionalContext implements
         transactionID = UUID.randomUUID();
         this.builder = builder;
 
-        // TODO remove this
         startTime = System.currentTimeMillis();
 
         parentContext = TransactionalContext.getCurrentContext();
@@ -172,8 +172,7 @@ public abstract class AbstractTransactionalContext implements
      * @param <T>            The type of the proxy's underlying object.
      * @return The address the update was written at.
      */
-    public abstract <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
-                                       SMREntry updateEntry,
+    public abstract <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry,
                                        Object[] conflictObject);
 
     /**
@@ -295,6 +294,6 @@ public abstract class AbstractTransactionalContext implements
 
     @Override
     public String toString() {
-        return "TX[" + Utils.toReadableID(transactionID) + "]";
+        return "TX[" + Utils.toReadableId(transactionID) + "]";
     }
 }

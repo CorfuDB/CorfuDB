@@ -439,7 +439,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
     @Override
     public String toString() {
-        return type.getSimpleName() + "[" + Utils.toReadableID(streamID) + "]";
+        return type.getSimpleName() + "[" + Utils.toReadableId(streamID) + "]";
     }
 
     private void abortTransaction(Exception e) {
@@ -470,7 +470,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
             TxResolutionInfo txInfo = new TxResolutionInfo(
                     context.getTransactionID(), snapshotTimestamp);
-            tae = new TransactionAbortedException(txInfo, null, abortCause, e);
+            tae = new TransactionAbortedException(txInfo, null, getStreamID(),
+                    abortCause, e, context);
             context.abortTransaction(tae);
         }
 

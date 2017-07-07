@@ -636,7 +636,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * <p>
      * Index  :  0  1  2  3  |          | 4  5  6  7  8
      * Stream :  A  B  A  B  | failover | A  C  A  B  B
-     * B.P    : -1 -1  0  1  |          | 2  X  4  3  7
+     * B.P    : -1 -1  0  1  |          | 2 -1  4  3  7
      * <p>
      * -1 : New StreamID so empty backpointers
      *  X : (null) Unknown backpointers as this is a failed-over sequencer.

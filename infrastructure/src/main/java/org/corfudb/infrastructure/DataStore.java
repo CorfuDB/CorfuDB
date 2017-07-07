@@ -19,7 +19,7 @@ import javax.annotation.Nullable;
 
 import lombok.Getter;
 
-import org.corfudb.util.JSONUtils;
+import org.corfudb.util.JsonUtils;
 
 /**
  * Stores data as JSON.
@@ -133,7 +133,7 @@ public class DataStore implements IDataStore {
 
     @Override
     public synchronized  <T> void put(Class<T> tclass, String prefix, String key, T value) {
-        cache.put(getKey(prefix, key), JSONUtils.parser.toJson(value, tclass));
+        cache.put(getKey(prefix, key), JsonUtils.parser.toJson(value, tclass));
     }
 
     @Override
@@ -156,7 +156,7 @@ public class DataStore implements IDataStore {
      */
     public <T> T get(Class<T> tclass, String prefix, String key, T value) {
         String keyString = getKey(prefix, key);
-        String json = cache.get(keyString, k -> JSONUtils.parser.toJson(value, tclass));
+        String json = cache.get(keyString, k -> JsonUtils.parser.toJson(value, tclass));
         return getObject(json, tclass);
     }
 
@@ -179,7 +179,7 @@ public class DataStore implements IDataStore {
     // Helper methods
 
     private <T> T getObject(String json, Class<T> tclass) {
-        return isNotNull(json) ? JSONUtils.parser.fromJson(json, tclass) : null;
+        return isNotNull(json) ? JsonUtils.parser.fromJson(json, tclass) : null;
     }
 
     private String getKey(String prefix, String key) {
