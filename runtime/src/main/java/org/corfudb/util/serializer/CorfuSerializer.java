@@ -9,10 +9,10 @@ import org.corfudb.runtime.CorfuRuntime;
  */
 public class CorfuSerializer implements ISerializer {
 
-    final private byte type;
+    private final byte type;
 
-        /* The magic that denotes this is a corfu payload */
-    final byte CorfuPayloadMagic = 0x42;
+    /* The magic that denotes this is a corfu payload */
+    final byte corfuPayloadMagic = 0x42;
 
     public CorfuSerializer(byte type) {
         this.type = type;
@@ -31,7 +31,7 @@ public class CorfuSerializer implements ISerializer {
      */
     @Override
     public Object deserialize(ByteBuf b, CorfuRuntime rt) {
-        if (b.readByte() != CorfuPayloadMagic) {
+        if (b.readByte() != corfuPayloadMagic) {
             byte[] bytes = new byte[b.readableBytes()];
             b.readBytes(bytes);
             return bytes;
@@ -48,7 +48,7 @@ public class CorfuSerializer implements ISerializer {
     @Override
     public void serialize(Object o, ByteBuf b) {
         if (o instanceof ICorfuSerializable) {
-            b.writeByte(CorfuPayloadMagic);
+            b.writeByte(corfuPayloadMagic);
             ICorfuSerializable c = (ICorfuSerializable) o;
             c.serialize(b);
         } else if (o instanceof byte[]) {
@@ -57,7 +57,8 @@ public class CorfuSerializer implements ISerializer {
             byte[] bytes = (byte[]) o;
             b.writeBytes(bytes);
         } else {
-            throw new RuntimeException("Attempting to serialize unsupported type " + o.getClass().getName() +".");
+            throw new RuntimeException("Attempting to serialize unsupported type "
+                    + o.getClass().getName() + ".");
         }
     }
 }

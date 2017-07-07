@@ -32,7 +32,9 @@ message LogEntry {
     optional int64 checkpointId_most_significant = 11;
     optional int64 checkpointId_least_significant = 12;
     optional int64 checkpointedStreamId_most_significant = 13;
-    optional int64 checkpointedStreamdId_least_significant = 14;
+    optional int64 checkpointedStreamId_least_significant = 14;
+    //  Tail of the stream at the time of taking the checkpoint snapshot.
+    optional int64 checkpointedStreamStartLogAddress = 15;
 }
 
 message LogHeader {

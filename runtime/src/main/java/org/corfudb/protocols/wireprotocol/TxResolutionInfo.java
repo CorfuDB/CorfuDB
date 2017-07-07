@@ -129,7 +129,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
 
     @Override
     public String toString() {
-        return "TXINFO[" + Utils.toReadableID(TXid) + "](ts="
+        return "TXINFO[" + Utils.toReadableId(TXid) + "](ts="
                 + snapshotTimestamp + ")";
     }
 

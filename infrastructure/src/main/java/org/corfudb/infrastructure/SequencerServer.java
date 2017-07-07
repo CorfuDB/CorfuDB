@@ -256,7 +256,7 @@ public class SequencerServer extends AbstractServer {
                     }
                     if (v > txSnapshotTimestamp) {
                         log.debug("ABORT[{}] conflict-stream[{}](ts={})",
-                                txInfo, Utils.toReadableID(streamId), v);
+                                txInfo, Utils.toReadableId(streamId), v);
                         response.set(TokenType.TX_ABORT_CONFLICT);
                     }
                     return v;

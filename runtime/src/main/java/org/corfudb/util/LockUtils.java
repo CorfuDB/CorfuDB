@@ -8,27 +8,37 @@ import java.util.concurrent.locks.ReadWriteLock;
  */
 public class LockUtils {
 
-    public static class AutoCloseRWLock implements AutoCloseable {
+    public static class AutoCloseRwLock implements AutoCloseable {
 
         ReadWriteLock lock;
         Lock releasingLock;
 
-        public AutoCloseRWLock(ReadWriteLock lock) {
+        public AutoCloseRwLock(ReadWriteLock lock) {
             this.lock = lock;
         }
 
-        public AutoCloseRWLock writeLock() {
+        /**
+         * Aquire a write lock.
+         * @return Write lock
+         */
+        public AutoCloseRwLock writeLock() {
             if (releasingLock != null) {
-                throw new RuntimeException("Attempted to acquire a wlock when one was already acquired!");
+                throw new RuntimeException("Attempted to acquire a wlock"
+                        + " when one was already acquired!");
             }
             releasingLock = lock.writeLock();
             releasingLock.lock();
             return this;
         }
 
-        public AutoCloseRWLock readLock() {
+        /**
+         * Aquire read lock.
+         * @return read lock
+         */
+        public AutoCloseRwLock readLock() {
             if (releasingLock != null) {
-                throw new RuntimeException("Attempted to acquire a rlock when one was already acquired!");
+                throw new RuntimeException("Attempted to acquire a rlock when "
+                        + "one was already acquired!");
             }
             releasingLock = lock.readLock();
             releasingLock.lock();

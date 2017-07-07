@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.JSONUtils;
+import org.corfudb.util.JsonUtils;
 
 /**
  * Created by mwei on 8/1/16.
@@ -58,7 +58,7 @@ public interface ICorfuPayload<T> {
                     byte[] byteArray = new byte[length];
                     x.readBytes(byteArray, 0, length);
                     String str = new String(byteArray, StandardCharsets.UTF_8);
-                    Layout layout = JSONUtils.parser.fromJson(str, Layout.class);
+                    Layout layout = JsonUtils.parser.fromJson(str, Layout.class);
                     return layout;
                 })
                 .put(IMetadata.DataRank.class, x ->
@@ -344,7 +344,7 @@ public interface ICorfuPayload<T> {
                 serialize(buffer, x);
             });
         } else if (payload instanceof Layout) {
-            byte[] b = JSONUtils.parser.toJson(payload).getBytes();
+            byte[] b = JsonUtils.parser.toJson(payload).getBytes();
             buffer.writeInt(b.length);
             buffer.writeBytes(b);
         } else if (payload instanceof ByteBuf) {

@@ -72,6 +72,10 @@ public class MultiCheckpointWriter {
         try {
             for (ICorfuSMR<Map> map : maps) {
                 UUID streamId = map.getCorfuStreamID();
+                if (((Map)map).size() == 0) {
+                    continue;
+                }
+
                 while (true) {
                     CheckpointWriter cpw = new CheckpointWriter(rt, streamId, author, (SMRMap) map);
                     ISerializer serializer =
@@ -80,17 +84,17 @@ public class MultiCheckpointWriter {
                     cpw.setSerializer(serializer);
                     cpw.setPostAppendFunc(postAppendFunc);
                     log.trace("appendCheckpoints: checkpoint map {} begin",
-                            Utils.toReadableID(map.getCorfuStreamID()));
+                            Utils.toReadableId(map.getCorfuStreamID()));
                     try {
                         List<Long> addresses = cpw.appendCheckpoint();
                         log.trace("appendCheckpoints: checkpoint map {} end",
-                                Utils.toReadableID(map.getCorfuStreamID()));
+                                Utils.toReadableId(map.getCorfuStreamID()));
                         checkpointLogAddresses.addAll(addresses);
                         break;
                     } catch (TransactionAbortedException ae) {
                         log.warn("appendCheckpoints: checkpoint map {} "
                                         + "TransactionAbortedException, retry",
-                                Utils.toReadableID(map.getCorfuStreamID()));
+                                Utils.toReadableId(map.getCorfuStreamID()));
                         // Don't break!
                     }
                 }
