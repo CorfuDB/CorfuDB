@@ -183,12 +183,14 @@ public class FastSmrMapsLoader {
         // On checkpoint, we also need to track the stream tail of the checkpoint
         if (isCheckPointEntry(logData)) {
             if (logData.getCheckpointType() == CheckpointEntry.CheckpointEntryType.END) {
-                streamTails.put(logData.getCheckpointedStreamId(),
-                        getStartAddressOfCheckPoint(logData));
+                streamTails.compute(logData.getCheckpointedStreamId(),
+                        (uuid, value) -> (value == null) ? getStartAddressOfCheckPoint(logData)
+                            : Math.max(value, getStartAddressOfCheckPoint(logData)));
             }
         }
         for (UUID streamId : logData.getStreams()) {
-            streamTails.put(streamId, address);
+            streamTails.compute(streamId,
+                    (uuid, value) -> (value == null) ? address : Math.max(value, address));
         }
     }
 
@@ -414,8 +416,8 @@ public class FastSmrMapsLoader {
                     .setStarted(true));
 
         } catch (Exception e) {
-            log.error("findCheckpointsInLogAddress[address = {}]: "
-                    + "Couldn't get the snapshotAddress", e);
+            log.error("findCheckpointsInLogAddress[{}]: "
+                    + "Couldn't get the snapshotAddress", address, e);
             fail("Couldn't get the snapshotAddress at address " + address);
         }
     }
