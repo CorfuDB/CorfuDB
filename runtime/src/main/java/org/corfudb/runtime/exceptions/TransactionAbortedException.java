@@ -26,6 +26,9 @@ public class TransactionAbortedException extends RuntimeException {
     @Getter
     Throwable cause;
 
+    @Getter
+    AbstractTransactionalContext context;
+
     /**
      * Constructor.
      * @param txResolutionInfo transaction information
@@ -56,7 +59,7 @@ public class TransactionAbortedException extends RuntimeException {
         this.abortCause = abortCause;
         this.cause = cause;
         this.conflictStream = conflictStream;
-
+        this.context = context;
     }
 
 }

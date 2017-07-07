@@ -7,6 +7,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import lombok.Getter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -44,6 +45,7 @@ import org.corfudb.util.Utils;
  * <p>Created by mwei on 4/4/16.
  */
 @Slf4j
+@ToString
 public abstract class AbstractTransactionalContext implements
         Comparable<AbstractTransactionalContext> {
 
