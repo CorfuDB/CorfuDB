@@ -154,7 +154,9 @@ public class AddressSpaceView extends AbstractView {
                 throw new RuntimeException("Unexpected return of empty data at address "
                         + address + " on read");
             } else if (data.isTrimmed()) {
-                throw new TrimmedException();
+                TrimmedException te = new TrimmedException();
+                te.setAddress(address);
+                throw te;
             }
             return data;
         }
