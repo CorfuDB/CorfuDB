@@ -202,7 +202,16 @@ public abstract class AbstractQueuedStreamView extends
      *
      * @param address       The address to read.
      */
-    protected abstract @Nonnull ILogData read(final long address);
+    protected @Nonnull ILogData read(final long address) {
+        try {
+            return readImpl(address);
+        } catch (TrimmedException e) {
+            e.setSnapshot(getCurrentContext().checkpointSnapshotAddress);
+            throw e;
+        }
+    }
+
+    protected abstract @Nonnull ILogData readImpl(final long address);
 
     /**
      * Given a list of addresses, retrieve the data as a list in the same
@@ -212,9 +221,18 @@ public abstract class AbstractQueuedStreamView extends
      *                      addresses given.
      */
     protected @Nonnull List<ILogData> readAll(@Nonnull final List<Long> addresses) {
+        try {
+            return readAllImpl(addresses);
+        } catch (TrimmedException e) {
+            e.setSnapshot(getCurrentContext().checkpointSnapshotAddress);
+            throw e;
+        }
+    }
+
+    protected  @Nonnull List<ILogData> readAllImpl(@Nonnull final List<Long> addresses) {
         return addresses.parallelStream()
-                        .map(this::read)
-                        .collect(Collectors.toList());
+                .map(this::read)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -231,8 +249,18 @@ public abstract class AbstractQueuedStreamView extends
      * @return              True, if entries were added to the read queue,
      *                      False, otherwise.
      */
-    protected abstract boolean fillReadQueue(final long maxGlobal,
-                                          final QueuedStreamContext context);
+    protected boolean fillReadQueue(final long maxGlobal,
+                                          final QueuedStreamContext context) {
+        try {
+            return fillReadQueueImpl(maxGlobal, context);
+        } catch (TrimmedException e) {
+            e.setSnapshot(getCurrentContext().checkpointSnapshotAddress);
+            throw e;
+        }
+    }
+
+    protected abstract boolean fillReadQueueImpl(final long maxGlobal,
+                                             final QueuedStreamContext context);
 
     /**
      * {@inheritDoc}

@@ -26,6 +26,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.TrimmedUpcallException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
@@ -161,6 +162,20 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 return TransactionalContext.getCurrentContext()
                         .access(this, accessMethod, conflictObject);
             } catch (Exception e) {
+                if (e instanceof TransactionAbortedException) {
+                    TransactionAbortedException tae = (TransactionAbortedException) e;
+                    if (tae.getCause() instanceof TrimmedException) {
+                        TrimmedException te = (TrimmedException) tae.getCause();
+                        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
+                        System.out.println(te.getSnapshot() + "   " + TransactionalContext
+                                .getCurrentContext().getSnapshotTimestamp());
+                        if (context.getRetry() < 1 || te.getSnapshot() != Address.NON_ADDRESS
+                                && te.getSnapshot() <= context.getSnapshotTimestamp()) {
+                            context.incrementRetry();
+                            return accessInner(accessMethod, conflictObject, isMetricsEnabled);
+                        }
+                    }
+                }
                 log.error("Access[{}] Exception: {}", this, e);
                 this.abortTransaction(e);
             }

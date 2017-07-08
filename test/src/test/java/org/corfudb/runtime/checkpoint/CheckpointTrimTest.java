@@ -100,4 +100,54 @@ public class CheckpointTrimTest extends AbstractViewTest {
         assertThat(newTestMap)
                  .containsKeys("a", "b", "c");
     }
+
+    @Test
+    public void testCheckpointTrimDuringPlayback2() throws Exception {
+        Map<String, String> testMap = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setStreamName("test")
+                .open();
+
+        Map<String, String> testMap2 = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setStreamName("test2")
+                .open();
+
+        // Place entries into the map
+        testMap.put("a", "a");
+        testMap.put("b", "a");
+        testMap.put("c", "a");
+        testMap2.put("a", "c");
+        testMap2.put("b", "c");
+        testMap2.put("c", "c");
+
+        // Insert a checkpoint
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap((SMRMap) testMap);
+        mcw.addMap((SMRMap) testMap2);
+        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
+
+
+        // TX1: Move object to 1
+        getRuntime().getObjectsView().TXBuild()
+                .setType(TransactionType.SNAPSHOT)
+                .setSnapshot(1)
+                .begin();
+
+        testMap.get("a");
+        getRuntime().getObjectsView().TXEnd();
+
+
+        // Trim the log
+        getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress - 1);
+        getRuntime().getAddressSpaceView().gc();
+        getRuntime().getAddressSpaceView().invalidateServerCaches();
+        getRuntime().getAddressSpaceView().invalidateClientCache();
+
+        // TX2: Read most recent state in TX
+        getRuntime().getObjectsView().TXBegin();
+        testMap.get("a");
+        getRuntime().getObjectsView().TXEnd();
+
+    }
 }

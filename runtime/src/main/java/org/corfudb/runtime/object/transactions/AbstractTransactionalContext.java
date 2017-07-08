@@ -98,6 +98,10 @@ public abstract class AbstractTransactionalContext implements
     private final long snapshotTimestamp = obtainSnapshotTimestamp();
 
 
+    @Getter
+    private volatile int retry = 0;
+
+
     /**
      * The address that the transaction was committed at.
      */
@@ -133,6 +137,10 @@ public abstract class AbstractTransactionalContext implements
         parentContext = TransactionalContext.getCurrentContext();
 
         AbstractTransactionalContext.log.debug("TXBegin[{}]", this);
+    }
+
+    public synchronized void incrementRetry() {
+        retry++;
     }
 
     /**
