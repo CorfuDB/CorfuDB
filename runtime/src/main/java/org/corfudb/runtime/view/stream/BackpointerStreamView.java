@@ -17,6 +17,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.util.Utils;
@@ -110,6 +111,14 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         }
     }
 
+    void processTrimmedException(TrimmedException te) {
+        if (TransactionalContext.getCurrentContext() != null
+                && TransactionalContext.getCurrentContext().getSnapshotTimestamp()
+                < getCurrentContext().checkpointSnapshotAddress) {
+            te.setRetriable(false);
+        }
+    }
+
     /** {@inheritDoc}
      *
      * <p>The backpointer version of remaining() calls nextUpTo() multiple times,
@@ -121,17 +130,27 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
      * */
     @Override
     protected ILogData read(final long address) {
-        return runtime.getAddressSpaceView().read(address);
+        try {
+            return runtime.getAddressSpaceView().read(address);
+        } catch (TrimmedException te) {
+            processTrimmedException(te);
+            throw te;
+        }
     }
 
     @Nonnull
     @Override
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
-        Map<Long, ILogData> dataMap =
-                runtime.getAddressSpaceView().read(addresses);
-        return addresses.stream()
-                .map(x -> dataMap.get(x))
-                .collect(Collectors.toList());
+        try {
+            Map<Long, ILogData> dataMap =
+                    runtime.getAddressSpaceView().read(addresses);
+            return addresses.stream()
+                    .map(x -> dataMap.get(x))
+                    .collect(Collectors.toList());
+        } catch (TrimmedException te) {
+            processTrimmedException(te);
+            throw te;
+        }
     }
 
     /**
