@@ -50,20 +50,26 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                         == getSnapshotTimestamp()
                         && !o.isOptimisticallyModifiedUnsafe(),
                 o -> {
-                    try {
-                        o.syncObjectUnsafe(getSnapshotTimestamp());
-                    } catch (TrimmedException te) {
-                        // If a trim is encountered, we must reset the object
-                        o.resetUnsafe();
-                        // and abort the transaction
-                        TransactionAbortedException tae =
-                                new TransactionAbortedException(
-                                        new TxResolutionInfo(getTransactionID(),
-                                                getSnapshotTimestamp()), null,
+                    for (int x = 0; x < this.builder.getRuntime().getTrimRetry(); x++) {
+                        try {
+                            o.syncObjectUnsafe(getSnapshotTimestamp());
+                            break;
+                        } catch (TrimmedException te) {
+                            // If a trim is encountered, we must reset the object
+                            o.resetUnsafe();
+                            if (!te.isRetriable()
+                                    || x == this.builder.getRuntime().getTrimRetry() - 1) {
+                                // abort the transaction
+                                TransactionAbortedException tae =
+                                        new TransactionAbortedException(
+                                                new TxResolutionInfo(getTransactionID(),
+                                                        getSnapshotTimestamp()), null,
                                                 proxy.getStreamID(),
                                                 AbortCause.TRIM, te, this);
-                        abortTransaction(tae);
-                        throw tae;
+                                abortTransaction(tae);
+                                throw tae;
+                            }
+                        }
                     }
                 },
                 o -> accessFunction.access(o));

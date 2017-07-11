@@ -168,10 +168,20 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which be cached.
      */
     public Map<Long, ILogData> read(Iterable<Long> addresses) {
+        Map<Long, ILogData> addressesMap;
         if (!runtime.isCacheDisabled()) {
-            return readCache.getAll(addresses);
+            addressesMap = readCache.getAll(addresses);
+        } else {
+            addressesMap = this.cacheFetch(addresses);
         }
-        return this.cacheFetch(addresses);
+
+        for (ILogData logData : addressesMap.values()) {
+            if (logData.isTrimmed()) {
+                throw new TrimmedException();
+            }
+        }
+
+        return addressesMap;
     }
 
     /**
