@@ -117,7 +117,7 @@ public class CorfuRuntime {
      */
     @Getter
     @Setter
-    public long maxCacheSize = 4_000_000_000L;
+    public long numCacheEntries = 5000;
 
     /**
      * The number of times to retry on a retriable TrimException within during a tranasaction
