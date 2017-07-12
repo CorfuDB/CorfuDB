@@ -135,6 +135,7 @@ public class CmdletIT extends AbstractIT {
                 .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, PORT))
                 .getOptionsString();
         String output = runCmdletGetOutput(command);
+        System.out.println(output);
         assertThat(output.contains(expectedLogPath)).isTrue();
         assertThat(output.contains(expectedInitialToken)).isTrue();
         assertThat(output.contains(expectedStartupArgs)).isTrue();

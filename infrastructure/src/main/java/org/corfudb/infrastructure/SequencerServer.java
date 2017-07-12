@@ -127,20 +127,8 @@ public class SequencerServer extends AbstractServer {
      */
     private long maxConflictWildcard = Address.NOT_FOUND;
 
-    private final long maxConflictCacheSize = 1_000_000;
-    private final Cache<Integer, Long>
-            conflictToGlobalTailCache = Caffeine.newBuilder()
-            .maximumSize(maxConflictCacheSize)
-            .removalListener((Integer k, Long v, RemovalCause cause) -> {
-                if (!RemovalCause.REPLACED.equals(cause)) {
-                    log.trace("Updating maxConflictWildcard. Old value = '{}', new value = '{}', "
-                                + "conflictParam = '{}'. Removal cause = '{}'",
-                            maxConflictWildcard, v, k, cause);
-                    maxConflictWildcard = Math.max(v, maxConflictWildcard);
-                }
-            })
-            .recordStats()
-            .build();
+    private final long defaultCacheSize = Long.MAX_VALUE;
+    private final Cache<Integer, Long> conflictToGlobalTailCache;
 
     /**
      * Handler for this server.
@@ -176,6 +164,26 @@ public class SequencerServer extends AbstractServer {
         MetricRegistry metrics = serverContext.getMetrics();
         counterTokenSum = metrics.counter(metricsPrefix + "token-sum");
         counterToken0 = metrics.counter(metricsPrefix + "token-query");
+
+        long cacheSize = defaultCacheSize;
+
+        if (opts.get("--sequencer-cache-size") != null
+                && Long.parseLong((String) opts.get("--sequencer-cache-size")) != 0) {
+            cacheSize = Long.parseLong((String) opts.get("--sequencer-cache-size"));
+        }
+
+        conflictToGlobalTailCache = Caffeine.newBuilder()
+                .maximumSize(cacheSize)
+                .removalListener((Integer k, Long v, RemovalCause cause) -> {
+                    if (!RemovalCause.REPLACED.equals(cause)) {
+                        log.trace("Updating maxConflictWildcard. Old value = '{}', new value='{}'"
+                                        + " conflictParam = '{}'. Removal cause = '{}'",
+                                maxConflictWildcard, v, k, cause);
+                        maxConflictWildcard = Math.max(v, maxConflictWildcard);
+                    }
+                })
+                .recordStats()
+                .build();
     }
 
     /**
