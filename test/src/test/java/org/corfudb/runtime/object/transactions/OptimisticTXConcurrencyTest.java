@@ -5,7 +5,9 @@ import com.google.common.reflect.TypeToken;
 
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.UUID;
 
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.junit.Test;
 
@@ -104,8 +106,9 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
 
         final int nmaps = 2;
         for (int i = 0; i < nmaps; i++)
-            maps.add( (SMRMap<Integer, String>) instantiateCorfuObject(
-                    new TypeToken<SMRMap<Integer, String>>() {}, "test stream" + i)
+            maps.add((SMRMap<Integer, String>) instantiateCorfuObject(
+                    new TypeToken<SMRMap<Integer, String>>() {
+                    }, "test stream" + i)
             );
         final int key1 = 1, key2 = 2, key3 = 3;
         final String tst1 = "foo", tst2 = "bar";
@@ -122,9 +125,9 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
         t(2, () -> {
             for (int i = 0; i < nNests; i++) {
                 TXBegin();
-                maps.get((i%nmaps)).put(key1, (i % nmaps) == 0 ? tst1 : tst2);
-                maps.get((i%nmaps)).put(key2, (i % nmaps) == 0 ? tst1 : tst2);
-                maps.get((i%nmaps)).put(key3, (i % nmaps) == 0 ? tst1 : tst2);
+                maps.get((i % nmaps)).put(key1, (i % nmaps) == 0 ? tst1 : tst2);
+                maps.get((i % nmaps)).put(key2, (i % nmaps) == 0 ? tst1 : tst2);
+                maps.get((i % nmaps)).put(key3, (i % nmaps) == 0 ? tst1 : tst2);
             }
         });
 

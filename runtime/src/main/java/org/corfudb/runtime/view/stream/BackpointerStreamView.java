@@ -390,7 +390,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         if (latestTokenValue == null || maxGlobal == Address.MAX) {
             latestTokenValue = runtime.getSequencerView()
                     .nextToken(Collections.singleton(context.id), 0)
-                    .getToken().getTokenValue() - 1;
+                    .getToken().getTokenValue();
         }
         // If there is no information on the tail of the stream, return,
         // there is nothing to do
