@@ -101,38 +101,10 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                                         .isStreamCurrentContextThreadCurrentContext())
                 ),
                         o -> {
-                            // Swap ourselves to be the active optimistic stream.
-                            // Inside setAsOptimisticStream, if there are
-                            // currently optimistic updates on the object, we
-                            // roll them back.  Then, we set this context as  the
-                            // object's new optimistic context.
-                            setAsOptimisticStream(o);
-
                             // inside syncObjectUnsafe, depending on the object
                             // version, we may need to undo or redo
                             // committed changes, or apply forward committed changes.
-                            for (int x = 0; x < this.builder.getRuntime().getTrimRetry(); x++) {
-                                try {
-                                    o.syncObjectUnsafe(getSnapshotTimestamp());
-                                    break;
-                                } catch (TrimmedException te) {
-                                    // If a trim is encountered, we must reset the object
-                                    o.resetUnsafe();
-
-                                    if (!te.isRetriable()
-                                            || x == this.builder.getRuntime().getTrimRetry() - 1) {
-                                        // abort the transaction
-                                        TransactionAbortedException tae =
-                                                new TransactionAbortedException(
-                                                        new TxResolutionInfo(getTransactionID(),
-                                                                getSnapshotTimestamp()), null,
-                                                        proxy.getStreamID(),
-                                                        AbortCause.TRIM, te, this);
-                                        abortTransaction(tae);
-                                        throw tae;
-                                    }
-                                }
-                            }
+                            syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, this::setAsOptimisticStream);
                         },
                     o -> accessFunction.access(o)
         );
@@ -166,9 +138,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         }
         // Otherwise, we need to sync the object
         return proxy.getUnderlyingObject().update(o -> {
-            setAsOptimisticStream(o);
             log.trace("Upcall[{}] {} Sync'd", this,  timestamp);
-            o.syncObjectUnsafe(getSnapshotTimestamp());
+            syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, this::setAsOptimisticStream);
             SMREntry wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
             if (wrapper2 != null && wrapper2.isHaveUpcallResult()) {
                 return wrapper2.getUpcallResult();
