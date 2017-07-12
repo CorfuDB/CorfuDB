@@ -5,6 +5,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+
+import javax.annotation.Nullable;
 
 import lombok.Getter;
 import lombok.ToString;
@@ -12,10 +15,15 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.ISMRStream;
+import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.util.Utils;
 
 /**
@@ -162,6 +170,41 @@ public abstract class AbstractTransactionalContext implements
     public abstract <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
                                                long timestamp,
                                                Object[] conflictObject);
+
+    public void syncWithRetryUnsafe(VersionLockedObject vlo,
+                                    long snapshotTimestamp,
+                                    ICorfuSMRProxyInternal proxy,
+                                    @Nullable Consumer<VersionLockedObject> optimisticStreamSetter) {
+        for (int x = 0; x < this.builder.getRuntime().getTrimRetry(); x++) {
+            try {
+                if (optimisticStreamSetter != null) {
+                    // Swap ourselves to be the active optimistic stream.
+                    // Inside setAsOptimisticStream, if there are
+                    // currently optimistic updates on the object, we
+                    // roll them back.  Then, we set this context as  the
+                    // object's new optimistic context.
+                    optimisticStreamSetter.accept(vlo);
+                }
+                vlo.syncObjectUnsafe(snapshotTimestamp);
+                break;
+            } catch (TrimmedException te) {
+                // If a trim is encountered, we must reset the object
+                vlo.resetUnsafe();
+                if (!te.isRetriable()
+                        || x == this.builder.getRuntime().getTrimRetry() - 1) {
+                    // abort the transaction
+                    TransactionAbortedException tae =
+                            new TransactionAbortedException(
+                                    new TxResolutionInfo(getTransactionID(),
+                                            snapshotTimestamp), null,
+                                    proxy.getStreamID(),
+                                    AbortCause.TRIM, te, this);
+                    abortTransaction(tae);
+                    throw tae;
+                }
+            }
+        }
+    }
 
     /**
      * Log an SMR update to the Corfu log.

@@ -569,7 +569,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
         // TX2: Read most recent state in TX
         getRuntime().getObjectsView().TXBegin();
-        testMap.get("a");
+        testMap.put("a", "b");
         getRuntime().getObjectsView().TXEnd();
 
     }
