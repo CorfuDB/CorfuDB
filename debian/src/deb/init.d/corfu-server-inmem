@@ -15,8 +15,10 @@ ROLENAME="Corfu In-Memory Infrastructure Server"
 PIDFILE=/var/run/corfu_inmem.pid
 PREFIX=/usr/local/bin
 PORT=9001
-# WARNING: -s => single node corfu, need to revert this change later.
-OPTS="-ms $PORT"
+# -m => in memory mode
+# -s => single node
+# -d => logging level
+OPTS="-m -s -d DEBUG $PORT"
 LOGFILE="/var/log/corfu.$PORT.log"
 . /lib/lsb/init-functions
 
