@@ -3,6 +3,8 @@ package org.corfudb.runtime.exceptions;
 import java.util.UUID;
 
 import lombok.Getter;
+import lombok.Setter;
+
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.view.Address;
@@ -29,6 +31,11 @@ public class TransactionAbortedException extends RuntimeException {
 
     @Getter
     AbstractTransactionalContext context;
+
+    /** True, if it is known that this abort was not caused by a false conflict. */
+    @Getter
+    @Setter
+    boolean precise = false;
 
     /** If available, the address where the conflict was detected,
      *  otherwise, Address.NON_EXIST.

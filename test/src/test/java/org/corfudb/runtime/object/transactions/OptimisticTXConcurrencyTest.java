@@ -7,8 +7,8 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.UUID;
 
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.junit.Test;
 
 /**
@@ -16,8 +16,9 @@ import org.junit.Test;
  */
 public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
     @Override
-    public void TXBegin() { OptimisticTXBegin(); }
-
+    public void TXBegin() {
+        OptimisticTXBegin();
+    }
 
 
     public void testOpacityOptimistic(boolean isInterleaved) throws Exception {
@@ -48,12 +49,12 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
     }
 
     /**
-     *  If task k aborts, then either task (k-1), or (k+1), or both, must have committed
-     *  (wrapping around for tasks n-1 and 0, respectively).
+     * If task k aborts, then either task (k-1), or (k+1), or both, must have committed
+     * (wrapping around for tasks n-1 and 0, respectively).
      */
     public void testOptimism(boolean testInterleaved) throws Exception {
 
-       testRWConflicts(testInterleaved);
+        testRWConflicts(testInterleaved);
 
         // verfiy that all aborts are justified
         for (int task_num = 0; task_num < numTasks; task_num++) {
@@ -84,8 +85,7 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
 
     @Test
     public void testAbortWWInterleaved()
-            throws Exception
-    {
+            throws Exception {
         concurrentAbortTest(true);
 
         // no assertion, just print abort rate
@@ -93,15 +93,14 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
 
     @Test
     public void testAbortWWThreaded()
-            throws Exception
-    {
+            throws Exception {
         concurrentAbortTest(false);
 
         // no assertion, just print abort rate
     }
 
     @Test
-    public void checkRollbackNested()  throws Exception {
+    public void checkRollbackNested() throws Exception {
         ArrayList<Map> maps = new ArrayList<>();
 
         final int nmaps = 2;
@@ -138,5 +137,46 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
                     .isEqualTo(null);
         });
 
+    }
+
+    /**
+     * This test evaluates a case of false hash conflict, i.e.,
+     * the case where given two different keys (UUIDs) its hash codes conflict.
+     */
+    @Test
+    public void concurrentTransactionsNonConflictingKeysSameHash() {
+        // These values have been obtained from real conflicting scenarios.
+        UUID streamID = UUID.fromString("a0a6f485-db5c-33a2-92b2-a1edb188e5c7");
+        UUID key1 = UUID.fromString("01003000-0000-0cb5-0000-000000000001");
+        UUID key2 = UUID.fromString("01003000-0000-0cb6-0000-000000000002");
+
+        // Confirm key1 and key2 hash codes actually conflict
+        assertThat(key1.hashCode()).isEqualTo(key2.hashCode());
+
+        Map<UUID, String> mapTest = getRuntime().getObjectsView().build()
+                .setType(SMRMap.class)
+                .setStreamID(streamID)
+                .open();
+        mapTest.clear();
+
+        t(1, () -> { getRuntime()
+                    .getObjectsView()
+                    .TXBuild()
+                    .setPreciseConflicts(true)
+                    .begin();
+        });
+        t(1, () -> mapTest.put(key1, "v1"));
+
+        t(2, () -> { getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin();
+        });
+        t(2, () -> mapTest.put(key2, "v2"));
+
+        t(1, () -> TXEnd());
+        t(2, () -> TXEnd())
+                .assertDoesNotThrow(TransactionAbortedException.class);
     }
 }

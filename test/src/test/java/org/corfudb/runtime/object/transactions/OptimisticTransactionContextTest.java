@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object.transactions;
 
 import org.corfudb.annotations.CorfuObject;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -9,10 +10,13 @@ import org.junit.Test;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
 
 /**
@@ -317,10 +321,137 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     }
 
 
+    /** Check that precise conflicts do not abort when
+     * two conflict keys collide.
+     */
     @Test
-    public void preciseConflictsDoNotAbort() {
+    public void preciseFalseConflictsDoNotAbort() {
         String k1 = "Aa";
         String k2 = "BB";
+
+        // Make sure these two keys collide.
+        assertThat(k1.hashCode())
+                .isEqualTo(k2.hashCode());
+
+        // Start two transactions, where k1 and k2
+        // are written to.
+        t1(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t1(() -> put(k1, "a"));
+
+        t2(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t2(() -> put(k2, "a"));
+
+        t1(() -> TXEnd());
+
+        // The second transaction would normally abort,
+        // Even though k1 != k2. However, under precise
+        // conflicts, there should be no abort.
+        t2(() -> TXEnd())
+            .assertDoesNotThrow(TransactionAbortedException.class);
+    }
+
+
+
+    /** Check that precise conflicts do not abort when
+     * two conflict keys collide and the causing operation
+     * is a mutator only.
+     */
+    @Test
+    public void preciseFalseConflictsMutatorDoNotAbort() {
+        String k1 = "Aa";
+        String k2 = "BB";
+
+        // Make sure these two keys collide.
+        assertThat(k1.hashCode())
+                .isEqualTo(k2.hashCode());
+
+        // Start two transactions, where k1 and k2
+        // are written to.
+        t1(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t1(() -> getMap().remove(k1));
+
+        t2(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t2(() -> put(k2, "a"));
+
+        t1(() -> TXEnd());
+
+        // The second transaction would normally abort,
+        // Even though k1 != k2. However, under precise
+        // conflicts, there should be no abort.
+        t2(() -> TXEnd())
+                .assertDoesNotThrow(TransactionAbortedException.class);
+    }
+
+    /** Check that precise conflicts do abort
+     * when an entry (such as a clear), which
+     * conflicts with all updates is inserted.
+     */
+    @Test
+    public void preciseTrueConflictAllAborts() {
+        String k1 = "Aa";
+        String k2 = "BB";
+
+        // Insert something initially into the map
+        put(k1, "a");
+
+        t1(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        // TX1 will clear the map
+        // TODO: Until poisoning is implemented, this operation
+        // TODO: conflicts when we -scan- the log, but not when
+        // TODO: the sequencer is deciding aborts, since "clear"
+        // TODO: is not added to the conflict set. We add clear
+        // TODO: falsely to te conflict set by inserting k1.
+        t1(() -> put(k1, "a"));
+        t1(() -> getMap().clear());
+
+        t2(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t2(() -> put(k2, "a"));
+
+        t1(() -> TXEnd());
+        t2(() -> TXEnd())
+            .assertThrows()
+            .isInstanceOf(TransactionAbortedException.class);
+    }
+
+    /** Check that precise conflicts do abort
+     * when two conflict keys collide.
+     */
+    @Test
+    public void preciseTrueConflictAllAbort() {
+        // Here, k1 == k2, so the transaction should
+        // abort.
+        String k1 = "A";
+        String k2 = "A";
 
         t1(() -> getRuntime()
                 .getObjectsView()
@@ -339,8 +470,365 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         t2(() -> put(k2, "a"));
 
         t1(() -> TXEnd());
-        t2(() -> TXEnd());
+        t2(() -> TXEnd())
+                .assertThrows()
+                .isInstanceOf(TransactionAbortedException.class);
+    }
+
+    /** Check that precise conflicts do not abort when
+     * two conflict keys collide.
+     *
+     * Here, k1 and k2 collide, as well as k3 and k4.
+     */
+    @Test
+    public void preciseMultiFalseConflictsDoNotAbort() {
+        String k1 = "Aa";
+        String k2 = "BB";
+        String k3 = "AaAaAa";
+        String k4 = "BBBBBB";
+
+        // Make sure these two key sets collide.
+        assertThat(k1.hashCode())
+                .isEqualTo(k2.hashCode());
+
+        assertThat(k3.hashCode())
+                .isEqualTo(k4.hashCode());
+
+        // Start two transactions, where k1-k4
+        // are written to.
+        t1(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t1(() -> put(k1, "a"));
+        t1(() -> put(k3, "a"));
+
+        t2(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t2(() -> put(k2, "a"));
+        t2(() -> put(k4, "a"));
+
+        t1(() -> TXEnd());
+
+        // The second transaction would normally abort,
+        // Even though k1 != k2 and k3 != k4. However, under precise
+        // conflicts, there should be no abort.
+        t2(() -> TXEnd())
+                .assertDoesNotThrow(TransactionAbortedException.class);
     }
 
 
+    /** Check that precise conflicts do not abort when
+     * two conflict keys from two different maps collide.
+     *
+     * Here, k1 and k2 collide, as well as k3 and k4.
+     */
+    @Test
+    public void preciseMultiStreamFalseConflictsDoNotAbort() {
+        String k1 = "Aa";
+        String k2 = "BB";
+        String k3 = "AaAaAa";
+        String k4 = "BBBBBB";
+
+        Map<String, String> map1 = getRuntime()
+                .getObjectsView().build()
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setStreamName("map1")
+                .open();
+
+        Map<String, String> map2 = getRuntime()
+                .getObjectsView().build()
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setStreamName("map2")
+                .open();
+
+        // Make sure these two key sets collide.
+        assertThat(k1.hashCode())
+                .isEqualTo(k2.hashCode());
+
+        assertThat(k3.hashCode())
+                .isEqualTo(k4.hashCode());
+
+        // Start two transactions, where k1-k4
+        // are written to on two maps.
+        t1(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t1(() -> map1.put(k1, "a"));
+        t1(() -> map2.put(k3, "a"));
+
+        t2(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t2(() -> map1.put(k2, "a"));
+        t2(() -> map2.put(k4, "a"));
+
+        t1(() -> TXEnd());
+
+        // The second transaction would normally abort,
+        // Even though k1 != k2 and k3 != k4. However, under precise
+        // conflicts, there should be no abort.
+        t2(() -> TXEnd())
+                .assertDoesNotThrow(TransactionAbortedException.class);
+    }
+
+
+    /** Check that precise conflicts do not abort when
+     * two conflict keys from two different maps collide.
+     *
+     * The two colliding pairs are written in two different
+     * transactions, so they result in two entries written
+     * to the log.
+     *
+     * Here, k1 and k2 collide, as well as k3 and k4.
+     */
+    @Test
+    public void preciseMultiStreamMultiWriteDoNotAbort() {
+        String k1 = "Aa";
+        String k2 = "BB";
+        String k3 = "AaAaAa";
+        String k4 = "BBBBBB";
+
+        Map<String, String> map1 = getRuntime()
+                .getObjectsView().build()
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setStreamName("map1")
+                .open();
+
+        Map<String, String> map2 = getRuntime()
+                .getObjectsView().build()
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setStreamName("map2")
+                .open();
+
+        // Make sure these two key sets collide.
+        assertThat(k1.hashCode())
+                .isEqualTo(k2.hashCode());
+
+        assertThat(k3.hashCode())
+                .isEqualTo(k4.hashCode());
+
+        // Start three transactions, where k1-k4
+        // are written to on two maps.
+        // T1 modifies k1 which falsely conflicts
+        // with k2.
+        t1(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t1(() -> map1.put(k1, "a"));
+
+        // T2 modifies k3 which falsely conflicts
+        // with k4.
+        t2(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t2(() -> map2.put(k3, "a"));
+
+        t3(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t3(() -> map1.put(k2, "a"));
+        t3(() -> map2.put(k4, "a"));
+
+        t1(() -> TXEnd());
+        t2(() -> TXEnd());
+
+        // The third transaction would normally abort,
+        // Even though k1 != k2 and k3 != k4. However, under precise
+        // conflicts, there should be no abort.
+        t3(() -> TXEnd())
+                .assertDoesNotThrow(TransactionAbortedException.class);
+    }
+
+    /** Check that precise conflicts do not abort
+     * due to a hole fill.
+     */
+    @Test
+    public void preciseFalseConflictDueToHoleFill() {
+        // Here, k1 == k2, so the transaction would
+        // normally abort, but we will hole fill tx1
+        // so it fails
+
+        String k1 = "A";
+        String k2 = "A";
+        UUID mapId = CorfuRuntime.getStreamID("test stream");
+
+        Map<UUID, Set<Integer>> conflictMap = ImmutableMap.<UUID, Set<Integer>>builder()
+                .put(mapId, Collections.singleton(k1.hashCode()))
+                .build();
+
+        t2(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t2(() -> put(k2, "a"));
+
+        // To simulate a failed transaction,
+        // we will manually update the counter
+        // on the sequencer.
+        getRuntime().getSequencerView()
+                .nextToken(Collections.singleton(mapId),1,
+                        new TxResolutionInfo(mapId, 0L,
+                                conflictMap, conflictMap));
+
+        // Reading address 0L before it gets
+        // written will insert a hole without
+        // contacting the sequencer.
+
+        getRuntime()
+                .getAddressSpaceView()
+                .read(0L);
+
+        t2(() -> TXEnd())
+                .assertDoesNotThrow(TransactionAbortedException.class);
+    }
+
+
+    /** Check that precise conflicts do not abort when
+     * two conflict keys collide.
+     */
+    @Test
+    public void preciseFalseConflictsMixedWithHoleFillDoNotAbort() {
+        String k1 = "Aa";
+        String k2 = "BB";
+
+        // Make sure these two keys collide.
+        assertThat(k1.hashCode())
+                .isEqualTo(k2.hashCode());
+
+        UUID mapId = CorfuRuntime.getStreamID("test stream");
+
+        Map<UUID, Set<Integer>> conflictMap = ImmutableMap.<UUID, Set<Integer>>builder()
+                .put(mapId, Collections.singleton(k2.hashCode()))
+                .build();
+
+        // Start two transactions, where k1 and k2
+        // are written to.
+        t1(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t1(() -> put(k1, "a"));
+
+        t2(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t2(() -> put(k2, "a"));
+
+        t1(() -> TXEnd());
+
+        // To simulate a failed transaction T3 that should have,
+        // been at address 2 and conflicted with T2
+        // we will manually update the counter
+        // on the sequencer.
+        getRuntime().getSequencerView()
+                .nextToken(Collections.singleton(mapId),1,
+                        new TxResolutionInfo(mapId, 0L,
+                                conflictMap, conflictMap));
+
+        // Reading address 1L before it gets
+        // written will insert a hole without
+        // contacting the sequencer.
+        getRuntime()
+                .getAddressSpaceView()
+                .read(1L);
+
+        // The second transaction would normally abort,
+        // Even though k1 != k2. However, under precise
+        // conflicts, there should be no abort.
+        t2(() -> TXEnd())
+                .assertDoesNotThrow(TransactionAbortedException.class);
+    }
+
+    /** Check that precise conflicts do not abort
+     * when not conflicting with a non-transactional
+     * update.
+     */
+    @Test
+    public void preciseNonTxConflictsDoNotAbort() {
+        // Here, k1 != k2, so the transaction should
+        // not abort.
+        String k1 = "Aa";
+        String k2 = "BB";
+
+        t2(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t1(() -> put(k1, "a"));
+
+        t2(() -> put(k2, "a"));
+
+        t2(() -> TXEnd())
+                .assertDoesNotThrow(TransactionAbortedException.class);
+    }
+
+    /** Check that precise conflicts do not abort
+     * when not conflicting with a non-transactional
+     * update.
+     */
+    @Test
+    public void preciseConflictAllAborts() {
+        String k1 = "Aa";
+        String k2 = "BB";
+
+        Map<String, String> map2 = getRuntime()
+                .getObjectsView().build()
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setStreamName("map2")
+                .open();
+
+        // Start two transactions, where k1 and k2
+        // are written to.
+        t1(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t1(() -> map2.put(k1, "a"));
+
+        t2(() -> getRuntime()
+                .getObjectsView()
+                .TXBuild()
+                .setPreciseConflicts(true)
+                .begin());
+
+        t2(() -> map2.size());
+        t2(() -> getMap().remove("z"));
+
+        t1(() -> TXEnd());
+        t2(() -> TXEnd())
+                .assertDoesNotThrow(TransactionAbortedException.class);
+    }
 }

@@ -24,12 +24,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.protocols.wireprotocol.TxScanInfo;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
@@ -341,8 +339,8 @@ public class SequencerServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    private void handleTxToken(CorfuPayloadMsg<TokenRequest> msg,
-                               ChannelHandlerContext ctx, IServerRouter r) {
+    private void handleTxToken(final CorfuPayloadMsg<TokenRequest> msg,
+                               final ChannelHandlerContext ctx, final IServerRouter r) {
         final long serverEpoch = r.getServerEpoch();
         final TokenRequest req = msg.getPayload();
         final TxResolutionInfo txInfo = req.getTxnResolution();
@@ -373,41 +371,39 @@ public class SequencerServer extends AbstractServer {
                     final Long conflictTail = conflictToGlobalTailCache
                             .getIfPresent(conflictKeyHash);
 
-                    if (conflictTail != null
-                            && (conflictTail > txSnapshotTimestamp
-                            || maxConflictWildcard > txSnapshotTimestamp)) {
-                        // Do we have scan info which overrides this for this stream?
-                        TxScanInfo scanInfo =
+                    if ((conflictTail != null
+                            && conflictTail > txSnapshotTimestamp)
+                            || maxConflictWildcard > txSnapshotTimestamp) {
+                        // Do we have validation which overrides this for this stream?
+                        final Long validatedAddress =
                                 txInfo.getValidatedStreams().get(streamId);
-                        if (scanInfo != null) {
-                            if (scanInfo.getEndPos() >= conflictTail - 1) {
-                                log.warn("handleTxToken: ScanInfo stream {} {}-{} overrides {}",
-                                        Utils.toReadableId(streamId),
-                                        scanInfo.getStartPos(), scanInfo.getEndPos(),
-                                        conflictTail);
-                            } else {
-                                log.debug("handleTxToken: ABORT[{}] conflict-key[{}]({}ts={})," +
-                                                "scanInfo {}-{} fails", txInfo,
-                                        conflictParam,
-                                        maxConflictWildcard > txSnapshotTimestamp ? "WILDCARD " : "",
-                                        conflictTail, scanInfo.getStartPos(), scanInfo.getEndPos());
-                                r.sendResponse(ctx, msg,
-                                        CorfuMsgType.TOKEN_RES.payloadMsg(
-                                                new TokenResponse(TokenType.TX_ABORT_CONFLICT_KEY,
-                                                        conflictParam, streamId, conflictTail, serverEpoch)));
-                                return;
-                            }
-                        }
-                        else {
-                            log.debug("handleTxToken: ABORT[{}] conflict-key[{}]({}ts={})", txInfo,
+                        // If we don't have a validation, or if the validation was
+                        // for an address before the current conflict tail, we fail.
+                        if (validatedAddress == null
+                                || validatedAddress < conflictTail) {
+                            log.debug("handleTxToken: ABORT[{}] {}conflict-key[{}]({}ts={})",
+                                    txInfo,
+                                    validatedAddress == null ? "" :
+                                            "validation failed (" + validatedAddress + ") ",
                                     conflictParam,
                                     maxConflictWildcard > txSnapshotTimestamp ? "WILDCARD " : "",
                                     conflictTail);
                             r.sendResponse(ctx, msg,
                                     CorfuMsgType.TOKEN_RES.payloadMsg(
                                             new TokenResponse(TokenType.TX_ABORT_CONFLICT_KEY,
-                                                    conflictParam, streamId, conflictTail, serverEpoch)));
+                                                    conflictParam, streamId,
+                                                    maxConflictWildcard > txSnapshotTimestamp
+                                                            ? maxConflictWildcard :
+                                                            conflictTail, serverEpoch)));
                             return;
+                        } else {
+                            // Otherwise, the client has certified that it has manually checked
+                            // that there are no true conflicts, so we continue and issue
+                            // the token.
+                            log.warn("handleTxToken: validated stream {} {} overrides {}",
+                                    Utils.toReadableId(streamId),
+                                    validatedAddress,
+                                    conflictTail);
                         }
                     }
                     log.trace("handleTxToken: OK[{}] conflict-key[{}](ts={})", txInfo,
@@ -424,6 +420,8 @@ public class SequencerServer extends AbstractServer {
                                             streamId, streamTail, serverEpoch)));
                     return;
                 }
+                log.trace("handleTxToken: OK[{}] conflict-stream[{}](ts={})", txInfo,
+                        Utils.toReadableId(streamId), streamTail);
             }
         }
 

@@ -37,8 +37,10 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     @Getter
     final Map<UUID, Set<Integer>>  writeConflictParams;
 
+    /** A map of streams which have been validated for transactional commit,
+        with the addresses they have been validated up to. */
     @Getter
-    final Map<UUID, TxScanInfo> validatedStreams;
+    final Map<UUID, Long> validatedStreams;
 
     /**
      * Constructor for TxResolutionInfo.
@@ -78,10 +80,12 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
      * @param snapshotTimestamp transaction snapshot timestamp
      * @param conflictMap map of conflict parameters, arranged by stream IDs
      * @param writeConflictParams map of write conflict parameters, arranged by stream IDs
+     * @param validatedMap  map of streams which have been validated for transactional commit,
+     *                      with the addresses they have been validated up to.
      */
     public TxResolutionInfo(UUID txId, long snapshotTimestamp, Map<UUID, Set<Integer>>
             conflictMap, Map<UUID, Set<Integer>> writeConflictParams,
-                            Map<UUID, TxScanInfo> validatedMap) {
+                            Map<UUID, Long> validatedMap) {
         this.TXid = txId;
         this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = conflictMap;
@@ -125,7 +129,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
 
         writeConflictParams = writeMapBuilder.build();
 
-        this.validatedStreams = ICorfuPayload.mapFromBuffer(buf, UUID.class, TxScanInfo.class);
+        this.validatedStreams = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
     }
 
     /**
