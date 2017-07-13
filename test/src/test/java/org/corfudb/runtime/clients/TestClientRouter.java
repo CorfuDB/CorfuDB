@@ -57,7 +57,18 @@ public class TestClientRouter implements IClientRouter {
     public synchronized long getEpoch() {
         return epoch;
     }
+
+    /**
+     * We should never set epoch backwards
+     *
+     * @param epoch
+     */
     public synchronized void setEpoch(long epoch) {
+        if (epoch < this.epoch) {
+            log.warn("setEpoch: Rejected attempt to set the router {}:{} to epoch {} smaller than current epoch {}",
+                    host, port, epoch, this.epoch);
+            return;
+        }
         this.epoch = epoch;
     }
 

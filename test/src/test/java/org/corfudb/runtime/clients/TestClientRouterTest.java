@@ -58,4 +58,24 @@ public class TestClientRouterTest extends AbstractCorfuTest {
         assertThatThrownBy(() -> bc.setRemoteEpoch(NEW_EPOCH).get())
                 .hasCauseInstanceOf(TimeoutException.class);
     }
+
+    @Test
+    public void doesNotUpdateEpochBackward() throws Exception {
+        TestServerRouter tsr = new TestServerRouter();
+        BaseServer bs = new BaseServer();
+        tsr.addServer(bs);
+        TestClientRouter tcr = new TestClientRouter(tsr);
+
+        BaseClient bc = new BaseClient();
+        tcr.addClient(bc);
+
+        long currentEpoch = tcr.getEpoch();
+        tcr.setEpoch(currentEpoch + 1);
+        assertThat(tcr.getEpoch()).isEqualTo(currentEpoch + 1);
+
+        currentEpoch = tcr.getEpoch();
+        tcr.setEpoch(currentEpoch - 1);
+        assertThat(tcr.getEpoch()).isNotEqualTo(currentEpoch - 1).isEqualTo(currentEpoch);
+
+    }
 }
