@@ -369,7 +369,7 @@ public class SequencerServer extends AbstractServer {
             if (conflictParamSet != null && conflictParamSet.size() > 0) {
                 // for each key pair, check for conflict;
                 // if not present, check against the wildcard
-                conflictParamSet.forEach(conflictParam -> {
+                for (Integer conflictParam : conflictParamSet)  {
                     final int conflictKeyHash = getConflictHashCode(streamId, conflictParam);
                     final Long conflictTail = conflictToGlobalTailCache
                             .getIfPresent(conflictKeyHash);
@@ -389,7 +389,7 @@ public class SequencerServer extends AbstractServer {
                     }
                     log.trace("handleTxToken: OK[{}] conflict-key[{}](ts={})", txInfo,
                             conflictParam, conflictTail);
-                });
+                }
             } else { // otherwise, check for conflict based on streams updates
                 final Long streamTail = streamTailToGlobalTailMap.get(streamId);
                 if (streamTail > txSnapshotTimestamp) {
