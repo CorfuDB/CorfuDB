@@ -409,7 +409,6 @@ public class SequencerServer extends AbstractServer {
                     final Long conflictTail = conflictToGlobalTailCache
                             .getIfPresent(conflictKeyHash);
 
-
                     if (txSnapshotTimestamp < maxConflictWildcard) {
                         log.debug("ABORT[{}] snapshot-ts[{}] WILDCARD ts=[{}]",
                                 txInfo, txSnapshotTimestamp, maxConflictWildcard);
