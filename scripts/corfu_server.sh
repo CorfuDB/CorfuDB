@@ -42,7 +42,7 @@ CORFUDB_GC_FLAGS="-XX:+PrintGCDetails -XX:+PrintGCTimeStamps -Xloggc:/var/log/co
 export JVMFLAGS="-Xmx${CORFUDB_HEAP}m $CORFUDB_GC_FLAGS $SERVER_JVMFLAGS"
 
 # yourkit profiler setup for corfu server
-if [ -f /usr/yourkit/bin/libyjpagent.so ] && [ -n $CORFU_ENABLE_PROFILER ]; then
+if [ -f /usr/yourkit/bin/libyjpagent.so ] && [ ! -z $CORFU_ENABLE_PROFILER ]; then
     PROFILER_AGENT="-agentpath:/usr/yourkit/bin/libyjpagent.so=port=54322,dir=/var/log,snapshot_name_format=corfu-{sessionname}-{datetime}-{pid}"
 else
     PROFILER_AGENT=""

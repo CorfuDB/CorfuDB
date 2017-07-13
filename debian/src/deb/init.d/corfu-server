@@ -40,9 +40,9 @@ ensure_profile_port () {
     iptables -C INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
     port_stat=$?
     set -e
-    if [ $op = "start" ] && [ $port_stat -ne 0 ]; then
+    if [ "$op" = "open" ] && [ "$port_stat" -ne "0" ]; then
         iptables -A INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
-    elif [ $op = "stop" ] && [ $port_stat -eq 0 ]; then
+    elif [ "$op" = "close" ] && [ "$port_stat" -eq "0" ]; then
         iptables -D INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
     fi
 }
@@ -50,8 +50,10 @@ ensure_profile_port () {
 case "$1" in
     start)
         log_daemon_msg "Starting $ROLENAME on port $PORT"
-        if [ -n $CORFU_ENABLE_PROFILER ]; then
-            ensure_profile_port $1
+        if [ ! -z $CORFU_ENABLE_PROFILER ]; then
+            ensure_profile_port open
+        else
+            ensure_profile_port close
         fi
         if start-stop-daemon --start --quiet  --background --make-pidfile --oknodo --pidfile $PIDFILE \
         --startas /bin/bash -- -c "exec $PREFIX/corfu_server $OPTS >> $LOGFILE 2>&1"; then
@@ -63,7 +65,6 @@ case "$1" in
     stop)
         log_daemon_msg "Stopping $ROLENAME on port $PORT"
         terminate_corfu_process $PIDFILE
-        ensure_profile_port $1
         if start-stop-daemon --stop --quiet  --oknodo --pidfile $PIDFILE; then
             log_end_msg 0
         else

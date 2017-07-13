@@ -5,6 +5,7 @@ After=remote-fs.target systemd-journald-dev-log.socket
 
 [Service]
 Type=forking
+EnvironmentFile=-/usr/share/corfu/conf/corfu.conf
 PIDFile=/var/run/corfu.pid
 ExecStart=/etc/init.d/corfu-server start
 ExecStop=/etc/init.d/corfu-server stop
