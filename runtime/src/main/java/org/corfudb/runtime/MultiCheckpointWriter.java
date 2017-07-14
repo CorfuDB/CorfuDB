@@ -72,9 +72,6 @@ public class MultiCheckpointWriter {
         try {
             for (ICorfuSMR<Map> map : maps) {
                 UUID streamId = map.getCorfuStreamID();
-                if (((Map)map).size() == 0) {
-                    continue;
-                }
 
                 while (true) {
                     CheckpointWriter cpw = new CheckpointWriter(rt, streamId, author, (SMRMap) map);

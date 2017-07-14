@@ -26,7 +26,10 @@ import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -95,7 +98,7 @@ public class CheckpointWriter {
 
     /** Local ref to the stream's view.
      */
-    StreamsView sv;
+    IStreamView cpStream;
 
     /** Local ref to the object that we're dumping.
      *  TODO: generalize to all SMR objects.
@@ -119,7 +122,11 @@ public class CheckpointWriter {
         this.map = map;
         checkpointId = UUID.randomUUID();
         checkpointStreamID = CorfuRuntime.getStreamID(streamId.toString() + "_cp");
-        sv = rt.getStreamsView();
+
+        StreamOptions options = StreamOptions.builder()
+                .doCache(false)
+                .build();
+        cpStream = rt.getStreamsView().get(checkpointStreamID, options);
     }
 
     /** Static method for all steps necessary to append checkpoint
@@ -177,7 +184,7 @@ public class CheckpointWriter {
                 ImmutableMap.copyOf(this.mdkv);
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                 author, checkpointId, streamId, mdkv, null);
-        startAddress = sv.append(Collections.singleton(checkpointStreamID), cp, null);
+        startAddress = cpStream.append(cp);
 
         postAppendFunc.accept(cp, startAddress);
         return startAddress;
@@ -228,7 +235,7 @@ public class CheckpointWriter {
             CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
                     author, checkpointId, streamId, mdkv, smrEntries);
 
-            long pos = sv.append(Collections.singleton(checkpointStreamID), cp, null);
+            long pos = cpStream.append(cp);
 
             postAppendFunc.accept(cp, pos);
             continuationAddresses.add(pos);
@@ -260,7 +267,7 @@ public class CheckpointWriter {
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
                 author, checkpointId, streamId, mdkv, null);
 
-        endAddress = sv.append(Collections.singleton(checkpointStreamID), cp, null);
+        endAddress = cpStream.append(cp);
 
         postAppendFunc.accept(cp, endAddress);
         return endAddress;
