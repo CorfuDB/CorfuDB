@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{15}) - %msg%n %ex{3}</pattern>
+        </encoder>
+    </appender>
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>${user.home}/corfudb.log</file>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{15}) - %msg%n %ex{3}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Control logging levels for individual components here. -->
+    <logger name="org.corfudb.runtime.object" level="TRACE"/>
+    <logger name="org.corfudb.runtime.clients" level="INFO"/>
+    <logger name="org.corfudb.infrastructure" level="INFO"/>
+    <logger name="io.netty.util" level="INFO"/>
+    <logger name="io.netty.util.internal" level="INFO"/>
+    <logger name="io.netty.buffer" level="INFO"/>
+
+    <root level="TRACE">
+        <!--<appender-ref ref="FILE" /-->
+        <!--<appender-ref ref="STDOUT" />-->
+    </root>
+</configuration>
