@@ -14,8 +14,9 @@ import org.junit.Test;
  */
 public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
     @Override
-    public void TXBegin() { OptimisticTXBegin(); }
-
+    public void TXBegin() {
+        OptimisticTXBegin();
+    }
 
 
     public void testOpacityOptimistic(boolean isInterleaved) throws Exception {
@@ -46,12 +47,12 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
     }
 
     /**
-     *  If task k aborts, then either task (k-1), or (k+1), or both, must have committed
-     *  (wrapping around for tasks n-1 and 0, respectively).
+     * If task k aborts, then either task (k-1), or (k+1), or both, must have committed
+     * (wrapping around for tasks n-1 and 0, respectively).
      */
     public void testOptimism(boolean testInterleaved) throws Exception {
 
-       testRWConflicts(testInterleaved);
+        testRWConflicts(testInterleaved);
 
         // verfiy that all aborts are justified
         for (int task_num = 0; task_num < numTasks; task_num++) {
@@ -82,8 +83,7 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
 
     @Test
     public void testAbortWWInterleaved()
-            throws Exception
-    {
+            throws Exception {
         concurrentAbortTest(true);
 
         // no assertion, just print abort rate
@@ -91,21 +91,21 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
 
     @Test
     public void testAbortWWThreaded()
-            throws Exception
-    {
+            throws Exception {
         concurrentAbortTest(false);
 
         // no assertion, just print abort rate
     }
 
     @Test
-    public void checkRollbackNested()  throws Exception {
+    public void checkRollbackNested() throws Exception {
         ArrayList<Map> maps = new ArrayList<>();
 
         final int nmaps = 2;
         for (int i = 0; i < nmaps; i++)
-            maps.add( (SMRMap<Integer, String>) instantiateCorfuObject(
-                    new TypeToken<SMRMap<Integer, String>>() {}, "test stream" + i)
+            maps.add((SMRMap<Integer, String>) instantiateCorfuObject(
+                    new TypeToken<SMRMap<Integer, String>>() {
+                    }, "test stream" + i)
             );
         final int key1 = 1, key2 = 2, key3 = 3;
         final String tst1 = "foo", tst2 = "bar";
@@ -122,9 +122,9 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
         t(2, () -> {
             for (int i = 0; i < nNests; i++) {
                 TXBegin();
-                maps.get((i%nmaps)).put(key1, (i % nmaps) == 0 ? tst1 : tst2);
-                maps.get((i%nmaps)).put(key2, (i % nmaps) == 0 ? tst1 : tst2);
-                maps.get((i%nmaps)).put(key3, (i % nmaps) == 0 ? tst1 : tst2);
+                maps.get((i % nmaps)).put(key1, (i % nmaps) == 0 ? tst1 : tst2);
+                maps.get((i % nmaps)).put(key2, (i % nmaps) == 0 ? tst1 : tst2);
+                maps.get((i % nmaps)).put(key3, (i % nmaps) == 0 ? tst1 : tst2);
             }
         });
 

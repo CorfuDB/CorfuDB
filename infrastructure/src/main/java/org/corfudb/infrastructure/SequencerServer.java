@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -128,7 +129,9 @@ public class SequencerServer extends AbstractServer {
     private long maxConflictWildcard = Address.NOT_FOUND;
 
     private final long defaultCacheSize = Long.MAX_VALUE;
-    private final Cache<Integer, Long> conflictToGlobalTailCache;
+    private final long defaultPerStreamCacheSize = Long.MAX_VALUE;
+    private long perStreamCacheSize = defaultPerStreamCacheSize;
+    private final Cache<UUID, Cache<Integer, Long>> conflictToGlobalTailCache;
 
     /**
      * Handler for this server.
@@ -171,30 +174,37 @@ public class SequencerServer extends AbstractServer {
                 && Long.parseLong((String) opts.get("--sequencer-cache-size")) != 0) {
             cacheSize = Long.parseLong((String) opts.get("--sequencer-cache-size"));
         }
+        if (opts.get("--sequencer-per-stream-cache-size") != null
+                && Long.parseLong((String) opts.get("--sequencer-per-stream-cache-size")) != 0) {
+            perStreamCacheSize =
+                    Long.parseLong((String) opts.get("--sequencer-per-stream-cache-size"));
+        }
+
 
         conflictToGlobalTailCache = Caffeine.newBuilder()
                 .maximumSize(cacheSize)
-                .removalListener((Integer k, Long v, RemovalCause cause) -> {
+                .removalListener((UUID k, Cache<Integer, Long> v, RemovalCause cause) -> {
                     if (!RemovalCause.REPLACED.equals(cause)) {
-                        log.trace("Updating maxConflictWildcard. Old value = '{}', new value='{}'"
-                                        + " conflictParam = '{}'. Removal cause = '{}'",
-                                maxConflictWildcard, v, k, cause);
-                        maxConflictWildcard = Math.max(v, maxConflictWildcard);
+                        if (v != null) {
+                            Optional<Long>
+                                    max = v.asMap().values().stream().max(Long::compare);
+                            if (max.isPresent()) {
+                                log.debug("Updating maxConflictWildcard. Old value = '{}',"
+                                                + "new value='{}' conflictParam = '{}'. "
+                                                + "Removal cause = '{}'",
+                                        maxConflictWildcard, v, k, cause);
+                                maxConflictWildcard = Math.max(max.get(), maxConflictWildcard);
+                            }
+                        } else {
+                            // If v was null or has no elements, there is no need to update
+                            // the maxConflictWildcard.
+                            log.warn("Conflict information evicted for stream {}, but "
+                                    + "no values so wildcard not updated", Utils.toReadableId(k));
+                        }
                     }
                 })
                 .recordStats()
                 .build();
-    }
-
-    /**
-    * Get the conflict hash code for a stream ID and conflict param.
-    *
-    * @param streamId      The stream ID.
-    * @param conflictParam The conflict parameter.
-    * @return A conflict hash code.
-    */
-    public int getConflictHashCode(UUID streamId, int conflictParam) {
-        return Objects.hash(streamId, conflictParam);
     }
 
     /**
@@ -236,10 +246,13 @@ public class SequencerServer extends AbstractServer {
                 // for each key pair, check for conflict;
                 // if not present, check against the wildcard
                 conflictParamSet.forEach(conflictParam -> {
-                    int conflictKeyHash = getConflictHashCode(entry.getKey(),
-                            conflictParam);
-                    Long v = conflictToGlobalTailCache.getIfPresent(conflictKeyHash);
+                    Cache<Integer, Long> streamConflictToGlobalTailCache =
+                            conflictToGlobalTailCache.getIfPresent(entry.getKey());
 
+                    Long v = null;
+                    if (streamConflictToGlobalTailCache != null) {
+                        v = streamConflictToGlobalTailCache.getIfPresent(conflictParam);
+                    }
                     log.trace("Commit-ck[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
 
                     if (v != null && v > txSnapshotTimestamp) {
@@ -495,14 +508,35 @@ public class SequencerServer extends AbstractServer {
                     // for each entry
                     .forEach(txEntry ->
                             // and for each conflict param
-                            txEntry.getValue().stream().forEach(conflictParam ->
+                            txEntry.getValue().forEach(conflictParam -> {
                                 // insert an entry with the new timestamp
                                 // using the hash code based on the param
                                 // and the stream id.
-                                conflictToGlobalTailCache.put(
-                                        getConflictHashCode(txEntry
-                                        .getKey(), conflictParam),
-                                    newTail - 1)));
+                                Cache<Integer, Long> streamConflictToGlobalTailCache =
+                                        conflictToGlobalTailCache.get(txEntry.getKey(),
+                                        k ->
+                                            Caffeine.newBuilder()
+                                                .maximumSize(perStreamCacheSize)
+                                                .removalListener((Integer c, Long v,
+                                                                  RemovalCause cause) -> {
+                                                    if (!RemovalCause.REPLACED.equals(cause)) {
+                                                        log.debug("Updating maxConflictWildcard. "
+                                                                        + "Old value = '{}',"
+                                                                        + "new value='{}' "
+                                                                        + "conflictParam = '{}'. "
+                                                                        + "Removal cause = '{}'",
+                                                                maxConflictWildcard, v, k, cause);
+                                                        maxConflictWildcard =
+                                                                Math.max(v, maxConflictWildcard);
+                                                    }
+                                                })
+                                            .recordStats()
+                                            .build()
+                                    );
+                                streamConflictToGlobalTailCache.put(conflictParam,
+                                        newTail - 1);
+                            })
+            );
         }
 
         log.trace("token {} backpointers {}",
