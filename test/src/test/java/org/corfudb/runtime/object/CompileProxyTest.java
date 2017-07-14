@@ -6,6 +6,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -274,6 +275,9 @@ public class CompileProxyTest extends AbstractViewTest {
                 .open();
         int concurrency = PARAMETERS.CONCURRENCY_LOTS;
 
+        // Blocking until sequencer becomes functional.
+        getDefaultRuntime().getSequencerView().nextToken(Collections.EMPTY_SET, 0);
+
         // schedule 'concurrency' number of threads,
         // each one put()'s a key with its thread index
 
@@ -338,7 +342,10 @@ public class CompileProxyTest extends AbstractViewTest {
 
         int concurrency = PARAMETERS.CONCURRENCY_LOTS;
 
-        // set up 'concurrency' number of threads that concurrency update sharedCorfuCompound, each to a differen value
+        // Block until sequencer operational.
+        getDefaultRuntime().getSequencerView().nextToken(Collections.EMPTY_SET, 0);
+
+        // set up 'concurrency' number of threads that concurrency update sharedCorfuCompound, each to a different value
         scheduleConcurrently(concurrency, t -> {
             sharedCorfuCompound.set(sharedCorfuCompound.new Inner("A"+t, "B"+t), t);
         });
