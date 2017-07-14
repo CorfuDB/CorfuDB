@@ -128,7 +128,7 @@ public class SequencerServer extends AbstractServer {
     private long maxConflictWildcard = Address.NOT_FOUND;
 
     private final long defaultCacheSize = Long.MAX_VALUE;
-    private final Cache<Integer, Long> conflictToGlobalTailCache;
+    private final Cache<String, Long> conflictToGlobalTailCache;
 
     /**
      * Handler for this server.
@@ -174,7 +174,7 @@ public class SequencerServer extends AbstractServer {
 
         conflictToGlobalTailCache = Caffeine.newBuilder()
                 .maximumSize(cacheSize)
-                .removalListener((Integer k, Long v, RemovalCause cause) -> {
+                .removalListener((String k, Long v, RemovalCause cause) -> {
                     if (!RemovalCause.REPLACED.equals(cause)) {
                         log.trace("Updating maxConflictWildcard. Old value = '{}', new value='{}'"
                                         + " conflictParam = '{}'. Removal cause = '{}'",
@@ -193,8 +193,8 @@ public class SequencerServer extends AbstractServer {
     * @param conflictParam The conflict parameter.
     * @return A conflict hash code.
     */
-    public int getConflictHashCode(UUID streamId, int conflictParam) {
-        return Objects.hash(streamId, conflictParam);
+    public String getConflictHashCode(UUID streamId, int conflictParam) {
+        return streamId.toString() + Integer.toString(conflictParam);
     }
 
     /**
@@ -236,7 +236,7 @@ public class SequencerServer extends AbstractServer {
                 // for each key pair, check for conflict;
                 // if not present, check against the wildcard
                 conflictParamSet.forEach(conflictParam -> {
-                    int conflictKeyHash = getConflictHashCode(entry.getKey(),
+                    String conflictKeyHash = getConflictHashCode(entry.getKey(),
                             conflictParam);
                     Long v = conflictToGlobalTailCache.getIfPresent(conflictKeyHash);
 
