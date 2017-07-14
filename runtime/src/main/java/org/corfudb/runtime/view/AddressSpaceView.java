@@ -45,6 +45,7 @@ public class AddressSpaceView extends AbstractView {
     /**
      * A cache for read results.
      */
+    @Getter
     final LoadingCache<Long, ILogData> readCache = Caffeine.<Long, ILogData>newBuilder()
             .maximumSize(runtime.getNumCacheEntries())
             .expireAfterAccess(runtime.getCacheExpiryTime(), TimeUnit.SECONDS)
