@@ -12,12 +12,15 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * This class implements the StreamLog interface using a Java hash map.
  * The stream log is only stored in-memory and not persisted.
  * This should only be used for testing.
  * Created by maithem on 7/21/16.
  */
+@Slf4j
 public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressSpace {
 
     private final AtomicLong globalTail = new AtomicLong(0L);
@@ -59,10 +62,11 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
 
     @Override
     public synchronized void prefixTrim(long address) {
-        if(isTrimmed(address)){
-            throw new TrimmedException();
+        if (isTrimmed(address)) {
+            log.warn("prefixTrim: Ignoring repeated trim {}", address);
+        } else {
+            startingAddress = address + 1;
         }
-        startingAddress = address + 1;
     }
 
     @Override
@@ -71,7 +75,9 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     @Override
-    public long getTrimMark() { return startingAddress; }
+    public long getTrimMark() {
+        return startingAddress;
+    }
 
     private void throwLogUnitExceptionsIfNecessary(long address, LogData entry) {
         if (entry.getRank() == null) {
@@ -89,7 +95,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
 
     @Override
     public LogData read(long address) {
-        if(isTrimmed(address)){
+        if (isTrimmed(address)) {
             return LogData.TRIMMED;
         }
         if (trimmed.contains(address)) {
