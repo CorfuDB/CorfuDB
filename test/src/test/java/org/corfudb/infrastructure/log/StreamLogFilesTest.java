@@ -416,8 +416,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         }
 
         // Try to trim an address that is less than the new starting address
-        // This shouldn't throw an exception
-        log.prefixTrim(trimAddress);
+        assertThatThrownBy(() -> log.prefixTrim(trimAddress))
+                .isInstanceOf(TrimmedException.class);
 
         long trimmedExceptions = 0;
 

@@ -61,9 +61,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         IStreamView sv = r.getStreamsView().get(CorfuRuntime.getStreamID("S1"));
         final int objSize = 100;
         long a1 = sv.append(new byte[objSize]);
-        final long cpEndAddress = 2L;
-        // Verify that the start/end records have been written for empty maps
-        assertThat(a1).isEqualTo(cpEndAddress);
+        final long firstAddress = 0L;
+        assertThat(a1).isEqualTo(firstAddress);
     }
 
     /** First smoke test, steps:
@@ -525,49 +524,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             assertThat(m2A.get(keyA)).isEqualTo(i);
             assertThat(m2B.get(keyB)).isEqualTo(i);
         }
-    }
-
-    @Test
-    public void emptyCheckPoint() throws Exception {
-        final String streamA = "streamA";
-        final String streamB = "streamB";
-        Map<String, Long> mA = instantiateMap(streamA);
-        Map<String, Long> mB = instantiateMap(streamB);
-        final String author = "CPWriter";
-        final int iter = 1000;
-
-        for (int x = 0; x < iter; x++) {
-            mA.put(Integer.toString(x), (long) x);
-            mB.put(Integer.toString(x), (long) x);
-        }
-
-        for (String key : mA.keySet()) {
-            mA.remove(key);
-        }
-
-        MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-        mcw1.addMap((SMRMap) mA);
-        mcw1.addMap((SMRMap) mB);
-        long trimAddress = mcw1.appendCheckpoints(r, author);
-
-        r.getAddressSpaceView().prefixTrim(trimAddress - 1);
-        r.getAddressSpaceView().gc();
-        r.getAddressSpaceView().invalidateServerCaches();
-        r.getAddressSpaceView().invalidateClientCache();
-
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultEndpoint()).connect();
-
-        Map<String, Long> mA2 = rt2.getObjectsView()
-                .build()
-                .setStreamName(streamA)
-                .setTypeToken(new TypeToken<SMRMap<String, Long>>() {
-                })
-                .setSerializer(serializer)
-                .open();
-
-        rt2.getObjectsView().TXBegin();
-        mA2.put("a", 2l);
-        rt2.getObjectsView().TXEnd();
     }
 }
 

@@ -213,7 +213,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public void prefixTrim(long address) {
         if (address < startingAddress) {
-            log.warn("prefixTrim: Ignoring repeated trim {}", address);
+            throw new TrimmedException();
         } else {
             // TODO(Maithem): Although this operation is persisted to disk,
             // the startingAddress can be lost even after the method has completed.
