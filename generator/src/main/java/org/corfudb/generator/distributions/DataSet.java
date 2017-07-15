@@ -3,31 +3,44 @@ package org.corfudb.generator.distributions;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
+import java.util.Random;
 
 /**
+ *
+ * This class defines a generic data distribution. A DataSet is used by operations
+ * that require data to execute (i.e. writing).
+ *
  * Created by maithem on 7/14/17.
  */
-public abstract class DataSet {
+public interface DataSet {
 
-    public abstract void populate();
+    /**
+     * Populate the data set.
+     */
+    void populate();
 
-    public List sample(int num) {
-        getDataSet().size();
+    /**
+     * Returns a random subset of the data. The default sampling method
+     * uses a uniform distribution, but other distributions can be used
+     * by the concrete classes.
+     *
+     * @param num number of data points
+     * @return random data points
+     */
+    default List sample(int num) {
+        List ret = new ArrayList<>();
+        Random random = new Random();
 
-        List<UUID> list = new ArrayList<>();
-
-        if (num > getDataSet().size()) {
-            for (int x = 0; x < (num / getDataSet().size()) + 1; x++) {
-                list.addAll(getDataSet());
-            }
-        } else {
-            list.addAll(getDataSet());
+        for (int x = 0; x < num; x++) {
+            ret.add(getDataSet().get(random.nextInt(getDataSet().size())));
         }
 
-        Collections.shuffle(list);
-        return list.subList(0, num);
+        return ret;
     }
 
-    public abstract List getDataSet();
+    /**
+     * Return the whole data set.
+     * @return Return a list of all the data points
+     */
+    List getDataSet();
 }

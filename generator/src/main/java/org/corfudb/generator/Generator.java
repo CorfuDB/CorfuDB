@@ -10,17 +10,30 @@ import java.util.concurrent.TimeUnit;
 import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
 
 import static java.util.concurrent.Executors.newWorkStealingPool;
 
 /**
+ * Generator is a program that generates synthetic workloads that try to mimic
+ * real applications that consume the CorfuDb client. Application's access
+ * patterns can be approximated by setting different configurations like
+ * data distributions, concurrency level, operation types, time skews etc.
+ *
+ *
  * Created by maithem on 7/14/17.
  */
-public class main {
+public class Generator {
     public static void main(String[] args) {
-        CorfuRuntime rt = new CorfuRuntime("localhost:9000").connect();
-        State state = new State(100, 20000, rt);
+        String endPoint = args[0];
+        int numStreams = Integer.parseInt(args[1]);
+        int numKeys = Integer.parseInt(args[2]);
+        long cpPeriod = Long.parseLong(args[3]);
+        int numThreads = Integer.parseInt(args[4]);
+        int numOperations = Integer.parseInt(args[5]);
+
+        CorfuRuntime rt = new CorfuRuntime(endPoint).connect();
+
+        State state = new State(numStreams, numKeys, rt);
 
         Runnable cpTrimTask = () -> {
             Operation op = new CheckpointOperation(state);
@@ -28,18 +41,17 @@ public class main {
         };
 
         final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-        scheduler.scheduleAtFixedRate(cpTrimTask, 1, 1, TimeUnit.MINUTES);
+        scheduler.scheduleAtFixedRate(cpTrimTask, 30, cpPeriod, TimeUnit.SECONDS);
 
-        int numThreads = 8;
         ExecutorService appWorkers = newWorkStealingPool(numThreads);
 
         Runnable app = () -> {
-            List<Operation> operations = state.getOperations().sample(3000000);
+            List<Operation> operations = state.getOperations().sample(numOperations);
             for (Operation operation : operations) {
                 try {
                     operation.execute();
-                } catch (TransactionAbortedException e) {
-                    System.out.println(e.getCause());
+                } catch (Exception ex) {
+                    ex.printStackTrace();
                 }
             }
         };

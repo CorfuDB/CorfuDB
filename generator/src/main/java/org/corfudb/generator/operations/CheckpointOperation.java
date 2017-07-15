@@ -20,14 +20,14 @@ public class CheckpointOperation extends Operation {
         try {
             MultiCheckpointWriter mcw = new MultiCheckpointWriter();
             mcw.addAllMaps(state.getMaps());
-            long trimAddress = mcw.appendCheckpoints(state.getRt(), "Maithem");
-            Thread.sleep(1000 * 60 * 1);
-            state.getRt().getAddressSpaceView().prefixTrim(trimAddress - 1);
+            long trimAddress = mcw.appendCheckpoints(state.getRuntime(), "Maithem");
             state.setTrimMark(trimAddress);
-            state.getRt().getAddressSpaceView().gc();
-            state.getRt().getAddressSpaceView().invalidateClientCache();
-            state.getRt().getAddressSpaceView().invalidateServerCaches();
-            log.info("CheckpointOperation Completed");
+            Thread.sleep(1000 * 30 * 1);
+            state.getRuntime().getAddressSpaceView().prefixTrim(trimAddress - 1);
+            state.getRuntime().getAddressSpaceView().gc();
+            state.getRuntime().getAddressSpaceView().invalidateClientCache();
+            state.getRuntime().getAddressSpaceView().invalidateServerCaches();
+            System.out.println("CheckpointOperation Completed");
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

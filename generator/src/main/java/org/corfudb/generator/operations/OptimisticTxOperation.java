@@ -17,8 +17,6 @@ public class OptimisticTxOperation extends Operation {
 
     @Override
     public void execute() {
-
-        log.info("OptimisticTxOperation Started");
         state.startOptimisticTx();
 
         int numOperations = state.getOperationCount().sample(1).get(0);
@@ -33,6 +31,5 @@ public class OptimisticTxOperation extends Operation {
         }
 
         state.stopOptimisticTx();
-        log.info("OptimisticTxOperation Completed");
     }
 }

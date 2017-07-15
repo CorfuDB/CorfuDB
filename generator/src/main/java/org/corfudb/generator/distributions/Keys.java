@@ -7,26 +7,29 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
+ * This class implements the distribution of keys that can be inserted
+ * into a map.
+ *
  * Created by maithem on 7/14/17.
  */
-public class Keys extends DataSet {
-    final private Set<UUID> keys;
-    final private int numKeys;
+public class Keys implements DataSet {
+    final Set<String> mapkeys;
+    final int numKeys;
 
     public Keys(int num) {
-        keys = new HashSet<>();
+        mapkeys = new HashSet<>();
         numKeys = num;
     }
 
     @Override
     public void populate() {
         for (int x = 0; x < numKeys; x++) {
-            keys.add(UUID.randomUUID());
+            mapkeys.add(UUID.randomUUID().toString());
         }
     }
 
     @Override
-    public List<UUID> getDataSet() {
-        return new ArrayList<>(keys);
+    public List<String> getDataSet() {
+        return new ArrayList<>(mapkeys);
     }
 }

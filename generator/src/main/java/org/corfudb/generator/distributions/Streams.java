@@ -7,27 +7,30 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
+ * This class implements a distribution over the possible streams that
+ * can be created/modified.
+ *
  * Created by maithem on 7/14/17.
  */
-public class Streams extends DataSet {
+public class Streams implements DataSet {
 
-    final private Set<UUID> streams;
-    final private int numStreams;
+    final Set<UUID> streamIds;
+    final int numStreams;
 
     public Streams(int num) {
-        streams = new HashSet<>();
+        streamIds = new HashSet<>();
         numStreams = num;
     }
 
     @Override
     public void populate() {
         for (int x = 0; x < numStreams; x++) {
-            streams.add(UUID.randomUUID());
+            streamIds.add(UUID.randomUUID());
         }
     }
 
     @Override
     public List<UUID> getDataSet() {
-        return new ArrayList<>(streams);
+        return new ArrayList<>(streamIds);
     }
 }

@@ -13,26 +13,46 @@ import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.distributions.Streams;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.object.transactions.TransactionType;
+
+import lombok.Getter;
+import lombok.Setter;
 
 /**
+ * This object keeps state information of the different data distributions and runtime client.
+ *
  * Created by maithem on 7/14/17.
  */
 public class State {
 
-    final private Streams streams;
-    final private Keys keys;
-    final private OperationCount operationCount;
-    final private Operations operations;
-    final private CorfuRuntime rt;
-    final private Map<UUID, SMRMap> maps;
-    private volatile long trimMark = -1;
+    @Getter
+    final Streams streams;
+
+    @Getter
+    final Keys keys;
+
+    @Getter
+    final OperationCount operationCount;
+
+    @Getter
+    final Operations operations;
+
+    @Getter
+    final CorfuRuntime runtime;
+
+    @Getter
+    final Map<UUID, SMRMap> maps;
+
+    @Getter
+    @Setter
+    volatile long trimMark = -1;
 
     public State(int numStreams, int numKeys, CorfuRuntime rt) {
         streams = new Streams(numStreams);
         keys = new Keys(numKeys);
         operationCount = new OperationCount();
 
-        this.rt = rt;
+        this.runtime = rt;
         maps = new HashMap<>();
         operations = new Operations(this);
 
@@ -41,12 +61,12 @@ public class State {
         operationCount.populate();
         operations.populate();
 
-        openMaps();
+        openObjects();
     }
 
-    private void openMaps() {
+    private void openObjects() {
         for (UUID uuid : streams.getDataSet()) {
-            SMRMap<UUID, UUID> map = rt.getObjectsView()
+            SMRMap<UUID, UUID> map = runtime.getObjectsView()
                     .build()
                     .setStreamID(uuid)
                     .setTypeToken(new TypeToken<SMRMap<UUID,UUID>>() {})
@@ -56,15 +76,7 @@ public class State {
         }
     }
 
-    public Streams getStreams() {
-        return streams;
-    }
-
-    public Keys getKeys() {
-        return keys;
-    }
-
-    public Map<UUID, UUID> getMap(UUID uuid) {
+    public Map<String, String> getMap(UUID uuid) {
         Map map = maps.get(uuid);
         if (map == null) {
             throw new RuntimeException("Map doesn't exist");
@@ -76,27 +88,23 @@ public class State {
         return maps.values();
     }
 
-    public OperationCount getOperationCount() {
-        return operationCount;
-    }
-
-    public Operations getOperations() {
-        return operations;
-    }
-
     public void startOptimisticTx() {
-        rt.getObjectsView().TXBegin();
+        runtime.getObjectsView().TXBegin();
     }
 
     public void stopOptimisticTx() {
-        rt.getObjectsView().TXEnd();
+        runtime.getObjectsView().TXEnd();
     }
 
-    public CorfuRuntime getRt() {
-        return rt;
+    public void startSnapshotTx(long snapshot) {
+        runtime.getObjectsView()
+                .TXBuild()
+                .setType(TransactionType.SNAPSHOT)
+                .setSnapshot(snapshot)
+                .begin();
     }
 
-    public void setTrimMark(long newTrimMark) {
-        trimMark = newTrimMark;
+    public void stopSnapshotTx() {
+        runtime.getObjectsView().TXEnd();
     }
 }

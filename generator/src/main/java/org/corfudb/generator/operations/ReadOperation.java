@@ -18,8 +18,7 @@ public class ReadOperation extends Operation {
     @Override
     public void execute() {
         UUID streamID = (UUID) state.getStreams().sample(1).get(0);
-        UUID key = (UUID) state.getKeys().sample(1).get(0);
+        String key = (String) state.getKeys().sample(1).get(0);
         state.getMap(streamID).get(key);
-        log.info("ReadOperation Completed");
     }
 }

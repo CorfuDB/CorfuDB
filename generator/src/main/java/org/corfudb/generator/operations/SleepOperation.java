@@ -19,10 +19,9 @@ public class SleepOperation extends Operation {
     public void execute() {
         Random rand = new Random();
 
-        int  sleepTime = rand.nextInt(100) + 1;
+        int  sleepTime = rand.nextInt(50);
         try {
-            Thread.sleep(0);
-            log.info("SleepOperation Completed");
+            Thread.sleep(sleepTime);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
