@@ -1,4 +1,6 @@
-package org.corfudb.generator;
+package org.corfudb.generator.operations;
+
+import org.corfudb.generator.State;
 
 /**
  * Created by maithem on 7/14/17.
@@ -9,5 +11,5 @@ public abstract class Operation {
         this.state = state;
     }
 
-    abstract void execute();
+    public abstract void execute();
 }

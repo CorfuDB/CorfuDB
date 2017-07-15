@@ -1,11 +1,9 @@
-package org.corfudb.generator;
+package org.corfudb.generator.distributions;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-import java.util.UUID;
 
 /**
  * Created by maithem on 7/14/17.

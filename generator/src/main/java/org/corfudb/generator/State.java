@@ -2,10 +2,15 @@ package org.corfudb.generator;
 
 import com.google.common.reflect.TypeToken;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import org.corfudb.generator.distributions.Keys;
+import org.corfudb.generator.distributions.OperationCount;
+import org.corfudb.generator.distributions.Operations;
+import org.corfudb.generator.distributions.Streams;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 
@@ -19,7 +24,8 @@ public class State {
     final private OperationCount operationCount;
     final private Operations operations;
     final private CorfuRuntime rt;
-    final private Map<UUID, Map<UUID, UUID>> maps;
+    final private Map<UUID, SMRMap> maps;
+    private volatile long trimMark = -1;
 
     public State(int numStreams, int numKeys, CorfuRuntime rt) {
         streams = new Streams(numStreams);
@@ -40,7 +46,7 @@ public class State {
 
     private void openMaps() {
         for (UUID uuid : streams.getDataSet()) {
-            Map<UUID, UUID> map = rt.getObjectsView()
+            SMRMap<UUID, UUID> map = rt.getObjectsView()
                     .build()
                     .setStreamID(uuid)
                     .setTypeToken(new TypeToken<SMRMap<UUID,UUID>>() {})
@@ -66,6 +72,10 @@ public class State {
         return maps.get(uuid);
     }
 
+    public Collection<SMRMap> getMaps() {
+        return maps.values();
+    }
+
     public OperationCount getOperationCount() {
         return operationCount;
     }
@@ -80,5 +90,13 @@ public class State {
 
     public void stopOptimisticTx() {
         rt.getObjectsView().TXEnd();
+    }
+
+    public CorfuRuntime getRt() {
+        return rt;
+    }
+
+    public void setTrimMark(long newTrimMark) {
+        trimMark = newTrimMark;
     }
 }
