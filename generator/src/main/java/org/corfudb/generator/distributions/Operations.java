@@ -1,6 +1,12 @@
-package org.corfudb.generator;
+package org.corfudb.generator.distributions;
 
 import com.google.common.collect.ImmutableList;
+import org.corfudb.generator.State;
+import org.corfudb.generator.operations.Operation;
+import org.corfudb.generator.operations.OptimisticTxOperation;
+import org.corfudb.generator.operations.ReadOperation;
+import org.corfudb.generator.operations.SleepOperation;
+import org.corfudb.generator.operations.WriteOperation;
 
 import java.util.List;
 

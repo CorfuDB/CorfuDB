@@ -1,4 +1,4 @@
-package org.corfudb.generator;
+package org.corfudb.generator.distributions;
 
 import java.util.ArrayList;
 import java.util.Collections;
