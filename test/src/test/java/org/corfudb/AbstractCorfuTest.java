@@ -496,7 +496,7 @@ public class AbstractCorfuTest {
         public void assertDoesNotThrow(Class<? extends Throwable> t) {
             if (ex != null) {
                 assertThat(ex)
-                        .isInstanceOf(t);
+                        .isNotInstanceOf(t);
             }
         }
 
