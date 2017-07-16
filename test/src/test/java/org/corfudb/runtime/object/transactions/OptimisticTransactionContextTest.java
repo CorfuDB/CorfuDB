@@ -4,6 +4,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ConflictParameterClass;
+import org.corfudb.util.serializer.ICorfuHashable;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -212,6 +213,116 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .assertDoesNotThrow(TransactionAbortedException.class);
     }
 
+    @Data
+    @AllArgsConstructor
+    static class IHashAlwaysConflictObject implements ICorfuHashable {
+        final String k1;
+        final String k2;
+
+        @Override
+        public byte[] generateCorfuHash() {
+            return new byte[0];
+        }
+    }
+
+    /** This test generates a custom object which implements an interface which always
+     * conflicts.
+     */
+    @Test
+    public void IHashAlwaysConflicts() {
+        IHashAlwaysConflictObject c1 = new IHashAlwaysConflictObject("a", "a");
+        IHashAlwaysConflictObject c2 = new IHashAlwaysConflictObject("a", "b");
+
+        Map<IHashAlwaysConflictObject, String> map = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<SMRMap<IHashAlwaysConflictObject, String>>() {})
+                .setStreamName("test")
+                .open();
+
+        t(1, this::OptimisticTXBegin);
+        t(2, this::OptimisticTXBegin);
+        t(1, () -> map.put(c1 , "v1"));
+        t(2, () -> map.put(c2 , "v2"));
+        t(1, this::TXEnd);
+        t(2, this::TXEnd)
+                .assertThrows()
+                .isInstanceOf(TransactionAbortedException.class);
+    }
+
+
+    @Data
+    @AllArgsConstructor
+    static class IHashConflictObject implements ICorfuHashable {
+        final String k1;
+        final String k2;
+
+        @Override
+        public byte[] generateCorfuHash() {
+            ByteBuffer b = ByteBuffer.wrap(new byte[k1.length() + k2.length()]);
+            b.put(k1.getBytes());
+            b.put(k2.getBytes());
+            return b.array();
+        }
+    }
+
+    /** This test generates a custom object which implements the CorfuHashable
+     * interface and should not conflict.
+     */
+    @Test
+    public void IHashNoConflicts() {
+        IHashConflictObject c1 = new IHashConflictObject("a", "a");
+        IHashConflictObject c2 = new IHashConflictObject("a", "b");
+
+        Map<IHashConflictObject, String> map = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<SMRMap<IHashConflictObject, String>>() {})
+                .setStreamName("test")
+                .open();
+
+        t(1, this::OptimisticTXBegin);
+        t(2, this::OptimisticTXBegin);
+        t(1, () -> map.put(c1 , "v1"));
+        t(2, () -> map.put(c2 , "v2"));
+        t(1, this::TXEnd);
+        t(2, this::TXEnd)
+                .assertDoesNotThrow(TransactionAbortedException.class);
+    }
+
+    @Data
+    static class ExtendedIHashObject extends IHashConflictObject {
+
+        public ExtendedIHashObject(String k1, String k2) {
+            super(k1, k2);
+        }
+
+        /** A simple dummy method. */
+        public String getK1K2() {
+            return k1 + k2;
+        }
+    }
+
+    /** This test extends a custom object which implements the CorfuHashable
+     * interface and should not conflict.
+     */
+    @Test
+    public void ExtendedIHashNoConflicts() {
+        ExtendedIHashObject c1 = new ExtendedIHashObject("a", "a");
+        ExtendedIHashObject c2 = new ExtendedIHashObject("a", "b");
+
+        Map<ExtendedIHashObject, String> map = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<SMRMap<ExtendedIHashObject, String>>() {})
+                .setStreamName("test")
+                .open();
+
+        t(1, this::OptimisticTXBegin);
+        t(2, this::OptimisticTXBegin);
+        t(1, () -> map.put(c1 , "v1"));
+        t(2, () -> map.put(c2 , "v2"));
+        t(1, this::TXEnd);
+        t(2, this::TXEnd)
+                .assertDoesNotThrow(TransactionAbortedException.class);
+    }
 
     /** In an optimistic transaction, we should be able to
      *  read our own writes in the same thread.

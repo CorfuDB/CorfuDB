@@ -128,6 +128,9 @@ public interface ISerializer {
                 (Function<Object, byte[]>)getCustomHasher(cls)) != null) {
             // If we have a registered custom hasher, use that
             return conversionFunc.apply(o);
+        } else if (o instanceof ICorfuHashable) {
+            // The object implements Corfu hashable, so use that
+            return ((ICorfuHashable) o).generateCorfuHash();
         } else {
             // Otherwise, revert to having xx generate a hash by using the
             // serializer then hashing.
