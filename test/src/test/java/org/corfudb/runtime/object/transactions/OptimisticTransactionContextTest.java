@@ -106,6 +106,27 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                             .isNotEqualTo("v2");
     }
 
+    /** This test ensures if modifying multiple keys, with one key that does
+     * conflict and another that does not, causes an abort.
+     */
+    @Test
+    public void modifyingMultipleKeysCausesAbort() {
+        // T1 modifies k1 and k2.
+        t(1, this::OptimisticTXBegin);
+        t(1, () -> put("k1", "v1"));
+        t(1, () -> put("k2", "v2"));
+
+        // T2 modifies k1, commits
+        t(2, this::OptimisticTXBegin);
+        t(2, () -> put("k1", "v3"));
+        t(2, this::TXEnd);
+
+        // T1 commits, should abort
+        t(1, this::TXEnd)
+                .assertThrows()
+                    .isInstanceOf(TransactionAbortedException.class);
+    }
+
     /** Ensure that, upon two consecutive nested transactions, the latest transaction can
      * see optimistic updates from previous ones.
      *
@@ -348,8 +369,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         t1(() -> m1.put("azusavnj", "1"));
         t2(() -> m2.put("ajkenmbb", "2"));
         t1(() -> rt.getObjectsView().TXEnd());
-        // TODO: Merge assertDoesNotThrow from PR# 821
-        // Should not throw a transaction aborted due to conflict exception.
-        t2(() -> rt.getObjectsView().TXEnd());
+        t2(() -> rt.getObjectsView().TXEnd())
+                .assertDoesNotThrow(TransactionAbortedException.class);
     }
 }

@@ -3,7 +3,9 @@ package org.corfudb.util.serializer;
 import com.esotericsoftware.kryo.Kryo;
 import com.google.common.collect.ImmutableMap;
 
+import java.nio.ByteBuffer;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 import de.javakaffee.kryoserializers.guava.ImmutableListSerializer;
@@ -64,6 +66,12 @@ public interface ISerializer {
             ImmutableMap.<Class<?>, Function<?, byte[]>>builder()
                     .put(String.class, (String o) ->
                         Utils.longToBigEndianByteArray(LongHashFunction.xx().hashChars(o)))
+                    .put(UUID.class, (UUID o) -> {
+                        ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
+                        bb.putLong(o.getMostSignificantBits());
+                        bb.putLong(o.getLeastSignificantBits());
+                        return bb.array();
+                    })
                     .put(Long.class, (Long o) -> Utils.longToBigEndianByteArray(o))
                     .put(Integer.class, (Integer o) -> Utils.intToBigEndianByteArray(o))
                     .put(Byte.class, (Byte o) -> new byte[]{o})

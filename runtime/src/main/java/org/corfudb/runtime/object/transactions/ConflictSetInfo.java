@@ -43,8 +43,7 @@ class ConflictSetInfo {
                         e -> e.getKey().getStreamID(),
                         // Value = Generated hash.
                         e -> e.getValue().stream()
-                                .map(o -> ConflictSetInfo.generateHashFromObject(e.getKey(),
-                                        e.getValue()))
+                                .map(o -> ConflictSetInfo.generateHashFromObject(e.getKey(), o))
                                 .collect(Collectors.toSet()),
                         // Merge function, in case key was already mapped
                         // (If two proxies have the same stream).
