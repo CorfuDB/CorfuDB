@@ -255,7 +255,7 @@ public abstract class AbstractTransactionalContext implements
      *                        available.
      */
     public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
-        getReadSetInfo().add(proxy.getStreamID(), conflictObjects);
+        getReadSetInfo().add(proxy, conflictObjects);
     }
 
     /**
@@ -276,9 +276,9 @@ public abstract class AbstractTransactionalContext implements
      * @return a synthetic "address" in the write-set, to be used for
      *     checking upcall results
      */
-    long addToWriteSet(ICorfuSMRProxy proxy, SMREntry updateEntry, Object[]
+    long addToWriteSet(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[]
             conflictObjects) {
-        return getWriteSetInfo().add(proxy.getStreamID(), updateEntry, conflictObjects);
+        return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
     }
 
     /**
