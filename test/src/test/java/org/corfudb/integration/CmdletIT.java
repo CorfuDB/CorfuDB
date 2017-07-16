@@ -48,8 +48,11 @@ public class CmdletIT extends AbstractIT {
     }
 
     private String runCmdletGetOutput(String command) throws Exception {
+
         ProcessBuilder builder = new ProcessBuilder("sh", "-c", command);
+        builder.directory(new File(CORFU_PROJECT_DIR));
         builder.redirectErrorStream(true);
+
         Process cmdlet = builder.start();
         final StringBuilder output = new StringBuilder();
 
@@ -74,7 +77,7 @@ public class CmdletIT extends AbstractIT {
     public void testCorfuLayoutCmdlet() throws Exception {
 
         corfuServerProcess = new CorfuServerRunner().setPort(PORT).runServer();
-        final String command = CORFU_PROJECT_DIR + "bin/corfu_layout " + ENDPOINT;
+        final String command = "bin/corfu_layout " + ENDPOINT;
         assertThat(runCmdletGetOutput(command).contains(getSingleLayout().toString()))
                 .isTrue();
         shutdownCorfuServer(corfuServerProcess);
@@ -89,7 +92,7 @@ public class CmdletIT extends AbstractIT {
     public void testCorfuPingCmdlet() throws Exception {
 
         corfuServerProcess = new CorfuServerRunner().setPort(PORT).runServer();
-        final String command = CORFU_PROJECT_DIR + "bin/corfu_ping " + ENDPOINT;
+        final String command = "bin/corfu_ping " + ENDPOINT;
         final String expectedSubString = "PING " + ENDPOINT + "ACK";
         assertThat(runCmdletGetOutput(command).contains(expectedSubString))
                 .isTrue();
@@ -106,7 +109,7 @@ public class CmdletIT extends AbstractIT {
     public void testCorfuLayoutsCmdlet() throws Exception {
 
         corfuServerProcess = new CorfuServerRunner().setPort(PORT).runServer();
-        final String command = CORFU_PROJECT_DIR + "bin/corfu_layouts -c " + ENDPOINT + " query";
+        final String command = "bin/corfu_layouts -c " + ENDPOINT + " query";
         // Squashing all spaces to compare JSON.
         assertThat(runCmdletGetOutput(command).replace(" ", "")
                 .contains(getSingleLayout().asJSONString()))
@@ -127,7 +130,7 @@ public class CmdletIT extends AbstractIT {
                 .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, PORT))
                 .runServer();
 
-        final String command = CORFU_PROJECT_DIR + "bin/corfu_query " + ENDPOINT;
+        final String command = "bin/corfu_query " + ENDPOINT;
         final String expectedLogPath = "--log-path=" + CORFU_LOG_PATH;
         final String expectedInitialToken = "--initial-token=-1";
         final String expectedStartupArgs = new CorfuServerRunner()
@@ -158,12 +161,12 @@ public class CmdletIT extends AbstractIT {
         String payload1 = "Hello";
         streamViewA.append(payload1.getBytes());
 
-        String commandRead = CORFU_PROJECT_DIR + "bin/corfu_stream -i " + streamA + " -c " + ENDPOINT + " read";
+        String commandRead = "bin/corfu_stream -i " + streamA + " -c " + ENDPOINT + " read";
         String output = runCmdletGetOutput(commandRead);
         assertThat(output.contains(payload1)).isTrue();
 
         String payload2 = "World";
-        String commandAppend = "echo '" + payload2 + "' | " + CORFU_PROJECT_DIR + "bin/corfu_stream -i " + streamA + " -c " + ENDPOINT + " append";
+        String commandAppend = "echo '" + payload2 + "' | " + "bin/corfu_stream -i " + streamA + " -c " + ENDPOINT + " append";
         runCmdletGetOutput(commandAppend);
 
         assertThat(streamViewA.next().getPayload(runtime)).isEqualTo(payload1.getBytes());
@@ -184,14 +187,14 @@ public class CmdletIT extends AbstractIT {
         final String streamA = "streamA";
         CorfuRuntime runtime = createRuntime(ENDPOINT);
 
-        String commandNextToken = CORFU_PROJECT_DIR + "bin/corfu_sequencer -i " + streamA + " -c " + ENDPOINT + " next-token 3";
+        String commandNextToken = "bin/corfu_sequencer -i " + streamA + " -c " + ENDPOINT + " next-token 3";
         runCmdletGetOutput(commandNextToken);
 
         Token token = runtime.getSequencerView()
                 .nextToken(Collections.singleton(CorfuRuntime.getStreamID(streamA)), 0)
                 .getToken();
 
-        String commandLatest = CORFU_PROJECT_DIR + "bin/corfu_sequencer -i " + streamA + " -c " + ENDPOINT + " latest";
+        String commandLatest = "bin/corfu_sequencer -i " + streamA + " -c " + ENDPOINT + " latest";
         String output = runCmdletGetOutput(commandLatest);
         assertThat(output.contains(token.toString())).isTrue();
         shutdownCorfuServer(corfuServerProcess);
@@ -203,9 +206,9 @@ public class CmdletIT extends AbstractIT {
         corfuServerProcess = new CorfuServerRunner().setPort(PORT).runServer();
         final String streamA = "streamA";
         String payload = "Hello";
-        String commandAppend = "echo '" + payload + "' | " + CORFU_PROJECT_DIR + "bin/corfu_as -i " + streamA + " -c " + ENDPOINT + " write 0";
+        String commandAppend = "echo '" + payload + "' | " + "bin/corfu_as -i " + streamA + " -c " + ENDPOINT + " write 0";
         runCmdletGetOutput(commandAppend);
-        String commandRead = CORFU_PROJECT_DIR + "bin/corfu_as -i " + streamA + " -c " + ENDPOINT + " read 0";
+        String commandRead = "bin/corfu_as -i " + streamA + " -c " + ENDPOINT + " read 0";
         assertThat(runCmdletGetOutput(commandRead).contains(payload)).isTrue();
         shutdownCorfuServer(corfuServerProcess);
     }
@@ -214,7 +217,7 @@ public class CmdletIT extends AbstractIT {
     public void testCorfuHandleFailuresCmdlet() throws Exception {
 
         corfuServerProcess = new CorfuServerRunner().setPort(PORT).runServer();
-        final String command = CORFU_PROJECT_DIR + "bin/corfu_handle_failures -c " + ENDPOINT;
+        final String command = "bin/corfu_handle_failures -c " + ENDPOINT;
         final String expectedSubString = "Failure handler on " + ENDPOINT + " started.Initiation completed !";
         assertThat(runCmdletGetOutput(command).contains(expectedSubString))
                 .isTrue();
@@ -226,10 +229,10 @@ public class CmdletIT extends AbstractIT {
 
         corfuServerProcess = new CorfuServerRunner().setPort(PORT).runServer();
         String payload = "Hello";
-        String commandAppend = "echo '" + payload + "' | " + CORFU_PROJECT_DIR + "bin/corfu_logunit " + ENDPOINT + " write 0";
+        String commandAppend = "echo '" + payload + "' | " + "bin/corfu_logunit " + ENDPOINT + " write 0";
         runCmdletGetOutput(commandAppend);
 
-        String commandRead = CORFU_PROJECT_DIR + "bin/corfu_logunit " + ENDPOINT + " read 0";
+        String commandRead = "bin/corfu_logunit " + ENDPOINT + " read 0";
         assertThat(runCmdletGetOutput(commandRead).contains(payload)).isTrue();
         shutdownCorfuServer(corfuServerProcess);
     }
@@ -239,7 +242,7 @@ public class CmdletIT extends AbstractIT {
 
         corfuServerProcess = new CorfuServerRunner().setPort(PORT).runServer();
         final String expectedOutput = "Reset " + ENDPOINT + ":ACK";
-        String commandRead = CORFU_PROJECT_DIR + "bin/corfu_reset " + ENDPOINT;
+        String commandRead = "bin/corfu_reset " + ENDPOINT;
         assertThat(runCmdletGetOutput(commandRead).contains(expectedOutput)).isTrue();
         shutdownCorfuServer(corfuServerProcess);
     }
@@ -255,7 +258,7 @@ public class CmdletIT extends AbstractIT {
         try (FileOutputStream fos = new FileOutputStream(layoutFile)) {
             fos.write(getSingleLayout().asJSONString().getBytes());
         }
-        String command = CORFU_PROJECT_DIR + "bin/corfu_bootstrap_cluster -l " + layoutFile.getAbsolutePath();
+        String command = "bin/corfu_bootstrap_cluster -l " + layoutFile.getAbsolutePath();
         String expectedOutput = "New layout installed";
 
         assertThat(runCmdletGetOutput(command).contains(expectedOutput)).isTrue();
@@ -273,7 +276,7 @@ public class CmdletIT extends AbstractIT {
         try (FileOutputStream fos = new FileOutputStream(layoutFile)) {
             fos.write(getSingleLayout().asJSONString().getBytes());
         }
-        String command = CORFU_PROJECT_DIR + "bin/corfu_management_bootstrap -c " + ENDPOINT + " -l " + layoutFile.getAbsolutePath();
+        String command = "bin/corfu_management_bootstrap -c " + ENDPOINT + " -l " + layoutFile.getAbsolutePath();
         String expectedOutput = ENDPOINT + " bootstrapped successfully";
 
         assertThat(runCmdletGetOutput(command).contains(expectedOutput)).isTrue();
@@ -286,13 +289,13 @@ public class CmdletIT extends AbstractIT {
         corfuServerProcess = new CorfuServerRunner().setPort(PORT).runServer();
         String streamA = "streamA";
         String payload = "helloWorld";
-        final String commandPut = CORFU_PROJECT_DIR + "bin/corfu_smrobject" +
+        final String commandPut = "bin/corfu_smrobject" +
                 " -i " + streamA +
                 " -c " + ENDPOINT +
                 " " + SMRMap.class.getCanonicalName() + " putIfAbsent x " + payload;
         runCmdletGetOutput(commandPut);
 
-        final String commandGet = CORFU_PROJECT_DIR + "bin/corfu_smrobject" +
+        final String commandGet = "bin/corfu_smrobject" +
                 " -i " + streamA +
                 " -c " + ENDPOINT +
                 " " + SMRMap.class.getCanonicalName() + " getOrDefault x none";
