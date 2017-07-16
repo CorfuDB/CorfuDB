@@ -13,6 +13,9 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
 /**
  * Created by mwei on 11/16/16.
  */
@@ -65,6 +68,67 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .doesNotContain(TEST_2, TEST_3, TEST_5);
 
         getRuntime().getObjectsView().TXAbort();
+    }
+
+
+    @Data
+    @AllArgsConstructor
+    static class CustomConflictObject {
+        final String k1;
+        final String k2;
+    }
+
+    /** When using two custom conflict objects which
+     * do not provide a serializable implementation,
+     * the implementation should hash them
+     * transparently, but when they conflict they should abort.
+     */
+    @Test
+    public void customConflictObjectsConflictAborts()
+    {
+        CustomConflictObject c1 = new CustomConflictObject("a", "a");
+        CustomConflictObject c2 = new CustomConflictObject("a", "a");
+
+        Map<CustomConflictObject, String> map = getDefaultRuntime().getObjectsView()
+                        .build()
+                        .setTypeToken(new TypeToken<SMRMap<CustomConflictObject, String>>() {})
+                        .setStreamName("test")
+                        .open();
+
+        t(1, this::OptimisticTXBegin);
+        t(2, this::OptimisticTXBegin);
+        t(1, () -> map.put(c1 , "v1"));
+        t(2, () -> map.put(c2 , "v2"));
+        t(1, this::TXEnd);
+        t(2, this::TXEnd)
+                .assertThrows()
+                    .isInstanceOf(TransactionAbortedException.class);
+    }
+
+    /** When using two custom conflict objects which
+     * do not provide a serializable implementation,
+     * the implementation should hash them
+     * transparently so they do not abort.
+     */
+    @Test
+    public void customConflictObjectsNoConflictNoAbort()
+    {
+        CustomConflictObject c1 = new CustomConflictObject("a", "a");
+        CustomConflictObject c2 = new CustomConflictObject("a", "b");
+
+        Map<CustomConflictObject, String> map = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<SMRMap<CustomConflictObject, String>>() {})
+                .setStreamName("test")
+                .open();
+
+        t(1, this::OptimisticTXBegin);
+        t(2, this::OptimisticTXBegin);
+        t(1, () -> map.put(c1 , "v1"));
+        t(2, () -> map.put(c2 , "v2"));
+        t(1, this::TXEnd);
+        t(2, this::TXEnd)
+                .assertDoesNotThrow(TransactionAbortedException.class);
     }
 
 
