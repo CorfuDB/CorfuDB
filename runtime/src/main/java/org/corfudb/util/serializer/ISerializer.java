@@ -62,6 +62,9 @@ public interface ISerializer {
      */
     void serialize(Object o, ByteBuf b);
 
+    /** This map provides some methods for performing hashing on
+     * known types.
+     */
     Map<Class<?>, Function<?, byte[]>> hashConversionMap =
             ImmutableMap.<Class<?>, Function<?, byte[]>>builder()
                     .put(String.class, (String o) ->
