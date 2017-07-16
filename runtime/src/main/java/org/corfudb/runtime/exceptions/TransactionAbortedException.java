@@ -51,9 +51,9 @@ public class TransactionAbortedException extends RuntimeException {
                 + " | Conflict Key = " + conflictKey
                 + " | Conflict Stream = " + conflictStream
                 + " | Cause = " + abortCause
-                + " | Time = " + context == null ? "Unknown" :
+                + " | Time = " + (context == null ? "Unknown" :
                 System.currentTimeMillis() -
-                context.getStartTime() + " ms");
+                context.getStartTime()) + " ms");
         this.txResolutionInfo = txResolutionInfo;
         this.conflictKey = conflictKey;
         this.abortCause = abortCause;
