@@ -47,21 +47,22 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         // WS,RS=TEST_4
         testObject.mutatorAccessorTest(TEST_4, TEST_5);
 
-        // Assert that the conflict set contains TEST_1, TEST_4
+        // Assert that the conflict set contains TEST_0, TEST_4
         assertThat(TransactionalContext.getCurrentContext()
-                .getReadSetInfo()
-                .getReadSetConflicts().values().stream()
+                .getReadSetInfo().getConflicts()
+                .values()
+                .stream()
                 .flatMap(x -> x.stream())
                 .collect(Collectors.toList()))
-                .contains(Integer.valueOf(TEST_0.hashCode()));
+                .contains(TEST_0, TEST_4);
 
-        // in optimistic mode, assert that the conflict set does NOT contain TEST_2, TEST_4
+        // in optimistic mode, assert that the conflict set does NOT contain TEST_2, TEST_3
         assertThat(TransactionalContext.getCurrentContext()
                 .getReadSetInfo()
-                .getReadSetConflicts().values().stream()
+                .getConflicts().values().stream()
                 .flatMap(x -> x.stream())
                 .collect(Collectors.toList()))
-                .doesNotContain(Integer.valueOf(TEST_3), Integer.valueOf(TEST_4));
+                .doesNotContain(TEST_2, TEST_3, TEST_5);
 
         getRuntime().getObjectsView().TXAbort();
     }

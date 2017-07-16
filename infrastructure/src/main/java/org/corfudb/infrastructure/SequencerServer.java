@@ -193,8 +193,8 @@ public class SequencerServer extends AbstractServer {
     * @param conflictParam The conflict parameter.
     * @return A conflict hash code.
     */
-    public String getConflictHashCode(UUID streamId, int conflictParam) {
-        return streamId.toString() + Integer.toString(conflictParam);
+    public String getConflictHashCode(UUID streamId, byte[] conflictParam) {
+        return streamId.toString() + Utils.bytesToHex(conflictParam);
     }
 
     /**
@@ -212,7 +212,7 @@ public class SequencerServer extends AbstractServer {
      *     cause.
      */
     public TokenType txnCanCommit(TxResolutionInfo txInfo, /** Input. */
-                                  AtomicReference<Integer> conflictKey /** Output. */) {
+                                  AtomicReference<byte[]> conflictKey /** Output. */) {
         log.trace("Commit-req[{}]", txInfo);
         final long txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
 
@@ -224,14 +224,14 @@ public class SequencerServer extends AbstractServer {
 
         AtomicReference<TokenType> response = new AtomicReference<>(TokenType.NORMAL);
 
-        for (Map.Entry<UUID, Set<Integer>> entry : txInfo.getConflictSet().entrySet()) {
+        for (Map.Entry<UUID, Set<byte[]>> entry : txInfo.getConflictSet().entrySet()) {
             if (response.get() != TokenType.NORMAL) {
                 break;
             }
 
             // if conflict-parameters are present, check for conflict based on conflict-parameter
             // updates
-            Set<Integer> conflictParamSet = entry.getValue();
+            Set<byte[]> conflictParamSet = entry.getValue();
             if (conflictParamSet != null && conflictParamSet.size() > 0) {
                 // for each key pair, check for conflict;
                 // if not present, check against the wildcard
@@ -430,7 +430,7 @@ public class SequencerServer extends AbstractServer {
         // Since Java does not allow an easy way for a function to return multiple values, this
         // variable is passed to the consumer that will use it to indicate to us if/what key was
         // responsible for an aborted transaction.
-        AtomicReference<Integer> conflictKey = new AtomicReference(TokenResponse.NO_CONFLICT_KEY);
+        AtomicReference<byte[]> conflictKey = new AtomicReference(TokenResponse.NO_CONFLICT_KEY);
 
         // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
         // Token allocation is conditioned on commit.
