@@ -75,6 +75,7 @@ public class Utils {
                 (byte) (in & 0xFF)};
     }
 
+
     public static byte[] longToBigEndianByteArray(long in) {
         return new byte[] {
                 (byte) ((in >> 56) & 0xFF),
@@ -86,6 +87,7 @@ public class Utils {
                 (byte) ((in >> 8) & 0xFF),
                 (byte) (in & 0xFF)};
     }
+  
     /**
      * Print byte code.
      * @param bytes Byte array that represents the byte code
