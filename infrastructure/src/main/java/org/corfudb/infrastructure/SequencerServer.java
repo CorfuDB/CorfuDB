@@ -11,16 +11,15 @@ import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import lombok.Data;
+import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -127,8 +126,25 @@ public class SequencerServer extends AbstractServer {
      */
     private long maxConflictWildcard = Address.NOT_FOUND;
 
+    /** Conflict data class - this lightweight data class holds
+     * data to be used as a key into the conflictToGlobalTailCache.
+     */
+    @AllArgsConstructor
+    @EqualsAndHashCode
+    static class ConflictData {
+        /** Stream Id of the conflict. */
+        final UUID streamId;
+        /** Byte array with conflict data. */
+        final byte[] conflict;
+
+        @Override
+        public String toString() {
+            return Utils.toReadableId(streamId) + ":" + Utils.bytesToHex(conflict);
+        }
+    }
+
     private final long defaultCacheSize = Long.MAX_VALUE;
-    private final Cache<String, Long> conflictToGlobalTailCache;
+    private final Cache<ConflictData, Long> conflictToGlobalTailCache;
 
     /**
      * Handler for this server.
@@ -174,7 +190,7 @@ public class SequencerServer extends AbstractServer {
 
         conflictToGlobalTailCache = Caffeine.newBuilder()
                 .maximumSize(cacheSize)
-                .removalListener((String k, Long v, RemovalCause cause) -> {
+                .removalListener((ConflictData k, Long v, RemovalCause cause) -> {
                     if (!RemovalCause.REPLACED.equals(cause)) {
                         log.trace("Updating maxConflictWildcard. Old value = '{}', new value='{}'"
                                         + " conflictParam = '{}'. Removal cause = '{}'",
@@ -193,8 +209,8 @@ public class SequencerServer extends AbstractServer {
     * @param conflictParam The conflict parameter.
     * @return A conflict hash code.
     */
-    public String getConflictHashCode(UUID streamId, byte[] conflictParam) {
-        return streamId.toString() + Utils.bytesToHex(conflictParam);
+    public ConflictData getConflictData(UUID streamId, byte[] conflictParam) {
+        return new ConflictData(streamId, conflictParam);
     }
 
     /**
@@ -236,9 +252,9 @@ public class SequencerServer extends AbstractServer {
                 // for each key pair, check for conflict;
                 // if not present, check against the wildcard
                 conflictParamSet.forEach(conflictParam -> {
-                    String conflictKeyHash = getConflictHashCode(entry.getKey(),
+                    ConflictData conflictData = getConflictData(entry.getKey(),
                             conflictParam);
-                    Long v = conflictToGlobalTailCache.getIfPresent(conflictKeyHash);
+                    Long v = conflictToGlobalTailCache.getIfPresent(conflictData);
 
                     log.trace("Commit-ck[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
 
@@ -500,8 +516,7 @@ public class SequencerServer extends AbstractServer {
                                 // using the hash code based on the param
                                 // and the stream id.
                                 conflictToGlobalTailCache.put(
-                                        getConflictHashCode(txEntry
-                                        .getKey(), conflictParam),
+                                        getConflictData(txEntry.getKey(), conflictParam),
                                     newTail - 1)));
         }
 
