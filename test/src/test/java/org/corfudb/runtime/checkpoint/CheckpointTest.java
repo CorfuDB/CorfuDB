@@ -506,16 +506,11 @@ public class CheckpointTest extends AbstractObjectTest {
     @Test
     public void prefixTrimTwiceAtSameAddress() throws Exception {
         final int mapSize = 5;
-        ThrowableAssert.ThrowingCallable trim = () -> getMyRuntime().getAddressSpaceView().prefixTrim(2);
-
         populateMaps(mapSize);
-        try {
-            trim.call();
-        } catch (Throwable t) {
-            throw new Exception("First trim call shouldn't fail");
-        }
-        // Trim again in exactly the same place should fail
-        assertThatThrownBy(trim).hasCauseInstanceOf(ExecutionException.class);
+
+        // Trim again in exactly the same place shouldn't fail
+        getMyRuntime().getAddressSpaceView().prefixTrim(2);
+        getMyRuntime().getAddressSpaceView().prefixTrim(2);
 
         // GC twice at the same place should be fine.
         getMyRuntime().getAddressSpaceView().gc();
