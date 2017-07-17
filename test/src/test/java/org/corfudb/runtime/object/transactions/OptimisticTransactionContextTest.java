@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object.transactions;
 
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ConflictParameterClass;
@@ -311,5 +312,43 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         // of the most recent write.
         assertThat(getMap())
                 .containsEntry("k", "v2");
+    }
+
+
+    /** This test checks if modifying two keys from
+     *  two different streams will cause a collision.
+     *
+     *  In the old single-level design, this would cause
+     *  a collision since 16 bits of the stream id were
+     *  being hashed into the 32 bit hashCode(), so that
+     *  certain stream-conflictkey combinations would
+     *  collide, as demonstrated below.
+     *
+     *  TODO: Potentially remove this unit test
+     *  TODO: once the hash function has stabilized.
+     */
+    @Test
+    public void collide16Bit() throws Exception {
+        CorfuRuntime rt = getDefaultRuntime().connect();
+        Map<String, String> m1 = rt.getObjectsView()
+                .build()
+                .setStreamName("test-1")
+                .setTypeToken(new TypeToken<SMRMap<String,String>>() {})
+                .open();
+
+        Map<String, String> m2 = rt.getObjectsView()
+                .build()
+                .setStreamName("test-2")
+                .setTypeToken(new TypeToken<SMRMap<String,String>>() {})
+                .open();
+
+        t1(() -> rt.getObjectsView().TXBegin());
+        t2(() -> rt.getObjectsView().TXBegin());
+        t1(() -> m1.put("azusavnj", "1"));
+        t2(() -> m2.put("ajkenmbb", "2"));
+        t1(() -> rt.getObjectsView().TXEnd());
+        // TODO: Merge assertDoesNotThrow from PR# 821
+        // Should not throw a transaction aborted due to conflict exception.
+        t2(() -> rt.getObjectsView().TXEnd());
     }
 }
