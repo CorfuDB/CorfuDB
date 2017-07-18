@@ -22,7 +22,7 @@ import net.openhft.hashing.LongHashFunction;
  * transaction execution.
  */
 @Getter
-class ConflictSetInfo {
+public class ConflictSetInfo {
 
 
     /** Set of objects this conflict set conflicts with. */
