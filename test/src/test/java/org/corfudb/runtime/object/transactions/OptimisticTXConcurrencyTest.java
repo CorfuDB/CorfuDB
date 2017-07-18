@@ -5,8 +5,10 @@ import com.google.common.reflect.TypeToken;
 
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.UUID;
 
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.junit.Test;
 
 /**
@@ -136,4 +138,37 @@ public class OptimisticTXConcurrencyTest extends TXConflictScenariosTest {
         });
 
     }
+
+    /**
+     * This test evaluates a case of false hash conflict, i.e.,
+     * the case where given two different keys (UUIDs) its hash codes conflict.
+     */
+    @Test
+    public void concurrentTransactionsNonConflictingKeysSameHash() {
+        // These values have been obtained from real conflicting scenarios.
+        UUID streamID = UUID.fromString("a0a6f485-db5c-33a2-92b2-a1edb188e5c7");
+        UUID key1 = UUID.fromString("01003000-0000-0cb5-0000-000000000001");
+        UUID key2 = UUID.fromString("01003000-0000-0cb6-0000-000000000002");
+
+        // Confirm key1 and key2 hash codes actually conflict
+        assertThat(key1.hashCode()).isEqualTo(key2.hashCode());
+
+        Map<UUID, String> mapTest = getRuntime().getObjectsView().build()
+                .setType(SMRMap.class)
+                .setStreamID(streamID)
+                .open();
+        mapTest.clear();
+
+        t(1, this::TXBegin);
+
+        t(1, () -> mapTest.put(key1, "v1"));
+
+        t(2, this::TXBegin);
+        t(2, () -> mapTest.put(key2, "v2"));
+
+        t(1, this::TXEnd);
+        t(2, this::TXEnd)
+                .assertDoesNotThrow(TransactionAbortedException.class);
+    }
+
 }

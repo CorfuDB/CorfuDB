@@ -13,6 +13,9 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
 /**
  * Created by mwei on 11/16/16.
  */
@@ -68,6 +71,67 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     }
 
 
+    @Data
+    @AllArgsConstructor
+    static class CustomConflictObject {
+        final String k1;
+        final String k2;
+    }
+
+    /** When using two custom conflict objects which
+     * do not provide a serializable implementation,
+     * the implementation should hash them
+     * transparently, but when they conflict they should abort.
+     */
+    @Test
+    public void customConflictObjectsConflictAborts()
+    {
+        CustomConflictObject c1 = new CustomConflictObject("a", "a");
+        CustomConflictObject c2 = new CustomConflictObject("a", "a");
+
+        Map<CustomConflictObject, String> map = getDefaultRuntime().getObjectsView()
+                        .build()
+                        .setTypeToken(new TypeToken<SMRMap<CustomConflictObject, String>>() {})
+                        .setStreamName("test")
+                        .open();
+
+        t(1, this::OptimisticTXBegin);
+        t(2, this::OptimisticTXBegin);
+        t(1, () -> map.put(c1 , "v1"));
+        t(2, () -> map.put(c2 , "v2"));
+        t(1, this::TXEnd);
+        t(2, this::TXEnd)
+                .assertThrows()
+                    .isInstanceOf(TransactionAbortedException.class);
+    }
+
+    /** When using two custom conflict objects which
+     * do not provide a serializable implementation,
+     * the implementation should hash them
+     * transparently so they do not abort.
+     */
+    @Test
+    public void customConflictObjectsNoConflictNoAbort()
+    {
+        CustomConflictObject c1 = new CustomConflictObject("a", "a");
+        CustomConflictObject c2 = new CustomConflictObject("a", "b");
+
+        Map<CustomConflictObject, String> map = getDefaultRuntime().getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<SMRMap<CustomConflictObject, String>>() {})
+                .setStreamName("test")
+                .open();
+
+        t(1, this::OptimisticTXBegin);
+        t(2, this::OptimisticTXBegin);
+        t(1, () -> map.put(c1 , "v1"));
+        t(2, () -> map.put(c2 , "v2"));
+        t(1, this::TXEnd);
+        t(2, this::TXEnd)
+                .assertDoesNotThrow(TransactionAbortedException.class);
+    }
+
+
     /** In an optimistic transaction, we should be able to
      *  read our own writes in the same thread.
      */
@@ -104,6 +168,27 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         t(1, () -> get("k"))
                             .assertResult()
                             .isNotEqualTo("v2");
+    }
+
+    /** This test ensures if modifying multiple keys, with one key that does
+     * conflict and another that does not, causes an abort.
+     */
+    @Test
+    public void modifyingMultipleKeysCausesAbort() {
+        // T1 modifies k1 and k2.
+        t(1, this::OptimisticTXBegin);
+        t(1, () -> put("k1", "v1"));
+        t(1, () -> put("k2", "v2"));
+
+        // T2 modifies k1, commits
+        t(2, this::OptimisticTXBegin);
+        t(2, () -> put("k1", "v3"));
+        t(2, this::TXEnd);
+
+        // T1 commits, should abort
+        t(1, this::TXEnd)
+                .assertThrows()
+                    .isInstanceOf(TransactionAbortedException.class);
     }
 
     /** Ensure that, upon two consecutive nested transactions, the latest transaction can
@@ -348,8 +433,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         t1(() -> m1.put("azusavnj", "1"));
         t2(() -> m2.put("ajkenmbb", "2"));
         t1(() -> rt.getObjectsView().TXEnd());
-        // TODO: Merge assertDoesNotThrow from PR# 821
-        // Should not throw a transaction aborted due to conflict exception.
-        t2(() -> rt.getObjectsView().TXEnd());
+        t2(() -> rt.getObjectsView().TXEnd())
+                .assertDoesNotThrow(TransactionAbortedException.class);
     }
 }

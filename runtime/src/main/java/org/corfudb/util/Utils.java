@@ -75,6 +75,19 @@ public class Utils {
                 (byte) (in & 0xFF)};
     }
 
+
+    public static byte[] longToBigEndianByteArray(long in) {
+        return new byte[] {
+                (byte) ((in >> 56) & 0xFF),
+                (byte) ((in >> 48) & 0xFF),
+                (byte) ((in >> 40) & 0xFF),
+                (byte) ((in >> 32) & 0xFF),
+                (byte) ((in >> 24) & 0xFF),
+                (byte) ((in >> 16) & 0xFF),
+                (byte) ((in >> 8) & 0xFF),
+                (byte) (in & 0xFF)};
+    }
+  
     /**
      * Print byte code.
      * @param bytes Byte array that represents the byte code
