@@ -6,6 +6,8 @@ import com.google.common.collect.ImmutableMap;
 import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 import java.util.function.Function;
 
 import de.javakaffee.kryoserializers.guava.ImmutableListSerializer;
@@ -62,6 +64,26 @@ public interface ISerializer {
      */
     void serialize(Object o, ByteBuf b);
 
+    Map<Class<?>, Function<?, byte[]>> customHashingMap =
+            new ConcurrentHashMap<>();
+
+    /** Register a new custom hasher with the serializer.
+     * @param cls               The class this hasher will handle.
+     * @param hashFunction      The function to execute to generate the hash.
+     */
+    default <T> void registerCustomHasher(Class<T> cls, Function<T, byte[]> hashFunction) {
+        customHashingMap.put(cls, hashFunction);
+    }
+
+    /** Get a custom hasher from the serializer.
+     * @param cls       The class to obtain a hasher for.
+     * @return          A function to generate a hash, or null, if no custom
+     *                  hasher was registered.
+     */
+    default <T> Function<T, byte[]> getCustomHasher(Class<T> cls) {
+        return (Function<T, byte[]>) customHashingMap.get(cls);
+    }
+
     /** This map provides some methods for performing hashing on
      * known types.
      */
@@ -97,11 +119,19 @@ public interface ISerializer {
      * @return  The hashed object value, as a byte array.
      */
     default byte[] hash(Object o) {
+        final Class<?> cls = o.getClass();
         Function<Object, byte[]> conversionFunc =
-                (Function<Object, byte[]>) hashConversionMap.get(o.getClass());
+                (Function<Object, byte[]>) hashConversionMap.get(cls);
         if (conversionFunc != null) {
             // If we know how to convert this object quickly, do that.
             return conversionFunc.apply(o);
+        } else if ((conversionFunc =
+                (Function<Object, byte[]>)getCustomHasher(cls)) != null) {
+            // If we have a registered custom hasher, use that
+            return conversionFunc.apply(o);
+        } else if (o instanceof ICorfuHashable) {
+            // The object implements Corfu hashable, so use that
+            return ((ICorfuHashable) o).generateCorfuHash();
         } else {
             // Otherwise, revert to having xx generate a hash by using the
             // serializer then hashing.
