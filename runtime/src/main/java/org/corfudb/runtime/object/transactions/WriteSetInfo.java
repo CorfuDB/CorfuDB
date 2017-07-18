@@ -17,7 +17,7 @@ import static org.corfudb.runtime.object.transactions.TransactionalContext.getRo
  * transaction execution.
  */
 @Getter
-class WriteSetInfo extends ConflictSetInfo {
+public class WriteSetInfo extends ConflictSetInfo {
 
     /** The set of mutated objects. */
     Set<UUID> affectedStreams = new HashSet<>();
