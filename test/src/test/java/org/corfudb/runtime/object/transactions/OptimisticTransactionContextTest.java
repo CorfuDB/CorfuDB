@@ -135,6 +135,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .assertDoesNotThrow(TransactionAbortedException.class);
     }
 
+  
     @Data
     @AllArgsConstructor
     static class CustomSameHashConflictObject {
