@@ -1,5 +1,7 @@
 package org.corfudb.util;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import io.netty.buffer.ByteBuf;
@@ -34,7 +36,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.recovery.RecoveryUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.recovery.FastSmrMapsLoader;
-
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -468,5 +470,10 @@ public class Utils {
             log.warn("printLogAnatomy [logAddress={}] cannot be deserialized ",
                     logData.getGlobalAddress());
         }
+    }
+
+    public static void setLogLevel(Level l) {
+        Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        root.setLevel(l);
     }
 }
