@@ -493,6 +493,13 @@ public class AbstractCorfuTest {
             return assertThatThrownBy(() -> {throw ex;});
         }
 
+        public void assertDoesNotThrow(Class<? extends Throwable> t) {
+            if (ex != null) {
+                assertThat(ex)
+                        .isNotInstanceOf(t);
+            }
+        }
+
         public T result()
         throws RuntimeException {
             if (ex != null) {
