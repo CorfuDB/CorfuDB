@@ -9,6 +9,10 @@
 # Short-Description:    Corfu Infrastructure Server
 ### END INIT INFO
 
+# BEGIN CORFU CONFIG BLOCK
+export CORFU_HEAP_SIZE_PERCENT=20
+# END CORFU CONFIG BLOCK
+
 umask 022
 
 ROLENAME="Corfu Infrastructure Server"

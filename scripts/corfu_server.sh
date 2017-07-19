@@ -35,6 +35,12 @@ then
     CLASSPATH=`cygpath -wp "$CLASSPATH"`
 fi
 
+# setup the corfudb heap size by taking a partition of total memory
+if [ ! -z $CORFU_HEAP_SIZE_PERCENT ] && [ $CORFU_HEAP_SIZE_PERCENT -gt 0 ] && [ $CORFU_HEAP_SIZE_PERCENT -lt 100 ]; then
+    TOTAL_MEMORY_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+    TOTAL_MEMORY_MB=$(($TOTAL_MEMORY_KB/1024))
+    CORFUDB_HEAP=$(($TOTAL_MEMORY_MB*$CORFU_HEAP_SIZE_PERCENT/100))
+fi
 
 # default heap for corfudb
 CORFUDB_HEAP="${CORFUDB_HEAP:-2000}"
