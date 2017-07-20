@@ -3,7 +3,7 @@
 if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then
     ./mvnw verify -Dmaven.javadoc.skip=true -Dtest.travisBuild=true  sonar:sonar \
         -Dsonar.analysis.mode=preview \
-        -Dsonar.host.url=https://sonarqube.com
+        -Dsonar.host.url=https://sonarqube.com \
         -Dsonar.github.pullRequest=$TRAVIS_PULL_REQUEST \
         -Dsonar.github.repository=$TRAVIS_REPO_SLUG \
         -Dsonar.github.oauth=$SONAR_GITHUB_TOKEN \
