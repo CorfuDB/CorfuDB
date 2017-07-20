@@ -229,17 +229,16 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     public long commitTransaction() throws TransactionAbortedException {
         log.debug("TX[{}] request optimistic commit", this);
 
-        return getConflictSetAndCommit(() -> getReadSetInfo().getReadSetConflicts());
+        return getConflictSetAndCommit(getReadSetInfo());
     }
 
     /**
      * Commit with a given conflict set and return the address.
      *
-     * @param computeConflictSet  conflict set used to check whether transaction can commit
+     * @param conflictSet  conflict set used to check whether transaction can commit
      * @return  the commit address
      */
-    public long getConflictSetAndCommit(Supplier<Map<UUID, Set<Integer>>>
-                                       computeConflictSet) {
+    public long getConflictSetAndCommit(ConflictSetInfo conflictSet) {
 
         if (TransactionalContext.isInNestedTransaction()) {
             getParentContext().addTransaction(this);
@@ -250,14 +249,14 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
         // If the write set is empty, we're done and just return
         // NOWRITE_ADDRESS.
-        if (getWriteSetInfo().getWriteSet().getEntryMap().isEmpty()) {
+        if (getWriteSetInfo().getWriteSet().isEmpty()) {
             log.trace("Commit[{}] Read-only commit (no write)", this);
             return NOWRITE_ADDRESS;
         }
 
         // Write to the transaction stream if transaction logging is enabled
-        Set<UUID> affectedStreams = new HashSet<>(getWriteSetInfo().getWriteSet()
-                .getEntryMap().keySet());
+        Set<UUID> affectedStreams = new HashSet<>(getWriteSetInfo()
+                .getWriteSet().getAffectedStreams());
         if (this.builder.runtime.getObjectsView().isTransactionLogging()) {
             affectedStreams.add(TRANSACTION_STREAM_ID);
         }
@@ -283,8 +282,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                         // streamID's
                         new TxResolutionInfo(getTransactionID(),
                                 getSnapshotTimestamp(),
-                                computeConflictSet.get(),
-                                collectWriteConflictParams())
+                                conflictSet.getHashedConflictSet(),
+                                getWriteSetInfo().getHashedConflictSet())
                 );
 
         log.trace("Commit[{}] Acquire address {}", this, address);

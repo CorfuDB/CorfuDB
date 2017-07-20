@@ -22,7 +22,6 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-import org.corfudb.runtime.object.ISMRStream;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.util.Utils;
 
@@ -122,7 +121,7 @@ public abstract class AbstractTransactionalContext implements
     private final WriteSetInfo writeSetInfo = new WriteSetInfo();
 
     @Getter
-    private final ReadSetInfo readSetInfo = new ReadSetInfo();
+    private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
 
     /**
      * A future which gets completed when this transaction commits.
@@ -256,7 +255,7 @@ public abstract class AbstractTransactionalContext implements
      *                        available.
      */
     public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
-        getReadSetInfo().addToReadSet(proxy.getStreamID(), conflictObjects);
+        getReadSetInfo().add(proxy, conflictObjects);
     }
 
     /**
@@ -264,7 +263,7 @@ public abstract class AbstractTransactionalContext implements
      *
      * @param other  Source readSet to merge in
      */
-    void mergeReadSetInto(ReadSetInfo other) {
+    void mergeReadSetInto(ConflictSetInfo other) {
         getReadSetInfo().mergeInto(other);
     }
 
@@ -277,10 +276,9 @@ public abstract class AbstractTransactionalContext implements
      * @return a synthetic "address" in the write-set, to be used for
      *     checking upcall results
      */
-    long addToWriteSet(ICorfuSMRProxy proxy, SMREntry updateEntry, Object[]
+    long addToWriteSet(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[]
             conflictObjects) {
-        return getWriteSetInfo().addToWriteSet(proxy.getStreamID(),
-                updateEntry, conflictObjects);
+        return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
     }
 
     /**
@@ -289,8 +287,8 @@ public abstract class AbstractTransactionalContext implements
      *
      * @return A set of longs representing all the conflict params
      */
-    Map<UUID, Set<Integer>> collectWriteConflictParams() {
-        return getWriteSetInfo().getWriteSetConflicts();
+    Map<UUID, Set<byte[]>> collectWriteConflictParams() {
+        return getWriteSetInfo().getHashedConflictSet();
     }
 
     void mergeWriteSetInto(WriteSetInfo other) {

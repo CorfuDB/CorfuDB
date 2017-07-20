@@ -45,6 +45,49 @@ public class Utils {
     private static Printer printer = new Textifier();
     private static TraceMethodVisitor mp = new TraceMethodVisitor(printer);
 
+    private final static char[] hexArray = "0123456789ABCDEF".toCharArray();
+
+    /** Convert a byte array to a hex string.
+     * Source:
+     * https://stackoverflow.com/questions/9655181/
+     * how-to-convert-a-byte-array-to-a-hex-string-in-java
+     * @param bytes Byte array to convert
+     * @return      Hex string representation.
+     */
+    public static String bytesToHex(byte[] bytes) {
+        if (bytes == null) {
+            return "(null)";
+        }
+        char[] hexChars = new char[bytes.length * 2];
+        for ( int j = 0; j < bytes.length; j++ ) {
+            int v = bytes[j] & 0xFF;
+            hexChars[j * 2] = hexArray[v >>> 4];
+            hexChars[j * 2 + 1] = hexArray[v & 0x0F];
+        }
+        return new String(hexChars);
+    }
+
+    public static byte[] intToBigEndianByteArray(int in) {
+        return new byte[] {
+                (byte) ((in >> 24) & 0xFF),
+                (byte) ((in >> 16) & 0xFF),
+                (byte) ((in >> 8) & 0xFF),
+                (byte) (in & 0xFF)};
+    }
+
+
+    public static byte[] longToBigEndianByteArray(long in) {
+        return new byte[] {
+                (byte) ((in >> 56) & 0xFF),
+                (byte) ((in >> 48) & 0xFF),
+                (byte) ((in >> 40) & 0xFF),
+                (byte) ((in >> 32) & 0xFF),
+                (byte) ((in >> 24) & 0xFF),
+                (byte) ((in >> 16) & 0xFF),
+                (byte) ((in >> 8) & 0xFF),
+                (byte) (in & 0xFF)};
+    }
+  
     /**
      * Print byte code.
      * @param bytes Byte array that represents the byte code
@@ -414,9 +457,9 @@ public class Utils {
                 log.info("--------------------------");
             } else if (le.getType() == LogEntry.LogEntryType.MULTIOBJSMR) {
                 log.info("printLogAnatomy: Number of Streams: " + logData.getStreams().size());
-                ((MultiObjectSMREntry)le).getEntryMap().forEach((stream, multiSmrEntry) -> {
+                ((MultiObjectSMREntry)le).getEntries().forEach((multiSmrEntry) -> {
                     log.info("printLogAnatomy: Number of Entries: " + multiSmrEntry
-                            .getSMRUpdates(stream).size());
+                            .getValue().getSMRUpdates(multiSmrEntry.getKey()));
                 });
                 log.info("--------------------------");
             }
