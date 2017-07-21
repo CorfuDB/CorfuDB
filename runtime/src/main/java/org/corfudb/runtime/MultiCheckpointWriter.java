@@ -8,6 +8,7 @@ import java.util.UUID;
 import java.util.function.BiConsumer;
 
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
@@ -25,8 +26,13 @@ import org.corfudb.util.serializer.ISerializer;
 public class MultiCheckpointWriter {
     @Getter
     private List<ICorfuSMR<Map>> maps = new ArrayList<>();
+
     @Getter
     private List<Long> checkpointLogAddresses = new ArrayList<>();
+
+    @Setter
+    @Getter
+    boolean enablePutAll = false;
 
     /** Add a map to the list of maps to be checkpointed by this class. */
     @SuppressWarnings("unchecked")
@@ -75,6 +81,7 @@ public class MultiCheckpointWriter {
 
                 while (true) {
                     CheckpointWriter cpw = new CheckpointWriter(rt, streamId, author, (SMRMap) map);
+                    cpw.setEnablePutAll(enablePutAll);
                     ISerializer serializer =
                             ((CorfuCompileProxy<Map>) map.getCorfuSMRProxy())
                                     .getSerializer();
