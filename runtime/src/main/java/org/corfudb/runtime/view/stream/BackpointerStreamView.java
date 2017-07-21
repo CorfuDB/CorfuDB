@@ -16,6 +16,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
@@ -107,6 +108,20 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 tokenResponse = runtime.getSequencerView()
                         .nextToken(Collections.singleton(id),
                              1);
+            } catch (StaleTokenException te) {
+                log.trace("Token grew stale occurred at {}", tokenResponse);
+                if (deacquisitionCallback != null) {
+                    if (!deacquisitionCallback.apply(tokenResponse)) {
+                        log.debug("Deacquisition requested abort");
+                        return -1L;
+                    }
+                }
+                // Request a new token, informing the sequencer we were
+                // overwritten.
+                tokenResponse = runtime.getSequencerView()
+                        .nextToken(Collections.singleton(id),
+                                1);
+
             }
         }
     }

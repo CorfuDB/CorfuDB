@@ -1,11 +1,17 @@
 package org.corfudb.integration;
 
+import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerClient;
-import org.corfudb.runtime.exceptions.AbortCause;
-import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.*;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -19,16 +25,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests the recovery of the Corfu instance.
@@ -462,6 +462,166 @@ public class ServerRestartIT extends AbstractIT {
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
 
     }
+
+    /**
+     * loop that randomizes a combination of the following activities:
+     * (i) map put()s
+     * (ii) checkpoint/trim
+     * (iii) leaving holes behind
+     * (iv) server shutdown/restart
+     *
+     * @throws Exception
+     */
+    @Test
+    public void sequencerTailsRecoveryLoopTest() throws Exception {
+
+        Process corfuServerProcess = runCorfuServer();
+        final int mapSize = 10;
+        UUID streamNameA = CorfuRuntime.getStreamID("mapA");
+        UUID streamNameB = CorfuRuntime.getStreamID("mapB");
+
+        long mapAStreamTail = -1;
+        long mapBStreamTail = -1;
+        long globalTail = -1;
+
+        CorfuRuntime corfuRuntime = createDefaultRuntime();
+        Random rand = new Random(PARAMETERS.SEED);
+
+        for (int r = 0; r < PARAMETERS.NUM_ITERATIONS_LOW; r++) {
+
+            Map<String, Integer> mapA = createMap(corfuRuntime, "mapA");
+            Map<String, Integer> mapB = createMap(corfuRuntime, "mapB");
+
+            // activity (i): map put()'s
+            boolean updateMaps = rand.nextBoolean();
+
+            if (updateMaps) {
+                System.out.println(r + "..do update maps");
+                for (int i = 0; i < mapSize; i++) {
+                    mapA.put(Integer.toString(i), i);
+                }
+                for (int i = 0; i < mapSize; i++) {
+                    mapB.put(Integer.toString(i), i);
+                }
+                mapAStreamTail = globalTail + mapSize;
+                mapBStreamTail = globalTail + 2 * mapSize;
+                globalTail += 2 * mapSize;
+            } else {
+                System.out.println(r + "..no map updates");
+            }
+
+            // activity (ii): log checkpoint and trim
+            boolean doCkpoint = rand.nextBoolean();
+
+            if (doCkpoint) {
+                // checkpoint and trim
+                MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
+                mcw1.addMap((SMRMap) mapA);
+                mcw1.addMap((SMRMap) mapB);
+                long checkpointAddress = mcw1.appendCheckpoints(corfuRuntime, "dahlia");
+
+                // Trim the log
+                corfuRuntime.getAddressSpaceView().prefixTrim(checkpointAddress - 1);
+                corfuRuntime.getAddressSpaceView().gc();
+                corfuRuntime.getAddressSpaceView().invalidateServerCaches();
+                corfuRuntime.getAddressSpaceView().invalidateClientCache();
+
+                System.out.println(r + "..ckpoint and trimmed @" + checkpointAddress);
+            } else {
+                System.out.println(r + "..no checkpoint/trim");
+            }
+
+            TokenResponse expectedTokenResponseA = corfuRuntime
+                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                    .getClient(SequencerClient.class)
+                    .nextToken(Collections.singleton(streamNameA), 0)
+                    .get();
+
+            TokenResponse expectedTokenResponseB = corfuRuntime
+                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                    .getClient(SequencerClient.class)
+                    .nextToken(Collections.singleton(streamNameB), 0)
+                    .get();
+
+
+            TokenResponse expectedGlobalTailResponse = corfuRuntime
+                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                    .getClient(SequencerClient.class)
+                    .nextToken(Collections.emptySet(), 0)
+                    .get();
+
+
+            // activity (iii) shutdown and restart
+            corfuRuntime.shutdown();
+            assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
+
+            corfuServerProcess = runCorfuServer();
+            corfuRuntime = createDefaultRuntime();
+
+            // check tail recovery after restart
+            TokenResponse tokenResponseA = corfuRuntime
+                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                    .getClient(SequencerClient.class)
+                    .nextToken(Collections.singleton(streamNameA), 1)
+                    .get();
+
+            TokenResponse tokenResponseB = corfuRuntime
+                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                    .getClient(SequencerClient.class)
+                    .nextToken(Collections.singleton(streamNameB), 1)
+                    .get();
+
+            assertThat(tokenResponseA.getTokenValue()).isEqualTo(expectedGlobalTailResponse
+                    .getTokenValue()+1);
+            assertThat(tokenResponseA.getBackpointerMap().get(streamNameA))
+                    .isEqualTo(expectedTokenResponseA.getTokenValue());
+
+            assertThat(tokenResponseB.getTokenValue()).isEqualTo(expectedGlobalTailResponse
+                    .getTokenValue()+2);
+            assertThat(tokenResponseB.getBackpointerMap().get(streamNameB))
+                    .isEqualTo(expectedTokenResponseB.getTokenValue());
+
+            // activity (iv): leave holes behind
+            // this is done by having another shutdown/restart, so the token above becomes stale
+
+            boolean restartwithHoles = true; // rand.nextBoolean();
+
+            if (restartwithHoles) {
+                corfuRuntime.shutdown();
+                assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
+
+                corfuServerProcess = runCorfuServer();
+                corfuRuntime = createDefaultRuntime();
+                System.out.println(r + "..restart with holes");
+                // in this scenario, the globalTail is left unchanged from before,
+                // because we restart without ever having writes use the tokens
+            } else {
+                System.out.println(r + ".. no holes left");
+                globalTail = tokenResponseB.getTokenValue();
+            }
+
+            // these writes should throw a StaleTokenException if we restarted
+            try {
+                corfuRuntime.getAddressSpaceView()
+                        .write(tokenResponseA.getToken(), "fixed string".getBytes());
+            } catch (StaleTokenException se) {
+                assertThat(restartwithHoles).isTrue();
+            }
+
+            try {
+                corfuRuntime.getAddressSpaceView()
+                        .write(tokenResponseB.getToken(), "fixed string".getBytes());
+            } catch (StaleTokenException se) {
+                assertThat(restartwithHoles).isTrue();
+            }
+
+            System.out.println(r + "completed..@" + globalTail);
+        }
+
+        assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
+
+    }
+
 }
 
 

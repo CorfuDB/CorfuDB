@@ -15,9 +15,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.AbortCause;
-import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.*;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.stream.IStreamView;
@@ -82,6 +80,8 @@ public class StreamsView extends AbstractView {
                 written = true;
             } catch (OverwriteException oe) {
                 log.warn("hole fill during COW entry append, retrying...");
+            } catch (StaleTokenException se) {
+                // simply loop
             }
         }
         return get(destination);
@@ -158,6 +158,18 @@ public class StreamsView extends AbstractView {
                 tokenResponse = new TokenResponse(
                         temp.getRespType(), tokenResponse.getConflictKey(),
                         temp.getToken(), temp.getBackpointerMap());
+
+            } catch (StaleTokenException se) {
+                // the epoch changed from when we grabbed the token from sequencer
+                log.warn("StaleToken[{}]: streams {}", tokenResponse.getTokenValue(),
+                        streamIDs.stream().map(Utils::toReadableId).collect(Collectors.toSet()));
+
+                throw new TransactionAbortedException(
+                        conflictInfo,
+                        tokenResponse.getConflictKey(),
+                        AbortCause.NEW_SEQUENCER, // TODO define a new AbortCause?
+                        TransactionalContext.getCurrentContext()
+                );
             }
         }
 
