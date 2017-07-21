@@ -23,6 +23,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
@@ -106,7 +107,7 @@ public class AddressSpaceView extends AbstractView {
             // epoch as the layout we are about to write
             // to.
             if (token.getEpoch() != l.getEpoch()) {
-                throw new WrongEpochException(l.getEpoch());
+                throw new StaleTokenException(l.getEpoch());
             }
 
             // Set the data to use the token
