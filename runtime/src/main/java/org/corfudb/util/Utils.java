@@ -457,9 +457,9 @@ public class Utils {
                 log.info("--------------------------");
             } else if (le.getType() == LogEntry.LogEntryType.MULTIOBJSMR) {
                 log.info("printLogAnatomy: Number of Streams: " + logData.getStreams().size());
-                ((MultiObjectSMREntry)le).getEntries().forEach((multiSmrEntry) -> {
+                ((MultiObjectSMREntry)le).getEntryMap().forEach((stream, multiSmrEntry) -> {
                     log.info("printLogAnatomy: Number of Entries: " + multiSmrEntry
-                            .getValue().getSMRUpdates(multiSmrEntry.getKey()));
+                            .getSMRUpdates(stream).size());
                 });
                 log.info("--------------------------");
             }
