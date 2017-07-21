@@ -82,8 +82,22 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * The epoch this router is in.
      */
     @Getter
-    @Setter
     public long epoch;
+
+    /**
+     * We should never set epoch backwards
+     *
+     * @param epoch
+     */
+    public void setEpoch(long epoch){
+        if (epoch < this.epoch) {
+            log.warn("setEpoch: Rejected attempt to set the router {}:{} to epoch {} smaller than current epoch {}",
+                    host, port, epoch, this.epoch);
+            return;
+        }
+        this.epoch = epoch;
+    }
+
     /**
      * The id of this client.
      */

@@ -12,9 +12,7 @@ import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.clients.SequencerClient;
-import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -743,5 +741,43 @@ public class ManagementViewTest extends AbstractViewTest {
         // We should be able to request a token now.
         corfuRuntime.getSequencerView().nextToken(Collections.singleton(CorfuRuntime
                 .getStreamID("testStream")), 1);
+    }
+
+    @Test
+    public void sealDoesNotModifyClientRouterEpoch() throws Exception {
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        addServer(SERVERS.PORT_2);
+        Layout l = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_2)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.PORT_2)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        bootstrapAllServers(l);
+
+        CorfuRuntime rt = new CorfuRuntime(SERVERS.ENDPOINT_0);
+        rt.connect();
+
+        // Seal
+        Layout currentLayout = rt.getLayoutView().getCurrentLayout();
+        currentLayout.setEpoch(currentLayout.getEpoch() + 1);
+        currentLayout.moveServersToEpoch();
+
+        for(String router : l.getAllServers()) {
+            assertThat(rt.getRouter(router).getEpoch()).isEqualTo(1L);
+        }
+
     }
 }
