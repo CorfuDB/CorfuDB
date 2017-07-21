@@ -77,7 +77,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 .setEpoch(1L)
                 .addLayoutServer(SERVERS.PORT_0)
                 .addLayoutServer(SERVERS.PORT_1)
-                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
                 .buildSegment()
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_0)
@@ -412,6 +412,10 @@ public class ManagementViewTest extends AbstractViewTest {
 
         induceSequencerFailureAndWait();
 
+        // Block until new sequencer reaches READY state.
+        getCorfuRuntime().getSequencerView().nextToken(
+                Collections.singleton(CorfuRuntime.getStreamID("streamA")),
+                0);
         // verify that a failover sequencer was started with the correct starting-tail
         //
         assertThat(getSequencer(SERVERS.PORT_0).getGlobalLogTail().get()).isEqualTo(beforeFailure);
@@ -710,9 +714,9 @@ public class ManagementViewTest extends AbstractViewTest {
         getManagementServer(SERVERS.PORT_2).shutdown();
         addClientRule(getManagementServer(SERVERS.PORT_0).getCorfuRuntime(),
                 new TestRule().matches(msg -> {
-                    if (msg.getMsgType().equals(CorfuMsgType.RESET_SEQUENCER)) {
+                    if (msg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER)) {
                         try {
-                            // There is a failure but the RESET_SEQUENCER message has not yet been
+                            // There is a failure but the BOOTSTRAP_SEQUENCER message has not yet been
                             // sent. So if we request a token now, we should be denied as the
                             // server is sealed and we get a WrongEpochException.
                             corfuRuntime
@@ -735,10 +739,8 @@ public class ManagementViewTest extends AbstractViewTest {
                 .isTrue();
 
         // We should be able to request a token now.
-        corfuRuntime.getRouter(SERVERS.ENDPOINT_0).getClient(SequencerClient.class)
-                .nextToken(Collections.singleton(CorfuRuntime
-                        .getStreamID("testStream")), 1).get();
-
+        corfuRuntime.getSequencerView().nextToken(Collections.singleton(CorfuRuntime
+                .getStreamID("testStream")), 1);
     }
 
     @Test
