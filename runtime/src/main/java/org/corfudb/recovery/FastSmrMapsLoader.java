@@ -251,9 +251,9 @@ public class FastSmrMapsLoader {
 
     private void updateCorfuObjectWithMultiObjSmrEntry(LogEntry logEntry, long globalAddress) {
         MultiObjectSMREntry multiObjectLogEntry = (MultiObjectSMREntry) logEntry;
-        multiObjectLogEntry.getEntries().forEach((multiSmrEntry) -> {
-            multiSmrEntry.getValue().getSMRUpdates(multiSmrEntry.getKey()).forEach((smrEntry) -> {
-                applySmrEntryToStream(multiSmrEntry.getKey(), smrEntry, globalAddress);
+        multiObjectLogEntry.getEntryMap().forEach((streamId, multiSmrEntry) -> {
+            multiSmrEntry.getSMRUpdates(streamId).forEach((smrEntry) -> {
+                applySmrEntryToStream(streamId, smrEntry, globalAddress);
             });
         });
     }
