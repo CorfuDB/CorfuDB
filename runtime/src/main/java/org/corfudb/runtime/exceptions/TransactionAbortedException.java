@@ -5,6 +5,7 @@ import java.util.UUID;
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.util.Utils;
 
 /**
  * Created by mwei on 1/11/16.
@@ -18,7 +19,7 @@ public class TransactionAbortedException extends RuntimeException {
     TxResolutionInfo txResolutionInfo;
 
     @Getter
-    Integer conflictKey;
+    byte[] conflictKey;
 
     @Getter
     UUID conflictStream;
@@ -37,23 +38,23 @@ public class TransactionAbortedException extends RuntimeException {
      */
     public TransactionAbortedException(
             TxResolutionInfo txResolutionInfo,
-            Integer conflictKey, AbortCause abortCause, AbstractTransactionalContext context) {
+            byte[] conflictKey, AbortCause abortCause, AbstractTransactionalContext context) {
         this(txResolutionInfo, conflictKey, null, abortCause, null, context);
     }
 
     public TransactionAbortedException(
             TxResolutionInfo txResolutionInfo,
-            Integer conflictKey, UUID conflictStream,
+            byte[] conflictKey, UUID conflictStream,
             AbortCause abortCause, Throwable cause, AbstractTransactionalContext context) {
         super("TX ABORT "
                 + " | Snapshot Time = " + txResolutionInfo.getSnapshotTimestamp()
                 + " | Transaction ID = " + txResolutionInfo.getTXid()
-                + " | Conflict Key = " + conflictKey
+                + " | Conflict Key = " + Utils.bytesToHex(conflictKey)
                 + " | Conflict Stream = " + conflictStream
                 + " | Cause = " + abortCause
-                + " | Time = " + context == null ? "Unknown" :
+                + " | Time = " + (context == null ? "Unknown" :
                 System.currentTimeMillis() -
-                context.getStartTime() + " ms");
+                context.getStartTime()) + " ms");
         this.txResolutionInfo = txResolutionInfo;
         this.conflictKey = conflictKey;
         this.abortCause = abortCause;
