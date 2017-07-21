@@ -11,19 +11,18 @@ import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import lombok.Data;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
@@ -141,9 +140,19 @@ public class SequencerServer extends AbstractServer {
     private static Counter counterTokenSum;
     private static Counter counterToken0;
 
+    @Getter
+    @Setter
+    private volatile long readyStateEpoch = -1;
+
     @Override
-    public boolean isServerReady() {
-        return serverContext.isReady();
+    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+        if ((readyStateEpoch != serverContext.getServerEpoch())
+                && (!msg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER))) {
+            log.warn("Rejecting msg at sequencer : sequencerStateEpoch:{}, serverEpoch:{}, "
+                    + "msg:{}", readyStateEpoch, serverContext.getServerEpoch(), msg);
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -317,12 +326,21 @@ public class SequencerServer extends AbstractServer {
     /**
      * Service an incoming request to reset the sequencer.
      */
-    @ServerHandler(type = CorfuMsgType.RESET_SEQUENCER, opTimer = metricsPrefix + "reset")
+    @ServerHandler(type = CorfuMsgType.BOOTSTRAP_SEQUENCER, opTimer = metricsPrefix + "reset")
     public synchronized void resetServer(CorfuPayloadMsg<SequencerTailsRecoveryMsg> msg,
                                          ChannelHandlerContext ctx, IServerRouter r,
                                          boolean isMetricsEnabled) {
         long initialToken = msg.getPayload().getGlobalTail();
         final Map<UUID, Long> streamTails = msg.getPayload().getStreamTails();
+        final long readyEpoch = msg.getPayload().getReadyStateEpoch();
+
+        // Stale bootstrap request should be discarded.
+        if (readyStateEpoch > readyEpoch) {
+            log.info("Sequencer already bootstrapped at epoch {}. "
+                    + "Discarding bootstrap request with epoch {}", readyStateEpoch, readyEpoch);
+            r.sendResponse(ctx, msg, CorfuMsgType.NACK.msg());
+            return;
+        }
 
         //
         // if the sequencer is reset, then we can't know when was
@@ -348,8 +366,12 @@ public class SequencerServer extends AbstractServer {
             streamTailToGlobalTailMap.putAll(streamTails);
         }
 
-        log.info("Sequencer reset with token = {}, streamTailToGlobalTailMap = {}",
-                initialToken, streamTailToGlobalTailMap);
+        // Mark the sequencer as ready after the tails have been populated.
+        readyStateEpoch = readyEpoch;
+
+        log.info("Sequencer reset with token = {}, streamTailToGlobalTailMap = {},"
+                        + " readyStateEpoch = {}",
+                initialToken, streamTailToGlobalTailMap, readyStateEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
@@ -496,13 +518,13 @@ public class SequencerServer extends AbstractServer {
                     .forEach(txEntry ->
                             // and for each conflict param
                             txEntry.getValue().stream().forEach(conflictParam ->
-                                // insert an entry with the new timestamp
-                                // using the hash code based on the param
-                                // and the stream id.
-                                conflictToGlobalTailCache.put(
-                                        getConflictHashCode(txEntry
-                                        .getKey(), conflictParam),
-                                    newTail - 1)));
+                                    // insert an entry with the new timestamp
+                                    // using the hash code based on the param
+                                    // and the stream id.
+                                    conflictToGlobalTailCache.put(
+                                            getConflictHashCode(txEntry
+                                                    .getKey(), conflictParam),
+                                            newTail - 1)));
         }
 
         log.trace("token {} backpointers {}",

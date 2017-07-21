@@ -14,6 +14,7 @@ import java.io.*;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -211,9 +212,12 @@ public class AbstractIT extends AbstractCorfuTest {
         private InputStream inputStream;
         private String logfile;
 
-        public StreamGobbler(InputStream inputStream, String logfile) {
+        public StreamGobbler(InputStream inputStream, String logfile) throws IOException {
             this.inputStream = inputStream;
             this.logfile = logfile;
+            if (Files.notExists(Paths.get(logfile))) {
+                Files.createFile(Paths.get(logfile));
+            }
         }
 
         @Override
@@ -221,7 +225,10 @@ public class AbstractIT extends AbstractCorfuTest {
             new BufferedReader(new InputStreamReader(inputStream)).lines()
                     .forEach((x) -> {
                                 try {
-                                    Files.write(Paths.get(logfile), x.getBytes());
+                                    Files.write(Paths.get(logfile), x.getBytes(),
+                                            StandardOpenOption.APPEND);
+                                    Files.write(Paths.get(logfile), "\n".getBytes(),
+                                            StandardOpenOption.APPEND);
                                 } catch (Exception e) {
                                     e.printStackTrace();
                                 }
@@ -236,7 +243,7 @@ public class AbstractIT extends AbstractCorfuTest {
     public static class CorfuServerRunner {
 
         private boolean single = true;
-        private String logLevel = "TRACE";
+        private String logLevel = "INFO";
         private String host = DEFAULT_HOST;
         private int port = DEFAULT_PORT;
         private String managementBootstrap = null;
