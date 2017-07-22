@@ -1,17 +1,20 @@
 package org.corfudb.integration;
 
+import org.assertj.core.api.ThrowableAssert;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.util.CFUtils;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.FileOutputStream;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -19,16 +22,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests the recovery of the Corfu instance.
@@ -461,6 +458,46 @@ public class ServerRestartIT extends AbstractIT {
 
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
 
+    }
+
+    /**
+     * If a tokenResponse is received in the previous epoch,
+     * a write should discard the tokenResponse and throw an exception.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void discardTokenReceivedInPreviousEpoch() throws Exception {
+        final int timeToWaitInSeconds = 3;
+
+        Process corfuServerProcess = runCorfuServer();
+
+        assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
+
+        corfuServerProcess = runCorfuServer();
+
+        CorfuRuntime corfuRuntime = createDefaultRuntime();
+        TokenResponse tr = corfuRuntime.getSequencerView().nextToken(Collections.emptySet(), 1);
+
+        assertThat(tr.getEpoch() == 1);
+
+        // Force the token response to have epoch = 0, to simulate a request received in previous epoch
+        TokenResponse mockTr = new TokenResponse(tr.getToken().getTokenValue(), tr.getEpoch() - 1, Collections.emptyMap());
+
+        byte[] testPayload = "hello world".getBytes();
+
+        // Should be stuck in a infinite loop
+        CompletableFuture cf = CFUtils.within(CompletableFuture.supplyAsync(() -> {
+            corfuRuntime.getAddressSpaceView().write(mockTr, testPayload);
+            return true;
+        }), Duration.ofSeconds(timeToWaitInSeconds));
+
+        try {
+            cf.get();
+        } catch (Exception e) {
+            assertThat(e.getCause()).isNotInstanceOf(TimeoutException.class);
+//            assertThat(e.getCause()).isInstanceOf(StaleTokenException.class);
+        }
     }
 }
 
