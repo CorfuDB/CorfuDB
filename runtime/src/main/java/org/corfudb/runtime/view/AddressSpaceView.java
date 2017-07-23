@@ -14,6 +14,9 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -50,12 +53,12 @@ public class AddressSpaceView extends AbstractView {
             .build(new CacheLoader<Long, ILogData>() {
                 @Override
                 public ILogData load(Long value) throws Exception {
-                    return cacheFetch(value);
+                    return addressesFetch(value);
                 }
 
                 @Override
                 public Map<Long, ILogData> loadAll(Iterable<? extends Long> keys) throws Exception {
-                    return cacheFetch((Iterable<Long>) keys);
+                    return addressesFetch((Iterable<Long>) keys);
                 }
             });
 
@@ -99,6 +102,11 @@ public class AddressSpaceView extends AbstractView {
      * @throws WrongEpochException  If the token epoch is invalid.
      */
     public void write(IToken token, Object data) throws OverwriteException {
+        write(token, data, null);
+    }
+
+    public void write(IToken token, Object data, @Nullable AddressSpaceOptions opts)
+            throws OverwriteException {
         final ILogData ld = new LogData(DataType.DATA, data);
 
         layoutHelper(l -> {
@@ -120,7 +128,8 @@ public class AddressSpaceView extends AbstractView {
         });
 
         // Cache the successful write
-        if (!runtime.isCacheDisabled()) {
+        if ((opts == null || opts != null && opts.isDoCache() )
+                && !runtime.isCacheDisabled()) {
             readCache.put(token.getTokenValue(), ld);
         }
     }
@@ -147,7 +156,12 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which be cached.
      */
     public @Nonnull ILogData read(long address) {
-        if (!runtime.isCacheDisabled()) {
+        return read(address, null);
+    }
+
+    public @Nonnull ILogData read(long address, AddressSpaceOptions opts) {
+        if ((opts == null || opts != null && opts.isDoCache() )
+                && !runtime.isCacheDisabled()) {
             ILogData data = readCache.get(address);
             if (data == null || data.getType() == DataType.EMPTY) {
                 throw new RuntimeException("Unexpected return of empty data at address "
@@ -167,20 +181,15 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which be cached.
      */
     public Map<Long, ILogData> read(Iterable<Long> addresses) {
-        Map<Long, ILogData> addressesMap;
-        if (!runtime.isCacheDisabled()) {
-            addressesMap = readCache.getAll(addresses);
-        } else {
-            addressesMap = this.cacheFetch(addresses);
-        }
+        return read(addresses, null);
+    }
 
-        for (ILogData logData : addressesMap.values()) {
-            if (logData.isTrimmed()) {
-                throw new TrimmedException();
-            }
+    public Map<Long, ILogData> read(Iterable<Long> addresses, AddressSpaceOptions opts) {
+        if ((opts == null || opts != null && opts.isDoCache() )
+                && !runtime.isCacheDisabled()) {
+            return readCache.getAll(addresses);
         }
-
-        return addressesMap;
+        return this.addressesFetch(addresses);
     }
 
     /**
@@ -275,7 +284,7 @@ public class AddressSpaceView extends AbstractView {
      * @return A result to be cached. If the readresult is empty,
      *         This entry will be scheduled to self invalidate.
      */
-    private @Nonnull ILogData cacheFetch(long address) {
+    private @Nonnull ILogData addressesFetch(long address) {
         log.trace("CacheMiss[{}]", address);
         ILogData result = fetch(address);
         if (result.getType() == DataType.EMPTY) {
@@ -290,7 +299,7 @@ public class AddressSpaceView extends AbstractView {
      * @param addresses collection of addresses to read from.
      * @return A result to be cached
      */
-    public @Nonnull Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
+    public @Nonnull Map<Long, ILogData> addressesFetch(Iterable<Long> addresses) {
         //turn the addresses into Set for now to satisfy signature requirement down the line
         Set<Long> readAddresses = new TreeSet<>();
         Iterator<Long> iterator = addresses.iterator();

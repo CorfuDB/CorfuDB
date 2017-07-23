@@ -12,13 +12,17 @@ import javax.annotation.Nonnull;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.AddressSpaceOptions;
+import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.util.Utils;
 
@@ -35,6 +39,7 @@ import org.corfudb.util.Utils;
 public class BackpointerStreamView extends AbstractQueuedStreamView {
 
     final StreamOptions options;
+    final AddressSpaceOptions addressSpaceOptions = new AddressSpaceOptions();
 
     /** Create a new backpointer stream view.
      *
@@ -46,6 +51,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                                  @Nonnull final StreamOptions options) {
         super(runtime, streamId);
         this.options = options;
+        addressSpaceOptions.setDoCache(options.doCache);
     }
 
     public BackpointerStreamView(final CorfuRuntime runtime,
@@ -88,7 +94,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // to the client.
             try {
                 runtime.getAddressSpaceView()
-                        .write(tokenResponse, object);
+                        .write(tokenResponse, object, addressSpaceOptions);
                 // The write completed successfully, so we return this
                 // address to the client.
                 return tokenResponse.getToken().getTokenValue();
@@ -130,27 +136,17 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
      * */
     @Override
     protected ILogData read(final long address) {
-        try {
-            return runtime.getAddressSpaceView().read(address);
-        } catch (TrimmedException te) {
-            processTrimmedException(te);
-            throw te;
-        }
+        return runtime.getAddressSpaceView().read(address, addressSpaceOptions);
     }
 
     @Nonnull
     @Override
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
-        try {
-            Map<Long, ILogData> dataMap =
-                    runtime.getAddressSpaceView().read(addresses);
-            return addresses.stream()
-                    .map(x -> dataMap.get(x))
-                    .collect(Collectors.toList());
-        } catch (TrimmedException te) {
-            processTrimmedException(te);
-            throw te;
-        }
+        Map<Long, ILogData> dataMap =
+                runtime.getAddressSpaceView().read(addresses, addressSpaceOptions);
+        return addresses.stream()
+                .map(x -> dataMap.get(x))
+                .collect(Collectors.toList());
     }
 
     /**
