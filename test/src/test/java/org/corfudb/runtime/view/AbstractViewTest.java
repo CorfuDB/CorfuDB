@@ -14,6 +14,7 @@ import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
+import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -26,6 +27,7 @@ import org.corfudb.runtime.clients.TestRule;
 import org.junit.After;
 import org.junit.Before;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -238,6 +240,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                             .handleMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(l),
                                     null, e.getValue().serverRouter);
                 });
+        TestServer primarySequencerNode = testServerMap.get(l.getSequencers().get(0));
+        primarySequencerNode.sequencerServer
+                .handleMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerTailsRecoveryMsg(0L,
+                        Collections.EMPTY_MAP, l.getEpoch())), null, primarySequencerNode.serverRouter);
     }
 
     /** Get a default CorfuRuntime. The default CorfuRuntime is connected to a single-node
