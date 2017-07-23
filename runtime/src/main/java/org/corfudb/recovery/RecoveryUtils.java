@@ -10,6 +10,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.view.AddressSpaceOptions;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -53,6 +54,8 @@ public class RecoveryUtils {
         }
     }
 
+    static final AddressSpaceOptions addressSpaceOptions = new AddressSpaceOptions();
+
     /**
      * Fetch LogData from Corfu server
      *
@@ -60,11 +63,8 @@ public class RecoveryUtils {
      * @return LogData at address
      */
     static ILogData getLogData(CorfuRuntime runtime, boolean loadInCache, long address) {
-        if (loadInCache) {
-            return runtime.getAddressSpaceView().read(address);
-        } else {
-            return runtime.getAddressSpaceView().fetch(address);
-        }
+        addressSpaceOptions.setDoCache(loadInCache);
+        return runtime.getAddressSpaceView().read(address, addressSpaceOptions);
     }
 
     /**
@@ -82,8 +82,10 @@ public class RecoveryUtils {
      * @return logData map ordered by addresses (increasing)
      */
     static Map<Long, ILogData> getLogData(CorfuRuntime runtime, long start, long end) {
+        addressSpaceOptions.setDoCache(false);
         return runtime.getAddressSpaceView().
-                cacheFetch(ContiguousSet.create(Range.closedOpen(start, end), DiscreteDomain.longs()));
+                read(ContiguousSet.create(Range.closedOpen(start, end), DiscreteDomain.longs()),
+                        addressSpaceOptions);
     }
 
     /** Deserialize a logData by getting the logEntry

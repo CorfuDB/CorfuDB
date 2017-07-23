@@ -9,12 +9,12 @@ import com.google.common.collect.Iterables;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -44,6 +44,7 @@ public class AddressSpaceView extends AbstractView {
     /**
      * A cache for read results.
      */
+    @Getter
     final LoadingCache<Long, ILogData> readCache = Caffeine.<Long, ILogData>newBuilder()
             .maximumSize(runtime.getNumCacheEntries())
             .expireAfterAccess(runtime.getCacheExpiryTime(), TimeUnit.SECONDS)
@@ -52,12 +53,12 @@ public class AddressSpaceView extends AbstractView {
             .build(new CacheLoader<Long, ILogData>() {
                 @Override
                 public ILogData load(Long value) throws Exception {
-                    return cacheFetch(value);
+                    return addressFetch(value);
                 }
 
                 @Override
                 public Map<Long, ILogData> loadAll(Iterable<? extends Long> keys) throws Exception {
-                    return cacheFetch((Iterable<Long>) keys);
+                    return addressFetch((Iterable<Long>) keys);
                 }
             });
 
@@ -101,6 +102,11 @@ public class AddressSpaceView extends AbstractView {
      * @throws WrongEpochException  If the token epoch is invalid.
      */
     public void write(IToken token, Object data) throws OverwriteException {
+        write(token, data, null);
+    }
+
+    public void write(IToken token, Object data, @Nullable AddressSpaceOptions opts)
+            throws OverwriteException {
         final ILogData ld = new LogData(DataType.DATA, data);
 
         layoutHelper(l -> {
@@ -122,7 +128,7 @@ public class AddressSpaceView extends AbstractView {
         });
 
         // Cache the successful write
-        if (!runtime.isCacheDisabled()) {
+        if (!runtime.isCacheDisabled() && (opts == null || opts.isDoCache())) {
             readCache.put(token.getTokenValue(), ld);
         }
     }
@@ -149,7 +155,12 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which be cached.
      */
     public @Nonnull ILogData read(long address) {
-        if (!runtime.isCacheDisabled()) {
+        return read(address, null);
+    }
+
+    public @Nonnull ILogData read(long address, AddressSpaceOptions opts) {
+        if (!runtime.isCacheDisabled() && (opts == null || opts.isDoCache())) {
+
             ILogData data = readCache.get(address);
             if (data == null || data.getType() == DataType.EMPTY) {
                 throw new RuntimeException("Unexpected return of empty data at address "
@@ -169,20 +180,14 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which be cached.
      */
     public Map<Long, ILogData> read(Iterable<Long> addresses) {
-        Map<Long, ILogData> addressesMap;
-        if (!runtime.isCacheDisabled()) {
-            addressesMap = readCache.getAll(addresses);
-        } else {
-            addressesMap = this.cacheFetch(addresses);
-        }
+        return read(addresses, null);
+    }
 
-        for (ILogData logData : addressesMap.values()) {
-            if (logData.isTrimmed()) {
-                throw new TrimmedException();
-            }
+    public Map<Long, ILogData> read(Iterable<Long> addresses, AddressSpaceOptions opts) {
+        if (!runtime.isCacheDisabled() && (opts == null || opts.isDoCache()) ) {
+            return readCache.getAll(addresses);
         }
-
-        return addressesMap;
+        return addressFetch(addresses);
     }
 
     /**
@@ -285,7 +290,7 @@ public class AddressSpaceView extends AbstractView {
      * @return A result to be cached. If the readresult is empty,
      *         This entry will be scheduled to self invalidate.
      */
-    private @Nonnull ILogData cacheFetch(long address) {
+    private @Nonnull ILogData addressFetch(long address) {
         log.trace("CacheMiss[{}]", address);
         ILogData result = fetch(address);
         if (result.getType() == DataType.EMPTY) {
@@ -301,7 +306,7 @@ public class AddressSpaceView extends AbstractView {
      * @return A result to be cached
      */
     public @Nonnull
-    Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
+    Map<Long, ILogData> addressFetch(Iterable<Long> addresses) {
         Map<Long, ILogData> allAddresses = new HashMap<>();
 
         Iterable<List<Long>> batches = Iterables.partition(addresses, runtime.getBulkReadSize());
@@ -313,24 +318,11 @@ public class AddressSpaceView extends AbstractView {
                         .getReplicationProtocol(runtime)
                         .readAll(l, batch)));
             } catch (Exception e) {
-                log.error("cacheFetch: Couldn't read addresses {}", batch, e);
+                log.error("addressFetch: Couldn't read addresses {}", batch, e);
             }
         }
 
         return allAddresses;
-    }
-
-    /**
-     * Fetch a collection of addresses.
-     *
-     * @param addresses collection of addresses to read from.
-     * @return A result to be cached
-     */
-    public @Nonnull
-    Map<Long, ILogData> cacheFetch(Set<Long> addresses) {
-        return layoutHelper(l -> l.getReplicationMode(addresses.iterator().next())
-                .getReplicationProtocol(runtime)
-                .readRange(l, addresses));
     }
 
 

@@ -166,6 +166,39 @@ public class CheckpointTest extends AbstractObjectTest {
     }
 
     /**
+     * test that checkpoint entries are not cached by addressSpace
+     */
+    @Test
+    public void cpNotCachedTest() throws Exception {
+        getMyRuntime().setCacheDisabled(false);
+        long cacheSize = getMyRuntime().getAddressSpaceView()
+                .getReadCache()
+                .estimatedSize();
+
+        // initially, nothing happened, cache should be empty
+        assertThat(cacheSize)
+                .isZero();
+
+        final int mapSize = PARAMETERS.NUM_ITERATIONS_VERY_LOW;
+        populateMaps(mapSize);
+
+        // now, two maps written, all entries should be cached
+        cacheSize = getMyRuntime().getAddressSpaceView()
+                .getReadCache()
+                .estimatedSize();
+        assertThat(cacheSize)
+                .isEqualTo(mapSize*2);
+
+        // write a checkpoint
+        mapCkpoint();
+
+        // verify that checkpoint did not increase the cache
+        assertThat(getMyRuntime().getAddressSpaceView()
+                .getReadCache()
+                .estimatedSize()).isEqualTo(cacheSize);
+    }
+
+    /**
      * this test builds two maps, m2A m2B, and brings up three threads:
      * <p>
      * 1. one pupolates the maps with mapSize items
