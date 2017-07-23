@@ -803,8 +803,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                             sh.getPendingTrims().add(trimEntry.getAddress());
                         }
                     }
-                } catch (FileNotFoundException fe) {
-                    return;
                 }
             }
         } catch (FileNotFoundException fe) {
