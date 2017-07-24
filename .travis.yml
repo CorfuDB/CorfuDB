@@ -2,44 +2,41 @@ language: java
 sudo: required
 dist: trusty
 jdk:
-  - oraclejdk8
+- oraclejdk8
 before_install:
-  - >-
-    .travis_scripts/generate_keys.sh $encrypted_026743b97986_key
-    $encrypted_026743b97986_iv
-  - .travis_scripts/setup_env.sh
+- ".travis_scripts/generate_keys.sh $encrypted_026743b97986_key $encrypted_026743b97986_iv"
+- ".travis_scripts/setup_env.sh"
 script:
-  - ./mvnw verify -Dmaven.javadoc.skip=true -Dtest.travisBuild=true
+- ".travis_scripts/verify.sh"
 after_success:
-  - 'mvn coveralls:report'
-  - .travis_scripts/javadocs.sh
-  - .travis_scripts/mvnrepo.sh
-  - .travis_scripts/push_deb.sh
-  - .travis_scripts/push_docker.sh
+- mvn coveralls:report
+- ".travis_scripts/javadocs.sh"
+- ".travis_scripts/mvnrepo.sh"
+- ".travis_scripts/push_deb.sh"
+- ".travis_scripts/push_docker.sh"
 before_cache:
-  - rm -rf $HOME/.m2/repository/org/corfudb
+- rm -rf $HOME/.m2/repository/org/corfudb
 cache:
   directories:
-    - $HOME/.m2
+  - "$HOME/.m2"
+  - "$HOME/.sonar/cache"
 notifications:
   email:
-    - corfudb-dev@googlegroups.com
+  - corfudb-dev@googlegroups.com
   webhooks:
     urls:
-      - 'https://webhooks.gitter.im/e/e26458f01e3586e3c140'
+    - https://webhooks.gitter.im/e/e26458f01e3586e3c140
     on_success: always
     on_failure: always
     on_start: true
-env:
-  global:
-    - secure: >-
-        WJZd15DtGSetu3HuaPE/Ap0EaPkR1D68ZUIFxyqUho8AY/rLGuANUrAY5U02jO1K1+iaYFMecRr2ZlOEK4N1XiBNz2gMnYmkHmUs9Gz+J3eA8SXdYOHsKyI5iRpyUgwzHIVLOKz03cvDlI04Rrm0Uhe/7hjNaXVge6I0YKPmiXI=
-    - secure: >-
-        YSaXp8PYE5YOaHOJTWXHIORNTP0oWdNDhSAMud1OD7LvH7ZdSPt35XVG8+Vagz+Y4mufCu0UVqVq62KJLtG9AVpKXxTvDdvCGZ7N5WLbGO0CAscjOuXm1uEKfGefpyFj2HZJ+h8zbuinAoZ5RHZa+SniRb1iES0lJUfxcYBMmoQ=
-    - secure: >-  # DOCKER_USERNAME
-        R7GUxZyUxj1WfvKN7Zcigo59+2Q2UTU489yGw9ac/DKafszwvrJ/z0aUXzADOhR7EIaBuElYb7zytr/DSTeDMoxq+EniH/OTx4S/Btb2Qw5RBw2pYzuahyqiVk3Tc6gcIvlE6gNl4b8K58YzwC634WxnPDmxH4hyIrE4sc3JJcQ=
-    - secure: >-  # DOCKER_PASSWORD
-        lzZmbc2HZgHX+xuBqXwwd9Zql+ae+Vw/+oUdO2QfQEuLqZKSUbjefMuaeFPsBrd8f9sUalJBaJ6VxecoWia0Ncj4QC9PR4MxaZaDm2Zt87KGbpxqvBcbZK332toNPTznV9Fozt5Iu0ofcCr86g6nyXcO+Sqr/5mMr/w6NVtYeJQ=
 addons:
   apt:
     packages: reprepro
+env:
+  global:
+  - secure: WJZd15DtGSetu3HuaPE/Ap0EaPkR1D68ZUIFxyqUho8AY/rLGuANUrAY5U02jO1K1+iaYFMecRr2ZlOEK4N1XiBNz2gMnYmkHmUs9Gz+J3eA8SXdYOHsKyI5iRpyUgwzHIVLOKz03cvDlI04Rrm0Uhe/7hjNaXVge6I0YKPmiXI=
+  - secure: YSaXp8PYE5YOaHOJTWXHIORNTP0oWdNDhSAMud1OD7LvH7ZdSPt35XVG8+Vagz+Y4mufCu0UVqVq62KJLtG9AVpKXxTvDdvCGZ7N5WLbGO0CAscjOuXm1uEKfGefpyFj2HZJ+h8zbuinAoZ5RHZa+SniRb1iES0lJUfxcYBMmoQ=
+  - secure: R7GUxZyUxj1WfvKN7Zcigo59+2Q2UTU489yGw9ac/DKafszwvrJ/z0aUXzADOhR7EIaBuElYb7zytr/DSTeDMoxq+EniH/OTx4S/Btb2Qw5RBw2pYzuahyqiVk3Tc6gcIvlE6gNl4b8K58YzwC634WxnPDmxH4hyIrE4sc3JJcQ=
+  - secure: lzZmbc2HZgHX+xuBqXwwd9Zql+ae+Vw/+oUdO2QfQEuLqZKSUbjefMuaeFPsBrd8f9sUalJBaJ6VxecoWia0Ncj4QC9PR4MxaZaDm2Zt87KGbpxqvBcbZK332toNPTznV9Fozt5Iu0ofcCr86g6nyXcO+Sqr/5mMr/w6NVtYeJQ=
+  - secure: SUmXHAnc9q13aw+Z4kA+JDEQ37OswcBi8KCHfr/7VI54VCmySYzcoYSOb9ADw31htOBDnuer8dMok63WnvFQ8Uad3K8Qj2rroehn6SUvbEjKH4K0PKPbohS1J2Tdpnd7gJ8H7Hydi1fjVTrxC27ih5ZB126Rg3fn6IUecIbYzHk=
+  - secure: Xl5vdWqyF71gMKpjW9djoCg3tn2UVupuVzptSdp+dpcPE+aN1RLEWBys9qtAjuDXR4bcTeMBkb0KIFz5WS7v0J+jPPcbnUWDNR9ixofM06gtlzpAqyN8YO7bd9tJijNnquz+GW1MXx3qIdo09O55OH76f1oQhVxlB+oqDISCV8k=

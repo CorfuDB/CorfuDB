@@ -11,19 +11,18 @@ import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import lombok.Data;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
@@ -127,20 +126,8 @@ public class SequencerServer extends AbstractServer {
      */
     private long maxConflictWildcard = Address.NOT_FOUND;
 
-    private final long maxConflictCacheSize = 1_000_000;
-    private final Cache<Integer, Long>
-            conflictToGlobalTailCache = Caffeine.newBuilder()
-            .maximumSize(maxConflictCacheSize)
-            .removalListener((Integer k, Long v, RemovalCause cause) -> {
-                if (!RemovalCause.REPLACED.equals(cause)) {
-                    log.trace("Updating maxConflictWildcard. Old value = '{}', new value = '{}', "
-                                + "conflictParam = '{}'. Removal cause = '{}'",
-                            maxConflictWildcard, v, k, cause);
-                    maxConflictWildcard = Math.max(v, maxConflictWildcard);
-                }
-            })
-            .recordStats()
-            .build();
+    private final long defaultCacheSize = Long.MAX_VALUE;
+    private final Cache<String, Long> conflictToGlobalTailCache;
 
     /**
      * Handler for this server.
@@ -153,9 +140,19 @@ public class SequencerServer extends AbstractServer {
     private static Counter counterTokenSum;
     private static Counter counterToken0;
 
+    @Getter
+    @Setter
+    private volatile long readyStateEpoch = -1;
+
     @Override
-    public boolean isServerReady() {
-        return serverContext.isReady();
+    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+        if ((readyStateEpoch != serverContext.getServerEpoch())
+                && (!msg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER))) {
+            log.warn("Rejecting msg at sequencer : sequencerStateEpoch:{}, serverEpoch:{}, "
+                    + "msg:{}", readyStateEpoch, serverContext.getServerEpoch(), msg);
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -176,6 +173,26 @@ public class SequencerServer extends AbstractServer {
         MetricRegistry metrics = serverContext.getMetrics();
         counterTokenSum = metrics.counter(metricsPrefix + "token-sum");
         counterToken0 = metrics.counter(metricsPrefix + "token-query");
+
+        long cacheSize = defaultCacheSize;
+
+        if (opts.get("--sequencer-cache-size") != null
+                && Long.parseLong((String) opts.get("--sequencer-cache-size")) != 0) {
+            cacheSize = Long.parseLong((String) opts.get("--sequencer-cache-size"));
+        }
+
+        conflictToGlobalTailCache = Caffeine.newBuilder()
+                .maximumSize(cacheSize)
+                .removalListener((String k, Long v, RemovalCause cause) -> {
+                    if (!RemovalCause.REPLACED.equals(cause)) {
+                        log.trace("Updating maxConflictWildcard. Old value = '{}', new value='{}'"
+                                        + " conflictParam = '{}'. Removal cause = '{}'",
+                                maxConflictWildcard, v, k, cause);
+                        maxConflictWildcard = Math.max(v, maxConflictWildcard);
+                    }
+                })
+                .recordStats()
+                .build();
     }
 
     /**
@@ -185,8 +202,8 @@ public class SequencerServer extends AbstractServer {
     * @param conflictParam The conflict parameter.
     * @return A conflict hash code.
     */
-    public int getConflictHashCode(UUID streamId, int conflictParam) {
-        return Objects.hash(streamId, conflictParam);
+    public String getConflictHashCode(UUID streamId, byte[] conflictParam) {
+        return streamId.toString() + Utils.bytesToHex(conflictParam);
     }
 
     /**
@@ -204,7 +221,7 @@ public class SequencerServer extends AbstractServer {
      *     cause.
      */
     public TokenType txnCanCommit(TxResolutionInfo txInfo, /** Input. */
-                                  AtomicReference<Integer> conflictKey /** Output. */) {
+                                  AtomicReference<byte[]> conflictKey /** Output. */) {
         log.trace("Commit-req[{}]", txInfo);
         final long txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
 
@@ -216,19 +233,19 @@ public class SequencerServer extends AbstractServer {
 
         AtomicReference<TokenType> response = new AtomicReference<>(TokenType.NORMAL);
 
-        for (Map.Entry<UUID, Set<Integer>> entry : txInfo.getConflictSet().entrySet()) {
+        for (Map.Entry<UUID, Set<byte[]>> entry : txInfo.getConflictSet().entrySet()) {
             if (response.get() != TokenType.NORMAL) {
                 break;
             }
 
             // if conflict-parameters are present, check for conflict based on conflict-parameter
             // updates
-            Set<Integer> conflictParamSet = entry.getValue();
+            Set<byte[]> conflictParamSet = entry.getValue();
             if (conflictParamSet != null && conflictParamSet.size() > 0) {
                 // for each key pair, check for conflict;
                 // if not present, check against the wildcard
                 conflictParamSet.forEach(conflictParam -> {
-                    int conflictKeyHash = getConflictHashCode(entry.getKey(),
+                    String conflictKeyHash = getConflictHashCode(entry.getKey(),
                             conflictParam);
                     Long v = conflictToGlobalTailCache.getIfPresent(conflictKeyHash);
 
@@ -309,12 +326,21 @@ public class SequencerServer extends AbstractServer {
     /**
      * Service an incoming request to reset the sequencer.
      */
-    @ServerHandler(type = CorfuMsgType.RESET_SEQUENCER, opTimer = metricsPrefix + "reset")
+    @ServerHandler(type = CorfuMsgType.BOOTSTRAP_SEQUENCER, opTimer = metricsPrefix + "reset")
     public synchronized void resetServer(CorfuPayloadMsg<SequencerTailsRecoveryMsg> msg,
                                          ChannelHandlerContext ctx, IServerRouter r,
                                          boolean isMetricsEnabled) {
         long initialToken = msg.getPayload().getGlobalTail();
         final Map<UUID, Long> streamTails = msg.getPayload().getStreamTails();
+        final long readyEpoch = msg.getPayload().getReadyStateEpoch();
+
+        // Stale bootstrap request should be discarded.
+        if (readyStateEpoch > readyEpoch) {
+            log.info("Sequencer already bootstrapped at epoch {}. "
+                    + "Discarding bootstrap request with epoch {}", readyStateEpoch, readyEpoch);
+            r.sendResponse(ctx, msg, CorfuMsgType.NACK.msg());
+            return;
+        }
 
         //
         // if the sequencer is reset, then we can't know when was
@@ -340,8 +366,12 @@ public class SequencerServer extends AbstractServer {
             streamTailToGlobalTailMap.putAll(streamTails);
         }
 
-        log.info("Sequencer reset with token = {}, streamTailToGlobalTailMap = {}",
-                initialToken, streamTailToGlobalTailMap);
+        // Mark the sequencer as ready after the tails have been populated.
+        readyStateEpoch = readyEpoch;
+
+        log.info("Sequencer reset with token = {}, streamTailToGlobalTailMap = {},"
+                        + " readyStateEpoch = {}",
+                initialToken, streamTailToGlobalTailMap, readyStateEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
@@ -422,7 +452,7 @@ public class SequencerServer extends AbstractServer {
         // Since Java does not allow an easy way for a function to return multiple values, this
         // variable is passed to the consumer that will use it to indicate to us if/what key was
         // responsible for an aborted transaction.
-        AtomicReference<Integer> conflictKey = new AtomicReference(TokenResponse.NO_CONFLICT_KEY);
+        AtomicReference<byte[]> conflictKey = new AtomicReference(TokenResponse.NO_CONFLICT_KEY);
 
         // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
         // Token allocation is conditioned on commit.
@@ -488,13 +518,13 @@ public class SequencerServer extends AbstractServer {
                     .forEach(txEntry ->
                             // and for each conflict param
                             txEntry.getValue().stream().forEach(conflictParam ->
-                                // insert an entry with the new timestamp
-                                // using the hash code based on the param
-                                // and the stream id.
-                                conflictToGlobalTailCache.put(
-                                        getConflictHashCode(txEntry
-                                        .getKey(), conflictParam),
-                                    newTail - 1)));
+                                    // insert an entry with the new timestamp
+                                    // using the hash code based on the param
+                                    // and the stream id.
+                                    conflictToGlobalTailCache.put(
+                                            getConflictHashCode(txEntry
+                                                    .getKey(), conflictParam),
+                                            newTail - 1)));
         }
 
         log.trace("token {} backpointers {}",

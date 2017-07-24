@@ -117,7 +117,14 @@ public class CorfuRuntime {
      */
     @Getter
     @Setter
-    public long maxCacheSize = 4_000_000_000L;
+    public long numCacheEntries = 5000;
+
+    /**
+     * The number of times to retry on a retriable TrimException within during a tranasaction
+     */
+    @Getter
+    @Setter
+    public int trimRetry = 2;
 
     /**
      * Sets expireAfterAccess and expireAfterWrite in seconds.
@@ -464,6 +471,17 @@ public class CorfuRuntime {
                                 .getClient(LayoutClient.class).getLayout();
                         // Wait for layout
                         Layout l = layoutFuture.get();
+
+                        // If the layout we got has a smaller epoch than the router,
+                        // we discard it.
+                        if (l.getEpoch() < router.getEpoch()) {
+                            log.warn("fetchLayout: Received a layout with epoch {} from server {}:{}" +
+                                            " smaller than router epoch {}, discarded.",
+                                    l.getEpoch(), router.getHost(),
+                                    router.getPort(), router.getEpoch());
+                            continue;
+                        }
+
                         l.setRuntime(this);
                         // this.layout should only be assigned to the new layout future
                         // once it has been completely constructed and initialized.
@@ -489,7 +507,7 @@ public class CorfuRuntime {
                         log.warn("Tried to get layout from {} but failed with exception:", s, e);
                     }
                 }
-                log.warn("Couldn't connect to any layout servers, retrying in {}s.", retryRate);
+                log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}s.", retryRate);
                 try {
                     Thread.sleep(retryRate * 1000);
                 } catch (InterruptedException e) {

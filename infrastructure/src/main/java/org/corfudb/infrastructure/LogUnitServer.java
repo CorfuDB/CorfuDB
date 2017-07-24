@@ -101,19 +101,11 @@ public class LogUnitServer extends AbstractServer {
 
     private static final String metricsPrefix = "corfu.server.logunit.";
 
-    private final ServerContext serverContext;
-
-    @Override
-    public boolean isServerReady() {
-        return serverContext.isReady();
-    }
-
     /**
      * Returns a new LogUnitServer.
      * @param serverContext context object providing settings and objects
      */
     public LogUnitServer(ServerContext serverContext) {
-        this.serverContext = serverContext;
         this.opts = serverContext.getServerConfig();
         double cacheSizeHeapRatio = Double.parseDouble((String) opts.get("--cache-heap-ratio"));
 

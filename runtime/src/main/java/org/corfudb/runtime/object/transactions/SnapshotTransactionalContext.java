@@ -50,19 +50,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                         == getSnapshotTimestamp()
                         && !o.isOptimisticallyModifiedUnsafe(),
                 o -> {
-                    try {
-                        o.syncObjectUnsafe(getSnapshotTimestamp());
-                    } catch (TrimmedException te) {
-                        // If a trim is encountered, we must reset the object
-                        o.resetUnsafe();
-                        // and abort the transaction
-                        TransactionAbortedException tae =
-                                new TransactionAbortedException(
-                                        new TxResolutionInfo(getTransactionID(),
-                                                getSnapshotTimestamp()), null, AbortCause.TRIM, te);
-                        abortTransaction(tae);
-                        throw tae;
-                    }
+                    syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, null);
                 },
                 o -> accessFunction.access(o));
     }

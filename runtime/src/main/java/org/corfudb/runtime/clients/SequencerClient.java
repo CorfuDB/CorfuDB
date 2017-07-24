@@ -71,8 +71,10 @@ public class SequencerClient implements IClient {
      * @param initialToken Token Number which the sequencer starts distributing.
      * @return A CompletableFuture which completes once the sequencer is reset.
      */
-    public CompletableFuture<Boolean> reset(Long initialToken, Map<UUID, Long> sequencerTails) {
-        return router.sendMessageAndGetCompletable(CorfuMsgType.RESET_SEQUENCER
-                .payloadMsg(new SequencerTailsRecoveryMsg(initialToken, sequencerTails)));
+    public CompletableFuture<Boolean> bootstrap(Long initialToken, Map<UUID, Long> sequencerTails,
+                                            Long readyStateEpoch) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.BOOTSTRAP_SEQUENCER
+                .payloadMsg(new SequencerTailsRecoveryMsg(initialToken, sequencerTails,
+                        readyStateEpoch)));
     }
 }

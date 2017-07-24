@@ -5,16 +5,24 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+
+import javax.annotation.Nullable;
 
 import lombok.Getter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.util.Utils;
 
 /**
@@ -44,6 +52,7 @@ import org.corfudb.util.Utils;
  * <p>Created by mwei on 4/4/16.
  */
 @Slf4j
+@ToString
 public abstract class AbstractTransactionalContext implements
         Comparable<AbstractTransactionalContext> {
 
@@ -84,7 +93,6 @@ public abstract class AbstractTransactionalContext implements
     public final TransactionBuilder builder;
 
     /**
-     * TODO remove this!
      * The start time of the context.
      */
     @Getter
@@ -113,7 +121,7 @@ public abstract class AbstractTransactionalContext implements
     private final WriteSetInfo writeSetInfo = new WriteSetInfo();
 
     @Getter
-    private final ReadSetInfo readSetInfo = new ReadSetInfo();
+    private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
 
     /**
      * A future which gets completed when this transaction commits.
@@ -127,7 +135,6 @@ public abstract class AbstractTransactionalContext implements
         transactionID = UUID.randomUUID();
         this.builder = builder;
 
-        // TODO remove this
         startTime = System.currentTimeMillis();
 
         parentContext = TransactionalContext.getCurrentContext();
@@ -163,6 +170,41 @@ public abstract class AbstractTransactionalContext implements
                                                long timestamp,
                                                Object[] conflictObject);
 
+    public void syncWithRetryUnsafe(VersionLockedObject vlo,
+                                    long snapshotTimestamp,
+                                    ICorfuSMRProxyInternal proxy,
+                                    @Nullable Consumer<VersionLockedObject> optimisticStreamSetter) {
+        for (int x = 0; x < this.builder.getRuntime().getTrimRetry(); x++) {
+            try {
+                if (optimisticStreamSetter != null) {
+                    // Swap ourselves to be the active optimistic stream.
+                    // Inside setAsOptimisticStream, if there are
+                    // currently optimistic updates on the object, we
+                    // roll them back.  Then, we set this context as  the
+                    // object's new optimistic context.
+                    optimisticStreamSetter.accept(vlo);
+                }
+                vlo.syncObjectUnsafe(snapshotTimestamp);
+                break;
+            } catch (TrimmedException te) {
+                // If a trim is encountered, we must reset the object
+                vlo.resetUnsafe();
+                if (!te.isRetriable()
+                        || x == this.builder.getRuntime().getTrimRetry() - 1) {
+                    // abort the transaction
+                    TransactionAbortedException tae =
+                            new TransactionAbortedException(
+                                    new TxResolutionInfo(getTransactionID(),
+                                            snapshotTimestamp), null,
+                                    proxy.getStreamID(),
+                                    AbortCause.TRIM, te, this);
+                    abortTransaction(tae);
+                    throw tae;
+                }
+            }
+        }
+    }
+
     /**
      * Log an SMR update to the Corfu log.
      *
@@ -172,8 +214,7 @@ public abstract class AbstractTransactionalContext implements
      * @param <T>            The type of the proxy's underlying object.
      * @return The address the update was written at.
      */
-    public abstract <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
-                                       SMREntry updateEntry,
+    public abstract <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry,
                                        Object[] conflictObject);
 
     /**
@@ -214,7 +255,7 @@ public abstract class AbstractTransactionalContext implements
      *                        available.
      */
     public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
-        getReadSetInfo().addToReadSet(proxy.getStreamID(), conflictObjects);
+        getReadSetInfo().add(proxy, conflictObjects);
     }
 
     /**
@@ -222,7 +263,7 @@ public abstract class AbstractTransactionalContext implements
      *
      * @param other  Source readSet to merge in
      */
-    void mergeReadSetInto(ReadSetInfo other) {
+    void mergeReadSetInto(ConflictSetInfo other) {
         getReadSetInfo().mergeInto(other);
     }
 
@@ -235,10 +276,9 @@ public abstract class AbstractTransactionalContext implements
      * @return a synthetic "address" in the write-set, to be used for
      *     checking upcall results
      */
-    long addToWriteSet(ICorfuSMRProxy proxy, SMREntry updateEntry, Object[]
+    long addToWriteSet(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[]
             conflictObjects) {
-        return getWriteSetInfo().addToWriteSet(proxy.getStreamID(),
-                updateEntry, conflictObjects);
+        return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
     }
 
     /**
@@ -247,8 +287,8 @@ public abstract class AbstractTransactionalContext implements
      *
      * @return A set of longs representing all the conflict params
      */
-    Map<UUID, Set<Integer>> collectWriteConflictParams() {
-        return getWriteSetInfo().getWriteSetConflicts();
+    Map<UUID, Set<byte[]>> collectWriteConflictParams() {
+        return getWriteSetInfo().getHashedConflictSet();
     }
 
     void mergeWriteSetInto(WriteSetInfo other) {

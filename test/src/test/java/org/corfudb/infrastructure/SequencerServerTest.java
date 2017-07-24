@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import org.corfudb.protocols.wireprotocol.*;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Collections;
@@ -19,10 +20,17 @@ public class SequencerServerTest extends AbstractServerTest {
         super();
     }
 
+    SequencerServer server;
+
     @Override
     public AbstractServer getDefaultServer() {
-        return new
-                SequencerServer(ServerContextBuilder.emptyContext());
+        server = new SequencerServer(ServerContextBuilder.emptyContext());
+        return server;
+    }
+
+    @Before
+    public void bootstrapSequencer() {
+        server.setReadyStateEpoch(0L);
     }
 
     @Test
@@ -193,8 +201,10 @@ public class SequencerServerTest extends AbstractServerTest {
         tailMap.put(streamB, newTailB);
         tailMap.put(streamC, newTailC);
 
-        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.RESET_SEQUENCER,
-                new SequencerTailsRecoveryMsg(globalTail + 2, tailMap)));
+        // Modifying the readyStateEpoch to simulate sequencer reset.
+        server.setReadyStateEpoch(-1L);
+        sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.BOOTSTRAP_SEQUENCER,
+                new SequencerTailsRecoveryMsg(globalTail + 2, tailMap, 0L)));
 
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
                 new TokenRequest(0L, Collections.singleton(streamA))));

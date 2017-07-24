@@ -43,8 +43,7 @@ public class AddressSpaceView extends AbstractView {
      * A cache for read results.
      */
     final LoadingCache<Long, ILogData> readCache = Caffeine.<Long, ILogData>newBuilder()
-            .<Long, ILogData>weigher((k, v) -> v.getSizeEstimate())
-            .maximumWeight(runtime.getMaxCacheSize())
+            .maximumSize(runtime.getNumCacheEntries())
             .expireAfterAccess(runtime.getCacheExpiryTime(), TimeUnit.SECONDS)
             .expireAfterWrite(runtime.getCacheExpiryTime(), TimeUnit.SECONDS)
             .recordStats()
@@ -168,10 +167,20 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which be cached.
      */
     public Map<Long, ILogData> read(Iterable<Long> addresses) {
+        Map<Long, ILogData> addressesMap;
         if (!runtime.isCacheDisabled()) {
-            return readCache.getAll(addresses);
+            addressesMap = readCache.getAll(addresses);
+        } else {
+            addressesMap = this.cacheFetch(addresses);
         }
-        return this.cacheFetch(addresses);
+
+        for (ILogData logData : addressesMap.values()) {
+            if (logData.isTrimmed()) {
+                throw new TrimmedException();
+            }
+        }
+
+        return addressesMap;
     }
 
     /**

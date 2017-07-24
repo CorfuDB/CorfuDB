@@ -506,19 +506,66 @@ public class CheckpointTest extends AbstractObjectTest {
     @Test
     public void prefixTrimTwiceAtSameAddress() throws Exception {
         final int mapSize = 5;
-        ThrowableAssert.ThrowingCallable trim = () -> getMyRuntime().getAddressSpaceView().prefixTrim(2);
-
         populateMaps(mapSize);
-        try {
-            trim.call();
-        } catch (Throwable t) {
-            throw new Exception("First trim call shouldn't fail");
-        }
-        // Trim again in exactly the same place should fail
-        assertThatThrownBy(trim).hasCauseInstanceOf(ExecutionException.class);
+
+        // Trim again in exactly the same place shouldn't fail
+        getMyRuntime().getAddressSpaceView().prefixTrim(2);
+        getMyRuntime().getAddressSpaceView().prefixTrim(2);
 
         // GC twice at the same place should be fine.
         getMyRuntime().getAddressSpaceView().gc();
         getMyRuntime().getAddressSpaceView().gc();
+    }
+
+    @Test
+    public void transactionalReadAfterCheckpoint() throws Exception {
+        Map<String, String> testMap = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                })
+                .setStreamName("test")
+                .open();
+
+        Map<String, String> testMap2 = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                })
+                .setStreamName("test2")
+                .open();
+
+        // Place entries into the map
+        testMap.put("a", "a");
+        testMap.put("b", "a");
+        testMap.put("c", "a");
+        testMap2.put("a", "c");
+        testMap2.put("b", "c");
+        testMap2.put("c", "c");
+
+        // Insert a checkpoint
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap((SMRMap) testMap);
+        mcw.addMap((SMRMap) testMap2);
+        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
+
+
+        // TX1: Move object to 1
+        getRuntime().getObjectsView().TXBuild()
+                .setType(TransactionType.SNAPSHOT)
+                .setSnapshot(1)
+                .begin();
+
+        testMap.get("a");
+        getRuntime().getObjectsView().TXEnd();
+
+
+        // Trim the log
+        getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress - 1);
+        getRuntime().getAddressSpaceView().gc();
+        getRuntime().getAddressSpaceView().invalidateServerCaches();
+        getRuntime().getAddressSpaceView().invalidateClientCache();
+
+        // TX2: Read most recent state in TX
+        getRuntime().getObjectsView().TXBegin();
+        testMap.put("a", "b");
+        getRuntime().getObjectsView().TXEnd();
+
     }
 }

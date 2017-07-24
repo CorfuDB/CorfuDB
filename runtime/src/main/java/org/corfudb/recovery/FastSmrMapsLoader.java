@@ -9,9 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.function.BiConsumer;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -32,6 +30,7 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
 import static org.corfudb.recovery.RecoveryUtils.*;
+import static org.corfudb.runtime.view.Address.isAddress;
 
 /** The FastSmrMapsLoader reconstructs the coalesced state of SMRMaps through sequential log read
  *
@@ -104,9 +103,10 @@ public class FastSmrMapsLoader {
     @Getter
     private int numberOfAttempt = NUMBER_OF_ATTEMPT;
 
-    private boolean logContainsCheckpoints = false;
     private int retryIteration = 0;
     private long nextRead;
+
+    private List<Future> futureList;
 
     public FastSmrMapsLoader(@Nonnull final CorfuRuntime corfuRuntime) {
         this.runtime = corfuRuntime;
@@ -129,15 +129,15 @@ public class FastSmrMapsLoader {
     private void summonNecromancer() {
         necromancer = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
                 .setNameFormat("necromancer-%d").build());
+        futureList = new ArrayList<>();
     }
 
     private void invokeNecromancer(Map<Long, ILogData> logDataMap, BiConsumer<Long, ILogData> resurrectionSpell) {
-        necromancer.execute(() -> {
+        futureList.add(necromancer.submit(() -> {
             logDataMap.forEach((address, logData) -> {
                 resurrectionSpell.accept(address, logData);
             });
-
-        });
+        }));
     }
 
     private void killNecromancer() {
@@ -148,6 +148,14 @@ public class FastSmrMapsLoader {
             String msg = "Necromancer is taking too long to load the maps. Gave up.";
             log.error(msg);
             fail(msg);
+        }
+        for (Future future : futureList) {
+            try {
+                future.get();
+            } catch (ExecutionException | InterruptedException e) {
+                log.error("Error in invokingNecromancer task : {}", e);
+                fail("FastSMRLoader recovery failed.");
+            }
         }
     }
 
@@ -175,14 +183,16 @@ public class FastSmrMapsLoader {
     public void updateStreamTails(long address, ILogData logData) {
         // On checkpoint, we also need to track the stream tail of the checkpoint
         if (isCheckPointEntry(logData)) {
-            // Need to deserialize
-            CheckpointEntry checkpointEntry = (CheckpointEntry) logData.getLogEntry(runtime);
-            if (checkpointEntry.getCpType() == CheckpointEntry.CheckpointEntryType.END) {
-                streamTails.put(checkpointEntry.getStreamId(), getStartAddressOfCheckPoint(checkpointEntry));
+            if (logData.getCheckpointType() == CheckpointEntry.CheckpointEntryType.END &&
+                    isAddress(getStartAddressOfCheckPoint(logData))) {
+                streamTails.compute(logData.getCheckpointedStreamId(),
+                        (uuid, value) -> (value == null) ? getStartAddressOfCheckPoint(logData)
+                            : Math.max(value, getStartAddressOfCheckPoint(logData)));
             }
         }
         for (UUID streamId : logData.getStreams()) {
-                streamTails.put(streamId, address);
+            streamTails.compute(streamId,
+                    (uuid, value) -> (value == null) ? address : Math.max(value, address));
         }
     }
 
@@ -399,7 +409,7 @@ public class FastSmrMapsLoader {
         try {
             CheckpointEntry logEntry = (CheckpointEntry) deserializeLogData(runtime, logData);
             long snapshotAddress = getSnapShotAddressOfCheckPoint(logEntry);
-            long startAddress = getStartAddressOfCheckPoint(logEntry);
+            long startAddress = getStartAddressOfCheckPoint(logData);
 
             streamMeta.addCheckPoint(new CheckPoint(checkPointId)
                     .addAddress(address)
@@ -408,8 +418,8 @@ public class FastSmrMapsLoader {
                     .setStarted(true));
 
         } catch (Exception e) {
-            log.error("findCheckpointsInLogAddress[address = {}]: " +
-                    "Couldn't get the snapshotAddress", e);
+            log.error("findCheckpointsInLogAddress[{}]: "
+                    + "Couldn't get the snapshotAddress", address, e);
             fail("Couldn't get the snapshotAddress at address " + address);
         }
     }

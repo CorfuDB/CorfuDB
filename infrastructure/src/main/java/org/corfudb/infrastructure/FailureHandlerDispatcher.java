@@ -12,6 +12,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.runtime.view.Layout;
 
 /**
@@ -35,20 +36,12 @@ public class FailureHandlerDispatcher {
      * @param corfuRuntime   Connected runtime
      * @return True if the cluster was recovered, False otherwise
      */
-    public boolean recoverCluster(ServerContext serverContext, Layout recoveryLayout,
-                                  CorfuRuntime corfuRuntime) {
+    public boolean recoverCluster(Layout recoveryLayout, CorfuRuntime corfuRuntime) {
 
         try {
             // Seals and increments the epoch.
             recoveryLayout.setRuntime(corfuRuntime);
             sealEpoch(recoveryLayout);
-            log.info("After seal: {}", recoveryLayout.asJSONString());
-
-            // Mark all components on node as ready after sealing.
-            serverContext.setReady(true);
-
-            // Reconfigure servers if required
-            reconfigureServers(corfuRuntime, recoveryLayout, recoveryLayout, true);
 
             // Attempts to update all the layout servers with the modified layout.
             while (true) {
@@ -69,7 +62,18 @@ public class FailureHandlerDispatcher {
             corfuRuntime.invalidateLayout();
             if (corfuRuntime.getLayoutView().getLayout().equals(recoveryLayout)) {
                 log.info("Layout Recovered = {}", recoveryLayout);
+            } else {
+                log.warn("Layout recovered with a different layout = {}",
+                        corfuRuntime.getLayoutView().getLayout());
             }
+
+            //TODO: Since sequencer reset is moved after paxos. Make sure the runtime has the latest
+            //TODO: layout view and latest client router epoch. (Use quorum layout fetch.)
+            //TODO: Handle condition if primary sequencer is not marked ready, reset fails.
+            // Reconfigure servers if required
+            // Primary sequencer would already be in a not-ready state since its in recovery.
+            reconfigureServers(corfuRuntime, recoveryLayout, recoveryLayout, true);
+
         } catch (Exception e) {
             log.error("Error: recovery: {}", e);
             return false;
@@ -100,9 +104,6 @@ public class FailureHandlerDispatcher {
             currentLayout.setRuntime(corfuRuntime);
             sealEpoch(currentLayout);
 
-            // Reconfigure servers if required
-            reconfigureServers(corfuRuntime, currentLayout, newLayout, false);
-
             // Attempts to update all the layout servers with the modified layout.
             try {
                 corfuRuntime.getLayoutView().updateLayout(newLayout, prepareRank);
@@ -118,7 +119,17 @@ public class FailureHandlerDispatcher {
             corfuRuntime.invalidateLayout();
             if (corfuRuntime.getLayoutView().getLayout().equals(newLayout)) {
                 log.info("Failed node removed. New Layout committed = {}", newLayout);
+            } else {
+                log.warn("Layout recovered with a different layout = {}",
+                        corfuRuntime.getLayoutView().getLayout());
             }
+
+            //TODO: Since sequencer reset is moved after paxos. Make sure the runtime has the latest
+            //TODO: layout view and latest client router epoch. (Use quorum layout fetch.)
+            //TODO: Handle condition if primary sequencer is not marked ready, reset fails.
+            // Reconfigure servers if required
+            reconfigureServers(corfuRuntime, currentLayout, newLayout, false);
+
         } catch (Exception e) {
             log.error("Error: dispatchHandler: {}", e);
         }
@@ -201,11 +212,33 @@ public class FailureHandlerDispatcher {
                 fastSmrMapsLoader.setLogTail(maxTokenRequested);
                 fastSmrMapsLoader.loadMaps();
                 Map<UUID, Long> streamTails = fastSmrMapsLoader.getStreamTails();
+                verifyStreamTailsMap(streamTails);
 
                 // Configuring the new sequencer.
-                newLayout.getSequencer(0).reset(maxTokenRequested + 1, streamTails).get();
+                boolean sequencerBootstrapResult = newLayout.getSequencer(0)
+                        .bootstrap(maxTokenRequested + 1, streamTails,
+                                newLayout.getEpoch()).get();
+                if (sequencerBootstrapResult) {
+                    log.info("Sequencer bootstrap successful.");
+                } else {
+                    log.warn("Sequencer bootstrap failed. Already bootstrapped.");
+                }
+
             } catch (InterruptedException e) {
-                log.error("Sequencer Reset interrupted : {}", e);
+                log.error("Sequencer bootstrap interrupted : {}", e);
+            }
+        }
+    }
+
+    /**
+     * Verifies whether there are any invalid streamTails.
+     * @param streamTails Stream tails map obtained from the fastSMRLoader.
+     */
+    private void verifyStreamTailsMap(Map<UUID, Long> streamTails) {
+        for (Long value : streamTails.values()) {
+            if (value < 0) {
+                log.error("Stream Tails map verification failed. Map = {}", streamTails);
+                throw new RecoveryException("Invalid stream tails found in map.");
             }
         }
     }

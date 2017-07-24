@@ -102,30 +102,10 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                                             || stream.isStreamCurrentContextThreadCurrentContext())
                             ); },
                         o -> {
-                            // Swap ourselves to be the active optimistic stream.
-                            // Inside setAsOptimisticStream, if there are
-                            // currently optimistic updates on the object, we
-                            // roll them back.  Then, we set this context as  the
-                            // object's new optimistic context.
-                            setAsOptimisticStream(o);
-
                             // inside syncObjectUnsafe, depending on the object
                             // version, we may need to undo or redo
                             // committed changes, or apply forward committed changes.
-                            try {
-                                o.syncObjectUnsafe(getSnapshotTimestamp());
-                            } catch (TrimmedException te) {
-                                // If a trim is encountered, we must reset the object
-                                o.resetUnsafe();
-                                // and abort the transaction
-                                TransactionAbortedException tae =
-                                        new TransactionAbortedException(
-                                                new TxResolutionInfo(getTransactionID(),
-                                                        getSnapshotTimestamp()), null,
-                                                AbortCause.TRIM, te);
-                                abortTransaction(tae);
-                                throw tae;
-                            }
+                            syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, this::setAsOptimisticStream);
                         },
                     o -> accessFunction.access(o)
         );
@@ -159,9 +139,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         }
         // Otherwise, we need to sync the object
         return proxy.getUnderlyingObject().update(o -> {
-            setAsOptimisticStream(o);
             log.trace("Upcall[{}] {} Sync'd", this,  timestamp);
-            o.syncObjectUnsafe(getSnapshotTimestamp());
+            syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, this::setAsOptimisticStream);
             SMREntry wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
             if (wrapper2 != null && wrapper2.isHaveUpcallResult()) {
                 return wrapper2.getUpcallResult();
@@ -251,17 +230,16 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     public long commitTransaction() throws TransactionAbortedException {
         log.debug("TX[{}] request optimistic commit", this);
 
-        return getConflictSetAndCommit(() -> getReadSetInfo().getReadSetConflicts());
+        return getConflictSetAndCommit(getReadSetInfo());
     }
 
     /**
      * Commit with a given conflict set and return the address.
      *
-     * @param computeConflictSet  conflict set used to check whether transaction can commit
+     * @param conflictSet  conflict set used to check whether transaction can commit
      * @return  the commit address
      */
-    public long getConflictSetAndCommit(Supplier<Map<UUID, Set<Integer>>>
-                                       computeConflictSet) {
+    public long getConflictSetAndCommit(ConflictSetInfo conflictSet) {
 
         if (TransactionalContext.isInNestedTransaction()) {
             getParentContext().addTransaction(this);
@@ -305,8 +283,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                         // streamID's
                         new TxResolutionInfo(getTransactionID(),
                                 getSnapshotTimestamp(),
-                                computeConflictSet.get(),
-                                collectWriteConflictParams())
+                                conflictSet.getHashedConflictSet(),
+                                getWriteSetInfo().getHashedConflictSet())
                 );
 
         log.trace("Commit[{}] Acquire address {}", this, address);

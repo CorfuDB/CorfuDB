@@ -1,6 +1,7 @@
 package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
+import lombok.extern.slf4j.Slf4j;
 
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -20,6 +21,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
  *
  * <p>Created by mwei on 7/27/16.
  */
+@Slf4j
 public class ClientMsgHandler {
 
     @FunctionalInterface
@@ -133,6 +135,7 @@ public class ClientMsgHandler {
                                     .getTarget().bindTo(o).invoke());
                         }
                     } catch (Throwable e) {
+                        log.error("Exception during incoming message handling", e);
                         throw new RuntimeException(e);
                     }
                 });

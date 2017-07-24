@@ -62,17 +62,12 @@ public class ServerContext {
     @Getter
     public static final MetricRegistry metrics = new MetricRegistry();
 
-    @Getter
-    @Setter
-    private volatile boolean ready;
-
     /**
      * Returns a new ServerContext.
      * @param serverConfig map of configuration strings to objects
      * @param serverRouter server router
      */
     public ServerContext(Map<String, Object> serverConfig, IServerRouter serverRouter) {
-        this.ready = true;
         this.serverConfig = serverConfig;
         this.dataStore = new DataStore(serverConfig);
         this.serverRouter = serverRouter;

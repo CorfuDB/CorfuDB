@@ -489,12 +489,6 @@ public class FastSmrMapsLoaderTest extends AbstractViewTest {
         UUID stream1 = CorfuRuntime.getStreamID("Map1");
         UUID stream2 = CorfuRuntime.getStreamID("Map2");
 
-        LogUnitClient luc = rt1.getRouter(getDefaultConfigurationString())
-                .getClient(LogUnitClient.class);
-        SequencerClient seq = rt1.getRouter(getDefaultConfigurationString())
-                .getClient(SequencerClient.class);
-
-
         long tail1 = rt1.getSequencerView().nextToken(Collections.singleton(stream1), 0).getToken().getTokenValue();
         long tail2 = rt1.getSequencerView().nextToken(Collections.singleton(stream2), 0).getToken().getTokenValue();
 
@@ -563,6 +557,41 @@ public class FastSmrMapsLoaderTest extends AbstractViewTest {
     }
 
     @Test
+    public void canFindTailsWithFailedCheckpoint() throws Exception {
+        CorfuRuntime rt1 = getDefaultRuntime();
+
+        Map<String, String> map = createMap("Map1", rt1);
+        map.put("k1", "v1");
+
+        UUID stream1 = CorfuRuntime.getStreamID("Map1");
+
+        CheckpointWriter cpw = new CheckpointWriter(rt1, stream1, "author", (SMRMap) map);
+        CheckpointWriter.startGlobalSnapshotTxn(rt1);
+        try {
+            cpw.startCheckpoint();
+            cpw.appendObjectState();
+        } finally {
+            rt1.getObjectsView().TXEnd();
+        }
+        map.put("k2", "v2");
+
+        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
+                .setLoadSmrMapsAtConnect(true)
+                .connect();
+
+        FastSmrMapsLoader fsm = new FastSmrMapsLoader(rt2);
+        fsm.setRecoverSequencerMode(true);
+        fsm.loadMaps();
+
+        final int streamTailOfMap = 3;
+        final int streamTailOfCheckpoint = 2;
+
+        Map<UUID, Long> streamTails = fsm.getStreamTails();
+
+        assertThat(streamTails.get(stream1)).isEqualTo(streamTailOfMap);
+    }
+
+    @Test
     public void canFindTailsWithOnlyCheckpointAndTrim() throws Exception {
         CorfuRuntime rt1 = getDefaultRuntime();
         int mapCount = 0;
@@ -606,7 +635,6 @@ public class FastSmrMapsLoaderTest extends AbstractViewTest {
         fsm.loadMaps();
 
         Map<UUID, Long> streamTails = fsm.getStreamTails();
-
 
         assertThat(streamTails.get(stream1)).isEqualTo(tail1);
         assertThat(streamTails.get(stream2)).isEqualTo(tail2);
@@ -1094,6 +1122,57 @@ public class FastSmrMapsLoaderTest extends AbstractViewTest {
         // Also recover the Transaction Stream
         assertThat(streamTails.size() == mapCount + 1);
 
+
+    }
+
+    /**
+     * Ensure that an empty stream (stream that was opened but never had any updates)
+     * will not have its tail reconstructed. Tail of such an empty stream will be -1.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void doNotReconstructEmptyCheckpoints() throws Exception {
+        CorfuRuntime rt1 = getDefaultRuntime();
+        int mapCount = 0;
+        Map<String, String> map1 = createMap("Map1", rt1);
+        mapCount++;
+        Map<String, String> map2 = createMap("Map2", rt1);
+        mapCount++;
+        Map<String, String> emptyMap = createMap("EmptyMap", rt1);
+        mapCount++;
+
+        map1.put("k1", "v1");
+        map1.put("k2", "v2");
+        map2.put("k3", "v3");
+        map2.put("k4", "v4");
+
+
+        UUID stream1 = CorfuRuntime.getStreamID("Map1");
+        UUID stream2 = CorfuRuntime.getStreamID("Map2");
+        UUID emptyStream = CorfuRuntime.getStreamID("EmptyMap");
+
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap((SMRMap) map1);
+        mcw.addMap((SMRMap) map2);
+        mcw.addMap((SMRMap) emptyMap);
+        mcw.appendCheckpoints(getRuntime(), "author");
+
+        long tail1 = rt1.getSequencerView().nextToken(Collections.singleton(stream1), 0).getToken().getTokenValue();
+        long tail2 = rt1.getSequencerView().nextToken(Collections.singleton(stream2), 0).getToken().getTokenValue();
+
+        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
+                .setLoadSmrMapsAtConnect(true)
+                .connect();
+
+        FastSmrMapsLoader fsm = new FastSmrMapsLoader(rt2);
+        fsm.setRecoverSequencerMode(true);
+        fsm.loadMaps();
+
+        Map<UUID, Long> streamTails = fsm.getStreamTails();
+        assertThat(streamTails.get(stream1)).isEqualTo(tail1);
+        assertThat(streamTails.get(stream2)).isEqualTo(tail2);
+        assertThat(streamTails.get(emptyStream)).isNull();
 
     }
 
