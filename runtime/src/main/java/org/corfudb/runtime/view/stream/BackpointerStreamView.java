@@ -127,7 +127,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     void processTrimmedException(TrimmedException te) {
         if (TransactionalContext.getCurrentContext() != null
                 && TransactionalContext.getCurrentContext().getSnapshotTimestamp()
-                < getCurrentContext().checkpointSnapshotAddress) {
+                < getCurrentContext().currentCp.getSnapshotAddress()) {
             te.setRetriable(false);
         }
     }
@@ -295,21 +295,34 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             CheckpointEntry cpEntry = (CheckpointEntry)
                     data.getPayload(runtime);
 
-            if (context.checkpointSuccessId == null &&
-                    cpEntry.getCpType() == CheckpointEntry.CheckpointEntryType.END) {
+            if (cpEntry.getCpType() == CheckpointEntry.CheckpointEntryType.END) {
                 log.trace("Checkpoint[{}] END found at address {} type {} id {} author {}",
                         this, data.getGlobalAddress(), cpEntry.getCpType(),
                         Utils.toReadableId(cpEntry.getCheckpointId()),
                         cpEntry.getCheckpointAuthorId());
-                context.checkpointSuccessId = cpEntry.getCheckpointId();
 
-                context.checkpointSuccessNumEntries = 1L;
-                context.checkpointSuccessBytes = (long) data.getSizeEstimate();
-                context.checkpointSuccessEndAddr = data.getGlobalAddress();
+                if (context.tempCp.getId() == null) {
+                    context.tempCp.setId(cpEntry.getCheckpointId());
+                } else if (context.tempCp.getId() != cpEntry.getCheckpointId()) {
+                    log.warn("Unrecognized checkpoint stream {}", cpEntry.getCheckpointId());
+                    return BackpointerOp.EXCLUDE;
+                }
+
+                // Should be monotonically increasing
+                if (data.getGlobalAddress() < context.tempCp.getEndAddr()) {
+                    log.error("Checkpoint end record decreasing from {} to {}",
+                            context.tempCp.getEndAddr(), data.getGlobalAddress());
+                    return BackpointerOp.EXCLUDE;
+                }
+                context.currentCp = CheckpointData.empty;
+                context.tempCp.unset();
+                context.tempCp.setNumEntries(1L);
+                context.tempCp.setSize((long) data.getSizeEstimate());
+                context.tempCp.setEndAddr(data.getGlobalAddress());
             }
-            else if (data.getCheckpointId().equals(context.checkpointSuccessId)) {
-                context.checkpointSuccessNumEntries++;
-                context.checkpointSuccessBytes += cpEntry.getSmrEntriesBytes();
+            else if (data.getCheckpointId().equals(context.tempCp.getId())) {
+                context.tempCp.setNumEntries(context.tempCp.getNumEntries() + 1);
+                context.tempCp.setSize(cpEntry.getSmrEntriesBytes() + context.tempCp.getSize());
                 if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
                     long cpStartAddr;
                     if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey
@@ -319,12 +332,16 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     } else {
                         cpStartAddr = data.getGlobalAddress();
                     }
-                    context.checkpointSuccessStartAddr = cpStartAddr;
+
                     if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey
                             .SNAPSHOT_ADDRESS) != null) {
-                        context.checkpointSnapshotAddress = Long.decode(cpEntry.getDict()
-                                .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
+                        context.tempCp.setSnapshotAddress(Long.decode(cpEntry.getDict()
+                                .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS)));
                     }
+
+                    context.tempCp.setStartAddr(cpStartAddr);
+
+                    context.currentCp = context.tempCp;
                     log.trace("Checkpoint[{}] HALT due to START at address {} startAddr"
                             + " {} type {} id {} author {}",
                             this, data.getGlobalAddress(), cpStartAddr, cpEntry.getCpType(),
@@ -352,7 +369,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         // any checkpoint entries, we should consult
         // a checkpoint first.
         if (context.globalPointer == Address.NEVER_READ &&
-                context.checkpointSuccessId == null) {
+                context.currentCp.getId() == null) {
             // The checkpoint stream ID is the UUID appended with CP
             final UUID checkpointId = CorfuRuntime
                     .getStreamID(context.id.toString() + "_cp");
@@ -435,7 +452,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         followBackpointers(context.id, context.readQueue,
                 latestTokenValue,
-                Long.max(context.globalPointer, context.checkpointSnapshotAddress),
+                Long.max(context.globalPointer, context.currentCp.getSnapshotAddress()),
                 d -> BackpointerOp.INCLUDE);
 
         return ! context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
