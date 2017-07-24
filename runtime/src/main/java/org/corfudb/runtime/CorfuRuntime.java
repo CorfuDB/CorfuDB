@@ -264,7 +264,7 @@ public class CorfuRuntime {
                 MetricsUtils.metricsReportingSetup(metrics);
             }
         }
-        log.debug("Corfu runtime version {} initialized.", getVersionString());
+        log.info("Corfu runtime version {} initialized.", getVersionString());
     }
 
     /**
