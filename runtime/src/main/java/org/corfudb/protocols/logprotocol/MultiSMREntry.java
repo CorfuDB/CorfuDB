@@ -3,6 +3,7 @@ package org.corfudb.protocols.logprotocol;
 import io.netty.buffer.ByteBuf;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,7 +29,7 @@ import org.corfudb.util.serializer.Serializers;
 public class MultiSMREntry extends LogEntry implements ISMRConsumable {
 
     @Getter
-    List<SMREntry> updates = new ArrayList<>();
+    List<SMREntry> updates = Collections.synchronizedList(new ArrayList<>());
 
     public MultiSMREntry() {
         this.type = LogEntryType.MULTISMR;

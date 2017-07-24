@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import com.codahale.metrics.Timer;
 
 import io.netty.channel.ChannelHandlerContext;
+import lombok.extern.slf4j.Slf4j;
 
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -25,6 +26,7 @@ import org.corfudb.util.MetricsUtils;
  *
  * <p>Created by mwei on 7/26/16.
  */
+@Slf4j
 public class CorfuMsgHandler {
 
     @FunctionalInterface
@@ -149,6 +151,7 @@ public class CorfuMsgHandler {
                                     }
                             });
                     } catch (Throwable e) {
+                        log.error("Exception during incoming message handling", e);
                         throw new RuntimeException(e);
                     }
                 });

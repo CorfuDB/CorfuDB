@@ -1,9 +1,6 @@
 package org.corfudb.runtime.object.transactions;
 
-import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -11,6 +8,7 @@ import lombok.Getter;
 
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 
 import static org.corfudb.runtime.object.transactions.TransactionalContext.getRootContext;
 
@@ -19,59 +17,34 @@ import static org.corfudb.runtime.object.transactions.TransactionalContext.getRo
  * transaction execution.
  */
 @Getter
-class WriteSetInfo {
+public class WriteSetInfo extends ConflictSetInfo {
 
-    // fine-grained conflict information regarding mutated-objects;
-    // captures values passed using @conflict annotations in @corfuObject
-    Map<UUID, Set<Integer>> writeSetConflicts = new HashMap<>();
-
-    // the set of mutated objects
+    /** The set of mutated objects. */
     Set<UUID> affectedStreams = new HashSet<>();
 
-    // teh actual updates to mutated objects
+    /** The actual updates to mutated objects. */
     MultiObjectSMREntry writeSet = new MultiObjectSMREntry();
 
-    // The set of poisoned streams. Poisoned streams contain an update
-    // which conflicts with everything (some object inserted a conflict
-    // set containing NULL), so the conflict set must be ignored.
-    Set<UUID> poisonedStreams = new HashSet<>();
-
-    Set<Integer> getConflictSet(UUID streamId) {
-        return getWriteSetConflicts().computeIfAbsent(streamId, u -> {
-            return new HashSet<>();
-        });
-    }
-
-
-    public void mergeInto(WriteSetInfo other) {
-        synchronized (getRootContext().getTransactionID()) {
-
-            // copy all the conflict-params
-            other.writeSetConflicts.forEach((streamId, cset) -> {
-                getConflictSet(streamId).addAll(cset);
-            });
-
-            // copy all the writeSet SMR entries
-            writeSet.mergeInto(other.getWriteSet());
-        }
-    }
-
-    public long addToWriteSet(UUID streamId, SMREntry updateEntry, Object[]
-            conflictObjects) {
+    public long add(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[] conflictObjects) {
         synchronized (getRootContext().getTransactionID()) {
 
             // add the SMRentry to the list of updates for this stream
-            writeSet.addTo(streamId, updateEntry);
+            writeSet.addTo(proxy.getStreamID(), updateEntry);
 
-            // add all the conflict params to the conflict-params set for this stream
-            if (conflictObjects != null) {
-                Set<Integer> streamConflicts = getConflictSet(streamId);
-                Arrays.asList(conflictObjects).stream()
-                        .forEach(V -> streamConflicts.add(Integer.valueOf(V.hashCode())));
-            }
+            super.add(proxy, conflictObjects);
 
-            return writeSet.getSMRUpdates(streamId).size() - 1;
+            return writeSet.getSMRUpdates(proxy.getStreamID()).size() - 1;
         }
     }
 
+    @Override
+    public void mergeInto(ConflictSetInfo other) {
+        if (!(other instanceof WriteSetInfo)) {
+            throw new UnsupportedOperationException("Merging write set with read set unsupported");
+        }
+
+        super.mergeInto(other);
+        affectedStreams.addAll(((WriteSetInfo) other).affectedStreams);
+        writeSet.mergeInto(((WriteSetInfo) other).writeSet);
+    }
 }

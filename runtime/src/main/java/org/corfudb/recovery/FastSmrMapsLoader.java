@@ -30,6 +30,7 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
 import static org.corfudb.recovery.RecoveryUtils.*;
+import static org.corfudb.runtime.view.Address.isAddress;
 
 /** The FastSmrMapsLoader reconstructs the coalesced state of SMRMaps through sequential log read
  *
@@ -182,7 +183,8 @@ public class FastSmrMapsLoader {
     public void updateStreamTails(long address, ILogData logData) {
         // On checkpoint, we also need to track the stream tail of the checkpoint
         if (isCheckPointEntry(logData)) {
-            if (logData.getCheckpointType() == CheckpointEntry.CheckpointEntryType.END) {
+            if (logData.getCheckpointType() == CheckpointEntry.CheckpointEntryType.END &&
+                    isAddress(getStartAddressOfCheckPoint(logData))) {
                 streamTails.compute(logData.getCheckpointedStreamId(),
                         (uuid, value) -> (value == null) ? getStartAddressOfCheckPoint(logData)
                             : Math.max(value, getStartAddressOfCheckPoint(logData)));

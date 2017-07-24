@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableSet;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Collections;
@@ -32,6 +33,11 @@ public class SequencerClientTest extends AbstractClientTest {
         return new ImmutableSet.Builder<IClient>()
                 .add(client)
                 .build();
+    }
+
+    @Before
+    public void bootstrapSequencer() {
+        client.bootstrap(0L, Collections.EMPTY_MAP, 0L);
     }
 
     @Test

@@ -229,17 +229,16 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     public long commitTransaction() throws TransactionAbortedException {
         log.debug("TX[{}] request optimistic commit", this);
 
-        return getConflictSetAndCommit(() -> getReadSetInfo().getReadSetConflicts());
+        return getConflictSetAndCommit(getReadSetInfo());
     }
 
     /**
      * Commit with a given conflict set and return the address.
      *
-     * @param computeConflictSet  conflict set used to check whether transaction can commit
+     * @param conflictSet  conflict set used to check whether transaction can commit
      * @return  the commit address
      */
-    public long getConflictSetAndCommit(Supplier<Map<UUID, Set<Integer>>>
-                                       computeConflictSet) {
+    public long getConflictSetAndCommit(ConflictSetInfo conflictSet) {
 
         if (TransactionalContext.isInNestedTransaction()) {
             getParentContext().addTransaction(this);
@@ -283,8 +282,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                         // streamID's
                         new TxResolutionInfo(getTransactionID(),
                                 getSnapshotTimestamp(),
-                                computeConflictSet.get(),
-                                collectWriteConflictParams())
+                                conflictSet.getHashedConflictSet(),
+                                getWriteSetInfo().getHashedConflictSet())
                 );
 
         log.trace("Commit[{}] Acquire address {}", this, address);

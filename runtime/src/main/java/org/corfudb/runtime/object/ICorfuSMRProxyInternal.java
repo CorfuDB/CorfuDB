@@ -1,5 +1,7 @@
 package org.corfudb.runtime.object;
 
+import org.corfudb.util.serializer.ISerializer;
+
 /**
  * An internal interface to the SMR Proxy.
  *
@@ -18,4 +20,11 @@ public interface ICorfuSMRProxyInternal<T> extends ICorfuSMRProxy<T> {
      * without causing a sync.
      */
     VersionLockedObject<T> getUnderlyingObject();
+
+    /**
+     * Get the serializer used for serializing arguments in the
+     * proxy.
+     * @return  The serializer to use.
+     */
+    ISerializer getSerializer();
 }

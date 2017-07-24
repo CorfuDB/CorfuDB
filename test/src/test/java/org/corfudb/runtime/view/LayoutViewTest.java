@@ -3,10 +3,12 @@ package org.corfudb.runtime.view;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -113,6 +115,10 @@ public class LayoutViewTest extends AbstractViewTest {
         bootstrapAllServers(l);
         CorfuRuntime corfuRuntime = getRuntime(l).connect();
 
+        getManagementServer(SERVERS.PORT_0).shutdown();
+        getManagementServer(SERVERS.PORT_1).shutdown();
+        getManagementServer(SERVERS.PORT_2).shutdown();
+
         // Thread to reconfigure the layout
         CountDownLatch startReconfigurationLatch = new CountDownLatch(1);
         CountDownLatch layoutReconfiguredLatch = new CountDownLatch(1);
@@ -145,9 +151,13 @@ public class LayoutViewTest extends AbstractViewTest {
 
                 corfuRuntime.getLayoutView().updateLayout(newLayout, newLayout.getEpoch());
                 corfuRuntime.invalidateLayout();
+                corfuRuntime.layout.get();
+                corfuRuntime.getRouter(SERVERS.ENDPOINT_0).getClient(SequencerClient.class)
+                        .bootstrap(0L, Collections.EMPTY_MAP, newLayout.getEpoch()).get();
                 log.debug("layout updated new layout {}", corfuRuntime.getLayoutView().getLayout());
                 layoutReconfiguredLatch.countDown();
             } catch (Exception e) {
+                log.error("GOT ERROR HERE !!");
                 e.printStackTrace();
             }
         });

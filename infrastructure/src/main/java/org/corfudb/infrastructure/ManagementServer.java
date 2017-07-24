@@ -7,6 +7,7 @@ import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
@@ -24,6 +25,7 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.view.Layout;
 
 /**
@@ -94,10 +96,10 @@ public class ManagementServer extends AbstractServer {
     private Future failureDetectorFuture = null;
     private AtomicBoolean recovered = new AtomicBoolean(false);
 
-    @Override
-    public boolean isServerReady() {
-        return true;
-    }
+    @Getter
+    private volatile boolean sequencerBootstrapped = false;
+    private static final int sequencerBootstrapRetries = 3;
+    private static final long sequencerBootstrapRetryTimeout = 1000;
 
     /**
      * Returns new ManagementServer.
@@ -115,7 +117,6 @@ public class ManagementServer extends AbstractServer {
         // If no state was preserved, there is no layout to recover.
         if (latestLayout == null) {
             recovered.set(true);
-            serverContext.setReady(true);
         }
 
         if ((Boolean) opts.get("--single")) {
@@ -162,14 +163,45 @@ public class ManagementServer extends AbstractServer {
         }
     }
 
-    private void recover() {
+    private void bootstrapPrimarySequencerServer() {
+        int bootstrapRetryLimit = sequencerBootstrapRetries;
+        while (bootstrapRetryLimit-- > 0) {
+            try {
+                String primarySequencer = latestLayout.getSequencers().get(0);
+                boolean bootstrapResult = (boolean) getCorfuRuntime().getRouter(primarySequencer)
+                        .getClient(SequencerClient.class)
+                        .bootstrap(0L, Collections.emptyMap(), latestLayout.getEpoch())
+                        .get();
+                if (!bootstrapResult) {
+                    log.warn("Sequencer already bootstrapped.");
+                } else {
+                    log.info("Bootstrapped sequencer server at epoch:{}", latestLayout.getEpoch());
+                }
+                sequencerBootstrapped = true;
+                return;
+            } catch (InterruptedException | ExecutionException e) {
+                log.error("Bootstrapping sequencer failed. Retrying: {}", e);
+            }
+            try {
+                Thread.sleep(sequencerBootstrapRetryTimeout);
+            } catch (InterruptedException ie) {
+                log.warn("sequencer bootstrap retry interrupted.");
+            }
+            getCorfuRuntime().invalidateLayout();
+        }
+        log.error("Sequencer Bootstrap failed. Retries exhausted.");
+    }
+
+    private boolean recover() {
         try {
-            failureHandlerDispatcher.recoverCluster(serverContext, (Layout) latestLayout.clone(),
-                    getCorfuRuntime());
+            boolean recoveryResult = failureHandlerDispatcher
+                    .recoverCluster((Layout) latestLayout.clone(), getCorfuRuntime());
             safeUpdateLayout(corfuRuntime.getLayoutView().getLayout());
+            return recoveryResult;
         } catch (CloneNotSupportedException e) {
             log.error("Failure Handler could not clone layout: {}", e);
             log.error("Recover: Node will remain blocked until recovered successfully.");
+            return false;
         }
     }
 
@@ -387,8 +419,13 @@ public class ManagementServer extends AbstractServer {
         }
         // Recover if flag is false
         if (!recovered.getAndSet(true)) {
-            recover();
+            sequencerBootstrapped = recover();
         }
+
+        if (!isSequencerBootstrapped()) {
+            bootstrapPrimarySequencerServer();
+        }
+
         if (failureDetectorFuture == null || failureDetectorFuture.isDone()) {
             failureDetectorFuture = failureDetectorService.submit(this::failureDetectorTask);
         } else {

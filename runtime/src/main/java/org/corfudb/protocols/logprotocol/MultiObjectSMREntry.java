@@ -29,7 +29,7 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
 
     // map from stream-ID to a list of updates encapsulated as MultiSMREntry
     @Getter
-    public Map<UUID, MultiSMREntry> entryMap = new HashMap<>();
+    public Map<UUID, MultiSMREntry> entryMap = Collections.synchronizedMap(new HashMap<>());
 
     public MultiObjectSMREntry() {
         this.type = LogEntryType.MULTIOBJSMR;
