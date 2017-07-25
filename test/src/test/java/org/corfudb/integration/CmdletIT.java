@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -47,7 +48,7 @@ public class CmdletIT extends AbstractIT {
                 0L);
     }
 
-    private String runCmdletGetOutput(String command) throws Exception {
+    static public String runCmdletGetOutput(String command) throws Exception {
         ProcessBuilder builder = new ProcessBuilder("sh", "-c", command);
         builder.redirectErrorStream(true);
         Process cmdlet = builder.start();
@@ -259,6 +260,30 @@ public class CmdletIT extends AbstractIT {
         String expectedOutput = "New layout installed";
 
         assertThat(runCmdletGetOutput(command).contains(expectedOutput)).isTrue();
+        shutdownCorfuServer(corfuServerProcess);
+    }
+
+    @Test
+    public void testCorfuBootstrapClusterWithStream() throws Exception {
+        corfuServerProcess = new CorfuServerRunner()
+                .setPort(PORT)
+                .setSingle(false)
+                .runServer();
+        File layoutFile = new File(CORFU_LOG_PATH + File.separator + "layoutFile");
+        layoutFile.createNewFile();
+        try (FileOutputStream fos = new FileOutputStream(layoutFile)) {
+            fos.write(getSingleLayout().asJSONString().getBytes());
+        }
+        String command = CORFU_PROJECT_DIR + "bin/corfu_bootstrap_cluster -l " + layoutFile.getAbsolutePath();
+        String expectedOutput = "New layout installed";
+
+        assertThat(runCmdletGetOutput(command).contains(expectedOutput)).isTrue();
+
+        CorfuRuntime runtime = createRuntime(ENDPOINT);
+        IStreamView streamViewA = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
+        assertThat(streamViewA.hasNext())
+                .isFalse();
+
         shutdownCorfuServer(corfuServerProcess);
     }
 
