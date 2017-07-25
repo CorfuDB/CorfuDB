@@ -349,7 +349,7 @@ public class VersionLockedObject<T> {
                 },
                 t -> {
                     if (saveUpcall) {
-                        pendingUpcalls.remove(t.getToken());
+                        pendingUpcalls.remove(t.getToken().getTokenValue());
                     }
                     return true;
                 });
