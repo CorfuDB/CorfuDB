@@ -220,6 +220,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                                       final NavigableSet<Long> queue,
                                       final long startAddress,
                                       final long stopAddress,
+                                      final boolean isCheckpointStream,
                                       final Function<ILogData, BackpointerOp> filter) {
         // Whether or not we added entries to the queue.
         boolean entryAdded = false;
@@ -257,10 +258,16 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 if (op == BackpointerOp.INCLUDE
                         || op == BackpointerOp.INCLUDE_STOP) {
                     queue.add(currentAddress);
-                    entryAdded = true;
+                    // If we are a checkpoint stream, then we must
+                    // only return true if we have seen an
+                    // END/zero-or-more-CONTINUATION/START
+                    // sequence during our search backward.
+                    if (!isCheckpointStream) {
+                        entryAdded = true;
+                    }
                     // Check if we need to stop
                     if (op == BackpointerOp.INCLUDE_STOP) {
-                        return entryAdded;
+                        return true;
                     }
                 }
             }
@@ -362,10 +369,14 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         runtime.getSequencerView()
                                 .nextToken(Collections.singleton(checkpointId), 0)
                                 .getToken().getTokenValue(),
-                        Address.NEVER_READ, d -> resolveCheckpoint(context, d))) {
+                        Address.NEVER_READ,
+                        true,
+                        d -> resolveCheckpoint(context, d))) {
                     log.trace("Read_Fill_Queue[{}] Using checkpoint with {} entries",
                             this, context.readCpQueue.size());
                     return true;
+                } else {
+                    context.readCpQueue.clear();
                 }
             } catch (TrimmedException te) {
                 // If we reached a trim and didn't hit a checkpoint, this might be okay,
@@ -436,6 +447,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         followBackpointers(context.id, context.readQueue,
                 latestTokenValue,
                 Long.max(context.globalPointer, context.checkpointSnapshotAddress),
+                false,
                 d -> BackpointerOp.INCLUDE);
 
         return ! context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
