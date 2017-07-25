@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.util.MetricsUtils;
 
 /**
@@ -77,7 +78,14 @@ public class CorfuMsgHandler {
     public boolean handle(CorfuMsg message, ChannelHandlerContext ctx, IServerRouter r,
                           boolean isMetricsEnabled) {
         if (handlerMap.containsKey(message.getMsgType())) {
-            handlerMap.get(message.getMsgType()).handle(message, ctx, r, isMetricsEnabled);
+            try {
+                handlerMap.get(message.getMsgType()).handle(message, ctx, r, isMetricsEnabled);
+            } catch (Exception ex) {
+                log.error("handle: Unhandled exception processing {} message",
+                        message.getMsgType(), ex);
+                r.sendResponse(ctx, message,
+                        CorfuMsgType.ERROR_SERVER_EXCEPTION.payloadMsg(new ExceptionMsg(ex)));
+            }
             return true;
         }
         return false;
