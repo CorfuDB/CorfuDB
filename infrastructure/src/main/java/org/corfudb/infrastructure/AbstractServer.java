@@ -27,7 +27,10 @@ public abstract class AbstractServer {
      */
     public abstract CorfuMsgHandler getHandler();
 
-    public abstract boolean isServerReady();
+    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+        // Overridden in sequencer to mark ready/not-ready state.
+        return true;
+    }
 
     /**
      * Handle a incoming Netty message.
@@ -42,7 +45,7 @@ public abstract class AbstractServer {
         }
         boolean isMetricsEnabled = MetricsUtils.isMetricsCollectionEnabled();
 
-        if (!this.isServerReady()) {
+        if (!this.isServerReadyToHandleMsg(msg)) {
             log.warn("Received message {} but Server not ready." , msg.getMsgType());
             r.sendResponse(ctx, msg, CorfuMsgType.NOT_READY.msg());
             return;

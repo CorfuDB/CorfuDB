@@ -1,10 +1,12 @@
 package org.corfudb.integration;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.HashSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +48,14 @@ public class SealIT extends AbstractIT{
         currentLayout.moveServersToEpoch();
         /* 3 */
         cr1.getLayoutView().updateLayout(currentLayout, 0);
+
+        cr1.invalidateLayout();
+        cr1.layout.get();
+
+        cr1.getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                .getClient(SequencerClient.class)
+                .bootstrap(1L, Collections.EMPTY_MAP, currentLayout.getEpoch())
+                .get();
 
 
         /* Now cr2 is still stuck in the previous epoch. The next time it will ask for a token,
