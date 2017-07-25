@@ -10,6 +10,8 @@ import java.util.concurrent.CompletableFuture;
 
 import lombok.Getter;
 import lombok.Setter;
+
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
@@ -63,6 +65,11 @@ public class SequencerClient implements IClient {
         return router.sendMessageAndGetCompletable(
                 CorfuMsgType.TOKEN_REQ
                         .payloadMsg(new TokenRequest(numTokens, streamIDs, conflictInfo)));
+    }
+
+    public CompletableFuture<Void> trimCache(Long address) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.SEQUENCER_TRIM_REQ
+                .payloadMsg(address));
     }
 
     /**

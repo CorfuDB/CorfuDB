@@ -213,18 +213,26 @@ public class AddressSpaceView extends AbstractView {
      */
     public void prefixTrim(final long address) {
         log.debug("PrefixTrim[{}]", address);
-        layoutHelper(l -> {
-                    l.getPrefixSegments(address).stream()
-                            .flatMap(seg -> seg.getStripes().stream())
-                            .flatMap(stripe -> stripe.getLogServers().stream())
-                            .map(endpoint ->
-                                    runtime.getRouter(endpoint)
-                                            .getClient(LogUnitClient.class))
-                            .map(client -> client.prefixTrim(address))
-                            .forEach(CFUtils::getUninterruptibly);
-                    return null;    // No return value
-                }
-        );
+        try {
+            layoutHelper(l -> {
+                        l.getPrefixSegments(address).stream()
+                                .flatMap(seg -> seg.getStripes().stream())
+                                .flatMap(stripe -> stripe.getLogServers().stream())
+                                .map(endpoint ->
+                                        runtime.getRouter(endpoint)
+                                                .getClient(LogUnitClient.class))
+                                .map(client -> client.prefixTrim(address))
+                                .forEach(CFUtils::getUninterruptibly);
+                        return null;    // No return value
+                    }
+            );
+
+            runtime.getSequencerView().trimCache(address);
+
+        } catch (Exception e) {
+            log.error("prefixTrim: Error while calling prefix trimming {}", address, e);
+            return;
+        }
     }
 
     /** Force compaction on an address space, which will force
