@@ -12,6 +12,7 @@ import io.netty.buffer.Unpooled;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -268,8 +269,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             Collection<File> files = FileUtils.listFiles(dir, extension, true);
 
             for (File file : files) {
-                try {
-                    FileInputStream fsIn = new FileInputStream(file);
+                try (FileInputStream fsIn = new FileInputStream(file)) {
                     FileChannel fc = fsIn.getChannel();
 
 
@@ -444,50 +444,49 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     private void trimLogFile(String filePath, Set<Long> pendingTrim) throws IOException {
-        FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath + ".copy"),
+        try (FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath + ".copy"),
                 EnumSet.of(StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE,
-                        StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
+                        StandardOpenOption.CREATE, StandardOpenOption.SPARSE))) {
 
-        FileChannel fc2 = FileChannel.open(FileSystems.getDefault()
-                        .getPath(getTrimmedFilePath(filePath)),
-                EnumSet.of(StandardOpenOption.APPEND));
+            CompactedEntry log = getCompactedEntries(filePath, pendingTrim);
 
-        CompactedEntry log = getCompactedEntries(filePath, pendingTrim);
+            LogHeader header = log.getLogHeader();
+            Collection<LogEntry> compacted = log.getEntries();
 
-        LogHeader header = log.getLogHeader();
-        Collection<LogEntry> compacted = log.getEntries();
+            writeHeader(fc, header.getVersion(), header.getVerifyChecksum());
 
-        writeHeader(fc, header.getVersion(), header.getVerifyChecksum());
+            for (LogEntry entry : compacted) {
 
-        for (LogEntry entry : compacted) {
+                ByteBuffer record = getByteBufferWithMetaData(entry);
+                ByteBuffer recordBuf = ByteBuffer.allocate(Short.BYTES // Delimiter
+                        + record.capacity());
 
-            ByteBuffer record = getByteBufferWithMetaData(entry);
-            ByteBuffer recordBuf = ByteBuffer.allocate(Short.BYTES // Delimiter
-                    + record.capacity());
+                recordBuf.putShort(RECORD_DELIMITER);
+                recordBuf.put(record.array());
+                recordBuf.flip();
 
-            recordBuf.putShort(RECORD_DELIMITER);
-            recordBuf.put(record.array());
-            recordBuf.flip();
-
-            fc.write(recordBuf);
-        }
-
-        fc.force(true);
-        fc.close();
-
-        try (OutputStream outputStream = Channels.newOutputStream(fc2)) {
-            // Todo(Maithem) How do we verify that the compacted file is correct?
-            for (Long address : pendingTrim) {
-                TrimEntry entry = TrimEntry.newBuilder()
-                        .setChecksum(getChecksum(address))
-                        .setAddress(address)
-                        .build();
-                entry.writeDelimitedTo(outputStream);
+                fc.write(recordBuf);
             }
-            outputStream.flush();
-            fc2.force(true);
+
+            fc.force(true);
         }
-        fc2.close();
+
+        try (FileChannel fc2 = FileChannel.open(FileSystems.getDefault()
+                        .getPath(getTrimmedFilePath(filePath)),
+                EnumSet.of(StandardOpenOption.APPEND))) {
+            try (OutputStream outputStream = Channels.newOutputStream(fc2)) {
+                // Todo(Maithem) How do we verify that the compacted file is correct?
+                for (Long address : pendingTrim) {
+                    TrimEntry entry = TrimEntry.newBuilder()
+                            .setChecksum(getChecksum(address))
+                            .setAddress(address)
+                            .build();
+                    entry.writeDelimitedTo(outputStream);
+                }
+                outputStream.flush();
+                fc2.force(true);
+            }
+        }
 
         Files.move(Paths.get(filePath + ".copy"), Paths.get(filePath),
                 StandardCopyOption.ATOMIC_MOVE);
@@ -498,6 +497,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     private CompactedEntry getCompactedEntries(String filePath,
                                                Set<Long> pendingTrim) throws IOException {
+
         FileChannel fc = getChannel(filePath, true);
 
         // Skip the header
@@ -704,12 +704,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
     }
 
-    private FileChannel getChannel(String filePath, boolean readOnly) throws IOException {
+    private @Nullable FileChannel getChannel(String filePath, boolean readOnly) throws IOException {
         try {
 
             if (readOnly) {
                 if (!new File(filePath).exists()) {
-                    return null;
+                    throw new FileNotFoundException();
                 } else {
                     return FileChannel.open(FileSystems.getDefault().getPath(filePath),
                             EnumSet.of(StandardOpenOption.READ));
@@ -783,34 +783,31 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             pendingTrimSize = sh.getPendingTrimChannel().size();
         }
 
-        FileChannel fcTrimmed = getChannel(getTrimmedFilePath(sh.getFileName()), true);
-        if (fcTrimmed == null) {
+        try (FileChannel fcTrimmed = getChannel(getTrimmedFilePath(sh.getFileName()), true)) {
+            try (InputStream inputStream = Channels.newInputStream(fcTrimmed)) {
+
+                while (fcTrimmed.position() < trimmedSize) {
+                    TrimEntry trimEntry = TrimEntry.parseDelimitedFrom(inputStream);
+                    sh.getTrimmedAddresses().add(trimEntry.getAddress());
+                }
+
+                inputStream.close();
+                fcTrimmed.close();
+
+                try (FileChannel fcPending =
+                             getChannel(getPendingTrimsFilePath(sh.getFileName()), true)) {
+                    try (InputStream pendingInputStream = Channels.newInputStream(fcPending)) {
+
+                        while (fcPending.position() < pendingTrimSize) {
+                            TrimEntry trimEntry = TrimEntry.parseDelimitedFrom(pendingInputStream);
+                            sh.getPendingTrims().add(trimEntry.getAddress());
+                        }
+                    }
+                }
+            }
+        } catch (FileNotFoundException fe) {
             return;
         }
-        InputStream inputStream = Channels.newInputStream(fcTrimmed);
-
-        while (fcTrimmed.position() < trimmedSize) {
-            TrimEntry trimEntry = TrimEntry.parseDelimitedFrom(inputStream);
-            sh.getTrimmedAddresses().add(trimEntry.getAddress());
-        }
-
-        inputStream.close();
-        fcTrimmed.close();
-
-        FileChannel fcPending = getChannel(getPendingTrimsFilePath(sh.getFileName()), true);
-        if (fcPending == null) {
-            return;
-        }
-
-        inputStream = Channels.newInputStream(fcPending);
-
-        while (fcPending.position() < pendingTrimSize) {
-            TrimEntry trimEntry = TrimEntry.parseDelimitedFrom(inputStream);
-            sh.getPendingTrims().add(trimEntry.getAddress());
-        }
-
-        inputStream.close();
-        fcPending.close();
     }
 
     Map<String, Long> getStrLongMap(Map<UUID, Long> uuidLongMap) {
