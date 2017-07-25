@@ -376,6 +376,8 @@ public class VersionLockedObject<T> {
      * @return True, if the object was modified by this thread. False otherwise.
      */
     public boolean optimisticallyOwnedByThreadUnsafe() {
+        WriteSetSMRStream optimisticStream = this.optimisticStream;
+
         return optimisticStream == null ? false : optimisticStream.isStreamForThisThread();
     }
 
@@ -440,6 +442,8 @@ public class VersionLockedObject<T> {
      */
     @Override
     public String toString() {
+        WriteSetSMRStream optimisticStream = this.optimisticStream;
+
         return object.getClass().getSimpleName()
                 + "[" + Utils.toReadableId(smrStream.getID()) + "]@"
                 + (getVersionUnsafe() == Address.NEVER_READ ? "NR" : getVersionUnsafe())

@@ -92,14 +92,15 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // updates.
         return proxy
                 .getUnderlyingObject()
-                .access(o -> (
-                        getWriteSetEntrySize(proxy.getStreamID()) == 0 && // No updates
-                        // And at the correct timestamp
-                        o.getVersionUnsafe() == getSnapshotTimestamp()
-                                && (o.getOptimisticStreamUnsafe() == null
-                                || o.getOptimisticStreamUnsafe()
-                                        .isStreamCurrentContextThreadCurrentContext())
-                ),
+                .access(o -> {
+                            WriteSetSMRStream stream = o.getOptimisticStreamUnsafe();
+                            return (
+                                getWriteSetEntrySize(proxy.getStreamID()) == 0 && // No updates
+                                        // And at the correct timestamp
+                                        o.getVersionUnsafe() == getSnapshotTimestamp()
+                                        && (stream == null
+                                            || stream.isStreamCurrentContextThreadCurrentContext())
+                            ); },
                         o -> {
                             // inside syncObjectUnsafe, depending on the object
                             // version, we may need to undo or redo
@@ -160,9 +161,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * @param <T>           Type of the underlying object
      */
     <T> void setAsOptimisticStream(VersionLockedObject<T> object) {
-        if (object.getOptimisticStreamUnsafe() == null
-                || !object.getOptimisticStreamUnsafe()
-                        .isStreamCurrentContextThreadCurrentContext()) {
+        WriteSetSMRStream stream = object.getOptimisticStreamUnsafe();
+        if (stream == null
+                || !stream.isStreamCurrentContextThreadCurrentContext()) {
 
             // We are setting the current context to the root context of nested transactions.
             // Upon sync forward
