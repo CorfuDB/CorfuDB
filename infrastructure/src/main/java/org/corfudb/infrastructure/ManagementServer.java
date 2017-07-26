@@ -544,12 +544,7 @@ public class ManagementServer extends AbstractServer {
             corfuRuntime.shutdown();
         }
 
-        try {
-            failureDetectorService.awaitTermination(serverContext.SHUTDOWN_TIMER.getSeconds(),
-                    TimeUnit.SECONDS);
-        } catch (InterruptedException ie) {
-            log.debug("failureDetectorService awaitTermination interrupted : {}", ie);
-        }
+        failureDetectorService.shutdownNow();
         log.info("Management Server shutting down.");
     }
 }

@@ -2,6 +2,7 @@ package org.corfudb;
 
 import org.assertj.core.api.AbstractObjectAssert;
 import org.assertj.core.api.AbstractThrowableAssert;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.test.DisabledOnTravis;
 import org.fusesource.jansi.Ansi;
 import org.junit.After;
@@ -218,6 +219,13 @@ public class AbstractCorfuTest {
         if (deleteSelf) {
             folder.delete();
         }
+    }
+
+    @Before
+    public void setAggressiveRuntimeRetryRate() {
+        final int time = 25;
+
+        CorfuRuntime.setDefaultRetryMilliseconds(time);
     }
 
     @Before

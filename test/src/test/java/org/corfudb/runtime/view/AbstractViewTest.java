@@ -74,6 +74,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     /** Initialize the AbstractViewTest. */
     public AbstractViewTest() {
+        setAggressiveRuntimeRetryRate();
         // Force all new CorfuRuntimes to override the getRouterFn
         CorfuRuntime.overrideGetRouterFunction = this::getRouterFunction;
         runtime = new CorfuRuntime(getDefaultEndpoint());

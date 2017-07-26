@@ -95,7 +95,7 @@ public class CheckpointTest extends AbstractObjectTest {
                 checkpointAddress = mcw1.appendCheckpoints(currentRuntime, author);
 
                 try {
-                    Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+                    Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
                 } catch (InterruptedException ie) {
                     //
                 }

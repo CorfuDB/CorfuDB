@@ -42,11 +42,11 @@ public abstract class AbstractView {
             try {
                 return runtime.layout.get();
             } catch (Exception ex) {
-                log.warn("Error executing remote call, invalidating view and retrying in {}s",
+                log.warn("Error executing remote call, invalidating view and retrying in {}ms",
                         runtime.retryRate, ex);
                 runtime.invalidateLayout();
                 try {
-                    Thread.sleep(runtime.retryRate * 1000);
+                    Thread.sleep(runtime.retryRate);
                 } catch (InterruptedException ie) {
                     log.warn("Interrupted Exception when getting current layout.", ie);
                 }
@@ -76,11 +76,11 @@ public abstract class AbstractView {
                 return function.apply(runtime.layout.get());
             } catch (RuntimeException re) {
                 if (re.getCause() instanceof TimeoutException) {
-                    log.warn("Timeout executing remote call, invalidating view and retrying in {}s",
+                    log.warn("Timeout executing remote call, invalidating view and retrying in {}ms",
                             runtime.retryRate);
                     runtime.invalidateLayout();
                     try {
-                        Thread.sleep(runtime.retryRate * 1000);
+                        Thread.sleep(runtime.retryRate);
                     } catch (InterruptedException ie) {
                         log.warn("Interrupted Exception in layout helper.", ie);
                     }
@@ -88,7 +88,7 @@ public abstract class AbstractView {
                     log.warn("Server still not ready. Waiting for server to start "
                             + "accepting requests.");
                     try {
-                        Thread.sleep(runtime.retryRate * 1000);
+                        Thread.sleep(runtime.retryRate);
                     } catch (InterruptedException ie) {
                         log.warn("Interrupted Exception in layout helper.", ie);
                     }
@@ -101,11 +101,11 @@ public abstract class AbstractView {
                     throw re;
                 }
             } catch (InterruptedException | ExecutionException ex) {
-                log.warn("Error executing remote call, invalidating view and retrying in {}s",
+                log.warn("Error executing remote call, invalidating view and retrying in {}ms",
                         runtime.retryRate, ex);
                 runtime.invalidateLayout();
                 try {
-                    Thread.sleep(runtime.retryRate * 1000);
+                    Thread.sleep(runtime.retryRate);
                 } catch (InterruptedException ie) {
                     log.warn("Interrupted Exception in layout helper.", ie);
                 }

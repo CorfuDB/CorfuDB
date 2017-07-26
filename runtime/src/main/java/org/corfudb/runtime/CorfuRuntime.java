@@ -46,6 +46,9 @@ public class CorfuRuntime {
 
     static final long DEFAULT_BATCH_FOR_FAST_LOADER = 5;
     static final int DEFAULT_TIMEOUT_MINUTES_FAST_LOADING = 30;
+    @Getter
+    @Setter
+    static int defaultRetryMilliseconds = 5000;
 
     @Data
     public static class CorfuRuntimeParameters {
@@ -104,7 +107,7 @@ public class CorfuRuntime {
      */
     public volatile CompletableFuture<Layout> layout;
     /**
-     * The rate in seconds to retry accessing a layout, in case of a failure.
+     * The rate in milliseconds to retry accessing a layout, in case of a failure.
      */
     public int retryRate;
     /**
@@ -257,7 +260,7 @@ public class CorfuRuntime {
     public CorfuRuntime() {
         layoutServers = new ArrayList<>();
         nodeRouters = new ConcurrentHashMap<>();
-        retryRate = 5;
+        retryRate = defaultRetryMilliseconds;
         synchronized (metrics) {
             if (metrics.getNames().isEmpty()) {
                 MetricsUtils.addJvmMetrics(metrics, mp);
@@ -507,9 +510,9 @@ public class CorfuRuntime {
                         log.warn("Tried to get layout from {} but failed with exception:", s, e);
                     }
                 }
-                log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}s.", retryRate);
+                log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}ms.", retryRate);
                 try {
-                    Thread.sleep(retryRate * 1000);
+                    Thread.sleep(retryRate);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
