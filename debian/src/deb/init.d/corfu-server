@@ -22,7 +22,7 @@ PORT=9000
 # -s => single mode
 # -d => logging level
 # -l => path of log data directory
-OPTS="-s -d DEBUG -l /common/nsxapi/data/corfu $PORT"
+OPTS="-s -c 0.3 -d DEBUG -l /common/nsxapi/data/corfu $PORT"
 LOGFILE="/var/log/corfu.$PORT.log"
 . /lib/lsb/init-functions
 
