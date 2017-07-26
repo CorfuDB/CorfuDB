@@ -41,4 +41,8 @@ public class SequencerView extends AbstractView {
         return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).nextToken(
                 streamIDs, numTokens, conflictInfo)));
     }
+
+    public void trimCache(long address) {
+        getCurrentLayout().getSequencer(0).trimCache(address);
+    }
 }

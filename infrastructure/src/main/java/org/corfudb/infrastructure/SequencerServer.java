@@ -5,6 +5,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 
 import io.netty.channel.ChannelHandlerContext;
@@ -15,6 +16,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -126,7 +128,6 @@ public class SequencerServer extends AbstractServer {
      */
     private long maxConflictWildcard = Address.NOT_FOUND;
 
-    private final long defaultCacheSize = Long.MAX_VALUE;
     private final Cache<String, Long> conflictToGlobalTailCache;
 
     /**
@@ -174,15 +175,11 @@ public class SequencerServer extends AbstractServer {
         counterTokenSum = metrics.counter(metricsPrefix + "token-sum");
         counterToken0 = metrics.counter(metricsPrefix + "token-query");
 
-        long cacheSize = defaultCacheSize;
-
-        if (opts.get("--sequencer-cache-size") != null
-                && Long.parseLong((String) opts.get("--sequencer-cache-size")) != 0) {
-            cacheSize = Long.parseLong((String) opts.get("--sequencer-cache-size"));
-        }
+        final long expireDuration = 20;
 
         conflictToGlobalTailCache = Caffeine.newBuilder()
-                .maximumSize(cacheSize)
+                .expireAfterWrite(expireDuration, TimeUnit.MINUTES)
+                .expireAfterAccess(expireDuration, TimeUnit.MINUTES)
                 .removalListener((String k, Long v, RemovalCause cause) -> {
                     if (!RemovalCause.REPLACED.equals(cause)) {
                         log.trace("Updating maxConflictWildcard. Old value = '{}', new value='{}'"
@@ -321,6 +318,23 @@ public class SequencerServer extends AbstractServer {
         Token token = new Token(responseGlobalTail, r.getServerEpoch());
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
                 TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, Collections.emptyMap())));
+    }
+
+    @ServerHandler(type = CorfuMsgType.SEQUENCER_TRIM_REQ, opTimer = metricsPrefix + "trimCache")
+    public synchronized void trimCache(CorfuPayloadMsg<Long> msg,
+                                       ChannelHandlerContext ctx, IServerRouter r,
+                                       boolean isMetricsEnabled) {
+        log.info("trimCache: Starting cache eviction");
+        long trimMark = msg.getPayload();
+        long entries = 0;
+        for (Map.Entry<String, Long> entry : conflictToGlobalTailCache.asMap().entrySet()) {
+            if (entry.getValue() < trimMark) {
+                conflictToGlobalTailCache.invalidate(entry.getKey());
+                entries++;
+            }
+        }
+        log.info("trimCache: Evicted {} entries", entries);
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     /**
@@ -535,5 +549,10 @@ public class SequencerServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
                 TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token,
                 backPointerMap.build())));
+    }
+
+    @VisibleForTesting
+    public Cache<String, Long> getConflictToGlobalTailCache() {
+        return conflictToGlobalTailCache;
     }
 }
