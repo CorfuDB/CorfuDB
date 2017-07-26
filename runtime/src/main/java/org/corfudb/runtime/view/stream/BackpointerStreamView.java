@@ -228,6 +228,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                                       final long startAddress,
                                       final long stopAddress,
                                       final Function<ILogData, BackpointerOp> filter) {
+        log.trace("followBackPointers: stmreadId[{}], queue[{}], startAddress[{}], stopAddress[{}]," +
+                "filter[{}]", streamId, queue, startAddress, stopAddress, filter);
         // Whether or not we added entries to the queue.
         boolean entryAdded = false;
         // The current address which we are reading from.
@@ -240,11 +242,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // Read the current address
             ILogData d;
             try {
+                log.trace("followBackPointers: readAddress[{}]", currentAddress);
                 d = read(currentAddress);
             } catch (TrimmedException e) {
                 if (options.ignoreTrimmed) {
-                    log.warn("followBackpointers: Ignoring trimmed exception for address {}," +
-                            " stream {}", currentAddress, id);
+                    log.warn("followBackpointers: Ignoring trimmed exception for address[{}]," +
+                            " stream[{}]", currentAddress, id);
                     return entryAdded;
                 } else {
                     throw e;
@@ -253,10 +256,13 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             // If it contains the stream we are interested in
             if (d.containsStream(streamId)) {
+                log.trace("followBackPointers: address[{}] contains streamId[{}], apply filter", currentAddress,
+                        streamId);
                 // Check whether we should include the address
                 BackpointerOp op = filter.apply(d);
                 if (op == BackpointerOp.INCLUDE
                         || op == BackpointerOp.INCLUDE_STOP) {
+                    log.trace("followBackPointers: Adding backpointer to address[{}] to queue", currentAddress);
                     queue.add(currentAddress);
                     entryAdded = true;
                     // Check if we need to stop
@@ -270,8 +276,11 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // Now calculate the next address
             // Try using backpointers first
 
+            log.trace("followBackPointers: calculate the next address");
+
             if (!runtime.isBackpointersDisabled() && d.hasBackpointer(streamId)) {
                 long tmp = d.getBackpointer(streamId);
+                log.trace("followBackPointers: backpointer points to {}", tmp);
                 // if backpointer is a valid log address or Address.NON_EXIST
                 // (beginning of the stream), do not single step back on the log
                 if (Address.isAddress(tmp) || tmp == Address.NON_EXIST) {
@@ -283,6 +292,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             if (singleStep) {
                 // backpointers failed, so we're
                 // downgrading to a linear scan
+                log.trace("followBackPointers: downgrading to single step, backpointer failed");
                 currentAddress = currentAddress - 1;
             }
         }
@@ -403,6 +413,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             latestTokenValue = runtime.getSequencerView()
                     .nextToken(Collections.singleton(context.id), 0)
                     .getToken().getTokenValue();
+            log.trace("Read_Fill_Queue[{}] Fetched tail {} from sequencer", this, latestTokenValue);
         }
         // If there is no information on the tail of the stream, return,
         // there is nothing to do

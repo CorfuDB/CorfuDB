@@ -322,7 +322,7 @@ public class VersionLockedObject<T> {
                         return;
                     }
                 } catch (NoRollbackException nre) {
-                    log.warn("OptimisticRollback[{}] to {} failed {}", this, timestamp, nre);
+                    log.warn("Rollback[{}] to {} failed {}", this, timestamp, nre);
                     resetUnsafe();
                 }
             }
