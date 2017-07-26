@@ -10,6 +10,8 @@ import org.corfudb.generator.State;
  */
 public abstract class Operation {
     protected State state;
+    String shortName;
+
     public Operation(State state) {
         this.state = state;
     }
