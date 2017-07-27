@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view.replication;
 
 import java.util.AbstractMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -68,7 +69,7 @@ public interface IReplicationProtocol {
      *                              addresses, hole filling if necessary.
      */
     default @Nonnull
-            Map<Long, ILogData> readAll(Layout layout, Set<Long> globalAddresses) {
+            Map<Long, ILogData> readAll(Layout layout, List<Long> globalAddresses) {
         return globalAddresses.parallelStream()
                 .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(layout, a)))
                 .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));

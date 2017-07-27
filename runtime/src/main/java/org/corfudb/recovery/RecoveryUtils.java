@@ -14,6 +14,7 @@ import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.ObjectsView;
 
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 
 import static org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS;
@@ -82,8 +83,11 @@ public class RecoveryUtils {
      * @return logData map ordered by addresses (increasing)
      */
     static Map<Long, ILogData> getLogData(CorfuRuntime runtime, long start, long end) {
-        return runtime.getAddressSpaceView().
-                cacheFetch(ContiguousSet.create(Range.closedOpen(start, end), DiscreteDomain.longs()));
+        Map<Long, ILogData> tmp = runtime.getAddressSpaceView().
+                cacheFetch(ContiguousSet.create(Range.closedOpen(start, end), DiscreteDomain.longs()).asList());
+        TreeMap<Long, ILogData> treeMap = new TreeMap<Long, ILogData>();
+        treeMap.putAll(tmp);
+        return treeMap;
     }
 
     /** Deserialize a logData by getting the logEntry

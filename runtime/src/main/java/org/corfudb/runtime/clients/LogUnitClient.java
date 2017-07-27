@@ -8,6 +8,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -316,16 +317,15 @@ public class LogUnitClient implements IClient {
     }
 
     /**
-     * Read data from the log unit server for a range of offsets of a particular stream.
+     * Read data from the log unit server for a list of addresses.
      *
-     * @param stream      Stream ID to be read.
-     * @param offsetRange Range of global offsets.
+     * @param list Range of global offsets.
      * @return CompletableFuture which returns a ReadResponse on completion.
      */
-    public CompletableFuture<ReadResponse> read(UUID stream, Range<Long> offsetRange) {
-        Timer.Context context = getTimerContext("readRange");
+    public CompletableFuture<ReadResponse> read(List<Long> list) {
+        Timer.Context context = getTimerContext("readList");
         CompletableFuture<ReadResponse> cf = router.sendMessageAndGetCompletable(
-                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(offsetRange, stream)));
+                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(list)));
         return cf.thenApply(x -> {
             context.stop();
             return x;
