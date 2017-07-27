@@ -10,7 +10,7 @@ if [ "$TRAVIS_PULL_REQUEST" != "false" ] && [ "$TRAVIS_SECURE_ENV_VARS" == "true
         -Dsonar.organization=corfudb \
         -Dsonar.login=$SONAR_TOKEN
 else
-    if [ "$TRAVIS_SECURE_ENV_VARS" == "true" ] ; then
+    if [ "$TRAVIS_SECURE_ENV_VARS" == "false" ] ; then
         echo "Not submitting sonar status to github because this is an external build"
         ./mvnw verify -Dmaven.javadoc.skip=true -Dsonar.host.url=https://sonarqube.com \
         -Dsonar.organization=corfudb -Dsonar.analysis.mode=preview \
