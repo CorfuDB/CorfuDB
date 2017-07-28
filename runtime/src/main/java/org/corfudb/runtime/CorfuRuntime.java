@@ -20,7 +20,9 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.recovery.FastSmrMapsLoader;
+import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.LogUnitClient;
@@ -520,6 +522,34 @@ public class CorfuRuntime {
         });
     }
 
+    @SuppressWarnings("unchecked")
+    private void checkVersion() {
+        try {
+            CompletableFuture<VersionInfo>[] futures = layout.get().getLayoutServers()
+                    .stream().map(this::getRouter)
+                    .map(r -> r.getClient(BaseClient.class))
+                    .map(BaseClient::getVersionInfo)
+                    .toArray(CompletableFuture[]::new);
+
+            CompletableFuture.allOf(futures).join();
+
+            for (CompletableFuture<VersionInfo> cf : futures) {
+                if (cf.get().getVersion() == null) {
+                    log.error("Unexpected server version, server is too old to return"
+                            + " version information");
+                } else if (!cf.get().getVersion().equals(getVersionString())) {
+                    log.error("connect: expected version {}, but server version is {}",
+                            getVersionString(), cf.get().getVersion());
+                } else {
+                    log.info("connect: client version {}, server version is {}",
+                            getVersionString(), cf.get().getVersion());
+                }
+            }
+        } catch (Exception e) {
+            log.error("connect: failed to get version", e);
+        }
+    }
+
     /**
      * Connect to the Corfu server instance.
      * When this function returns, the Corfu server is ready to be accessed.
@@ -537,6 +567,8 @@ public class CorfuRuntime {
                 throw new RuntimeException(e);
             }
         }
+
+        checkVersion();
 
         if (loadSmrMapsAtConnect) {
             FastSmrMapsLoader fastLoader = new FastSmrMapsLoader(this)

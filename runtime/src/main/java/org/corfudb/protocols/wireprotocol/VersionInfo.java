@@ -3,6 +3,8 @@ package org.corfudb.protocols.wireprotocol;
 import java.lang.management.ManagementFactory;
 import java.util.Map;
 
+import org.corfudb.runtime.CorfuRuntime;
+
 import lombok.Getter;
 
 /**
@@ -21,7 +23,11 @@ public class VersionInfo {
     @Getter
     String jvmUsed = System.getProperty("java.home") + "/bin/java";
 
+    @Getter
+    String version;
+
     public VersionInfo(Map<String,Object> optionsMap) {
         this.optionsMap = optionsMap;
+        this.version = CorfuRuntime.getVersionString();
     }
 }
