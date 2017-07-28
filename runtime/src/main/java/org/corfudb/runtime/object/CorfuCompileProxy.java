@@ -330,6 +330,15 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"}) // Due to deprecation
     private <R> R TXExecuteInner(Supplier<R> txFunction, boolean isMetricsEnabled) {
+        // Don't nest transactions if we are already running transactionally
+        if (TransactionalContext.isInTransaction()) {
+            try {
+                return txFunction.get();
+            } catch (Exception e) {
+                log.warn("TXExecute[{}] Abort with Exception: {}", this, e);
+                this.abortTransaction(e);
+            }
+        }
         long sleepTime = 1L;
         final long maxSleepTime = 1000L;
         int retries = 1;
