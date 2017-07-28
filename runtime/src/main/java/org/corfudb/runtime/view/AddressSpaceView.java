@@ -5,7 +5,9 @@ import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -14,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import com.google.common.collect.Iterables;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -300,17 +303,18 @@ public class AddressSpaceView extends AbstractView {
      * @return A result to be cached
      */
     public @Nonnull Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
-        //turn the addresses into Set for now to satisfy signature requirement down the line
-        Set<Long> readAddresses = new TreeSet<>();
-        Iterator<Long> iterator = addresses.iterator();
-        while(iterator.hasNext()){
-            readAddresses.add(iterator.next());
+        Map<Long, ILogData> temp = new HashMap<>();
+
+        Iterable<List<Long>> batches = Iterables.partition(addresses, runtime.getBulkReadSize());
+
+        for (List<Long> batch : batches) {
+            //doesn't handle the case where some address have a different replication mode
+            temp.putAll(layoutHelper(l -> l.getReplicationMode(batch.iterator().next())
+                    .getReplicationProtocol(runtime)
+                    .readAll(l, batch)));
         }
 
-        //doesn't handle the case where some address have a different replication mode
-        return layoutHelper(l -> l.getReplicationMode(readAddresses.iterator().next())
-                .getReplicationProtocol(runtime)
-                .readAll(l, readAddresses));
+        return temp;
     }
 
 

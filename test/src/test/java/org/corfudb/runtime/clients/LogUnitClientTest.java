@@ -77,7 +77,7 @@ public class LogUnitClientTest extends AbstractClientTest {
             throws Exception {
         byte[] testString = "hello world".getBytes();
         client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
-        LogData r = client.read(0).get().getReadSet().get(0L);
+        LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
         assertThat(r.getPayload(new CorfuRuntime()))
@@ -89,10 +89,10 @@ public class LogUnitClientTest extends AbstractClientTest {
         byte[] testString = "hello world".getBytes();
         client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
         client.write(1, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
-        LogData r = client.read(0).get().getReadSet().get(0L);
+        LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
-        r = client.read(1).get().getReadSet().get(1L);
+        r = client.read(1).get().getAddresses().get(1L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
 
@@ -104,7 +104,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         serverRouter.reset();
         serverRouter.addServer(server2);
 
-        assertThat(client.read(0).get().getReadSet().get(0L).isTrimmed()).isTrue();
+        assertThat(client.read(0).get().getAddresses().get(0L).isTrimmed()).isTrue();
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
     }
@@ -121,7 +121,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         assertThat(server2.getDataCache().asMap().size()).isEqualTo(1);
         client.flushCache().get();
         assertThat(server2.getDataCache().asMap().size()).isEqualTo(0);
-        LogData r = client.read(0).get().getReadSet().get(0L);
+        LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat(server2.getDataCache().asMap().size()).isEqualTo(1);
     }
 
@@ -131,7 +131,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         byte[] testString = "hello world".getBytes();
 
         client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(1), testString, Collections.emptyMap()).get();
-        LogData r = client.read(0).get().getReadSet().get(0L);
+        LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
         assertThat(r.getPayload(new CorfuRuntime()))
@@ -139,7 +139,7 @@ public class LogUnitClientTest extends AbstractClientTest {
 
         byte[] testString2 = "hello world 2".getBytes();
         client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(2), testString2, Collections.emptyMap()).get();
-        r = client.read(0).get().getReadSet().get(0L);
+        r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
         assertThat(r.getPayload(new CorfuRuntime()))
@@ -152,7 +152,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         byte[] testString = "hello world".getBytes();
 
         client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(2), testString, Collections.emptyMap()).get();
-        LogData r = client.read(0).get().getReadSet().get(0L);
+        LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
         assertThat(r.getPayload(new CorfuRuntime()))
@@ -166,7 +166,7 @@ public class LogUnitClientTest extends AbstractClientTest {
             // expected
             assertEquals(DataOutrankedException.class, e.getCause().getClass());
         }
-        r = client.read(0).get().getReadSet().get(0L);
+        r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
         assertThat(r.getPayload(new CorfuRuntime()))
@@ -178,7 +178,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         byte[] testString = "hello world".getBytes();
 
         client.write(0, Collections.<UUID>emptySet(), new IMetadata.DataRank(1), testString, Collections.emptyMap()).get();
-        LogData r = client.read(0).get().getReadSet().get(0L);
+        LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType()) .isEqualTo(DataType.DATA);
         assertThat(r.getPayload(new CorfuRuntime()))
                 .isEqualTo(testString);
@@ -192,11 +192,11 @@ public class LogUnitClientTest extends AbstractClientTest {
             assertEquals(ValueAdoptedException.class, e.getCause().getClass());
             ValueAdoptedException ex = (ValueAdoptedException)e.getCause();
             ReadResponse read = ex.getReadResponse();
-            LogData log = read.getReadSet().get(0l);
+            LogData log = read.getAddresses().get(0l);
             assertThat(log.getType()).isEqualTo(DataType.DATA);
             assertThat(log.getPayload(new CorfuRuntime())).isEqualTo(testString);;
         }
-        r = client.read(0).get().getReadSet().get(0L);
+        r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType()).isEqualTo(DataType.DATA);
         assertThat(r.getPayload(new CorfuRuntime())).isEqualTo(testString);
     }
@@ -224,7 +224,7 @@ public class LogUnitClientTest extends AbstractClientTest {
             throws Exception {
         byte[] testString = "hello world".getBytes();
         client.fillHole(0).get();
-        LogData r = client.read(0).get().getReadSet().get(0L);
+        LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.HOLE);
 
@@ -239,7 +239,7 @@ public class LogUnitClientTest extends AbstractClientTest {
         byte[] testString = "hello world".getBytes();
         client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
 
-        LogData r = client.read(0).get().getReadSet().get(0L);
+        LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
 
@@ -261,7 +261,7 @@ public class LogUnitClientTest extends AbstractClientTest {
                         .put(CorfuRuntime.getStreamID("hello2"), ADDRESS_1)
                         .build()).get();
 
-        LogData r = client.read(0).get().getReadSet().get(0L);
+        LogData r = client.read(0).get().getAddresses().get(0L);
         assertThat(r.getBackpointerMap())
                 .containsEntry(CorfuRuntime.getStreamID("hello"), ADDRESS_0);
         assertThat(r.getBackpointerMap())

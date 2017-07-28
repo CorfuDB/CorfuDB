@@ -1,10 +1,9 @@
 package org.corfudb.protocols.wireprotocol;
 
-import com.google.common.collect.Range;
-
 import io.netty.buffer.ByteBuf;
 
-import java.util.UUID;
+import java.util.Arrays;
+import java.util.List;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -16,9 +15,7 @@ import lombok.Data;
 @AllArgsConstructor
 public class ReadRequest implements ICorfuPayload<ReadRequest> {
 
-    final Range<Long> range;
-    @SuppressWarnings({"checkstyle:abbreviationaswordinname", "checkstyle:membername"})
-    final UUID streamID;
+    final List<Long> list;
 
     /**
      * Deserialization Constructor from ByteBuf to ReadRequest.
@@ -26,26 +23,16 @@ public class ReadRequest implements ICorfuPayload<ReadRequest> {
      * @param buf The buffer to deserialize
      */
     public ReadRequest(ByteBuf buf) {
-        range = ICorfuPayload.rangeFromBuffer(buf, Long.class);
-        if (ICorfuPayload.fromBuffer(buf, Boolean.class)) {
-            streamID = ICorfuPayload.fromBuffer(buf, UUID.class);
-        } else {
-            streamID = null;
-        }
+        list = ICorfuPayload.listFromBuffer(buf, Long.class);
     }
 
     public ReadRequest(Long address) {
-        range = Range.singleton(address);
-        streamID = null;
+        list = Arrays.asList(address);
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, range);
-        ICorfuPayload.serialize(buf, streamID != null);
-        if (streamID != null) {
-            ICorfuPayload.serialize(buf, streamID);
-        }
+        ICorfuPayload.serialize(buf, list);
     }
 
 }

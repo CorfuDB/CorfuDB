@@ -184,13 +184,10 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.READ_REQUEST, opTimer = metricsPrefix + "read")
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
                       boolean isMetricsEnabled) {
-        log.trace("log read: {} {}", msg.getPayload().getStreamID() == null
-                        ? "global" : msg.getPayload().getStreamID(),
-                msg.getPayload().getRange());
+        log.trace("read: {}", msg.getPayload().getList());
         ReadResponse rr = new ReadResponse();
         try {
-            for (Long l = msg.getPayload().getRange().lowerEndpoint();
-                    l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
+            for (Long l : msg.getPayload().getList()) {
                 ILogData e = dataCache.get(l);
                 if (e == null) {
                     rr.put(l, LogData.EMPTY);
