@@ -122,7 +122,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
             writeToLog(log, address, DataType.RANK_ONLY, "v-2", 2);
             fail();
         } catch (ValueAdoptedException e) {
-            LogData logData = e.getReadResponse().getReadSet().get(0l);
+            LogData logData = e.getReadResponse().getAddresses().get(0l);
             assertTrue(new String(logData.getData()).contains("v-1"));
         }
         LogData value2 = log.read(address);

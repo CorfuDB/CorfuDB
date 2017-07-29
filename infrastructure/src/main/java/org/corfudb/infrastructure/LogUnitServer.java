@@ -27,6 +27,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
@@ -184,13 +185,32 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.READ_REQUEST, opTimer = metricsPrefix + "read")
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
                       boolean isMetricsEnabled) {
-        log.trace("log read: {} {}", msg.getPayload().getStreamID() == null
-                        ? "global" : msg.getPayload().getStreamID(),
-                msg.getPayload().getRange());
+        log.trace("read: {}", msg.getPayload().getRange());
         ReadResponse rr = new ReadResponse();
         try {
             for (Long l = msg.getPayload().getRange().lowerEndpoint();
                     l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
+                ILogData e = dataCache.get(l);
+                if (e == null) {
+                    rr.put(l, LogData.EMPTY);
+                } else {
+                    rr.put(l, (LogData) e);
+                }
+            }
+            r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
+        } catch (DataCorruptionException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
+        }
+    }
+
+    @ServerHandler(type = CorfuMsgType.MULTIPLE_READ_REQUEST, opTimer = metricsPrefix + "multiRead")
+    private void multiRead(CorfuPayloadMsg<MultipleReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
+                           boolean isMetricsEnabled) {
+        log.trace("multiRead: {}", msg.getPayload().getAddresses());
+
+        ReadResponse rr = new ReadResponse();
+        try {
+            for (Long l : msg.getPayload().getAddresses()) {
                 ILogData e = dataCache.get(l);
                 if (e == null) {
                     rr.put(l, LogData.EMPTY);

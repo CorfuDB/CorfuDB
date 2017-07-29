@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view.replication;
 
 import java.util.AbstractMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -63,12 +64,33 @@ public interface IReplicationProtocol {
      * just performs multiple reads (possible in parallel).
      *
      * @param layout                The layout to use for the readAll.
-     * @param globalAddresses       A set of addresses to read from.
+     * @param globalAddresses       A list of addresses to read from.
      * @return                      A map of addresses to committed
      *                              addresses, hole filling if necessary.
      */
     default @Nonnull
-            Map<Long, ILogData> readAll(Layout layout, Set<Long> globalAddresses) {
+            Map<Long, ILogData> readAll(Layout layout, List<Long> globalAddresses) {
+        return globalAddresses.parallelStream()
+                .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(layout, a)))
+                .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
+    }
+
+    /** Read data from a range.
+     *
+     * <p>This method functions exactly like a readAll, except
+     * that it returns the result for a range of addresses.
+     *
+     * <p>An implementation may optimize for this type of
+     * bulk request, but the default implementation
+     * just performs multiple reads (possible in parallel).
+     *
+     * @param layout                The layout to use for the readRange.
+     * @param globalAddresses       A list of addresses to read from.
+     * @return                      A map of addresses to committed
+     *                              addresses, hole filling if necessary.
+     */
+    default @Nonnull
+    Map<Long, ILogData> readRange(Layout layout, Set<Long> globalAddresses) {
         return globalAddresses.parallelStream()
                 .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(layout, a)))
                 .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));

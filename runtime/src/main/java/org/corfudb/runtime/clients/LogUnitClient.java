@@ -8,6 +8,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -23,6 +24,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.FillHoleRequest;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
@@ -316,16 +318,31 @@ public class LogUnitClient implements IClient {
     }
 
     /**
-     * Read data from the log unit server for a range of offsets of a particular stream.
+     * Read data from the log unit server for a range of addresses.
      *
-     * @param stream      Stream ID to be read.
-     * @param offsetRange Range of global offsets.
+     * @param range Range of global offsets.
      * @return CompletableFuture which returns a ReadResponse on completion.
      */
-    public CompletableFuture<ReadResponse> read(UUID stream, Range<Long> offsetRange) {
+    public CompletableFuture<ReadResponse> read(Range<Long> range) {
         Timer.Context context = getTimerContext("readRange");
         CompletableFuture<ReadResponse> cf = router.sendMessageAndGetCompletable(
-                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(offsetRange, stream)));
+                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(range)));
+        return cf.thenApply(x -> {
+            context.stop();
+            return x;
+        });
+    }
+
+    /**
+     * Read data from the log unit server for a list of addresses.
+     *
+     * @param list list of global addresses.
+     * @return CompletableFuture which returns a ReadResponse on completion.
+     */
+    public CompletableFuture<ReadResponse> read(List<Long> list) {
+        Timer.Context context = getTimerContext("readList");
+        CompletableFuture<ReadResponse> cf = router.sendMessageAndGetCompletable(
+                CorfuMsgType.MULTIPLE_READ_REQUEST.payloadMsg(new MultipleReadRequest(list)));
         return cf.thenApply(x -> {
             context.stop();
             return x;
