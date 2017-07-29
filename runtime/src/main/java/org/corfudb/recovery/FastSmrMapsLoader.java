@@ -28,6 +28,8 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.Serializers;
 
 import static org.corfudb.recovery.RecoveryUtils.*;
 import static org.corfudb.runtime.view.Address.isAddress;
@@ -233,8 +235,12 @@ public class FastSmrMapsLoader {
     private void applySmrEntryToStream(UUID streamId, SMREntry entry,
                                        long globalAddress, boolean isCheckPointEntry) {
         if (isCheckPointEntry || shouldEntryBeApplied(streamId, entry)) {
+
+            // Get the serializer type from the entry
+            ISerializer serializer = Serializers.getSerializer(entry.getSerializerType().getType());
+
             // Create an Object only for non-checkpoints
-            createSmrMapIfNotExist(runtime, streamId);
+            createSmrMapIfNotExist(runtime, streamId, serializer);
             CorfuCompileProxy cp = getCorfuCompileProxy(runtime, streamId);
             cp.getUnderlyingObject().applyUpdateToStreamUnsafe(entry, globalAddress);
         }

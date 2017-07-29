@@ -13,7 +13,9 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.IObjectBuilder;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -97,7 +99,7 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
                         arguments, serializer);
             } else {
                 ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
-                return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
+                T result = (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
                             try {
                                 return CorfuCompileWrapperBuilder.getWrapper(type, runtime,
                                         streamID, arguments, serializer);
@@ -106,6 +108,22 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
                             }
                         }
                 );
+                // Get object serializer to check if we didn't attempt to set another serializer
+                // to an already existing map
+                ISerializer objectSerializer = ((CorfuCompileProxy) ((ICorfuSMR) runtime.getObjectsView().
+                        getObjectCache().
+                        get(oid)).
+                        getCorfuSMRProxy())
+                        .getSerializer();
+
+                if (serializer != objectSerializer) {
+                    log.warn("open: Attempt to open an existing object with a different serializer {}. " +
+                            "Object {} opened with original serializer {}.",
+                            serializer.getClass().getSimpleName(),
+                            oid,
+                            objectSerializer.getClass().getSimpleName());
+                }
+                return result;
             }
         } catch (Exception ex) {
             log.error("Runtime instrumentation no longer supported and no compiled class found"
