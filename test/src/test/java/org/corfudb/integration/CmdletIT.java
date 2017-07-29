@@ -1,18 +1,11 @@
 package org.corfudb.integration;
 
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.BufferedReader;
@@ -30,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>
  * Created by zlokhandwala on 5/8/17.
  */
+@Ignore
 public class CmdletIT extends AbstractIT {
 
     // Using port 9901 to avoid intellij port conflict.
@@ -136,7 +130,6 @@ public class CmdletIT extends AbstractIT {
                 .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, PORT))
                 .getOptionsString();
         String output = runCmdletGetOutput(command);
-        System.out.println(output);
         assertThat(output.contains(expectedLogPath)).isTrue();
         assertThat(output.contains(expectedInitialToken)).isTrue();
         assertThat(output.contains(expectedStartupArgs)).isTrue();

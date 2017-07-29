@@ -34,7 +34,10 @@ public class ManagementClientTest extends AbstractClientTest {
         server = new ManagementServer(serverContext);
         return new ImmutableSet.Builder<AbstractServer>()
                 .add(server)
+                // Required for management server to fetch the latest layout and connect runtime.
                 .add(new LayoutServer(serverContext))
+                // Required for management server to be able to bootstrap the sequencer.
+                .add(new SequencerServer(serverContext))
                 .build();
     }
 
@@ -64,7 +67,9 @@ public class ManagementClientTest extends AbstractClientTest {
     public void handleBootstrap()
             throws Exception {
         // Since the servers are started as single nodes thus already bootstrapped.
-        assertThatThrownBy(() -> client.bootstrapManagement(TestLayoutBuilder.single(SERVERS.PORT_0)).get()).isInstanceOf(ExecutionException.class);
+        assertThatThrownBy(() ->
+                client.bootstrapManagement(TestLayoutBuilder.single(SERVERS.PORT_0)).get())
+                .isInstanceOf(ExecutionException.class);
     }
 
     /**
