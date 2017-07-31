@@ -264,7 +264,7 @@ public class FastSmrMapsLoaderTest extends AbstractViewTest {
 
         CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
                 .setLoadSmrMapsAtConnect(true)
-                .setBulkReadSizeForFastLoader(2l)
+                .setBulkReadSize(2)
                 .connect();
 
         assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
