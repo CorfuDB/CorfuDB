@@ -21,7 +21,7 @@
     <logger name="io.netty.buffer" level="INFO"/>
 
     <root level="TRACE">
-        <!--<appender-ref ref="FILE" /-->
+        <!--<appender-ref ref="FILE" />-->
         <!--<appender-ref ref="STDOUT" />-->
     </root>
 </configuration>
