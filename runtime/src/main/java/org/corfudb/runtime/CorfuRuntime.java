@@ -46,8 +46,9 @@ import org.corfudb.util.Version;
 @Accessors(chain = true)
 public class CorfuRuntime {
 
-    static final long DEFAULT_BATCH_FOR_FAST_LOADER = 5;
     static final int DEFAULT_TIMEOUT_MINUTES_FAST_LOADING = 30;
+
+    public static final int BULK_READ_SIZE = 10;
 
     @Data
     public static class CorfuRuntimeParameters {
@@ -179,11 +180,11 @@ public class CorfuRuntime {
 
 
     /**
-     * Set the bulk read size for the Fast Laoder.
+     * Set the bulk read size.
      */
     @Setter
     @Getter
-    private long bulkReadSizeForFastLoader = DEFAULT_BATCH_FOR_FAST_LOADER;
+    public int bulkReadSize = BULK_READ_SIZE;
 
 
     /**
@@ -572,7 +573,7 @@ public class CorfuRuntime {
 
         if (loadSmrMapsAtConnect) {
             FastSmrMapsLoader fastLoader = new FastSmrMapsLoader(this)
-                    .setBatchReadSize(bulkReadSizeForFastLoader)
+                    .setBatchReadSize(getBulkReadSize())
                     .setTimeoutInMinutesForLoading(timeoutInMinutesForFastLoading);
             fastLoader.loadMaps();
         }

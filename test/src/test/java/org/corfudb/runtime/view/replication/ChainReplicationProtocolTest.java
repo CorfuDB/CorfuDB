@@ -74,7 +74,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         // At this point, a direct read of the tail should
         // reflect the -other- clients value
         ILogData readResult = r.getRouter(SERVERS.ENDPOINT_0).getClient(LogUnitClient.class)
-                .read(0).get().getReadSet().get(0L);
+                .read(0).get().getAddresses().get(0L);
 
         assertThat(readResult.getPayload(r))
             .isEqualTo("incomplete".getBytes());

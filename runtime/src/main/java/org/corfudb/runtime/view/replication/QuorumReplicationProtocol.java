@@ -86,7 +86,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
                 return null;
             }
             if (readResponse != null) {
-                LogData result = readResponse.getReadSet().get(address);
+                LogData result = readResponse.getAddresses().get(address);
                 if (result != null && !isEmptyType(result.getType())) {
                     return result;
                 }
@@ -199,7 +199,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
                         ReadResponse rr = getAdoptedValueWithHighestRankIfPresent(
                                 address, future.getThrowables());
                         if (rr != null) { // check
-                            LogData logDataExisting = rr.getReadSet().get(address);
+                            LogData logDataExisting = rr.getAddresses().get(address);
                             logDataExisting.releaseBuffer();
                             logDataExisting.setRank(dh.getRef().getRank());
                             dh.setRef(logDataExisting.getSerializedForm().getSerialized());
@@ -256,7 +256,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
             if (t instanceof ValueAdoptedException) {
                 ValueAdoptedException ve = (ValueAdoptedException) t;
                 ReadResponse r = ve.getReadResponse();
-                LogData ld = r.getReadSet().get(position);
+                LogData ld = r.getAddresses().get(position);
                 if (maxRank == null || maxRank.compareTo(ld.getRank()) < 0) {
                     maxRank = ld.getRank();
                     result = r;
@@ -274,8 +274,8 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
 
         @Override
         public int compare(ReadResponse o1, ReadResponse o2) {
-            LogData ld1 = o1.getReadSet().get(logPosition);
-            LogData ld2 = o2.getReadSet().get(logPosition);
+            LogData ld1 = o1.getAddresses().get(logPosition);
+            LogData ld2 = o2.getAddresses().get(logPosition);
             if(ld1.isTrimmed() || ld2.isTrimmed()) {
                 throw new TrimmedException();
             }
