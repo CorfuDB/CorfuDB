@@ -75,10 +75,12 @@ public class MultiCheckpointWriter {
         log.trace("appendCheckpoints: author '{}' at globalAddress {} begins",
                 author, globalAddress);
 
+        log.info("appendCheckpoints: appending checkpoints for {} maps", maps.size());
+        final long cpStart = System.currentTimeMillis();
         try {
             for (ICorfuSMR<Map> map : maps) {
                 UUID streamId = map.getCorfuStreamID();
-
+                final long mapCpStart = System.currentTimeMillis();
                 while (true) {
                     CheckpointWriter cpw = new CheckpointWriter(rt, streamId, author, (SMRMap) map);
                     cpw.setEnablePutAll(enablePutAll);
@@ -99,15 +101,22 @@ public class MultiCheckpointWriter {
                         log.warn("appendCheckpoints: checkpoint map {} "
                                         + "TransactionAbortedException, retry",
                                 Utils.toReadableId(map.getCorfuStreamID()));
-                        // Don't break!
                     }
                 }
+                final long mapCpEnd = System.currentTimeMillis();
+
+                log.info("appendCheckpoints: took {} ms to checkpoint map {}",
+                        mapCpEnd - mapCpStart, streamId);
             }
         } finally {
             log.trace("appendCheckpoints: author '{}' at globalAddress {} finished",
                     author, globalAddress);
             rt.getObjectsView().TXEnd();
         }
+        final long cpStop = System.currentTimeMillis();
+
+        log.info("appendCheckpoints: took {} ms to append {} checkpoints", cpStop - cpStart,
+                maps.size());
         return globalAddress;
     }
 
