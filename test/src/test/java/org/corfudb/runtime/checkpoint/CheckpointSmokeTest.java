@@ -1,7 +1,7 @@
 package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
@@ -371,20 +371,19 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             setRuntime();
             Map<String, Long> m2 = instantiateMap(streamName);
 
-            // If the snapshot is prior to the checkpoint start,
-            // a trimmed exception will be thrown.
+            // Verify that not only the last CP is considered
             if (globalAddr < startAddress - 1) {
                 final long thisAddress = globalAddr;
-                assertThatThrownBy(() ->
-                        {
-                            r.getObjectsView().TXBuild()
-                                .setType(TransactionType.SNAPSHOT)
-                                .setSnapshot(thisAddress)
-                                .begin();
-                            m2.size(); // Just call any accessor
-                        })
-                        .describedAs("Snapshot at global log address " + globalAddr)
-                        .isInstanceOf(TransactionAbortedException.class);
+                try {
+                    r.getObjectsView().TXBuild()
+                            .setType(TransactionType.SNAPSHOT)
+                            .setSnapshot(thisAddress)
+                            .begin();
+                    m2.size(); // Just call any accessor
+                } catch (TransactionAbortedException tae) {
+                    fail();
+                }
+
             } else {
                 r.getObjectsView().TXBuild()
                         .setType(TransactionType.SNAPSHOT)
