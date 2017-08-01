@@ -83,7 +83,8 @@ public abstract class AbstractQueuedStreamView extends
 
         // If maxGlobal is before the checkpoint position, throw a
         // trimmed exception
-        if (maxGlobal < context.checkpointSuccessStartAddr) {
+        if (context.currentCp.isReady()
+                && maxGlobal < context.currentCp.getStartAddr()) {
             throw new TrimmedException();
         }
 
@@ -91,7 +92,7 @@ public abstract class AbstractQueuedStreamView extends
         NavigableSet<Long> getFrom;
         if (context.readCpQueue.size() > 0) {
             getFrom = context.readCpQueue;
-            context.globalPointer = context.checkpointSuccessStartAddr;
+            context.globalPointer = context.currentCp.getStartAddr();
         } else {
             getFrom = context.readQueue;
         }
@@ -135,7 +136,8 @@ public abstract class AbstractQueuedStreamView extends
 
         // If maxGlobal is before the checkpoint position, throw a
         // trimmed exception
-        if (maxGlobal < context.checkpointSuccessStartAddr) {
+        if (context.currentCp.isReady()
+                && maxGlobal < context.currentCp.getStartAddr()) {
             throw new TrimmedException();
         }
 
@@ -283,7 +285,8 @@ public abstract class AbstractQueuedStreamView extends
 
         // If we're attempt to go prior to most recent checkpoint, we
         // throw a TrimmedException.
-        if (context.globalPointer - 1 < context.checkpointSuccessStartAddr) {
+        if (context.currentCp.isReady()
+                && context.globalPointer < context.currentCp.getStartAddr()) {
             throw new TrimmedException();
         }
 
@@ -372,21 +375,12 @@ public abstract class AbstractQueuedStreamView extends
          */
         final NavigableSet<Long> readCpQueue = new TreeSet<>();
 
-        /** Info on checkpoint we used for initial stream replay,
-         *  other checkpoint-related info & stats.  Hodgepodge, clarify.
-         */
-        UUID checkpointSuccessId = null;
-        long checkpointSuccessStartAddr = Address.NEVER_READ;
-        long checkpointSuccessEndAddr = Address.NEVER_READ;
-        long checkpointSuccessNumEntries = 0L;
-        long checkpointSuccessBytes = 0L;
         // No need to keep track of # of DATA entries, use context.resolvedQueue.size()?
         long resolvedEstBytes = 0L;
-        /** The address the current checkpoint snapshot was taken at.
-         *  The checkpoint guarantees for this stream there are no entries
-         *  between checkpointSuccessStartAddr and checkpointSnapshotAddress.
-         */
-        long checkpointSnapshotAddress = Address.NEVER_READ;
+
+        CheckpointData currentCp = CheckpointData.empty;
+
+        CheckpointData tempCp = new CheckpointData();
 
         /** Create a new stream context with the given ID and maximum address
          * to read to.
@@ -409,14 +403,10 @@ public abstract class AbstractQueuedStreamView extends
             resolvedQueue.clear();
             minResolution = Address.NON_ADDRESS;
             maxResolution = Address.NON_ADDRESS;
-
-            checkpointSuccessId = null;
-            checkpointSuccessStartAddr = Address.NEVER_READ;
-            checkpointSuccessEndAddr = Address.NEVER_READ;
-            checkpointSnapshotAddress = Address.NEVER_READ;
-            checkpointSuccessNumEntries = 0;
-            checkpointSuccessBytes = 0;
             resolvedEstBytes = 0;
+
+            currentCp = CheckpointData.empty;
+            tempCp = new CheckpointData();
         }
 
         /**
