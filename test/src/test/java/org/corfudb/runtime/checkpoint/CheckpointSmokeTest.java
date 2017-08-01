@@ -90,7 +90,26 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      */
     @Test
 	public void smoke1Test() throws Exception {
-        final String streamName = "mystream";
+        boolean[] b = new boolean[]{true, false};
+        int counter = 0;
+
+        for (int i = 0; i < 2; i++) {
+            for (int j = 0; j < 2; j++) {
+                for (int k = 0; k < 2; k++) {
+                    // Avoid the case of writing START & END but not the
+                    // checkpoint data in the middle CONTINUATION (index=j).
+                    if (! (b[i] && !b[j] && b[k])) {
+                        System.err.printf("try %s %s %s %d\n", b[i], b[j], b[k], counter);
+                        smoke1Test(b[i], b[j], b[k], counter++);
+                    }
+                }
+            }
+        }
+    }
+
+    public void smoke1Test(boolean write1, boolean write2, boolean write3, int counter)
+            throws Exception {
+        final String streamName = "mystream" + counter;
         final UUID streamId = CorfuRuntime.getStreamID(streamName);
         final String key1 = "key1";
         final long key1Val = 42;
@@ -111,9 +130,10 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         m.put(key1, key1Val);
         m.put(key2, key2Val);
 
-        // Write our successful checkpoint, 3 records total.
+        // Write our successful checkpoint, up to 3 records total.
         writeCheckpointRecords(streamId, checkpointAuthor, checkpointId,
-                new Object[]{new Object[]{key8, key8Val}, new Object[]{key7, key7Val}});
+                new Object[]{new Object[]{key8, key8Val}, new Object[]{key7, key7Val}},
+                () -> {}, () -> {}, write1, write2, write3);
 
         // Write our 3rd 'real' key, then check all 3 keys + the checkpoint keys
         m.put(key3, key3Val);
@@ -126,11 +146,18 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // Make a new runtime & map, then look for expected bad behavior
         setRuntime();
         Map<String, Long> m2 = instantiateMap(streamName);
-        assertThat(m2.get(key1)).isNull();
-        assertThat(m2.get(key2)).isNull();
+        if (write1 && write2 && write3) {
+            assertThat(m2.get(key1)).isNull();
+            assertThat(m2.get(key2)).isNull();
+            assertThat(m2.get(key7)).isEqualTo(key7Val);
+            assertThat(m2.get(key8)).isEqualTo(key8Val);
+        } else {
+            assertThat(m2.get(key1)).isEqualTo(key1Val);
+            assertThat(m2.get(key2)).isEqualTo(key2Val);
+            assertThat(m2.get(key7)).isNull();
+            assertThat(m2.get(key8)).isNull();
+        }
         assertThat(m2.get(key3)).isEqualTo(key3Val);
-        assertThat(m2.get(key7)).isEqualTo(key7Val);
-        assertThat(m2.get(key8)).isEqualTo(key8Val);
     }
 
     /** Second smoke test, steps:
@@ -426,12 +453,14 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         Map<CheckpointEntry.CheckpointDictKey, String> mdKV = new HashMap<>();
         mdKV.put(CheckpointEntry.CheckpointDictKey.START_TIME, "The perfect time");
 
+        // Calculate the start address because it's written in all entries.
+        TokenResponse tokResp1 = r.getSequencerView().nextToken(Collections.singleton(streamId)
+                , 0);
+        long addr1 = tokResp1.getToken().getTokenValue();
+        mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1 + 1));
+
         // Write cp #1 of 3
         if (write1) {
-            TokenResponse tokResp1 = r.getSequencerView().nextToken(Collections.singleton(streamId)
-                    , 0);
-            long addr1 = tokResp1.getToken().getTokenValue();
-            mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1 + 1));
             CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                     checkpointAuthor, checkpointId, streamId, mdKV, null);
             sv.append(cp1, null, null);
