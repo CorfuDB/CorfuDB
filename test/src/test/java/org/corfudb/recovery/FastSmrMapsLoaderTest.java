@@ -1,6 +1,7 @@
 package org.corfudb.recovery;
 
 import com.google.common.reflect.TypeToken;
+import org.corfudb.CustomSerializer;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -19,6 +20,7 @@ import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -46,14 +48,18 @@ public class FastSmrMapsLoaderTest extends AbstractViewTest {
         return data.getSerializedForm();
     }
 
-    private VersionLockedObject getVersionLockedObject(CorfuRuntime cr, String streamName) {
+    private CorfuCompileProxy getCorfuCompileProxy(CorfuRuntime cr, String streamName) {
         ObjectsView.ObjectID mapId = new ObjectsView.
                 ObjectID(CorfuRuntime.getStreamID(streamName), SMRMap.class);
 
-        CorfuCompileProxy cp = ((CorfuCompileProxy) ((ICorfuSMR) cr.getObjectsView().
+        return ((CorfuCompileProxy) ((ICorfuSMR) cr.getObjectsView().
                 getObjectCache().
                 get(mapId)).
                 getCorfuSMRProxy());
+    }
+
+    private VersionLockedObject getVersionLockedObject(CorfuRuntime cr, String streamName) {
+        CorfuCompileProxy cp = getCorfuCompileProxy(cr, streamName);
         return cp.getUnderlyingObject();
     }
 
@@ -258,7 +264,7 @@ public class FastSmrMapsLoaderTest extends AbstractViewTest {
 
         CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
                 .setLoadSmrMapsAtConnect(true)
-                .setBulkReadSizeForFastLoader(2l)
+                .setBulkReadSize(2)
                 .connect();
 
         assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
@@ -1173,8 +1179,44 @@ public class FastSmrMapsLoaderTest extends AbstractViewTest {
         assertThat(streamTails.get(stream1)).isEqualTo(tail1);
         assertThat(streamTails.get(stream2)).isEqualTo(tail2);
         assertThat(streamTails.get(emptyStream)).isNull();
-
     }
 
+    /**
+     * Upon recreation of the map, the correct serializer should be
+     * set for the map. The serializer type comes from the SMREntry.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void canRecreateMapWithCorrectSerializer() throws Exception {
+        ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 1));
+        Serializers.registerSerializer(customSerializer);
+        CorfuRuntime originalRuntime = getDefaultRuntime();
+
+        Map<String, String> originalMap = originalRuntime.getObjectsView().build()
+                .setType(SMRMap.class)
+                .setStreamName("test")
+                .setSerializer(customSerializer)
+                .open();
+
+        originalMap.put("a", "b");
+
+        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+                .connect();
+
+        FastSmrMapsLoader fsmr = new FastSmrMapsLoader(recreatedRuntime);
+        fsmr.loadMaps();
+
+        // We don't need to set the serializer this map
+        // because it was already created in the ObjectsView cache
+        // with the correct serializer.
+        Map<String, String> recreatedMap = recreatedRuntime.getObjectsView().build()
+                .setType(SMRMap.class)
+                .setStreamName("test")
+                .open();
+
+        assertThat(getCorfuCompileProxy(recreatedRuntime, "test").getSerializer()).isEqualTo(customSerializer);
+
+    }
 
 }

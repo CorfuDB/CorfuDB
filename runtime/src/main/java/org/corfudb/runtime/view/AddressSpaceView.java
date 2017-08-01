@@ -4,11 +4,12 @@ import com.codahale.metrics.Gauge;
 import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.google.common.collect.Iterables;
 
-import java.util.Iterator;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
@@ -299,18 +300,37 @@ public class AddressSpaceView extends AbstractView {
      * @param addresses collection of addresses to read from.
      * @return A result to be cached
      */
-    public @Nonnull Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
-        //turn the addresses into Set for now to satisfy signature requirement down the line
-        Set<Long> readAddresses = new TreeSet<>();
-        Iterator<Long> iterator = addresses.iterator();
-        while(iterator.hasNext()){
-            readAddresses.add(iterator.next());
+    public @Nonnull
+    Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
+        Map<Long, ILogData> allAddresses = new HashMap<>();
+
+        Iterable<List<Long>> batches = Iterables.partition(addresses, runtime.getBulkReadSize());
+
+        for (List<Long> batch : batches) {
+            try {
+                //doesn't handle the case where some address have a different replication mode
+                allAddresses.putAll(layoutHelper(l -> l.getReplicationMode(batch.iterator().next())
+                        .getReplicationProtocol(runtime)
+                        .readAll(l, batch)));
+            } catch (Exception e) {
+                log.error("cacheFetch: Couldn't read addresses {}", batch, e);
+            }
         }
 
-        //doesn't handle the case where some address have a different replication mode
-        return layoutHelper(l -> l.getReplicationMode(readAddresses.iterator().next())
+        return allAddresses;
+    }
+
+    /**
+     * Fetch a collection of addresses.
+     *
+     * @param addresses collection of addresses to read from.
+     * @return A result to be cached
+     */
+    public @Nonnull
+    Map<Long, ILogData> cacheFetch(Set<Long> addresses) {
+        return layoutHelper(l -> l.getReplicationMode(addresses.iterator().next())
                 .getReplicationProtocol(runtime)
-                .readAll(l, readAddresses));
+                .readRange(l, addresses));
     }
 
 
