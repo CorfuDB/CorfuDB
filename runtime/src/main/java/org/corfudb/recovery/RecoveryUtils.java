@@ -6,7 +6,6 @@ import com.google.common.collect.Range;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuCompileProxy;
@@ -18,7 +17,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS;
-import static org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS;
 
 /**
  * Created by rmichoud on 6/22/17.
