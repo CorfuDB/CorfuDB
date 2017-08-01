@@ -20,7 +20,9 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.recovery.FastSmrMapsLoader;
+import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.LogUnitClient;
@@ -44,8 +46,9 @@ import org.corfudb.util.Version;
 @Accessors(chain = true)
 public class CorfuRuntime {
 
-    static final long DEFAULT_BATCH_FOR_FAST_LOADER = 5;
     static final int DEFAULT_TIMEOUT_MINUTES_FAST_LOADING = 30;
+
+    public static final int BULK_READ_SIZE = 10;
 
     @Data
     public static class CorfuRuntimeParameters {
@@ -177,11 +180,11 @@ public class CorfuRuntime {
 
 
     /**
-     * Set the bulk read size for the Fast Laoder.
+     * Set the bulk read size.
      */
     @Setter
     @Getter
-    private long bulkReadSizeForFastLoader = DEFAULT_BATCH_FOR_FAST_LOADER;
+    public int bulkReadSize = BULK_READ_SIZE;
 
 
     /**
@@ -520,6 +523,34 @@ public class CorfuRuntime {
         });
     }
 
+    @SuppressWarnings("unchecked")
+    private void checkVersion() {
+        try {
+            CompletableFuture<VersionInfo>[] futures = layout.get().getLayoutServers()
+                    .stream().map(this::getRouter)
+                    .map(r -> r.getClient(BaseClient.class))
+                    .map(BaseClient::getVersionInfo)
+                    .toArray(CompletableFuture[]::new);
+
+            CompletableFuture.allOf(futures).join();
+
+            for (CompletableFuture<VersionInfo> cf : futures) {
+                if (cf.get().getVersion() == null) {
+                    log.error("Unexpected server version, server is too old to return"
+                            + " version information");
+                } else if (!cf.get().getVersion().equals(getVersionString())) {
+                    log.error("connect: expected version {}, but server version is {}",
+                            getVersionString(), cf.get().getVersion());
+                } else {
+                    log.info("connect: client version {}, server version is {}",
+                            getVersionString(), cf.get().getVersion());
+                }
+            }
+        } catch (Exception e) {
+            log.error("connect: failed to get version", e);
+        }
+    }
+
     /**
      * Connect to the Corfu server instance.
      * When this function returns, the Corfu server is ready to be accessed.
@@ -538,9 +569,11 @@ public class CorfuRuntime {
             }
         }
 
+        checkVersion();
+
         if (loadSmrMapsAtConnect) {
             FastSmrMapsLoader fastLoader = new FastSmrMapsLoader(this)
-                    .setBatchReadSize(bulkReadSizeForFastLoader)
+                    .setBatchReadSize(getBulkReadSize())
                     .setTimeoutInMinutesForLoading(timeoutInMinutesForFastLoading);
             fastLoader.loadMaps();
         }

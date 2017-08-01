@@ -61,7 +61,7 @@ Options:
 (defn read-logunit [address] (let [obj
          (.. (.. (get-logunit-client) (read address)) (get))]
 
-         (let [read-response (.. (.. obj (getReadSet)) (get address))]
+         (let [read-response (.. (.. obj (getAddresses)) (get address))]
          (if (.equals (.. read-response (getType)) org.corfudb.protocols.wireprotocol.DataType/DATA)
          (let [bytes (.. read-response (getPayload *r))]
            (.. System/out (write bytes 0 (count bytes))))

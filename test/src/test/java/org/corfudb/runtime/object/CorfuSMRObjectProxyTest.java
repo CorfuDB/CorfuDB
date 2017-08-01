@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -258,6 +259,42 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         test.put("a", "b");
         test.get("a");
         assertThat(test.get("a")).isEqualTo("b");
+    }
+
+    /**
+     * Once a SMR map is created with a serializer, we should
+     * not be able to change the serializer by re-opening the map with
+     * a different serializer.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void doesNotResetSerializerIfMapAlreadyExists() throws Exception {
+        ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 1));
+        Serializers.registerSerializer(customSerializer);
+        CorfuRuntime r = getDefaultRuntime();
+
+        Map<String, String> test = r.getObjectsView().build()
+                .setType(SMRMap.class)
+                .setStreamName("test")
+                .setSerializer(customSerializer)
+                .open();
+
+        Map<String, String> test2 = r.getObjectsView().build()
+                .setType(SMRMap.class)
+                .setStreamName("test")
+                .setSerializer(Serializers.JSON)
+                .open();
+
+        ObjectsView.ObjectID mapId = new ObjectsView.
+                ObjectID(CorfuRuntime.getStreamID("test"), SMRMap.class);
+
+        CorfuCompileProxy cp = ((CorfuCompileProxy) ((ICorfuSMR) r.getObjectsView().
+                getObjectCache().
+                get(mapId)).
+                getCorfuSMRProxy());
+
+        assertThat(cp.getSerializer()).isEqualTo(customSerializer);
     }
 
 }

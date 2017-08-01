@@ -243,5 +243,9 @@ public class ObjectsView extends AbstractView {
     public static class ObjectID<T> {
         final UUID streamID;
         final Class<T> type;
+
+        public String toString() {
+            return "[" + streamID + ", " + type.getSimpleName() + "]";
+        }
     }
 }

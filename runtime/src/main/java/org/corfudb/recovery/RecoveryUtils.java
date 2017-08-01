@@ -12,6 +12,7 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.util.serializer.ISerializer;
 
 import java.util.Map;
 import java.util.UUID;
@@ -43,12 +44,13 @@ public class RecoveryUtils {
      *
      * @param streamId
      */
-    static void createSmrMapIfNotExist(CorfuRuntime runtime, UUID streamId) {
+    static void createSmrMapIfNotExist(CorfuRuntime runtime, UUID streamId, ISerializer serializer) {
         if (!runtime.getObjectsView().getObjectCache()
                 .containsKey(RecoveryUtils.getObjectIdFromStreamId(streamId))) {
             runtime.getObjectsView().build()
                     .setStreamID(streamId)
                     .setType(SMRMap.class)
+                    .setSerializer(serializer)
                     .open();
         }
     }

@@ -4,25 +4,28 @@ package org.corfudb.runtime.view;
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 
-import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.infrastructure.PurgeFailurePolicy;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.PurgeFailurePolicy;
+import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.*;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.CFUtils;
 import org.junit.Test;
 
 import java.util.Collections;
 import java.util.Map;
-
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -216,6 +219,16 @@ public class ManagementViewTest extends AbstractViewTest {
         for (String server: corfuRuntime.getLayoutView().getLayout().getAllServers()) {
             corfuRuntime.getRouter(server).getClient(ManagementClient.class).initiateFailureHandler().get();
         }
+
+        // Waiting for management servers to send the bootstrap sequencer request and be ready
+        // to detect failures to speed up test time.
+        CFUtils.within(
+                CompletableFuture.allOf(
+                        getManagementServer(SERVERS.PORT_0).getSequencerBootstrappedFuture(),
+                        getManagementServer(SERVERS.PORT_1).getSequencerBootstrappedFuture(),
+                        getManagementServer(SERVERS.PORT_2).getSequencerBootstrappedFuture()),
+                PARAMETERS.TIMEOUT_NORMAL
+        ).join();
 
         // Setting aggressive timeouts
         setAggressiveTimeouts(l, corfuRuntime,

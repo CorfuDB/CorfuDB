@@ -1,6 +1,8 @@
 package org.corfudb.runtime.view.replication;
 
 import com.google.common.collect.Range;
+
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -66,7 +68,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         // know where the committed tail is.
         ILogData ret =  CFUtils.getUninterruptibly(layout
                 .getLogUnitClient(globalAddress, numUnits - 1)
-                                    .read(globalAddress)).getReadSet()
+                                    .read(globalAddress)).getAddresses()
                 .getOrDefault(globalAddress, null);
         return ret == null || ret.isEmpty() ? null : ret;
     }
@@ -75,16 +77,40 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
      * {@inheritDoc}
      */
     @Override
-    public Map<Long, ILogData> readAll(Layout layout, Set<Long> globalAddresses) {
+    public Map<Long, ILogData> readAll(Layout layout, List<Long> globalAddresses) {
+        long startAddress = globalAddresses.iterator().next();
+        int numUnits = layout.getSegmentLength(startAddress);
+        log.trace("readAll[{}]: chain {}/{}", globalAddresses, numUnits, numUnits);
+
+        Map<Long, LogData> logResult = CFUtils.getUninterruptibly(layout
+                .getLogUnitClient(startAddress, numUnits - 1)
+                .read(globalAddresses)).getAddresses();
+
+        //in case of a hole, do a normal read and use its hole fill policy
+        Map<Long, ILogData> returnResult = new TreeMap<>();
+        for (Map.Entry<Long, LogData> entry : logResult.entrySet()) {
+            ILogData value = entry.getValue();
+            if (value == null || value.isEmpty()) {
+                value = read(layout, entry.getKey());
+            }
+
+            returnResult.put(entry.getKey(), value);
+        }
+
+        return returnResult;
+    }
+
+    @Override
+    public Map<Long, ILogData> readRange(Layout layout, Set<Long> globalAddresses) {
         Range<Long> range = Range.encloseAll(globalAddresses);
         long startAddress = range.lowerEndpoint();
         long endAddress = range.upperEndpoint();
         int numUnits = layout.getSegmentLength(startAddress);
-        log.trace("ReadAll[{}-{}]: chain {}/{}", startAddress, endAddress, numUnits, numUnits);
+        log.trace("readRange[{}-{}]: chain {}/{}", startAddress, endAddress, numUnits, numUnits);
 
         Map<Long, LogData> logResult = CFUtils.getUninterruptibly(layout
                 .getLogUnitClient(startAddress, numUnits - 1)
-                .read(null, range)).getReadSet();
+                .read(range)).getAddresses();
 
         //in case of a hole, do a normal read and use its hole fill policy
         Map<Long, ILogData> returnResult = new TreeMap<>();
@@ -159,7 +185,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         int numUnits = layout.getSegmentLength(globalAddress);
         log.debug("Recover[{}]: read chain head {}/{}", globalAddress, 1, numUnits);
         ILogData ld = CFUtils.getUninterruptibly(layout.getLogUnitClient(globalAddress, 0)
-                .read(globalAddress)).getReadSet().getOrDefault(globalAddress, null);
+                .read(globalAddress)).getAddresses().getOrDefault(globalAddress, null);
         // If nothing was at the head, this is a bug and we
         // should fail with a runtime exception, as there
         // was nothing to recover - if the head was removed

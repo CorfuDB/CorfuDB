@@ -1,22 +1,15 @@
 package org.corfudb.integration;
 
-import org.assertj.core.api.ThrowableAssert;
-import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.CFUtils;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.exceptions.*;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -31,10 +24,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests the recovery of the Corfu instance.
@@ -45,14 +45,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 public class ServerRestartIT extends AbstractIT {
 
     // Total number of iterations of randomized failovers.
-    static int ITERATIONS;
+    private static int ITERATIONS;
     // Percentage of Client restarts.
-    static int CLIENT_RESTART_PERCENTAGE;
+    private static int CLIENT_RESTART_PERCENTAGE;
     // Percentage of Server restarts.
-    static int SERVER_RESTART_PERCENTAGE;
+    private static int SERVER_RESTART_PERCENTAGE;
 
-    static String corfuSingleNodeHost;
-    static int corfuSingleNodePort;
+    private static String corfuSingleNodeHost;
+    private static int corfuSingleNodePort;
 
     @Before
     public void loadProperties() {
@@ -69,6 +69,14 @@ public class ServerRestartIT extends AbstractIT {
                 .setPort(corfuSingleNodePort)
                 .setLogPath(getCorfuServerLogPath(corfuSingleNodeHost, corfuSingleNodePort))
                 .runServer();
+    }
+
+    private Random getRandomNumberGenerator() {
+        final Random randomSeed = new Random();
+        final long SEED = randomSeed.nextLong();
+        // Keep this print at all times to reproduce any failed test.
+        System.out.println("SEED = " + Long.toHexString(SEED));
+        return new Random(SEED);
     }
 
 
@@ -92,7 +100,7 @@ public class ServerRestartIT extends AbstractIT {
 
         // Logs the server and client state in each iteration with the
         // maps used and keys and values inserted in each iteration.
-        final boolean TEST_SEQUENCE_LOGGING = true;
+        final boolean TEST_SEQUENCE_LOGGING = false;
         final File testSequenceLogFile = new File(TEST_SEQUENCE_LOG_PATH);
         if (!testSequenceLogFile.exists()) {
             testSequenceLogFile.createNewFile();
@@ -100,11 +108,7 @@ public class ServerRestartIT extends AbstractIT {
 
         final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
-        // Keep this print at all times to reproduce any failed test.
-        final Random randomSeed = new Random();
-        final long SEED = randomSeed.nextLong();
-        final Random rand = new Random(SEED);
-        System.out.println("SEED = " + SEED);
+        final Random rand = getRandomNumberGenerator();
 
         // Runs the corfu server. Expect slight delay until server is running.
         Process corfuServerProcess = runCorfuServer();
@@ -142,7 +146,7 @@ public class ServerRestartIT extends AbstractIT {
 
                 if (clientRestart) {
                     smrMapList.clear();
-                    runtimeList.forEach(CorfuRuntime::shutdown);
+                    runtimeList.parallelStream().forEach(CorfuRuntime::shutdown);
                     for (int j = 0; j < MAPS; j++) {
                         final int jj = j;
                         Future<Boolean> future = executorService.submit(() -> {
@@ -208,12 +212,7 @@ public class ServerRestartIT extends AbstractIT {
      */
     @Test
     public void testSingleNodeRecoveryTransactionalClientNested() throws Exception {
-        try {
-            runSingleNodeRecoveryTransactionalClient(true);
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw e;
-        }
+        runSingleNodeRecoveryTransactionalClient(true);
     }
 
     /**
@@ -223,131 +222,108 @@ public class ServerRestartIT extends AbstractIT {
      */
     @Test
     public void testSingleNodeRecoveryTransactionalClient() throws Exception {
-        try {
-            runSingleNodeRecoveryTransactionalClient(false);
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw e;
-        }
+        runSingleNodeRecoveryTransactionalClient(false);
     }
 
     private void runSingleNodeRecoveryTransactionalClient(boolean nested) throws Exception {
-        try {
-            // Total number of maps (streams) to write to.
-            final int MAPS = 5;
-            final int MAX_LIMIT_KEY_RANGE_PRE_SHUTDOWN = 20;
-            final int MIN_LIMIT_KEY_RANGE_DURING_SHUTDOWN = 30;
-            final int MAX_LIMIT_KEY_RANGE_DURING_SHUTDOWN = 60;
-            final int MIN_LIMIT_KEY_RANGE_POST_SHUTDOWN = 100;
-            final int MAX_LIMIT_KEY_RANGE_POST_SHUTDOWN = 200;
-            final int CLIENT_DELAY_POST_SHUTDOWN = 50;
 
-            // Run CORFU Server. Expect slight delay until server is running.
-            System.out.println("Start Corfu Server");
-            final Process corfuServerProcess = runCorfuServer();
-            // Delay (time to start)
-            Thread.sleep(PARAMETERS.TIMEOUT_NORMAL.toMillis());
-            assertThat(corfuServerProcess.isAlive()).isTrue();
+        // Total number of maps (streams) to write to.
+        final int MAPS = 5;
+        final int MAX_LIMIT_KEY_RANGE_PRE_SHUTDOWN = 20;
+        final int MIN_LIMIT_KEY_RANGE_DURING_SHUTDOWN = 30;
+        final int MAX_LIMIT_KEY_RANGE_DURING_SHUTDOWN = 60;
+        final int MIN_LIMIT_KEY_RANGE_POST_SHUTDOWN = 100;
+        final int MAX_LIMIT_KEY_RANGE_POST_SHUTDOWN = 200;
+        final int CLIENT_DELAY_POST_SHUTDOWN = 50;
 
-            // Initialize Client: Create Runtime (Client)
-            CorfuRuntime runtime = createDefaultRuntime();
+        final Random rand = getRandomNumberGenerator();
 
-            // Create Maps
-            List<Map<String, Integer>> smrMapList = new ArrayList<>();
-            List<Map<String, Integer>> expectedMapList = new ArrayList<>();
-            for (int i = 0; i < MAPS; i++) {
-                smrMapList.add(createMap(runtime, Integer.toString(i)));
-                Map<String, Integer> expectedMap = new HashMap<>();
-                expectedMapList.add(expectedMap);
-            }
+        // Run CORFU Server. Expect slight delay until server is running.
+        final Process corfuServerProcess = runCorfuServer();
+        assertThat(corfuServerProcess.isAlive()).isTrue();
 
-            // Execute Transactions (while Corfu Server RUNNING)
-            for (int i = 0; i < ITERATIONS; i++) {
-                assertThat(executeTransaction(runtime, smrMapList, expectedMapList, 0,
-                        MAX_LIMIT_KEY_RANGE_PRE_SHUTDOWN, nested)).isTrue();
-            }
+        // Initialize Client: Create Runtime (Client)
+        CorfuRuntime runtime = createDefaultRuntime();
 
-            // ShutDown (STOP) CORFU Server
-            System.out.println("Shutdown Corfu Server");
-            assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
-
-            // Execute Transactions (once Corfu Server Shutdown)
-            for (int i = 0; i < ITERATIONS; i++) {
-                assertThat(executeTransaction(runtime, smrMapList, expectedMapList,
-                        MIN_LIMIT_KEY_RANGE_DURING_SHUTDOWN, MAX_LIMIT_KEY_RANGE_DURING_SHUTDOWN, nested)).isFalse();
-            }
-
-            // Restart Corfu Server
-            System.out.println("Restart Corfu Server");
-            Process corfuServerProcessRestart = runCorfuServer();
-            // Delay (time to restart)
-            Thread.sleep(PARAMETERS.TIMEOUT_NORMAL.toMillis());
-            assertThat(corfuServerProcessRestart.isAlive()).isTrue();
-
-            // Execute Transactions (once Corfu Server was restarted)
-            for (int i = 0; i < ITERATIONS; i++) {
-                assertThat(executeTransaction(runtime, smrMapList, expectedMapList,
-                        MIN_LIMIT_KEY_RANGE_POST_SHUTDOWN, MAX_LIMIT_KEY_RANGE_POST_SHUTDOWN, nested)).isTrue();
-            }
-
-            // Verify Correctness
-            // Note: by triggering this from a separate thread we guarantee that we can catch any potential problems
-            // related to transactional contexts not being removed for current thread.
-            ScheduledThreadPoolExecutor exec = new ScheduledThreadPoolExecutor(1);
-            ScheduledFuture<Boolean> future = exec.schedule(new Callable<Boolean>() {
-                public Boolean call() {
-                    for (int i = 0; i < expectedMapList.size(); i++) {
-                        Map<String, Integer> expectedMap = expectedMapList.get(i);
-                        for (Map.Entry<String, Integer> entry : expectedMap.entrySet()) {
-                            if (smrMapList.get(i).get(entry.getKey()) != null) {
-                                if (!(smrMapList.get(i).get(entry.getKey()).equals(entry.getValue().intValue()))) {
-                                    return false;
-                                }
-                            } else {
-                                return false;
-                            }
-                        }
-                    }
-                    return true;
-                }
-            }, CLIENT_DELAY_POST_SHUTDOWN, TimeUnit.MILLISECONDS);
-
-            // Wait for Executor to Finish
-            exec.shutdown();
-            try {
-                exec.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-
-            // Data Correctness Validation
-            assertThat(future.get()).isTrue();
-
-            // ShutDown the server before exiting
-            System.out.println("Shutdown Corfu Server");
-            assertThat(shutdownCorfuServer(corfuServerProcessRestart)).isTrue();
-        } catch (Exception e) {
-            throw e;
+        // Create Maps
+        List<Map<String, Integer>> smrMapList = new ArrayList<>();
+        List<Map<String, Integer>> expectedMapList = new ArrayList<>();
+        for (int i = 0; i < MAPS; i++) {
+            smrMapList.add(createMap(runtime, Integer.toString(i)));
+            expectedMapList.add(new HashMap<>());
         }
+
+        // Execute Transactions (while Corfu Server RUNNING)
+        for (int i = 0; i < ITERATIONS; i++) {
+            assertThat(executeTransaction(runtime, smrMapList, expectedMapList, 0,
+                    MAX_LIMIT_KEY_RANGE_PRE_SHUTDOWN, nested, rand)).isTrue();
+        }
+
+        // ShutDown (STOP) CORFU Server
+        assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
+
+        // Execute Transactions (once Corfu Server Shutdown)
+        for (int i = 0; i < ITERATIONS; i++) {
+            assertThat(executeTransaction(runtime, smrMapList, expectedMapList,
+                    MIN_LIMIT_KEY_RANGE_DURING_SHUTDOWN, MAX_LIMIT_KEY_RANGE_DURING_SHUTDOWN,
+                    nested, rand)).isFalse();
+        }
+
+        // Restart Corfu Server
+        Process corfuServerProcessRestart = runCorfuServer();
+        // Block until server is ready.
+        runtime.invalidateLayout();
+        runtime.layout.get();
+
+        // Execute Transactions (once Corfu Server was restarted)
+        for (int i = 0; i < ITERATIONS; i++) {
+            assertThat(executeTransaction(runtime, smrMapList, expectedMapList,
+                    MIN_LIMIT_KEY_RANGE_POST_SHUTDOWN, MAX_LIMIT_KEY_RANGE_POST_SHUTDOWN,
+                    nested, rand)).isTrue();
+        }
+
+        // Verify Correctness
+        // Note: by triggering this from a separate thread we guarantee that we can catch any potential problems
+        // related to transactional contexts not being removed for current thread.
+        ScheduledThreadPoolExecutor exec = new ScheduledThreadPoolExecutor(1);
+        ScheduledFuture<Boolean> future = exec.schedule(() -> {
+
+            for (int i = 0; i < expectedMapList.size(); i++) {
+                Map<String, Integer> expectedMap = expectedMapList.get(i);
+                Map<String, Integer> smrMap = smrMapList.get(i);
+                if (!smrMap.equals(expectedMap)) {
+                    return false;
+                }
+            }
+            return true;
+        }, CLIENT_DELAY_POST_SHUTDOWN, TimeUnit.MILLISECONDS);
+
+        // Wait for Executor to Finish
+        exec.shutdown();
+        try {
+            exec.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        // Data Correctness Validation
+        assertThat(future.get()).isTrue();
+
+        // ShutDown the server before exiting
+        assertThat(shutdownCorfuServer(corfuServerProcessRestart)).isTrue();
     }
 
-    private boolean executeTransaction (CorfuRuntime runtime, List<Map<String, Integer>> smrMapList,
-                                             List<Map<String, Integer>> expectedMapList, int minKeyRange,
-                                             int maxKeyRange, boolean nested) {
+    private boolean executeTransaction(CorfuRuntime runtime, List<Map<String, Integer>> smrMapList,
+                                       List<Map<String, Integer>> expectedMapList, int minKeyRange,
+                                       int maxKeyRange, boolean nested, Random rand) {
 
         // Number of insertions in map in each iteration.
         final int INSERTIONS = 100;
         boolean retry = true;
 
-        // Keep this print at all times to reproduce any failed test.
-        final Random randomSeed = new Random();
-        final long SEED = randomSeed.nextLong();
-        final Random rand = new Random(SEED);
-        System.out.println("SEED = " + SEED);
-
         boolean success = false;
 
-        while(retry) {
+        while (retry) {
             try {
                 retry = false;
                 // Start Transaction
@@ -441,7 +417,6 @@ public class ServerRestartIT extends AbstractIT {
         final int newMapBStreamTail = 19;
         final int newGlobalTail = 19;
 
-        corfuRuntime.shutdown();
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
 
         corfuServerProcess = runCorfuServer();
@@ -527,7 +502,7 @@ public class ServerRestartIT extends AbstractIT {
      * @throws Exception
      */
 
-  public void sequencerTailsRecoveryLoopTest() throws Exception {
+    public void sequencerTailsRecoveryLoopTest() throws Exception {
 
         Process corfuServerProcess = runCorfuServer();
         final int mapSize = 10;
@@ -626,12 +601,12 @@ public class ServerRestartIT extends AbstractIT {
                     .get();
 
             assertThat(tokenResponseA.getTokenValue()).isEqualTo(expectedGlobalTailResponse
-                    .getTokenValue()+1);
+                    .getTokenValue() + 1);
             assertThat(tokenResponseA.getBackpointerMap().get(streamNameA))
                     .isEqualTo(expectedTokenResponseA.getTokenValue());
 
             assertThat(tokenResponseB.getTokenValue()).isEqualTo(expectedGlobalTailResponse
-                    .getTokenValue()+2);
+                    .getTokenValue() + 2);
             assertThat(tokenResponseB.getBackpointerMap().get(streamNameB))
                     .isEqualTo(expectedTokenResponseB.getTokenValue());
 

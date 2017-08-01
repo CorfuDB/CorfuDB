@@ -7,13 +7,13 @@ import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -94,12 +94,10 @@ public class ManagementServer extends AbstractServer {
      * Future for periodic failure detection task.
      */
     private Future failureDetectorFuture = null;
-    private AtomicBoolean recovered = new AtomicBoolean(false);
+    private boolean recovered = false;
 
     @Getter
-    private volatile boolean sequencerBootstrapped = false;
-    private static final int sequencerBootstrapRetries = 3;
-    private static final long sequencerBootstrapRetryTimeout = 1000;
+    private volatile CompletableFuture<Boolean> sequencerBootstrappedFuture;
 
     /**
      * Returns new ManagementServer.
@@ -112,11 +110,12 @@ public class ManagementServer extends AbstractServer {
 
         bootstrapEndpoint = (opts.get("--management-server") != null)
                 ? opts.get("--management-server").toString() : null;
+        sequencerBootstrappedFuture = new CompletableFuture<>();
 
         safeUpdateLayout(getCurrentLayout());
         // If no state was preserved, there is no layout to recover.
         if (latestLayout == null) {
-            recovered.set(true);
+            recovered = true;
         }
 
         if ((Boolean) opts.get("--single")) {
@@ -164,32 +163,23 @@ public class ManagementServer extends AbstractServer {
     }
 
     private void bootstrapPrimarySequencerServer() {
-        int bootstrapRetryLimit = sequencerBootstrapRetries;
-        while (bootstrapRetryLimit-- > 0) {
-            try {
-                String primarySequencer = latestLayout.getSequencers().get(0);
-                boolean bootstrapResult = (boolean) getCorfuRuntime().getRouter(primarySequencer)
-                        .getClient(SequencerClient.class)
-                        .bootstrap(0L, Collections.emptyMap(), latestLayout.getEpoch())
-                        .get();
-                if (!bootstrapResult) {
-                    log.warn("Sequencer already bootstrapped.");
-                } else {
-                    log.info("Bootstrapped sequencer server at epoch:{}", latestLayout.getEpoch());
-                }
-                sequencerBootstrapped = true;
-                return;
-            } catch (InterruptedException | ExecutionException e) {
-                log.error("Bootstrapping sequencer failed. Retrying: {}", e);
+        try {
+            String primarySequencer = latestLayout.getSequencers().get(0);
+            boolean bootstrapResult = getCorfuRuntime().getRouter(primarySequencer)
+                    .getClient(SequencerClient.class)
+                    .bootstrap(0L, Collections.emptyMap(), latestLayout.getEpoch())
+                    .get();
+            sequencerBootstrappedFuture.complete(bootstrapResult);
+            if (!bootstrapResult) {
+                log.warn("Sequencer already bootstrapped.");
+            } else {
+                log.info("Bootstrapped sequencer server at epoch:{}", latestLayout.getEpoch());
             }
-            try {
-                Thread.sleep(sequencerBootstrapRetryTimeout);
-            } catch (InterruptedException ie) {
-                log.warn("sequencer bootstrap retry interrupted.");
-            }
-            getCorfuRuntime().invalidateLayout();
+            return;
+        } catch (InterruptedException | ExecutionException e) {
+            log.error("Bootstrapping sequencer failed. Retrying: {}", e);
         }
-        log.error("Sequencer Bootstrap failed. Retries exhausted.");
+        getCorfuRuntime().invalidateLayout();
     }
 
     private boolean recover() {
@@ -412,17 +402,22 @@ public class ManagementServer extends AbstractServer {
     /**
      * Schedules the failure detector task only if the previous task is completed.
      */
-    private void failureDetectorScheduler() {
+    private synchronized void failureDetectorScheduler() {
         if (latestLayout == null && bootstrapEndpoint == null) {
             log.warn("Management Server waiting to be bootstrapped");
             return;
         }
         // Recover if flag is false
-        if (!recovered.getAndSet(true)) {
-            sequencerBootstrapped = recover();
-        }
-
-        if (!isSequencerBootstrapped()) {
+        if (!recovered) {
+            recovered = recover();
+            if (!recovered) {
+                log.error("failureDetectorScheduler: Recovery failed. Retrying.");
+                return;
+            }
+            // If recovery succeeds, reconfiguration was successful.
+            sequencerBootstrappedFuture.complete(true);
+        } else if (!sequencerBootstrappedFuture.isDone()) {
+            // This should be invoked only once in case of a clean startup (not recovery).
             bootstrapPrimarySequencerServer();
         }
 
