@@ -162,6 +162,12 @@ public class CheckpointEntry extends LogEntry {
     @Override
     public void serialize(ByteBuf b) {
         super.serialize(b);
+
+        if (cpType == CheckpointEntryType.END
+                && getDict().get(CheckpointDictKey.START_LOG_ADDRESS) == null) {
+            throw new IllegalArgumentException(dict.get(CheckpointDictKey.START_LOG_ADDRESS));
+        }
+
         b.writeByte(cpType.asByte());
         b.writeLong(checkpointId.getMostSignificantBits());
         b.writeLong(checkpointId.getLeastSignificantBits());
