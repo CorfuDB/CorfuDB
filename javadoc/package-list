@@ -1,4 +1,7 @@
 org.corfudb.annotations
+org.corfudb.generator
+org.corfudb.generator.distributions
+org.corfudb.generator.operations
 org.corfudb.infrastructure
 org.corfudb.infrastructure.log
 org.corfudb.logReader
