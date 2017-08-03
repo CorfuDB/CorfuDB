@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
@@ -182,4 +183,13 @@ public class BaseClient implements IClient {
         throw new ServerNotReadyException();
     }
 
+    /** Generic handler for a server exception. */
+    @ClientHandler(type = CorfuMsgType.ERROR_SERVER_EXCEPTION)
+    private static Object handleServerException(CorfuPayloadMsg<ExceptionMsg> msg,
+                                                ChannelHandlerContext ctx, IClientRouter r)
+        throws Throwable {
+        log.warn("Server threw exception for request {}", msg.getRequestID(),
+                msg.getPayload().getThrowable());
+        throw msg.getPayload().getThrowable();
+    }
 }
