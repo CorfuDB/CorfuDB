@@ -3,11 +3,11 @@ package org.corfudb.infrastructure.log;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
+import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
 
 import io.netty.buffer.ByteBuf;
 
 import java.io.File;
-import java.io.FileFilter;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -15,7 +15,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 import io.netty.buffer.Unpooled;
-import org.apache.commons.io.filefilter.WildcardFileFilter;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
@@ -25,7 +24,6 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -402,7 +400,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Verify that first 25 segments have been deleted
         String[] afterTrimFiles = logs.list();
-        assertThat((long) afterTrimFiles.length).isEqualTo((numSegments - endSegment) * filesPerSegment);
+        assertThat(afterTrimFiles).hasSize((int)((numSegments - endSegment + 1) * filesPerSegment));
 
         Set<String> fileNames = new HashSet(Arrays.asList(afterTrimFiles));
         for (long x = endSegment + 1; x < numSegments; x++) {
@@ -446,12 +444,34 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.prefixTrim(StreamLogFiles.RECORDS_PER_LOG_FILE / 2);
         log.compact();
         log = new StreamLogFiles(getContext(), false);
-        final long midSegmentAddress = StreamLogFiles.RECORDS_PER_LOG_FILE + 5;
+        final long midSegmentAddress = RECORDS_PER_LOG_FILE + 5;
         log.prefixTrim(midSegmentAddress);
         log.compact();
         log = new StreamLogFiles(getContext(), false);
 
         assertThat(log.getGlobalTail()).isEqualTo(midSegmentAddress);
-        assertThat(((StreamLogFiles)log).getTrimMark()).isEqualTo(midSegmentAddress + 1);
+        assertThat(log.getTrimMark()).isEqualTo(midSegmentAddress + 1);
+    }
+
+    @Test
+    public void testPrefixTrimAfterRestart() {
+        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        StreamLog log = new StreamLogFiles(getContext(), false);
+
+        final long numSegments = 3;
+        for (long x  = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
+            writeToLog(log, x);
+        }
+
+        final long trimMark = RECORDS_PER_LOG_FILE * 2 + 100;
+        log.prefixTrim(trimMark);
+        log.close();
+
+        log = new StreamLogFiles(getContext(), false);
+        log.compact();
+
+        File logs = new File(logDir);
+        final int lastTwoSegmentsFiles = 3 * 2;
+        assertThat(logs.list()).hasSize(lastTwoSegmentsFiles);
     }
 }

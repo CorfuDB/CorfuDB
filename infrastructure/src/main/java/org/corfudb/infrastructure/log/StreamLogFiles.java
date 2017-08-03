@@ -11,6 +11,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
 import java.io.File;
+import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -56,7 +57,6 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 
 
 /**
@@ -387,26 +387,34 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                                     + " attempting to trim anyways", sh.getSegment(),
                             sh.getRefCount());
                 }
-
                 sh.close();
-
-                File logFile = new File(sh.getFileName());
-                File trimmedFile = new File(getTrimmedFilePath(sh.getFileName()));
-                File pendingFile = new File(getPendingTrimsFilePath(sh.getFileName()));
-
-                Set<File> files = new HashSet(Arrays.asList(logFile, trimmedFile, pendingFile));
-
-                for (File file : files) {
-                    long delta = file.length();
-
-                    if (!file.delete()) {
-                        log.error("trimPrefix: Couldn't delete file {}", file.getName());
-                    } else {
-                        freedBytes += delta;
-                        numFiles++;
-                    }
-                }
                 writeChannels.remove(sh.getFileName());
+            }
+        }
+
+        File dir = new File(logDir);
+        FileFilter fileFilter = new FileFilter() {
+            public boolean accept(File file) {
+                try {
+                    String segmentStr = file.getName().split("\\.")[0];
+                    return Long.parseLong(segmentStr) < endSegment;
+                } catch (Exception e) {
+                    log.warn("trimPrefix: ignoring file {}", file.getName());
+                    return false;
+                }
+            }
+        };
+
+        File[] files = dir.listFiles(fileFilter);
+
+        for (File file : files) {
+            long delta = file.length();
+
+            if (!file.delete()) {
+                log.error("trimPrefix: Couldn't delete file {}", file.getName());
+            } else {
+                freedBytes += delta;
+                numFiles++;
             }
         }
 
