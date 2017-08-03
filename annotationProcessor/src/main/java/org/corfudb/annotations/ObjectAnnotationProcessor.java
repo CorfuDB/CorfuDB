@@ -383,8 +383,10 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                         &&
                                 methodSet.stream().noneMatch(x -> x.method.toString()
                                 .equals(method.toString()))) {
-                            methodSet.add(new SmrMethodInfo(method,
-                                            ifaceElement, true));
+                            if (method.getAnnotation(DontInstrument.class) == null) {
+                                methodSet.add(new SmrMethodInfo(method,
+                                        ifaceElement, true));
+                            }
                         }
                     });
         });
@@ -547,7 +549,9 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 (m.hasConflictAnnotations ? conflictField : "null")
                         );
                     }
-                    typeSpecBuilder.addMethod(ms.build());
+                    if (smrMethod.getAnnotation(DontInstrument.class) == null) {
+                        typeSpecBuilder.addMethod(ms.build());
+                    }
                 });
 
         addUpcallMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);

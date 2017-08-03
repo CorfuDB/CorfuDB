@@ -4,13 +4,16 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.reflect.TypeToken;
 import lombok.Data;
 import lombok.Getter;
+import net.openhft.hashing.LongHashFunction;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -24,34 +27,69 @@ public class SMRMultiIndexTest extends AbstractViewTest {
 
     public CorfuRuntime r;
 
-    public class IndexRow {
-
-        @Getter
-        final int id;
-
-        @Getter
-        final String i0;
-
-        @Getter
-        final String i1;
-
-        @Getter
-        final String i2;
-
-        public IndexRow(int id, String i0, String i1, String i2)
-        {
-            this.id = id;
-            this.i0 = i0;
-            this.i1 = i1;
-            this.i2 = i2;
-        }
-
-    }
 
     @Before
     public void setRuntime() throws Exception {
         r = getDefaultRuntime().connect();
     }
+
+    @Test
+    public <K, V> void createIndexTest() throws Exception {
+        List<SMRMultiIndex.IndexSpecification<String, String, Long, AbstractMap.SimpleImmutableEntry<String, String>>> indexSpecifications = new ArrayList<>();
+        indexSpecifications.add(new SMRMultiIndex.IndexSpecification<String, String, Long, AbstractMap.SimpleImmutableEntry<String, String>>(
+                "LEFT_INDEX",
+                (String key , String val) -> LongHashFunction.xx().hashChars(key),
+                (String key , String val) -> new AbstractMap.SimpleImmutableEntry<String, String>(key, val)
+        ));
+        indexSpecifications.add(new SMRMultiIndex.IndexSpecification<String, String, Long, AbstractMap.SimpleImmutableEntry<String, String>>(
+                "RIGHT_INDEX",
+                (String key , String val) -> LongHashFunction.xx().hashChars(key),
+                (String key , String val) -> new AbstractMap.SimpleImmutableEntry<String, String>(key, val)
+        ));
+         SMRMultiIndex<String, String, String, AbstractMap.SimpleImmutableEntry<String, String>> multiIndexMap = r.getObjectsView()
+                .build()
+                .setType(SMRMultiIndex.class)
+                .setStreamName("MultiIndexMap")
+                .setTypeToken(new TypeToken<SMRMultiIndex<String, String, String, AbstractMap.SimpleImmutableEntry<String, String>>>() {})
+                .setArguments(indexSpecifications)
+                .open();
+        SMRMap<String, String> smrMap = r.getObjectsView()
+                .build()
+                .setType(SMRMap.class)
+                .setStreamName("SMRMap")
+                .setTypeToken(new TypeToken<SMRMap>() {})
+                .open();
+
+         final int samples = 500000;
+         final int queries = 100;
+
+        long t = System.currentTimeMillis();
+         for(int i = 0; i < samples ; i++) {
+             multiIndexMap.put("key" + i, "value" + i);
+         }
+        System.out.println("");
+        System.out.println("Time:Puts:" + (System.currentTimeMillis() - t));
+        t = System.currentTimeMillis();
+        for(int i=0; i < queries; i++) {
+            Collection<AbstractMap.SimpleImmutableEntry<String, String>> left = multiIndexMap.getByNamedIndex("LEFT_INDEX", "key1");
+            Collection<AbstractMap.SimpleImmutableEntry<String, String>> right = multiIndexMap.getByNamedIndex("RIGHT_INDEX", "key2");
+            Stream.concat(left.stream().map(e -> e.getKey()), right.stream().map(e -> e.getKey())).collect(Collectors.toList());
+        }
+        System.out.println("Time:Query IDX:"+(System.currentTimeMillis() - t));
+
+        t = System.currentTimeMillis();
+        for(int i = 0; i < samples ; i++) {
+            smrMap.put("key" + i, "value" + i);
+        }
+        System.out.println("Time:Puts:" + (System.currentTimeMillis() - t));
+        t = System.currentTimeMillis();
+        for(int i=0; i < queries; i++)
+            smrMap.scanAndFilterByEntry(e -> e.getKey().equals("key1") || e.getKey().equals("key2")).stream().map(e -> e.getKey()).collect(Collectors.toList());
+        System.out.println("Time:Query SF:"+(System.currentTimeMillis() - t));
+
+
+    }
+    /*
 
     @Test
     @SuppressWarnings("unchecked")
@@ -144,4 +182,7 @@ public class SMRMultiIndexTest extends AbstractViewTest {
                 .contains(row0)
                 .contains(row1);
     }
+    */
+
+
 }
