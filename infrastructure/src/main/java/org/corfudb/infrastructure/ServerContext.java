@@ -78,8 +78,8 @@ public class ServerContext {
         String mp = "corfu.server.";
         synchronized (metrics) {
             if (!isMetricsReportingSetUp(metrics)) {
-                addJvmMetrics(metrics, mp);
-                MetricsUtils.addCacheGauges(metrics, mp + "datastore.cache.", dataStore.getCache());
+//                addJvmMetrics(metrics, mp);
+//                MetricsUtils.addCacheGauges(metrics, mp + "datastore.cache.", dataStore.getCache());
                 MetricsUtils.metricsReportingSetup(metrics);
             }
         }

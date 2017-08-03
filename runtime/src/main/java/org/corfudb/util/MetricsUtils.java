@@ -1,11 +1,11 @@
 package org.corfudb.util;
 
 import com.codahale.metrics.Counter;
-import com.codahale.metrics.CsvReporter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricFilter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.MetricSet;
+import com.codahale.metrics.Slf4jReporter;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.jvm.FileDescriptorRatioGauge;
 import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
@@ -15,10 +15,10 @@ import com.github.benmanes.caffeine.cache.Cache;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
+import org.slf4j.LoggerFactory;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -105,12 +105,13 @@ public class MetricsUtils {
                 }
                 return metricsReportingEnabled;
             };
-            CsvReporter reporter1 = CsvReporter.forRegistry(metrics)
-                    .formatFor(Locale.US)
+
+            Slf4jReporter reporter1 = Slf4jReporter.forRegistry(metrics)
                     .convertRatesTo(TimeUnit.SECONDS)
                     .convertDurationsTo(TimeUnit.MILLISECONDS)
+                    .outputTo(LoggerFactory.getLogger("org.corfudb.metricsdata"))
                     .filter(f)
-                    .build(statDir);
+                    .build();
             reporter1.start(interval, TimeUnit.SECONDS);
         }
     }
