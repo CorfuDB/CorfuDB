@@ -12,6 +12,7 @@ import org.corfudb.annotations.*;
 
 import javax.annotation.Nullable;
 import java.util.*;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -77,7 +78,7 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
     }
 
     /** A registry for index specifications. */
-    final Map<Long, IndexSpecification> indexSpecifications;
+    final Map<String, IndexSpecification> indexSpecifications;
 
     /** The underlying HashMap. */
     final Map<K, V> mainMap;
@@ -85,7 +86,7 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
 
 
     /** Indexes for the main map.*/
-    final Map<Long, Map<I,Set<P>>> indexMaps;
+    final Map<String, Map<I,Set<P>>> indexMaps;
 
     /** Create a new in-memory multi-index given
      * a set of indexing functions. */
@@ -93,10 +94,10 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
 
         this.mainMap = new HashMap<>();
         this.indexSpecifications = new HashMap<>();
-        indexMaps = new HashMap<Long, Map<I,Set<P>>>();
+        indexMaps = new HashMap<String, Map<I,Set<P>>>();
         for(IndexSpecification indexSpecification: indexSpecifications){
-            this.indexSpecifications.put(LongHashFunction.xx().hashChars(indexSpecification.getName()), indexSpecification);
-            this.indexMaps.put(LongHashFunction.xx().hashChars(indexSpecification.getName()), new HashMap<I, Set<P>>());
+            this.indexSpecifications.put(indexSpecification.getName(), indexSpecification);
+            this.indexMaps.put(indexSpecification.getName(), new HashMap<I, Set<P>>());
         }
     }
 
@@ -229,7 +230,7 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
      */
     @Accessor
     public Collection getByNamedIndex(String indexName, I indexKey) {
-        Map<I, Set<P>> indexMap = indexMaps.get(indexName.hashCode());
+        Map<I, Set<P>> indexMap = indexMaps.get(indexName);
         if(indexMap == null)
             return Collections.EMPTY_SET;
         Collection result = indexMap.get(indexKey);
@@ -292,22 +293,22 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
 
 
     public void createIndex(K key, V value) {
-        for(Map.Entry<Long, IndexSpecification> entry: indexSpecifications.entrySet()){
+        for(Map.Entry<String, IndexSpecification> entry: indexSpecifications.entrySet()){
             Collection index = getIndex(entry.getKey(), entry.getValue(), key, value);
             P projection = (P) entry.getValue().getProjectionFunction().generateProjection(key, value);
             index.add(projection);
         }
     }
     public void removeIndex(K key, V value) {
-        for(Map.Entry<Long, IndexSpecification> entry: indexSpecifications.entrySet()){
+        for(Map.Entry<String, IndexSpecification> entry: indexSpecifications.entrySet()){
             Collection index = getIndex(entry.getKey(), entry.getValue(), key, value);
             P projection = (P) entry.getValue().getProjectionFunction().generateProjection(key, value);
             index.remove(projection);
         }
     }
 
-    public Collection getIndex(Long idx, IndexSpecification indexSpecification, K key, V value) {
-        Map<I, Set<P>> indexMap = indexMaps.get(idx);
+    public Collection getIndex(String indexName, IndexSpecification indexSpecification, K key, V value) {
+        Map<I, Set<P>> indexMap = indexMaps.get(indexName);
         I indexKey = (I) indexSpecification.getIndexFunction().generateIndex(key, value);
         Set<P> index = indexMap.get(indexKey);
         if(index == null) {

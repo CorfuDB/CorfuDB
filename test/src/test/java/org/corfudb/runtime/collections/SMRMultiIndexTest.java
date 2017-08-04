@@ -35,17 +35,19 @@ public class SMRMultiIndexTest extends AbstractViewTest {
 
     @Test
     public <K, V> void createIndexTest() throws Exception {
-        List<SMRMultiIndex.IndexSpecification<String, String, Long, AbstractMap.SimpleImmutableEntry<String, String>>> indexSpecifications = new ArrayList<>();
-        indexSpecifications.add(new SMRMultiIndex.IndexSpecification<String, String, Long, AbstractMap.SimpleImmutableEntry<String, String>>(
-                "LEFT_INDEX",
-                (String key , String val) -> LongHashFunction.xx().hashChars(key),
+        List<SMRMultiIndex.IndexSpecification<String, String, String, AbstractMap.SimpleImmutableEntry<String, String>>> indexSpecifications = new ArrayList<>();
+        indexSpecifications.add(new SMRMultiIndex.IndexSpecification<String, String, String, AbstractMap.SimpleImmutableEntry<String, String>>(
+                "INDEX",
+                (String key , String val) -> key,
                 (String key , String val) -> new AbstractMap.SimpleImmutableEntry<String, String>(key, val)
         ));
-        indexSpecifications.add(new SMRMultiIndex.IndexSpecification<String, String, Long, AbstractMap.SimpleImmutableEntry<String, String>>(
+/*
+        indexSpecifications.add(new SMRMultiIndex.IndexSpecification<String, String, String, AbstractMap.SimpleImmutableEntry<String, String>>(
                 "RIGHT_INDEX",
-                (String key , String val) -> LongHashFunction.xx().hashChars(key),
+                (String key , String val) -> key,
                 (String key , String val) -> new AbstractMap.SimpleImmutableEntry<String, String>(key, val)
         ));
+        */
          SMRMultiIndex<String, String, String, AbstractMap.SimpleImmutableEntry<String, String>> multiIndexMap = r.getObjectsView()
                 .build()
                 .setType(SMRMultiIndex.class)
@@ -71,8 +73,8 @@ public class SMRMultiIndexTest extends AbstractViewTest {
         System.out.println("Time:Puts:" + (System.currentTimeMillis() - t));
         t = System.currentTimeMillis();
         for(int i=0; i < queries; i++) {
-            Collection<AbstractMap.SimpleImmutableEntry<String, String>> left = multiIndexMap.getByNamedIndex("LEFT_INDEX", "key1");
-            Collection<AbstractMap.SimpleImmutableEntry<String, String>> right = multiIndexMap.getByNamedIndex("RIGHT_INDEX", "key2");
+            Collection<AbstractMap.SimpleImmutableEntry<String, String>> left = multiIndexMap.getByNamedIndex("INDEX", "key1");
+            Collection<AbstractMap.SimpleImmutableEntry<String, String>> right = multiIndexMap.getByNamedIndex("INDEX", "key2");
             Stream.concat(left.stream().map(e -> e.getKey()), right.stream().map(e -> e.getKey())).collect(Collectors.toList());
         }
         System.out.println("Time:Query IDX:"+(System.currentTimeMillis() - t));
