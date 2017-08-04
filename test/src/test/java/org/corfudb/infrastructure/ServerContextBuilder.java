@@ -23,6 +23,7 @@ public class ServerContextBuilder {
     String cacheSizeHeapRatio = "0.5";
     String address = "test";
     int port = 9000;
+    String seqCache = "1000";
     String managementBootstrapEndpoint = null;
     IServerRouter serverRouter;
 
@@ -35,7 +36,8 @@ public class ServerContextBuilder {
                 new ImmutableMap.Builder<String, Object>()
                 .put("--initial-token", initialToken)
                 .put("--single", single)
-                .put("--memory", memory);
+                .put("--memory", memory)
+                .put("--sequencer-cache-size", seqCache);
         if (logPath != null) {
          builder.put("--log-path", logPath);
         }

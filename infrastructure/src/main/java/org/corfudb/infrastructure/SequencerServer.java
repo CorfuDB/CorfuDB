@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -36,6 +35,8 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
+
+import static org.corfudb.protocols.wireprotocol.TokenType.TX_ABORT_SEQ_OVERFLOW;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -79,11 +80,6 @@ import org.corfudb.util.Utils;
 public class SequencerServer extends AbstractServer {
 
     /**
-     * key-name for storing {@link SequencerServer} state in {@link ServerContext::getDataStore()}.
-     */
-    private static final String PREFIX_SEQUENCER = "SEQUENCER";
-
-    /**
      * Inherit from CorfuServer a server context.
      */
     private final ServerContext serverContext;
@@ -101,11 +97,7 @@ public class SequencerServer extends AbstractServer {
     private final AtomicLong globalLogTail = new AtomicLong(Address
             .getMinAddress());
 
-    /**
-     * remember start point, if sequencer is started as failover sequencer.
-     */
-    private final AtomicLong globalLogStart = new AtomicLong(Address
-            .getMinAddress());
+    private long trimMark = Address.NON_ADDRESS;
 
     /**
      * - {@link SequencerServer::streamTailToGlobalTailMap}:
@@ -175,11 +167,14 @@ public class SequencerServer extends AbstractServer {
         counterTokenSum = metrics.counter(metricsPrefix + "token-sum");
         counterToken0 = metrics.counter(metricsPrefix + "token-query");
 
-        final long expireDuration = 20;
+        long cacheSize = 250_000;
+        if (opts.get("--sequencer-cache-size") != null) {
+            cacheSize = Long.parseLong((String) opts.get("--sequencer-cache-size"));
+
+        }
 
         conflictToGlobalTailCache = Caffeine.newBuilder()
-                .expireAfterWrite(expireDuration, TimeUnit.MINUTES)
-                .expireAfterAccess(expireDuration, TimeUnit.MINUTES)
+                .maximumSize(cacheSize)
                 .removalListener((String k, Long v, RemovalCause cause) -> {
                     if (!RemovalCause.REPLACED.equals(cause)) {
                         log.trace("Updating maxConflictWildcard. Old value = '{}', new value='{}'"
@@ -222,10 +217,10 @@ public class SequencerServer extends AbstractServer {
         log.trace("Commit-req[{}]", txInfo);
         final long txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
 
-        if (txSnapshotTimestamp < globalLogStart.get() - 1) {
-            log.debug("ABORT[{}] snapshot-ts[{}] failover-ts[{}]",
-                    txSnapshotTimestamp, globalLogStart.get());
-            return TokenType.TX_ABORT_NEWSEQ;
+        if (txSnapshotTimestamp < trimMark) {
+            log.debug("ABORT[{}] snapshot-ts[{}] trimMark-ts[{}]", txInfo,
+                    txSnapshotTimestamp, trimMark);
+            return TokenType.TX_ABORT_SEQ_TRIM;
         }
 
         AtomicReference<TokenType> response = new AtomicReference<>(TokenType.NORMAL);
@@ -241,7 +236,8 @@ public class SequencerServer extends AbstractServer {
             if (conflictParamSet != null && conflictParamSet.size() > 0) {
                 // for each key pair, check for conflict;
                 // if not present, check against the wildcard
-                conflictParamSet.forEach(conflictParam -> {
+                for (byte[] conflictParam : conflictParamSet) {
+
                     String conflictKeyHash = getConflictHashCode(entry.getKey(),
                             conflictParam);
                     Long v = conflictToGlobalTailCache.getIfPresent(conflictKeyHash);
@@ -252,16 +248,16 @@ public class SequencerServer extends AbstractServer {
                         log.debug("ABORT[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
                         conflictKey.set(conflictParam);
                         response.set(TokenType.TX_ABORT_CONFLICT);
+                        break;
                     }
 
-                    if (v == null && maxConflictWildcard > txSnapshotTimestamp) {
-                        log.warn("ABORT[{}] conflict-key[{}](WILDCARD ts={})", txInfo,
-                                conflictParam,
-                                maxConflictWildcard);
-                        conflictKey.set(conflictParam);
-                        response.set(TokenType.TX_ABORT_CONFLICT);
+                    if (txSnapshotTimestamp < maxConflictWildcard) {
+                        log.debug("ABORT[{}] snapshot-ts[{}] WILDCARD ts=[{}]",
+                                txInfo, txSnapshotTimestamp, maxConflictWildcard);
+                        response.set(TX_ABORT_SEQ_OVERFLOW);
+                        break;
                     }
-                });
+                }
             } else { // otherwise, check for conflict based on streams updates
                 UUID streamId = entry.getKey();
                 streamTailToGlobalTailMap.compute(streamId, (k, v) -> {
@@ -325,7 +321,11 @@ public class SequencerServer extends AbstractServer {
                                        ChannelHandlerContext ctx, IServerRouter r,
                                        boolean isMetricsEnabled) {
         log.info("trimCache: Starting cache eviction");
-        long trimMark = msg.getPayload();
+        if (trimMark < msg.getPayload()) {
+            // Advance the trim mark, if the new trim request has a higher trim mark.
+            trimMark = msg.getPayload();
+        }
+
         long entries = 0;
         for (Map.Entry<String, Long> entry : conflictToGlobalTailCache.asMap().entrySet()) {
             if (entry.getValue() < trimMark) {
@@ -371,7 +371,6 @@ public class SequencerServer extends AbstractServer {
         //
         if (initialToken > globalLogTail.get()) {
             globalLogTail.set(initialToken);
-            globalLogStart.set(initialToken);
             maxConflictWildcard = initialToken - 1;
             conflictToGlobalTailCache.invalidateAll();
 
