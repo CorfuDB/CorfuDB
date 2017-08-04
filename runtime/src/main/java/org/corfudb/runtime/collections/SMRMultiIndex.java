@@ -1,38 +1,46 @@
 package org.corfudb.runtime.collections;
 
 
-
-import com.google.common.collect.ImmutableList;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-
-import net.openhft.hashing.LongHashFunction;
 import org.corfudb.annotations.*;
 
 import javax.annotation.Nullable;
 import java.util.*;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 /**
  * //FIXME: These indexes are secondary indexes on a data structure. These should be more like a library that
  * // FIXME: extends the functionality of SMRMap and does not need to be a separate standalone datastructure.
  * This object implements a multi-indexed map.
  *
- * Maps are indexed by their row index, R, as well as multiple column indexes
- * calculated at insert time using a set of index functions, which generate
+ * Maps are indexed by their row index, R, as well as multiple Named indexes
+ * calculated at insert time using index functions, which generate
  * indexes from the inserted value.
  *
- * The map can be queried via the row index or by any column index. Multiple
- * values may exist at any given column index, and the implementation returns
- * a collection.
+ * The Main Indexing Data Structure.
+ * Each named index maintains a <Code>Map</Code> of indexKeys that in turn
+ * point to a <Code>Map</Code> of keys and values from the main <Code>Map</Code>
+ * datastructure. This multi-level <Code>Map</Code> provides flexibility for the current use case.
+ *
+ *  ____________________________________________________________________________________________
+ * | <String>IndexName</String> -->  ___________________________________________________________|
+ * |                                 | <I>IndexKey1</I> --> ____________________________________|
+ * |                                 |                     |<K>PrimaryKey1</K> --><V>Value1</V> |
+ * |                                 |                     |<K>PrimaryKey2</K> --><V>Value2</V> |
+ * |                                 |                     |____________________________________|
+ * |                                 |                     |____________________________________|
+ * |                                 | <I>IndexKey2</I> -->|<K>PrimaryKey1</K> --><V>Value1</V> |
+ * |                                 |                     |<K>PrimaryKey3</K> --><V>Value3</V> |
+ * |_________________________________|_____________________|____________________________________|
+ *
+ *
  *
  * Created by mwei on 4/7/17.
  */
 //FIXME: having four generics is clunky. We need to come up with a simpler interface.
 @CorfuObject
-public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
+public class SMRMultiIndex<K, V, I> implements Map<K, V> {
 
     //TODO Index function is too generic and can be source of inefficiency
     //TODO Maybe there should be efficient implementations that can do efficient
@@ -41,7 +49,7 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
      *
      * @param <K> The type of the key used in indexing.
      * @param <V> The type of the value used in indexing.
-     * @param <I> The type of index key.
+     * //@param <I> The type of index key.
      */
     @FunctionalInterface
     public interface IndexFunction<K, V, I>{
@@ -50,42 +58,64 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
 
     /**
      * The interface for a projection function.
-     * @param <K>   The type of the key used in projection.
+     * //@param <K>   The type of the key used in projection.
      * @param <V>   The type of the value used in projection.
      * @param <P>   The type of the projection returned.
      */
     @FunctionalInterface
-    public interface ProjectionFunction<K, V, P>{
-        P generateProjection(K k, V v);
+    public interface ProjectionFunction<K, V, I, P>{
+        P generateProjection(K k, V v, I i);
     }
 
     /**
-     * Data holder for Index specification.
+     * Data holder for User to be able to specify the index creation.
+     * It takes in a list of IndexFunction to index the main
+     * Map in different ways.
+     *
      * @param <K> The type of the key.
      * @param <V> The type of the value.
      * @param <I> The type of the index key.
-     * @param <P> The type of projected value for the index
+     * //@param <P> The type of projected value for the index
      */
     @Data
     @EqualsAndHashCode(of = {"name"})
     @AllArgsConstructor
-    public static class IndexSpecification<K, V, I, P>{
+    public static class IndexSpecification<K, V, I>{
         String name;
-        private IndexFunction<K, V, I> indexFunction;
-        private ProjectionFunction<K, V, P> projectionFunction;
-
+        private List<IndexFunction<K, V, I>> indexFunctions;
     }
 
-    /** A registry for index specifications. */
-    final Map<Long, IndexSpecification> indexSpecifications;
+    /**
+     * To Specify multiple named indexes for the Main Map.
+     */
+    final Map<String, IndexSpecification> indexSpecifications;
 
     /** The underlying HashMap. */
     final Map<K, V> mainMap;
 
 
+    /**
+     * The Main Indexing Data Structure.
+     * Each named index maintains a <Code>Map</Code> of indexKeys that in turn
+     * point to a <Code>Map</Code> of keys and values from the main <Code>Map</Code>
+     * datastructure. This multi-level <Code>Map</Code> provides flexibility for the current use case.
+     *
+     *  ____________________________________________________________________________________________
+     * | <String>IndexName</String> -->  ___________________________________________________________|
+     * |                                 | <I>IndexKey1</I> --> ____________________________________|
+     * |                                 |                     |<K>PrimaryKey1</K> --><V>Value1</V> |
+     * |                                 |                     |<K>PrimaryKey2</K> --><V>Value2</V> |
+     * |                                 |                     |____________________________________|
+     * |                                 |                     |____________________________________|
+     * |                                 | <I>IndexKey2</I> -->|<K>PrimaryKey1</K> --><V>Value1</V> |
+     * |                                 |                     |<K>PrimaryKey3</K> --><V>Value3</V> |
+     * |_________________________________|_____________________|____________________________________|
+     *
+     *
+     */
 
     /** Indexes for the main map.*/
-    final Map<Long, Map<I,Set<P>>> indexMaps;
+    final Map<String, Map<I,Map<K,V>>> indexMaps;
 
     /** Create a new in-memory multi-index given
      * a set of indexing functions. */
@@ -93,10 +123,11 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
 
         this.mainMap = new HashMap<>();
         this.indexSpecifications = new HashMap<>();
-        indexMaps = new HashMap<Long, Map<I,Set<P>>>();
+        indexMaps = new HashMap<String, Map<I,Map<K,V>>>();
+
         for(IndexSpecification indexSpecification: indexSpecifications){
-            this.indexSpecifications.put(LongHashFunction.xx().hashChars(indexSpecification.getName()), indexSpecification);
-            this.indexMaps.put(LongHashFunction.xx().hashChars(indexSpecification.getName()), new HashMap<I, Set<P>>());
+            this.indexSpecifications.put(indexSpecification.getName(), indexSpecification);
+            this.indexMaps.put(indexSpecification.getName(), new HashMap<I, Map<K,V>>());
         }
     }
 
@@ -115,9 +146,9 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
 
         V previous = mainMap.put(key, value);
         if(previous != null) {
-            removeIndex(key, previous);
+            removeIndexes(key, previous);
         }
-        createIndex(key, value);
+        createIndexes(key, value);
         return previous;
     }
 
@@ -132,7 +163,7 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
      *                          previous value in the map.
      */
     @DontInstrument
-    V undoPutRecord(SMRMultiIndex<K,V,I,P> index, K key, V value) {
+    V undoPutRecord(SMRMultiIndex<K,V,I> index, K key, V value) {
         return index.get(key);
     }
 
@@ -146,7 +177,7 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
      *                      needed.
      */
     @DontInstrument
-    void undoPut(SMRMultiIndex<K,V,I,P> index, V undoRecord, K key, V value) {
+    void undoPut(SMRMultiIndex<K,V,I> index, V undoRecord, K key, V value) {
         if (undoRecord == null) {
             index.remove(key);
         } else {
@@ -168,7 +199,7 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
     public V remove(Object key) {
         V previous = mainMap.remove(key);
         if(previous != null)
-            removeIndex((K)key, previous);
+            removeIndexes((K)key, previous);
         return previous;
     }
 
@@ -181,7 +212,7 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
      *                          previous value in the map.
      */
     @DontInstrument
-    V undoRemoveRecord(SMRMultiIndex<K,V,I,P> index, K key) {
+    V undoRemoveRecord(SMRMultiIndex<K,V,I> index, K key) {
         return index.get(key);
     }
 
@@ -192,7 +223,7 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
      * @param undoRecord    The undo record generated by undoRemoveRecord
      */
     @DontInstrument
-    void undoRemove(SMRMultiIndex<K,V,I,P> index, V undoRecord, K key) {
+    void undoRemove(SMRMultiIndex<K,V,I> index, V undoRecord, K key) {
         if (undoRecord == null) {
             index.remove(key);
         } else {
@@ -228,12 +259,36 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
      * @return          A set of values which match the given index criteria.
      */
     @Accessor
-    public Collection getByNamedIndex(String indexName, I indexKey) {
-        Map<I, Set<P>> indexMap = indexMaps.get(indexName.hashCode());
-        if(indexMap == null)
+    public Collection getByNamedIndex(String indexName, I indexKey, ProjectionFunction<K,V,I, ?> projectionFunction) {
+        Map<I,Map<K,V>> indexMap = indexMaps.get(indexName);
+        if (indexMap == null)
             return Collections.EMPTY_SET;
-        Collection result = indexMap.get(indexKey);
-        return result != null? ImmutableList.copyOf(result) : Collections.EMPTY_SET;
+        Map<K,V> index = indexMap.get(indexKey);
+        if (index == null)
+            return Collections.EMPTY_SET;
+        List result = new ArrayList();
+        for (Map.Entry<K,V> entry : index.entrySet()) {
+            result.add(projectionFunction.generateProjection(entry.getKey(), entry.getValue(), indexKey));
+        }
+        return result;
+    }
+
+    /** Get a value by a given named index.
+     *
+     * @param indexName  The index of the index function from the list
+     *                  passed in at construction time.
+     * @param indexKey The index Key to use.
+     * @return          A set of values which match the given index criteria.
+     */
+    @Accessor
+    public Collection<Map.Entry<K,V>> getByNamedIndexUnsafe(String indexName, I indexKey) {
+        Map<I,Map<K,V>> indexMap = indexMaps.get(indexName);
+        if (indexMap == null)
+            return Collections.EMPTY_SET;
+        Map<K,V> index = indexMap.get(indexKey);
+        if (index == null)
+            return Collections.EMPTY_SET;
+        return index.entrySet();
     }
 
     /** Get the size of the multi-index.
@@ -291,30 +346,29 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
     }
 
 
-    public void createIndex(K key, V value) {
-        for(Map.Entry<Long, IndexSpecification> entry: indexSpecifications.entrySet()){
-            Collection index = getIndex(entry.getKey(), entry.getValue(), key, value);
-            P projection = (P) entry.getValue().getProjectionFunction().generateProjection(key, value);
-            index.add(projection);
-        }
+    //--------------- Helper Methods to Create/Update/Remove Indexes -----------
+
+    public void createIndexes(K key, V value) {
+        indexSpecifications.entrySet().forEach(entry -> {
+            getIndexList(entry.getKey(), entry.getValue(), key, value).forEach(index -> index.put(key, value));
+        });
     }
-    public void removeIndex(K key, V value) {
-        for(Map.Entry<Long, IndexSpecification> entry: indexSpecifications.entrySet()){
-            Collection index = getIndex(entry.getKey(), entry.getValue(), key, value);
-            P projection = (P) entry.getValue().getProjectionFunction().generateProjection(key, value);
-            index.remove(projection);
-        }
+    public void removeIndexes(K key, V value) {
+        indexSpecifications.entrySet().forEach(entry -> {
+            getIndexList(entry.getKey(), entry.getValue(), key, value).forEach(index -> index.remove(key));
+        });
     }
 
-    public Collection getIndex(Long idx, IndexSpecification indexSpecification, K key, V value) {
-        Map<I, Set<P>> indexMap = indexMaps.get(idx);
-        I indexKey = (I) indexSpecification.getIndexFunction().generateIndex(key, value);
-        Set<P> index = indexMap.get(indexKey);
-        if(index == null) {
-            index = new HashSet<P>();
-            indexMap.put(indexKey, index);
+    public List<Map<K, V>> getIndexList(String indexName, IndexSpecification indexSpecification, K key, V value) {
+
+        List<Map<K, V>> indexes = new ArrayList<Map<K, V>>();
+
+        for (Object indexFunction : indexSpecification.getIndexFunctions()) {
+            I indexKey = (I) ((IndexFunction<K, V, I>) indexFunction).generateIndex(key, value);
+            Map<K, V> index = indexMaps.get(indexName).computeIfAbsent(indexKey, K -> new HashMap<>());
+            indexes.add(index);
         }
-        return index;
+        return indexes;
     }
 
 }
