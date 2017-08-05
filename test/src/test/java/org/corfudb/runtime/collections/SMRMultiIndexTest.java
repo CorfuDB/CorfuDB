@@ -1,10 +1,7 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.reflect.TypeToken;
-import lombok.Data;
-import lombok.Getter;
-import net.openhft.hashing.LongHashFunction;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Before;
@@ -12,7 +9,6 @@ import org.junit.Test;
 
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class SMRMultiIndexTest extends AbstractViewTest {
 
-    @Getter
+    @lombok.Getter
     final String defaultConfigurationString = getDefaultEndpoint();
 
     public CorfuRuntime r;
@@ -35,24 +31,18 @@ public class SMRMultiIndexTest extends AbstractViewTest {
 
     @Test
     public <K, V> void createIndexTest() throws Exception {
-        List<SMRMultiIndex.IndexSpecification<String, String, String>> indexSpecifications = new ArrayList<>();
-        indexSpecifications.add(new SMRMultiIndex.IndexSpecification<String, String, String>(
+        List<SMRMultiIndex.IndexSpecification<String, String, String, Map.Entry>> indexSpecifications = new ArrayList<>();
+        indexSpecifications.add(new SMRMultiIndex.IndexSpecification<String, String, String, Map.Entry>(
                 "INDEX",
-                Arrays.asList((String key , String val) -> key)
-               // (String key , String val) -> new AbstractMap.SimpleImmutableEntry<String, String>(key, val)
+                Arrays.asList((String key , String val) -> key),
+               (String key , String val) -> new AbstractMap.SimpleEntry<String, String>(key, val)
         ));
-/*
-        indexSpecifications.add(new SMRMultiIndex.IndexSpecification<String, String, String, AbstractMap.SimpleImmutableEntry<String, String>>(
-                "RIGHT_INDEX",
-                (String key , String val) -> key,
-                (String key , String val) -> new AbstractMap.SimpleImmutableEntry<String, String>(key, val)
-        ));
-        */
-         SMRMultiIndex<String, String, String> multiIndexMap = r.getObjectsView()
+
+         SMRMultiIndex<String, String, String, Map.Entry> multiIndexMap = r.getObjectsView()
                 .build()
                 .setType(SMRMultiIndex.class)
                 .setStreamName("MultiIndexMap")
-                .setTypeToken(new TypeToken<SMRMultiIndex<String, String, String>>() {})
+                .setTypeToken(new TypeToken<SMRMultiIndex<String, String, String, Map.Entry>>() {})
                 .setArguments(indexSpecifications)
                 .open();
         SMRMap<String, String> smrMap = r.getObjectsView()
@@ -73,16 +63,16 @@ public class SMRMultiIndexTest extends AbstractViewTest {
         System.out.println("Time:Puts:" + (System.nanoTime() - t));
         t = System.nanoTime();
         for(int i=0; i < queries; i++) {
-            Collection<AbstractMap.SimpleEntry<String, String>> left = multiIndexMap.getByNamedIndex("INDEX", "key1", (k, v, idx) -> new AbstractMap.SimpleEntry<String, String>(k, v));
-            Collection<AbstractMap.SimpleEntry<String, String>> right = multiIndexMap.getByNamedIndex("INDEX", "key2",(k, v, idx) -> new AbstractMap.SimpleEntry<String, String>(k, v));
+            Collection<Map.Entry<String, Map.Entry>> left = multiIndexMap.getByNamedIndex("INDEX", "key1");
+            Collection<Map.Entry<String, Map.Entry>> right = multiIndexMap.getByNamedIndex("INDEX", "key2");
             //System.out.println(Stream.concat(left.stream().map(e -> e.getKey()), right.stream().map(e -> e.getKey())).collect(Collectors.toList()));
             Stream.concat(left.stream().map(e -> e.getKey()), right.stream().map(e -> e.getKey())).collect(Collectors.toList());
         }
         System.out.println("Time:Query IDX:"+(System.nanoTime() - t));
         t = System.nanoTime();
         for(int i=0; i < queries; i++) {
-            Collection<Map.Entry<String, String>> left = multiIndexMap.getByNamedIndexUnsafe("INDEX", "key1");
-            Collection<Map.Entry<String, String>> right = multiIndexMap.getByNamedIndexUnsafe("INDEX", "key2");
+            Collection<Map.Entry<String, Map.Entry>> left = multiIndexMap.getByNamedIndex("INDEX", "key1");
+            Collection<Map.Entry<String, Map.Entry>> right = multiIndexMap.getByNamedIndex("INDEX", "key2");
             //System.out.println(Stream.concat(left.stream().map(e -> e.getKey()), right.stream().map(e -> e.getKey())).collect(Collectors.toList()));
             Stream.concat(left.stream().map(e -> e.getKey()), right.stream().map(e -> e.getKey())).collect(Collectors.toList());
         }
