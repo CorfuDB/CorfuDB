@@ -30,9 +30,7 @@ public class CorfuTableTest extends AbstractViewTest {
 
         @Getter
         final CorfuTable.ProjectionFunction<String, String, String, String> projectionFunction
-                = (i, e) -> e.stream()
-                             .map(entry -> entry.getValue())
-                             .collect(Collectors.toList());
+                = (i, s) -> s.map(entry -> entry.getValue());
     }
 
     @Test
