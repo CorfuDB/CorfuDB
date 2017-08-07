@@ -28,6 +28,25 @@ import org.corfudb.annotations.DontInstrument;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
 
+/** The CorfuTable implements a simple key-value store.
+ *
+ * <p>The primary interface to the CorfuTable is a Map, where the keys must be unique and
+ * each key is mapped to exactly one value. Null values are not permitted.
+ *
+ * <p>The CorfuTable also supports an unlimited number of secondary indexes, which
+ * the user provides at construction time as an enum which implements the IndexSpecificaiton
+ * interface. An index specification consists of a IndexFunction, which returns a set of secondary
+ * keys (indexes) the value should be mapped to. Secondary indexes are many-to-many: values
+ * can be mapped to multiple indexes, and indexes can be mapped to multiples values. Each
+ * IndexSpecification also specifies a projection function, which specifies a transformation
+ * that can be done on a retrieval on the index. A common projection is to emit only the
+ * values.
+ *
+ * @param <K>   The type of the primary key.
+ * @param <V>   The type of the values to be mapped.
+ * @param <F>   The type of the index specification enumeration.
+ * @param <I>   The type of the index.
+ */
 @CorfuObject
 public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification, I>
         implements Map<K, V> {
@@ -61,11 +80,22 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
                                               @Nonnull Collection<Map.Entry<K, V>> entriesUnsafe);
     }
 
+    /**
+     * The interface for a index specification, which consists of a indexing function
+     * and a projection functino.
+     * @param <K>   The type of the primary key on the map.
+     * @param <V>   The type of the value on the map.
+     * @param <I>   The type of the index.
+     * @param <P>   The type returned by the projection function.
+     */
     public interface IndexSpecification<K, V, I, P> {
         IndexFunction<K, V, I> getIndexFunction();
         ProjectionFunction<K, V, I, P> getProjectionFunction();
     }
 
+    /** An index specification enumeration which has no index specifications.
+     *  Using this enumeration effectively disables secondary indexes.
+     */
     enum NoSecondaryIndex implements IndexSpecification {
         ;
 
@@ -80,6 +110,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         }
     }
 
+    /** The "main" map which contains the primary key-value mappings. */
     protected final Map<K,V> mainMap = new HashMap<>();
 
     protected final Set<F> indexFunctions;
@@ -172,6 +203,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         undoRemove(table, undoRecord, key);
     }
 
+    @DontInstrument
     Object[] putAllConflictFunction(Map<? extends K, ? extends V> m) {
         return m.keySet().stream()
                 .map(Object::hashCode)
