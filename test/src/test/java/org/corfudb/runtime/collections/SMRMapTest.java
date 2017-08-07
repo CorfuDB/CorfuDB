@@ -53,7 +53,8 @@ public class SMRMapTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String,
+                        CorfuTable.NoSecondaryIndex, Void>>() {})
                 .open();
 
         testMap.clear();
@@ -73,7 +74,8 @@ public class SMRMapTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String,
+                        CorfuTable.NoSecondaryIndex, Void>>() {})
                 .open();
 
         corfuInstancesMap.clear();
@@ -89,7 +91,7 @@ public class SMRMapTest extends AbstractViewTest {
         // ScanAndFilterByEntry
         Predicate<Map.Entry<String, String>> valuePredicate =
                 p -> p.getValue().equals("CorfuServer");
-        Collection<Map.Entry<String, String>> filteredMap = ((SMRMap)corfuInstancesMap)
+        Collection<Map.Entry<String, String>> filteredMap = ((CorfuTable)corfuInstancesMap)
                 .scanAndFilterByEntry(valuePredicate);
 
         assertThat(filteredMap.size()).isEqualTo(2);
@@ -99,7 +101,8 @@ public class SMRMapTest extends AbstractViewTest {
         }
 
         // ScanAndFilter (Deprecated Method)
-        List<String> corfuServerList = ((SMRMap)corfuInstancesMap).scanAndFilter(p -> p.equals("CorfuServer"));
+        List<String> corfuServerList = ((CorfuTable)corfuInstancesMap)
+                .scanAndFilter(p -> p.equals("CorfuServer"));
 
         assertThat(corfuServerList.size()).isEqualTo(2);
 

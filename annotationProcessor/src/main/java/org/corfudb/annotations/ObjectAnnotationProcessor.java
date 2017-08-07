@@ -547,7 +547,10 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 (m.hasConflictAnnotations ? conflictField : "null")
                         );
                     }
-                    typeSpecBuilder.addMethod(ms.build());
+                    // Don't instrument methods not marked for instrumentation
+                    if (smrMethod.getAnnotation(DontInstrument.class) == null) {
+                        typeSpecBuilder.addMethod(ms.build());
+                    }
                 });
 
         addUpcallMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
