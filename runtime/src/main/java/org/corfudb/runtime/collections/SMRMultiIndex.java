@@ -9,6 +9,8 @@ import org.corfudb.annotations.*;
 
 import javax.annotation.Nullable;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
  * //FIXME: These indexes are secondary indexes on a data structure. These should be more like a library that
@@ -268,7 +270,7 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
         Map<K,P> index = indexMap.get(indexKey);
         if (index == null)
             return Collections.EMPTY_SET;
-        return ImmutableSet.copyOf(index.entrySet());
+        return index.entrySet();
     }
 
     /** Get the size of the multi-index.
@@ -351,7 +353,7 @@ public class SMRMultiIndex<K, V, I, P> implements Map<K, V> {
 
         for (Object indexFunction : indexSpecification.getIndexFunctions()) {
             I indexKey = (I) ((IndexFunction<K, V, I>) indexFunction).generateIndex(key, value);
-            Map<K, P> index = indexMaps.get(indexName).computeIfAbsent(indexKey, K -> new HashMap<>());
+            Map<K, P> index = indexMaps.get(indexName).computeIfAbsent(indexKey, K -> new ConcurrentHashMap<>());
             indexes.add(index);
         }
         return indexes;

@@ -34,7 +34,7 @@ public class SMRMultiIndexTest extends AbstractViewTest {
         List<SMRMultiIndex.IndexSpecification<String, String, String, Map.Entry>> indexSpecifications = new ArrayList<>();
         indexSpecifications.add(new SMRMultiIndex.IndexSpecification<String, String, String, Map.Entry>(
                 "INDEX",
-                Arrays.asList((String key , String val) -> key),
+                Arrays.asList((String key , String val) -> key.contains("5") ? "five": key ),
                (String key , String val) -> new AbstractMap.SimpleEntry<String, String>(key, val)
         ));
 
@@ -55,41 +55,33 @@ public class SMRMultiIndexTest extends AbstractViewTest {
          final int samples = 500000;
          final int queries = 100;
 
-        long t = System.nanoTime();
+        long t = System.currentTimeMillis();
          for(int i = 0; i < samples ; i++) {
              multiIndexMap.put("key" + i, "value" + i);
          }
         System.out.println("");
-        System.out.println("Time:Puts:" + (System.nanoTime() - t));
-        t = System.nanoTime();
+        System.out.println("Time:Puts:" + (System.currentTimeMillis() - t));
+        t = System.currentTimeMillis();
         for(int i=0; i < queries; i++) {
             Collection<Map.Entry<String, Map.Entry>> left = multiIndexMap.getByNamedIndex("INDEX", "key1");
-            Collection<Map.Entry<String, Map.Entry>> right = multiIndexMap.getByNamedIndex("INDEX", "key2");
+            Collection<Map.Entry<String, Map.Entry>> right = multiIndexMap.getByNamedIndex("INDEX", "five");
             //System.out.println(Stream.concat(left.stream().map(e -> e.getKey()), right.stream().map(e -> e.getKey())).collect(Collectors.toList()));
             Stream.concat(left.stream().map(e -> e.getKey()), right.stream().map(e -> e.getKey())).collect(Collectors.toList());
         }
-        System.out.println("Time:Query IDX:"+(System.nanoTime() - t));
-        t = System.nanoTime();
-        for(int i=0; i < queries; i++) {
-            Collection<Map.Entry<String, Map.Entry>> left = multiIndexMap.getByNamedIndex("INDEX", "key1");
-            Collection<Map.Entry<String, Map.Entry>> right = multiIndexMap.getByNamedIndex("INDEX", "key2");
-            //System.out.println(Stream.concat(left.stream().map(e -> e.getKey()), right.stream().map(e -> e.getKey())).collect(Collectors.toList()));
-            Stream.concat(left.stream().map(e -> e.getKey()), right.stream().map(e -> e.getKey())).collect(Collectors.toList());
-        }
-        System.out.println("Time:Query IDX Unsafe:"+(System.nanoTime() - t));
+        System.out.println("Time:Query IDX:"+(System.currentTimeMillis() - t));
 
-        t = System.nanoTime();
+        t = System.currentTimeMillis();
         for(int i = 0; i < samples ; i++) {
             smrMap.put("key" + i, "value" + i);
         }
-        System.out.println("Time:Puts:" + (System.nanoTime() - t));
-        t = System.nanoTime();
+        System.out.println("Time:Puts:" + (System.currentTimeMillis() - t));
+        t = System.currentTimeMillis();
         for(int i=0; i < queries; i++) {
-            //System.out.println(smrMap.scanAndFilterByEntry(e -> e.getKey().equals("key1") || e.getKey().equals("key2")).stream().map(e -> e.getKey()).collect(Collectors.toList()));
-            smrMap.scanAndFilterByEntry(e -> e.getKey().equals("key1") || e.getKey().equals("key2")).stream().map(e -> e.getKey()).collect(Collectors.toList());
+            //System.out.println(smrMap.scanAndFilterByEntry(e -> e.getKey().equals("key1") || e.getKey().contains("5")).stream().map(e -> e.getKey()).collect(Collectors.toList()));
+            smrMap.scanAndFilterByEntry(e -> e.getKey().equals("key1") || e.getKey().contains("5")).stream().map(e -> e.getKey()).collect(Collectors.toList());
 
         }
-        System.out.println("Time:Query SF:"+(System.nanoTime() - t));
+        System.out.println("Time:Query SF:"+(System.currentTimeMillis() - t));
 
 
     }
