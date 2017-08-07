@@ -51,12 +51,31 @@ public class CorfuTableTest extends AbstractViewTest {
         corfuTable.put("k3", "b");
 
         assertThat(corfuTable.getByIndex(StringIndexers.BY_FIRST_LETTER, "a"))
-                .containsExactly(new AbstractMap.SimpleImmutableEntry<>("k1", "a"),
-                                 new AbstractMap.SimpleImmutableEntry<>("k2", "ab"));
+                .containsExactly("a", "ab");
 
         assertThat(corfuTable.getByIndex(StringIndexers.BY_VALUE, "ab"))
-                .containsExactly(new AbstractMap.SimpleImmutableEntry<>("k2", "ab"));
+                .containsExactly("ab");
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void emptyIndexesReturnEmptyValues() {
+        CorfuTable<String, String, StringIndexers, String>
+                corfuTable = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(
+                        new TypeToken<CorfuTable<String, String, StringIndexers, String>>() {})
+                .setArguments(StringIndexers.class)
+                .setStreamName("test")
+                .open();
+
+
+        assertThat(corfuTable.getByIndex(StringIndexers.BY_FIRST_LETTER, "a"))
+                .isEmpty();
+
+        assertThat(corfuTable.getByIndex(StringIndexers.BY_VALUE, "ab"))
+                .isEmpty();
+    }
+
 
     @Test
     @SuppressWarnings("unchecked")
