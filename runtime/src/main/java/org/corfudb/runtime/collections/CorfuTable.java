@@ -142,7 +142,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      * @return
      */
     @SuppressWarnings("unchecked")
-    public Collection<Map.Entry<K, V>> getByIndex(@Nonnull F indexFunction, I index) {
+    public Collection<Object> getByIndex(@Nonnull F indexFunction, I index) {
         return  indexFunction.getProjectionFunction()
                                 .generateProjection(index, indexMap
                                 .getOrDefault(indexFunction, ImmutableMultimap.of()).get(index));
