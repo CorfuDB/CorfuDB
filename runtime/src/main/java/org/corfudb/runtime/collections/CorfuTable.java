@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
 
@@ -76,8 +77,9 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      */
     @FunctionalInterface
     public interface ProjectionFunction<K, V, I, P> {
-        @Nonnull Collection<P> generateProjection(I index,
-                                              @Nonnull Collection<Map.Entry<K, V>> entriesUnsafe);
+        @Nonnull
+        Stream<P> generateProjection(I index,
+                                     @Nonnull Stream<Map.Entry<K, V>> entryStream);
     }
 
     /**
@@ -101,12 +103,12 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
 
         @Override
         public IndexFunction getIndexFunction() {
-            return (k, v) -> Collections.emptyList();
+            throw new UnsupportedOperationException();
         }
 
         @Override
         public ProjectionFunction getProjectionFunction() {
-            return (i, e) -> Collections.emptyList();
+            throw new UnsupportedOperationException();
         }
     }
 
@@ -174,9 +176,10 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      */
     @SuppressWarnings("unchecked")
     public Collection<Object> getByIndex(@Nonnull F indexFunction, I index) {
-        return  indexFunction.getProjectionFunction()
+        return (Collection<Object>) indexFunction.getProjectionFunction()
                                 .generateProjection(index, indexMap
-                                .getOrDefault(indexFunction, ImmutableMultimap.of()).get(index));
+                                .get(indexFunction).get(index).parallelStream())
+                                .collect(Collectors.toList());
     }
 
     /** {@inheritDoc} */
@@ -228,8 +231,8 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
                               Map<? extends K, ? extends V> m) {
         ImmutableMap.Builder<K,V> builder = ImmutableMap.builder();
         m.keySet().forEach(k -> builder.put(k,
-                (previousState.get(k) == null ?
-                        (V) CorfuTable.UndoNullable.NULL
+                (previousState.get(k) == null
+                        ? (V) CorfuTable.UndoNullable.NULL
                         : previousState.get(k))));
         return builder.build();
     }
