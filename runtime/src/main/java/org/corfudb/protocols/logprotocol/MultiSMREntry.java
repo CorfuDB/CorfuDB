@@ -57,9 +57,9 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
     void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
         super.deserializeBuffer(b, rt);
 
-        short numUpdates = b.readShort();
+        int numUpdates = b.readInt();
         updates = new ArrayList<>();
-        for (short i = 0; i < numUpdates; i++) {
+        for (int i = 0; i < numUpdates; i++) {
             updates.add(
                     (SMREntry) Serializers.CORFU.deserialize(b, rt));
         }
@@ -68,7 +68,7 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
     @Override
     public void serialize(ByteBuf b) {
         super.serialize(b);
-        b.writeShort(updates.size());
+        b.writeInt(updates.size());
         updates.stream()
                 .forEach(x -> Serializers.CORFU.serialize(x, b));
     }

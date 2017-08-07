@@ -85,9 +85,9 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
     void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
         super.deserializeBuffer(b, rt);
 
-        short numUpdates = b.readShort();
+        int numUpdates = b.readInt();
         entryMap = new HashMap<>();
-        for (short i = 0; i < numUpdates; i++) {
+        for (int i = 0; i < numUpdates; i++) {
             entryMap.put(
                     new UUID(b.readLong(), b.readLong()),
                     ((MultiSMREntry) Serializers.CORFU.deserialize(b, rt)));
@@ -97,7 +97,7 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
     @Override
     public void serialize(ByteBuf b) {
         super.serialize(b);
-        b.writeShort(entryMap.size());
+        b.writeInt(entryMap.size());
         entryMap.entrySet().stream()
                 .forEach(x -> {
                     b.writeLong(x.getKey().getMostSignificantBits());
