@@ -46,7 +46,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     /**
      * The interface for a projection function.
      *
-     * <p> NOTE: The projection function MUST return an immutable collection,
+     * <p> NOTE: The projection function MUST return a new (preferably immutable) collection,
      * the collection of entries passed during this function are NOT safe to use
      * outside the context of this function.
      *
@@ -287,7 +287,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         }
     }
 
-    @Mutator(name = "put", noUpcall = true)
+    @Mutator(name = "remove", noUpcall = true)
     void delete(@ConflictParameter K key) {
         V previous =  mainMap.remove(key);
         unmapSecondaryIndexes(key, previous);
