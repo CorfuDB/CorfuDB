@@ -353,7 +353,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     @Mutator(name = "clear", reset = true)
     public void clear() {
         mainMap.clear();
-        indexMap.clear();
+        indexMap.values().parallelStream().forEach(m -> m.clear());
     }
 
     /** {@inheritDoc} */
