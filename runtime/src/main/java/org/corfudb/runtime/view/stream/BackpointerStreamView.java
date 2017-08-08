@@ -149,17 +149,27 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
      * */
     @Override
     protected ILogData read(final long address) {
-        return runtime.getAddressSpaceView().read(address, addressSpaceOptions);
+        try {
+            return runtime.getAddressSpaceView().read(address, addressSpaceOptions);
+        } catch (TrimmedException te) {
+            processTrimmedException(te);
+            throw te;
+        }
     }
 
     @Nonnull
     @Override
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
-        Map<Long, ILogData> dataMap =
-                runtime.getAddressSpaceView().read(addresses, addressSpaceOptions);
-        return addresses.stream()
-                .map(x -> dataMap.get(x))
-                .collect(Collectors.toList());
+        try {
+            Map<Long, ILogData> dataMap =
+                    runtime.getAddressSpaceView().read(addresses, addressSpaceOptions);
+            return addresses.stream()
+                    .map(x -> dataMap.get(x))
+                    .collect(Collectors.toList());
+        } catch (TrimmedException te) {
+            processTrimmedException(te);
+            throw te;
+        }
     }
 
     /**

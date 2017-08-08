@@ -14,8 +14,8 @@ import org.corfudb.runtime.view.AddressSpaceOptions;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS;
 
@@ -63,7 +63,7 @@ public class RecoveryUtils {
      * @return LogData at address
      */
     static ILogData getLogData(CorfuRuntime runtime, boolean loadInCache, long address) {
-        addressSpaceOptions.setDoCache(loadInCache);
+        addressSpaceOptions.setDoCache(false);
         return runtime.getAddressSpaceView().read(address, addressSpaceOptions);
     }
 
@@ -83,9 +83,14 @@ public class RecoveryUtils {
      */
     static Map<Long, ILogData> getLogData(CorfuRuntime runtime, long start, long end) {
         addressSpaceOptions.setDoCache(false);
-        return runtime.getAddressSpaceView().
-                read(ContiguousSet.create(Range.closedOpen(start, end), DiscreteDomain.longs()),
-                        addressSpaceOptions);
+        Set<Long> addresses = ContiguousSet.create(Range.closedOpen(start, end), DiscreteDomain
+                .longs());
+
+        Map<Long, ILogData> dataMap =
+                runtime.getAddressSpaceView()
+                        .bulkFetchNoBatch(addresses, addressSpaceOptions);
+
+        return dataMap;
     }
 
     /** Deserialize a logData by getting the logEntry

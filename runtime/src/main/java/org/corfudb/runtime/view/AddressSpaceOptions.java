@@ -7,7 +7,7 @@ import lombok.Setter;
 
 /**
  * hold address-space specific options.
- * 
+ *
  * Created by dmalkhi on 7/13/17.
  */
 @AllArgsConstructor @NoArgsConstructor

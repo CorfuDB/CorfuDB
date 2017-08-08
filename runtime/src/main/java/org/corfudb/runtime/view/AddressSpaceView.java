@@ -6,9 +6,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.Iterables;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
@@ -28,9 +26,6 @@ import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
-
-import java.util.Comparator;
-
 
 
 /**
@@ -53,12 +48,12 @@ public class AddressSpaceView extends AbstractView {
             .build(new CacheLoader<Long, ILogData>() {
                 @Override
                 public ILogData load(Long value) throws Exception {
-                    return addressFetch(value);
+                    return cacheFetch(value);
                 }
 
                 @Override
                 public Map<Long, ILogData> loadAll(Iterable<? extends Long> keys) throws Exception {
-                    return addressFetch((Iterable<Long>) keys);
+                    return cacheFetch((Iterable<Long>) keys);
                 }
             });
 
@@ -159,35 +154,48 @@ public class AddressSpaceView extends AbstractView {
     }
 
     public @Nonnull ILogData read(long address, AddressSpaceOptions opts) {
+        ILogData data;
         if (!runtime.isCacheDisabled() && (opts == null || opts.isDoCache())) {
-
-            ILogData data = readCache.get(address);
-            if (data == null || data.getType() == DataType.EMPTY) {
-                throw new RuntimeException("Unexpected return of empty data at address "
-                        + address + " on read");
-            } else if (data.isTrimmed()) {
-                throw new TrimmedException();
-            }
-            return data;
+            data = readCache.get(address);
+        } else {
+            data = fetch(address);
         }
-        return fetch(address);
+
+        if (data == null || data.getType() == DataType.EMPTY) {
+            throw new RuntimeException("Unexpected return of empty data at address "
+                    + address + " on read");
+        } else if (data.isTrimmed()) {
+            throw new TrimmedException();
+        }
+        return data;
     }
 
     /**
-     * Read the given object from a range of addresses.
+     * Read the given object from a set of addresses.
      *
      * @param addresses An iterable with addresses to read from
+     * @param opts determine whether to cache the result
      * @return A result, which be cached.
      */
-    public Map<Long, ILogData> read(Iterable<Long> addresses) {
-        return read(addresses, null);
+    public Map<Long, ILogData> read(Iterable<Long> addresses, AddressSpaceOptions opts) {
+        Map<Long, ILogData> addressesMap;
+        if (!runtime.isCacheDisabled() && (opts == null || opts.isDoCache()) ) {
+            addressesMap = readCache.getAll(addresses);
+        } else {
+            addressesMap = cacheFetch(addresses);
+        }
+
+        for (ILogData logData : addressesMap.values()) {
+            if (logData.isTrimmed()) {
+                throw new TrimmedException();
+            }
+        }
+
+        return addressesMap;
     }
 
-    public Map<Long, ILogData> read(Iterable<Long> addresses, AddressSpaceOptions opts) {
-        if (!runtime.isCacheDisabled() && (opts == null || opts.isDoCache()) ) {
-            return readCache.getAll(addresses);
-        }
-        return addressFetch(addresses);
+    public Map<Long, ILogData> read(Iterable<Long> addresses) {
+        return read(addresses, null);
     }
 
     /**
@@ -290,7 +298,7 @@ public class AddressSpaceView extends AbstractView {
      * @return A result to be cached. If the readresult is empty,
      *         This entry will be scheduled to self invalidate.
      */
-    private @Nonnull ILogData addressFetch(long address) {
+    private @Nonnull ILogData cacheFetch(long address) {
         log.trace("CacheMiss[{}]", address);
         ILogData result = fetch(address);
         if (result.getType() == DataType.EMPTY) {
@@ -300,14 +308,15 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
-     * Fetch a collection of addresses for insertion into the cache.
+     * Fetch a collection of addresses.
      *
      * @param addresses collection of addresses to read from.
      * @return A result to be cached
      */
     public @Nonnull
-    Map<Long, ILogData> addressFetch(Iterable<Long> addresses) {
-        Map<Long, ILogData> allAddresses = new HashMap<>();
+    Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
+
+        Map<Long, ILogData> allAddresses = new TreeMap<>();
 
         Iterable<List<Long>> batches = Iterables.partition(addresses, runtime.getBulkReadSize());
 
@@ -318,21 +327,35 @@ public class AddressSpaceView extends AbstractView {
                         .getReplicationProtocol(runtime)
                         .readAll(l, batch)));
             } catch (Exception e) {
-                log.error("addressFetch: Couldn't read addresses {}", batch, e);
+                log.error("cacheFetch: Couldn't read addresses {}", batch, e);
             }
         }
 
         return allAddresses;
     }
 
+    /**
+     * Fetch a collection of addresses.
+     * TODO probably should be renamed bulkRead, since it is public
+     *
+     * @param addresses collection of addresses to read from.
+     * @param options
+     * @return A map of addresses -> log-entries
+     */
+    public @Nonnull
+    Map<Long, ILogData> bulkFetchNoBatch(Set<Long> addresses, AddressSpaceOptions options) {
+        return layoutHelper(l -> l.getReplicationMode(addresses.iterator().next())
+                    .getReplicationProtocol(runtime)
+                    .readRange(l, addresses));
+    }
 
     /**
-     * Explicitly fetch a given address, bypassing the cache.
+     * Explicitly fetch a given address.
      *
      * @param address An address to read from.
-     * @return A result, which will be uncached.
+     * @return A log entry.
      */
-    public @Nonnull ILogData fetch(final long address) {
+    @Nonnull ILogData fetch(final long address) {
         return layoutHelper(l -> l.getReplicationMode(address)
                 .getReplicationProtocol(runtime)
                 .read(l, address)
