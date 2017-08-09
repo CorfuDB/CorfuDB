@@ -115,17 +115,25 @@ public class StreamsView extends AbstractView {
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.CONFLICT,
-                        TransactionalContext.getCurrentContext()
-                );
-            }
-
-            if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ) {
+                        TransactionalContext.getCurrentContext());
+            } else if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ) {
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.NEW_SEQUENCER,
-                        TransactionalContext.getCurrentContext()
-                );
+                        TransactionalContext.getCurrentContext());
+            } else if (tokenResponse.getRespType() == TokenType.TX_ABORT_SEQ_OVERFLOW) {
+                throw new TransactionAbortedException(
+                        conflictInfo,
+                        tokenResponse.getConflictKey(),
+                        AbortCause.SEQUENCER_OVERFLOW,
+                        TransactionalContext.getCurrentContext());
+            } else if (tokenResponse.getRespType() == TokenType.TX_ABORT_SEQ_TRIM) {
+                throw new TransactionAbortedException(
+                        conflictInfo,
+                        tokenResponse.getConflictKey(),
+                        AbortCause.SEQUENCER_TRIM,
+                        TransactionalContext.getCurrentContext());
             }
 
             // Attempt to write to the log

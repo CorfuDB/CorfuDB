@@ -26,7 +26,15 @@ public enum  TokenType implements ICorfuPayload<TokenType> {
 
     // token request for optimistic TX-commit rejected due to a
     // failover-sequencer lacking conflict-resolution info
-    TX_ABORT_NEWSEQ((byte) 3);
+    TX_ABORT_NEWSEQ((byte) 3),
+
+    // Sent when a transaction aborts a transaction due to missing information
+    // (required data evicted from cache)
+    TX_ABORT_SEQ_OVERFLOW((byte) 4),
+
+    // Sent when a transaction aborts because it has an old version (i.e. older than
+    // the trim mark). This is to detect slow transactions
+    TX_ABORT_SEQ_TRIM((byte) 5);
 
     final int val;
 
