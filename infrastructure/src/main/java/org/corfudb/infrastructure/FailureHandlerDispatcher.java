@@ -7,7 +7,7 @@ import java.util.concurrent.ExecutionException;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.recovery.FastSmrMapsLoader;
+import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -204,14 +204,14 @@ public class FailureHandlerDispatcher {
 
             try {
 
-                FastSmrMapsLoader fastSmrMapsLoader = new FastSmrMapsLoader(runtime);
-                fastSmrMapsLoader.setRecoverSequencerMode(true);
-                fastSmrMapsLoader.setLoadInCache(false);
+                FastObjectLoader fastObjectLoader = new FastObjectLoader(runtime);
+                fastObjectLoader.setRecoverSequencerMode(true);
+                fastObjectLoader.setLoadInCache(false);
 
                 // FastSMRLoader sets the logHead based on trim mark.
-                fastSmrMapsLoader.setLogTail(maxTokenRequested);
-                fastSmrMapsLoader.loadMaps();
-                Map<UUID, Long> streamTails = fastSmrMapsLoader.getStreamTails();
+                fastObjectLoader.setLogTail(maxTokenRequested);
+                fastObjectLoader.loadMaps();
+                Map<UUID, Long> streamTails = fastObjectLoader.getStreamTails();
                 verifyStreamTailsMap(streamTails);
 
                 // Configuring the new sequencer.

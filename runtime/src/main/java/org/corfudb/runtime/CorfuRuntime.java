@@ -21,7 +21,7 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.VersionInfo;
-import org.corfudb.recovery.FastSmrMapsLoader;
+import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -572,7 +572,7 @@ public class CorfuRuntime {
         checkVersion();
 
         if (loadSmrMapsAtConnect) {
-            FastSmrMapsLoader fastLoader = new FastSmrMapsLoader(this)
+            FastObjectLoader fastLoader = new FastObjectLoader(this)
                     .setBatchReadSize(getBulkReadSize())
                     .setTimeoutInMinutesForLoading(timeoutInMinutesForFastLoading);
             fastLoader.loadMaps();
