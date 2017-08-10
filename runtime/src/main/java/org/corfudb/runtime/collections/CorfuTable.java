@@ -221,7 +221,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      * @return
      */
     @SuppressWarnings("unchecked")
-    @DontInstrument
+    @Accessor
     public @Nonnull Collection<Object> getByIndex(@Nonnull F indexFunction, I index) {
         return getByIndex(indexFunction, indexFunction.getProjectionFunction(), index);
     }
@@ -234,7 +234,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      * @param <P>                   The projection return type.
      * @return
      */
-    @DontInstrument
+    @Accessor
     public @Nonnull <P> Collection<P> getByIndex(@Nonnull F indexFunction,
                                 @Nonnull ProjectionFunction<K, V, I, P> projectionFunction,
                                 I index) {
@@ -285,7 +285,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     public V put(@ConflictParameter K key, V value) {
         V previous = mainMap.put(key, value);
         // If we have index functions, update the secondary indexes.
-        if (indexFunctions.isEmpty()) {
+        if (!indexFunctions.isEmpty()) {
             unmapSecondaryIndexes(key, previous);
             mapSecondaryIndexes(key, value);
         }
@@ -359,7 +359,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     public void insert(@ConflictParameter K key, V value) {
         V previous = mainMap.put(key, value);
         // If we have index functions, update the secondary indexes.
-        if (indexFunctions.isEmpty()) {
+        if (!indexFunctions.isEmpty()) {
             unmapSecondaryIndexes(key, previous);
             mapSecondaryIndexes(key, value);
         }
@@ -410,7 +410,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
             table.unmapSecondaryIndexes(key, previous);
         } else {
             V previous = table.mainMap.put(key, undoRecord);
-            if (table.indexFunctions.isEmpty()) {
+            if (!table.indexFunctions.isEmpty()) {
                 table.unmapSecondaryIndexes(key, previous);
                 table.mapSecondaryIndexes(key, undoRecord);
             }
@@ -433,7 +433,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
             conflictParameterFunction = "putAllConflictFunction")
     public void putAll(@Nonnull Map<? extends K, ? extends V> m) {
         // If we have no index functions, then just directly put all
-        if (indexFunctions.isEmpty()) {
+        if (!indexFunctions.isEmpty()) {
             mainMap.putAll(m);
         }
         // Otherwise we must update all secondary indexes

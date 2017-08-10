@@ -3,12 +3,7 @@ package org.corfudb.runtime.collections;
 import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 
-import java.util.AbstractMap;
-import java.util.Collection;
 import java.util.Collections;
-import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
 
 import org.assertj.core.data.MapEntry;
 import org.corfudb.runtime.view.AbstractViewTest;
