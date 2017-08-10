@@ -124,7 +124,7 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
                     CorfuTable currentCorfuTable = ((CorfuTable) result);
                     if (arguments.length > 0) {
                         // If current map in cache has no indexer, or there is currently an other index
-                        if (!(currentCorfuTable.hasIndices()) ||
+                        if (!(currentCorfuTable.hasSecondaryIndices()) ||
                             currentCorfuTable.getIndexerClass() != arguments[0].getClass()){
                             ((CorfuTable) result).registerIndex((Class) arguments[0]);
                         }

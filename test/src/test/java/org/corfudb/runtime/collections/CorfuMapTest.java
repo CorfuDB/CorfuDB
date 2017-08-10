@@ -53,7 +53,7 @@ public class CorfuMapTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         testMap.clear();
@@ -73,7 +73,7 @@ public class CorfuMapTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         corfuInstancesMap.clear();
@@ -117,7 +117,7 @@ public class CorfuMapTest extends AbstractViewTest {
         ICorfuSMR testMap = (ICorfuSMR) getRuntime().getObjectsView()
                 .build()
                 .setStreamID(id)
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         assertThat(id)
@@ -131,7 +131,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         testMap.clear();
@@ -152,14 +152,14 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test 1")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
         testMap.clear();
         testMap.put("z", "e");
         Map<String, Map<String, String>> testMap2 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test 2")
-                .setTypeToken(new TypeToken<CorfuMap<String, Map<String, String>>>() {})
+                .setTypeToken(CorfuTable.<String, Map<String, String>>getMapType())
                 .open();
         testMap2.put("a", testMap);
 
@@ -174,7 +174,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap3 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test 1")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         assertThat(testMap3.get("y"))
@@ -189,7 +189,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("a")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         testMap.clear();
@@ -200,7 +200,7 @@ public class CorfuMapTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamName("a")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         assertThat(testMap2.get("z"))
@@ -213,7 +213,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamID(UUID.randomUUID())
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         final int num_threads = PARAMETERS.CONCURRENCY_SOME;
@@ -261,8 +261,7 @@ public class CorfuMapTest extends AbstractViewTest {
                             return getRuntime().getObjectsView()
                                     .build()
                                     .setStreamID(UUID.randomUUID())
-                                    .setTypeToken(new TypeToken<CorfuMap<String, String>>() {
-                                    })
+                                    .setTypeToken(CorfuTable.<String, String>getMapType())
                                     .addOption(ObjectOpenOptions.NO_CACHE)
                                     .open();
                         })
@@ -300,7 +299,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         testMap.put("a", "b");
@@ -322,13 +321,13 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test1")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         Map<String, String> testMap2 = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test2")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         testMap.put("a", "b");
@@ -364,7 +363,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         getRuntime().getObjectsView().TXBegin();
@@ -387,7 +386,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW).asLongStream()
@@ -421,7 +420,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW).asLongStream()
@@ -448,7 +447,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         testMap.clear();
@@ -487,7 +486,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         getRuntime().getObjectsView().TXBegin();
@@ -510,7 +509,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("test")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         testMap.clear();
@@ -539,7 +538,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         assertThat(testMap.put("a", "z"));
@@ -556,7 +555,7 @@ public class CorfuMapTest extends AbstractViewTest {
                     .setStreamName("A")
                     .setSerializer(Serializers.JSON)
                     .addOption(ObjectOpenOptions.NO_CACHE)
-                    .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                    .setTypeToken(CorfuTable.<String,String>getMapType())
                     .open();
 
             getRuntime().getObjectsView().TXBegin();
@@ -575,7 +574,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, TestObject> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setTypeToken(new TypeToken<CorfuMap<String, TestObject>>() {})
+                .setTypeToken(CorfuTable.<String, TestObject>getMapType())
                 .open();
 
         testMap.put("A", new TestObject("A", 2, ImmutableMap.of("A", "B")));
@@ -592,7 +591,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, TestObject> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setTypeToken(new TypeToken<CorfuMap<String, TestObject>>() {})
+                .setTypeToken(CorfuTable.<String, TestObject>getMapType())
                 .open();
 
         IntStream.range(0, PARAMETERS.NUM_ITERATIONS_LOW)
@@ -626,7 +625,7 @@ public class CorfuMapTest extends AbstractViewTest {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamName("A")
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         testMap.put("a", "z");
@@ -643,8 +642,7 @@ public class CorfuMapTest extends AbstractViewTest {
                             return getRuntime().getObjectsView()
                                     .build()
                                     .setStreamID(mapStream)
-                                    .setTypeToken(new TypeToken<CorfuMap<String, String>>() {
-                                    })
+                                    .setTypeToken(CorfuTable.<String, String>getMapType())
                                     .addOption(ObjectOpenOptions.NO_CACHE)
                                     .open();
                         })
@@ -727,7 +725,7 @@ public class CorfuMapTest extends AbstractViewTest {
                 .getObjectsView()
                 .build()
                 .setStreamID(stream)
-                .setTypeToken(new TypeToken<CorfuMap<String, String>>() {})
+                .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         testMap.clear();
@@ -741,7 +739,7 @@ public class CorfuMapTest extends AbstractViewTest {
 
         long startTime = System.nanoTime();
         Map<String, String> testMap2 = getRuntime().getObjectsView().build()
-                .setType(CorfuMap.class)
+                .setTypeToken(CorfuTable.<String, String>getMapType())
                 .setStreamID(stream)
                 .addOption(ObjectOpenOptions.NO_CACHE)
                 .open();

@@ -3,9 +3,9 @@ package org.corfudb.runtime.collections;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
+import com.google.common.reflect.TypeToken;
 
 import java.util.AbstractMap;
 import java.util.ArrayList;
@@ -51,7 +51,37 @@ import org.corfudb.annotations.MutatorAccessor;
  */
 @CorfuObject
 public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification, I>
-        implements Map<K, V> {
+        implements ICorfuMap<K, V> {
+
+    /** Helper function to get a map (non-secondary index) Corfu table.
+     *
+     * @param <K>           Key type
+     * @param <V>           Value type
+     * @return              A type token to pass to the builder.
+     */
+    static <K, V> TypeToken<CorfuTable<K, V, NoSecondaryIndex, Void>>
+        getMapType() {
+        return new TypeToken<CorfuTable<K, V, NoSecondaryIndex, Void>>() {};
+    }
+
+    /** Helper function to get a Corfu Table.
+     *
+     * @param keyClass              The class of the Key
+     * @param valueClass            The class of the Value
+     * @param functionEnumClass     The class of the function enum
+     * @param indexClass            The class of the index
+     * @param <K>                   Key type
+     * @param <V>                   Value type
+     * @param <F>                   Function enum type
+     * @param <I>                   Index type
+     * @return                      A type token to pass to the builder.
+     */
+    static <K, V, F extends Enum<F> & CorfuTable.IndexSpecification, I>
+    TypeToken<CorfuTable<K, V, F, I>>
+    getTableType(Class<K> keyClass, Class<V> valueClass, Class<F> functionEnumClass,
+                 Class<I> indexClass) {
+        return new TypeToken<CorfuTable<K, V, F, I>>() {};
+    }
 
     /**
      * The interface for an indexing function.
@@ -148,8 +178,14 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         return mainMap.isEmpty();
     }
 
+    /** Return whether this table has secondary indexes or not.
+     *
+     * @return  True, if secondary indexes are present. False otherwise.
+     */
     @Accessor
-    public boolean hasIndices() {return !indexFunctions.isEmpty();}
+    public boolean hasSecondaryIndices() {
+        return !indexFunctions.isEmpty();
+    }
 
     @Getter
     public Class indexerClass;
@@ -184,12 +220,48 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      * @return
      */
     @SuppressWarnings("unchecked")
-    public Collection<Object> getByIndex(@Nonnull F indexFunction, I index) {
-        return (Collection<Object>) indexFunction.getProjectionFunction()
-                                .generateProjection(index, indexMap
-                                .get(indexFunction).get(index).parallelStream())
-                                .collect(Collectors.toList());
+    @DontInstrument
+    public @Nonnull Collection<Object> getByIndex(@Nonnull F indexFunction, I index) {
+        return getByIndex(indexFunction, indexFunction.getProjectionFunction(), index);
     }
+
+    /** Get a mapping using the specified index function.
+     *
+     * @param indexFunction The index function to use.
+     * @param projectionFunction    The function to project results with.
+     * @param index         The index
+     * @param <P>                   The projection return type.
+     * @return
+     */
+    @DontInstrument
+    public @Nonnull <P> Collection<P> getByIndex(@Nonnull F indexFunction,
+                                @Nonnull ProjectionFunction<K, V, I, P> projectionFunction,
+                                I index) {
+        return getByIndexAndFilter(indexFunction, projectionFunction, e -> true, index);
+    }
+
+    /** Scan and filter using the specified index function and projection.
+     *
+     * @param indexFunction         An indexing function.
+     * @param projectionFunction    The function to project results with.
+     * @param entryPredicate        The predicate to scan and filter with.
+     * @param index                 The index to lookup.
+     * @param <P>                   The projection return type.
+     * @return
+     */
+    @Accessor
+    public @Nonnull <P> Collection<P> getByIndexAndFilter(@Nonnull F indexFunction,
+                                 @Nonnull ProjectionFunction<K, V, I, P> projectionFunction,
+                                 @Nonnull Predicate<? super Map.Entry<K, V>>
+                                                                  entryPredicate,
+                                 I index) {
+        return projectionFunction
+                .generateProjection(index, indexMap
+                        .get(indexFunction).get(index).parallelStream()
+                        .filter(entryPredicate))
+                .collect(Collectors.toList());
+    }
+
 
     /**
      * Register new index class
@@ -280,8 +352,10 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         );
     }
 
+    /** {@inheritDoc} */
+    @Override
     @Mutator(name = "put", noUpcall = true)
-    void insert(@ConflictParameter K key, V value) {
+    public void insert(@ConflictParameter K key, V value) {
         V previous = mainMap.put(key, value);
         // If we have index functions, update the secondary indexes.
         if (indexFunctions.size() > 0) {
@@ -303,14 +377,8 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         return mainMap.values().parallelStream().filter(p).collect(Collectors.toList());
     }
 
-    /**
-     * Returns a {@link Collection} filtered by entries (keys and/or values).
-     * This method has a memory/CPU advantage over the map iterators as no deep copy
-     * is actually performed.
-     *
-     * @param entryPredicate java predicate (function to evaluate)
-     * @return a view of the entries contained in this map meeting the predicate condition.
-     */
+    /** {@inheritDoc} */
+    @Override
     @Accessor
     public Collection<Map.Entry<K, V>> scanAndFilterByEntry(Predicate<? super Map.Entry<K, V>>
                                                                     entryPredicate) {
@@ -348,8 +416,10 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         }
     }
 
+    /** {@inheritDoc} */
+    @Override
     @Mutator(name = "remove", noUpcall = true)
-    void delete(@ConflictParameter K key) {
+    public void delete(@ConflictParameter K key) {
         V previous =  mainMap.remove(key);
         unmapSecondaryIndexes(key, previous);
     }
