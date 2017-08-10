@@ -22,6 +22,7 @@ import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
 
+import lombok.Getter;
 import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.ConflictParameter;
 import org.corfudb.annotations.CorfuObject;
@@ -115,12 +116,13 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     /** The "main" map which contains the primary key-value mappings. */
     protected final Map<K,V> mainMap = new HashMap<>();
 
-    protected final Set<F> indexFunctions;
+    protected Set<F> indexFunctions;
 
-    protected final Map<F, Multimap<I, Map.Entry<K,V>>> indexMap;
+    protected Map<F, Multimap<I, Map.Entry<K,V>>> indexMap;
 
     /** Generate a table with the given set of indexes. */
     public CorfuTable(Class<F> indexFunctionEnumClass) {
+        indexerClass = indexFunctionEnumClass;
         indexMap = new HashMap<>();
         indexFunctions = EnumSet.allOf(indexFunctionEnumClass);
         indexFunctions.forEach(f -> indexMap.put(f, ArrayListMultimap.create()));
@@ -146,6 +148,12 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         return mainMap.isEmpty();
     }
 
+    @Accessor
+    public boolean hasIndices() {return !indexFunctions.isEmpty();}
+
+    @Getter
+    public Class indexerClass;
+
     /** {@inheritDoc} */
     @Override
     @Accessor
@@ -168,6 +176,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     }
 
 
+
     /** Get a mapping using the specified index function.
      *
      * @param indexFunction The index function to use.
@@ -180,6 +189,21 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
                                 .generateProjection(index, indexMap
                                 .get(indexFunction).get(index).parallelStream())
                                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Register new index class
+     *
+     * This replaces the current index.
+     *
+     * @param indexFunctionEnumClass
+     */
+    public void registerIndex(Class indexFunctionEnumClass) {
+        indexerClass = indexFunctionEnumClass;
+        indexMap = new HashMap<>();
+        indexFunctions = EnumSet.allOf(indexFunctionEnumClass);
+        indexFunctions.forEach(f -> indexMap.put(f, ArrayListMultimap.create()));
+        mainMap.forEach(this::mapSecondaryIndexes);
     }
 
     /** {@inheritDoc} */
@@ -389,8 +413,10 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         if (value != null) {
             final Map.Entry<K, V> previousEntry
                     = new AbstractMap.SimpleImmutableEntry<>(key, value);
-            indexMap.entrySet().parallelStream()
-                    .forEach(e -> e.getValue().remove(key, previousEntry));
+            indexFunctions.parallelStream()
+                    .forEach(f -> f.getIndexFunction().generateIndex(key, value)
+                            .forEach(i -> indexMap.get(f).remove((I) i, previousEntry)));
+
         }
     }
 
