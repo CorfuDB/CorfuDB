@@ -66,10 +66,6 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
 
     /** Helper function to get a Corfu Table.
      *
-     * @param keyClass              The class of the Key
-     * @param valueClass            The class of the Value
-     * @param functionEnumClass     The class of the function enum
-     * @param indexClass            The class of the index
      * @param <K>                   Key type
      * @param <V>                   Value type
      * @param <F>                   Function enum type
@@ -78,8 +74,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      */
     static <K, V, F extends Enum<F> & CorfuTable.IndexSpecification, I>
     TypeToken<CorfuTable<K, V, F, I>>
-    getTableType(Class<K> keyClass, Class<V> valueClass, Class<F> functionEnumClass,
-                 Class<I> indexClass) {
+    getTableType() {
         return new TypeToken<CorfuTable<K, V, F, I>>() {};
     }
 
