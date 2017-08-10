@@ -541,7 +541,9 @@ public class CorfuMapTest extends AbstractViewTest {
                 .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
-        assertThat(testMap.put("a", "z"));
+        assertThat(testMap.put("a", "z"))
+                .isNull();
+
         getRuntime().getObjectsView().TXBegin();
         assertThat(testMap.put("a", "a"))
                 .isEqualTo("z");

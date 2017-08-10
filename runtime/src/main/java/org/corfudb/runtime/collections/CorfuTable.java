@@ -285,7 +285,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     public V put(@ConflictParameter K key, V value) {
         V previous = mainMap.put(key, value);
         // If we have index functions, update the secondary indexes.
-        if (indexFunctions.size() > 0) {
+        if (indexFunctions.isEmpty()) {
             unmapSecondaryIndexes(key, previous);
             mapSecondaryIndexes(key, value);
         }
@@ -359,7 +359,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     public void insert(@ConflictParameter K key, V value) {
         V previous = mainMap.put(key, value);
         // If we have index functions, update the secondary indexes.
-        if (indexFunctions.size() > 0) {
+        if (indexFunctions.isEmpty()) {
             unmapSecondaryIndexes(key, previous);
             mapSecondaryIndexes(key, value);
         }
@@ -410,7 +410,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
             table.unmapSecondaryIndexes(key, previous);
         } else {
             V previous = table.mainMap.put(key, undoRecord);
-            if (table.indexFunctions.size() > 0) {
+            if (table.indexFunctions.isEmpty()) {
                 table.unmapSecondaryIndexes(key, previous);
                 table.mapSecondaryIndexes(key, undoRecord);
             }
