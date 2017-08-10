@@ -89,7 +89,7 @@ public class SMRMapTest extends AbstractViewTest {
         // ScanAndFilterByEntry
         Predicate<Map.Entry<String, String>> valuePredicate =
                 p -> p.getValue().equals("CorfuServer");
-        Collection<Map.Entry<String, String>> filteredMap = ((CorfuTable)corfuInstancesMap)
+        Collection<Map.Entry<String, String>> filteredMap = ((SMRMap)corfuInstancesMap)
                 .scanAndFilterByEntry(valuePredicate);
 
         assertThat(filteredMap.size()).isEqualTo(2);
@@ -99,7 +99,7 @@ public class SMRMapTest extends AbstractViewTest {
         }
 
         // ScanAndFilter (Deprecated Method)
-        List<String> corfuServerList = ((CorfuTable)corfuInstancesMap)
+        List<String> corfuServerList = ((SMRMap)corfuInstancesMap)
                 .scanAndFilter(p -> p.equals("CorfuServer"));
 
         assertThat(corfuServerList.size()).isEqualTo(2);
