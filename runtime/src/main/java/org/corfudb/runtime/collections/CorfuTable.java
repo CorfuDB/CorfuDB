@@ -11,11 +11,16 @@ import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.ConcurrentModificationException;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -29,6 +34,7 @@ import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.DontInstrument;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
+import org.corfudb.annotations.TransactionalMethod;
 
 /** The CorfuTable implements a simple key-value store.
  *
@@ -467,6 +473,141 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     @Accessor
     public @Nonnull Set<Entry<K, V>> entrySet() {
         return ImmutableSet.copyOf(mainMap.entrySet());
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Accessor
+    public V getOrDefault(Object key, V defaultValue) {
+        return mainMap.getOrDefault(key, defaultValue);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Accessor
+    public void forEach(BiConsumer<? super K, ? super V> action) {
+        mainMap.forEach(action);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @TransactionalMethod
+    public void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
+        Objects.requireNonNull(function);
+        for (Map.Entry<K, V> entry : entrySet()) {
+            K k;
+            V v;
+            try {
+                k = entry.getKey();
+                v = entry.getValue();
+            } catch (IllegalStateException ise) {
+                // this usually means the entry is no longer in the map.
+                throw new ConcurrentModificationException(ise);
+            }
+
+            // ise thrown from function is not a cme.
+            v = function.apply(k, v);
+
+            try {
+                entry.setValue(v);
+            } catch (IllegalStateException ise) {
+                // this usually means the entry is no longer in the map.
+                throw new ConcurrentModificationException(ise);
+            }
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @TransactionalMethod
+    public V putIfAbsent(K key, V value) {
+        V v = get(key);
+        if (v == null) {
+            v = put(key, value);
+        }
+
+        return v;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @TransactionalMethod
+    public boolean remove(Object key, Object value) {
+        Object curValue = get(key);
+        if (!Objects.equals(curValue, value)
+                || (curValue == null && !containsKey(key))) {
+            return false;
+        }
+        remove(key);
+        return true;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @TransactionalMethod
+    public V replace(K key, V value) {
+        V curValue;
+        if (((curValue = get(key)) != null) || containsKey(key)) {
+            curValue = put(key, value);
+        }
+        return curValue;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @TransactionalMethod
+    public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
+
+        Objects.requireNonNull(mappingFunction);
+        V v;
+        if ((v = get(key)) == null) {
+            V newValue;
+            if ((newValue = mappingFunction.apply(key)) != null) {
+                put(key, newValue);
+                return newValue;
+            }
+        }
+
+        return v;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @TransactionalMethod
+    public V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V>
+            remappingFunction) {
+        Objects.requireNonNull(remappingFunction);
+        V oldValue;
+        if ((oldValue = get(key)) != null) {
+            V newValue = remappingFunction.apply(key, oldValue);
+            if (newValue != null) {
+                put(key, newValue);
+                return newValue;
+            } else {
+                remove(key);
+                return null;
+            }
+        } else {
+            return null;
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @TransactionalMethod
+    public V merge(K key, V value, BiFunction<? super V, ? super V, ? extends V>
+            remappingFunction) {
+        Objects.requireNonNull(remappingFunction);
+        Objects.requireNonNull(value);
+        V oldValue = get(key);
+        V newValue = (oldValue == null) ? value :
+                remappingFunction.apply(oldValue, value);
+        if (newValue == null) {
+            remove(key);
+        } else {
+            put(key, newValue);
+        }
+        return newValue;
     }
 
     /** Unmaps the secondary indexes for a given key value pair.
