@@ -11,9 +11,7 @@ import javax.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.wireprotocol.TokenType;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.*;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
@@ -104,7 +102,6 @@ public class StreamsView extends AbstractView {
                 ? runtime.getSequencerView().nextToken(streamIDs, 1) // Token w/o conflict info
                 : runtime.getSequencerView().nextToken(streamIDs, 1,
                 conflictInfo); // Token w/ conflict info
-
 
         // Until we've succeeded
         while (true) {

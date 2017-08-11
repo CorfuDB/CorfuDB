@@ -134,7 +134,8 @@ public class FastSmrMapsLoader {
         futureList = new ArrayList<>();
     }
 
-    private void invokeNecromancer(Map<Long, ILogData> logDataMap, BiConsumer<Long, ILogData> resurrectionSpell) {
+    private void invokeNecromancer(Map<Long, ILogData> logDataMap, BiConsumer<Long, ILogData>
+            resurrectionSpell) {
         futureList.add(necromancer.submit(() -> {
             logDataMap.forEach((address, logData) -> {
                 resurrectionSpell.accept(address, logData);
@@ -493,7 +494,7 @@ public class FastSmrMapsLoader {
 
                     // For now one by one read and apply
                     for (long address : checkPoint.getAddresses()) {
-                        updateCorfuObject(getLogData(runtime, loadInCache, address));
+                        updateCorfuObject(getLogData(runtime, false, address));
                     }
                 });
     }
@@ -569,23 +570,23 @@ public class FastSmrMapsLoader {
 
             // Sanity
             boolean canProcessRange = true;
-            for(Map.Entry<Long, ILogData> entry : range.entrySet()) {
-                long address = entry.getKey();
-                ILogData logData = entry.getValue();
-                if (address != addressProcessed + 1) {
+            for (long address = start; address < stopNotIncluded; address++) {
+                ILogData logData = range.get(address);
+                if (address != addressProcessed + 1 || logData == null) {
                     fail("We missed an entry. It can lead to correctness issues.");
                 }
                 addressProcessed++;
 
                 if (logData.getType() == DataType.TRIMMED) {
-                    log.warn("applyForEachAddress[{}, start={}] address is trimmed", address, logHead);
+                    log.warn("applyForEachAddress[{}, start={}] address is trimmed", logData.getGlobalAddress(),
+                            logHead);
                     handleRetry();
                     canProcessRange = false;
                     break;
                 }
 
-                if(address % STATUS_UPDATE_PACE == 0) {
-                    log.info("applyForEachAddress: read up to {}", address);
+                if(logData.getGlobalAddress() % STATUS_UPDATE_PACE == 0) {
+                    log.info("applyForEachAddress: read up to {}", logData.getGlobalAddress());
                 }
             }
             if (canProcessRange) {
