@@ -311,10 +311,24 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                             ||
                             x.getModifiers().contains(Modifier.PROTECTED))
                     .forEach(x -> {
-                        if (methodSet.stream().noneMatch(y ->
-                                // If this method is present in the parent, the string
-                                // will match.
-                                y.method.toString().equals(x.toString()))) {
+                        if (methodSet.stream().noneMatch(y -> {
+                            // If this method is present in the parent, we need to check
+                            // the parameters
+                            if (y.method.getSimpleName().equals(x.getSimpleName())) {
+                                if (y.method.getParameters().size() == x.getParameters().size()) {
+                                    // If there are generics, assume a match for now
+                                    // TODO: Properly handle generics
+                                    if (x.getParameters().stream().anyMatch(p ->
+                                        p.asType().getKind() == TypeKind.TYPEVAR)) {
+                                        return true;
+                                    } else {
+                                        // Otherwise the method name will match
+                                        return x.toString().equals(y.method.toString());
+                                    }
+                                }
+                            }
+                            return false;
+                        })) {
                             methodSet.add(new SmrMethodInfo(x, null));
                         }
                     });
@@ -547,7 +561,10 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                 (m.hasConflictAnnotations ? conflictField : "null")
                         );
                     }
-                    typeSpecBuilder.addMethod(ms.build());
+                    // Don't instrument methods not marked for instrumentation
+                    if (smrMethod.getAnnotation(DontInstrument.class) == null) {
+                        typeSpecBuilder.addMethod(ms.build());
+                    }
                 });
 
         addUpcallMap(typeSpecBuilder, originalName, interfacesToAdd, methodSet);
