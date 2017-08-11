@@ -524,7 +524,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
             v = function.apply(k, v);
 
             try {
-                entry.setValue(v);
+                insert(k, v);
             } catch (IllegalStateException ise) {
                 // this usually means the entry is no longer in the map.
                 throw new ConcurrentModificationException(ise);
