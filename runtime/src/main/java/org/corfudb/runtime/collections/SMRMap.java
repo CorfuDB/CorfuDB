@@ -244,7 +244,7 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
             v = function.apply(k, v);
 
             try {
-                entry.setValue(v);
+                blindPut(k, v);
             } catch (IllegalStateException ise) {
                 // this usually means the entry is no longer in the map.
                 throw new ConcurrentModificationException(ise);
