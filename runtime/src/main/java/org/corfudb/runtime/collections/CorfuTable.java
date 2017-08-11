@@ -386,7 +386,9 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      */
     @Accessor
     public List<V> scanAndFilter(Predicate<? super V> p) {
-        return mainMap.values().parallelStream().filter(p).collect(Collectors.toList());
+        return mainMap.values().parallelStream()
+                                    .filter(p)
+                                    .collect(Collectors.toCollection(ArrayList::new));
     }
 
     /** {@inheritDoc} */
@@ -394,8 +396,9 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     @Accessor
     public Collection<Map.Entry<K, V>> scanAndFilterByEntry(Predicate<? super Map.Entry<K, V>>
                                                                     entryPredicate) {
-        return mainMap.entrySet().parallelStream().filter(entryPredicate).collect(Collectors
-                .toCollection(ArrayList::new));
+        return mainMap.entrySet().parallelStream()
+                                    .filter(entryPredicate)
+                                    .collect(Collectors.toCollection(ArrayList::new));
     }
 
     /** {@inheritDoc} */
