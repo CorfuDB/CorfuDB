@@ -262,18 +262,16 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
                                  @Nonnull Predicate<? super Map.Entry<K, V>>
                                                                   entryPredicate,
                                  I index) {
-        if (indexFunctions.isEmpty()) {
-            return projectionFunction
-                    .generateProjection(index, mainMap.entrySet().parallelStream()
-                            .filter(entryPredicate))
-                    .collect(Collectors.toList());
-        } else {
-            return projectionFunction
-                    .generateProjection(index, indexMap
-                            .get(indexFunction).get(index).parallelStream()
-                            .filter(entryPredicate))
-                    .collect(Collectors.toList());
-        }
+        final Stream<Map.Entry<K,V>> entryStream = indexFunctions.isEmpty()
+                // If there are no index functions, use the entire map
+                ? mainMap.entrySet().parallelStream()
+                // Otherwise, use the secondary index that was generated.
+                : indexMap
+                .get(indexFunction).get(index).parallelStream();
+
+        return projectionFunction
+                .generateProjection(index, entryStream.filter(entryPredicate))
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
 
@@ -388,7 +386,9 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      */
     @Accessor
     public List<V> scanAndFilter(Predicate<? super V> p) {
-        return mainMap.values().parallelStream().filter(p).collect(Collectors.toList());
+        return mainMap.values().parallelStream()
+                                    .filter(p)
+                                    .collect(Collectors.toCollection(ArrayList::new));
     }
 
     /** {@inheritDoc} */
@@ -396,8 +396,9 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     @Accessor
     public Collection<Map.Entry<K, V>> scanAndFilterByEntry(Predicate<? super Map.Entry<K, V>>
                                                                     entryPredicate) {
-        return mainMap.entrySet().parallelStream().filter(entryPredicate).collect(Collectors
-                .toCollection(ArrayList::new));
+        return mainMap.entrySet().parallelStream()
+                                    .filter(entryPredicate)
+                                    .collect(Collectors.toCollection(ArrayList::new));
     }
 
     /** {@inheritDoc} */
