@@ -104,8 +104,8 @@ public class MultiCheckpointWriter<T extends Map> {
                 }
                 final long mapCpEnd = System.currentTimeMillis();
 
-                log.info("appendCheckpoints: took {} ms to checkpoint map {}",
-                        mapCpEnd - mapCpStart, streamId);
+                log.info("appendCheckpoints: took {} ms to checkpoint {} entries for map {}",
+                        mapCpEnd - mapCpStart, ((SMRMap) map).size(), streamId);
             }
         } finally {
             log.trace("appendCheckpoints: author '{}' at globalAddress {} finished",
