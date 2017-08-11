@@ -316,7 +316,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Set up CP writer, with interleaved writes for middle keys
         middleTracker = -1;
-        CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, (SMRMap) m);
+        CheckpointWriter<SMRMap> cpw = new CheckpointWriter(getRuntime(), streamId, author, (SMRMap) m);
         cpw.setSerializer(serializer);
         cpw.setBatchSize(1);
         cpw.setPostAppendFunc((cp, pos) -> {

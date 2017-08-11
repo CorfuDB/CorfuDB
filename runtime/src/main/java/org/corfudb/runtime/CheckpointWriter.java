@@ -22,7 +22,7 @@ import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -31,20 +31,13 @@ import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
-
-import java.time.LocalDateTime;
-import java.util.*;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
-import java.util.function.Function;
-
 /** Checkpoint writer for SMRMaps: take a snapshot of the
  *  object via TXBegin(), then dump the frozen object's
  *  state into CheckpointEntry records into the object's
  *  stream.
  *  TODO: Generalize to all SMR objects.
  */
-public class CheckpointWriter {
+public class CheckpointWriter<T extends Map> {
     /** Metadata to be stored in the CP's 'dict' map.
      */
     private UUID streamId;
@@ -108,19 +101,19 @@ public class CheckpointWriter {
     /** Local ref to the object that we're dumping.
      *  TODO: generalize to all SMR objects.
      */
-    private SMRMap map;
+    private T map;
 
     @Getter
     @Setter
     ISerializer serializer = Serializers.JSON;
 
-    /** Constructor for Checkpoint Writer for SMRMaps.
+    /** Constructor for Checkpoint Writer for Corfu Maps.
      * @param rt object's runtime
      * @param streamId unique identifier of stream to checkpoint
      * @param author checkpoint initiator
      * @param map local reference of the map to checkpoint
      */
-    public CheckpointWriter(CorfuRuntime rt, UUID streamId, String author, SMRMap map) {
+    public CheckpointWriter(CorfuRuntime rt, UUID streamId, String author, T map) {
         this.rt = rt;
         this.streamId = streamId;
         this.author = author;
@@ -131,7 +124,7 @@ public class CheckpointWriter {
     }
 
     /** Static method for all steps necessary to append checkpoint
-     *  data for an SMRMap into its own stream.  An optimistic
+     *  data for a Corfu Map into its own stream.  An optimistic
      *  read-only transaction is used to freeze the contents of
      *  the map while the checkpoint entries are written to
      *  the stream.
@@ -175,7 +168,7 @@ public class CheckpointWriter {
 
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_TIME, startTime.toString());
         // Need the actual object's version
-        ICorfuSMR<SMRMap> corfuObject = (ICorfuSMR<SMRMap>) this.map;
+        ICorfuSMR<T> corfuObject = (ICorfuSMR<T>) this.map;
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS,
                 Long.toString(corfuObject.getCorfuSMRProxy().getVersion()));
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS,
@@ -220,6 +213,10 @@ public class CheckpointWriter {
                 ImmutableMap.copyOf(this.mdkv);
         List<Long> continuationAddresses = new ArrayList<>();
 
+        Class underlyingObjectType = ((CorfuCompileProxy<Map>)
+                ((ICorfuSMR<T>) map).getCorfuSMRProxy())
+                .getObjectType();
+
         if (enablePutAll) {
             Iterable<List<Object>> partitions = Iterables.partition(map.keySet(), batchSize);
 
@@ -229,7 +226,8 @@ public class CheckpointWriter {
                     tmp.put(keyMutator.apply(k), valueMutator.apply(map.get(k)));
                 }
 
-                SMREntry smrEntry = new SMREntry("putAll", new Object[]{tmp}, serializer);
+                SMREntry smrEntry = new SMREntry("putAll", new Object[]{tmp}, serializer
+                );
                 MultiSMREntry smrEntries = new MultiSMREntry();
                 smrEntries.addTo(smrEntry);
 

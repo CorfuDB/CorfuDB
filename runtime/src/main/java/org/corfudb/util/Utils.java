@@ -31,10 +31,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.recovery.RecoveryUtils;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.recovery.FastSmrMapsLoader;
-
 
 
 /**
@@ -448,7 +447,7 @@ public class Utils {
      * @param logData Data entry to print
      */
     public static void printLogAnatomy(CorfuRuntime runtime, ILogData logData) {
-        FastSmrMapsLoader fastLoader = new FastSmrMapsLoader(runtime);
+        FastObjectLoader fastLoader = new FastObjectLoader(runtime);
         try {
             LogEntry le = RecoveryUtils.deserializeLogData(runtime, logData);
             if (le.getType() == LogEntry.LogEntryType.SMR) {
