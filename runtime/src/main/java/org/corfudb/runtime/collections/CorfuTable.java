@@ -44,7 +44,7 @@ import org.corfudb.annotations.TransactionalMethod;
  * each key is mapped to exactly one value. Null values are not permitted.
  *
  * <p>The CorfuTable also supports an unlimited number of secondary indexes, which
- * the user provides at construction time as an enum which implements the IndexSpecificaiton
+ * the user provides at construction time as an enum which implements the IndexSpecification
  * interface. An index specification consists of a IndexFunction, which returns a set of secondary
  * keys (indexes) the value should be mapped to. Secondary indexes are many-to-many: values
  * can be mapped to multiple indexes, and indexes can be mapped to multiples values. Each
@@ -70,7 +70,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      */
     static <K, V> TypeToken<CorfuTable<K, V, NoSecondaryIndex, Void>>
         getMapType() {
-        return new TypeToken<CorfuTable<K, V, NoSecondaryIndex, Void>>() {};
+            return new TypeToken<CorfuTable<K, V, NoSecondaryIndex, Void>>() {};
     }
 
     /** Helper function to get a Corfu Table.
@@ -83,8 +83,8 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      */
     static <K, V, F extends Enum<F> & CorfuTable.IndexSpecification, I>
     TypeToken<CorfuTable<K, V, F, I>>
-    getTableType() {
-        return new TypeToken<CorfuTable<K, V, F, I>>() {};
+        getTableType() {
+            return new TypeToken<CorfuTable<K, V, F, I>>() {};
     }
 
     /**
@@ -119,7 +119,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
 
     /**
      * The interface for a index specification, which consists of a indexing function
-     * and a projection functino.
+     * and a projection function.
      * @param <K>   The type of the primary key on the map.
      * @param <V>   The type of the value on the map.
      * @param <I>   The type of the index.
@@ -153,6 +153,9 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     protected Set<F> indexFunctions;
 
     protected Map<F, Multimap<I, Map.Entry<K,V>>> indexMap;
+
+    @Getter
+    boolean indexGenerationFailed = false;
 
     /** Generate a table with the given set of indexes. */
     public CorfuTable(Class<F> indexFunctionEnumClass) {
@@ -259,7 +262,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
                                  @Nonnull Predicate<? super Map.Entry<K, V>>
                                                                   entryPredicate,
                                  I index) {
-        if (indexFunctions.size() == 0) {
+        if (indexFunctions.isEmpty()) {
             return projectionFunction
                     .generateProjection(index, mainMap.entrySet().parallelStream()
                             .filter(entryPredicate))
@@ -625,6 +628,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      * @param key           The primary key (index) for the mapping.
      * @param value         The value to unmap.
      */
+    @SuppressWarnings("unchecked")
     protected void unmapSecondaryIndexes(K key, V value) {
         try {
             if (value != null) {
@@ -637,6 +641,8 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
             }
         } catch (Exception e) {
             indexFunctions = Collections.emptySet();
+            indexMap.clear();
+            indexGenerationFailed = true;
             log.error("unmapSecondaryIndexes: Exception unmapping {}, {},"
                             + " UNMAPPING ALL INDEXES, indexing is disabled",
                     key, value, e);
@@ -657,7 +663,9 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
                             .forEach(i -> indexMap.get(f).put((I) i, entry)));
         } catch (Exception e) {
             indexFunctions = Collections.emptySet();
-            log.warn("unmapSecondaryIndexes: Exception unmapping {}, {},"
+            indexMap.clear();;
+            indexGenerationFailed = true;
+            log.warn("mapSecondaryIndexes: Exception mapping {}, {},"
                     + " UNMAPPING ALL INDEXES, indexing is disabled", key, value, e);
         }
     }
