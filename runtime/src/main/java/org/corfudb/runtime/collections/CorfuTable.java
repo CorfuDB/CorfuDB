@@ -28,6 +28,8 @@ import java.util.stream.Stream;
 import javax.annotation.Nonnull;
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.ConflictParameter;
 import org.corfudb.annotations.CorfuObject;
@@ -55,6 +57,7 @@ import org.corfudb.annotations.TransactionalMethod;
  * @param <F>   The type of the index specification enumeration.
  * @param <I>   The type of the index.
  */
+@Slf4j
 @CorfuObject
 public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification, I>
         implements ICorfuMap<K, V> {
@@ -256,11 +259,18 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
                                  @Nonnull Predicate<? super Map.Entry<K, V>>
                                                                   entryPredicate,
                                  I index) {
-        return projectionFunction
-                .generateProjection(index, indexMap
-                        .get(indexFunction).get(index).parallelStream()
-                        .filter(entryPredicate))
-                .collect(Collectors.toList());
+        if (indexFunctions.size() == 0) {
+            return projectionFunction
+                    .generateProjection(index, mainMap.entrySet().parallelStream()
+                            .filter(entryPredicate))
+                    .collect(Collectors.toList());
+        } else {
+            return projectionFunction
+                    .generateProjection(index, indexMap
+                            .get(indexFunction).get(index).parallelStream()
+                            .filter(entryPredicate))
+                    .collect(Collectors.toList());
+        }
     }
 
 
@@ -616,13 +626,20 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      * @param value         The value to unmap.
      */
     protected void unmapSecondaryIndexes(K key, V value) {
-        if (value != null) {
-            final Map.Entry<K, V> previousEntry
-                    = new AbstractMap.SimpleImmutableEntry<>(key, value);
-            indexFunctions.parallelStream()
-                    .forEach(f -> f.getIndexFunction().generateIndex(key, value)
-                            .forEach(i -> indexMap.get(f).remove((I) i, previousEntry)));
+        try {
+            if (value != null) {
+                final Map.Entry<K, V> previousEntry
+                        = new AbstractMap.SimpleImmutableEntry<>(key, value);
+                indexFunctions.parallelStream()
+                        .forEach(f -> f.getIndexFunction().generateIndex(key, value)
+                                .forEach(i -> indexMap.get(f).remove((I) i, previousEntry)));
 
+            }
+        } catch (Exception e) {
+            indexFunctions = Collections.emptySet();
+            log.error("unmapSecondaryIndexes: Exception unmapping {}, {},"
+                            + " UNMAPPING ALL INDEXES, indexing is disabled",
+                    key, value, e);
         }
     }
 
@@ -633,10 +650,16 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      */
     @SuppressWarnings("unchecked")
     protected void mapSecondaryIndexes(K key, V value) {
-        Map.Entry<K, V> entry = new AbstractMap.SimpleImmutableEntry<>(key, value);
-        indexFunctions.parallelStream()
-                .forEach(f -> f.getIndexFunction().generateIndex(key, value)
-                        .forEach(i -> indexMap.get(f).put((I) i, entry)));
+        try {
+            Map.Entry<K, V> entry = new AbstractMap.SimpleImmutableEntry<>(key, value);
+            indexFunctions.parallelStream()
+                    .forEach(f -> f.getIndexFunction().generateIndex(key, value)
+                            .forEach(i -> indexMap.get(f).put((I) i, entry)));
+        } catch (Exception e) {
+            indexFunctions = Collections.emptySet();
+            log.warn("unmapSecondaryIndexes: Exception unmapping {}, {},"
+                    + " UNMAPPING ALL INDEXES, indexing is disabled", key, value, e);
+        }
     }
 
 }
