@@ -446,17 +446,18 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
             conflictParameterFunction = "putAllConflictFunction")
     public void putAll(@Nonnull Map<? extends K, ? extends V> m) {
         // If we have no index functions, then just directly put all
-        if (!indexFunctions.isEmpty()) {
+        if (indexFunctions.isEmpty()) {
             mainMap.putAll(m);
+        } else {
+            // Otherwise we must update all secondary indexes
+            // TODO: Do this in parallel (need to acquire update locks, potentially)
+            m.entrySet().stream()
+                    .forEach(e -> {
+                        V previous = mainMap.put(e.getKey(), e.getValue());
+                        unmapSecondaryIndexes(e.getKey(), previous);
+                        mapSecondaryIndexes(e.getKey(), e.getValue());
+                    });
         }
-        // Otherwise we must update all secondary indexes
-        // TODO: Do this in parallel (need to acquire update locks, potentially)
-        m.entrySet().stream()
-                .forEach(e -> {
-                    V previous = mainMap.put(e.getKey(), e.getValue());
-                    unmapSecondaryIndexes(e.getKey(), previous);
-                    mapSecondaryIndexes(e.getKey(), e.getValue());
-                });
     }
 
     /** {@inheritDoc} */
