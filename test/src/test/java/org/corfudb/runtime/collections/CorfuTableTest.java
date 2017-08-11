@@ -63,6 +63,7 @@ public class CorfuTableTest extends AbstractViewTest {
                 .containsExactly("ab");
     }
 
+
     @Test
     @SuppressWarnings("unchecked")
     public void emptyIndexesReturnEmptyValues() {
@@ -147,7 +148,7 @@ public class CorfuTableTest extends AbstractViewTest {
     public void canSetNewIndex() {
         CorfuTable<String, String, StringIndexers, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setType(CorfuTable.class)
+                .setTypeToken(CorfuTable.<String, String, StringIndexers, String>getTableType())
                 .setArguments(StringIndexers.class)
                 .setStreamName("test")
                 .open();
@@ -162,7 +163,7 @@ public class CorfuTableTest extends AbstractViewTest {
 
         CorfuTable<String, String, OtherStringIndexer, String>
                 corfuTableWithIndex = getDefaultRuntime().getObjectsView().build()
-                .setType(CorfuTable.class)
+                .setTypeToken(CorfuTable.<String, String, OtherStringIndexer, String>getTableType())
                 .setArguments(OtherStringIndexer.class)
                 .setStreamName("test")
                 .open();
@@ -178,7 +179,7 @@ public class CorfuTableTest extends AbstractViewTest {
     public void doUpdateIndicesOnRemove() throws Exception {
         CorfuTable<String, String, StringIndexers, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setType(CorfuTable.class)
+                .setTypeToken(CorfuTable.<String, String, StringIndexers, String>getTableType())
                 .setArguments(StringIndexers.class)
                 .setStreamName("test")
                 .open();
