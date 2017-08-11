@@ -12,7 +12,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
-import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
@@ -23,9 +22,9 @@ import org.corfudb.util.serializer.ISerializer;
  * Checkpoint multiple SMRMaps serially as a prerequisite for a later log trim.
  */
 @Slf4j
-public class MultiCheckpointWriter {
+public class MultiCheckpointWriter<T extends Map> {
     @Getter
-    private List<ICorfuSMR<Map>> maps = new ArrayList<>();
+    private List<ICorfuSMR<T>> maps = new ArrayList<>();
 
     @Getter
     private List<Long> checkpointLogAddresses = new ArrayList<>();
@@ -36,14 +35,14 @@ public class MultiCheckpointWriter {
 
     /** Add a map to the list of maps to be checkpointed by this class. */
     @SuppressWarnings("unchecked")
-    public void addMap(SMRMap map) {
-        maps.add((ICorfuSMR<Map>) map);
+    public void addMap(T map) {
+        maps.add((ICorfuSMR<T>) map);
     }
 
     /** Add map(s) to the list of maps to be checkpointed by this class. */
 
-    public void addAllMaps(Collection<SMRMap> maps) {
-        for (SMRMap map : maps) {
+    public void addAllMaps(Collection<T> maps) {
+        for (T map : maps) {
             addMap(map);
         }
     }
@@ -78,11 +77,11 @@ public class MultiCheckpointWriter {
         log.info("appendCheckpoints: appending checkpoints for {} maps", maps.size());
         final long cpStart = System.currentTimeMillis();
         try {
-            for (ICorfuSMR<Map> map : maps) {
+            for (ICorfuSMR<T> map : maps) {
                 UUID streamId = map.getCorfuStreamID();
                 final long mapCpStart = System.currentTimeMillis();
                 while (true) {
-                    CheckpointWriter cpw = new CheckpointWriter(rt, streamId, author, (SMRMap) map);
+                    CheckpointWriter<T> cpw = new CheckpointWriter(rt, streamId, author, (T) map);
                     cpw.setEnablePutAll(enablePutAll);
                     ISerializer serializer =
                             ((CorfuCompileProxy<Map>) map.getCorfuSMRProxy())
