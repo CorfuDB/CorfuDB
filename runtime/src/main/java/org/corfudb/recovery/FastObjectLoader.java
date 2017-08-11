@@ -25,6 +25,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
@@ -34,7 +35,7 @@ import org.corfudb.util.serializer.Serializers;
 import static org.corfudb.recovery.RecoveryUtils.*;
 import static org.corfudb.runtime.view.Address.isAddress;
 
-/** The FastSmrMapsLoader reconstructs the coalesced state of SMRMaps through sequential log read
+/** The FastObjectLoader reconstructs the coalesced state of SMRMaps through sequential log read
  *
  * This utility reads Log entries sequentially extracting the SMRUpdates from each entry
  * and build the Maps as we go. In the presence of checkpoints, the checkpoint entries will
@@ -47,7 +48,7 @@ import static org.corfudb.runtime.view.Address.isAddress;
 
 @Slf4j
 @Accessors(chain = true)
-public class FastSmrMapsLoader {
+public class FastObjectLoader {
 
     static final long DEFAULT_BATCH_FOR_FAST_LOADER = 10;
     static final int DEFAULT_TIMEOUT_MINUTES_FAST_LOADING = 30;
@@ -55,6 +56,10 @@ public class FastSmrMapsLoader {
     static final int STATUS_UPDATE_PACE = 10000;
 
     private CorfuRuntime runtime;
+
+    @Setter
+    @Getter
+    Class defaultObjectsType = SMRMap.class;
 
     @Setter
     @Getter
@@ -91,6 +96,20 @@ public class FastSmrMapsLoader {
     @Getter
     private Set<UUID> streamsToIgnore = new HashSet<>();
 
+    /**
+     * We can register streams with non-default type
+     */
+    @Getter
+    private Map<UUID, Class> nonDefaultTypeStreams = new HashMap<>();
+
+    private Class getStreamType(UUID streamId) {
+        if (nonDefaultTypeStreams.containsKey(streamId)) {
+            return nonDefaultTypeStreams.get(streamId);
+        }
+
+        return defaultObjectsType;
+    }
+
     private long addressProcessed;
 
     // In charge of summoning Corfu maps back in this world
@@ -110,7 +129,7 @@ public class FastSmrMapsLoader {
 
     private List<Future> futureList;
 
-    public FastSmrMapsLoader(@Nonnull final CorfuRuntime corfuRuntime) {
+    public FastObjectLoader(@Nonnull final CorfuRuntime corfuRuntime) {
         this.runtime = corfuRuntime;
         loadInCache = !corfuRuntime.cacheDisabled;
         streamsMetaData = new HashMap<>();
@@ -239,9 +258,12 @@ public class FastSmrMapsLoader {
             // Get the serializer type from the entry
             ISerializer serializer = Serializers.getSerializer(entry.getSerializerType().getType());
 
+            // Get the type of the object we want to recreate
+            Class objectType = getStreamType(streamId);
+
             // Create an Object only for non-checkpoints
-            createSmrMapIfNotExist(runtime, streamId, serializer);
-            CorfuCompileProxy cp = getCorfuCompileProxy(runtime, streamId);
+            createObjectIfNotExist(runtime, streamId, serializer, objectType);
+            CorfuCompileProxy cp = getCorfuCompileProxy(runtime, streamId, objectType);
             cp.getUnderlyingObject().applyUpdateToStreamUnsafe(entry, globalAddress);
         }
     }
@@ -358,7 +380,7 @@ public class FastSmrMapsLoader {
         retryIteration++;
         if (retryIteration > numberOfAttempt) {
             log.error("processLogData[]: retried {} number of times and failed", retryIteration);
-            throw new RuntimeException("FastSmrMapsLoader failed after too many retry (" + retryIteration + ")");
+            throw new RuntimeException("FastObjectLoader failed after too many retry (" + retryIteration + ")");
         }
         else {
             cleanUpForRetry();
@@ -366,7 +388,7 @@ public class FastSmrMapsLoader {
     }
 
     /**
-     * Fail the FastSmrMapsLoader throwing a RuntimeException
+     * Fail the FastObjectLoader throwing a RuntimeException
      *
      * @param msg message passed in the RuntimeException
      */
