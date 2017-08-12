@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import com.codahale.metrics.Gauge;
+import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
@@ -66,18 +67,16 @@ public class AddressSpaceView extends AbstractView {
      */
     public AddressSpaceView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
+    }
+
+    public void setMetrics(MetricRegistry metrics) {
 
         final String pfx = String.format("%s0x%x.cache.", runtime.getMpASV(), this.hashCode());
-        runtime.getMetrics().register(pfx + "cache-size",
-                (Gauge<Long>) () -> readCache.estimatedSize());
-        runtime.getMetrics().register(pfx + "evictions",
-                (Gauge<Long>) () -> readCache.stats().evictionCount());
-        runtime.getMetrics().register(pfx + "hit-rate",
-                (Gauge<Double>) () -> readCache.stats().hitRate());
-        runtime.getMetrics().register(pfx + "hits",
-                (Gauge<Long>) () -> readCache.stats().hitCount());
-        runtime.getMetrics().register(pfx + "misses",
-                (Gauge<Long>) () -> readCache.stats().missCount());
+        metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::estimatedSize);
+        metrics.register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
+        metrics.register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
+        metrics.register(pfx + "hits", (Gauge<Long>) () -> readCache.stats().hitCount());
+        metrics.register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
     }
 
     /**

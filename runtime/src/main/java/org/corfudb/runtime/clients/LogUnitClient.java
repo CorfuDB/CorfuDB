@@ -1,5 +1,6 @@
 package org.corfudb.runtime.clients;
 
+import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.Range;
 
@@ -15,6 +16,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -51,6 +53,14 @@ public class LogUnitClient implements IClient {
     @Setter
     @Getter
     IClientRouter router;
+
+    @Getter
+    MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+
+    public LogUnitClient setMetricRegistry(@NonNull MetricRegistry metricRegistry) {
+        this.metricRegistry = metricRegistry;
+        return this;
+    }
 
     public String getHost() {
         return router.getHost();
@@ -434,7 +444,7 @@ public class LogUnitClient implements IClient {
     }
 
     private Timer.Context getTimerContext(String opName) {
-        Timer t = CorfuRuntime.getMetrics().timer(
+        Timer t = getMetricRegistry().timer(
                 CorfuRuntime.getMpLUC()
                         + getHost() + ":" + getPort().toString() + "-" + opName);
         return t.time();

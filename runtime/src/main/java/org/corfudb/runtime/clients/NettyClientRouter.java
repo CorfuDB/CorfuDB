@@ -209,6 +209,14 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 null, false, null, null);
     }
 
+    public NettyClientRouter(String host, Integer port, Boolean tls,
+                             String keyStore, String ksPasswordFile, String trustStore,
+                             String tsPasswordFile, Boolean saslPlainText, String usernameFile,
+                             String passwordFile) {
+        this(host, port, tls, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
+                saslPlainText, usernameFile, passwordFile, null);
+    }
+
     /**
      * Creates a new NettyClientRouter connected to the specified host and port with the
      * specified tls and sasl options.
@@ -227,7 +235,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     public NettyClientRouter(String host, Integer port, Boolean tls,
                              String keyStore, String ksPasswordFile, String trustStore,
                              String tsPasswordFile, Boolean saslPlainText, String usernameFile,
-                             String passwordFile) {
+                             String passwordFile, MetricRegistry metricRegistry) {
         this.host = host;
         this.port = port;
 
@@ -243,7 +251,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         outstandingRequests = new ConcurrentHashMap<>();
         shutdown = true;
 
-        MetricRegistry metrics = CorfuRuntime.getMetrics();
+        MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
+
+        if (metricRegistry != null) {
+            metrics = metricRegistry;
+        }
         String pfx = CorfuRuntime.getMpCR() + host + ":" + port.toString() + ".";
         synchronized (metrics) {
             if (!metrics.getNames().contains(pfx + "connected")) {
@@ -420,7 +432,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             cf.syncUninterruptibly();
             if (!cf.awaitUninterruptibly(timeoutConnect)) {
                 cf.channel().close();   // close port
-                MetricsUtils.incConditionalCounter(isEnabled, counterConnectFailed, 1);
+//                MetricsUtils.incConditionalCounter(isEnabled, counterConnectFailed, 1);
                 throw new NetworkException(c + " Timeout connecting to endpoint",
                         host + ":" + port);
             }
@@ -429,7 +441,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         channel.closeFuture().addListener((r) -> {
             connected = false;
             outstandingRequests.forEach((reqId, reqCompletableFuture) -> {
-                MetricsUtils.incConditionalCounter(isEnabled, counterSendDisconnected, 1);
+//                MetricsUtils.incConditionalCounter(isEnabled, counterSendDisconnected, 1);
                 reqCompletableFuture.completeExceptionally(new NetworkException("Disconnected",
                         host + ":" + port));
                 outstandingRequests.remove(reqId);
@@ -441,8 +453,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                         connectChannel(b, c);
                         return;
                     } catch (Exception ex) {
-                        MetricsUtils.incConditionalCounter(isEnabled,
-                                counterConnectFailed, 1);
+//                        MetricsUtils.incConditionalCounter(isEnabled,
+//                                counterConnectFailed, 1);
                         log.warn("Exception while reconnecting, retry in {} ms", timeoutRetry);
                         Thread.sleep(timeoutRetry);
                     }
@@ -533,7 +545,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             final CompletableFuture<T> cfTimeout =
                     CFUtils.within(cfElapsed, Duration.ofMillis(timeoutResponse));
             cfTimeout.exceptionally(e -> {
-                MetricsUtils.incConditionalCounter(isEnabled, counterSendTimeout, 1);
+//                MetricsUtils.incConditionalCounter(isEnabled, counterSendTimeout, 1);
                 outstandingRequests.remove(thisRequest);
                 log.debug("Remove request {} due to timeout!", thisRequest);
                 return null;
@@ -566,8 +578,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         message.setEpoch(epoch);
         // Write this message out on the channel.
         outContext.writeAndFlush(message);
-        MetricsUtils.incConditionalCounter(MetricsUtils
-                .isMetricsCollectionEnabled(), counterAsyncOpSent, 1);
+//        MetricsUtils.incConditionalCounter(MetricsUtils
+//                .isMetricsCollectionEnabled(), counterAsyncOpSent, 1);
         log.trace("Sent one-way message: {}", message);
     }
 
