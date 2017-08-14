@@ -69,8 +69,13 @@ public class AddressSpaceView extends AbstractView {
         super(runtime);
     }
 
-    public void setMetrics(MetricRegistry metrics) {
-
+    /**
+     * Sets the MetricRegistry and registers the metrics.
+     * Should be called only once. Multiple attempts to register the metrics
+     * throws IllegalArgumentException.
+     * @param metrics MetricRegistry to be set and registered to.
+     */
+    public void setAndRegisterMetrics(MetricRegistry metrics) {
         final String pfx = String.format("%s0x%x.cache.", runtime.getMpASV(), this.hashCode());
         metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::estimatedSize);
         metrics.register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
