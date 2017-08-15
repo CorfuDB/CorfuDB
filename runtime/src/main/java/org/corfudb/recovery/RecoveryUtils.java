@@ -10,6 +10,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -50,6 +51,13 @@ public class RecoveryUtils {
                     .setType(type)
                     .setSerializer(serializer)
                     .open();
+        }
+    }
+
+    static void createObjectIfNotExist(ObjectBuilder ob) {
+        if (!ob.getRuntime().getObjectsView().getObjectCache()
+                .containsKey(RecoveryUtils.getObjectIdFromStreamId(ob.getStreamID(), ob.getType()))){
+                ob.open();
         }
     }
 

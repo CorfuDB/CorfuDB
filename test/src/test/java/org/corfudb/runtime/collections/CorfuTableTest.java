@@ -15,7 +15,7 @@ import lombok.RequiredArgsConstructor;
 public class CorfuTableTest extends AbstractViewTest {
 
     @RequiredArgsConstructor
-    enum StringIndexers implements CorfuTable.IndexSpecification<String, String, String, String> {
+    public enum StringIndexers implements CorfuTable.IndexSpecification<String, String, String, String> {
         BY_VALUE((k,v) -> Collections.singleton(v)),
         BY_FIRST_LETTER((k, v) -> Collections.singleton(Character.toString(v.charAt(0))))
         ;
