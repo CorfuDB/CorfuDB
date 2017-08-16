@@ -4,12 +4,12 @@
     <appender name="MetricsRollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>/var/log/corfu-metrics.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
-            <fileNamePattern>/var/log/corfu-metrics.%i.log</fileNamePattern>
+            <fileNamePattern>/var/log/corfu-metrics.%i.log.gz</fileNamePattern>
             <minIndex>1</minIndex>
             <maxIndex>10</maxIndex>
         </rollingPolicy>
         <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
-            <maxFileSize>100MB</maxFileSize>
+            <maxFileSize>10MB</maxFileSize>
         </triggeringPolicy>
 
         <encoder>
