@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import lombok.AccessLevel;
 import lombok.Data;
+import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
@@ -31,9 +32,11 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
 
     final CorfuRuntime runtime;
 
+    @Getter
     Class<T> type;
 
     @Setter
+    @Getter
     @SuppressWarnings("checkstyle:abbreviation")
     UUID streamID;
 
