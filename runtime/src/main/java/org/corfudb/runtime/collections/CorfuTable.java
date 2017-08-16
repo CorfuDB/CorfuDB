@@ -10,10 +10,10 @@ import com.google.common.reflect.TypeToken;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.ConcurrentModificationException;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -150,9 +150,9 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     /** The "main" map which contains the primary key-value mappings. */
     protected final Map<K,V> mainMap = new HashMap<>();
 
-    protected Set<F> indexFunctions;
+    protected final Set<F> indexFunctions = new HashSet<>();
 
-    protected Map<F, Multimap<I, Map.Entry<K,V>>> indexMap;
+    protected final Map<F, Multimap<I, Map.Entry<K,V>>> indexMap = new HashMap<>();
 
     @Getter
     boolean indexGenerationFailed = false;
@@ -160,15 +160,14 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     /** Generate a table with the given set of indexes. */
     public CorfuTable(Class<F> indexFunctionEnumClass) {
         indexerClass = indexFunctionEnumClass;
-        indexMap = new HashMap<>();
-        indexFunctions = EnumSet.allOf(indexFunctionEnumClass);
+        indexFunctions.addAll(EnumSet.allOf(indexFunctionEnumClass));
         indexFunctions.forEach(f -> indexMap.put(f, ArrayListMultimap.create()));
     }
 
     /** Default constructor. Generates a table without any secondary indexes. */
     public CorfuTable() {
-        indexFunctions = Collections.emptySet();
-        indexMap = Collections.emptyMap();
+        log.error("CorfuTable: Creating a table without secondary indexes! Secondary index lookup"
+            + " will DEGRADE to a full scan");
     }
 
     /** {@inheritDoc} */
@@ -195,7 +194,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     }
 
     @Getter
-    public Class indexerClass;
+    public Class<F> indexerClass;
 
     /** {@inheritDoc} */
     @Override
@@ -262,15 +261,27 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
                                  @Nonnull Predicate<? super Map.Entry<K, V>>
                                                                   entryPredicate,
                                  I index) {
-        final Stream<Map.Entry<K,V>> entryStream = indexFunctions.isEmpty()
-                // If there are no index functions, use the entire map
-                ? mainMap.entrySet().parallelStream()
-                // Otherwise, use the secondary index that was generated.
-                : indexMap
-                .get(indexFunction).get(index).parallelStream();
+        Stream<Map.Entry<K,V>> entryStream;
 
-        return projectionFunction
-                .generateProjection(index, entryStream.filter(entryPredicate))
+        if (indexFunctions.isEmpty()) {
+            // If there are no index functions, use the entire map
+            entryStream = mainMap.entrySet().parallelStream();
+            log.warn("getByIndexAndFilter: Attempted getByIndexAndFilter without indexing");
+        } else {
+            Multimap<I, Map.Entry<K,V>> secondaryMap = indexMap.get(indexFunction);
+            if (secondaryMap != null) {
+                // Otherwise, use the secondary index that was generated.
+                entryStream = secondaryMap.get(index).parallelStream();
+            } else {
+                // For some reason the function is not present (maybe someone passed the
+                // wrong function).
+                log.error("getByIndexAndFilter: Attempted to read from a index function which"
+                        + "is not available, falling back to no secondary index");
+                entryStream = mainMap.entrySet().parallelStream();
+            }
+        }
+
+        return projectionFunction.generateProjection(index, entryStream.filter(entryPredicate))
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
@@ -282,10 +293,11 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      *
      * @param indexFunctionEnumClass
      */
-    public void registerIndex(Class indexFunctionEnumClass) {
+    public void registerIndex(Class<F> indexFunctionEnumClass) {
         indexerClass = indexFunctionEnumClass;
-        indexMap = new HashMap<>();
-        indexFunctions = EnumSet.allOf(indexFunctionEnumClass);
+        indexMap.clear();
+        indexFunctions.clear();
+        indexFunctions.addAll(EnumSet.allOf(indexFunctionEnumClass));
         indexFunctions.forEach(f -> indexMap.put(f, ArrayListMultimap.create()));
         mainMap.forEach(this::mapSecondaryIndexes);
     }
@@ -642,7 +654,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
 
             }
         } catch (Exception e) {
-            indexFunctions = Collections.emptySet();
+            indexFunctions.clear();
             indexMap.clear();
             indexGenerationFailed = true;
             log.error("unmapSecondaryIndexes: Exception unmapping {}, {},"
@@ -664,10 +676,10 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
                     .forEach(f -> f.getIndexFunction().generateIndex(key, value)
                             .forEach(i -> indexMap.get(f).put((I) i, entry)));
         } catch (Exception e) {
-            indexFunctions = Collections.emptySet();
-            indexMap.clear();;
+            indexFunctions.clear();
+            indexMap.clear();
             indexGenerationFailed = true;
-            log.warn("mapSecondaryIndexes: Exception mapping {}, {},"
+            log.error("mapSecondaryIndexes: Exception mapping {}, {},"
                     + " UNMAPPING ALL INDEXES, indexing is disabled", key, value, e);
         }
     }
