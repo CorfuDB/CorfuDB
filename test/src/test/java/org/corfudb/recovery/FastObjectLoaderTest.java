@@ -10,6 +10,8 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.CorfuTableTest;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
@@ -17,6 +19,7 @@ import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -1229,155 +1232,178 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     }
 
     // Test will be enable after introduction of CorfuTable
-//    @Test
-//    public void canRecreateCorfuTable() throws Exception {
-//        CorfuRuntime originalRuntime = getDefaultRuntime();
-//
-//        CorfuTable originalTable = originalRuntime.getObjectsView().build()
-//                .setType(CorfuTable.class)
-//                .setStreamName("test")
-//                .open();
-//
-//        originalTable.put("a", "b");
-//
-//        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
-//                .connect();
-//
-//        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-//        fsmr.getNonDefaultTypeStreams().put(CorfuRuntime.getStreamID("test"), CorfuTable.class);
-//        fsmr.loadMaps();
-//
-//        CorfuTable recreatedTable = recreatedRuntime.getObjectsView().build()
-//                .setType(CorfuTable.class)
-//                .setStreamName("test")
-//                .open();
-//        // Get raw maps (VersionLockedObject)
-//        VersionLockedObject vo1 = getVersionLockedObject(originalRuntime, "test", CorfuTable.class);
-//        VersionLockedObject vo1Prime = getVersionLockedObject(recreatedRuntime, "test", CorfuTable.class);
-//
-//        // Assert that UnderlyingObjects are at the same version
-//        // If they are at the same version, a sync on the object will
-//        // be a no op for the new runtime.
-//        assertThat(vo1Prime.getVersionUnsafe()).isEqualTo(vo1.getVersionUnsafe());
-//
-//        assertThat(recreatedTable.get("a")).isEqualTo("b");
-//
-//    }
-//
-//    @Test
-//    public void canRecreateCorfuTableWithCheckpoint() throws Exception {
-//        CorfuRuntime originalRuntime = getDefaultRuntime();
-//
-//        CorfuTable originalTable1 = originalRuntime.getObjectsView().build()
-//                .setType(CorfuTable.class)
-//                .setStreamName("test1")
-//                .open();
-//
-//        CorfuTable originalTable2 = originalRuntime.getObjectsView().build()
-//                .setType(CorfuTable.class)
-//                .setStreamName("test2")
-//                .open();
-//
-//        originalTable1.put("a", "b");
-//        originalTable2.put("c", "d");
-//        originalTable1.put("e", "f");
-//        originalTable2.put("g", "h");
-//
-//        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
-//        mcw.addMap((CorfuTable) originalTable1);
-//        mcw.addMap((CorfuTable) originalTable2);
-//        mcw.appendCheckpoints(getRuntime(), "author");
-//
-//        originalTable1.put("i", "j");
-//        originalTable2.put("k", "l");
-//
-//        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
-//                .connect();
-//
-//
-//
-//        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-//        fsmr.getNonDefaultTypeStreams().put(CorfuRuntime.getStreamID("test1"), CorfuTable.class);
-//        fsmr.getNonDefaultTypeStreams().put(CorfuRuntime.getStreamID("test2"), CorfuTable.class);
-//        fsmr.loadMaps();
-//
-//
-//        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test1", originalTable1, CorfuTable.class);
-//        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test2", originalTable2, CorfuTable.class);
-//
-//    }
-//
-//    @Test
-//    public void canRecreateCorfuTableWithIndex() throws Exception {
-//        CorfuRuntime originalRuntime = getDefaultRuntime();
-//
-//
-//        CorfuTable originalTable = originalRuntime.getObjectsView().build()
-//                .setType(CorfuTable.class)
-//                .setArguments(CorfuTableTest.StringIndexers.class)
-//                .setStreamName("test")
-//                .open();
-//
-//        originalTable.put("k1", "a");
-//        originalTable.put("k2", "ab");
-//        originalTable.put("k3", "ba");
-//
-//        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
-//                .connect();
-//
-//        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-//        fsmr.getNonDefaultTypeStreams().put(CorfuRuntime.getStreamID("test"), CorfuTable.class);
-//        fsmr.loadMaps();
-//
-//        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test", originalTable, CorfuTable.class);
-//
-//
-//        CorfuTable recreatedTable = recreatedRuntime.getObjectsView().build()
-//                .setType(CorfuTable.class)
-//                .setArguments(CorfuTableTest.StringIndexers.class)
-//                .setStreamName("test")
-//                .open();
-//
-//        assertThat(recreatedTable.getByIndex(CorfuTableTest.StringIndexers.BY_FIRST_LETTER, "a"))
-//                .containsExactly("a", "ab");
-//    }
-//
-//    @Test
-//    public void canRecreateMixOfMaps() throws Exception {
-//        CorfuRuntime originalRuntime = getDefaultRuntime();
-//
-//        SMRMap smrMap = originalRuntime.getObjectsView().build()
-//                .setType(SMRMap.class)
-//                .setStreamName("smrMap")
-//                .open();
-//
-//        CorfuTable corfuTable = originalRuntime.getObjectsView().build()
-//                .setType(CorfuTable.class)
-//                .setStreamName("corfuTable")
-//                .open();
-//
-//        smrMap.put("a", "b");
-//        corfuTable.put("c", "d");
-//        smrMap.put("e", "f");
-//        corfuTable.put("g", "h");
-//
-//        MultiCheckpointWriter mcw = new MultiCheckpointWriter<>();
-//        mcw.addMap((SMRMap) smrMap);
-//        mcw.addMap((CorfuTable) corfuTable);
-//        mcw.appendCheckpoints(getRuntime(), "author");
-//
-//        smrMap.put("i", "j");
-//        corfuTable.put("k", "l");
-//
-//        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
-//                .connect();
-//
-//        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-//        fsmr.getNonDefaultTypeStreams().put(CorfuRuntime.getStreamID("corfuTable"), CorfuTable.class);
-//        fsmr.loadMaps();
-//
-//
-//        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "smrMap", smrMap, SMRMap.class);
-//        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "corfuTable", corfuTable, CorfuTable.class);
-//    }
+    @Test
+    public void canRecreateCorfuTable() throws Exception {
+        CorfuRuntime originalRuntime = getDefaultRuntime();
+
+        CorfuTable originalTable = originalRuntime.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setStreamName("test")
+                .open();
+
+        originalTable.put("a", "b");
+
+        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+                .connect();
+
+        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
+        ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
+                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setStreamID(CorfuRuntime.getStreamID("test"));
+        fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test"), ob);
+        fsmr.loadMaps();
+
+        CorfuTable recreatedTable = recreatedRuntime.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setStreamName("test")
+                .open();
+        // Get raw maps (VersionLockedObject)
+        VersionLockedObject vo1 = getVersionLockedObject(originalRuntime, "test", CorfuTable.class);
+        VersionLockedObject vo1Prime = getVersionLockedObject(recreatedRuntime, "test", CorfuTable.class);
+
+        // Assert that UnderlyingObjects are at the same version
+        // If they are at the same version, a sync on the object will
+        // be a no op for the new runtime.
+        assertThat(vo1Prime.getVersionUnsafe()).isEqualTo(vo1.getVersionUnsafe());
+
+        assertThat(recreatedTable.get("a")).isEqualTo("b");
+
+    }
+
+    @Test
+    public void canRecreateCorfuTableWithCheckpoint() throws Exception {
+        CorfuRuntime originalRuntime = getDefaultRuntime();
+
+        CorfuTable originalTable1 = originalRuntime.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setStreamName("test1")
+                .open();
+
+        CorfuTable originalTable2 = originalRuntime.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setStreamName("test2")
+                .open();
+
+        originalTable1.put("a", "b");
+        originalTable2.put("c", "d");
+        originalTable1.put("e", "f");
+        originalTable2.put("g", "h");
+
+        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
+        mcw.addMap((CorfuTable) originalTable1);
+        mcw.addMap((CorfuTable) originalTable2);
+        mcw.appendCheckpoints(getRuntime(), "author");
+
+        originalTable1.put("i", "j");
+        originalTable2.put("k", "l");
+
+        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+                .connect();
+
+
+
+        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
+        ObjectBuilder ob1 = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
+                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setStreamID(CorfuRuntime.getStreamID("test1"));
+        ObjectBuilder ob2 = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
+                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setStreamID(CorfuRuntime.getStreamID("test2"));
+        fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test1"), ob1);
+        fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test2"), ob2);
+
+        fsmr.loadMaps();
+
+
+        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test1", originalTable1, CorfuTable.class);
+        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test2", originalTable2, CorfuTable.class);
+
+    }
+
+    @Test
+    public void canRecreateCorfuTableWithIndex() throws Exception {
+        CorfuRuntime originalRuntime = getDefaultRuntime();
+
+
+        CorfuTable originalTable = originalRuntime.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setStreamName("test")
+                .open();
+
+        originalTable.put("k1", "a");
+        originalTable.put("k2", "ab");
+        originalTable.put("k3", "ba");
+
+        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+                .connect();
+
+        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
+        ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
+                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setStreamID(CorfuRuntime.getStreamID("test"));
+        fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test"), ob);
+
+        fsmr.loadMaps();
+
+        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test", originalTable, CorfuTable.class);
+
+
+        CorfuTable recreatedTable = recreatedRuntime.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setStreamName("test")
+                .open();
+
+        assertThat(recreatedTable.getByIndex(CorfuTableTest.StringIndexers.BY_FIRST_LETTER, "a"))
+                .containsExactly("a", "ab");
+
+        getVersionLockedObject(recreatedRuntime, "test", CorfuTable.class).resetUnsafe();
+
+        recreatedTable.get("k3");
+        assertThat(recreatedTable.hasSecondaryIndices()).isTrue();
+        recreatedTable.getByIndex(CorfuTableTest.StringIndexers.BY_FIRST_LETTER, "a");
+    }
+
+    @Test
+    public void canRecreateMixOfMaps() throws Exception {
+        CorfuRuntime originalRuntime = getDefaultRuntime();
+
+        SMRMap smrMap = originalRuntime.getObjectsView().build()
+                .setType(SMRMap.class)
+                .setStreamName("smrMap")
+                .open();
+
+        CorfuTable corfuTable = originalRuntime.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setStreamName("corfuTable")
+                .open();
+
+        smrMap.put("a", "b");
+        corfuTable.put("c", "d");
+        smrMap.put("e", "f");
+        corfuTable.put("g", "h");
+
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter<>();
+        mcw.addMap((SMRMap) smrMap);
+        mcw.addMap((CorfuTable) corfuTable);
+        mcw.appendCheckpoints(getRuntime(), "author");
+
+        smrMap.put("i", "j");
+        corfuTable.put("k", "l");
+
+        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+                .connect();
+
+        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
+        ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
+                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setStreamID(CorfuRuntime.getStreamID("corfuTable"));
+        fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("corfuTable"), ob);
+        fsmr.loadMaps();
+
+
+        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "smrMap", smrMap, SMRMap.class);
+        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "corfuTable", corfuTable, CorfuTable.class);
+    }
 }

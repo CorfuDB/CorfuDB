@@ -28,6 +28,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -99,12 +100,15 @@ public class FastObjectLoader {
     /**
      * We can register streams with non-default type
      */
-    @Getter
-    private Map<UUID, Class> nonDefaultTypeStreams = new HashMap<>();
+    private Map<UUID, ObjectBuilder> customTypeStreams = new HashMap<>();
+
+    public void addCustomTypeStream(UUID streamId, ObjectBuilder ob) {
+        customTypeStreams.put(streamId, ob);
+    }
 
     private Class getStreamType(UUID streamId) {
-        if (nonDefaultTypeStreams.containsKey(streamId)) {
-            return nonDefaultTypeStreams.get(streamId);
+        if (customTypeStreams.containsKey(streamId)) {
+            return customTypeStreams.get(streamId).getType();
         }
 
         return defaultObjectsType;
@@ -262,7 +266,14 @@ public class FastObjectLoader {
             Class objectType = getStreamType(streamId);
 
             // Create an Object only for non-checkpoints
-            createObjectIfNotExist(runtime, streamId, serializer, objectType);
+
+            // If it is a special type, create it with the object builder
+            if (objectType != defaultObjectsType) {
+                createObjectIfNotExist(customTypeStreams.get(streamId));
+            }
+            else {
+                createObjectIfNotExist(runtime, streamId, serializer, objectType);
+            }
             CorfuCompileProxy cp = getCorfuCompileProxy(runtime, streamId, objectType);
             cp.getUnderlyingObject().applyUpdateToStreamUnsafe(entry, globalAddress);
         }
