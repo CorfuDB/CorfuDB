@@ -1406,4 +1406,48 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "smrMap", smrMap, SMRMap.class);
         assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "corfuTable", corfuTable, CorfuTable.class);
     }
+
+    @Test
+    public void canRecreateCustomWithSerializer() throws Exception {
+        CorfuRuntime originalRuntime = getDefaultRuntime();
+        ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 1));
+        Serializers.registerSerializer(customSerializer);
+
+        CorfuTable originalTable = originalRuntime.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setStreamName("test")
+                .setSerializer(customSerializer)
+                .open();
+
+        originalTable.put("a", "b");
+
+        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+                .connect();
+
+        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
+        ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
+                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setStreamID(CorfuRuntime.getStreamID("test"));
+        fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test"), ob);
+        fsmr.loadMaps();
+
+        CorfuTable recreatedTable = recreatedRuntime.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setStreamName("test")
+                .open();
+        // Get raw maps (VersionLockedObject)
+        VersionLockedObject vo1 = getVersionLockedObject(originalRuntime, "test", CorfuTable.class);
+        VersionLockedObject vo1Prime = getVersionLockedObject(recreatedRuntime, "test", CorfuTable.class);
+
+        // Assert that UnderlyingObjects are at the same version
+        // If they are at the same version, a sync on the object will
+        // be a no op for the new runtime.
+        assertThat(vo1Prime.getVersionUnsafe()).isEqualTo(vo1.getVersionUnsafe());
+
+        assertThat(recreatedTable.get("a")).isEqualTo("b");
+
+        assertThat(getCorfuCompileProxy(recreatedRuntime, "test", CorfuTable.class).getSerializer())
+                .isEqualTo(customSerializer);
+
+    }
 }

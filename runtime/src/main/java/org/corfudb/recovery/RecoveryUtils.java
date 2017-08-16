@@ -54,10 +54,10 @@ public class RecoveryUtils {
         }
     }
 
-    static void createObjectIfNotExist(ObjectBuilder ob) {
+    static void createObjectIfNotExist(ObjectBuilder ob, ISerializer serializer) {
         if (!ob.getRuntime().getObjectsView().getObjectCache()
                 .containsKey(RecoveryUtils.getObjectIdFromStreamId(ob.getStreamID(), ob.getType()))){
-                ob.open();
+                ob.setSerializer(serializer).open();
         }
     }
 

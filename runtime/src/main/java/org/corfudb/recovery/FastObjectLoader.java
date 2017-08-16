@@ -269,7 +269,7 @@ public class FastObjectLoader {
 
             // If it is a special type, create it with the object builder
             if (objectType != defaultObjectsType) {
-                createObjectIfNotExist(customTypeStreams.get(streamId));
+                createObjectIfNotExist(customTypeStreams.get(streamId), serializer);
             }
             else {
                 createObjectIfNotExist(runtime, streamId, serializer, objectType);
