@@ -18,6 +18,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -154,6 +159,9 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
 
     protected final Map<F, Multimap<I, Map.Entry<K,V>>> indexMap = new HashMap<>();
 
+    protected final ExecutorService indexExecutor = Executors
+                    .newSingleThreadExecutor(r -> new Thread(r, "CorfuTable-Indexer"));
+
     @Getter
     boolean indexGenerationFailed = false;
 
@@ -268,6 +276,16 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
             entryStream = mainMap.entrySet().parallelStream();
             log.warn("getByIndexAndFilter: Attempted getByIndexAndFilter without indexing");
         } else {
+            // Collect the indexes first
+            try {
+                // Submitting this empty job and waiting for it will cause us
+                // to wait for all pending jobs. Since we're guaranteed to be
+                // single threaded otherwise, this should be safe.
+                indexExecutor.submit(() -> null).get();
+            } catch (Exception e) {
+                // Rethrow exception
+                throw new RuntimeException(e);
+            }
             Multimap<I, Map.Entry<K,V>> secondaryMap = indexMap.get(indexFunction);
             if (secondaryMap != null) {
                 // Otherwise, use the secondary index that was generated.
@@ -307,10 +325,10 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     @MutatorAccessor(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord")
     public V put(@ConflictParameter K key, V value) {
         V previous = mainMap.put(key, value);
-        // If we have index functions, update the secondary indexes.
+        // If we have index functions, update the secondary indexes
         if (!indexFunctions.isEmpty()) {
-            unmapSecondaryIndexes(key, previous);
-            mapSecondaryIndexes(key, value);
+            unmapSecondaryIndexesAsync(key, previous);
+            mapSecondaryIndexesAsync(key, value);
         }
         return previous;
     }
@@ -383,8 +401,8 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         V previous = mainMap.put(key, value);
         // If we have index functions, update the secondary indexes.
         if (!indexFunctions.isEmpty()) {
-            unmapSecondaryIndexes(key, previous);
-            mapSecondaryIndexes(key, value);
+            unmapSecondaryIndexesAsync(key, previous);
+            mapSecondaryIndexesAsync(key, value);
         }
     }
 
@@ -420,7 +438,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     @SuppressWarnings("unchecked")
     public V remove(@ConflictParameter Object key) {
         V previous =  mainMap.remove(key);
-        unmapSecondaryIndexes((K) key, previous);
+        unmapSecondaryIndexesAsync((K) key, previous);
         return previous;
     }
 
@@ -433,12 +451,12 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     protected void undoRemove(CorfuTable<K, V, F, I> table, V undoRecord, K key) {
         if (undoRecord == null) {
             V previous =  table.mainMap.remove(key);
-            table.unmapSecondaryIndexes(key, previous);
+            table.unmapSecondaryIndexesAsync(key, previous);
         } else {
             V previous = table.mainMap.put(key, undoRecord);
             if (!table.indexFunctions.isEmpty()) {
-                table.unmapSecondaryIndexes(key, previous);
-                table.mapSecondaryIndexes(key, undoRecord);
+                table.unmapSecondaryIndexesAsync(key, previous);
+                table.mapSecondaryIndexesAsync(key, undoRecord);
             }
         }
     }
@@ -448,7 +466,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     @Mutator(name = "remove", noUpcall = true)
     public void delete(@ConflictParameter K key) {
         V previous =  mainMap.remove(key);
-        unmapSecondaryIndexes(key, previous);
+        unmapSecondaryIndexesAsync(key, previous);
     }
 
     /** {@inheritDoc} */
@@ -467,8 +485,8 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
             m.entrySet().stream()
                     .forEach(e -> {
                         V previous = mainMap.put(e.getKey(), e.getValue());
-                        unmapSecondaryIndexes(e.getKey(), previous);
-                        mapSecondaryIndexes(e.getKey(), e.getValue());
+                        unmapSecondaryIndexesAsync(e.getKey(), previous);
+                        mapSecondaryIndexesAsync(e.getKey(), e.getValue());
                     });
         }
     }
@@ -637,6 +655,10 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         return newValue;
     }
 
+    protected void unmapSecondaryIndexesAsync(final K key, final V value) {
+        indexExecutor.submit(() -> unmapSecondaryIndexes(key, value));
+    }
+
     /** Unmaps the secondary indexes for a given key value pair.
      *
      * @param key           The primary key (index) for the mapping.
@@ -663,13 +685,17 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         }
     }
 
+    protected void mapSecondaryIndexesAsync(final K key, final V value) {
+        indexExecutor.submit(() -> mapSecondaryIndexes(key, value));
+    }
+
     /** Maps the secondary indexes for a given key value pair.
      *
      * @param key       The primary key (index) for the mapping.
      * @param value     The value to map.
      */
     @SuppressWarnings("unchecked")
-    protected void mapSecondaryIndexes(K key, V value) {
+    protected void mapSecondaryIndexes(final K key, final V value) {
         try {
             Map.Entry<K, V> entry = new AbstractMap.SimpleImmutableEntry<>(key, value);
             indexFunctions.parallelStream()
