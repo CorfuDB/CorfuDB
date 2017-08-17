@@ -3,6 +3,8 @@ sudo: required
 dist: trusty
 jdk:
 - oraclejdk8
+services:
+- docker
 before_install:
 - ".travis_scripts/generate_keys.sh $encrypted_026743b97986_key $encrypted_026743b97986_iv"
 - ".travis_scripts/setup_env.sh"
@@ -36,7 +38,7 @@ env:
   global:
   - secure: WJZd15DtGSetu3HuaPE/Ap0EaPkR1D68ZUIFxyqUho8AY/rLGuANUrAY5U02jO1K1+iaYFMecRr2ZlOEK4N1XiBNz2gMnYmkHmUs9Gz+J3eA8SXdYOHsKyI5iRpyUgwzHIVLOKz03cvDlI04Rrm0Uhe/7hjNaXVge6I0YKPmiXI=
   - secure: YSaXp8PYE5YOaHOJTWXHIORNTP0oWdNDhSAMud1OD7LvH7ZdSPt35XVG8+Vagz+Y4mufCu0UVqVq62KJLtG9AVpKXxTvDdvCGZ7N5WLbGO0CAscjOuXm1uEKfGefpyFj2HZJ+h8zbuinAoZ5RHZa+SniRb1iES0lJUfxcYBMmoQ=
-  - secure: R7GUxZyUxj1WfvKN7Zcigo59+2Q2UTU489yGw9ac/DKafszwvrJ/z0aUXzADOhR7EIaBuElYb7zytr/DSTeDMoxq+EniH/OTx4S/Btb2Qw5RBw2pYzuahyqiVk3Tc6gcIvlE6gNl4b8K58YzwC634WxnPDmxH4hyIrE4sc3JJcQ=
-  - secure: lzZmbc2HZgHX+xuBqXwwd9Zql+ae+Vw/+oUdO2QfQEuLqZKSUbjefMuaeFPsBrd8f9sUalJBaJ6VxecoWia0Ncj4QC9PR4MxaZaDm2Zt87KGbpxqvBcbZK332toNPTznV9Fozt5Iu0ofcCr86g6nyXcO+Sqr/5mMr/w6NVtYeJQ=
+  - secure: dqCmERPc/7xlKhSrjN+/R1E6b/OUTfHiQOMmUp9yTr9gBE9xNvQ1yBhkgvPt8Jp9mmm79BPcu3MzDgXZbo8giPXU1Ge+hbVGc/l50XjendZqvpcVA9vwxZ1V+lRxYy3UqRsx6xSGfnoIPDY9JRCReZzME/Na0Mnu78h9OFyZlFk=
+  - secure: c7T/MBOWQIyvbDGdAX1OIyqoP98Rr5gCsiw6k4lE7CNhlpMW/WEPLWV/qlrX+SOxirIdELM4clR+FeWX3uW4RVN+X3/CMM97h2FqmODsBvZW7PcRhn9mftUP8XMyBfk1S9jzYFnslNvDXCSSaWaN+XE/Hqat3nRjMmOCs20U/7c=
   - secure: SUmXHAnc9q13aw+Z4kA+JDEQ37OswcBi8KCHfr/7VI54VCmySYzcoYSOb9ADw31htOBDnuer8dMok63WnvFQ8Uad3K8Qj2rroehn6SUvbEjKH4K0PKPbohS1J2Tdpnd7gJ8H7Hydi1fjVTrxC27ih5ZB126Rg3fn6IUecIbYzHk=
   - secure: Xl5vdWqyF71gMKpjW9djoCg3tn2UVupuVzptSdp+dpcPE+aN1RLEWBys9qtAjuDXR4bcTeMBkb0KIFz5WS7v0J+jPPcbnUWDNR9ixofM06gtlzpAqyN8YO7bd9tJijNnquz+GW1MXx3qIdo09O55OH76f1oQhVxlB+oqDISCV8k=
