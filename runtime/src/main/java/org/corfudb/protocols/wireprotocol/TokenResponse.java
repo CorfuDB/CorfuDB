@@ -2,6 +2,7 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 
@@ -60,6 +61,21 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
         backpointerMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
     }
 
+
+    public TokenResponse(TokenType type, long address, long epoch) {
+        respType = type;
+        conflictKey = NO_CONFLICT_KEY;
+        token = new Token(address, epoch);
+        this.backpointerMap = Collections.emptyMap();
+    }
+
+    public TokenResponse(TokenType type, byte[] conflictKey, long address, long epoch) {
+        respType = type;
+        this.conflictKey = conflictKey;
+        token = new Token(address, epoch);
+        this.backpointerMap = Collections.emptyMap();
+    }
+    
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, respType);
