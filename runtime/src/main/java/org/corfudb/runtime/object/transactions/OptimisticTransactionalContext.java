@@ -1,16 +1,21 @@
 package org.corfudb.runtime.object.transactions;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
@@ -22,9 +27,15 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.ISMRStream;
+import org.corfudb.runtime.object.StreamViewSMRAdapter;
 import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.Utils;
 
 import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
+
+import javax.annotation.Nonnull;
 
 /** A Corfu optimistic transaction context.
  *
@@ -229,8 +240,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @SuppressWarnings("unchecked")
     public long commitTransaction() throws TransactionAbortedException {
         log.debug("TX[{}] request optimistic commit", this);
-
-        return getConflictSetAndCommit(getReadSetInfo());
+        return doCommit(getReadSetInfo());
     }
 
     /**
@@ -239,19 +249,19 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * @param conflictSet  conflict set used to check whether transaction can commit
      * @return  the commit address
      */
-    public long getConflictSetAndCommit(ConflictSetInfo conflictSet) {
+    protected long doCommit(final ConflictSetInfo conflictSet) {
 
         if (TransactionalContext.isInNestedTransaction()) {
             getParentContext().addTransaction(this);
             commitAddress = AbstractTransactionalContext.FOLDED_ADDRESS;
-            log.trace("Commit[{}] Folded into {}", this, getParentContext());
+            log.trace("doCommit[{}] Folded into {}", this, getParentContext());
             return commitAddress;
         }
 
         // If the write set is empty, we're done and just return
         // NOWRITE_ADDRESS.
         if (getWriteSetInfo().getWriteSet().getEntryMap().isEmpty()) {
-            log.trace("Commit[{}] Read-only commit (no write)", this);
+            log.trace("doCommit[{}] Read-only commit (no write)", this);
             return NOWRITE_ADDRESS;
         }
 
@@ -262,39 +272,188 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             affectedStreams.add(TRANSACTION_STREAM_ID);
         }
 
-        // Now we obtain a conditional address from the sequencer.
-        // This step currently happens all at once, and we get an
-        // address of -1L if it is rejected.
-        long address = -1L;
+        // Now we obtain a conditional address from the sequencer and append to the log
+        // If rejected we will get a transaction aborted exception.
+        long address;
 
-        address = this.builder.runtime.getStreamsView()
-                .append(
+        final Map<UUID, Set<byte[]>> hashedConflictSet =
+                conflictSet.getHashedConflictSet();
+        try {
+            address = this.builder.runtime.getStreamsView()
+                    .append(
+                            affectedStreams,
+                            collectWriteSetEntries(),
+                            new TxResolutionInfo(getTransactionID(),
+                                    getSnapshotTimestamp(),
+                                    hashedConflictSet,
+                                    getWriteSetInfo().getHashedConflictSet())
+                    );
+        } catch (TransactionAbortedException tae) {
+            // If precise conflicts aren't required, re-throw the transaction.
+            if (!builder.isPreciseConflicts()) {
+                throw tae;
+            }
 
-                        // a set of stream-IDs that contains the affected streams
-                        affectedStreams,
+            // Otherwise, do a precise conflict check.
+            address = doPreciseCommit(tae, conflictSet.getConflicts()
+                    , hashedConflictSet, affectedStreams);
+        }
 
-                        // a MultiObjectSMREntry that contains the update(s) to objects
-                        collectWriteSetEntries(),
-
-                        // TxResolution info:
-                        // 1. snapshot timestamp
-                        // 2. a map of conflict params, arranged by streamID's
-                        // 3. a map of write conflict-params, arranged by
-                        // streamID's
-                        new TxResolutionInfo(getTransactionID(),
-                                getSnapshotTimestamp(),
-                                conflictSet.getHashedConflictSet(),
-                                getWriteSetInfo().getHashedConflictSet())
-                );
-
-        log.trace("Commit[{}] Acquire address {}", this, address);
+        log.trace("doCommit[{}] Acquire address {}", this, address);
 
         super.commitTransaction();
         commitAddress = address;
 
         tryCommitAllProxies();
-        log.trace("Commit[{}] Written to {}", this, address);
+        log.trace("doCommit[{}] Written to {}", this, address);
         return address;
+    }
+
+    /** Do a precise commit, which is guaranteed not to produce an abort
+     * due to a false conflict. This method achieves this guarantee by scanning
+     * scanning the log when the sequencer detects a conflict, and manually
+     * inspecting each entry in the conflict window. If there are no true conflicts,
+     * the transaction is retried with the sequencer, otherwise, if a true conflict
+     * is detected, the transaction aborts, with a flag indicating the the abort
+     * was precise (guaranteed to not be false).
+     *
+     * @param originalException     The original exception when we first tried to commit.
+     * @param conflictSet           The set of objects this transaction conflicts with.
+     * @param hashedConflictSet     The hashed version of the conflict set.
+     * @param affectedStreams       The set of streams affected by this transaction.
+     * @return                      The address the transaction was committed to.
+     * @throws TransactionAbortedException  If the transaction must be aborted.
+     */
+    protected long doPreciseCommit(@Nonnull final TransactionAbortedException originalException,
+                                   @NonNull final Map<ICorfuSMRProxyInternal, Set<Object>>
+                                           conflictSet,
+                                   @NonNull final Map<UUID, Set<byte[]>> hashedConflictSet,
+                                   @NonNull final Set<UUID> affectedStreams) {
+
+        log.debug("doPreciseCommit[{}]: Imprecise conflict detected, resolving...", this);
+        TransactionAbortedException currentException = originalException;
+
+        // This map contains the maximum address of the streams we have
+        // verified to not have any true conflicts so far.
+        final Map<UUID, Long> verifiedStreams = new HashMap<>();
+
+        // We resolve conflicts until we have a -true- conflict.
+        // This might involve having the sequencer reject our
+        // request to commit multiple times.
+        while (currentException.getAbortCause() == AbortCause.CONFLICT) {
+            final UUID conflictStream = currentException.getConflictStream();
+            final long currentAddress = currentException.getConflictAddress();
+            final TransactionAbortedException thisException = currentException;
+
+            // Get the proxy, which should be available either in the write set
+            // or read set. We need the proxy to generate the conflict objects
+            // from the SMR entry.
+            ICorfuSMRProxyInternal proxy;
+            Optional<ICorfuSMRProxyInternal> modifyProxy = getModifiedProxies().stream()
+                    .filter(p -> p.getStreamID().equals(conflictStream))
+                    .findFirst();
+            if (modifyProxy.isPresent()) {
+                proxy = modifyProxy.get();
+            } else {
+                modifyProxy = getReadSetInfo().getProxy(conflictStream);
+                if (!modifyProxy.isPresent()) {
+                    modifyProxy = getWriteSetInfo().getProxy(conflictStream);
+                    if (!modifyProxy.isPresent()) {
+                        log.warn("doPreciseCommit[{}]: precise conflict resolution requested "
+                                + "but proxy not found, aborting", this);
+                    }
+                    throw currentException;
+                }
+                proxy = modifyProxy.get();
+            }
+
+            // Otherwise starting from the snapshot address to the conflict
+            // address (following backpointers if possible), check if there
+            // is any conflict
+            log.debug("doPreciseCommit[{}]: conflictStream {} searching {} to {}",
+                    this,
+                    Utils.toReadableId(conflictStream),
+                    getSnapshotTimestamp() + 1,
+                    currentAddress);
+            // Generate a view over the stream that caused the conflict
+            IStreamView stream =
+                    builder.runtime.getStreamsView().get(conflictStream);
+            try {
+                ISMRStream smrStream = new StreamViewSMRAdapter(builder.runtime, stream);
+                // Start the stream right after the snapshot.
+                smrStream.seek(getSnapshotTimestamp() + 1);
+                // Iterate over the stream, manually checking each conflict object.
+                smrStream.streamUpTo(currentAddress)
+                        .forEach(x -> {
+                            Object[] conflicts =
+                                    proxy.getConflictFromEntry(x.getSMRMethod(),
+                                            x.getSMRArguments());
+                            log.trace("doPreciseCommit[{}]: found conflicts {}", this, conflicts);
+                            if (conflicts != null) {
+                                Optional<Set<Object>> conflictObjects =
+                                        conflictSet.entrySet().stream()
+                                            .filter(e -> e.getKey().getStreamID()
+                                                    .equals(conflictStream))
+                                            .map(Map.Entry::getValue)
+                                            .findAny();
+                                if (!Collections.disjoint(Arrays.asList(conflicts),
+                                        conflictObjects.get())) {
+                                    log.debug("doPreciseCommit[{}]: True conflict, aborting",
+                                            this);
+                                    thisException.setPrecise(true);
+                                    throw thisException;
+                                }
+                            } else {
+                                // Conflicts was null, which means the entry conflicted with -any-
+                                // update (for example, a clear).
+                                log.debug("doPreciseCommit[{}]: True conflict due to conflict all,"
+                                                + " aborting",
+                                        this);
+                                thisException.setPrecise(true);
+                                throw thisException;
+                            }
+                        });
+            } catch (TrimmedException te) {
+                // During the scan, it could be possible for us to encounter
+                // a trim exception. In this case, the trim counts as a conflict
+                // and we must abort.
+                log.warn("doPreciseCommit[{}]: Aborting due to trim during scan");
+                throw new TransactionAbortedException(currentException.getTxResolutionInfo(),
+                        currentException.getConflictKey(), conflictStream,
+                        AbortCause.TRIM, te, this);
+            }
+
+            // If we got here, we now tell the sequencer we checked this
+            // object manually and it was a false conflict, and try to
+            // commit.
+            log.warn("doPreciseCommit[{}]: False conflict, stream {} checked from {} to {}",
+                    this, Utils.toReadableId(conflictStream), getSnapshotTimestamp() + 1,
+                    currentAddress);
+            verifiedStreams.put(conflictStream, currentAddress);
+            try {
+                return this.builder.runtime.getStreamsView()
+                        .append(
+                                affectedStreams,
+                                collectWriteSetEntries(),
+                                new TxResolutionInfo(getTransactionID(),
+                                        getSnapshotTimestamp(),
+                                        hashedConflictSet,
+                                        getWriteSetInfo().getHashedConflictSet(),
+                                        verifiedStreams
+                                )
+                        );
+            } catch (TransactionAbortedException taeRetry) {
+                // This means that the sequencer still rejected our request
+                // Which may be because another client updated this
+                // conflict key already. We'll try again if the
+                // abort reason was due to a conflict.
+                log.warn("doPreciseCommit[{}]: Sequencer rejected, retrying", this, taeRetry);
+                currentException = taeRetry;
+            }
+        }
+        // If the abort had no conflict key information, we have
+        // no choice but to re-throw.
+        throw currentException;
     }
 
     /** Try to commit the optimistic updates to each proxy. */

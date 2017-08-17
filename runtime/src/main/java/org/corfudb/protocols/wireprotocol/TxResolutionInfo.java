@@ -37,6 +37,11 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     @Getter
     final Map<UUID, Set<byte[]>>  writeConflictParams;
 
+    /** A map of streams which have been validated for transactional commit,
+        with the addresses they have been validated up to. */
+    @Getter
+    final Map<UUID, Long> validatedStreams;
+
     /**
      * Constructor for TxResolutionInfo.
      *
@@ -48,6 +53,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
         this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = Collections.emptyMap();
         this.writeConflictParams = Collections.emptyMap();
+        this.validatedStreams = Collections.emptyMap();
     }
 
     /**
@@ -64,7 +70,29 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
         this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = conflictMap;
         this.writeConflictParams = writeConflictParams;
+        this.validatedStreams = Collections.emptyMap();
     }
+
+    /**
+     * Constructor for TxResolutionInfo.
+     *
+     * @param txId transaction identifier
+     * @param snapshotTimestamp transaction snapshot timestamp
+     * @param conflictMap map of conflict parameters, arranged by stream IDs
+     * @param writeConflictParams map of write conflict parameters, arranged by stream IDs
+     * @param validatedMap  map of streams which have been validated for transactional commit,
+     *                      with the addresses they have been validated up to.
+     */
+    public TxResolutionInfo(UUID txId, long snapshotTimestamp, Map<UUID, Set<byte[]>>
+            conflictMap, Map<UUID, Set<byte[]>> writeConflictParams,
+                            Map<UUID, Long> validatedMap) {
+        this.TXid = txId;
+        this.snapshotTimestamp = snapshotTimestamp;
+        this.conflictSet = conflictMap;
+        this.writeConflictParams = writeConflictParams;
+        this.validatedStreams = validatedMap;
+    }
+
 
     /**
      * fast, specialized deserialization constructor, from a ByteBuf to this object
@@ -100,6 +128,8 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
         }
 
         writeConflictParams = writeMapBuilder.build();
+
+        this.validatedStreams = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
     }
 
     /**
@@ -125,6 +155,8 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
             ICorfuPayload.serialize(buf, x.getKey());
             ICorfuPayload.serialize(buf, x.getValue());
         });
+
+        ICorfuPayload.serialize(buf, validatedStreams);
     }
 
     @Override

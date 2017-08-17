@@ -90,6 +90,12 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Getter
     ISerializer serializer;
 
+    /** A map from method names to their corresponding conflict
+     * functions.
+     */
+    @Getter
+    Map<String, IConflictFunction> conflictFunctionMap;
+
     /**
      * The arguments this proxy was created with.
      */
@@ -129,6 +135,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                              Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
                              Map<String, IUndoFunction<T>> undoTargetMap,
                              Map<String, IUndoRecordFunction<T>> undoRecordTargetMap,
+                             Map<String, IConflictFunction> conflictFunctionMap,
                              Set<String> resetSet
     ) {
         this.rt = rt;
@@ -136,6 +143,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         this.type = type;
         this.args = args;
         this.serializer = serializer;
+        this.conflictFunctionMap = conflictFunctionMap;
 
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().get(streamID)),
@@ -424,6 +432,12 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     public long getVersion() {
         return access(o -> underlyingObject.getVersionUnsafe(),
                 null);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public Object[] getConflictFromEntry(String smrMethod, Object[] smrArguments) {
+        return getConflictFunctionMap().get(smrMethod).getConflictSet(smrArguments);
     }
 
     /**

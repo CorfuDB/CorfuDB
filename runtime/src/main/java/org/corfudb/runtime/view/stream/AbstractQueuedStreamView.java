@@ -424,7 +424,8 @@ public abstract class AbstractQueuedStreamView extends
          * */
         @Override
         void seek(long globalAddress) {
-            if (Address.nonAddress(globalAddress)) {
+            if (globalAddress != Address.maxNonAddress() &&
+                    Address.nonAddress(globalAddress)) {
                 throw new IllegalArgumentException("globalAddress must"
                         + " be >= Address.maxNonAddress()");
             }

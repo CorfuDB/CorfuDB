@@ -26,7 +26,6 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
@@ -231,9 +230,8 @@ public class SequencerServer extends AbstractServer {
         // issued.
         long responseGlobalTail = (req.getStreams().size() == 0) ? globalLogTail.get() - 1 :
                 maxStreamGlobalTail;
-        Token token = new Token(responseGlobalTail, r.getServerEpoch());
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, Collections.emptyMap())));
+                responseGlobalTail, r.getServerEpoch(), Collections.emptyMap())));
     }
 
     @ServerHandler(type = CorfuMsgType.SEQUENCER_TRIM_REQ, opTimer = metricsPrefix + "trimCache")
@@ -358,9 +356,8 @@ public class SequencerServer extends AbstractServer {
         final long serverEpoch = r.getServerEpoch();
         final TokenRequest req = msg.getPayload();
 
-        Token token = new Token(globalLogTail.getAndAdd(req.getNumTokens()), serverEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, Collections.emptyMap())));
+                globalLogTail.getAndAdd(req.getNumTokens()), serverEpoch, Collections.emptyMap())));
 
     }
 
@@ -378,8 +375,8 @@ public class SequencerServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    private void handleTxToken(CorfuPayloadMsg<TokenRequest> msg,
-                               ChannelHandlerContext ctx, IServerRouter r) {
+    private void handleTxToken(final CorfuPayloadMsg<TokenRequest> msg,
+                               final ChannelHandlerContext ctx, final IServerRouter r) {
         final long serverEpoch = r.getServerEpoch();
         final TokenRequest req = msg.getPayload();
         final TxResolutionInfo txInfo = req.getTxnResolution();
@@ -408,6 +405,8 @@ public class SequencerServer extends AbstractServer {
                     final String conflictKeyHash = getConflictHashCode(streamId, conflictParam);
                     final Long conflictTail = conflictToGlobalTailCache
                             .getIfPresent(conflictKeyHash);
+                    final Long validatedAddress =
+                            txInfo.getValidatedStreams().get(streamId);
 
                     if (txSnapshotTimestamp < maxConflictWildcard) {
                         log.debug("ABORT[{}] snapshot-ts[{}] WILDCARD ts=[{}]",
@@ -415,20 +414,38 @@ public class SequencerServer extends AbstractServer {
                         r.sendResponse(ctx, msg,
                                 CorfuMsgType.TOKEN_RES.payloadMsg(
                                         new TokenResponse(TokenType.TX_ABORT_SEQ_OVERFLOW,
-                                                conflictParam, Address.ABORTED, serverEpoch)));
+                                                conflictParam, streamId,
+                                                Address.ABORTED, serverEpoch)));
                         return;
                     }
 
                     if (conflictTail != null
-                            && (conflictTail > txSnapshotTimestamp)) {
-                        log.debug("handleTxToken: ABORT[{}] conflict-key[{}](ts={})", txInfo,
-                                conflictParam,
-                                conflictTail);
-                        r.sendResponse(ctx, msg,
-                                CorfuMsgType.TOKEN_RES.payloadMsg(
-                                        new TokenResponse(TokenType.TX_ABORT_CONFLICT_KEY,
-                                                conflictParam, conflictTail, serverEpoch)));
-                        return;
+                            && conflictTail > txSnapshotTimestamp) {
+                        // If we don't have a validation, or if the validation was
+                        // for an address before the current conflict tail, we fail.
+                        if (validatedAddress == null
+                                || validatedAddress < conflictTail) {
+                            log.debug("handleTxToken: ABORT[{}] {}conflict-key[{}]({}ts={})",
+                                    txInfo,
+                                    validatedAddress == null ? "" :
+                                            "validation failed (" + validatedAddress + ") ",
+                                    conflictParam,
+                                    conflictTail);
+                            r.sendResponse(ctx, msg,
+                                    CorfuMsgType.TOKEN_RES.payloadMsg(
+                                            new TokenResponse(TokenType.TX_ABORT_CONFLICT_KEY,
+                                                    conflictParam, streamId,
+                                                    conflictTail, serverEpoch)));
+                            return;
+                        } else {
+                            // Otherwise, the client has certified that it has manually checked
+                            // that there are no true conflicts, so we continue and issue
+                            // the token.
+                            log.warn("handleTxToken: validated stream {} {} overrides {}",
+                                    Utils.toReadableId(streamId),
+                                    validatedAddress,
+                                    conflictTail);
+                        }
                     }
                     log.trace("handleTxToken: OK[{}] conflict-key[{}](ts={})", txInfo,
                             conflictParam, conflictTail);
@@ -441,9 +458,12 @@ public class SequencerServer extends AbstractServer {
                     r.sendResponse(ctx, msg,
                             CorfuMsgType.TOKEN_RES.payloadMsg(
                                     new TokenResponse(TokenType.TX_ABORT_CONFLICT_STREAM,
-                                            streamTail, serverEpoch)));
+                                            TokenResponse.NO_CONFLICT_KEY,
+                                            streamId, streamTail, serverEpoch)));
                     return;
                 }
+                log.trace("handleTxToken: OK[{}] conflict-stream[{}](ts={})", txInfo,
+                        Utils.toReadableId(streamId), streamTail);
             }
         }
 
@@ -512,9 +532,8 @@ public class SequencerServer extends AbstractServer {
                 currentTail, backPointerMap.build());
         // return the token response with the new global tail
         // and the streams backpointers
-        Token token = new Token(currentTail, serverEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token,
+                currentTail, serverEpoch,
                 backPointerMap.build())));
     }
 

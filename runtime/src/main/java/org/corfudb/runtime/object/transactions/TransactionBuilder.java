@@ -29,6 +29,25 @@ public class TransactionBuilder {
      */
     public long snapshot = -1L;
 
+
+    /** Require precise conflict detection.
+     *
+     * <p>If set to false, transaction conflict resolution
+     * will rely on the sequencer, which may abort due
+     * to hash collisions.
+     *
+     * <p>If set to true, transaction conflict resolution
+     * will first attempt to resolve using the sequencer
+     * and if the sequencer requests an abort, then we
+     * will retry by reading the log manually. If a true
+     * conflict exists, then we will abort, otherwise
+     * we will reattempt to commit the transaction using
+     * the manually resolved information. Setting
+     * this value to true has significant performance
+     * implications on an abort.
+     */
+    public boolean preciseConflicts = false;
+
     public TransactionBuilder(CorfuRuntime runtime) {
         this.runtime = runtime;
     }

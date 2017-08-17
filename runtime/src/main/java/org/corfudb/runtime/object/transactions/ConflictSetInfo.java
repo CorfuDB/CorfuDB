@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -26,6 +27,12 @@ public class ConflictSetInfo {
     /** Get a hash for the object, given a proxy. */
     public static byte[] generateHashFromObject(ICorfuSMRProxyInternal p, Object o) {
         return p.getSerializer().hash(o);
+    }
+
+    public Optional<ICorfuSMRProxyInternal> getProxy(UUID stream) {
+        return conflicts.keySet().stream()
+                .filter(p -> p.getStreamID().equals(stream))
+                .findFirst();
     }
 
     /** Get the hashed conflict set.
