@@ -110,30 +110,39 @@ public class StreamsView extends AbstractView {
         while (true) {
 
             // Is our token a valid type?
-            if (tokenResponse.getRespType() == TokenType.TX_ABORT_CONFLICT) {
+            switch (tokenResponse.getRespType()) {
+                case TX_ABORT_CONFLICT_KEY:
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.CONFLICT,
                         TransactionalContext.getCurrentContext());
-            } else if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ) {
+                case TX_ABORT_CONFLICT_STREAM:
+                throw new TransactionAbortedException(
+                        conflictInfo,
+                        tokenResponse.getConflictKey(),
+                        AbortCause.CONFLICT,
+                        TransactionalContext.getCurrentContext());
+                case TX_ABORT_NEWSEQ:
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.NEW_SEQUENCER,
                         TransactionalContext.getCurrentContext());
-            } else if (tokenResponse.getRespType() == TokenType.TX_ABORT_SEQ_OVERFLOW) {
+                case TX_ABORT_SEQ_OVERFLOW:
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.SEQUENCER_OVERFLOW,
                         TransactionalContext.getCurrentContext());
-            } else if (tokenResponse.getRespType() == TokenType.TX_ABORT_SEQ_TRIM) {
+                case TX_ABORT_SEQ_TRIM:
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.SEQUENCER_TRIM,
                         TransactionalContext.getCurrentContext());
+                default:
+                    // Fall through
             }
 
             // Attempt to write to the log

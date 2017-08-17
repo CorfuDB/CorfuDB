@@ -213,7 +213,8 @@ public class SequencerServer extends AbstractServer {
      *     cause.
      */
     public TokenType txnCanCommit(TxResolutionInfo txInfo, /** Input. */
-                                  AtomicReference<byte[]> conflictKey /** Output. */) {
+                                  AtomicReference<byte[]> conflictKey /** Output. */,
+                                  AtomicReference<Long> conflictAddress /** Output. */) {
         log.trace("Commit-req[{}]", txInfo);
         final long txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
 
@@ -247,7 +248,7 @@ public class SequencerServer extends AbstractServer {
                     if (v != null && v > txSnapshotTimestamp) {
                         log.debug("ABORT[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
                         conflictKey.set(conflictParam);
-                        response.set(TokenType.TX_ABORT_CONFLICT);
+                        response.set(TokenType.TX_ABORT_CONFLICT_KEY);
                         break;
                     }
 
@@ -256,6 +257,15 @@ public class SequencerServer extends AbstractServer {
                                 txInfo, txSnapshotTimestamp, maxConflictWildcard);
                         response.set(TX_ABORT_SEQ_OVERFLOW);
                         break;
+                    }
+
+                    if (v == null && maxConflictWildcard > txSnapshotTimestamp) {
+                        log.warn("ABORT[{}] conflict-key[{}](WILDCARD ts={})", txInfo,
+                                conflictParam,
+                                maxConflictWildcard);
+                        conflictAddress.set(maxConflictWildcard);
+                        conflictKey.set(conflictParam);
+                        response.set(TokenType.TX_ABORT_CONFLICT_KEY);
                     }
                 }
             } else { // otherwise, check for conflict based on streams updates
@@ -267,7 +277,8 @@ public class SequencerServer extends AbstractServer {
                     if (v > txSnapshotTimestamp) {
                         log.debug("ABORT[{}] conflict-stream[{}](ts={})",
                                 txInfo, Utils.toReadableId(streamId), v);
-                        response.set(TokenType.TX_ABORT_CONFLICT);
+                        conflictAddress.set(v);
+                        response.set(TokenType.TX_ABORT_CONFLICT_STREAM);
                     }
                     return v;
                 });
@@ -466,14 +477,15 @@ public class SequencerServer extends AbstractServer {
         // variable is passed to the consumer that will use it to indicate to us if/what key was
         // responsible for an aborted transaction.
         AtomicReference<byte[]> conflictKey = new AtomicReference(TokenResponse.NO_CONFLICT_KEY);
+        AtomicReference<Long> conflictAddress = new AtomicReference<>(Address.ABORTED);
 
         // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
         // Token allocation is conditioned on commit.
         // First, we check if the transaction can commit.
-        TokenType tokenType = txnCanCommit(req.getTxnResolution(), conflictKey);
+        TokenType tokenType = txnCanCommit(req.getTxnResolution(), conflictKey, conflictAddress);
         if (tokenType != TokenType.NORMAL) {
             // If the txn aborts, then DO NOT hand out a token.
-            Token token = new Token(Address.ABORTED, serverEpoch);
+            Token token = new Token(conflictAddress.get(), serverEpoch);
             r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(tokenType,
                     conflictKey.get(), token, Collections.emptyMap())));
             return;
