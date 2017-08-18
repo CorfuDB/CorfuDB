@@ -9,6 +9,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 
 import java.io.*;
 import java.lang.reflect.Field;
@@ -25,6 +26,7 @@ import java.util.concurrent.Executors;
  * Integration tests.
  * Created by zlokhandwala on 4/28/17.
  */
+@Ignore
 public class AbstractIT extends AbstractCorfuTest {
     static final String DEFAULT_HOST = "localhost";
     static final int DEFAULT_PORT = 9000;

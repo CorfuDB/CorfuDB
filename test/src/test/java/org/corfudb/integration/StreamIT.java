@@ -4,6 +4,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
+import org.junit.Ignore;
 
 import java.util.Random;
 import java.util.UUID;
@@ -13,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * A set integration tests that exercise the stream API.
  */
-
+@Ignore
 public class StreamIT extends AbstractIT {
     static String corfuSingleNodeHost;
     static int corfuSingleNodePort;

@@ -1,6 +1,5 @@
 package org.corfudb.runtime.view;
 
-import groovy.util.logging.Slf4j;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -10,6 +9,8 @@ import java.lang.reflect.Field;
 import static java.lang.reflect.Modifier.TRANSIENT;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+
+import lombok.extern.slf4j.Slf4j;
 
 
 /**
