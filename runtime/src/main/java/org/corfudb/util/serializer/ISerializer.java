@@ -15,7 +15,8 @@ import de.javakaffee.kryoserializers.guava.ImmutableMapSerializer;
 import de.javakaffee.kryoserializers.guava.ImmutableMultimapSerializer;
 import de.javakaffee.kryoserializers.guava.ImmutableSetSerializer;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.Unpooled;
+
 import net.openhft.hashing.LongHashFunction;
 
 import org.corfudb.runtime.CorfuRuntime;
@@ -136,7 +137,7 @@ public interface ISerializer {
             // Otherwise, revert to having xx generate a hash by using the
             // serializer then hashing.
             long hash;
-            ByteBuf b = PooledByteBufAllocator.DEFAULT.buffer();
+            ByteBuf b = Unpooled.buffer();
             serialize(o, b);
             hash = LongHashFunction.xx().hashBytes(b.nioBuffer());
             b.release();
