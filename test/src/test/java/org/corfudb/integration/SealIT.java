@@ -4,6 +4,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Collections;
@@ -14,6 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Created by rmichoud on 2/12/17.
  */
+@Ignore
 public class SealIT extends AbstractIT{
     static String corfuSingleNodeHost;
     static int corfuSingleNodePort;
