@@ -8,14 +8,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-import org.corfudb.util.Utils;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.PooledByteBufAllocator;
 import lombok.Getter;
-import net.openhft.hashing.LongHashFunction;
 
 /**
  * This class captures information about objects accessed (read) during speculative
