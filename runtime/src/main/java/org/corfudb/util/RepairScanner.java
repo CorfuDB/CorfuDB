@@ -410,7 +410,7 @@ public class RepairScanner {
         BufferedReader reader;
         try {
             // TODO external program review?
-            java.lang.Process p = Runtime.getRuntime().exec("/usr/bin/who am i");
+            java.lang.Process p = Runtime.getRuntime().exec("/usr/bin/who");
             p.waitFor();
 
             reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
