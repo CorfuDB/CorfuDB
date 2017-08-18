@@ -11,6 +11,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.CFUtils;
 import org.corfudb.runtime.collections.SMRMap;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -42,6 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * fresh servers.
  * Created by zlokhandwala on 4/25/17.
  */
+@Ignore
 public class ServerRestartIT extends AbstractIT {
 
     // Total number of iterations of randomized failovers.

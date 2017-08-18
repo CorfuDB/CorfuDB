@@ -19,14 +19,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import jdk.internal.org.objectweb.asm.ClassReader;
-import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
-import jdk.internal.org.objectweb.asm.tree.ClassNode;
-import jdk.internal.org.objectweb.asm.tree.InsnList;
-import jdk.internal.org.objectweb.asm.tree.MethodNode;
-import jdk.internal.org.objectweb.asm.util.Printer;
-import jdk.internal.org.objectweb.asm.util.Textifier;
-import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -41,9 +33,6 @@ import org.corfudb.runtime.CorfuRuntime;
  */
 @Slf4j
 public class Utils {
-    private static Printer printer = new Textifier();
-    private static TraceMethodVisitor mp = new TraceMethodVisitor(printer);
-
     private final static char[] hexArray = "0123456789ABCDEF".toCharArray();
 
     /** Convert a byte array to a hex string.
@@ -85,35 +74,6 @@ public class Utils {
                 (byte) ((in >> 16) & 0xFF),
                 (byte) ((in >> 8) & 0xFF),
                 (byte) (in & 0xFF)};
-    }
-  
-    /**
-     * Print byte code.
-     * @param bytes Byte array that represents the byte code
-     * @return String representation of the byte code
-     */
-    public static String printByteCode(byte[] bytes) {
-        ClassReader cr = new ClassReader(bytes);
-        ClassNode cn = new ClassNode();
-        cr.accept(cn, 0);
-        final List<MethodNode> methods = cn.methods;
-        StringBuilder sb = new StringBuilder();
-        for (MethodNode m : methods) {
-            InsnList inList = m.instructions;
-            sb.append(m.name);
-            for (int i = 0; i < inList.size(); i++) {
-                sb.append(insnToString(inList.get(i)));
-            }
-        }
-        return sb.toString();
-    }
-
-    public static String insnToString(AbstractInsnNode insn) {
-        insn.accept(mp);
-        StringWriter sw = new StringWriter();
-        printer.print(new PrintWriter(sw));
-        printer.getText().clear();
-        return sw.toString();
     }
 
     /**
