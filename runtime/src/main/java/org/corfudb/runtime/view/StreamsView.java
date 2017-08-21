@@ -11,6 +11,9 @@ import javax.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -142,9 +145,17 @@ public class StreamsView extends AbstractView {
                 // If we're here, we succeeded, return the acquired token
                 return tokenResponse.getTokenValue();
             } catch (OverwriteException oe) {
+                int sizeOfWrite = 0;
+                try {
+                    ILogData.SerializationHandle handle = new LogData(DataType.DATA, object).getSerializedForm();
+                    sizeOfWrite = handle.getSerialized().getSizeEstimate();
+                    handle.close();
+                } catch (Exception e) {
+                    log.warn("Couldnt get size", e);
+                }
                 // We were overwritten, get a new token and try again.
-                log.warn("append[{}]: Overwrite , streams {}", tokenResponse.getTokenValue(),
-                        streamIDs.stream().map(Utils::toReadableId).collect(Collectors.toSet()));
+                log.warn("append[{}]: Overwrite , streams {}, size {}", tokenResponse.getTokenValue(),
+                        streamIDs.stream().map(Utils::toReadableId).collect(Collectors.toSet()), sizeOfWrite);
 
                 TokenResponse temp;
                 if (conflictInfo == null) {
