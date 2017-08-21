@@ -1,0 +1,17 @@
+
+description = ''
+dependencies {
+  compile project(':runtime')
+  compile project(':format')
+    compile group: 'com.offbytwo', name: 'docopt', version:'0.6.0.20150202'
+    compile group: 'org.fusesource.jansi', name: 'jansi', version:'1.14'
+    compile group: 'commons-io', name: 'commons-io', version:'2.4'
+    compile group: 'io.dropwizard.metrics', name: 'metrics-core', version:'3.1.0'
+    compile group: 'io.dropwizard.metrics', name: 'metrics-jvm', version:'3.1.0'
+}
+
+task packageTests(type: Jar) {
+  from sourceSets.test.output
+  classifier = 'tests'
+}
+artifacts.archives packageTests

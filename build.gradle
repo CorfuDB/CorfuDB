@@ -1,0 +1,111 @@
+plugins {
+    id 'io.franzbecker.gradle-lombok' version '1.10'
+    id "nebula.ospackage" version "4.4.0"
+    id 'com.github.johnrengelman.shadow' version '2.0.1'
+    id 'java'
+}
+
+allprojects  {
+  apply plugin: 'maven'
+  group = 'org.corfudb'
+  version = '0.1-SNAPSHOT'
+}
+
+repositories {
+    mavenLocal()
+    jcenter()
+
+    maven { url "http://clojars.org/repo" }
+    mavenCentral()
+}
+
+subprojects {
+  apply plugin: 'java'
+  apply plugin: 'com.github.johnrengelman.shadow'
+  apply plugin: 'org.corfudb.build.GitRepositoryPlugin'
+  sourceCompatibility = 1.8
+  targetCompatibility = 1.8
+
+  tasks.withType(JavaCompile) {
+  	options.encoding = 'UTF-8'
+  }
+
+  repositories {
+      mavenLocal()
+      jcenter()
+
+      maven { url "http://clojars.org/repo" }
+      mavenCentral()
+  }
+
+  lombok {
+    version = "1.16.18"
+    sha256 = ""
+  }
+
+  dependencies {
+    compile group: 'net.openhft', name: 'zero-allocation-hashing', version:'0.8'
+    compile group: 'org.slf4j', name: 'slf4j-api', version:'1.7.6'
+    compile group: 'com.github.ben-manes.caffeine', name: 'caffeine', version:'2.4.0'
+    compile group: 'com.google.guava', name: 'guava', version:'21.0'
+    compile group: 'io.netty', name: 'netty-all', version:'4.1.10.Final'
+    compile group: 'ch.qos.logback', name: 'logback-classic', version:'1.2.3'
+    testCompile group: 'junit', name: 'junit', version:'4.12'
+    testCompile group: 'org.assertj', name: 'assertj-core', version:'3.0.0'
+    testCompile group: 'com.github.marschall', name: 'junit-lambda', version:'0.2.0'
+    compileOnly group: 'org.projectlombok', name: 'lombok', version:'1.16.16'
+    compileOnly group: 'org.codehaus.mojo', name: 'findbugs-maven-plugin', version:'3.0.3'
+}
+}
+
+
+ospackage {
+    packageName = 'corfu-server'
+    version = project.getVersion().toString()
+    release = '1'
+    arch = I386
+    type = BINARY
+    os = LINUX
+    def corfuPath = '/usr/share/corfu'
+
+    requires('java-runtime-headless')
+
+    postInstall file('debian/src/deb/control/postinst')
+    preUninstall file('debian/src/deb/control/prerm')
+
+    // JAR / WARs
+    from subprojects.collect { it.tasks.withType(Zip) }
+        // Strip the version from the jar filename
+        rename { String fileName ->
+            fileName.replace("-${project.version}", "")
+        }
+        fileMode 0500
+        into corfuPath + 'lib'
+
+    // aliases
+    from(new File(project.rootDir.getAbsolutePath(), 'bin')) {
+        fileMode 755
+        into corfuPath + 'bin'
+    }
+
+    // corfu scripts
+    from(new File(project.rootDir.getAbsolutePath(), 'corfu_scripts')) {
+        fileMode 755
+        into corfuPath + 'corfu_scripts'
+    }
+
+    // scripts
+    from(new File(project.rootDir.getAbsolutePath(), 'scripts')) {
+        fileMode 755
+        into corfuPath + 'scripts'
+    }
+
+
+}
+
+buildDeb.dependsOn getTasksByName('shadowJar', true)
+buildDeb.dependsOn getTasksByName('build', true)
+
+buildDeb {
+
+}

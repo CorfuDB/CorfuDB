@@ -1,0 +1,24 @@
+rootProject.name = 'corfu'
+include ':infrastructure'
+include ':runtime'
+include ':format'
+include ':cmdlets'
+include ':test'
+include ':annotationProcessor'
+include ':annotations'
+include ':samples'
+include ':logReader'
+include ':debian'
+include ':generator'
+
+project(':infrastructure').projectDir = "$rootDir/infrastructure" as File
+project(':runtime').projectDir = "$rootDir/runtime" as File
+project(':format').projectDir = "$rootDir/format" as File
+project(':cmdlets').projectDir = "$rootDir/cmdlets" as File
+project(':test').projectDir = "$rootDir/test" as File
+project(':annotationProcessor').projectDir = "$rootDir/annotationProcessor" as File
+project(':annotations').projectDir = "$rootDir/annotations" as File
+project(':samples').projectDir = "$rootDir/samples" as File
+project(':logReader').projectDir = "$rootDir/logReader" as File
+project(':debian').projectDir = "$rootDir/debian" as File
+project(':generator').projectDir = "$rootDir/generator" as File

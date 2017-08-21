@@ -1,0 +1,15 @@
+
+description = ''
+dependencies {
+  compile project(':runtime')
+  compile project(':format')
+  compile project(':infrastructure')
+    compile group: 'com.offbytwo', name: 'docopt', version:'0.6.0.20150202'
+    compile group: 'com.google.protobuf', name: 'protobuf-java', version:'3.1.0'
+}
+
+task packageTests(type: Jar) {
+  from sourceSets.test.output
+  classifier = 'tests'
+}
+artifacts.archives packageTests
