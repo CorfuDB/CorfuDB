@@ -1,0 +1,12 @@
+
+description = ''
+dependencies {
+  compile project(':annotations')
+    compile group: 'com.squareup', name: 'javapoet', version:'1.7.0'
+}
+
+task packageTests(type: Jar) {
+  from sourceSets.test.output
+  classifier = 'tests'
+}
+artifacts.archives packageTests

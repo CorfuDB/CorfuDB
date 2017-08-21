@@ -1,0 +1,13 @@
+
+description = ''
+dependencies {
+  compile project(':runtime')
+    compile group: 'com.offbytwo', name: 'docopt', version:'0.6.0.20150202'
+  compile project(':test')
+}
+
+task packageTests(type: Jar) {
+  from sourceSets.test.output
+  classifier = 'tests'
+}
+artifacts.archives packageTests

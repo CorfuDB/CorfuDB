@@ -1,0 +1,24 @@
+
+description = ''
+dependencies {
+  compile project(':runtime')
+  compile project(':infrastructure')
+    compile group: 'com.google.protobuf', name: 'protobuf-java', version:'3.1.0'
+    compile(group: 'org.clojure', name: 'clojure', version:'1.8.0') {
+exclude(module: 'jline')
+    }
+    compile(group: 'jline', name: 'jline', version:'2.14.2') {
+exclude(module: 'jansi')
+    }
+    compile(group: 'reply', name: 'reply', version:'0.3.7') {
+exclude(module: 'jline')
+    }
+    compile group: 'com.offbytwo', name: 'docopt', version:'0.6.0.20150202'
+    compile group: 'org.fusesource.jansi', name: 'jansi', version:'1.14'
+}
+
+task packageTests(type: Jar) {
+  from sourceSets.test.output
+  classifier = 'tests'
+}
+artifacts.archives packageTests
