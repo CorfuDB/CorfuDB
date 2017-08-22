@@ -25,16 +25,12 @@ public class WriteSetInfo extends ConflictSetInfo {
     /** The actual updates to mutated objects. */
     MultiObjectSMREntry writeSet = new MultiObjectSMREntry();
 
+
     public long add(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[] conflictObjects) {
-        synchronized (getRootContext().getTransactionID()) {
-
-            // add the SMRentry to the list of updates for this stream
-            writeSet.addTo(proxy.getStreamID(), updateEntry);
-
-            super.add(proxy, conflictObjects);
-
-            return writeSet.getSMRUpdates(proxy.getStreamID()).size() - 1;
-        }
+        super.add(proxy, conflictObjects);
+        affectedStreams.add(proxy.getStreamID());
+        writeSet.addTo(proxy.getStreamID(), updateEntry);
+        return writeSet.getSMRUpdates(proxy.getStreamID()).size() - 1;
     }
 
     @Override

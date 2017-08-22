@@ -80,5 +80,12 @@ public interface ICorfuSMRProxy<T> {
      */
     long getVersion();
 
+    /** Given an SMR Entry (with method an arguments), return the
+     * conflict set, or null if there is no conflict set.
+     * @param smrMethod     The method used
+     * @param smrArguments  The arguments to the method.
+     * @return              The conflict set.
+     */
+    Object[] getConflictFromEntry(String smrMethod, Object[] smrArguments);
 
 }

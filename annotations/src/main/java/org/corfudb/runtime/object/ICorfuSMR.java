@@ -33,6 +33,11 @@ public interface ICorfuSMR<T> {
      * @return The undo record map. */
     Map<String, IUndoRecordFunction<T>> getCorfuUndoRecordMap();
 
+    /** Get a map from strings (function names) to conflict functions.
+     * @return The conflict entry map.
+     */
+    Map<String, IConflictFunction> getCorfuEntryToConflictMap();
+
     /** Get a set of strings (function names) which result in a reset
      * of the object.
      * @return  The set of strings that cause a reset on the object.

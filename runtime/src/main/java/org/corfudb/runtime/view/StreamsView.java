@@ -115,13 +115,19 @@ public class StreamsView extends AbstractView {
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
+                        tokenResponse.getConflictStream(),
                         AbortCause.CONFLICT,
+                        null,
+                        tokenResponse.getTokenValue(),
                         TransactionalContext.getCurrentContext());
                 case TX_ABORT_CONFLICT_STREAM:
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
+                        tokenResponse.getConflictStream(),
                         AbortCause.CONFLICT,
+                        null,
+                        tokenResponse.getTokenValue(),
                         TransactionalContext.getCurrentContext());
                 case TX_ABORT_NEWSEQ:
                 throw new TransactionAbortedException(
@@ -174,6 +180,7 @@ public class StreamsView extends AbstractView {
                 // eventually be deprecated since these are no longer used)
                 tokenResponse = new TokenResponse(
                         temp.getRespType(), tokenResponse.getConflictKey(),
+                        tokenResponse.getConflictStream(),
                         temp.getToken(), temp.getBackpointerMap());
 
             } catch (StaleTokenException se) {
