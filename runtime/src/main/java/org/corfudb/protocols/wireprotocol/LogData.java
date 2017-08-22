@@ -23,6 +23,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     public static final LogData EMPTY = new LogData(DataType.EMPTY);
     public static final LogData HOLE = new LogData(DataType.HOLE);
     public static final LogData TRIMMED = new LogData(DataType.TRIMMED);
+    public static final int NOT_KNOWN = -1;
 
     @Getter
     final DataType type;
@@ -32,7 +33,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     private ByteBuf serializedCache = null;
 
-    private int lastKnownSize = 0;
+    private int lastKnownSize = NOT_KNOWN;
 
     private final transient AtomicReference<Object> payload = new AtomicReference<>();
 
@@ -94,7 +95,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     public int getSizeEstimate() {
         if (data != null) {
             return data.length;
-        } else if (lastKnownSize != 0) {
+        } else if (lastKnownSize != NOT_KNOWN) {
             return lastKnownSize;
         }
         log.warn("getSizeEstimate: LogData size estimate is defaulting to 1,"
