@@ -77,7 +77,6 @@ public class DataStore implements IDataStore {
     private LoadingCache<String, String> buildMemoryDs() {
         LoadingCache<String, String> cache = Caffeine
                 .newBuilder()
-                .recordStats()
                 .build(k -> null);
         return cache;
     }

@@ -94,19 +94,20 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * The arguments this proxy was created with.
      */
     final Object[] args;
+
+    private final MetricRegistry metrics;
     /**
      * Metrics: meter (counter), histogram.
      */
-    private MetricRegistry metrics = CorfuRuntime.getMetrics();
-    private String mpObj = CorfuRuntime.getMpObj();
-    private Timer timerAccess = metrics.timer(mpObj + "access");
-    private Timer timerLogWrite = metrics.timer(mpObj + "log-write");
-    private Timer timerTxn = metrics.timer(mpObj + "txn");
-    private Timer timerUpcall = metrics.timer(mpObj + "upcall");
-    private Counter counterAccessOptimistic = metrics.counter(mpObj + "access-optimistic");
-    private Counter counterAccessLocked = metrics.counter(mpObj + "access-locked");
-    private Counter counterTxnRetry1 = metrics.counter(mpObj + "txn-first-retry");
-    private Counter counterTxnRetryN = metrics.counter(mpObj + "txn-extra-retries");
+    private final String mpObj;
+    private final Timer timerAccess;
+    private final Timer timerLogWrite;
+    private final Timer timerTxn;
+    private final Timer timerUpcall;
+    private final Counter counterAccessOptimistic;
+    private final Counter counterAccessLocked;
+    private final Counter counterTxnRetry1;
+    private final Counter counterTxnRetryN;
 
     /**
      * Creates a CorfuCompileProxy object on a particular stream.
@@ -140,6 +141,17 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().get(streamID)),
                 upcallTargetMap, undoRecordTargetMap,
                 undoTargetMap, resetSet);
+
+        metrics = rt.getMetrics() != null ? rt.getMetrics() : CorfuRuntime.getDefaultMetrics();
+        mpObj = CorfuRuntime.getMpObj();
+        timerAccess = metrics.timer(mpObj + "access");
+        timerLogWrite = metrics.timer(mpObj + "log-write");
+        timerTxn = metrics.timer(mpObj + "txn");
+        timerUpcall = metrics.timer(mpObj + "upcall");
+        counterAccessOptimistic = metrics.counter(mpObj + "access-optimistic");
+        counterAccessLocked = metrics.counter(mpObj + "access-locked");
+        counterTxnRetry1 = metrics.counter(mpObj + "txn-first-retry");
+        counterTxnRetryN = metrics.counter(mpObj + "txn-extra-retries");
     }
 
     /**

@@ -8,11 +8,13 @@ import java.util.UUID;
 
 import lombok.AccessLevel;
 import lombok.Data;
+import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
@@ -30,9 +32,11 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
 
     final CorfuRuntime runtime;
 
+    @Getter
     Class<T> type;
 
     @Setter
+    @Getter
     @SuppressWarnings("checkstyle:abbreviation")
     UUID streamID;
 
@@ -115,6 +119,20 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
                         get(oid)).
                         getCorfuSMRProxy())
                         .getSerializer();
+
+                // FIXME: temporary hack until we have a registry
+                // If current map in cache has no indexer, or there is currently an other one,
+                // this will create and compute the indices.
+                if (result instanceof CorfuTable) {
+                    CorfuTable currentCorfuTable = ((CorfuTable) result);
+                    if (arguments.length > 0) {
+                        // If current map in cache has no indexer, or there is currently an other index
+                        if (!(currentCorfuTable.hasSecondaryIndices()) ||
+                            currentCorfuTable.getIndexerClass() != arguments[0].getClass()){
+                            ((CorfuTable) result).registerIndex((Class) arguments[0]);
+                        }
+                    }
+                }
 
                 if (serializer != objectSerializer) {
                     log.warn("open: Attempt to open an existing object with a different serializer {}. " +

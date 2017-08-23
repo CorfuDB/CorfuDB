@@ -10,6 +10,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -23,8 +24,8 @@ import static org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointDictKe
  */
 public class RecoveryUtils {
 
-    static ObjectsView.ObjectID getObjectIdFromStreamId(UUID streamId) {
-        return new ObjectsView.ObjectID(streamId, SMRMap.class);
+    static ObjectsView.ObjectID getObjectIdFromStreamId(UUID streamId, Class type) {
+        return new ObjectsView.ObjectID(streamId, type);
     }
     static boolean isCheckPointEntry(ILogData logData) {
         return logData.hasCheckpointMetadata();
@@ -42,14 +43,21 @@ public class RecoveryUtils {
      *
      * @param streamId
      */
-    static void createSmrMapIfNotExist(CorfuRuntime runtime, UUID streamId, ISerializer serializer) {
+    static void createObjectIfNotExist(CorfuRuntime runtime, UUID streamId, ISerializer serializer, Class type) {
         if (!runtime.getObjectsView().getObjectCache()
-                .containsKey(RecoveryUtils.getObjectIdFromStreamId(streamId))) {
+                .containsKey(RecoveryUtils.getObjectIdFromStreamId(streamId, type))) {
             runtime.getObjectsView().build()
                     .setStreamID(streamId)
-                    .setType(SMRMap.class)
+                    .setType(type)
                     .setSerializer(serializer)
                     .open();
+        }
+    }
+
+    static void createObjectIfNotExist(ObjectBuilder ob, ISerializer serializer) {
+        if (!ob.getRuntime().getObjectsView().getObjectCache()
+                .containsKey(RecoveryUtils.getObjectIdFromStreamId(ob.getStreamID(), ob.getType()))){
+                ob.setSerializer(serializer).open();
         }
     }
 
@@ -106,8 +114,8 @@ public class RecoveryUtils {
      * @param streamId
      * @return
      */
-    static CorfuCompileProxy getCorfuCompileProxy(CorfuRuntime runtime, UUID streamId) {
-        ObjectsView.ObjectID thisObjectId = new ObjectsView.ObjectID(streamId, SMRMap.class);
+    static CorfuCompileProxy getCorfuCompileProxy(CorfuRuntime runtime, UUID streamId, Class type) {
+        ObjectsView.ObjectID thisObjectId = new ObjectsView.ObjectID(streamId, type);
         return ((CorfuCompileProxy) ((ICorfuSMR) runtime.getObjectsView().getObjectCache().get(thisObjectId)).
                 getCorfuSMRProxy());
     }

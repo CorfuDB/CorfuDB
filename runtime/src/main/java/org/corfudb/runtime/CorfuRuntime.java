@@ -16,12 +16,13 @@ import java.util.stream.Collectors;
 
 import lombok.Data;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.VersionInfo;
-import org.corfudb.recovery.FastSmrMapsLoader;
+import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -211,7 +212,14 @@ public class CorfuRuntime {
     @Getter
     private static final String mpObj = mp + "object.";
     @Getter
-    private static final MetricRegistry metrics = new MetricRegistry();
+    private static MetricRegistry defaultMetrics = new MetricRegistry();
+    @Getter
+    private MetricRegistry metrics = new MetricRegistry();
+
+    public CorfuRuntime setMetrics(@NonNull MetricRegistry metrics) {
+        this.metrics = metrics;
+        return this;
+    }
 
     /**
      * When set, overrides the default getRouterFunction. Used by the testing
@@ -244,7 +252,8 @@ public class CorfuRuntime {
                 try {
                     router.addClient(new LayoutClient())
                             .addClient(new SequencerClient())
-                            .addClient(new LogUnitClient())
+                            .addClient(new LogUnitClient().setMetricRegistry(metrics != null
+                                            ? metrics : CorfuRuntime.getDefaultMetrics()))
                             .addClient(new ManagementClient())
                             .start();
                     nodeRouters.put(address, router);
@@ -261,9 +270,12 @@ public class CorfuRuntime {
         layoutServers = new ArrayList<>();
         nodeRouters = new ConcurrentHashMap<>();
         retryRate = 5;
+
+        getAddressSpaceView().setMetrics(metrics != null
+                ? metrics : CorfuRuntime.getDefaultMetrics());
         synchronized (metrics) {
             if (metrics.getNames().isEmpty()) {
-                MetricsUtils.addJvmMetrics(metrics, mp);
+//                MetricsUtils.addJvmMetrics(metrics, mp);
                 MetricsUtils.metricsReportingSetup(metrics);
             }
         }
@@ -572,7 +584,7 @@ public class CorfuRuntime {
         checkVersion();
 
         if (loadSmrMapsAtConnect) {
-            FastSmrMapsLoader fastLoader = new FastSmrMapsLoader(this)
+            FastObjectLoader fastLoader = new FastObjectLoader(this)
                     .setBatchReadSize(getBulkReadSize())
                     .setTimeoutInMinutesForLoading(timeoutInMinutesForFastLoading);
             fastLoader.loadMaps();

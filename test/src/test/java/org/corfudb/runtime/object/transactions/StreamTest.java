@@ -1,7 +1,10 @@
 package org.corfudb.runtime.object.transactions;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.junit.Test;
 
@@ -40,6 +43,67 @@ public class StreamTest extends AbstractTransactionsTest {
 
     private final int READ_PERCENT = 80;
     private final int MAX_PERCENT = 100;
+
+
+    @Test
+    public void sequencerTrimTest() {
+
+        SMRMap<String, String> map = instantiateCorfuObject(SMRMap.class, "A");
+        final int numEntries = 10;
+        TXBegin();
+        map.get("a");
+        t2(() -> {
+            TXBegin();
+            for (int x = 0; x < numEntries; x++) {
+                map.put(Integer.toString(x), Integer.toString(x));
+            }
+            TXEnd();
+        });
+
+        getRuntime().getAddressSpaceView().prefixTrim(1);
+
+        for (int x = 0; x < numEntries; x++) {
+            map.put(Integer.toString(x), Integer.toString(x));
+        }
+
+        boolean abortException = false;
+
+        try {
+            TXEnd();
+        } catch (TransactionAbortedException tae) {
+            assertThat(tae.getAbortCause()).isEqualTo(AbortCause.SEQUENCER_TRIM);
+            abortException = true;
+        }
+
+        assertThat(abortException).isTrue();
+    }
+
+    @Test
+    public void sequencerOverflowTest() {
+
+        SMRMap<String, String> map = instantiateCorfuObject(SMRMap.class, "A");
+        final int numEntries = 2000;
+        boolean abortException = false;
+
+        try {
+            TXBegin();
+            map.put("0", "0");
+
+            t1(() -> {
+                for (int x = 0; x < numEntries; x++) {
+                    TXBegin();
+                    map.put(Integer.toString(x), Integer.toString(x));
+                    TXEnd();
+                }
+            });
+
+            TXEnd();
+        } catch (TransactionAbortedException tae) {
+            assertThat(tae.getAbortCause()).isEqualTo(AbortCause.SEQUENCER_OVERFLOW);
+            abortException = true;
+        }
+        assertThat(abortException).isTrue();
+    }
 
     @Test
     public void mixBackpointers() {

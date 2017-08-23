@@ -132,11 +132,10 @@ public class LogUnitServer extends AbstractServer {
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
                 .writer(batchWriter)
-                .recordStats()
                 .build(this::handleRetrieval);
 
         MetricRegistry metrics = serverContext.getMetrics();
-        MetricsUtils.addCacheGauges(metrics, metricsPrefix + "cache.", dataCache);
+//        MetricsUtils.addCacheGauges(metrics, metricsPrefix + "cache.", dataCache);
 
         Runnable task = () -> streamLog.compact();
         compactor = scheduler.scheduleAtFixedRate(task, 10, 45, TimeUnit.MINUTES);
