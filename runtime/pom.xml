@@ -28,6 +28,11 @@
         <artifactId>annotationProcessor</artifactId>
         <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.carrotsearch</groupId>
+            <artifactId>java-sizeof</artifactId>
+            <version>0.0.5</version>
+        </dependency>
 
         <dependency>
             <groupId>com.esotericsoftware</groupId>
