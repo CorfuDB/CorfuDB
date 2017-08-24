@@ -11,12 +11,16 @@ import javax.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.*;
-import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.AppendException;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.StaleTokenException;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Utils;
@@ -87,14 +91,16 @@ public class StreamsView extends AbstractView {
         return get(destination);
     }
 
-    /** Append to multiple streams simultaneously, possibly providing
+    /**
+     * Append to multiple streams simultaneously, possibly providing
      * information on how to resolve conflicts.
-     * @param streamIDs     The streams to append to.
-     * @param object        The object to append to each stream.
-     * @param conflictInfo  Conflict information for the sequencer to check.
-     * @return              The address the entry was written to.
-     * @throws TransactionAbortedException      If the transaction was aborted by
-     *                                          the sequencer.
+     *
+     * @param streamIDs    The streams to append to.
+     * @param object       The object to append to each stream.
+     * @param conflictInfo Conflict information for the sequencer to check.
+     * @return The address the entry was written to.
+     * @throws TransactionAbortedException If the transaction was aborted by
+     *                                     the sequencer.
      */
     public long append(@Nonnull Set<UUID> streamIDs, @Nonnull Object object,
                        @Nullable TxResolutionInfo conflictInfo) throws TransactionAbortedException {
@@ -105,9 +111,7 @@ public class StreamsView extends AbstractView {
                 : runtime.getSequencerView().nextToken(streamIDs, 1,
                 conflictInfo); // Token w/ conflict info
 
-
-        // Until we've succeeded
-        while (true) {
+        for (int x = 0; x < runtime.getWriteRetry(); x++) {
 
             // Is our token a valid type?
             if (tokenResponse.getRespType() == TokenType.TX_ABORT_CONFLICT) {
@@ -142,8 +146,11 @@ public class StreamsView extends AbstractView {
                 // If we're here, we succeeded, return the acquired token
                 return tokenResponse.getTokenValue();
             } catch (OverwriteException oe) {
+
                 // We were overwritten, get a new token and try again.
-                log.warn("append[{}]: Overwrite , streams {}", tokenResponse.getTokenValue(),
+                log.warn("append[{}]: Overwritten after {} retries, streams {}",
+                        tokenResponse.getTokenValue(),
+                        x,
                         streamIDs.stream().map(Utils::toReadableId).collect(Collectors.toSet()));
 
                 TokenResponse temp;
@@ -176,10 +183,15 @@ public class StreamsView extends AbstractView {
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.NEW_SEQUENCER, // in the future, perhaps define a new AbortCause?
-                        TransactionalContext.getCurrentContext()
-                );
+                        TransactionalContext.getCurrentContext());
             }
         }
 
+        log.error("append[{}]: failed after {} retries , streams {}, write size {} bytes",
+                tokenResponse.getTokenValue(),
+                runtime.getWriteRetry(),
+                streamIDs.stream().map(Utils::toReadableId).collect(Collectors.toSet()),
+                ILogData.getSerializedSize(object));
+        throw new AppendException();
     }
 }

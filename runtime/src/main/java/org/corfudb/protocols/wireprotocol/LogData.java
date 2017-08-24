@@ -7,6 +7,7 @@ import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
@@ -16,11 +17,13 @@ import org.corfudb.util.serializer.Serializers;
 /**
  * Created by mwei on 8/15/16.
  */
+@Slf4j
 public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     public static final LogData EMPTY = new LogData(DataType.EMPTY);
     public static final LogData HOLE = new LogData(DataType.HOLE);
     public static final LogData TRIMMED = new LogData(DataType.TRIMMED);
+    public static final int NOT_KNOWN = -1;
 
     @Getter
     final DataType type;
@@ -29,6 +32,8 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     byte[] data;
 
     private ByteBuf serializedCache = null;
+
+    private int lastKnownSize = NOT_KNOWN;
 
     private final transient AtomicReference<Object> payload = new AtomicReference<>();
 
@@ -80,6 +85,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         if (serializedCache == null) {
             serializedCache = Unpooled.buffer();
             doSerializeInternal(serializedCache);
+            lastKnownSize = serializedCache.array().length;
         } else {
             serializedCache.retain();
         }
@@ -89,7 +95,11 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     public int getSizeEstimate() {
         if (data != null) {
             return data.length;
+        } else if (lastKnownSize != NOT_KNOWN) {
+            return lastKnownSize;
         }
+        log.warn("getSizeEstimate: LogData size estimate is defaulting to 1,"
+                + " this might cause leaks in the cache!");
         return 1;
     }
 
