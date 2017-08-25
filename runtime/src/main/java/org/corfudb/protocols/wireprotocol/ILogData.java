@@ -128,6 +128,19 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
         return getType() == DataType.TRIMMED;
     }
 
+    /**
+     * Return the serialized size of an object
+     * @param obj the entry's payload object
+     * @return size of serialized buffer
+     */
+    static int getSerializedSize(Object obj) {
+        ILogData ld = new LogData(DataType.DATA, obj);
+        ld.acquireBuffer();
+        int size = ld.getSizeEstimate();
+        ld.releaseBuffer();
+        return size;
+    }
+
     /** Assign a given token to this log data.
      *
      * @param token     The token to use.

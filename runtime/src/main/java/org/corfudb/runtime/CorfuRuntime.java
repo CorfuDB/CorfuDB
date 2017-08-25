@@ -123,11 +123,18 @@ public class CorfuRuntime {
     public long numCacheEntries = 5000;
 
     /**
-     * The number of times to retry on a retriable TrimException within during a tranasaction
+     * The number of times to retry on a retriable TrimException within during a transaction
      */
     @Getter
     @Setter
     public int trimRetry = 2;
+
+    /**
+     * Number of times to retry on an OverwriteException before giving up.
+     */
+    @Getter
+    @Setter
+    public int writeRetry = 3;
 
     /**
      * Sets expireAfterAccess and expireAfterWrite in seconds.
