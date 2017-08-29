@@ -1,4 +1,4 @@
-RELEASENAME = 'dropkick'
+RELEASENAME = 'equinox'
 BRANCH = 'nsx-dropkick'
 
 UBUNTU_MIRROR = "http://ubtmirror.nicira.eng.vmware.com/ubuntu"
