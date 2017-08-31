@@ -1,6 +1,7 @@
 
 apply plugin: 'com.google.protobuf'
 apply plugin: 'java'
+apply plugin: 'idea'
 
 description = ''
 
@@ -26,6 +27,14 @@ protobuf {
     protoc {
         // The artifact spec for the Protobuf Compiler
         artifact = 'com.google.protobuf:protoc:3.0.0'
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ["src/main/java", "${protobuf.generatedFilesBaseDir}/main/java"]
+        }
     }
 }
 
