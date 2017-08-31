@@ -18,6 +18,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.TransactionalMethod;
@@ -25,6 +26,7 @@ import org.corfudb.annotations.TransactionalMethod;
 /**
  * Created by mwei on 1/7/16.
  */
+@Slf4j
 @CorfuObject
 @Deprecated // TODO: Add replacement method that conforms to style
 @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
@@ -80,7 +82,19 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
      */
     @Accessor
     public List<V> scanAndFilter(Predicate<? super V> p) {
-        return super.values().parallelStream().filter(p).collect(Collectors.toList());
+        try {
+            return super.values().parallelStream().filter(p).collect(Collectors.toList());
+        } catch (NullPointerException npe) {
+            for (V val : super.values()) {
+                try {
+                    p.test(val);
+                } catch (NullPointerException npe2) {
+                    log.error("npe at value {}", val);
+                }
+            }
+        }
+        log.error("shouldn't return null");
+        return null;
     }
 
     /**
