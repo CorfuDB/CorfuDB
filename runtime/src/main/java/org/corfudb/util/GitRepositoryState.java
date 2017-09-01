@@ -94,8 +94,8 @@ public class GitRepositoryState {
                 properties.load(GitRepositoryState.class.getClassLoader()
                         .getResourceAsStream("git.properties"));
                 _gitRepositoryState = new GitRepositoryState(properties);
-            } catch (IOException ie) {
-                log.error("Failed to get repository state", ie);
+            } catch (Exception e) {
+                log.error("Failed to get repository state", e);
                 _gitRepositoryState = new GitRepositoryState();
             }
         }
