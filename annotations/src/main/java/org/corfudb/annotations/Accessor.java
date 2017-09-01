@@ -5,6 +5,9 @@ import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.util.function.Consumer;
+
+import org.corfudb.runtime.object.IDirectAccessFunction;
 
 /** An accessor marks a method which accesses
  * the state of a Corfu object.
@@ -21,4 +24,24 @@ public @interface Accessor {
      */
     String conflictParameterFunction() default "";
 
+    /** A list of functions to dispatch to perform a direct read.
+     *
+     * @return  A list of functions which direct reads can be
+     *          performed against.
+     */
+    Class<? extends IDirectReadEnum> directReadFunctions() default NoDirectReadFunctions.class;
+
+    enum NoDirectReadFunctions implements IDirectReadEnum {
+        ;
+
+        @Override
+        public IDirectAccessFunction getDirectFunction() {
+            return null;
+        }
+
+        @Override
+        public String getMutatorName() {
+            return null;
+        }
+    }
 }

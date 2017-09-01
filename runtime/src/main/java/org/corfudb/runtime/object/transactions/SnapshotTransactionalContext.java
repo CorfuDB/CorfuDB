@@ -2,6 +2,7 @@ package org.corfudb.runtime.object.transactions;
 
 import com.google.common.collect.ImmutableSet;
 
+import java.util.Map;
 import java.util.Set;
 
 import lombok.Getter;
@@ -13,6 +14,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.IDirectAccessFunction;
 
 /**
  * A snapshot transactional context.
@@ -41,7 +43,9 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     @Override
     public <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
                            ICorfuSMRAccess<R, T> accessFunction,
-                           Object[] conflictObject) {
+                           Object[] conflictObject,
+                           Map<String, IDirectAccessFunction> accessFunctionMap,
+                           Object[] originalArgs) {
 
         // In snapshot transactions, there are no conflicts.
         // Hence, we do not need to add this access to a conflict set

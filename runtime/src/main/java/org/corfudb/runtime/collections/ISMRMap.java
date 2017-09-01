@@ -3,11 +3,18 @@ package org.corfudb.runtime.collections;
 import com.google.common.collect.ImmutableMap;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+
 import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.ConflictParameter;
+import org.corfudb.annotations.IDirectReadEnum;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
+import org.corfudb.runtime.object.IDirectAccessFunction;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 
 /**
  * Created by mwei on 1/9/16.
@@ -62,9 +69,30 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
      * <p>Conflicts: this operation conflicts with any operation on the
      * given key.
      */
-    @Accessor
+    @Accessor(directReadFunctions = GetDirectFunctions.class)
     @Override
     V get(@ConflictParameter Object key);
+
+    @Getter
+    @RequiredArgsConstructor
+    enum GetDirectFunctions implements IDirectReadEnum {
+        PUT("put", (args, putArgs) -> {
+            final Object accessKey = args[0];
+            final Object putKey = putArgs[0];
+            final Object putValue = putArgs[1];
+
+            // If the keys aren't the same, reading fails
+            if (!Objects.equals(accessKey, putKey)) {
+                return IDirectAccessFunction.DirectReadErrors.DIRECT_READ_FAILED;
+            }
+
+            // Otherwise, return the put value
+            return putValue;
+        });
+
+        final String mutatorName;
+        final IDirectAccessFunction directFunction;
+    }
 
     /**
      * {@inheritDoc}

@@ -62,6 +62,9 @@ public class CorfuRuntime {
 
         /** Number of times to attempt to read before hole filling. */
         int holeFillRetry = 10;
+
+        /** True, if direct reads are enabled. */
+        boolean directReadEnabled = true;
     }
 
     @Getter

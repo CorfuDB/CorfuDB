@@ -3,6 +3,7 @@ plugins {
     id "nebula.ospackage" version "4.4.0"
     id 'com.github.johnrengelman.shadow' version '2.0.1'
     id 'java'
+    id 'net.ltgt.apt' version '0.10'
 }
 
 allprojects  {
@@ -23,6 +24,7 @@ subprojects {
   apply plugin: 'java'
   apply plugin: 'com.github.johnrengelman.shadow'
   apply plugin: 'org.corfudb.build.GitRepositoryPlugin'
+  apply plugin: 'net.ltgt.apt'
   sourceCompatibility = 1.8
   targetCompatibility = 1.8
 
