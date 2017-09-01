@@ -16,10 +16,13 @@ import com.squareup.javapoet.TypeVariableName;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -38,6 +41,7 @@ import javax.lang.model.element.NestingKind;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.MirroredTypeException;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
@@ -47,6 +51,7 @@ import org.corfudb.runtime.object.IConflictFunction;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRUpcallTarget;
+import org.corfudb.runtime.object.IDirectAccessFunction;
 import org.corfudb.runtime.object.IUndoFunction;
 import org.corfudb.runtime.object.IUndoRecordFunction;
 
@@ -431,6 +436,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
 
         verifyNoUpCallReference(noUpcalls, upCalls);
 
+        Set<String> directFields = new HashSet<>();
         // Generate wrapper classes.
         methodSet.stream()
                 .filter(x -> !x.doNotAdd)
@@ -547,10 +553,49 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                             .collect(Collectors.joining(", ")));
                     } else if (mutator == null) {
                         // Otherwise, just force the access to access the underlying call.
+                        String directFieldName = null;
+                        Arrays.stream(Accessor.NoDirectReadFunctions.values())
+                                .collect(Collectors.toMap(e -> e.getMutatorName(),
+                                        e-> e.getDirectFunction()));
+                        if (accessor != null) {
+                            try {
+                                // Should throw exception if a type was present
+                                accessor.directReadFunctions();
+                            } catch (MirroredTypeException mte) {
+                                if (!processingEnv.getTypeUtils().asElement(mte.getTypeMirror())
+                                        .getSimpleName().toString()
+                                        .equals(Accessor.NoDirectReadFunctions.class.getSimpleName())) {
+                                    TypeMirror directReadType = mte.getTypeMirror();
+                                    directFieldName =
+                                            smrMethod.getSimpleName()
+                                                    + "_DIRECT" + CORFUSMR_FIELD;
+                                    while (directFields.contains(directFieldName)) {
+                                        directFieldName = directFieldName
+                                                + Integer.toString(new Random().nextInt(9));
+                                    }
+                                    directFields.add(directFieldName);
+                                    FieldSpec fs = FieldSpec
+                                            .builder(ParameterizedTypeName.get(Map.class,
+                                                    String.class,
+                                                    IDirectAccessFunction.class),
+                                                    directFieldName,
+                                                    Modifier.FINAL, Modifier.STATIC)
+                                            .initializer("$T.stream($T.values())"
+                                            + ".collect($T.toMap(e -> e.getMutatorName(), "
+                                            + "e -> e.getDirectFunction()))",
+                                                    ClassName.get(Arrays.class),
+                                                    ClassName.get(directReadType),
+                                                    ClassName.get(Collectors.class))
+                                            .build();
+                                    typeSpecBuilder.addField(fs);
+                                }
+                            }
+                        }
                         ms.addStatement((smrMethod.getReturnType().getKind()
                                         .equals(TypeKind.VOID) ? "" : "return ") + "proxy"
                                         + CORFUSMR_FIELD + ".access(" + "o" + CORFUSMR_FIELD
-                                        + " -> {$Lo" + CORFUSMR_FIELD + ".$L($L);$L}," + "$L)",
+                                        + " -> {$Lo" + CORFUSMR_FIELD + ".$L($L);$L}," + "$L,"
+                                        + "$L,$L)",
                                 smrMethod.getReturnType().getKind().equals(TypeKind.VOID)
                                         ? "" : "return ",
                                 smrMethod.getSimpleName(),
@@ -559,7 +604,14 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                                         .collect(Collectors.joining(", ")),
                                 smrMethod.getReturnType().getKind().equals(TypeKind.VOID)
                                         ? "return null;" : "",
-                                (m.hasConflictAnnotations ? conflictField : "null")
+                                (m.hasConflictAnnotations ? conflictField : "null"),
+                                directFieldName == null ? "Collections.emptyMap()" :
+                                        directFieldName,
+                                directFieldName == null ? "null" : "new Object[] {"
+                                + smrMethod.getParameters().stream()
+                                        .map(ve -> ve.getSimpleName().toString())
+                                        .collect(Collectors.joining(","))
+                                + "}"
                         );
                     }
                     // Don't instrument methods not marked for instrumentation
@@ -579,6 +631,12 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         // Mark the object as instrumented, so we don't instrument it again.
         typeSpecBuilder
                 .addAnnotation(AnnotationSpec.builder(InstrumentedCorfuObject.class).build());
+
+        // To import collections for Collections.emptyMap().
+        typeSpecBuilder.addField(FieldSpec.builder(Class.class,
+                "COLLECTIONS" + CORFUSMR_FIELD, Modifier.STATIC, Modifier.FINAL)
+                .initializer("$T.class", Collections.class)
+                .build());
 
         JavaFile javaFile = JavaFile
                 .builder(packageName,

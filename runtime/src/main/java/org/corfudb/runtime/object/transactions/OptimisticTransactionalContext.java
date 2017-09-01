@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -19,6 +20,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
+import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -27,6 +29,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.IDirectAccessFunction;
 import org.corfudb.runtime.object.ISMRStream;
 import org.corfudb.runtime.object.StreamViewSMRAdapter;
 import org.corfudb.runtime.object.VersionLockedObject;
@@ -91,12 +94,34 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * {@inheritDoc}
      */
     @Override
+    @SuppressWarnings("unchecked")
     public <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
                            ICorfuSMRAccess<R, T> accessFunction,
-                           Object[] conflictObject) {
+                           Object[] conflictObject,
+                           @Nonnull Map<String, IDirectAccessFunction> accessFunctionMap,
+                           Object[] originalArgs) {
         log.debug("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
         // First, we add this access to the read set
         addToReadSet(proxy, conflictObject);
+
+        if (getWriteSetInfo().getAffectedStreams().contains(proxy.getStreamID())) {
+            MultiSMREntry mse = getWriteSetInfo().getWriteSet()
+                    .entryMap.get(proxy.getStreamID());
+            List<SMREntry> entries = mse.getUpdates();
+            // Need to iterate backwards
+            ListIterator<SMREntry> it = entries.listIterator(entries.size());
+            while (it.hasPrevious()) {
+                SMREntry e = it.previous();
+                if (accessFunctionMap != null &&
+                        accessFunctionMap.containsKey(e.getSMRMethod())) {
+                    R res = (R) accessFunctionMap.get(e.getSMRMethod())
+                            .compute(originalArgs, e.getSMRArguments());
+                    if (res != IDirectAccessFunction.DirectReadErrors.DIRECT_READ_FAILED) {
+                        return res;
+                    }
+                }
+            }
+        }
 
         // Next, we sync the object, which will bring the object
         // to the correct version, reflecting any optimistic

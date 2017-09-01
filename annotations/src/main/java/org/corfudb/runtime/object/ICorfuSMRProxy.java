@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object;
 
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -13,10 +14,14 @@ public interface ICorfuSMRProxy<T> {
     /** Access the state of the object.
      * @param accessMethod      The method to execute when accessing an object.
      * @param conflictObject    Fine-grained conflict information, if available.
+     * @param accessFunctionMap Direct-access functions, if available.
      * @param <R>               The type to return.
      * @return                  The result of the accessMethod
      */
-    <R> R access(ICorfuSMRAccess<R, T> accessMethod, Object[] conflictObject);
+    <R> R access(ICorfuSMRAccess<R, T> accessMethod,
+                 Object[] conflictObject,
+                 Map<String, IDirectAccessFunction> accessFunctionMap,
+                 Object[] originalArgs);
 
     /**
      * Record an SMR function to the log before returning.

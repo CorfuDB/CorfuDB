@@ -5,18 +5,26 @@ import static java.lang.Long.min;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import com.google.common.collect.ImmutableMap;
 
 import java.lang.reflect.Constructor;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
+
+import javax.annotation.Nonnull;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -26,9 +34,11 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.TrimmedUpcallException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.Serializers;
 
 /**
  * In the Corfu runtime, on top of a stream,
@@ -130,7 +140,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-    public CorfuCompileProxy(CorfuRuntime rt, UUID streamID, Class<T> type, Object[] args,
+    public CorfuCompileProxy(CorfuRuntime rt,
+                             UUID streamID, Class<T> type, Object[] args,
                              ISerializer serializer,
                              Map<String, ICorfuSMRUpcallTarget<T>> upcallTargetMap,
                              Map<String, IUndoFunction<T>> undoTargetMap,
@@ -167,19 +178,26 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
-                        Object[] conflictObject) {
+                        Object[] conflictObject,
+                        @Nonnull Map<String, IDirectAccessFunction> accessFunctionMap,
+                        Object[] originalArgs) {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerAccess)) {
-            return accessInner(accessMethod, conflictObject, isEnabled);
+            return accessInner(accessMethod, conflictObject,
+                    accessFunctionMap, originalArgs, isEnabled);
         }
     }
 
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
-                              Object[] conflictObject, boolean isMetricsEnabled) {
+                              Object[] conflictObject,
+                              @Nonnull Map<String, IDirectAccessFunction> accessFunctionMap,
+                              Object[] originalArgs,
+                              boolean isMetricsEnabled) {
         if (TransactionalContext.isInTransaction()) {
             try {
                 return TransactionalContext.getCurrentContext()
-                        .access(this, accessMethod, conflictObject);
+                        .access(this, accessMethod, conflictObject,
+                                accessFunctionMap, originalArgs);
             } catch (Exception e) {
                 log.error("Access[{}] Exception: {}", this, e);
                 this.abortTransaction(e);
@@ -207,7 +225,8 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 return null;
             });
             // And attempt an access again.
-            return accessInner(accessMethod, conflictObject, isMetricsEnabled);
+            return accessInner(accessMethod, conflictObject, accessFunctionMap,
+                    originalArgs, isMetricsEnabled);
         }
     }
 
@@ -431,7 +450,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public long getVersion() {
         return access(o -> underlyingObject.getVersionUnsafe(),
-                null);
+                null, Collections.emptyMap(), null);
     }
 
     /** {@inheritDoc} */

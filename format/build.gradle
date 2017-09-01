@@ -29,6 +29,19 @@ protobuf {
         artifact = 'com.google.protobuf:protoc:3.0.0'
     }
 }
+idea {
+    module {
+        sourceDirs += file("${projectDir}/proto")
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ["src/main/java", "${protobuf.generatedFilesBaseDir}/main/java"]
+        }
+    }
+}
 
 sourceSets {
     main {
