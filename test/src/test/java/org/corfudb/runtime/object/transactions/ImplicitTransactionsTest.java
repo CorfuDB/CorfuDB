@@ -82,7 +82,7 @@ public class ImplicitTransactionsTest extends AbstractTransactionsTest{
             to.throwRuntimeException();
             TXEnd();
         } catch (Exception e) {
-            assertThat(TransactionalContext.isInTransaction()).isFalse();
+            assertThat(Transactions.active()).isFalse();
         }
     }
 

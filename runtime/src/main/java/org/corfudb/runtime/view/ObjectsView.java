@@ -13,17 +13,13 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.AbortCause;
-import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.object.transactions.Transactions;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 
@@ -110,12 +106,6 @@ public class ObjectsView extends AbstractView {
     public void TXBegin() {
         TransactionType type = TransactionType.OPTIMISTIC;
 
-        /* If it is a nested transaction, inherit type of parent */
-        if (TransactionalContext.isInTransaction()) {
-            type = TransactionalContext.getCurrentContext().getBuilder().getType();
-            log.trace("Inheriting parent's transaction type {}", type);
-        }
-
         TXBuild()
                 .setType(type)
                 .begin();
@@ -137,16 +127,7 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings({"checkstyle:methodname", "checkstyle:abbreviation"})
     public void TXAbort() {
-        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
-        if (context == null) {
-            log.warn("Attempted to abort a transaction, but no transaction active!");
-        } else {
-            TxResolutionInfo txInfo = new TxResolutionInfo(
-                    context.getTransactionID(), context.getSnapshotTimestamp());
-            context.abortTransaction(new TransactionAbortedException(
-                    txInfo, null, AbortCause.USER, context));
-            TransactionalContext.removeContext();
-        }
+        Transactions.abort();
     }
 
     /**
@@ -157,7 +138,7 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings({"checkstyle:methodname", "checkstyle:abbreviation"})
     public boolean TXActive() {
-        return TransactionalContext.isInTransaction();
+        return Transactions.active();
     }
 
     /**
@@ -170,19 +151,21 @@ public class ObjectsView extends AbstractView {
     @SuppressWarnings({"checkstyle:methodname", "checkstyle:abbreviation"})
     public long TXEnd()
             throws TransactionAbortedException {
-        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
+        return Transactions.commit();
+        /*
+        AbstractTransaction context = TransactionalContext.getCurrentContext();
         if (context == null) {
             log.warn("Attempted to end a transaction, but no transaction active!");
-            return AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
+            return AbstractTransaction.UNCOMMITTED_ADDRESS;
         } else {
             long totalTime = System.currentTimeMillis() - context.getStartTime();
             log.trace("TXCommit[{}] time={} ms",
                     context, totalTime);
             try {
-                return TransactionalContext.getCurrentContext().commitTransaction();
+                return TransactionalContext.getCurrentContext().commit();
             } catch (TransactionAbortedException e) {
                 log.warn("TXCommit[{}] Exception {}", context, e);
-                TransactionalContext.getCurrentContext().abortTransaction(e);
+                TransactionalContext.getCurrentContext().abort(e);
                 throw e;
             } catch (Exception e) {
                 log.warn("TXCommit[{}] Exception {}", context, e);
@@ -205,12 +188,12 @@ public class ObjectsView extends AbstractView {
                         snapshotTimestamp);
                 TransactionAbortedException tae = new TransactionAbortedException(txInfo,
                         null, null, abortCause, e, context);
-                context.abortTransaction(tae);
+                context.abort(tae);
                 throw tae;
             } finally {
                 TransactionalContext.removeContext();
             }
-        }
+        }*/
     }
 
     /** Given a Corfu object, syncs the object to the most up to date version.

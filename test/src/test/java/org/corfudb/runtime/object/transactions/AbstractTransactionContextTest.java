@@ -97,7 +97,7 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
                 .isNull();
 
         assertThat(result)
-                .isEqualTo(AbstractTransactionalContext.NOWRITE_ADDRESS);
+                .isEqualTo(AbstractTransaction.NOWRITE_ADDRESS);
     }
 
 }

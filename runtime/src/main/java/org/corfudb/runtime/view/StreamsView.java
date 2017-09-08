@@ -12,12 +12,10 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.*;
-import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.object.transactions.Transactions;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Utils;
 
@@ -119,7 +117,7 @@ public class StreamsView extends AbstractView {
                         AbortCause.CONFLICT,
                         null,
                         tokenResponse.getTokenValue(),
-                        TransactionalContext.getCurrentContext());
+                        Transactions.current());
                 case TX_ABORT_CONFLICT_STREAM:
                 throw new TransactionAbortedException(
                         conflictInfo,
@@ -128,25 +126,25 @@ public class StreamsView extends AbstractView {
                         AbortCause.CONFLICT,
                         null,
                         tokenResponse.getTokenValue(),
-                        TransactionalContext.getCurrentContext());
+                        Transactions.current());
                 case TX_ABORT_NEWSEQ:
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.NEW_SEQUENCER,
-                        TransactionalContext.getCurrentContext());
+                        Transactions.current());
                 case TX_ABORT_SEQ_OVERFLOW:
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.SEQUENCER_OVERFLOW,
-                        TransactionalContext.getCurrentContext());
+                        Transactions.current());
                 case TX_ABORT_SEQ_TRIM:
                 throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.SEQUENCER_TRIM,
-                        TransactionalContext.getCurrentContext());
+                        Transactions.current());
                 default:
                     // Fall through
             }
@@ -192,7 +190,7 @@ public class StreamsView extends AbstractView {
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.NEW_SEQUENCER, // in the future, perhaps define a new AbortCause?
-                        TransactionalContext.getCurrentContext()
+                        Transactions.current()
                 );
             }
         }

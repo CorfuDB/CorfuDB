@@ -74,6 +74,7 @@ public abstract class AbstractQueuedStreamView extends
     @Override
     protected ILogData getNextEntry(QueuedStreamContext context,
                                     long maxGlobal) {
+        log.warn("getNextEntry[{}]: {}", this, context.readQueue);
         // If we have no entries to read, fill the read queue.
         // Return if the queue is still empty.
         if (context.readQueue.isEmpty() && context.readCpQueue.isEmpty()
@@ -127,7 +128,7 @@ public abstract class AbstractQueuedStreamView extends
     protected List<ILogData> getNextEntries(QueuedStreamContext context, long maxGlobal,
                                             Function<ILogData, Boolean> contextCheckFn) {
         NavigableSet<Long> readSet = new TreeSet<>();
-
+        log.warn("getNextEntries[{}]: {}", this, context.readQueue);
         // Scan backward in the stream to find interesting
         // log records less than or equal to maxGlobal.
         // Boolean includes both CHECKPOINT & DATA entries.
@@ -272,9 +273,10 @@ public abstract class AbstractQueuedStreamView extends
     @Override
     public synchronized ILogData previous() {
         final QueuedStreamContext context = getCurrentContext();
-        log.trace("Previous[{}] max={} min={}", this,
+        log.trace("Previous[{}] max={} min={} ptr={}", this,
                 context.maxResolution,
-                context.minResolution);
+                context.minResolution,
+                context.globalPointer);
 
         // If never read, there would be no pointer to the previous entry.
         if (context.globalPointer == Address.NEVER_READ) {
@@ -291,26 +293,30 @@ public abstract class AbstractQueuedStreamView extends
         // one less than the current.
         Long prevAddress = context
                 .resolvedQueue.lower(context.globalPointer);
+        long oldPointer = context.globalPointer;
         // If the pointer is before our min resolution, we need to resolve
         // to get the correct previous entry.
         if (prevAddress == null && Address.isAddress(context.minResolution)
                 || prevAddress != null && prevAddress <= context.minResolution) {
             context.globalPointer = prevAddress == null ? Address.NEVER_READ :
                                                 prevAddress - 1L;
-            long oldPointer = context.globalPointer;
             remainingUpTo(context.minResolution);
+            // should not terminate prematurely
             context.minResolution = Address.NON_ADDRESS;
             context.globalPointer = oldPointer;
             prevAddress = context
                     .resolvedQueue.lower(context.globalPointer);
-            log.trace("Previous[}] updated queue {}", this, context.resolvedQueue);
+            log.trace("Previous[{}] updated queue {}, ptr={}, prev={}", this, context.resolvedQueue,
+                    context.globalPointer, prevAddress);
         }
+        // Clear the read queue
+        context.readQueue.clear();
+
         // If still null, we're done.
         if (prevAddress == null) {
             return null;
         }
-        // Add the current pointer back into the read queue
-        context.readQueue.add(context.globalPointer);
+
         // Update the global pointer
         context.globalPointer = prevAddress;
         return read(prevAddress);
@@ -423,7 +429,7 @@ public abstract class AbstractQueuedStreamView extends
          * {@inheritDoc}
          * */
         @Override
-        void seek(long globalAddress) {
+        synchronized void seek(long globalAddress) {
             if (globalAddress != Address.maxNonAddress() &&
                     Address.nonAddress(globalAddress)) {
                 throw new IllegalArgumentException("globalAddress must"

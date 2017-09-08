@@ -1,16 +1,7 @@
 package org.corfudb.runtime.object.transactions;
 
-import com.google.common.collect.ImmutableSet;
-
-import java.util.Set;
-
-import lombok.Getter;
-
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 
@@ -23,16 +14,14 @@ import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
  *
  * <p>Created by mwei on 11/22/16.
  */
-public class SnapshotTransactionalContext extends AbstractTransactionalContext {
+public class SnapshotTransaction extends AbstractTransaction {
 
-    /** In a snapshot transaction, no proxies are ever modified.
-     *
-     */
-    @Getter
-    private Set<ICorfuSMRProxyInternal> modifiedProxies = ImmutableSet.of();
+    final long previousSnapshot;
 
-    public SnapshotTransactionalContext(TransactionBuilder builder) {
+    public SnapshotTransaction(TransactionBuilder builder) {
         super(builder);
+        previousSnapshot = Transactions.getReadSnapshot();
+        Transactions.getContext().setReadSnapshot(builder.snapshot);
     }
 
     /**
@@ -47,10 +36,10 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
         // Hence, we do not need to add this access to a conflict set
         // do not add: addToReadSet(proxy, conflictObject);
         return proxy.getUnderlyingObject().access(o -> o.getVersionUnsafe()
-                        == getSnapshotTimestamp()
+                        == builder.getSnapshot()
                         && !o.isOptimisticallyModifiedUnsafe(),
                 o -> {
-                    syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, null);
+                    syncWithRetryUnsafe(o, builder.getSnapshot(), proxy, null);
                 },
                 o -> accessFunction.access(o));
     }
@@ -84,15 +73,14 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                 "Can't modify object during a read-only transaction!");
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
-    public void addTransaction(AbstractTransactionalContext tc) {
-        throw new UnsupportedOperationException("Can't merge into a readonly txn (yet)");
+    public long commit() throws TransactionAbortedException {
+        // Restore the previous snapshot on commit.
+        Transactions.getContext().setReadSnapshot(previousSnapshot);
+        return super.commit();
     }
-
-    @Override
-    public long obtainSnapshotTimestamp() {
-        return getBuilder().getSnapshot();
-    }
-
 
 }

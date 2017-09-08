@@ -1,6 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -14,7 +13,6 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -30,6 +28,7 @@ import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.ISMRStream;
 import org.corfudb.runtime.object.StreamViewSMRAdapter;
 import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Utils;
 
@@ -60,16 +59,20 @@ import javax.annotation.Nonnull;
  * <p>Created by mwei on 4/4/16.
  */
 @Slf4j
-public class OptimisticTransactionalContext extends AbstractTransactionalContext {
+public abstract class AbstractOptimisticTransaction extends
+        AbstractTransaction {
 
-    /** The proxies which were modified by this transaction. */
-    @Getter
-    private final Set<ICorfuSMRProxyInternal> modifiedProxies =
-            new HashSet<>();
-
-
-    OptimisticTransactionalContext(TransactionBuilder builder) {
+    AbstractOptimisticTransaction(TransactionBuilder builder) {
         super(builder);
+    }
+
+    protected <T> void addToReadSet(ICorfuSMRProxyInternal<T> proxy,
+                                      Object[] conflictObject) { }
+
+    protected <T> long addToWriteSet(ICorfuSMRProxyInternal<T> proxy,
+                                       SMREntry updateEntry,
+                                       Object[] conflictObject) {
+        return Transactions.getContext().getWriteSet().add(proxy, updateEntry, conflictObject);
     }
 
     /**
@@ -95,28 +98,22 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                            ICorfuSMRAccess<R, T> accessFunction,
                            Object[] conflictObject) {
         log.debug("Access[{},{}] conflictObj={}", this, proxy, conflictObject);
-        // First, we add this access to the read set
         addToReadSet(proxy, conflictObject);
-
         // Next, we sync the object, which will bring the object
         // to the correct version, reflecting any optimistic
         // updates.
         return proxy
                 .getUnderlyingObject()
-                .access(o -> {
-                            WriteSetSMRStream stream = o.getOptimisticStreamUnsafe();
-                            return (
-                                getWriteSetEntrySize(proxy.getStreamID()) == 0 && // No updates
-                                        // And at the correct timestamp
-                                        o.getVersionUnsafe() == getSnapshotTimestamp()
-                                        && (stream == null
-                                            || stream.isStreamCurrentContextThreadCurrentContext())
-                            ); },
+                .access(o -> o.optimisticallyOwnedByThreadUnsafe()
+                                    && Transactions.getContext().getWriteSet()
+                                    .getWriteSet().getSMRUpdates(proxy.getStreamID()).size()
+                                == o.getOptimisticStreamUnsafe().pos(),
                         o -> {
                             // inside syncObjectUnsafe, depending on the object
                             // version, we may need to undo or redo
                             // committed changes, or apply forward committed changes.
-                            syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, this::setAsOptimisticStream);
+                            syncWithRetryUnsafe(o, obtainSnapshotTimestamp(),
+                                    proxy, this::setAsOptimisticStream);
                         },
                     o -> accessFunction.access(o)
         );
@@ -144,46 +141,48 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         addToReadSet(proxy, conflictObject);
 
         // if we have a result, return it.
-        SMREntry wrapper = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
+        SMREntry wrapper = Transactions.getContext().getWriteSet().getWriteSet()
+                .getSMRUpdates(proxy.getStreamID()).get((int)timestamp);
         if (wrapper != null && wrapper.isHaveUpcallResult()) {
             return wrapper.getUpcallResult();
         }
         // Otherwise, we need to sync the object
         return proxy.getUnderlyingObject().update(o -> {
             log.trace("Upcall[{}] {} Sync'd", this,  timestamp);
-            syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, this::setAsOptimisticStream);
-            SMREntry wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
+            syncWithRetryUnsafe(o, obtainSnapshotTimestamp(), proxy, this::setAsOptimisticStream);
+            SMREntry wrapper2 = Transactions.getContext().getWriteSet().getWriteSet()
+                    .getSMRUpdates(proxy.getStreamID()).get((int)timestamp);
             if (wrapper2 != null && wrapper2.isHaveUpcallResult()) {
                 return wrapper2.getUpcallResult();
             }
             // If we still don't have the upcall, this must be a bug.
             throw new RuntimeException("Tried to get upcall during a transaction but"
                     + " we don't have it even after an optimistic sync (asked for " + timestamp
-                    + " we have 0-" + (getWriteSetEntryList(proxy.getStreamID()).size() - 1) + ")");
+                    + " we have " + (Transactions.getContext().getWriteSet().getWriteSet()
+                    .getSMRUpdates(proxy.getStreamID()).size()) + ", stream is at "
+                    + proxy.getUnderlyingObject().getOptimisticStreamUnsafe().pos() + ")");
         });
     }
 
     /** Set the correct optimistic stream for this transaction (if not already).
      *
      * If the Optimistic stream doesn't reflect the current transaction context,
-     * we create the correct WriteSetSMRStream and pick the latest context as the
+     * we create the correct WriteSetSmrStream and pick the latest context as the
      * current context.
      * @param object        Underlying object under transaction
      * @param <T>           Type of the underlying object
      */
     <T> void setAsOptimisticStream(VersionLockedObject<T> object) {
-        WriteSetSMRStream stream = object.getOptimisticStreamUnsafe();
+        WriteSetSmrStream stream = object.getOptimisticStreamUnsafe();
         if (stream == null
-                || !stream.isStreamCurrentContextThreadCurrentContext()) {
+                || !stream.isStreamForThisThread()) {
 
             // We are setting the current context to the root context of nested transactions.
             // Upon sync forward
             // the stream will replay every entries from all parent transactional context.
-            WriteSetSMRStream newSmrStream =
-                    new WriteSetSMRStream(TransactionalContext.getTransactionStackAsList(),
-                    object.getID());
+            WriteSetSmrStream newSmrStream =
+                    new WriteSetSmrStream(Transactions.getContext().getWriteSet(), object.getID());
 
-            newSmrStream.currentContext = 0;
             object.setOptimisticStreamUnsafe(newSmrStream);
         }
     }
@@ -206,28 +205,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         log.trace("LogUpdate[{},{}] {} ({}) conflictObj={}",
                 this, proxy, updateEntry.getSMRMethod(),
                 updateEntry.getSMRArguments(), conflictObjects);
-
         return addToWriteSet(proxy, updateEntry, conflictObjects);
-    }
-
-    /**
-     * Commit a transaction into this transaction by merging the read/write
-     * sets.
-     *
-     * @param tc The transaction to merge.
-     */
-    @SuppressWarnings("unchecked")
-    public void addTransaction(AbstractTransactionalContext tc) {
-        log.trace("Merge[{}] adding {}", this, tc);
-        // merge the conflict maps
-        mergeReadSetInto(tc.getReadSetInfo());
-
-        // merge the write-sets
-        mergeWriteSetInto(tc.getWriteSetInfo());
-
-        // "commit" the optimistic writes (for each proxy we touched)
-        // by updating the modifying context (as long as the context
-        // is still the same).
     }
 
     /** Commit the transaction. If it is the last transaction in the stack,
@@ -238,37 +216,27 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @Override
     @SuppressWarnings("unchecked")
-    public long commitTransaction() throws TransactionAbortedException {
-        log.debug("TX[{}] request optimistic commit", this);
-        return doCommit(getReadSetInfo());
-    }
-
-    /**
-     * Commit with a given conflict set and return the address.
-     *
-     * @param conflictSet  conflict set used to check whether transaction can commit
-     * @return  the commit address
-     */
-    protected long doCommit(final ConflictSetInfo conflictSet) {
-
-        if (TransactionalContext.isInNestedTransaction()) {
-            getParentContext().addTransaction(this);
-            commitAddress = AbstractTransactionalContext.FOLDED_ADDRESS;
-            log.trace("doCommit[{}] Folded into {}", this, getParentContext());
-            return commitAddress;
+    public long commit() throws TransactionAbortedException {
+        if (Transactions.isNested()) {
+            log.trace("commit[{}] Nested transaction folded", this);
+            return AbstractTransaction.FOLDED_ADDRESS;
         }
 
         // If the write set is empty, we're done and just return
         // NOWRITE_ADDRESS.
-        if (getWriteSetInfo().getWriteSet().getEntryMap().isEmpty()) {
-            log.trace("doCommit[{}] Read-only commit (no write)", this);
+        if (Transactions.getContext().getWriteSet()
+                .getWriteSet().getEntryMap().isEmpty()) {
+            log.trace("commit[{}] Read-only commit (no write)", this);
             return NOWRITE_ADDRESS;
         }
 
         // Write to the transaction stream if transaction logging is enabled
-        Set<UUID> affectedStreams = new HashSet<>(getWriteSetInfo().getWriteSet()
-                .getEntryMap().keySet());
+        Set<UUID> affectedStreams = Transactions.getContext().getWriteSet()
+                .getWriteSet()
+                .getEntryMap().keySet();
+
         if (this.builder.runtime.getObjectsView().isTransactionLogging()) {
+            affectedStreams = new HashSet<>(affectedStreams);
             affectedStreams.add(TRANSACTION_STREAM_ID);
         }
 
@@ -277,16 +245,17 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         long address;
 
         final Map<UUID, Set<byte[]>> hashedConflictSet =
-                conflictSet.getHashedConflictSet();
+                Transactions.getContext().getConflictSet().getHashedConflictSet();
         try {
             address = this.builder.runtime.getStreamsView()
                     .append(
                             affectedStreams,
-                            collectWriteSetEntries(),
+                            Transactions.getContext().getWriteSet().getWriteSet(),
                             new TxResolutionInfo(getTransactionID(),
-                                    getSnapshotTimestamp(),
+                                    obtainSnapshotTimestamp(),
                                     hashedConflictSet,
-                                    getWriteSetInfo().getHashedConflictSet())
+                                    Transactions.getContext().getWriteSet()
+                                            .getHashedConflictSet())
                     );
         } catch (TransactionAbortedException tae) {
             // If precise conflicts aren't required, re-throw the transaction.
@@ -295,17 +264,16 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             }
 
             // Otherwise, do a precise conflict check.
-            address = doPreciseCommit(tae, conflictSet.getConflicts()
+            address = preciseCommit(tae, Transactions.getContext().getConflictSet().getConflicts()
                     , hashedConflictSet, affectedStreams);
         }
 
-        log.trace("doCommit[{}] Acquire address {}", this, address);
+        log.trace("commit[{}] Acquire address {}", this, address);
 
-        super.commitTransaction();
-        commitAddress = address;
+        super.commit();
 
-        tryCommitAllProxies();
-        log.trace("doCommit[{}] Written to {}", this, address);
+        tryCommitAllProxies(address);
+        log.trace("commit[{}] Written to {}", this, address);
         return address;
     }
 
@@ -324,13 +292,13 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * @return                      The address the transaction was committed to.
      * @throws TransactionAbortedException  If the transaction must be aborted.
      */
-    protected long doPreciseCommit(@Nonnull final TransactionAbortedException originalException,
-                                   @NonNull final Map<ICorfuSMRProxyInternal, Set<Object>>
+    protected long preciseCommit(@Nonnull final TransactionAbortedException originalException,
+                                 @NonNull final Map<ICorfuSMRProxyInternal, Set<Object>>
                                            conflictSet,
-                                   @NonNull final Map<UUID, Set<byte[]>> hashedConflictSet,
-                                   @NonNull final Set<UUID> affectedStreams) {
+                                 @NonNull final Map<UUID, Set<byte[]>> hashedConflictSet,
+                                 @NonNull final Set<UUID> affectedStreams) {
 
-        log.debug("doPreciseCommit[{}]: Imprecise conflict detected, resolving...", this);
+        log.debug("preciseCommit[{}]: Imprecise conflict detected, resolving...", this);
         TransactionAbortedException currentException = originalException;
 
         // This map contains the maximum address of the streams we have
@@ -349,17 +317,20 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // or read set. We need the proxy to generate the conflict objects
             // from the SMR entry.
             ICorfuSMRProxyInternal proxy;
-            Optional<ICorfuSMRProxyInternal> modifyProxy = getModifiedProxies().stream()
+            Optional<ICorfuSMRProxyInternal> modifyProxy =
+                    Transactions.getContext().getWriteSet()
+                    .getConflicts().keySet()
+                    .stream()
                     .filter(p -> p.getStreamID().equals(conflictStream))
                     .findFirst();
             if (modifyProxy.isPresent()) {
                 proxy = modifyProxy.get();
             } else {
-                modifyProxy = getReadSetInfo().getProxy(conflictStream);
+                modifyProxy = Transactions.getContext().getConflictSet().getProxy(conflictStream);
                 if (!modifyProxy.isPresent()) {
-                    modifyProxy = getWriteSetInfo().getProxy(conflictStream);
+                    modifyProxy = Transactions.getContext().getWriteSet().getProxy(conflictStream);
                     if (!modifyProxy.isPresent()) {
-                        log.warn("doPreciseCommit[{}]: precise conflict resolution requested "
+                        log.warn("preciseCommit[{}]: precise conflict resolution requested "
                                 + "but proxy not found, aborting", this);
                     }
                     throw currentException;
@@ -370,10 +341,10 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // Otherwise starting from the snapshot address to the conflict
             // address (following backpointers if possible), check if there
             // is any conflict
-            log.debug("doPreciseCommit[{}]: conflictStream {} searching {} to {}",
+            log.debug("preciseCommit[{}]: conflictStream {} searching {} to {}",
                     this,
                     Utils.toReadableId(conflictStream),
-                    getSnapshotTimestamp() + 1,
+                    obtainSnapshotTimestamp() + 1,
                     currentAddress);
             // Generate a view over the stream that caused the conflict
             IStreamView stream =
@@ -381,14 +352,14 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             try {
                 ISMRStream smrStream = new StreamViewSMRAdapter(builder.runtime, stream);
                 // Start the stream right after the snapshot.
-                smrStream.seek(getSnapshotTimestamp() + 1);
+                smrStream.seek(obtainSnapshotTimestamp() + 1);
                 // Iterate over the stream, manually checking each conflict object.
                 smrStream.streamUpTo(currentAddress)
                         .forEach(x -> {
                             Object[] conflicts =
                                     proxy.getConflictFromEntry(x.getSMRMethod(),
                                             x.getSMRArguments());
-                            log.trace("doPreciseCommit[{}]: found conflicts {}", this, conflicts);
+                            log.trace("preciseCommit[{}]: found conflicts {}", this, conflicts);
                             if (conflicts != null) {
                                 Optional<Set<Object>> conflictObjects =
                                         conflictSet.entrySet().stream()
@@ -398,7 +369,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                                             .findAny();
                                 if (!Collections.disjoint(Arrays.asList(conflicts),
                                         conflictObjects.get())) {
-                                    log.debug("doPreciseCommit[{}]: True conflict, aborting",
+                                    log.debug("preciseCommit[{}]: True conflict, aborting",
                                             this);
                                     thisException.setPrecise(true);
                                     throw thisException;
@@ -406,7 +377,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                             } else {
                                 // Conflicts was null, which means the entry conflicted with -any-
                                 // update (for example, a clear).
-                                log.debug("doPreciseCommit[{}]: True conflict due to conflict all,"
+                                log.debug("preciseCommit[{}]: True conflict due to conflict all,"
                                                 + " aborting",
                                         this);
                                 thisException.setPrecise(true);
@@ -417,7 +388,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 // During the scan, it could be possible for us to encounter
                 // a trim exception. In this case, the trim counts as a conflict
                 // and we must abort.
-                log.warn("doPreciseCommit[{}]: Aborting due to trim during scan");
+                log.warn("preciseCommit[{}]: Aborting due to trim during scan");
                 throw new TransactionAbortedException(currentException.getTxResolutionInfo(),
                         currentException.getConflictKey(), conflictStream,
                         AbortCause.TRIM, te, this);
@@ -426,19 +397,20 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // If we got here, we now tell the sequencer we checked this
             // object manually and it was a false conflict, and try to
             // commit.
-            log.warn("doPreciseCommit[{}]: False conflict, stream {} checked from {} to {}",
-                    this, Utils.toReadableId(conflictStream), getSnapshotTimestamp() + 1,
+            log.warn("preciseCommit[{}]: False conflict, stream {} checked from {} to {}",
+                    this, Utils.toReadableId(conflictStream), obtainSnapshotTimestamp() + 1,
                     currentAddress);
             verifiedStreams.put(conflictStream, currentAddress);
             try {
                 return this.builder.runtime.getStreamsView()
                         .append(
                                 affectedStreams,
-                                collectWriteSetEntries(),
+                                Transactions.getContext().getWriteSet().getWriteSet(),
                                 new TxResolutionInfo(getTransactionID(),
-                                        getSnapshotTimestamp(),
+                                        obtainSnapshotTimestamp(),
                                         hashedConflictSet,
-                                        getWriteSetInfo().getHashedConflictSet(),
+                                        Transactions.getContext().getWriteSet()
+                                        .getHashedConflictSet(),
                                         verifiedStreams
                                 )
                         );
@@ -447,7 +419,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 // Which may be because another client updated this
                 // conflict key already. We'll try again if the
                 // abort reason was due to a conflict.
-                log.warn("doPreciseCommit[{}]: Sequencer rejected, retrying", this, taeRetry);
+                log.warn("preciseCommit[{}]: Sequencer rejected, retrying", this, taeRetry);
                 currentException = taeRetry;
             }
         }
@@ -457,12 +429,12 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     }
 
     /** Try to commit the optimistic updates to each proxy. */
-    protected void tryCommitAllProxies() {
+    protected void tryCommitAllProxies(long address) {
         // First, get the committed entry
         // in order to get the backpointers
         // and the underlying SMREntries.
         ILogData committedEntry = this.builder.getRuntime()
-                .getAddressSpaceView().read(commitAddress);
+                .getAddressSpaceView().read(address);
 
         updateAllProxies(x -> {
             log.trace("Commit[{}] Committing {}", this,  x);
@@ -471,13 +443,14 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // If some other client updated this object, sync
             // it forward to grab those updates
             x.getUnderlyingObject().syncObjectUnsafe(
-                        commitAddress - 1);
+                        address - 1);
             // Also, be nice and transfer the undo
             // log from the optimistic updates
             // for this to work the write sets better
             // be the same
             List<SMREntry> committedWrites =
-                    getWriteSetEntryList(x.getStreamID());
+                    Transactions.getContext().getWriteSet().getWriteSet()
+                        .getSMRUpdates(x.getStreamID());
             List<SMREntry> entryWrites =
                     ((ISMRConsumable) committedEntry
                             .getPayload(this.getBuilder().runtime))
@@ -495,7 +468,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                         });
             }
             // and move the stream pointer to "skip" this commit entry
-            x.getUnderlyingObject().seek(commitAddress + 1);
+            x.getUnderlyingObject().seek(address + 1);
             log.trace("Commit[{}] Committed {}", this,  x);
         });
 
@@ -503,7 +476,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
     @SuppressWarnings("unchecked")
     protected void updateAllProxies(Consumer<ICorfuSMRProxyInternal> function) {
-        getModifiedProxies().forEach(x -> {
+        Transactions.getContext().getWriteSet().getConflicts().keySet().forEach(x -> {
             // If we are on the same thread, this will hold true.
             if (x.getUnderlyingObject()
                     .optimisticallyOwnedByThreadUnsafe()) {
@@ -520,31 +493,16 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         });
     }
 
-    /** Get the root context (the first context of a nested txn)
-     * which must be an optimistic transactional context.
-     * @return  The root context.
-     */
-    private OptimisticTransactionalContext getRootContext() {
-        AbstractTransactionalContext atc = TransactionalContext.getRootContext();
-        if (atc != null && !(atc instanceof OptimisticTransactionalContext)) {
-            throw new RuntimeException("Attempted to nest two different "
-                    + "transactional context types");
-        }
-        return (OptimisticTransactionalContext)atc;
-    }
-
     /**
      * Get the first timestamp for this transaction.
      *
      * @return The first timestamp to be used for this transaction.
      */
-    @Override
-    public synchronized long obtainSnapshotTimestamp() {
-        final AbstractTransactionalContext atc = getRootContext();
-        if (atc != null && atc != this) {
-            // If we're in a nested transaction, the first read timestamp
-            // needs to come from the root.
-            return atc.getSnapshotTimestamp();
+    public long obtainSnapshotTimestamp() {
+        final long lastSnapshot = Transactions.getContext().getReadSnapshot();
+        if (lastSnapshot != Address.NO_SNAPSHOT) {
+            // Snapshot was previously set, so use it
+            return lastSnapshot;
         } else {
             // Otherwise, fetch a read token from the sequencer the linearize
             // ourselves against.
@@ -552,6 +510,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     .getSequencerView().nextToken(Collections.emptySet(),
                             0).getToken().getTokenValue();
             log.trace("SnapshotTimestamp[{}] {}", this, currentTail);
+            Transactions.getContext().setReadSnapshot(currentTail);
             return currentTail;
         }
     }

@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.AbstractTransaction;
 import org.corfudb.util.Utils;
 import org.corfudb.runtime.view.Address;
 
@@ -31,7 +31,7 @@ public class TransactionAbortedException extends RuntimeException {
     Throwable cause;
 
     @Getter
-    AbstractTransactionalContext context;
+    AbstractTransaction context;
 
     /** True, if it is known that this abort was not caused by a false conflict. */
     @Getter
@@ -52,14 +52,14 @@ public class TransactionAbortedException extends RuntimeException {
      */
     public TransactionAbortedException(
             TxResolutionInfo txResolutionInfo,
-            byte[] conflictKey, AbortCause abortCause, AbstractTransactionalContext context) {
+            byte[] conflictKey, AbortCause abortCause, AbstractTransaction context) {
         this(txResolutionInfo, conflictKey, null, abortCause, null, context);
     }
 
     public TransactionAbortedException(
             TxResolutionInfo txResolutionInfo,
             byte[] conflictKey, UUID conflictStream,
-            AbortCause abortCause, Throwable cause, AbstractTransactionalContext context) {
+            AbortCause abortCause, Throwable cause, AbstractTransaction context) {
         super("TX ABORT "
                 + " | Snapshot Time = " + txResolutionInfo.getSnapshotTimestamp()
                 + " | Transaction ID = " + txResolutionInfo.getTXid()
@@ -80,7 +80,7 @@ public class TransactionAbortedException extends RuntimeException {
     public TransactionAbortedException(TxResolutionInfo txResolutionInfo,
                                        byte[] conflictKey, UUID conflictStream,
                                        AbortCause abortCause, Throwable cause,
-                                       long conflictAddress, AbstractTransactionalContext context) {
+                                       long conflictAddress, AbstractTransaction context) {
         this(txResolutionInfo, conflictKey, conflictStream,
                 abortCause, cause, context);
         this.conflictAddress = conflictAddress;

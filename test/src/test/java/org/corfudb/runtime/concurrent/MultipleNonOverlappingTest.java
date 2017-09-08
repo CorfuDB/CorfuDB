@@ -102,11 +102,12 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
         Assert.assertEquals(testMap2.size(), FINAL_SUM1);
         for (long i = 0; i < OBJECT_NUM; i++) {
             log.debug("final testmap1.get({}) = {}", i, testMap1.get(i));
-            log.debug("final testmap2.get({}) = {}", i, testMap2.get(i));
+            final long t2 = testMap2.get(i);
+            log.debug("final testmap2.get({}) = {}", i, t2);
             if (i % 2 == 0)
-                Assert.assertEquals((long)testMap2.get(i), (long) FINAL_SUM2);
+                Assert.assertEquals(t2, (long) FINAL_SUM2);
             else
-                Assert.assertEquals((long)testMap2.get(i), (long) FINAL_SUM1);
+                Assert.assertEquals(t2, (long) FINAL_SUM1);
         }
 
     }

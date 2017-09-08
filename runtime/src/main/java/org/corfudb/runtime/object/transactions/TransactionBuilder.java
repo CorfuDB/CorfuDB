@@ -22,7 +22,7 @@ public class TransactionBuilder {
     /** The type of context to build.
      *
      */
-    public TransactionType type = TransactionType.OPTIMISTIC;
+    public TransactionType type = TransactionType.READ_AFTER_WRITE;
 
     /** For snapshot transactions, the address the
      * snapshot will start at.
@@ -56,6 +56,6 @@ public class TransactionBuilder {
      * to the builder.
      */
     public void begin() {
-        TransactionalContext.newContext(type.get.apply(this));
+        Transactions.begin(type.get.apply(this));
     }
 }
