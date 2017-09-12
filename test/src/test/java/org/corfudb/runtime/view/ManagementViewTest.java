@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 
 import com.google.common.reflect.TypeToken;
+
 import lombok.Getter;
 
 import org.corfudb.infrastructure.PurgeFailurePolicy;
@@ -46,6 +47,7 @@ public class ManagementViewTest extends AbstractViewTest {
     /**
      * Sets aggressive timeouts for all the router endpoints on all the runtimes.
      * <p>
+     *
      * @param layout        Layout to get all server endpoints.
      * @param corfuRuntimes All runtimes whose routers' timeouts are to be set.
      */
@@ -72,7 +74,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
         // Boolean flag turned to true when the MANAGEMENT_FAILURE_DETECTED message
         // is sent by the Management client to its server.
-        final Semaphore failureDetected = new Semaphore(1,true);
+        final Semaphore failureDetected = new Semaphore(1, true);
 
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
@@ -111,12 +113,12 @@ public class ManagementViewTest extends AbstractViewTest {
         // MANAGEMENT_FAILURE_DETECTED message.
         addClientRule(getManagementServer(SERVERS.PORT_1).getCorfuRuntime(),
                 new TestRule().matches(corfuMsg -> {
-            if (corfuMsg.getMsgType().equals(CorfuMsgType
-                    .MANAGEMENT_FAILURE_DETECTED)) {
-                failureDetected.release();
-            }
-            return true;
-        }));
+                    if (corfuMsg.getMsgType().equals(CorfuMsgType
+                            .MANAGEMENT_FAILURE_DETECTED)) {
+                        failureDetected.release();
+                    }
+                    return true;
+                }));
 
         assertThat(failureDetected.tryAcquire(PARAMETERS.TIMEOUT_NORMAL
                         .toNanos(),
@@ -133,7 +135,7 @@ public class ManagementViewTest extends AbstractViewTest {
      */
     @Test
     public void removeSingleNodeFailure()
-            throws Exception{
+            throws Exception {
 
         // Creating server contexts with PurgeFailurePolicies.
         ServerContext sc0 = new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(SERVERS.PORT_0)).setPort(SERVERS.PORT_0).build();
@@ -166,7 +168,7 @@ public class ManagementViewTest extends AbstractViewTest {
         l.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
         corfuRuntime.connect();
         // Initiating all failure handlers.
-        for (String server: l.getAllServers()) {
+        for (String server : l.getAllServers()) {
             corfuRuntime.getRouter(server).getClient(ManagementClient.class).initiateFailureHandler().get();
         }
 
@@ -180,9 +182,11 @@ public class ManagementViewTest extends AbstractViewTest {
         addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
         getManagementServer(SERVERS.PORT_1).shutdown();
 
-        for (int i=0; i<PARAMETERS.NUM_ITERATIONS_LOW; i++){
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             corfuRuntime.invalidateLayout();
-            if (corfuRuntime.getLayoutView().getLayout().getEpoch() == 2L) {break;}
+            if (corfuRuntime.getLayoutView().getLayout().getEpoch() == 2L) {
+                break;
+            }
             Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
         Layout l2 = corfuRuntime.getLayoutView().getLayout();
@@ -216,7 +220,7 @@ public class ManagementViewTest extends AbstractViewTest {
         corfuRuntime = getRuntime(l).connect();
 
         // Initiating all failure handlers.
-        for (String server: corfuRuntime.getLayoutView().getLayout().getAllServers()) {
+        for (String server : corfuRuntime.getLayoutView().getLayout().getAllServers()) {
             corfuRuntime.getRouter(server).getClient(ManagementClient.class).initiateFailureHandler().get();
         }
 
@@ -261,7 +265,7 @@ public class ManagementViewTest extends AbstractViewTest {
             throws Exception {
         // Boolean flag turned to true when the MANAGEMENT_FAILURE_DETECTED message
         // is sent by the Management client to its server.
-        final Semaphore failureDetected = new Semaphore(2,true);
+        final Semaphore failureDetected = new Semaphore(2, true);
 
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
@@ -363,11 +367,11 @@ public class ManagementViewTest extends AbstractViewTest {
             Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             // Assert successful seal of all servers.
             if (getServerRouter(SERVERS.PORT_0).getServerEpoch() == 2L ||
-                getServerRouter(SERVERS.PORT_1).getServerEpoch() == 2L ||
-                getServerRouter(SERVERS.PORT_2).getServerEpoch() == 2L ||
-                getLayoutServer(SERVERS.PORT_0).getCurrentLayout().getEpoch() == 2L ||
-                getLayoutServer(SERVERS.PORT_1).getCurrentLayout().getEpoch() == 2L ||
-                getLayoutServer(SERVERS.PORT_2).getCurrentLayout().getEpoch() == 2L) {
+                    getServerRouter(SERVERS.PORT_1).getServerEpoch() == 2L ||
+                    getServerRouter(SERVERS.PORT_2).getServerEpoch() == 2L ||
+                    getLayoutServer(SERVERS.PORT_0).getCurrentLayout().getEpoch() == 2L ||
+                    getLayoutServer(SERVERS.PORT_1).getCurrentLayout().getEpoch() == 2L ||
+                    getLayoutServer(SERVERS.PORT_2).getCurrentLayout().getEpoch() == 2L) {
                 return;
             }
         }
@@ -376,7 +380,7 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
     protected void induceSequencerFailureAndWait()
-        throws Exception {
+            throws Exception {
 
         long currentEpoch = getCorfuRuntime().getLayoutView().getLayout().getEpoch();
 
@@ -484,7 +488,7 @@ public class ManagementViewTest extends AbstractViewTest {
         testMap = (ISMRMap<Integer, String>) instantiateCorfuObject(
                 new TypeToken<SMRMap<Integer, String>>() {
                 }, "test stream"
-        ) ;
+        );
 
         return testMap;
     }
@@ -502,7 +506,7 @@ public class ManagementViewTest extends AbstractViewTest {
      */
     @Test
     public void ckSequencerFailoverTXResolution()
-        throws Exception {
+            throws Exception {
         getManagementTestLayout();
 
         Map<Integer, String> map = getMap();
@@ -531,7 +535,7 @@ public class ManagementViewTest extends AbstractViewTest {
         induceSequencerFailureAndWait();
         t(0, () -> {
             boolean commit = true;
-            map.put(nUpdates+1, payload); // should not conflict
+            map.put(nUpdates + 1, payload); // should not conflict
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
@@ -550,12 +554,12 @@ public class ManagementViewTest extends AbstractViewTest {
         // in another thread, fill the log with a few entries
         t(1, () -> {
             for (int i = 0; i < nUpdates; i++)
-                map.put(i, payload+1);
+                map.put(i, payload + 1);
         });
 
         t(0, () -> {
             boolean commit = true;
-            map.put(nUpdates+1, payload); // should not conflict
+            map.put(nUpdates + 1, payload); // should not conflict
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
@@ -593,7 +597,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // in another thread, fill the log with a few entries
         t(1, () -> {
             for (int i = 0; i < nUpdates; i++)
-                map.put(i, payload+1);
+                map.put(i, payload + 1);
         });
 
         // now, the tail of the log is at nUpdates;
@@ -605,7 +609,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
         t(0, () -> {
             boolean commit = true;
-            map.put(nUpdates+1, payload); // should not conflict
+            map.put(nUpdates + 1, payload); // should not conflict
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
@@ -624,12 +628,12 @@ public class ManagementViewTest extends AbstractViewTest {
         // in another thread, fill the log with a few entries
         t(1, () -> {
             for (int i = 0; i < nUpdates; i++)
-                map.put(i, payload+2);
+                map.put(i, payload + 2);
         });
 
         t(0, () -> {
             boolean commit = true;
-            map.put(nUpdates+1, payload); // should not conflict
+            map.put(nUpdates + 1, payload); // should not conflict
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
@@ -655,8 +659,9 @@ public class ManagementViewTest extends AbstractViewTest {
      * B.P    : -1 -1  0  1  |          | 2 -1  4  3  7
      * <p>
      * -1 : New StreamID so empty backpointers
-     *  X : (null) Unknown backpointers as this is a failed-over sequencer.
+     * X : (null) Unknown backpointers as this is a failed-over sequencer.
      * <p>
+     *
      * @throws Exception
      */
     @Test
@@ -691,8 +696,9 @@ public class ManagementViewTest extends AbstractViewTest {
      * Requests for a token for the given stream ID.
      * Asserts the backpointer map in the token response with the specified backpointer location.
      * Writes test data to the log unit servers using the tokenResponse.
-     * @param streamID                  Stream ID to request token for.
-     * @param expectedBackpointerValue  Expected backpointer for given stream.
+     *
+     * @param streamID                 Stream ID to request token for.
+     * @param expectedBackpointerValue Expected backpointer for given stream.
      */
     private void getTokenWriteAndAssertBackPointer(UUID streamID, Long expectedBackpointerValue) {
         TokenResponse tokenResponse =
@@ -788,9 +794,82 @@ public class ManagementViewTest extends AbstractViewTest {
         currentLayout.setEpoch(currentLayout.getEpoch() + 1);
         currentLayout.moveServersToEpoch();
 
-        for(String router : l.getAllServers()) {
+        for (String router : l.getAllServers()) {
             assertThat(rt.getRouter(router).getEpoch()).isEqualTo(1L);
         }
 
+    }
+
+    @Test
+    public void testAddNode() throws Exception {
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+
+        Layout l1 = new TestLayoutBuilder()
+                .setEpoch(0L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_0)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        bootstrapAllServers(l1);
+
+        CorfuRuntime rt = new CorfuRuntime(SERVERS.ENDPOINT_0).connect();
+        rt.getRouter(SERVERS.ENDPOINT_0).getClient(ManagementClient.class)
+                .addNodeRequest(SERVERS.ENDPOINT_1,
+                        true,
+                        true,
+                        true,
+                        false,
+                        0).get();
+        rt.invalidateLayout();
+        Layout layoutPhase2 = rt.layout.get();
+
+        Layout l2 = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .setStart(0L)
+                .setEnd(0L)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .addToLayout()
+                .buildSegment()
+                .setStart(1L)
+                .setEnd(-1L)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        assertThat(l2.asJSONString()).isEqualTo(layoutPhase2.asJSONString());
+
+        rt.getRouter(SERVERS.ENDPOINT_0).getClient(ManagementClient.class)
+                .mergeSegmentsRequest().get();
+        rt.invalidateLayout();
+        Layout layoutPhase3 = rt.layout.get();
+
+        Layout l3 = new TestLayoutBuilder()
+                .setEpoch(2L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        assertThat(l3.asJSONString()).isEqualTo(layoutPhase3.asJSONString());
     }
 }
