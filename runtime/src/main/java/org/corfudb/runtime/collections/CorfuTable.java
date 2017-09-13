@@ -1,13 +1,10 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Multimap;
 import com.google.common.reflect.TypeToken;
 
-import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.ConcurrentModificationException;
@@ -152,7 +149,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
 
     protected final Set<F> indexFunctions = new HashSet<>();
 
-    protected final Map<F, Multimap<I, Map.Entry<K,V>>> indexMap = new HashMap<>();
+    protected final Map<F, Map<I, Map<K,V>>> indexMap = new HashMap<>();
 
     @Getter
     boolean indexGenerationFailed = false;
@@ -161,7 +158,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     public CorfuTable(Class<F> indexFunctionEnumClass) {
         indexerClass = indexFunctionEnumClass;
         indexFunctions.addAll(EnumSet.allOf(indexFunctionEnumClass));
-        indexFunctions.forEach(f -> indexMap.put(f, ArrayListMultimap.create()));
+        indexFunctions.forEach(f -> indexMap.put(f, new HashMap<>()));
     }
 
     /** Default constructor. Generates a table without any secondary indexes. */
@@ -268,10 +265,14 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
             entryStream = mainMap.entrySet().parallelStream();
             log.warn("getByIndexAndFilter: Attempted getByIndexAndFilter without indexing");
         } else {
-            Multimap<I, Map.Entry<K,V>> secondaryMap = indexMap.get(indexFunction);
+            Map<I, Map<K, V>> secondaryMap = indexMap.get(indexFunction);
             if (secondaryMap != null) {
                 // Otherwise, use the secondary index that was generated.
-                entryStream = secondaryMap.get(index).parallelStream();
+                if (secondaryMap.get(index) != null) {
+                    entryStream = secondaryMap.get(index).entrySet().parallelStream();
+                } else {
+                    entryStream = Stream.empty();
+                }
             } else {
                 // For some reason the function is not present (maybe someone passed the
                 // wrong function).
@@ -298,7 +299,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         indexMap.clear();
         indexFunctions.clear();
         indexFunctions.addAll(EnumSet.allOf(indexFunctionEnumClass));
-        indexFunctions.forEach(f -> indexMap.put(f, ArrayListMultimap.create()));
+        indexFunctions.forEach(f -> indexMap.put(f, new HashMap<>()));
         mainMap.forEach(this::mapSecondaryIndexes);
     }
 
@@ -646,11 +647,10 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     protected void unmapSecondaryIndexes(K key, V value) {
         try {
             if (value != null) {
-                final Map.Entry<K, V> previousEntry
-                        = new AbstractMap.SimpleImmutableEntry<>(key, value);
                 indexFunctions.parallelStream()
                         .forEach(f -> f.getIndexFunction().generateIndex(key, value)
-                                .forEach(i -> indexMap.get(f).remove((I) i, previousEntry)));
+                                .forEach(i -> indexMap.get(f).computeIfAbsent((I) i,
+                                        (I) -> new HashMap<K, V>()).remove(key)));
 
             }
         } catch (Exception e) {
@@ -671,10 +671,10 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     @SuppressWarnings("unchecked")
     protected void mapSecondaryIndexes(K key, V value) {
         try {
-            Map.Entry<K, V> entry = new AbstractMap.SimpleImmutableEntry<>(key, value);
             indexFunctions.parallelStream()
                     .forEach(f -> f.getIndexFunction().generateIndex(key, value)
-                            .forEach(i -> indexMap.get(f).put((I) i, entry)));
+                            .forEach(i -> indexMap.get(f).computeIfAbsent((I) i,
+                                    (I) -> new HashMap<K, V>()).put(key, value)));
         } catch (Exception e) {
             indexFunctions.clear();
             indexMap.clear();
