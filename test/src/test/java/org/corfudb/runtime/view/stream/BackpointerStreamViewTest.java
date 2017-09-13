@@ -81,6 +81,9 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         }
     }
 
+    /** Test if seeking the stream after resetting and then calling previous
+     *  returns the correct entry.
+     */
     @Test
     public void seekSkipTest() {
         CorfuRuntime runtime = getDefaultRuntime();
@@ -93,7 +96,12 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         sv.append(ENTRY_1);
         sv.append(ENTRY_2);
         sv.reset();
+
+        // This moves the stream pointer so the NEXT read will be 2
+        // (the pointer is at 1).
         sv.seek(2);
+
+        // The previous entry should be ENTRY_0
         assertThat((byte[])sv.previous().getPayload(runtime))
                 .isEqualTo(ENTRY_0);
     }

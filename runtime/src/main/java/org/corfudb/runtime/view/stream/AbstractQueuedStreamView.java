@@ -274,7 +274,7 @@ public abstract class AbstractQueuedStreamView extends
         final QueuedStreamContext context = getCurrentContext();
         final long oldPointer = context.globalPointer;
 
-        log.trace("Previous[{}] max={} min={}", this,
+        log.trace("previous[{}]: max={} min={}", this,
                 context.maxResolution,
                 context.minResolution);
 
@@ -305,7 +305,7 @@ public abstract class AbstractQueuedStreamView extends
             context.globalPointer = oldPointer;
             prevAddress = context
                     .resolvedQueue.lower(context.globalPointer);
-            log.trace("Previous[{}] updated resolved queue {}", this, context.resolvedQueue);
+            log.trace("previous[{}]: updated resolved queue {}", this, context.resolvedQueue);
         }
         // If still null, we're done.
         if (prevAddress == null) {
@@ -313,7 +313,7 @@ public abstract class AbstractQueuedStreamView extends
         }
         // Add the old pointer back into the read queue
         context.readQueue.add(oldPointer);
-        log.trace("Previous[{}] updated read queue {}", this, context.readQueue);
+        log.trace("previous[{}]: updated read queue {}", this, context.readQueue);
         // Update the global pointer
         context.globalPointer = prevAddress;
         return read(prevAddress);
