@@ -307,12 +307,14 @@ public abstract class AbstractQueuedStreamView extends
                     .resolvedQueue.lower(context.globalPointer);
             log.trace("previous[{}]: updated resolved queue {}", this, context.resolvedQueue);
         }
+
+        // Clear the read queue, it may no longer be valid
+        context.readQueue.clear();
+
         // If still null, we're done.
         if (prevAddress == null) {
             return null;
         }
-        // Add the old pointer back into the read queue
-        context.readQueue.add(oldPointer);
         log.trace("previous[{}]: updated read queue {}", this, context.readQueue);
         // Update the global pointer
         context.globalPointer = prevAddress;
