@@ -81,6 +81,23 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         }
     }
 
+    @Test
+    public void seekSkipTest() {
+        CorfuRuntime runtime = getDefaultRuntime();
+        IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
+        final byte[] ENTRY_0 = {0};
+        final byte[] ENTRY_1 = {1};
+        final byte[] ENTRY_2 = {2};
+
+        sv.append(ENTRY_0);
+        sv.append(ENTRY_1);
+        sv.append(ENTRY_2);
+        sv.reset();
+        sv.seek(2);
+        assertThat((byte[])sv.previous().getPayload(runtime))
+                .isEqualTo(ENTRY_0);
+    }
+
 
     @Test
     public void moreReadQueueTest() {
