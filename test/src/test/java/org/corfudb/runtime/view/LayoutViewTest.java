@@ -182,4 +182,54 @@ public class LayoutViewTest extends AbstractViewTest {
         assertThat(sv.next()).isEqualTo(null);
     }
 
+    /**
+     * Want to ensure that consensus is taken only from the members of the existing layout.
+     * If we take consensus on new layout, the test should fail as we would receive a
+     * wrong epoch exception from SERVERS.PORT_0.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void getConsensusFromCurrentMembers() throws Exception {
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+
+        Layout l = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        bootstrapAllServers(l);
+        CorfuRuntime corfuRuntime = getRuntime(l).connect();
+
+
+        getManagementServer(SERVERS.PORT_0).shutdown();
+        getManagementServer(SERVERS.PORT_1).shutdown();
+
+        Layout newLayout = new TestLayoutBuilder()
+                .setEpoch(2L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        l.setRuntime(corfuRuntime);
+        newLayout.setRuntime(corfuRuntime);
+
+        l.setEpoch(l.getEpoch() + 1);
+        l.moveServersToEpoch();
+        corfuRuntime.getLayoutView().updateLayout(newLayout, 1L);
+
+    }
+
 }
