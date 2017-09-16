@@ -269,7 +269,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
             if (secondaryMap != null) {
                 // Otherwise, use the secondary index that was generated.
                 if (secondaryMap.get(index) != null) {
-                    entryStream = secondaryMap.get(index).entrySet().parallelStream();
+                    entryStream = secondaryMap.get(index).entrySet().stream();
                 } else {
                     entryStream = Stream.empty();
                 }
@@ -479,7 +479,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     @Mutator(name = "clear", reset = true)
     public void clear() {
         mainMap.clear();
-        indexMap.values().parallelStream().forEach(m -> m.clear());
+        indexMap.values().stream().forEach(m -> m.clear());
     }
 
     /** {@inheritDoc} */
@@ -647,7 +647,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     protected void unmapSecondaryIndexes(K key, V value) {
         try {
             if (value != null) {
-                indexFunctions.parallelStream()
+                indexFunctions.stream()
                         .forEach(f -> f.getIndexFunction().generateIndex(key, value)
                                 .forEach(i -> indexMap.get(f).computeIfAbsent((I) i,
                                         (I) -> new HashMap<K, V>()).remove(key)));
@@ -671,7 +671,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
     @SuppressWarnings("unchecked")
     protected void mapSecondaryIndexes(K key, V value) {
         try {
-            indexFunctions.parallelStream()
+            indexFunctions.stream()
                     .forEach(f -> f.getIndexFunction().generateIndex(key, value)
                             .forEach(i -> indexMap.get(f).computeIfAbsent((I) i,
                                     (I) -> new HashMap<K, V>()).put(key, value)));
