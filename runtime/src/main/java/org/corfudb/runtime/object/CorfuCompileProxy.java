@@ -101,20 +101,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     final Object[] args;
 
-    private final MetricRegistry metrics;
-    /**
-     * Metrics: meter (counter), histogram.
-     */
-    private final String mpObj;
-    private final Timer timerAccess;
-    private final Timer timerLogWrite;
-    private final Timer timerTxn;
-    private final Timer timerUpcall;
-    private final Counter counterAccessOptimistic;
-    private final Counter counterAccessLocked;
-    private final Counter counterTxnRetry1;
-    private final Counter counterTxnRetryN;
-
     /**
      * Creates a CorfuCompileProxy object on a particular stream.
      *
@@ -149,17 +135,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().get(streamID)),
                 upcallTargetMap, undoRecordTargetMap,
                 undoTargetMap, resetSet);
-
-        metrics = rt.getMetrics() != null ? rt.getMetrics() : CorfuRuntime.getDefaultMetrics();
-        mpObj = CorfuRuntime.getMpObj();
-        timerAccess = metrics.timer(mpObj + "access");
-        timerLogWrite = metrics.timer(mpObj + "log-write");
-        timerTxn = metrics.timer(mpObj + "txn");
-        timerUpcall = metrics.timer(mpObj + "upcall");
-        counterAccessOptimistic = metrics.counter(mpObj + "access-optimistic");
-        counterAccessLocked = metrics.counter(mpObj + "access-locked");
-        counterTxnRetry1 = metrics.counter(mpObj + "txn-first-retry");
-        counterTxnRetryN = metrics.counter(mpObj + "txn-extra-retries");
     }
 
     /**
@@ -168,14 +143,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
                         Object[] conflictObject) {
-        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
-        try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerAccess)) {
-            return accessInner(accessMethod, conflictObject, isEnabled);
-        }
-    }
-
-    private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
-                              Object[] conflictObject, boolean isMetricsEnabled) {
         if (Transactions.active()) {
             try {
                 return Transactions.current()
@@ -207,7 +174,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 return null;
             });
             // And attempt an access again.
-            return accessInner(accessMethod, conflictObject, isMetricsEnabled);
+            return access(accessMethod, conflictObject);
         }
     }
 
@@ -217,13 +184,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public long logUpdate(String smrUpdateFunction, final boolean keepUpcallResult,
                           Object[] conflictObject, Object... args) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(timerLogWrite)) {
-            return logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args);
-        }
-    }
-
-    private long logUpdateInner(String smrUpdateFunction, final boolean keepUpcallResult,
-                                Object[] conflictObject, Object... args) {
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (Transactions.active()) {
@@ -252,32 +212,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Override
     public <R> R getUpcallResult(long timestamp, Object[] conflictObject) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(timerUpcall);) {
-            return getUpcallResultInner(timestamp, conflictObject);
-        }
-    }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void sync() {
-        // Linearize this read against a timestamp
-        final long timestamp =
-                rt.getSequencerView()
-                        .nextToken(Collections.singleton(streamID), 0).getToken()
-                        .getTokenValue();
-
-        log.debug("Sync[{}] {}", this, timestamp);
-
-        // Acquire locks and perform read.
-        underlyingObject.update(o -> {
-            o.syncObjectUnsafe(timestamp);
-            return null;
-        });
-    }
-
-    private <R> R getUpcallResultInner(long timestamp, Object[] conflictObject) {
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (Transactions.active()) {
@@ -324,6 +259,26 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     }
 
     /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void sync() {
+        // Linearize this read against a timestamp
+        final long timestamp =
+                rt.getSequencerView()
+                        .nextToken(Collections.singleton(streamID), 0).getToken()
+                        .getTokenValue();
+
+        log.debug("Sync[{}] {}", this, timestamp);
+
+        // Acquire locks and perform read.
+        underlyingObject.update(o -> {
+            o.syncObjectUnsafe(timestamp);
+            return null;
+        });
+    }
+
+    /**
      * Get the ID of the stream this proxy is subscribed to.
      *
      * @return The UUID of the stream this proxy is subscribed to.
@@ -341,15 +296,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Override
     public <R> R TXExecute(Supplier<R> txFunction) {
-        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
-        try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerTxn)) {
-            return TXExecuteInner(txFunction, isEnabled);
-        }
-    }
-
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"}) // Due to deprecation
-    private <R> R TXExecuteInner(Supplier<R> txFunction, boolean isMetricsEnabled) {
         // Don't nest transactions if we are already running transactionally
         if (Transactions.active()) {
             try {
@@ -385,11 +331,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                     }
                 }
 
-                if (retries == 1) {
-                    MetricsUtils
-                            .incConditionalCounter(isMetricsEnabled, counterTxnRetry1, 1);
-                }
-                MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTxnRetryN, 1);
                 log.debug("Transactional function aborted due to {}, retrying after {} msec",
                         e, sleepTime);
                 try {
