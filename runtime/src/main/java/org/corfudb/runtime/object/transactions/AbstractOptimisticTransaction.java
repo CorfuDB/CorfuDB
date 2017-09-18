@@ -66,9 +66,25 @@ public abstract class AbstractOptimisticTransaction extends
         super(builder);
     }
 
+    /** Add a proxy and a set of conflicts to the read set of this transaction.
+     *
+     * @param proxy             The proxy to add
+     * @param conflictObject    The set of conflicts to add
+     * @param <T>               The type of the proxy being added.
+     */
     protected <T> void addToReadSet(ICorfuSMRProxyInternal<T> proxy,
                                       Object[] conflictObject) { }
 
+
+    /** Add a proxy and a set of conflicts to the write set of this transaction.
+     *
+     * @param proxy             The proxy to add
+     * @param updateEntry       Update to add
+     * @param conflictObject    The set of conflicts to add
+     * @param <T>               The type of the proxy being added
+     * @return                  The address (in an optimistic write set) the update was
+     *                          written to.
+     */
     protected <T> long addToWriteSet(ICorfuSMRProxyInternal<T> proxy,
                                        SMREntry updateEntry,
                                        Object[] conflictObject) {
@@ -208,15 +224,18 @@ public abstract class AbstractOptimisticTransaction extends
         return addToWriteSet(proxy, updateEntry, conflictObjects);
     }
 
+
     /** Commit the transaction. If it is the last transaction in the stack,
      * append it to the log, otherwise merge it into a nested transaction.
      *
      * @return The address of the committed transaction.
      * @throws TransactionAbortedException  If the transaction was aborted.
      */
-    @Override
     @SuppressWarnings("unchecked")
+    @Override
     public long commit() throws TransactionAbortedException {
+        final TransactionContext context = Transactions.getContext();
+
         if (Transactions.isNested()) {
             log.trace("commit[{}] Nested transaction folded", this);
             return AbstractTransaction.FOLDED_ADDRESS;
@@ -224,14 +243,14 @@ public abstract class AbstractOptimisticTransaction extends
 
         // If the write set is empty, we're done and just return
         // NOWRITE_ADDRESS.
-        if (Transactions.getContext().getWriteSet()
+        if (context.getWriteSet()
                 .getWriteSet().getEntryMap().isEmpty()) {
             log.trace("commit[{}] Read-only commit (no write)", this);
             return NOWRITE_ADDRESS;
         }
 
         // Write to the transaction stream if transaction logging is enabled
-        Set<UUID> affectedStreams = Transactions.getContext().getWriteSet()
+        Set<UUID> affectedStreams = context.getWriteSet()
                 .getWriteSet()
                 .getEntryMap().keySet();
 
@@ -244,15 +263,19 @@ public abstract class AbstractOptimisticTransaction extends
         // If rejected we will get a transaction aborted exception.
         long address;
 
+        // No need to compute the conflict set if there is no snapshot (and therefore no
+        // conflicts).
         final Map<UUID, Set<byte[]>> hashedConflictSet =
-                Transactions.getContext().getConflictSet().getHashedConflictSet();
+                context.getReadSnapshot() == Address.NO_SNAPSHOT ? Collections.emptyMap() :
+                context.getConflictSet().getHashedConflictSet();
+
         try {
             address = this.builder.runtime.getStreamsView()
                     .append(
                             affectedStreams,
                             Transactions.getContext().getWriteSet().getWriteSet(),
                             new TxResolutionInfo(getTransactionID(),
-                                    obtainSnapshotTimestamp(),
+                                    context.getReadSnapshot(),
                                     hashedConflictSet,
                                     Transactions.getContext().getWriteSet()
                                             .getHashedConflictSet())
@@ -270,9 +293,9 @@ public abstract class AbstractOptimisticTransaction extends
 
         log.trace("commit[{}] Acquire address {}", this, address);
 
+        tryCommitAllProxies(address);
         super.commit();
 
-        tryCommitAllProxies(address);
         log.trace("commit[{}] Written to {}", this, address);
         return address;
     }
@@ -294,9 +317,10 @@ public abstract class AbstractOptimisticTransaction extends
      */
     protected long preciseCommit(@Nonnull final TransactionAbortedException originalException,
                                  @NonNull final Map<ICorfuSMRProxyInternal, Set<Object>>
-                                           conflictSet,
+                                         conflictSet,
                                  @NonNull final Map<UUID, Set<byte[]>> hashedConflictSet,
                                  @NonNull final Set<UUID> affectedStreams) {
+        final TransactionContext context = Transactions.getContext();
 
         log.debug("preciseCommit[{}]: Imprecise conflict detected, resolving...", this);
         TransactionAbortedException currentException = originalException;
@@ -318,17 +342,17 @@ public abstract class AbstractOptimisticTransaction extends
             // from the SMR entry.
             ICorfuSMRProxyInternal proxy;
             Optional<ICorfuSMRProxyInternal> modifyProxy =
-                    Transactions.getContext().getWriteSet()
-                    .getConflicts().keySet()
-                    .stream()
-                    .filter(p -> p.getStreamID().equals(conflictStream))
-                    .findFirst();
+                    context.getWriteSet()
+                            .getConflicts().keySet()
+                            .stream()
+                            .filter(p -> p.getStreamID().equals(conflictStream))
+                            .findFirst();
             if (modifyProxy.isPresent()) {
                 proxy = modifyProxy.get();
             } else {
-                modifyProxy = Transactions.getContext().getConflictSet().getProxy(conflictStream);
+                modifyProxy = context.getConflictSet().getProxy(conflictStream);
                 if (!modifyProxy.isPresent()) {
-                    modifyProxy = Transactions.getContext().getWriteSet().getProxy(conflictStream);
+                    modifyProxy = context.getWriteSet().getProxy(conflictStream);
                     if (!modifyProxy.isPresent()) {
                         log.warn("preciseCommit[{}]: precise conflict resolution requested "
                                 + "but proxy not found, aborting", this);
@@ -344,7 +368,7 @@ public abstract class AbstractOptimisticTransaction extends
             log.debug("preciseCommit[{}]: conflictStream {} searching {} to {}",
                     this,
                     Utils.toReadableId(conflictStream),
-                    obtainSnapshotTimestamp() + 1,
+                    context.getReadSnapshot() + 1,
                     currentAddress);
             // Generate a view over the stream that caused the conflict
             IStreamView stream =
@@ -352,7 +376,7 @@ public abstract class AbstractOptimisticTransaction extends
             try {
                 ISMRStream smrStream = new StreamViewSMRAdapter(builder.runtime, stream);
                 // Start the stream right after the snapshot.
-                smrStream.seek(obtainSnapshotTimestamp() + 1);
+                smrStream.seek(context.getReadSnapshot() + 1);
                 // Iterate over the stream, manually checking each conflict object.
                 smrStream.streamUpTo(currentAddress)
                         .forEach(x -> {
@@ -363,10 +387,10 @@ public abstract class AbstractOptimisticTransaction extends
                             if (conflicts != null) {
                                 Optional<Set<Object>> conflictObjects =
                                         conflictSet.entrySet().stream()
-                                            .filter(e -> e.getKey().getStreamID()
-                                                    .equals(conflictStream))
-                                            .map(Map.Entry::getValue)
-                                            .findAny();
+                                                .filter(e -> e.getKey().getStreamID()
+                                                        .equals(conflictStream))
+                                                .map(Map.Entry::getValue)
+                                                .findAny();
                                 if (!Collections.disjoint(Arrays.asList(conflicts),
                                         conflictObjects.get())) {
                                     log.debug("preciseCommit[{}]: True conflict, aborting",
@@ -398,7 +422,7 @@ public abstract class AbstractOptimisticTransaction extends
             // object manually and it was a false conflict, and try to
             // commit.
             log.warn("preciseCommit[{}]: False conflict, stream {} checked from {} to {}",
-                    this, Utils.toReadableId(conflictStream), obtainSnapshotTimestamp() + 1,
+                    this, Utils.toReadableId(conflictStream), context.getReadSnapshot() + 1,
                     currentAddress);
             verifiedStreams.put(conflictStream, currentAddress);
             try {
@@ -407,10 +431,9 @@ public abstract class AbstractOptimisticTransaction extends
                                 affectedStreams,
                                 Transactions.getContext().getWriteSet().getWriteSet(),
                                 new TxResolutionInfo(getTransactionID(),
-                                        obtainSnapshotTimestamp(),
+                                        context.getReadSnapshot(),
                                         hashedConflictSet,
-                                        Transactions.getContext().getWriteSet()
-                                        .getHashedConflictSet(),
+                                        context.getWriteSet().getHashedConflictSet(),
                                         verifiedStreams
                                 )
                         );
@@ -443,18 +466,18 @@ public abstract class AbstractOptimisticTransaction extends
             // If some other client updated this object, sync
             // it forward to grab those updates
             x.getUnderlyingObject().syncObjectUnsafe(
-                        address - 1);
+                    address - 1);
             // Also, be nice and transfer the undo
             // log from the optimistic updates
             // for this to work the write sets better
             // be the same
             List<SMREntry> committedWrites =
                     Transactions.getContext().getWriteSet().getWriteSet()
-                        .getSMRUpdates(x.getStreamID());
+                            .getSMRUpdates(x.getStreamID());
             List<SMREntry> entryWrites =
                     ((ISMRConsumable) committedEntry
                             .getPayload(this.getBuilder().runtime))
-                    .getSMRUpdates(x.getStreamID());
+                            .getSMRUpdates(x.getStreamID());
             if (committedWrites.size()
                     == entryWrites.size()) {
                 IntStream.range(0, committedWrites.size())
@@ -492,6 +515,7 @@ public abstract class AbstractOptimisticTransaction extends
             }
         });
     }
+
 
     /**
      * Get the first timestamp for this transaction.

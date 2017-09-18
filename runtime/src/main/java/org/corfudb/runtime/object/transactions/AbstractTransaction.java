@@ -1,23 +1,42 @@
 package org.corfudb.runtime.object.transactions;
 
+import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
+import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.ISMRStream;
+import org.corfudb.runtime.object.StreamViewSMRAdapter;
 import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Utils;
 
 /**
@@ -127,7 +146,8 @@ public abstract class AbstractTransaction {
     public void syncWithRetryUnsafe(VersionLockedObject vlo,
                                     long snapshotTimestamp,
                                     ICorfuSMRProxyInternal proxy,
-                                    @Nullable Consumer<VersionLockedObject> optimisticStreamSetter) {
+                                    @Nullable Consumer<VersionLockedObject> optimisticStreamSetter)
+    {
         for (int x = 0; x < this.builder.getRuntime().getTrimRetry(); x++) {
             try {
                 if (optimisticStreamSetter != null) {
@@ -171,11 +191,6 @@ public abstract class AbstractTransaction {
     public abstract <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry,
                                        Object[] conflictObject);
 
-    /**
-     * Commit the transaction to the log.
-     *
-     * @throws TransactionAbortedException If the transaction is aborted.
-     */
     public long commit() throws TransactionAbortedException {
         completionFuture.complete(true);
         return NOWRITE_ADDRESS;
