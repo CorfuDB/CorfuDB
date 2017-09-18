@@ -80,6 +80,9 @@ public class Address {
      */
     public static final long NON_EXIST = -6L;
 
+    /** An address indicating no snapshot was taken for a transaction. */
+    public static final long NO_SNAPSHOT = -7L;
+
     /** This is a constant use for initializing addresses before 0 is read.
      * to be consistent, a initial position already "consumed" is -1L
      */

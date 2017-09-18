@@ -24,9 +24,9 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.AbstractTransaction;
 import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.object.transactions.Transactions;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -163,8 +163,7 @@ public class CheckpointWriter<T extends Map> {
      */
     public long startCheckpoint() {
         startTime = LocalDateTime.now();
-        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
-        long txBeginGlobalAddress = context.getSnapshotTimestamp();
+        long txBeginGlobalAddress = Transactions.getReadSnapshot();
 
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_TIME, startTime.toString());
         // Need the actual object's version
@@ -311,7 +310,6 @@ public class CheckpointWriter<T extends Map> {
                 .setType(TransactionType.SNAPSHOT)
                 .setSnapshot(globalTail)
                 .begin();
-        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
-        return context.getSnapshotTimestamp();
+        return Transactions.getReadSnapshot();
     }
 }

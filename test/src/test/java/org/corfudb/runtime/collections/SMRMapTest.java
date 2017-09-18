@@ -527,7 +527,11 @@ public class SMRMapTest extends AbstractViewTest {
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
         testMap.clear();
-        getRuntime().getObjectsView().TXAbort();
+        try {
+            getRuntime().getObjectsView().TXAbort();
+        } catch (TransactionAbortedException tae) {
+            // Manually aborted.
+        }
         assertThat(testMap.size())
                 .isEqualTo(1);
     }

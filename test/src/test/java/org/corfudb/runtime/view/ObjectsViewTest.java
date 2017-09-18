@@ -78,7 +78,8 @@ public class ObjectsViewTest extends AbstractViewTest {
             throws Exception {
         //begin tests
         CorfuRuntime r = getDefaultRuntime();
-        r.getObjectsView().TXAbort();
+        assertThatThrownBy(() -> r.getObjectsView().TXAbort())
+                .isInstanceOf(TransactionAbortedException.class);
     }
 
     @Test

@@ -10,37 +10,21 @@ import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 
-import static org.corfudb.runtime.object.transactions.TransactionalContext.getRootContext;
-
 /**
  * This class captures information about objects mutated (written) during speculative
  * transaction execution.
  */
 @Getter
-public class WriteSetInfo extends ConflictSetInfo {
-
-    /** The set of mutated objects. */
-    Set<UUID> affectedStreams = new HashSet<>();
+public class WriteSet extends ConflictSet {
 
     /** The actual updates to mutated objects. */
-    MultiObjectSMREntry writeSet = new MultiObjectSMREntry();
+    final MultiObjectSMREntry writeSet = new MultiObjectSMREntry();
 
 
     public long add(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[] conflictObjects) {
         super.add(proxy, conflictObjects);
-        affectedStreams.add(proxy.getStreamID());
         writeSet.addTo(proxy.getStreamID(), updateEntry);
         return writeSet.getSMRUpdates(proxy.getStreamID()).size() - 1;
     }
 
-    @Override
-    public void mergeInto(ConflictSetInfo other) {
-        if (!(other instanceof WriteSetInfo)) {
-            throw new UnsupportedOperationException("Merging write set with read set unsupported");
-        }
-
-        super.mergeInto(other);
-        affectedStreams.addAll(((WriteSetInfo) other).affectedStreams);
-        writeSet.mergeInto(((WriteSetInfo) other).writeSet);
-    }
 }

@@ -24,6 +24,7 @@ import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.clients.TestClientRouter;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.junit.After;
 import org.junit.Before;
 
@@ -126,7 +127,11 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         });
         // Abort any active transactions...
         while (runtime.getObjectsView().TXActive()) {
-            runtime.getObjectsView().TXAbort();
+            try {
+                runtime.getObjectsView().TXAbort();
+            } catch (TransactionAbortedException tae) {
+                // This is okay, manual abort requested
+            }
         }
     }
 

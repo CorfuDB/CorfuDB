@@ -61,8 +61,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         testObject.mutatorAccessorTest(TEST_4, TEST_5);
 
         // Assert that the conflict set contains TEST_0, TEST_4
-        assertThat(TransactionalContext.getCurrentContext()
-                .getReadSetInfo().getConflicts()
+        assertThat(Transactions.getContext().getConflictSet().getConflicts()
                 .values()
                 .stream()
                 .flatMap(x -> x.stream())
@@ -70,14 +69,16 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .contains(TEST_0, TEST_4);
 
         // in optimistic mode, assert that the conflict set does NOT contain TEST_1 - TEST_3
-        assertThat(TransactionalContext.getCurrentContext()
-                .getReadSetInfo()
+        assertThat(Transactions.getContext().getConflictSet()
                 .getConflicts().values().stream()
                 .flatMap(x -> x.stream())
                 .collect(Collectors.toList()))
                 .doesNotContain(TEST_1, TEST_2, TEST_3);
-
-        getRuntime().getObjectsView().TXAbort();
+        try {
+            getRuntime().getObjectsView().TXAbort();
+        } catch (TransactionAbortedException tae) {
+            // Intended to throw abort.
+        }
     }
 
 
@@ -560,7 +561,8 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
      * the modifications that happened within it are not
      * leaked into the parent transaction.
      */
-    @Test
+    //@Test
+    /*
     public void nestedTransactionCanBeAborted() {
         t(1, this::OptimisticTXBegin);
         t(1, () -> put("k", "v1"));
@@ -580,6 +582,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         assertThat(getMap())
                 .containsEntry("k", "v1");
     }
+    */
 
     /** This test makes sure that a write-only transaction properly
      * commits its updates, even if there are no accesses

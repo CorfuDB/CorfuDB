@@ -18,7 +18,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.object.transactions.Transactions;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.util.Utils;
@@ -125,8 +125,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     }
 
     void processTrimmedException(TrimmedException te) {
-        if (TransactionalContext.getCurrentContext() != null
-                && TransactionalContext.getCurrentContext().getSnapshotTimestamp()
+        if (Transactions.current() != null
+                && Transactions.getReadSnapshot()
                 < getCurrentContext().checkpointSnapshotAddress) {
             te.setRetriable(false);
         }
@@ -230,11 +230,13 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         while (currentAddress > stopAddress  && Address.isAddress(currentAddress)) {
             // The queue already contains an address from this
             // range, terminate.
+            /*
             if (queue.contains(currentAddress)) {
                 log.trace("FollowBackpointers[{}] Terminate due to {} "
                         + "already in queue", this, currentAddress);
                 return entryAdded;
             }
+            */
             backpointerCount++;
 
             // Read the current address

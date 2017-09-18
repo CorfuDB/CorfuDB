@@ -24,8 +24,8 @@ import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.TrimmedUpcallException;
-import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.object.transactions.AbstractTransaction;
+import org.corfudb.runtime.object.transactions.Transactions;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
@@ -176,9 +176,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
                               Object[] conflictObject, boolean isMetricsEnabled) {
-        if (TransactionalContext.isInTransaction()) {
+        if (Transactions.active()) {
             try {
-                return TransactionalContext.getCurrentContext()
+                return Transactions.current()
                         .access(this, accessMethod, conflictObject);
             } catch (Exception e) {
                 log.error("Access[{}] Exception: {}", this, e);
@@ -226,11 +226,11 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                                 Object[] conflictObject, Object... args) {
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
-        if (TransactionalContext.isInTransaction()) {
+        if (Transactions.active()) {
             try {
                 // We generate an entry to avoid exposing the serializer to the tx context.
                 SMREntry entry = new SMREntry(smrUpdateFunction, args, serializer);
-                return TransactionalContext.getCurrentContext()
+                return Transactions.current()
                         .logUpdate(this, entry, conflictObject);
             } catch (Exception e) {
                 log.warn("Update[{}] Exception: {}", this, e);
@@ -280,9 +280,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     private <R> R getUpcallResultInner(long timestamp, Object[] conflictObject) {
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
-        if (TransactionalContext.isInTransaction()) {
+        if (Transactions.active()) {
             try {
-                return (R) TransactionalContext.getCurrentContext()
+                return (R) Transactions.current()
                         .getUpcallResult(this, timestamp, conflictObject);
             } catch (Exception e) {
                 log.warn("UpcallResult[{}] Exception: {}", this, e);
@@ -351,7 +351,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"}) // Due to deprecation
     private <R> R TXExecuteInner(Supplier<R> txFunction, boolean isMetricsEnabled) {
         // Don't nest transactions if we are already running transactionally
-        if (TransactionalContext.isInTransaction()) {
+        if (Transactions.active()) {
             try {
                 return txFunction.get();
             } catch (Exception e) {
@@ -375,9 +375,12 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 // Re-throw exception to client.
                 log.warn("TXExecute[{}] Abort with exception {}", this, e);
                 if (e.getAbortCause() == AbortCause.NETWORK) {
-                    if (TransactionalContext.getCurrentContext() != null) {
-                        TransactionalContext.getCurrentContext().abortTransaction(e);
-                        TransactionalContext.removeContext();
+                    if (Transactions.current() != null) {
+                        try {
+                            Transactions.abort();
+                        } catch (TransactionAbortedException tae) {
+                            // discard manual abort
+                        }
                         throw e;
                     }
                 }
@@ -482,7 +485,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         AbortCause abortCause;
         TransactionAbortedException tae;
 
-        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
+        AbstractTransaction context = Transactions.current();
 
         if (e instanceof TransactionAbortedException) {
             tae = (TransactionAbortedException) e;
@@ -495,11 +498,11 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 snapshotTimestamp = -1L;
                 abortCause = AbortCause.NETWORK;
             } else if (e instanceof UnsupportedOperationException) {
-                snapshotTimestamp = context.getSnapshotTimestamp();
+                snapshotTimestamp = Transactions.getReadSnapshot();
                 abortCause = AbortCause.UNSUPPORTED;
             } else {
-                log.error("abortTransaction[{}] Abort Transaction with Exception {}", this, e);
-                snapshotTimestamp = context.getSnapshotTimestamp();
+                log.error("abort[{}] Abort Transaction with Exception {}", this, e);
+                snapshotTimestamp = Transactions.getReadSnapshot();
                 abortCause = AbortCause.UNDEFINED;
             }
 
@@ -507,10 +510,17 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                     context.getTransactionID(), snapshotTimestamp);
             tae = new TransactionAbortedException(txInfo, null, getStreamID(),
                     abortCause, e, context);
-            context.abortTransaction(tae);
+            context.abort(tae);
         }
 
-        TransactionalContext.removeContext();
+
+        // Discard the transaction chain, if present.
+        try {
+            Transactions.abort();
+        } catch (TransactionAbortedException e2) {
+            // discard manual abort
+        }
+
         throw tae;
     }
 }

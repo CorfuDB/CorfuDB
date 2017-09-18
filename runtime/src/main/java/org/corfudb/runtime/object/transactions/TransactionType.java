@@ -9,9 +9,10 @@ import lombok.RequiredArgsConstructor;
  */
 @RequiredArgsConstructor
 public enum TransactionType {
-    OPTIMISTIC(OptimisticTransactionalContext::new),
-    SNAPSHOT(SnapshotTransactionalContext::new),
-    WRITE_AFTER_WRITE(WriteAfterWriteTransactionalContext::new);
+    OPTIMISTIC(OptimisticTransaction::new),
+    SNAPSHOT(SnapshotTransaction::new),
+    WRITE_AFTER_WRITE(WriteAfterWriteTransaction::new),
+    READ_AFTER_WRITE(ReadAfterWriteTransaction::new);
 
-    final Function<TransactionBuilder, ? extends AbstractTransactionalContext> get;
+    final Function<TransactionBuilder, ? extends AbstractTransaction> get;
 }

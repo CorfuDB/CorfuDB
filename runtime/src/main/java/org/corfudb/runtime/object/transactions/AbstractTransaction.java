@@ -1,8 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -13,14 +10,12 @@ import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
-import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.util.Utils;
@@ -38,7 +33,7 @@ import org.corfudb.util.Utils;
  * <p>Within transactional context, these methods invoke the transactionalContext
  * accessor/mutator helper.
  *
- * <p>For example, OptimisticTransactionalContext.access() is responsible for
+ * <p>For example, OptimisticTransaction.access() is responsible for
  * sync'ing the proxy state to the snapshot version, and then doing the access.
  *
  * <p>logUpdate() within transactional context is
@@ -53,24 +48,13 @@ import org.corfudb.util.Utils;
  */
 @Slf4j
 @ToString
-public abstract class AbstractTransactionalContext implements
-        Comparable<AbstractTransactionalContext> {
-
-    /**
-     * Constant for the address of an uncommitted log entry.
-     */
-    public static final long UNCOMMITTED_ADDRESS = -1L;
+public abstract class AbstractTransaction {
 
     /**
      * Constant for a transaction which has been folded into
      * another transaction.
      */
     public static final long FOLDED_ADDRESS = -2L;
-
-    /**
-     * Constant for a transaction which has been aborted.
-     */
-    public static final long ABORTED_ADDRESS = -3L;
 
     /**
      * Constant for committing a transaction which did not
@@ -99,31 +83,6 @@ public abstract class AbstractTransactionalContext implements
     public final long startTime;
 
     /**
-     * The global-log position that the transaction snapshots in all reads.
-     */
-    @Getter(lazy = true)
-    private final long snapshotTimestamp = obtainSnapshotTimestamp();
-
-
-    /**
-     * The address that the transaction was committed at.
-     */
-    @Getter
-    public long commitAddress = AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
-
-    /**
-     * The parent context of this transaction, if in a nested transaction.
-     */
-    @Getter
-    private final AbstractTransactionalContext parentContext;
-
-    @Getter
-    private final WriteSetInfo writeSetInfo = new WriteSetInfo();
-
-    @Getter
-    private final ConflictSetInfo readSetInfo = new ConflictSetInfo();
-
-    /**
      * A future which gets completed when this transaction commits.
      * It is completed exceptionally when the transaction aborts.
      */
@@ -131,15 +90,10 @@ public abstract class AbstractTransactionalContext implements
     public CompletableFuture<Boolean> completionFuture =
             new CompletableFuture<>();
 
-    AbstractTransactionalContext(TransactionBuilder builder) {
+    AbstractTransaction(TransactionBuilder builder) {
         transactionID = UUID.randomUUID();
         this.builder = builder;
-
         startTime = System.currentTimeMillis();
-
-        parentContext = TransactionalContext.getCurrentContext();
-
-        AbstractTransactionalContext.log.debug("TXBegin[{}]", this);
     }
 
     /**
@@ -198,7 +152,7 @@ public abstract class AbstractTransactionalContext implements
                                             snapshotTimestamp), null,
                                     proxy.getStreamID(),
                                     AbortCause.TRIM, te, this);
-                    abortTransaction(tae);
+                    abort(tae);
                     throw tae;
                 }
             }
@@ -218,19 +172,11 @@ public abstract class AbstractTransactionalContext implements
                                        Object[] conflictObject);
 
     /**
-     * Add a given transaction to this transactional context, merging
-     * the read and write sets.
-     *
-     * @param tc The transactional context to merge.
-     */
-    public abstract void addTransaction(AbstractTransactionalContext tc);
-
-    /**
      * Commit the transaction to the log.
      *
      * @throws TransactionAbortedException If the transaction is aborted.
      */
-    public long commitTransaction() throws TransactionAbortedException {
+    public long commit() throws TransactionAbortedException {
         completionFuture.complete(true);
         return NOWRITE_ADDRESS;
     }
@@ -238,99 +184,10 @@ public abstract class AbstractTransactionalContext implements
     /**
      * Forcefully abort the transaction.
      */
-    public void abortTransaction(TransactionAbortedException ae) {
-        AbstractTransactionalContext.log.debug("TXAbort[{}]", this);
-        commitAddress = ABORTED_ADDRESS;
+    public void abort(TransactionAbortedException ae) {
+        AbstractTransaction.log.debug("abort[{}]", this);
         completionFuture
                 .completeExceptionally(ae);
-    }
-
-    public abstract long obtainSnapshotTimestamp();
-
-    /**
-     * Add the proxy and conflict-params information to our read set.
-     *
-     * @param proxy           The proxy to add
-     * @param conflictObjects The fine-grained conflict information, if
-     *                        available.
-     */
-    public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
-        getReadSetInfo().add(proxy, conflictObjects);
-    }
-
-    /**
-     * Merge another readSet into this one.
-     *
-     * @param other  Source readSet to merge in
-     */
-    void mergeReadSetInto(ConflictSetInfo other) {
-        getReadSetInfo().mergeInto(other);
-    }
-
-    /**
-     * Add an update to the transaction optimistic write-set.
-     *
-     * @param proxy           the SMR object for this update
-     * @param updateEntry     the update
-     * @param conflictObjects the conflict objects to add
-     * @return a synthetic "address" in the write-set, to be used for
-     *     checking upcall results
-     */
-    long addToWriteSet(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[]
-            conflictObjects) {
-        return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
-    }
-
-    /**
-     * collect all the conflict-params from the write-set for this transaction
-     * into a set.
-     *
-     * @return A set of longs representing all the conflict params
-     */
-    Map<UUID, Set<byte[]>> collectWriteConflictParams() {
-        return getWriteSetInfo().getHashedConflictSet();
-    }
-
-    void mergeWriteSetInto(WriteSetInfo other) {
-        getWriteSetInfo().mergeInto(other);
-    }
-
-    /**
-     * convert our write set into a new MultiObjectSMREntry.
-     *
-     * @return  the write set
-     */
-    MultiObjectSMREntry collectWriteSetEntries() {
-        return getWriteSetInfo().getWriteSet();
-    }
-
-    /**
-     * Helper function to get a write set for a particular stream.
-     *
-     * @param id The stream to get a append set for.
-     * @return The append set for that stream, as an ordered list.
-     */
-    List<SMREntry> getWriteSetEntryList(UUID id) {
-        return getWriteSetInfo().getWriteSet().getSMRUpdates(id);
-    }
-
-    int getWriteSetEntrySize(UUID id) {
-        List<SMREntry> entries = getWriteSetInfo().getWriteSet().getSMRUpdates(id);
-
-        if (entries == null) {
-            return 0;
-        } else {
-            return entries.size();
-        }
-    }
-
-    /**
-     * Transactions are ordered by their snapshot timestamp.
-     */
-    @Override
-    public int compareTo(AbstractTransactionalContext o) {
-        return Long.compare(this.getSnapshotTimestamp(), o
-                .getSnapshotTimestamp());
     }
 
     @Override
