@@ -28,7 +28,7 @@ public class PrimitiveSerializer implements ISerializer {
     public static final Map<Byte, DeserializerFunction> DeserializerMap =
             Arrays.stream(Primitives.values())
                     .collect(Collectors.toMap(Primitives::getTypeNum, Primitives::getDeserializer));
-    public static final Map<Class, SerializerFunction> SerializerMap = getSerializerMap();
+    public static final Map<Class, Primitives> SerializerMap = getSerializerMap();
 
     public PrimitiveSerializer(byte type) {
         this.type = type;
@@ -40,12 +40,12 @@ public class PrimitiveSerializer implements ISerializer {
     }
 
     @SuppressWarnings("unchecked")
-    private static Map<Class, SerializerFunction> getSerializerMap() {
+    private static Map<Class, Primitives> getSerializerMap() {
         ImmutableMap.Builder b = ImmutableMap.<Class, SerializerFunction>builder();
         Arrays.stream(Primitives.values()).forEach(e -> {
-            b.put(e.getClassType(), e.getSerializer());
+            b.put(e.getClassType(), e);
             if (e.getPrimitiveClass() != null) {
-                b.put(e.getPrimitiveClass(), e.getSerializer());
+                b.put(e.getPrimitiveClass(), e);
             }
         });
         return b.build();
@@ -109,11 +109,12 @@ public class PrimitiveSerializer implements ISerializer {
         if (o.getClass().getName().contains("$ByteBuddy$")) {
             ((SerializerFunction<Object>) Primitives.CORFU_SMR.getSerializer()).serialize(o, b);
         } else {
-            SerializerFunction f = SerializerMap.get(o.getClass());
-            if (f == null) {
+            Primitives p = SerializerMap.get(o.getClass());
+            if (p == null) {
                 throw new RuntimeException("Unsupported class for serialization: " + o.getClass());
             }
-            f.serialize(o, b);
+            b.writeByte(p.getTypeNum());
+            ((SerializerFunction<Object>)p.getSerializer()).serialize(o, b);
         }
     }
 
