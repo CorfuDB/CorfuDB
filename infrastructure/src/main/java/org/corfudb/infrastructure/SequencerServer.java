@@ -382,6 +382,13 @@ public class SequencerServer extends AbstractServer {
         final TxResolutionInfo txInfo = req.getTxnResolution();
         final long txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
 
+        // If the tx has no snapshot (conflict-free) then issue the tokens.
+        if (txSnapshotTimestamp == Address.NO_SNAPSHOT) {
+            log.debug("handleTxToken[{}]: Conflict-free TX");
+            handleAllocation(msg, ctx, r);
+            return;
+        }
+
         if (txSnapshotTimestamp < trimMark) {
             log.debug("ABORT[{}] snapshot-ts[{}] trimMark-ts[{}]", txInfo,
                     txSnapshotTimestamp, trimMark);
