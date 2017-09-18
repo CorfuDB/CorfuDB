@@ -1,31 +1,12 @@
 package org.corfudb.runtime.object.transactions;
 
-import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
-
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
-import java.util.stream.IntStream;
 
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.ToString;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -33,11 +14,12 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-import org.corfudb.runtime.object.ISMRStream;
-import org.corfudb.runtime.object.StreamViewSMRAdapter;
 import org.corfudb.runtime.object.VersionLockedObject;
-import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Utils;
+
+import lombok.Getter;
+import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Represents a transactional context. Transactional contexts
