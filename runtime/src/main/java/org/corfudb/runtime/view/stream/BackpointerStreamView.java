@@ -15,6 +15,7 @@ import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -71,7 +72,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // We loop forever until we are interrupted, since we may have to
         // acquire an address several times until we are successful.
-        while (true) {
+        for (int x = 0; x < runtime.getWriteRetry(); x++) {
             // Next, we call the acquisitionCallback, if present, informing
             // the client of the token that we acquired.
             if (acquisitionCallback != null) {
@@ -122,6 +123,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             }
         }
+
+        log.error("append[{}]: failed after {} retries, write size {} bytes",
+                tokenResponse.getTokenValue(),
+                runtime.getWriteRetry(),
+                ILogData.getSerializedSize(object));
+        throw new AppendException();
     }
 
     void processTrimmedException(TrimmedException te) {
