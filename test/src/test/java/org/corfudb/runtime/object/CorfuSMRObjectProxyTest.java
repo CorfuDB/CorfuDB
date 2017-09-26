@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -87,7 +88,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         }
 
         Map<String, String> testMap2 = getRuntime().getObjectsView().open(
-                CorfuRuntime.getStreamID("test"), TreeMap.class);
+                CorfuRuntime.getStreamId("test"), TreeMap.class);
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
 
             assertThat(testMap2.get(Integer.toString(i)))
@@ -289,12 +290,12 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         ObjectsView.ObjectID mapId = new ObjectsView.
                 ObjectID(CorfuRuntime.getStreamID("test"), SMRMap.class);
 
-        CorfuCompileProxy cp = ((CorfuCompileProxy) ((ICorfuSMR) r.getObjectsView().
+        ICorfuWrapper wrapper = ((ICorfuWrapper) r.getObjectsView().
                 getObjectCache().
-                get(mapId)).
-                getCorfuSMRProxy());
+                get(mapId));
 
-        assertThat(cp.getSerializer()).isEqualTo(customSerializer);
+        assertThat(((ObjectBuilder)wrapper.getCorfuBuilder())
+                .getSerializer()).isEqualTo(customSerializer);
     }
 
 }

@@ -7,11 +7,17 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import lombok.Data;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.NoRollbackException;
+import org.corfudb.runtime.object.ICorfuWrapper;
+import org.corfudb.runtime.object.IStateMachineOp;
+import org.corfudb.runtime.object.IUndoFunction;
+import org.corfudb.runtime.object.IUndoRecordFunction;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -22,7 +28,7 @@ import org.corfudb.util.serializer.Serializers;
 @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
 @ToString(callSuper = true)
 @NoArgsConstructor
-public class SMREntry extends LogEntry implements ISMRConsumable {
+public class SMREntry extends LogEntry implements ISMRConsumable, IStateMachineOp {
 
     /**
      * The name of the SMR method. Note that this is limited to the size of a short.
@@ -64,12 +70,12 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
 
     /** If there is an upcall result for this modification. */
     @Getter
-    public transient boolean haveUpcallResult = false;
+    public transient boolean upcallResultPresent = false;
 
     /** Set the upcall result for this entry. */
     public void setUpcallResult(Object result) {
         upcallResult = result;
-        haveUpcallResult = true;
+        upcallResultPresent = true;
     }
 
     /** Set the undo record for this entry. */
@@ -142,5 +148,66 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         // TODO: we should check that the id matches the id of this entry,
         // but replex erases this information.
         return Collections.singletonList(this);
+    }
+
+    @Override
+    public <T> T apply(ICorfuWrapper<T> wrapper, T object) {
+        final IUndoRecordFunction<T> undoFunc = wrapper.getCorfuUndoRecordMap().get(getSMRMethod());
+
+        if (undoFunc != null && !undoable) {
+            undoRecord = undoFunc.getUndoRecord(object, getSMRArguments());
+            undoable = true;
+        } else if (wrapper.getCorfuResetSet().contains(getSMRMethod())) {
+            undoRecord = object;
+            undoable = true;
+            return wrapper.getCorfuBuilder().getRawInstance();
+        }
+
+        upcallResult =
+              wrapper.getCorfuSMRUpcallMap().get(getSMRMethod()).upcall(object, getSMRArguments());
+        upcallResultPresent = true;
+        return object;
+    }
+
+    @Override
+    public <T> Object[] getConflicts(ICorfuWrapper<T> wrapper) {
+        return wrapper.getCorfuEntryToConflictMap().get(getSMRMethod())
+                .getConflictSet(getSMRArguments());
+    }
+
+    @Data
+    static class UndoOperation implements IStateMachineOp {
+
+        final String method;
+        final Object undoRecord;
+        final Object[] args;
+
+        @Override
+        public <T> T apply(ICorfuWrapper<T> wrapper, T object) {
+            if (wrapper.getCorfuResetSet().contains(method)) {
+                return (T) undoRecord;
+            } else {
+                wrapper.getCorfuUndoMap().get(method).doUndo(object, undoRecord, args);
+                return object;
+            }
+        }
+
+        @Override
+        public long getAddress() {
+            return 0;
+        }
+    }
+
+    public IStateMachineOp getUndoOperation()
+        throws NoRollbackException {
+        if (undoable) {
+            return new UndoOperation(getSMRMethod(), undoRecord, getSMRArguments());
+        }
+        throw new NoRollbackException(0);
+    }
+
+    @Override
+    public long getAddress() {
+        return getEntry().getGlobalAddress();
     }
 }

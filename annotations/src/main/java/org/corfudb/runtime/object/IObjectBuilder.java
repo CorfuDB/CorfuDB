@@ -40,6 +40,26 @@ public interface IObjectBuilder<T> {
      */
     <R> IObjectBuilder<R> setType(Class<R> type);
 
+    /** Get the type set for this object.
+     * @return  The type for this object.
+     */
+    Class<T> getType();
+
+    /** Get the arguments used to construct this object.
+     * @return  The arguments used for this object.
+     */
+    Object[] getArguments();
+
+    /** Get the stream ID for this object.
+     * @return  The stream ID for this object.
+     */
+    UUID getStreamId();
+
+    /** Get a new instance of this object.
+     * @return  Get a new uninstrumented instance of this object.
+     */
+    T getRawInstance();
+
     /** Open the object, using the parameters given to the builder.
      *
      * @return  An instance of the Corfu object.

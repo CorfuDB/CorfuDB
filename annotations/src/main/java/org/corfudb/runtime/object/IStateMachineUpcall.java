@@ -6,7 +6,7 @@ package org.corfudb.runtime.object;
  * Created by mwei on 11/10/16.
  */
 @FunctionalInterface
-public interface ICorfuSMRUpcallTarget<R> {
+public interface IStateMachineUpcall<R> {
 
     /** Do the upcall.
      * @param obj   The upcall target.

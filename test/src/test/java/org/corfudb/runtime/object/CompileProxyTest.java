@@ -83,21 +83,22 @@ public class CompileProxyTest extends AbstractViewTest {
         executeScheduled(concurrency, PARAMETERS.TIMEOUT_NORMAL);
 
         // track the raw stream updates caused by the execution so far
-        ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = (ICorfuSMR<CorfuSharedCounter>) sharedCounter;
-        ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
+        VersionedObjectManager<CorfuSharedCounter> om =
+                (VersionedObjectManager<CorfuSharedCounter>)
+                        ((ICorfuWrapper)sharedCounter).getObjectManager$CORFU();
         //IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
         int beforeSync, afterSync;
 
         // before sync'ing the in-memory object, the in-memory copy does not get updated
-        assertThat(beforeSync = proxy_CORFUSMR.getUnderlyingObject().object.getValue())
+        assertThat(beforeSync = om.object.getValue())
                 .isEqualTo(INITIAL);
 
         // sync with the stream entry by entry
         for (int timestamp = 1; timestamp <= concurrency; timestamp++) {
-            proxy_CORFUSMR.getUnderlyingObject()
-                    .syncObjectUnsafe(timestamp);
-            assertThat((afterSync = proxy_CORFUSMR.getUnderlyingObject().object.getValue()))
+            om
+                    .syncObjectUnsafe(timestamp, null);
+            assertThat((afterSync = om.object.getValue()))
                     .isBetween(0, concurrency);
             assertThat(beforeSync)
                     .isNotEqualTo(afterSync);
@@ -205,8 +206,10 @@ public class CompileProxyTest extends AbstractViewTest {
                 })
                 .open();
 
-        ICorfuSMR<CorfuSharedCounter> compiledSharedCounter = (ICorfuSMR<CorfuSharedCounter>)  sharedCounter;
-        ICorfuSMRProxyInternal<CorfuSharedCounter> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuSharedCounter>) compiledSharedCounter.getCorfuSMRProxy();
+        VersionedObjectManager<CorfuSharedCounter> om =
+                (VersionedObjectManager<CorfuSharedCounter>)
+                        ((ICorfuWrapper)sharedCounter).getObjectManager$CORFU();
+
       //  IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
         int numTasks = PARAMETERS.NUM_ITERATIONS_LOW;
@@ -236,7 +239,7 @@ public class CompileProxyTest extends AbstractViewTest {
             } else {
                 // before sync'ing the in-memory object, the in-memory copy does not get updated
                 // check that the in-memory copy is only as up-to-date as the latest 'get()'
-                assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getValue())
+                assertThat(om.object.getValue())
                         .isEqualTo(lastRead.get());
 
                 // now read, expect to get the latest written
@@ -385,8 +388,9 @@ public class CompileProxyTest extends AbstractViewTest {
                 .open();
 
         // for tracking raw stream status
-        ICorfuSMR<CorfuCompoundObj> compiledCorfuCompound = (ICorfuSMR<CorfuCompoundObj>) sharedCorfuCompound;
-        ICorfuSMRProxyInternal<CorfuCompoundObj> proxy_CORFUSMR = (ICorfuSMRProxyInternal<CorfuCompoundObj>) compiledCorfuCompound.getCorfuSMRProxy();
+        VersionedObjectManager<CorfuCompoundObj> om =
+                (VersionedObjectManager<CorfuCompoundObj>)
+                        ((ICorfuWrapper)sharedCorfuCompound).getObjectManager$CORFU();
        // IStreamView objStream = proxy_CORFUSMR.getUnderlyingObject().getStreamViewUnsafe();
 
         // initialization
@@ -406,9 +410,9 @@ public class CompileProxyTest extends AbstractViewTest {
         // step 2: check the unsync'ed in-memory object state
         addTestStep((ignored_task_num) -> {
             // before sync'ing the in-memory object, the in-memory copy does not get updated
-            assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getUser().getFirstName())
+            assertThat(om.object.getUser().getFirstName())
                     .startsWith("E");
-            assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getUser().getLastName())
+            assertThat(om.object.getUser().getLastName())
                     .startsWith("F");
         });
 

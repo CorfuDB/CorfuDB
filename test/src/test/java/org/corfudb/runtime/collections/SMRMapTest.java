@@ -23,7 +23,7 @@ import lombok.ToString;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuWrapper;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
@@ -114,14 +114,14 @@ public class SMRMapTest extends AbstractViewTest {
     public void canGetID()
             throws Exception {
         UUID id = UUID.randomUUID();
-        ICorfuSMR testMap = (ICorfuSMR) getRuntime().getObjectsView()
+        ICorfuWrapper testMap = (ICorfuWrapper) getRuntime().getObjectsView()
                 .build()
                 .setStreamID(id)
                 .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
                 .open();
 
         assertThat(id)
-                .isEqualTo(testMap.getCorfuStreamID());
+                .isEqualTo(testMap.getId$CORFU());
     }
 
     @Test

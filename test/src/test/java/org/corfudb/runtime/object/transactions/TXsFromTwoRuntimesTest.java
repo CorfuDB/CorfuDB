@@ -218,7 +218,7 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
             assertThat(isAbort)
                     .isFalse();
 
-            // this currently fails, due to incorrect sync on commit in VersionLockedObject
+            // this currently fails, due to incorrect sync on commit in VersionedObjectManager
             // expect to see nTXs+1 entries on the stream
             assertThat(mymap.size())
                     .isEqualTo(nTXs+1);

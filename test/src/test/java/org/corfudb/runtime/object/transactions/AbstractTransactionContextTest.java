@@ -5,6 +5,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuSharedCounter;
+import org.corfudb.runtime.view.Address;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -97,7 +98,7 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
                 .isNull();
 
         assertThat(result)
-                .isEqualTo(AbstractTransaction.NOWRITE_ADDRESS);
+                .isEqualTo(Address.NOWRITE);
     }
 
 }

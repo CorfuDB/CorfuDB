@@ -1,27 +1,22 @@
 package org.corfudb.runtime.object.transactions;
 
-import java.util.Deque;
-import java.util.LinkedList;
 import java.util.UUID;
 
+import javax.annotation.Nonnull;
+
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.IObjectManager;
+import org.corfudb.runtime.object.IStateMachineStream;
 import org.corfudb.runtime.view.Address;
-
-import lombok.extern.slf4j.Slf4j;
 
 /** This class provides support for transactions.
  *
  */
 @Slf4j
 public class Transactions {
-
-    /** A thread local stack containing all transactions for a given thread.
-     */
-    private static final ThreadLocal<Deque<AbstractTransaction>>
-            threadTransactionStack = ThreadLocal.withInitial(LinkedList<AbstractTransaction>::new);
-
     /** A thread local containing the transaction context for a given thread.
      * This context is reset whenever a transaction stack is committed or aborted.
      * */
@@ -37,35 +32,41 @@ public class Transactions {
         // other optimistic transactions.
         if (active()
                 && transaction instanceof AbstractOptimisticTransaction
-                && !(threadTransactionStack.get().getFirst()
-                instanceof AbstractOptimisticTransaction)) {
+                && !(current() instanceof AbstractOptimisticTransaction)) {
             throw new TransactionAbortedException(
                     new TxResolutionInfo(new UUID(0, 0), 0),
                     null, AbortCause.UNSUPPORTED, null);
         }
 
-        threadTransactionStack.get().addFirst(transaction);
+        transactionContext.get().setCurrent(transaction);
     }
 
     /** Attempt to commit the current transaction. */
     public static long commit() throws TransactionAbortedException {
+        final TransactionContext context = transactionContext.get();
         try {
-            if (threadTransactionStack.get().isEmpty()) {
+            if (context.getCurrent() == null) {
                 log.warn("commit: Attempt to commit but no transaction present.");
                 return Address.NEVER_READ;
             }
-            long pos = threadTransactionStack.get().peekFirst().commit();
-            threadTransactionStack.get().removeFirst();
+            final AbstractTransaction currentTransaction = context.getCurrent();
+            long pos = context.getCurrent().commit();
+            context.setCurrent(context.getCurrent().getParent());
+            // If we are not nested, this is the final TX in the chain and the context
+            // has been committed to the log.
+            if (currentTransaction.getParent() == null) {
+                context.setCommitAddress(pos);
+            }
             return pos;
         } catch (TransactionAbortedException tae) {
-            // Transaction aborted during the commit attempt, so empty the
-            // stack and re-throw the exception.
-            threadTransactionStack.get().clear();
+            // Transaction aborted during the commit attempt,
+            // so stop all transactions and re-throw the exception.
+            context.setCurrent(null);
             throw tae;
         } finally {
             // If there are no transactions left on the stack,
             // clear the current context.
-            if (threadTransactionStack.get().isEmpty()) {
+            if (context.getCurrent() == null) {
                 resetTransactionContext();
             }
         }
@@ -73,11 +74,17 @@ public class Transactions {
 
     /** Abort the transaction stack. */
     public static void abort() {
-        threadTransactionStack.get().clear();
-        resetTransactionContext();
-        throw new TransactionAbortedException(new
+        abort(new TransactionAbortedException(new
                 TxResolutionInfo(new UUID(0,0), 0),
-                null, AbortCause.USER, null);
+                null, AbortCause.USER, null));
+    }
+
+    /** Abort the transaction stack with the specified exception.
+     * @param tae   The exception to abort with.
+     */
+    public static void abort(TransactionAbortedException tae) {
+        resetTransactionContext();
+        throw tae;
     }
 
     /** Check whether there is an active transaction on this thread or not.
@@ -85,7 +92,7 @@ public class Transactions {
      * @return  True, if there is an active transaction on this thread, false otherwise.
      */
     public static boolean active() {
-        return !threadTransactionStack.get().isEmpty();
+        return transactionContext.get().getCurrent() !=  null;
     }
 
     /** Check whether the current thread stack contains more than one active transaction.
@@ -93,7 +100,8 @@ public class Transactions {
      * @return  True, if there is more than one active transaction, false otherwise.
      */
     public static boolean isNested() {
-        return threadTransactionStack.get().size() > 1;
+        return transactionContext.get().getCurrent() != null
+                && transactionContext.get().getCurrent().getParent() != null;
     }
 
     /** Get the snapshot "version" reads are being served from, if present, otherwise
@@ -110,13 +118,23 @@ public class Transactions {
      * @return  The current active transaction, or null, if no transaction is present.
      */
     public static AbstractTransaction current() {
-        return threadTransactionStack.get().peekFirst();
+        return getContext().getCurrent();
+    }
+
+    /** Get a state machine stream for the active transaction.
+     *
+     * @param manager   The manager to get a state machine stream for
+     * @param current   The current state machine stream
+     * @return          A state machine stream for the active transaction.
+     */
+    public static IStateMachineStream getStateMachineStream(@Nonnull IObjectManager manager,
+                                                @Nonnull IStateMachineStream current) {
+        return getContext().getStateMachineStream(manager, current);
     }
 
     /** Reset the transaction context, clearing the read and write sets. */
     private static void resetTransactionContext() {
         transactionContext.remove();
-        transactionContext.set(new TransactionContext());
     }
 
     /** Get the current transaction context. */

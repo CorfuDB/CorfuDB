@@ -1,9 +1,11 @@
 package org.corfudb.runtime.object.transactions;
 
-import lombok.extern.slf4j.Slf4j;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.object.IObjectManager;
+import org.corfudb.runtime.object.IStateMachineStream;
 
 /** A write-after-write transactional context.
  *
@@ -24,17 +26,45 @@ import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 public class WriteAfterWriteTransaction
         extends AbstractOptimisticTransaction {
 
-    WriteAfterWriteTransaction(TransactionBuilder builder) {
-        super(builder);
+    static final class WriteAfterWriteStateMachineStream extends
+    AbstractOptimisticStateMachineStream {
+
+        WriteAfterWriteStateMachineStream(@Nonnull IObjectManager<?> manager,
+                                          @Nonnull IStateMachineStream parent,
+                                          @Nonnull TransactionContext context,
+                                          long address) {
+            super(manager, parent, context, address);
+        }
+
+        /** {@inheritDoc} */
+        @Override
+        public long append(@Nonnull String smrMethod,
+                           @Nonnull Object[] smrArguments,
+                           @Nullable Object[] conflictObjects, boolean keepEntry) {
+            writerContext.getConflictSet().add(manager, conflictObjects);
+            return super.append(smrMethod, smrArguments, conflictObjects, keepEntry);
+        }
+
+
+    }
+
+    WriteAfterWriteTransaction(@Nonnull TransactionBuilder builder,
+                               @Nonnull TransactionContext context) {
+        super(builder, context);
         obtainSnapshotTimestamp();
     }
 
+    /** {@inheritDoc} */
     @Override
-    protected <T> long addToWriteSet(ICorfuSMRProxyInternal<T> proxy,
-                                     SMREntry updateEntry,
-                                     Object[] conflictObject) {
-        Transactions.getContext().getConflictSet().add(proxy, conflictObject);
-        return super.addToWriteSet(proxy, updateEntry, conflictObject);
+    public IStateMachineStream getStateMachineStream(@Nonnull IObjectManager manager,
+                                                     @Nonnull IStateMachineStream current) {
+        if (current.equals(this)) {
+            return current;
+        }
+        return new WriteAfterWriteStateMachineStream(manager, current.getRoot(),
+                context, context.getReadSnapshot());
     }
+
+
 
 }

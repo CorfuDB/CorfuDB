@@ -15,13 +15,13 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.CorfuWrapperBuilder;
+import org.corfudb.runtime.object.ICorfuWrapper;
+import org.corfudb.runtime.object.IObjectBuilder;
 import org.corfudb.runtime.object.transactions.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.Transactions;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.util.serializer.Serializers;
 
 /**
  * A view of the objects inside a Corfu instance.
@@ -67,16 +67,22 @@ public class ObjectsView extends AbstractView {
      */
     @SuppressWarnings("unchecked")
     public <T> T copy(@NonNull T obj, @NonNull UUID destination) {
-        ICorfuSMR<T> proxy = (ICorfuSMR<T>)obj;
-        ObjectID oid = new ObjectID(destination, proxy.getCorfuSMRProxy().getObjectType());
+        ICorfuWrapper<T> wrapper = (ICorfuWrapper<T>)obj;
+        ObjectID oid = new ObjectID(destination, wrapper.getCorfuBuilder().getType());
         return (T) objectCache.computeIfAbsent(oid, x -> {
-            IStreamView sv = runtime.getStreamsView().copy(proxy.getCorfuStreamID(),
-                    destination, proxy.getCorfuSMRProxy().getVersion());
+            IStreamView sv = runtime.getStreamsView().copy(wrapper.getId$CORFU(),
+                    destination, wrapper.getObjectManager$CORFU().getVersion());
             try {
+                final ObjectBuilder<T> originalBuilder = (ObjectBuilder<T>)
+                        wrapper.getCorfuBuilder();
+                IObjectBuilder<T> builder = new ObjectBuilder(originalBuilder.getRuntime())
+                        .setArguments(originalBuilder.getArguments())
+                        .setType(originalBuilder.getType())
+                        .setSerializer(originalBuilder.getSerializer())
+                        .setStreamID(sv.getId());
+
                 return
-                        CorfuCompileWrapperBuilder.getWrapper(proxy.getCorfuSMRProxy()
-                                        .getObjectType(), runtime, sv.getId(), null,
-                                Serializers.JSON);
+                        CorfuWrapperBuilder.getWrapper((ObjectBuilder)builder);
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
@@ -152,48 +158,6 @@ public class ObjectsView extends AbstractView {
     public long TXEnd()
             throws TransactionAbortedException {
         return Transactions.commit();
-        /*
-        AbstractTransaction context = TransactionalContext.getCurrentContext();
-        if (context == null) {
-            log.warn("Attempted to end a transaction, but no transaction active!");
-            return AbstractTransaction.UNCOMMITTED_ADDRESS;
-        } else {
-            long totalTime = System.currentTimeMillis() - context.getStartTime();
-            log.trace("TXCommit[{}] time={} ms",
-                    context, totalTime);
-            try {
-                return TransactionalContext.getCurrentContext().commit();
-            } catch (TransactionAbortedException e) {
-                log.warn("TXCommit[{}] Exception {}", context, e);
-                TransactionalContext.getCurrentContext().abort(e);
-                throw e;
-            } catch (Exception e) {
-                log.warn("TXCommit[{}] Exception {}", context, e);
-                AbortCause abortCause;
-
-                if (e instanceof NetworkException) {
-                    abortCause = AbortCause.NETWORK;
-                } else {
-                    abortCause = AbortCause.UNDEFINED;
-                }
-
-                long snapshotTimestamp;
-                try {
-                    snapshotTimestamp = context.getSnapshotTimestamp();
-                } catch (NetworkException ne) {
-                    snapshotTimestamp = -1L;
-                }
-
-                TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
-                        snapshotTimestamp);
-                TransactionAbortedException tae = new TransactionAbortedException(txInfo,
-                        null, null, abortCause, e, context);
-                context.abort(tae);
-                throw tae;
-            } finally {
-                TransactionalContext.removeContext();
-            }
-        }*/
     }
 
     /** Given a Corfu object, syncs the object to the most up to date version.
@@ -201,9 +165,9 @@ public class ObjectsView extends AbstractView {
      * @param object    The Corfu object to sync.
      */
     public void syncObject(Object object) {
-        if (object instanceof ICorfuSMR<?>) {
-            ICorfuSMR<?> corfuObject = (ICorfuSMR<?>) object;
-            corfuObject.getCorfuSMRProxy().sync();
+        if (object instanceof ICorfuWrapper<?>) {
+            ICorfuWrapper<?> corfuObject = (ICorfuWrapper<?>) object;
+            corfuObject.getObjectManager$CORFU().sync();
         }
     }
 
@@ -214,9 +178,9 @@ public class ObjectsView extends AbstractView {
     public void syncObject(Object... objects) {
         Arrays.stream(objects)
                 .parallel()
-                .filter(x -> x instanceof ICorfuSMR<?>)
-                .map(x -> (ICorfuSMR<?>) x)
-                .forEach(x -> x.getCorfuSMRProxy().sync());
+                .filter(x -> x instanceof ICorfuWrapper<?>)
+                .map(x -> (ICorfuWrapper<?>) x)
+                .forEach(x -> x.getObjectManager$CORFU().sync());
     }
 
     @Data

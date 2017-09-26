@@ -7,9 +7,7 @@ import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuWrapper;
 import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
@@ -56,7 +54,7 @@ public class RecoveryUtils {
 
     static void createObjectIfNotExist(ObjectBuilder ob, ISerializer serializer) {
         if (!ob.getRuntime().getObjectsView().getObjectCache()
-                .containsKey(RecoveryUtils.getObjectIdFromStreamId(ob.getStreamID(), ob.getType()))){
+                .containsKey(RecoveryUtils.getObjectIdFromStreamId(ob.getStreamId(), ob.getType()))){
                 ob.setSerializer(serializer).open();
         }
     }
@@ -114,9 +112,8 @@ public class RecoveryUtils {
      * @param streamId
      * @return
      */
-    static CorfuCompileProxy getCorfuCompileProxy(CorfuRuntime runtime, UUID streamId, Class type) {
+    static <T> ICorfuWrapper<T> getWrapper(CorfuRuntime runtime, UUID streamId, Class<T> type) {
         ObjectsView.ObjectID thisObjectId = new ObjectsView.ObjectID(streamId, type);
-        return ((CorfuCompileProxy) ((ICorfuSMR) runtime.getObjectsView().getObjectCache().get(thisObjectId)).
-                getCorfuSMRProxy());
+        return (ICorfuWrapper<T>) runtime.getObjectsView().getObjectCache().get(thisObjectId);
     }
 }

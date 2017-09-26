@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.stream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableSet;
+import java.util.NoSuchElementException;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.BiFunction;
@@ -319,7 +320,11 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      *
      * */
     protected T getCurrentContext() {
-        return streamContexts.first();
+        try {
+            return streamContexts.first();
+        } catch (NoSuchElementException nsee) {
+            return baseContext;
+        }
     }
 
     /** Add a new context. */
