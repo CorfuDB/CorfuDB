@@ -235,13 +235,6 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // Loop until we have reached the stop address.
         while (currentAddress > stopAddress  && Address.isAddress(currentAddress)) {
-            // The queue already contains an address from this
-            // range, terminate.
-            if (queue.contains(currentAddress)) {
-                log.trace("FollowBackpointers[{}] Terminate due to {} "
-                        + "already in queue", this, currentAddress);
-                return entryAdded;
-            }
             backpointerCount++;
 
             // Read the current address

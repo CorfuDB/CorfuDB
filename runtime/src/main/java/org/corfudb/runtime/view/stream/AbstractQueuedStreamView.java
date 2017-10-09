@@ -272,7 +272,9 @@ public abstract class AbstractQueuedStreamView extends
     @Override
     public synchronized ILogData previous() {
         final QueuedStreamContext context = getCurrentContext();
-        log.trace("Previous[{}] max={} min={}", this,
+        final long oldPointer = context.globalPointer;
+
+        log.trace("previous[{}]: max={} min={}", this,
                 context.maxResolution,
                 context.minResolution);
 
@@ -297,20 +299,23 @@ public abstract class AbstractQueuedStreamView extends
                 || prevAddress != null && prevAddress <= context.minResolution) {
             context.globalPointer = prevAddress == null ? Address.NEVER_READ :
                                                 prevAddress - 1L;
-            long oldPointer = context.globalPointer;
+
             remainingUpTo(context.minResolution);
             context.minResolution = Address.NON_ADDRESS;
             context.globalPointer = oldPointer;
             prevAddress = context
                     .resolvedQueue.lower(context.globalPointer);
-            log.trace("Previous[}] updated queue {}", this, context.resolvedQueue);
+            log.trace("previous[{}]: updated resolved queue {}", this, context.resolvedQueue);
         }
+
+        // Clear the read queue, it may no longer be valid
+        context.readQueue.clear();
+
         // If still null, we're done.
         if (prevAddress == null) {
             return null;
         }
-        // Add the current pointer back into the read queue
-        context.readQueue.add(context.globalPointer);
+        log.trace("previous[{}]: updated read queue {}", this, context.readQueue);
         // Update the global pointer
         context.globalPointer = prevAddress;
         return read(prevAddress);
@@ -423,7 +428,7 @@ public abstract class AbstractQueuedStreamView extends
          * {@inheritDoc}
          * */
         @Override
-        void seek(long globalAddress) {
+        synchronized void seek(long globalAddress) {
             if (Address.nonAddress(globalAddress)) {
                 throw new IllegalArgumentException("globalAddress must"
                         + " be >= Address.maxNonAddress()");
