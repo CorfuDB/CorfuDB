@@ -17,6 +17,7 @@ umask 022
 
 ROLENAME="Corfu In-Memory Infrastructure Server"
 PIDDIR=/var/run/corfu_inmem
+CORFU_USER=corfu
 PORT=9001
 LOGFILE="/var/log/corfu.$PORT.log"
 . /lib/lsb/init-functions
@@ -27,6 +28,7 @@ ensure_pid_dir () {
     if [ ! -d $PIDDIR ]; then
         mkdir -p $PIDDIR
         chmod 755 $PIDDIR
+        chown -R $CORFU_USER:$CORFU_USER $PIDDIR
     fi
 }
 
