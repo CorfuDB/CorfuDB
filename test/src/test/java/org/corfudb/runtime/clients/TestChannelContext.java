@@ -1,9 +1,17 @@
 package org.corfudb.runtime.clients;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.*;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.ChannelProgressivePromise;
+import io.netty.channel.ChannelPromise;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.EventExecutor;
@@ -12,6 +20,8 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
 import java.net.SocketAddress;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Created by mwei on 7/6/16.
@@ -25,6 +35,10 @@ public class TestChannelContext implements ChannelHandlerContext {
     }
 
     HandleMessageFunction hmf;
+
+    private final static int THREAD_COUNT = 4;
+    private final static ExecutorService msgExecutorService = Executors.newFixedThreadPool(THREAD_COUNT,
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("testChannel-%d").build());
 
     public TestChannelContext(HandleMessageFunction hmf) {
         this.hmf = hmf;
@@ -42,7 +56,7 @@ public class TestChannelContext implements ChannelHandlerContext {
             } catch (Exception e) {
                  log.warn("Error during deserialization", e);
             }
-        });
+        }, msgExecutorService);
     }
 
     @Override
