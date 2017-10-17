@@ -224,7 +224,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      */
     @SuppressWarnings("unchecked")
     @Accessor
-    public @Nonnull Collection<Object> getByIndex(@Nonnull F indexFunction, I index) {
+    public @Nonnull <P> Collection<P> getByIndex(@Nonnull F indexFunction, I index) {
         return getByIndex(indexFunction, indexFunction.getProjectionFunction(), index);
     }
 
