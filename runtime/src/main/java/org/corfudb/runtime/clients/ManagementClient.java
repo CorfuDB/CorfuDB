@@ -8,6 +8,7 @@ import java.util.concurrent.CompletableFuture;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.corfudb.protocols.wireprotocol.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -90,6 +91,36 @@ public class ManagementClient implements IClient {
     public CompletableFuture<Boolean> initiateFailureHandler() {
         return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_START_FAILURE_HANDLER
                 .msg());
+    }
+
+    /**
+     * Add node request.
+     *
+     * @param endpoint             Endpoint to be added
+     * @param isLayoutServer       Is it a layout server.
+     * @param isSequencerServer    Is it a sequencer server.
+     * @param isLogUnitServer      Is it a log unit server.
+     * @param isUnresponsiveServer Is it an unresponsive server.
+     * @param logUnitStripeIndex   The stripe index it belongs to if its a log unit server.
+     * @return Returns a completable future which returns true on successful workflow dispatch.
+     */
+    public CompletableFuture<Boolean> addNodeRequest(String endpoint,
+                                                     boolean isLayoutServer,
+                                                     boolean isSequencerServer,
+                                                     boolean isLogUnitServer,
+                                                     boolean isUnresponsiveServer,
+                                                     int logUnitStripeIndex) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.ADD_NODE_REQUEST.payloadMsg(
+                new AddNodeRequest(endpoint, isLayoutServer, isSequencerServer, isLogUnitServer,
+                        isUnresponsiveServer, logUnitStripeIndex)));
+    }
+
+    /**
+     * Request to merge segments.
+     * @return Returns a completable future which returns true on successful workflow dispatch.
+     */
+    public CompletableFuture<Boolean> mergeSegmentsRequest() {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.MERGE_SEGMENTS_REQUEST.msg());
     }
 
     /**

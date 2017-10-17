@@ -9,6 +9,8 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import io.netty.channel.ChannelHandlerContext;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.lang.invoke.MethodHandles;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -25,7 +27,9 @@ import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.FileSegmentReplicationRequest;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.KnownAddressSetRequest;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
@@ -284,6 +288,64 @@ public class LogUnitServer extends AbstractServer {
             log.error("Encountered error while flushing cache {}", e);
         }
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+    /**
+     * Replicates the file segment specified and provided.
+     */
+    @ServerHandler(type = CorfuMsgType.SEGMENT_REPLICATION, opTimer = metricsPrefix + "replication")
+    private void replicateSegment(CorfuPayloadMsg<FileSegmentReplicationRequest> msg,
+                                  ChannelHandlerContext ctx, IServerRouter r,
+                                  boolean isMetricsEnabled) {
+        // Add error "not supported" for in memory corfu log unit server.
+        FileSegmentReplicationRequest request = msg.getPayload();
+        try {
+            String tempFilePath = opts.get("--log-path") + File.separator + "log"
+                    + File.separator + request.getFileSegmentIndex() + "_temp.log";
+            String destinationFilePath = opts.get("--log-path") + File.separator + "log"
+                    + File.separator + request.getFileSegmentIndex() + ".log";
+
+            // Create destination files if they do not exist yet.
+            new File(destinationFilePath).createNewFile();
+            new File(StreamLogFiles.getTrimmedFilePath(destinationFilePath)).createNewFile();
+            new File(StreamLogFiles.getPendingTrimsFilePath(destinationFilePath)).createNewFile();
+
+            // Create the source temporary file to replicate.
+            File sourceFile = new File(tempFilePath);
+            boolean result = sourceFile.createNewFile();
+            // Assert file creation
+            assert result;
+
+            try (FileOutputStream fos = new FileOutputStream(sourceFile)) {
+                fos.write(request.getFileBuffer());
+                fos.close();
+            }
+
+            // Reset handle so that if handle already exists, it recognizes newly added values.
+            StreamLogFiles slf = (StreamLogFiles) streamLog;
+            slf.replicateSegment(tempFilePath, destinationFilePath, request.getFileSegmentIndex());
+
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            r.sendResponse(ctx, msg, CorfuMsgType.NACK.msg());
+        }
+    }
+
+    /**
+     * Returns a set of all known addresses for the range provided by the start and end addresses.
+     */
+    @ServerHandler(type = CorfuMsgType.KNOWN_ADDRESS_REQUEST, opTimer = metricsPrefix
+            + "knownAddressRequest")
+    private void getKnownAddresses(CorfuPayloadMsg<KnownAddressSetRequest> msg,
+                                   ChannelHandlerContext ctx, IServerRouter r,
+                                   boolean isMetricsEnabled) {
+        KnownAddressSetRequest request = msg.getPayload();
+        r.sendResponse(ctx, msg, CorfuMsgType.KNOWN_ADDRESS_RESPONSE
+                .payloadMsg(((StreamLogFiles) streamLog)
+                        .getKnownAddressesInRange(request.getStartAddress(),
+                                request.getEndAddress())));
     }
 
 

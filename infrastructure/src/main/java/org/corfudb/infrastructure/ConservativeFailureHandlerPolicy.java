@@ -31,6 +31,7 @@ public class ConservativeFailureHandlerPolicy implements IFailureHandlerPolicy {
         LayoutWorkflowManager layoutManager = new LayoutWorkflowManager(originalLayout);
         Layout newLayout = layoutManager
                 .moveResponsiveSequencerToTop(failedNodes)
+                .clearUnResponsiveServers()
                 .addUnresponsiveServers(failedNodes)
                 .build();
         newLayout.setRuntime(corfuRuntime);
