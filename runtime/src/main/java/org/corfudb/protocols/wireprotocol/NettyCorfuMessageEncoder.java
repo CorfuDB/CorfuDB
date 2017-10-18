@@ -12,12 +12,23 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class NettyCorfuMessageEncoder extends MessageToByteEncoder<CorfuMsg> {
 
+
+    Integer max = 0;
+
     @Override
     protected void encode(ChannelHandlerContext channelHandlerContext,
                           CorfuMsg corfuMsg,
                           ByteBuf byteBuf) throws Exception {
         try {
             corfuMsg.serialize(byteBuf);
+            byteBuf.readableBytes();
+            synchronized (max) {
+                if (max < byteBuf.readableBytes()) {
+                    max = byteBuf.readableBytes();
+                    log.debug("New write buffer max found {}", max);
+                }
+            }
+
         } catch (Exception e) {
             log.error("Error during serialization!", e);
         }
