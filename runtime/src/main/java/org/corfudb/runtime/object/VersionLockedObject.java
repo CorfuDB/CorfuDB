@@ -1,7 +1,5 @@
 package org.corfudb.runtime.object;
 
-import io.netty.util.internal.ConcurrentSet;
-
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -137,8 +135,7 @@ public class VersionLockedObject<T> {
 
         this.newObjectFn = newObjectFn;
         this.object = newObjectFn.get();
-
-        this.pendingUpcalls = new ConcurrentSet<>();
+        this.pendingUpcalls = ConcurrentHashMap.newKeySet();
         this.upcallResults = new ConcurrentHashMap<>();
 
         lock = new StampedLock();
