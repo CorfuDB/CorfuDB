@@ -60,6 +60,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                         value = actualValue == null ? this.payload : actualValue;
                         this.payload.set(value);
                         copyBuf.release();
+                        lastKnownSize = data.length;
                         data = null;
                     }
                 }
@@ -93,8 +94,9 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     @Override
     public int getSizeEstimate() {
-        if (data != null) {
-            return data.length;
+        byte[] tempData = data;
+        if (tempData != null) {
+            return tempData.length;
         } else if (lastKnownSize != NOT_KNOWN) {
             return lastKnownSize;
         }
