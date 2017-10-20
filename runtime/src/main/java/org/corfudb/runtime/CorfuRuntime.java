@@ -373,6 +373,14 @@ public class CorfuRuntime {
         return UUID.nameUUIDFromBytes(string.getBytes());
     }
 
+    public static UUID getCheckpointStreamIdFromId(UUID streamId) {
+        return getStreamID(streamId.toString() + StreamsView.CHECKPOINT_SUFFIX);
+    }
+
+    public static UUID getCheckpointStreamIdFromName(String streamName) {
+        return getCheckpointStreamIdFromId(CorfuRuntime.getStreamID(streamName));
+    }
+
     /**
      * Get corfy runtime version.
      **/

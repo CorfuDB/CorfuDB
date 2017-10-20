@@ -354,7 +354,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 context.checkpointSuccessId == null) {
             // The checkpoint stream ID is the UUID appended with CP
             final UUID checkpointId = CorfuRuntime
-                    .getStreamID(context.id.toString() + "_cp");
+                    .getCheckpointStreamIdFromId(context.id);
             // Find the checkpoint, if present
             try {
                 if (followBackpointers(checkpointId, context.readCpQueue,
