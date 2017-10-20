@@ -1,5 +1,9 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.ContiguousSet;
+import com.google.common.collect.DiscreteDomain;
+import com.google.common.collect.Range;
+
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Map;
@@ -7,10 +11,14 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.RawDataMsg;
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -21,6 +29,7 @@ import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
+import org.corfudb.util.CFUtils;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
@@ -153,6 +162,71 @@ public class LayoutManagementView extends AbstractView {
         } catch (InterruptedException | ExecutionException e) {
             log.error("Bootstrapping sequencer failed due to exception : ", e);
         }
+    }
+
+    public void stateTransfer(String endpoint, Layout.LayoutSegment segment) {
+
+        final long chunkSize = 5_000;
+
+        for (long chunkStart = segment.getStart(); chunkStart < segment.getEnd()
+                ; chunkStart = chunkStart + chunkSize) {
+            long chunkEnd = Math.min((chunkStart + chunkSize - 1), segment.getEnd() - 1);
+
+            Map<Long, ILogData> dataMap = runtime.getAddressSpaceView()
+                    .cacheFetch(ContiguousSet.create(
+                            Range.closed(chunkStart, chunkEnd),
+                            DiscreteDomain.longs()));
+
+            // Redirect these logEntries to the newNode.
+            boolean replicationSuccess = CFUtils.getUninterruptibly(runtime
+                    .getRouter(endpoint)
+                    .getClient(LogUnitClient.class)
+                    .replicateRawData(new RawDataMsg(dataMap.entrySet().parallelStream()
+                            .collect(Collectors
+                                    .toMap(Map.Entry::getKey,
+                                            entry -> (LogData) entry.getValue())))));
+
+            if (!replicationSuccess) {
+                throw new RuntimeException("Replication failure.");
+            }
+
+            log.info("stateTransfer: Replicated address chunk [{}, {}]",
+                    chunkStart, chunkEnd);
+        }
+    }
+
+    /**
+     * Attempts to merge the last 2 segments.
+     *
+     * @param currentLayout Current layout
+     * @return True if merge successful, else False.
+     * @throws CloneNotSupportedException  if layout clne fails.
+     * @throws QuorumUnreachableException  if seal or consensus could not be achieved.
+     * @throws LayoutModificationException if merge not possible in layout.
+     * @throws OutrankedException          if consensus is outranked.
+     */
+    public boolean mergeSegments(Layout currentLayout)
+            throws CloneNotSupportedException, QuorumUnreachableException,
+            LayoutModificationException, OutrankedException {
+
+        currentLayout.setRuntime(runtime);
+        sealEpoch(currentLayout);
+
+        LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
+        Layout newLayout = layoutBuilder
+                .mergePreviousSegment(currentLayout.getSegments().size() - 1)
+                .build();
+        newLayout.setRuntime(runtime);
+
+        attemptConsensus(newLayout);
+
+        try {
+            reconfigureSequencerServers(currentLayout, newLayout, true);
+        } catch (InterruptedException | ExecutionException e) {
+            log.error("mergeSegments: Bootstrapping sequencer failed due to exception : ", e);
+        }
+
+        return true;
     }
 
     /**

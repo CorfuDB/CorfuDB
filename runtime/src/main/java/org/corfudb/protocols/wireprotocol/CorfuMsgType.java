@@ -89,6 +89,8 @@ public enum CorfuMsgType {
     HEARTBEAT_REQUEST(75, TypeToken.of(CorfuMsg.class), true),
     HEARTBEAT_RESPONSE(76, new TypeToken<CorfuPayloadMsg<byte[]>>(){}, true),
 
+    RAW_DATA_REPLICATE(80, new TypeToken<CorfuPayloadMsg<RawDataMsg>>(){}),
+
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true)
     ;
 

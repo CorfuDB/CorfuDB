@@ -51,6 +51,7 @@ public class Layout implements Cloneable {
     /**
      * A Gson parser.
      */
+    @Getter
     static final Gson parser = new GsonBuilder()
             .registerTypeAdapter(Layout.class, new LayoutDeserializer())
             .create();
