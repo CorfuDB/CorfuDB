@@ -17,6 +17,7 @@ public class ServerContextBuilder {
 
     boolean single = true;
     boolean memory = true;
+    boolean compression = true;
     String logPath = null;
     boolean noVerify = false;
     boolean tlsEnabled = false;

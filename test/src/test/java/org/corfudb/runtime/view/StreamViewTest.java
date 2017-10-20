@@ -134,7 +134,7 @@ public class StreamViewTest extends AbstractViewTest {
     @SuppressWarnings("unchecked")
     public void canReadWriteFromCachedStream()
             throws Exception {
-        CorfuRuntime r = getDefaultRuntime().connect()
+        CorfuRuntime r = getDefaultRuntime().enableCompression().connect()
                 .setCacheDisabled(false);
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();

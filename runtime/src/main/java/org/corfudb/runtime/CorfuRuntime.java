@@ -166,6 +166,8 @@ public class CorfuRuntime {
     @Getter
     private volatile boolean isShutdown = false;
 
+    private boolean enableCompression = false;
+
     private boolean tlsEnabled = false;
     private String keyStore;
     private String ksPasswordFile;
@@ -254,7 +256,7 @@ public class CorfuRuntime {
                 String host = address.split(":")[0];
                 Integer port = Integer.parseInt(address.split(":")[1]);
                 // Generate a new router, start it and add it to the table.
-                NettyClientRouter router = new NettyClientRouter(host, port,
+                NettyClientRouter router = new NettyClientRouter(host, port, enableCompression,
                         tlsEnabled, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
                         saslPlainTextEnabled, usernameFile, passwordFile);
                 log.debug("Connecting to new router {}:{}", host, port);
@@ -309,6 +311,11 @@ public class CorfuRuntime {
         this.trustStore = trustStore;
         this.tsPasswordFile = tsPasswordFile;
         this.tlsEnabled = true;
+        return this;
+    }
+
+    public CorfuRuntime enableCompression() {
+        this.enableCompression = true;
         return this;
     }
 
