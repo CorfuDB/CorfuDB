@@ -17,18 +17,28 @@ umask 022
 
 ROLENAME="Corfu Infrastructure Server"
 PIDDIR=/var/run/corfu
+LOGDIR=/var/log/corfu
+DATADIR=/config/corfu
 CORFU_USER=corfu
 PORT=9000
-LOGFILE="/var/log/corfu.$PORT.log"
 . /lib/lsb/init-functions
 
 export PATH="${PATH:+$PATH:}/usr/sbin/:usr/bin"
 
-ensure_pid_dir () {
+corfu_user_exist=$(id -u $CORFU_USER > /dev/null 2>&1; echo $?)
+
+ensure_dirs () {
     if [ ! -d $PIDDIR ]; then
         mkdir -p $PIDDIR
         chmod 755 $PIDDIR
+    fi
+    if [ ! -d $LOGDIR ]; then
+        mkdir -p $LOGDIR
+    fi
+    if [ "$corfu_user_exist" = 0 ]; then
         chown -R $CORFU_USER:$CORFU_USER $PIDDIR
+        chown -R $CORFU_USER:$CORFU_USER $LOGDIR
+        chown -R $CORFU_USER:$CORFU_USER $DATADIR
     fi
 }
 
@@ -48,7 +58,7 @@ ensure_profile_port () {
 case "$1" in
     start|profile)
         log_daemon_msg "Starting $ROLENAME on port $PORT"
-        ensure_pid_dir
+        ensure_dirs
         ensure_profile_port $1
         /usr/tanuki/bin/corfu-server-wrapper $1
         ;;
