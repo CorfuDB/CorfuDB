@@ -12,6 +12,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.runtime.view.Layout;
 
 /**
@@ -90,6 +92,8 @@ public enum CorfuMsgType {
     MANAGEMENT_FAILURE_DETECTED(74, new TypeToken<CorfuPayloadMsg<FailureDetectorMsg>>(){}, true),
     HEARTBEAT_REQUEST(75, TypeToken.of(CorfuMsg.class), true),
     HEARTBEAT_RESPONSE(76, new TypeToken<CorfuPayloadMsg<byte[]>>(){}, true),
+    ORCHESTRATOR_REQUEST(77, new TypeToken<CorfuPayloadMsg<OrchestratorRequest>>() {}),
+    ORCHESTRATOR_RESPONSE(78, new TypeToken<CorfuPayloadMsg<OrchestratorResponse>>() {}),
 
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true),
     ERROR_SHUTDOWN_EXCEPTION(201, TypeToken.of(CorfuMsg.class), true)

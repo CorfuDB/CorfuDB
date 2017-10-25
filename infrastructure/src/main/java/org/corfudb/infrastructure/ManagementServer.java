@@ -25,15 +25,15 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.format.Types.NodeMetrics;
-
 import org.corfudb.infrastructure.management.IFailureDetectorPolicy;
 import org.corfudb.infrastructure.management.PollReport;
-
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
+import org.corfudb.infrastructure.orchestrator.Orchestrator;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.ManagementClient;
@@ -42,6 +42,8 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.IFailureHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
+
+import javax.annotation.Nonnull;
 
 /**
  * Instantiates and performs failure detection and handling asynchronously.
@@ -114,6 +116,8 @@ public class ManagementServer extends AbstractServer {
     @Getter
     private volatile CompletableFuture<Boolean> sequencerBootstrappedFuture;
 
+    private final Orchestrator orchestrator;
+
     /**
      * Returns new ManagementServer.
      *
@@ -176,6 +180,8 @@ public class ManagementServer extends AbstractServer {
         } catch (RejectedExecutionException err) {
             log.error("Error scheduling failure detection task, {}", err);
         }
+
+        orchestrator = new Orchestrator(this::getCorfuRuntime);
     }
 
     private void bootstrapPrimarySequencerServer() {
@@ -261,6 +267,23 @@ public class ManagementServer extends AbstractServer {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Forward an orchestrator request to the orchestrator service.
+     *
+     * @param msg corfu message containing ORCHESTRATOR_REQUEST
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
+     */
+    @ServerHandler(type = CorfuMsgType.ORCHESTRATOR_REQUEST, opTimer = metricsPrefix
+            + "orchestrator-request")
+    public synchronized void handleOrchestratorMsg(@Nonnull CorfuPayloadMsg<OrchestratorRequest> msg,
+                                                   @Nonnull ChannelHandlerContext ctx,
+                                                   @Nonnull IServerRouter r,
+                                                   boolean isMetricsEnabled) {
+        log.debug("Received an orchestrator message {}", msg);
+        orchestrator.handle(msg, ctx, r);
     }
 
     /**
