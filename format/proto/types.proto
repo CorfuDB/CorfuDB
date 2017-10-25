@@ -14,6 +14,12 @@ enum CheckpointEntryType {
     END = 2;
 }
 
+// Workflow types that the orchestrator service can execute
+enum OrchestratorRequestType {
+    // Add a new node to the cluster
+    ADD_NODE = 1;
+}
+
 message DataRank {
     required int64 rank = 1;
     required int64 uuid_most_significant = 2;
