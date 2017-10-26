@@ -26,6 +26,8 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.FillHoleRequest;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.KnownAddressSetRequest;
+import org.corfudb.protocols.wireprotocol.KnownAddressSetResponse;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -241,6 +243,21 @@ public class LogUnitClient implements IClient {
     }
 
     /**
+     * Handle KNOWN_ADDRESS_RESPONSE
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     */
+    @ClientHandler(type = CorfuMsgType.KNOWN_ADDRESS_RESPONSE)
+    private static Object handleKnownAddressSetResponse(CorfuPayloadMsg<KnownAddressSetResponse>
+                                                                msg,
+                                                        ChannelHandlerContext ctx,
+                                                        IClientRouter r) {
+        return msg.getPayload().getKnownAddresses();
+    }
+
+    /**
      * Asynchronously write to the logging unit.
      *
      * @param address        The address to write to.
@@ -448,5 +465,17 @@ public class LogUnitClient implements IClient {
                 CorfuRuntime.getMpLUC()
                         + getHost() + ":" + getPort().toString() + "-" + opName);
         return t.time();
+    }
+
+    /**
+     * Reqeust a set of all known addresses in the specified range.
+     *
+     * @param startAddress Start address
+     * @param endAddress   End Address
+     * @return Completable Future returning the set of addresses known by the log unit server.
+     */
+    public CompletableFuture<Set<Long>> requestKnownAddressSet(long startAddress, long endAddress) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.KNOWN_ADDRESS_REQUEST.payloadMsg(
+                new KnownAddressSetRequest(startAddress, endAddress)));
     }
 }

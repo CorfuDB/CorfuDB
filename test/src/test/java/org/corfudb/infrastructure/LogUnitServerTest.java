@@ -406,7 +406,7 @@ public class LogUnitServerTest extends AbstractServerTest {
     }
 
     @Test
-    public void CheckCacheSizeIsCorrectRatio() throws Exception {
+    public void checkCacheSizeIsCorrectRatio() throws Exception {
 
         Random r = new Random(System.currentTimeMillis());
         double randomCacheRatio = minHeapRatio + (maxHeapRatio - minHeapRatio) * r.nextDouble();
@@ -421,6 +421,60 @@ public class LogUnitServerTest extends AbstractServerTest {
         assertThat(s1).hasCorrectCacheSize(randomCacheRatio);
     }
 
+    /**
+     * Checks if known address request returning range of addresses written in LogUnitServer.
+     * [0:DATA], [1:Absent], [2: DATA], [3:HOLE]
+     * Request for (1,100) returns {2, 3}
+     * @throws Exception
+     */
+    @Test
+    public void checkKnownAddresses() throws Exception {
+
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+        new LogUnitServer(new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setMemory(false)
+                .build());
+
+        final long ADDRESS_0 = 0L;
+        final long ADDRESS_1 = 1L;
+        final long ADDRESS_2 = 2L;
+        final long ADDRESS_3 = 3L;
+        final long ADDRESS_100 = 100L;
+
+        ByteBuf b = Unpooled.buffer();
+        Serializers.CORFU.serialize("0".getBytes(), b);
+
+        WriteRequest m = WriteRequest.builder()
+                .writeMode(WriteMode.NORMAL)
+                .data(new LogData(DataType.DATA, b))
+                .build();
+        m.setGlobalAddress(ADDRESS_0);
+        sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
+
+        m = WriteRequest.builder()
+                .writeMode(WriteMode.NORMAL)
+                .data(new LogData(DataType.DATA, b))
+                .build();
+        m.setGlobalAddress(ADDRESS_2);
+        sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
+
+        m = WriteRequest.builder()
+                .writeMode(WriteMode.NORMAL)
+                .data(new LogData(DataType.HOLE, b))
+                .build();
+        m.setGlobalAddress(ADDRESS_3);
+        sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
+
+        sendMessage(CorfuMsgType.KNOWN_ADDRESS_REQUEST
+                .payloadMsg(new KnownAddressSetRequest(ADDRESS_1, ADDRESS_100)));
+        Set<Long> expectedSet = new HashSet<>();
+        expectedSet.add(ADDRESS_2);
+        expectedSet.add(ADDRESS_3);
+
+        assertThat(((CorfuPayloadMsg<KnownAddressSetResponse>)getLastMessage())
+                .getPayload()).isEqualTo(expectedSet);
+    }
 
 }
 
