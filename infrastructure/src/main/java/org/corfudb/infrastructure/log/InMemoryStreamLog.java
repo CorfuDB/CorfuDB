@@ -1,15 +1,16 @@
 package org.corfudb.infrastructure.log;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
-
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * This class implements the StreamLog interface using a Java hash map.
@@ -136,5 +137,17 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
                 trimmed.remove(address);
             }
         }
+    }
+
+    @Override
+    public Set<Long> getKnownAddressesInRange(long startAddress, long endAddress) {
+
+        Set<Long> knownAddresses = new HashSet<>();
+        for (long address = startAddress; address <= endAddress; address++) {
+            if (logCache.containsKey(address)) {
+                knownAddresses.add(address);
+            }
+        }
+        return knownAddresses;
     }
 }

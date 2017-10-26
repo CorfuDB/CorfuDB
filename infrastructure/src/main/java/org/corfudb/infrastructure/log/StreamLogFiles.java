@@ -38,6 +38,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
 
@@ -735,6 +736,41 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     /**
+     * Creates and returns a new segment handle for a given existing file path for a segmentIndex.
+     *
+     * @param filePath     New segment handle points to this file path.
+     * @param segmentIndex Segment handle reads and writes addresses falling in this segmentIndex.
+     * @return
+     */
+    SegmentHandle createSegmentHandle(String filePath, long segmentIndex) {
+        try {
+            boolean verify = true;
+            if (noVerify) {
+                verify = false;
+            }
+
+            FileChannel fc1 = getChannel(filePath, false);
+            FileChannel fc2 = getChannel(getTrimmedFilePath(filePath), false);
+            FileChannel fc3 = getChannel(getPendingTrimsFilePath(filePath), false);
+
+            if (fc1.size() == 0) {
+                writeHeader(fc1, VERSION, verify);
+                log.trace("Opened new segment file, writing header for {}", filePath);
+            }
+            log.trace("Opened new log file at {}", filePath);
+            SegmentHandle sh = new SegmentHandle(segmentIndex, fc1, fc2, fc3, filePath);
+            // The first time we open a file we should read to the end, to load the
+            // map of entries we already have.
+            readAddressSpace(sh);
+            loadTrimAddresses(sh);
+            return sh;
+        } catch (IOException e) {
+            log.error("Error opening file {}", filePath, e);
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
      * Gets the file channel for a particular address, creating it
      * if is not present in the map.
      *
@@ -748,33 +784,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         filePath += segment;
         filePath += ".log";
 
-        SegmentHandle handle = writeChannels.computeIfAbsent(filePath, a -> {
-            try {
-                boolean verify = true;
-                if (noVerify) {
-                    verify = false;
-                }
-
-                FileChannel fc1 = getChannel(a, false);
-                FileChannel fc2 = getChannel(getTrimmedFilePath(a), false);
-                FileChannel fc3 = getChannel(getPendingTrimsFilePath(a), false);
-
-                if (fc1.size() == 0) {
-                    writeHeader(fc1, VERSION, verify);
-                    log.trace("Opened new segment file, writing header for {}", a);
-                }
-                log.trace("Opened new log file at {}", a);
-                SegmentHandle sh = new SegmentHandle(segment, fc1, fc2, fc3, a);
-                // The first time we open a file we should read to the end, to load the
-                // map of entries we already have.
-                readAddressSpace(sh);
-                loadTrimAddresses(sh);
-                return sh;
-            } catch (IOException e) {
-                log.error("Error opening file {}", a, e);
-                throw new RuntimeException(e);
-            }
-        });
+        SegmentHandle handle = writeChannels.computeIfAbsent(filePath,
+                a -> createSegmentHandle(a, segment));
 
         handle.retain();
         return handle;
@@ -1038,6 +1049,33 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         public Collection<LogEntry> getEntries() {
             return entries;
         }
+    }
+
+    /**
+     * Fetches the set of addresses known to the segment handler given a start and end address.
+     *
+     * @param startAddress start address specifying the range.
+     * @param endAddress end address specifying the range.
+     * @return Set of known addresses.
+     */
+    @Override
+    public Set<Long> getKnownAddressesInRange(long startAddress, long endAddress) {
+
+        long startSegment = startAddress / RECORDS_PER_LOG_FILE;
+        long endSegment = endAddress / RECORDS_PER_LOG_FILE;
+
+        Set<Long> knownAddressSet = new HashSet<>();
+        for (long segmentIndex = startSegment; segmentIndex <= endSegment; segmentIndex++) {
+            String filePath = logDir + File.separator + segmentIndex + ".log";
+
+            // Filters all addresses in range.
+            knownAddressSet.addAll(writeChannels.get(filePath)
+                    .knownAddresses.keySet().stream()
+                    .filter(key -> ((key >= startAddress) && (key <= endAddress)))
+                    .collect(Collectors.toSet()));
+        }
+
+        return knownAddressSet;
     }
 
     /**

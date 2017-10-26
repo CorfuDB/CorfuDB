@@ -88,6 +88,10 @@ public enum CorfuMsgType {
     MANAGEMENT_FAILURE_DETECTED(74, new TypeToken<CorfuPayloadMsg<FailureDetectorMsg>>(){}, true),
     HEARTBEAT_REQUEST(75, TypeToken.of(CorfuMsg.class), true),
     HEARTBEAT_RESPONSE(76, new TypeToken<CorfuPayloadMsg<byte[]>>(){}, true),
+    ADD_NODE_REQUEST(77, new TypeToken<CorfuPayloadMsg<AddNodeRequest>>() {}),
+
+    KNOWN_ADDRESS_REQUEST(81, new TypeToken<CorfuPayloadMsg<KnownAddressSetRequest>>() {}),
+    KNOWN_ADDRESS_RESPONSE(82, new TypeToken<CorfuPayloadMsg<KnownAddressSetResponse>>() {}),
 
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true)
     ;

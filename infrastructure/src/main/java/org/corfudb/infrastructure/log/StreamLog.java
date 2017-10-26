@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.log;
 
 import java.io.IOException;
+import java.util.Set;
 
 import org.corfudb.protocols.wireprotocol.LogData;
 
@@ -71,4 +72,12 @@ public interface StreamLog {
      * @param address  address to release
      */
     void release(long address, LogData entry);
+
+    /**
+     * Fetches a set of all known addresses in the given range.
+     * @param startAddress start of range address
+     * @param endAddress end of range address
+     * @return set of known addresses by the log unit server.
+     */
+    Set<Long> getKnownAddressesInRange(long startAddress, long endAddress);
 }
