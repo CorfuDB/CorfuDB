@@ -8,12 +8,10 @@ import lombok.Getter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
-import org.corfudb.infrastructure.management.PurgeFailurePolicy;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.clients.TestRule;
@@ -848,5 +846,76 @@ public class ManagementViewTest extends AbstractViewTest {
         long newEpoch = 2L;
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(newEpoch);
         assertThat(corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers()).isEmpty();
+    }
+
+    /**
+     * Add a new node with layout, sequencer and log unit components.
+     * The new log unit node is open to reads and writes only in the new segment and no
+     * catchup or replication of old data is performed.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testAddNodeWithoutCatchup() throws Exception {
+        addServer(SERVERS.PORT_0);
+
+        Layout l1 = new TestLayoutBuilder()
+                .setEpoch(0L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_0)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        bootstrapAllServers(l1);
+
+        ServerContext sc1 = new ServerContextBuilder()
+                .setSingle(false)
+                .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
+                .setPort(SERVERS.PORT_1)
+                .build();
+        addServer(SERVERS.PORT_1, sc1);
+
+        CorfuRuntime rt = new CorfuRuntime(SERVERS.ENDPOINT_0).connect();
+
+        // Write to address space 0
+        rt.getStreamsView().get(CorfuRuntime.getStreamID("test"))
+                .append("testPayload".getBytes());
+
+        rt.getLayoutManagementView().addNode(l1, SERVERS.ENDPOINT_1,
+                true,
+                true,
+                true,
+                false,
+                0);
+
+        rt.invalidateLayout();
+        Layout layoutPhase2 = rt.layout.get();
+
+        Layout l2 = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .setStart(0L)
+                .setEnd(1L)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .addToLayout()
+                .buildSegment()
+                .setStart(1L)
+                .setEnd(-1L)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        assertThat(l2.asJSONString()).isEqualTo(layoutPhase2.asJSONString());
     }
 }

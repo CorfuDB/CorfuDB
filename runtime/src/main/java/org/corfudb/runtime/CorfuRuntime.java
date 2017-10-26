@@ -33,6 +33,7 @@ import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutManagementView;
 import org.corfudb.runtime.view.LayoutView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
@@ -95,6 +96,11 @@ public class CorfuRuntime {
      */
     @Getter(lazy = true)
     private final ObjectsView objectsView = new ObjectsView(this);
+    /**
+     * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
+     */
+    @Getter(lazy = true)
+    private final LayoutManagementView layoutManagementView = new LayoutManagementView(this);
     /**
      * A list of known layout servers.
      */
