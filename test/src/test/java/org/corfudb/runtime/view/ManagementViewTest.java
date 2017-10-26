@@ -4,7 +4,6 @@ package org.corfudb.runtime.view;
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 
-import org.corfudb.infrastructure.PurgeFailurePolicy;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
@@ -362,11 +361,11 @@ public class ManagementViewTest extends AbstractViewTest {
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             // Assert successful seal of all servers.
-            if (getServerRouter(SERVERS.PORT_0).getServerEpoch() == 2L ||
-                getServerRouter(SERVERS.PORT_1).getServerEpoch() == 2L ||
-                getServerRouter(SERVERS.PORT_2).getServerEpoch() == 2L ||
-                getLayoutServer(SERVERS.PORT_0).getCurrentLayout().getEpoch() == 2L ||
-                getLayoutServer(SERVERS.PORT_1).getCurrentLayout().getEpoch() == 2L ||
+            if (getServerRouter(SERVERS.PORT_0).getServerEpoch() == 2L &&
+                getServerRouter(SERVERS.PORT_1).getServerEpoch() == 2L &&
+                getServerRouter(SERVERS.PORT_2).getServerEpoch() == 2L &&
+                getLayoutServer(SERVERS.PORT_0).getCurrentLayout().getEpoch() == 2L &&
+                getLayoutServer(SERVERS.PORT_1).getCurrentLayout().getEpoch() == 2L &&
                 getLayoutServer(SERVERS.PORT_2).getCurrentLayout().getEpoch() == 2L) {
                 return;
             }
