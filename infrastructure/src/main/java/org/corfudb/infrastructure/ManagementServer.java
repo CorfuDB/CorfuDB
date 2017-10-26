@@ -26,6 +26,7 @@ import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.view.IFailureHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 
 /**
@@ -242,7 +243,6 @@ public class ManagementServer extends AbstractServer {
     boolean checkBootstrap(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (latestLayout == null && bootstrapEndpoint == null) {
             log.warn("Received message but not bootstrapped! Message={}", msg);
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR));
             return false;
         }
         return true;
@@ -285,13 +285,10 @@ public class ManagementServer extends AbstractServer {
     public synchronized void initiateFailureHandler(CorfuMsg msg, ChannelHandlerContext ctx,
                                                     IServerRouter r,
                                                     boolean isMetricsEnabled) {
-        if (isShutdown()) {
-            log.warn("Management Server received {} but is shutdown.", msg.getMsgType().toString());
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
-            return;
-        }
+
         // This server has not been bootstrapped yet, ignore all requests.
         if (!checkBootstrap(msg, ctx, r)) {
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR));
             return;
         }
 
@@ -317,13 +314,10 @@ public class ManagementServer extends AbstractServer {
     public synchronized void handleFailureDetectedMsg(CorfuPayloadMsg<FailureDetectorMsg> msg,
                                                       ChannelHandlerContext ctx, IServerRouter r,
                                                       boolean isMetricsEnabled) {
-        if (isShutdown()) {
-            log.warn("Management Server received {} but is shutdown.", msg.getMsgType().toString());
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
-            return;
-        }
+
         // This server has not been bootstrapped yet, ignore all requests.
         if (!checkBootstrap(msg, ctx, r)) {
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR));
             return;
         }
 
