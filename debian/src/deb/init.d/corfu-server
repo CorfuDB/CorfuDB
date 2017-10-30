@@ -19,6 +19,7 @@ ROLENAME="Corfu Infrastructure Server"
 PIDDIR=/var/run/corfu
 LOGDIR=/var/log/corfu
 DATADIR=/config/corfu
+CBM_BARRIER=/config/corfu/START
 CORFU_USER=corfu
 PORT=9000
 . /lib/lsb/init-functions
@@ -26,6 +27,13 @@ PORT=9000
 export PATH="${PATH:+$PATH:}/usr/sbin/:usr/bin"
 
 corfu_user_exist=$(id -u $CORFU_USER > /dev/null 2>&1; echo $?)
+
+wait_for_condition () {
+    until [ -f $CBM_BARRIER ]
+    do
+        sleep 5
+    done
+}
 
 ensure_dirs () {
     if [ ! -d $PIDDIR ]; then
@@ -60,6 +68,7 @@ case "$1" in
         log_daemon_msg "Starting $ROLENAME on port $PORT"
         ensure_dirs
         ensure_profile_port $1
+        wait_for_condition
         /usr/tanuki/bin/corfu-server-wrapper $1
         ;;
     stop)
