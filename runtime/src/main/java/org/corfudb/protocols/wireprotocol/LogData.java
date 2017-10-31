@@ -67,7 +67,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
             }
         }
 
-        data = null;
         return value;
     }
 
