@@ -20,6 +20,7 @@ PIDDIR=/var/run/corfu
 LOGDIR=/var/log/corfu
 DATADIR=/config/corfu
 CBM_BARRIER=/config/corfu/START
+TLS_SIGNAL_FILE=/config/corfu/TLS_ENABLED
 CORFU_USER=corfu
 PORT=9000
 . /lib/lsb/init-functions
@@ -33,6 +34,10 @@ wait_for_condition () {
     do
         sleep 5
     done
+}
+
+ensure_files () {
+    touch $TLS_SIGNAL_FILE
 }
 
 ensure_dirs () {
@@ -67,6 +72,7 @@ case "$1" in
     start|profile)
         log_daemon_msg "Starting $ROLENAME on port $PORT"
         ensure_dirs
+        ensure_files
         ensure_profile_port $1
         wait_for_condition
         /usr/tanuki/bin/corfu-server-wrapper $1
