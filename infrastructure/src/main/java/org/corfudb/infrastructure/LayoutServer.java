@@ -92,7 +92,7 @@ public class LayoutServer extends AbstractServer {
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
 
-        if ((Boolean) opts.get("--single")) {
+        if (getCurrentLayout() == null && (Boolean) opts.get("--single")) {
             getSingleNodeLayout();
         }
     }
