@@ -2,13 +2,12 @@
 Description=Corfu Infrastructure Server
 SourcePath=/etc/init.d/corfu-server
 Documentation=https://github.com/corfudb/corfudb
-Before=rc-local.service
-Before=multi-user.target
-Before=graphical.target
 Before=shutdown.target
-After=remote-fs.target
-After=systemd-journald-dev-log.socket
 Conflicts=shutdown.target
+After=remote-fs.target
+After=network-online.target
+After=systemd-journald-dev-log.socket
+After=nsx-custom.target
 
 [Service]
 Type=forking
@@ -22,5 +21,4 @@ ExecStop=/etc/init.d/corfu-server stop
 ExecReload=/etc/init.d/corfu-server restart
 
 [Install]
-WantedBy=multi-user.target
-WantedBy=graphical.target
+WantedBy=nsx-custom.target
