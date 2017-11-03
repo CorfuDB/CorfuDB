@@ -7,21 +7,35 @@
     </appender>
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
         <file>${user.home}/corfudb.log</file>
+        <append>false</append>
         <encoder>
             <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{15}) - %msg%n %ex{3}</pattern>
+        </encoder>
+    </appender>
+    <appender name="CORRECTNESS" class="ch.qos.logback.core.FileAppender">
+        <file>${user.home}/correctness.log</file>
+        <append>false</append>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd_HH:mm:ss.SSS}, [%thread], %msg %n</pattern>
         </encoder>
     </appender>
 
     <!-- Control logging levels for individual components here. -->
     <logger name="org.corfudb.runtime.object" level="TRACE"/>
-    <logger name="org.corfudb.runtime.clients" level="INFO"/>
-    <logger name="org.corfudb.infrastructure" level="INFO"/>
+    <logger name="org.corfudb.runtime.clients" level="TRACE"/>
+    <logger name="org.corfudb.runtime.view" level="TRACE"/>
+    <logger name="org.corfudb.infrastructure" level="TRACE"/>
     <logger name="io.netty.util" level="INFO"/>
     <logger name="io.netty.util.internal" level="INFO"/>
     <logger name="io.netty.buffer" level="INFO"/>
 
+    <!-- Correctness -->
+    <logger name="correctness" level="INFO" additivity="false">
+        <appender-ref ref="CORRECTNESS"/>
+    </logger>
+
     <root level="TRACE">
-        <!--<appender-ref ref="FILE" /-->
+        <!--<appender-ref ref="FILE" />-->
         <!--<appender-ref ref="STDOUT" />-->
     </root>
 </configuration>
