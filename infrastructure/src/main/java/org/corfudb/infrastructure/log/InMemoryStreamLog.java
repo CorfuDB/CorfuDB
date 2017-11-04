@@ -1,16 +1,13 @@
 package org.corfudb.infrastructure.log;
 
-import io.netty.util.internal.ConcurrentSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -33,7 +30,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
      */
     public InMemoryStreamLog() {
         logCache = new ConcurrentHashMap();
-        trimmed = new ConcurrentSet<>();
+        trimmed = ConcurrentHashMap.newKeySet();
         startingAddress = 0;
     }
 

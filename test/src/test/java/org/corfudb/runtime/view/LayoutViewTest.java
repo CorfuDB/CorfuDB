@@ -182,4 +182,125 @@ public class LayoutViewTest extends AbstractViewTest {
         assertThat(sv.next()).isEqualTo(null);
     }
 
+    /**
+     * Want to ensure that consensus is taken only from the members of the existing layout.
+     * If we take consensus on new layout, the test should fail as we would receive a
+     * wrong epoch exception from SERVERS.PORT_0.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void getConsensusFromCurrentMembers1Node() throws Exception {
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+
+        Layout l = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        bootstrapAllServers(l);
+        CorfuRuntime corfuRuntime = getRuntime(l).connect();
+
+
+        getManagementServer(SERVERS.PORT_0).shutdown();
+        getManagementServer(SERVERS.PORT_1).shutdown();
+
+        Layout newLayout = new TestLayoutBuilder()
+                .setEpoch(2L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        l.setRuntime(corfuRuntime);
+        newLayout.setRuntime(corfuRuntime);
+
+        l.setEpoch(l.getEpoch() + 1);
+        l.moveServersToEpoch();
+        corfuRuntime.getLayoutView().updateLayout(newLayout, 1L);
+
+        assertThat(getLayoutServer(SERVERS.PORT_0).getCurrentLayout()).isEqualTo(newLayout);
+        assertThat(getLayoutServer(SERVERS.PORT_1).getCurrentLayout()).isEqualTo(newLayout);
+    }
+
+    /**
+     * Moving from a cluster of 3 nodes {Node 0, Node 1, Node 2} -> {Node 1, Node 2, Node 3}
+     * We add a rule to make Node 1 unresponsive.
+     * To move to the next epoch we would need a majority consensus from {0, 1, 2} and we receive
+     * responses from {0, 2} and successfully update the layout.
+     * NOTE: We DO NOT await consensus from {1, 2, 3}. If we do, Node 1 does not respond and
+     * Node 3 should throw a WrongEpochException and our updateLayout should fail.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void getConsensusFromCurrentMembers3Nodes() throws Exception {
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        addServer(SERVERS.PORT_2);
+        addServer(SERVERS.PORT_3);
+
+        Layout l = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_0)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        bootstrapAllServers(l);
+        CorfuRuntime corfuRuntime = getRuntime(l).connect();
+
+
+        getManagementServer(SERVERS.PORT_0).shutdown();
+        getManagementServer(SERVERS.PORT_1).shutdown();
+        getManagementServer(SERVERS.PORT_2).shutdown();
+        getManagementServer(SERVERS.PORT_3).shutdown();
+
+        addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
+
+        Layout newLayout = new TestLayoutBuilder()
+                .setEpoch(2L)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addLayoutServer(SERVERS.PORT_3)
+                .addSequencer(SERVERS.PORT_0)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        l.setRuntime(corfuRuntime);
+        newLayout.setRuntime(corfuRuntime);
+
+        // Keep old layout untouched for assertion
+        Layout oldLayout = (Layout) l.clone();
+        l.setEpoch(l.getEpoch() + 1);
+        l.moveServersToEpoch();
+
+        // We receive responses from PORT_0 and PORT_2
+        corfuRuntime.getLayoutView().updateLayout(newLayout, 1L);
+
+        assertThat(getLayoutServer(SERVERS.PORT_0).getCurrentLayout()).isEqualTo(oldLayout);
+        assertThat(getLayoutServer(SERVERS.PORT_1).getCurrentLayout()).isEqualTo(newLayout);
+        assertThat(getLayoutServer(SERVERS.PORT_2).getCurrentLayout()).isEqualTo(newLayout);
+        assertThat(getLayoutServer(SERVERS.PORT_3).getCurrentLayout()).isEqualTo(newLayout);
+    }
 }

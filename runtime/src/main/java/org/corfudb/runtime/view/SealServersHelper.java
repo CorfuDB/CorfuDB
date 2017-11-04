@@ -33,10 +33,11 @@ public class SealServersHelper {
         Map<String, CompletableFuture<Boolean>> resultMap = new HashMap<>();
         // Seal layout servers
         layout.getAllServers().forEach(server -> {
-            BaseClient baseClient = layout.getRuntime().getRouter(server)
-                    .getClient(BaseClient.class);
             CompletableFuture<Boolean> cf = new CompletableFuture<>();
             try {
+                // Creating router can cause NetworkException which should be handled.
+                BaseClient baseClient = layout.getRuntime().getRouter(server)
+                        .getClient(BaseClient.class);
                 cf = baseClient.setRemoteEpoch(layout.getEpoch());
             } catch (NetworkException ne) {
                 cf.completeExceptionally(ne);
@@ -84,9 +85,9 @@ public class SealServersHelper {
                     .toArray(CompletableFuture[]::new);
             try {
                 for (CompletableFuture<Boolean> cf : completableFutures) {
-                    CFUtils.getUninterruptibly(cf, TimeoutException.class);
+                    CFUtils.getUninterruptibly(cf, TimeoutException.class, NetworkException.class);
                 }
-            } catch (TimeoutException e) {
+            } catch (TimeoutException | NetworkException e) {
                 throw new QuorumUnreachableException(0, layoutStripe.getLogServers().size());
             }
         }
