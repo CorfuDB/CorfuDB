@@ -2,7 +2,6 @@ package org.corfudb.runtime.object;
 
 import static java.lang.Long.min;
 
-import ch.qos.logback.classic.Logger;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
@@ -30,6 +29,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
@@ -114,7 +114,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     /**
      * Correctness Logging
      */
-    private final Logger correctnessLogger = (Logger) LoggerFactory.getLogger("correctness");
+    private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
     /**
      * Creates a CorfuCompileProxy object on a particular stream.
@@ -191,7 +191,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                         .nextToken(Collections.singleton(streamID), 0).getToken()
                         .getTokenValue();
         log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
-        correctnessLogger.info("Version, {}", timestamp);
+        correctnessLogger.trace("Version, {}", timestamp);
 
         // Perform underlying access
         try {
@@ -244,7 +244,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         long address = underlyingObject.logUpdate(smrEntry, keepUpcallResult);
         log.trace("Update[{}] {}@{} ({}) conflictObj={}",
                 this, smrUpdateFunction, address, args, conflictObject);
-        correctnessLogger.info("Version, {}", address);
+        correctnessLogger.trace("Version, {}", address);
         return address;
     }
 
