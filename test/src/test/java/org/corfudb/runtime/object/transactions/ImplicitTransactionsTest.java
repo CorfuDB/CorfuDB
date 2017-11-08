@@ -1,15 +1,9 @@
 package org.corfudb.runtime.object.transactions;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.TransactionalObject;
-import org.corfudb.runtime.view.ObjectsView;
-import org.junit.Test;
 
-import java.util.Map;
+import org.corfudb.runtime.object.TransactionalObject;
+import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

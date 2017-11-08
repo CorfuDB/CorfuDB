@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
 
+import java.lang.reflect.Constructor;
 import java.util.EnumSet;
 import java.util.Set;
 import java.util.UUID;
@@ -15,10 +16,11 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.CorfuWrapperBuilder;
+import org.corfudb.runtime.object.ICorfuWrapper;
 import org.corfudb.runtime.object.IObjectBuilder;
+import org.corfudb.runtime.object.VersionedObjectManager;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -30,6 +32,7 @@ import org.corfudb.util.serializer.Serializers;
 @Slf4j
 public class ObjectBuilder<T> implements IObjectBuilder<T> {
 
+    @Getter
     final CorfuRuntime runtime;
 
     @Getter
@@ -52,10 +55,43 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
     @Setter(AccessLevel.NONE)
     Object[] arguments = new Object[0];
 
+    @Setter
+    @Getter
+    VersionedObjectManager<T> object;
+
     @SuppressWarnings("unchecked")
     public <R> ObjectBuilder<R> setType(Class<R> type) {
         this.type = (Class<T>) type;
         return (ObjectBuilder<R>) this;
+    }
+
+    @Override
+    public UUID getStreamId() {
+        return streamID;
+    }
+
+    @Override
+    public T getRawInstance() {
+        try {
+            T ret = null;
+            if (getArguments() == null || getArguments().length == 0) {
+                ret = getType().newInstance();
+            } else {
+                // This loop is not ideal, but the easiest way to get around Java boxing,
+                // which results in primitive constructors not matching.
+                for (Constructor<?> constructor : getType().getDeclaredConstructors()) {
+                    try {
+                        ret = (T) constructor.newInstance(getArguments());
+                        break;
+                    } catch (Exception e) {
+                        // just keep trying until one works.
+                    }
+                }
+            }
+            return ret;
+        } catch (InstantiationException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -99,14 +135,12 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
 
         try {
             if (options.contains(ObjectOpenOptions.NO_CACHE)) {
-                return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
-                        arguments, serializer);
+                return CorfuWrapperBuilder.getWrapper(this);
             } else {
                 ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
                 T result = (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
                             try {
-                                return CorfuCompileWrapperBuilder.getWrapper(type, runtime,
-                                        streamID, arguments, serializer);
+                                return CorfuWrapperBuilder.getWrapper(this);
                             } catch (Exception ex) {
                                 throw new RuntimeException(ex);
                             }
@@ -114,11 +148,10 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
                 );
                 // Get object serializer to check if we didn't attempt to set another serializer
                 // to an already existing map
-                ISerializer objectSerializer = ((CorfuCompileProxy) ((ICorfuSMR) runtime.getObjectsView().
+                ISerializer objectSerializer = ((ObjectBuilder)
+                        ((ICorfuWrapper) runtime.getObjectsView().
                         getObjectCache().
-                        get(oid)).
-                        getCorfuSMRProxy())
-                        .getSerializer();
+                        get(oid)).getObjectManager$CORFU().getBuilder()).getSerializer();
 
                 // FIXME: temporary hack until we have a registry
                 // If current map in cache has no indexer, or there is currently an other one,

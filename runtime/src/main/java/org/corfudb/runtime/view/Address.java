@@ -92,4 +92,21 @@ public class Address {
      * to another stream.
      */
     public static final long COW_BACKPOINTER = -7L;
+
+    public static final long UP_TO_DATE = -8L;
+
+
+    /**
+     * Constant for committing a transaction which did not
+     * modify the log at all.
+     */
+    public static final long NOWRITE = -9L;
+
+
+    /**
+     * Constant for a transaction which has been folded into
+     * another transaction.
+     */
+    public static final long FOLDED = -10L;
+
 }

@@ -26,7 +26,8 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.object.CorfuCompileProxy;
+import org.corfudb.runtime.object.IStateMachineStream;
+import org.corfudb.runtime.object.VersionedObjectManager;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.util.Utils;
@@ -246,6 +247,7 @@ public class FastObjectLoader {
         return false;
     }
 
+    Map<UUID, FastLoadedStateMachineStream> streamMap = new HashMap<>();
 
     /**
      * Update the corfu object and it's underlying stream with the new entry.
@@ -270,12 +272,16 @@ public class FastObjectLoader {
             // If it is a special type, create it with the object builder
             if (objectType != defaultObjectsType) {
                 createObjectIfNotExist(customTypeStreams.get(streamId), serializer);
-            }
-            else {
+            } else {
                 createObjectIfNotExist(runtime, streamId, serializer, objectType);
             }
-            CorfuCompileProxy cp = getCorfuCompileProxy(runtime, streamId, objectType);
-            cp.getUnderlyingObject().applyUpdateToStreamUnsafe(entry, globalAddress);
+
+            VersionedObjectManager manager =
+                    ((VersionedObjectManager)getWrapper(runtime, streamId, objectType).getObjectManager$CORFU());
+            FastLoadedStateMachineStream stream = streamMap.computeIfAbsent(streamId,
+                    id -> (FastLoadedStateMachineStream) manager.installNewStream( s -> new
+                            FastLoadedStateMachineStream(id, (IStateMachineStream)s)));
+            stream.learnEntry(entry, globalAddress);
         }
     }
 

@@ -74,7 +74,6 @@ public abstract class AbstractQueuedStreamView extends
     @Override
     protected ILogData getNextEntry(QueuedStreamContext context,
                                     long maxGlobal) {
-        log.warn("getNextEntry[{}]: {}", this, context.readQueue);
         // If we have no entries to read, fill the read queue.
         // Return if the queue is still empty.
         if (context.readQueue.isEmpty() && context.readCpQueue.isEmpty()
@@ -128,7 +127,6 @@ public abstract class AbstractQueuedStreamView extends
     protected List<ILogData> getNextEntries(QueuedStreamContext context, long maxGlobal,
                                             Function<ILogData, Boolean> contextCheckFn) {
         NavigableSet<Long> readSet = new TreeSet<>();
-        log.warn("getNextEntries[{}]: {}", this, context.readQueue);
         // Scan backward in the stream to find interesting
         // log records less than or equal to maxGlobal.
         // Boolean includes both CHECKPOINT & DATA entries.

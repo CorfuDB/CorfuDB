@@ -1,14 +1,12 @@
 package org.corfudb.runtime.object.transactions;
 
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import lombok.Getter;
-
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.object.IObjectManager;
 
 /**
  * This class captures information about objects mutated (written) during speculative
@@ -20,11 +18,20 @@ public class WriteSet extends ConflictSet {
     /** The actual updates to mutated objects. */
     final MultiObjectSMREntry writeSet = new MultiObjectSMREntry();
 
+    /** Returns whether there are any writes present in the write set.
+     *
+     * @return  True, if there are writes present, false otherwise.
+     */
+    public boolean isEmpty() {
+        return writeSet.entryMap.isEmpty();
+    }
 
-    public long add(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[] conflictObjects) {
-        super.add(proxy, conflictObjects);
-        writeSet.addTo(proxy.getStreamID(), updateEntry);
-        return writeSet.getSMRUpdates(proxy.getStreamID()).size() - 1;
+    <T> long add(@Nonnull IObjectManager<T> manager,
+                 @Nonnull SMREntry updateEntry,
+                 @Nullable Object[] conflictObjects) {
+        super.add(manager, conflictObjects);
+        writeSet.addTo(manager.getId(), updateEntry);
+        return writeSet.getSMRUpdates(manager.getId()).size() - 1;
     }
 
 }

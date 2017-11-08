@@ -3,7 +3,6 @@ package org.corfudb.runtime.collections;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.reflect.TypeToken;
 
 import java.util.Collection;
 import java.util.List;
@@ -23,7 +22,7 @@ import lombok.ToString;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuWrapper;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.corfudb.util.serializer.Serializers;
@@ -114,14 +113,14 @@ public class CorfuMapTest extends AbstractViewTest {
     public void canGetID()
             throws Exception {
         UUID id = UUID.randomUUID();
-        ICorfuSMR testMap = (ICorfuSMR) getRuntime().getObjectsView()
+        ICorfuWrapper testMap = (ICorfuWrapper) getRuntime().getObjectsView()
                 .build()
                 .setStreamID(id)
                 .setTypeToken(CorfuTable.<String,String>getMapType())
                 .open();
 
         assertThat(id)
-                .isEqualTo(testMap.getCorfuStreamID());
+                .isEqualTo(testMap.getId$CORFU());
     }
 
     @Test

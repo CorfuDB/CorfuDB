@@ -9,9 +9,12 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import lombok.Getter;
+import org.corfudb.runtime.object.IObjectManager;
+import org.corfudb.runtime.view.ObjectBuilder;
 
 /**
  * This class captures information about objects accessed (read) during speculative
@@ -22,30 +25,28 @@ public class ConflictSet {
 
 
     /** Set of objects this conflict set conflicts with. */
-    protected final Map<ICorfuSMRProxyInternal, Set<Object>> conflicts = new HashMap<>();
+    protected final Map<IObjectManager, Set<Object>> conflicts = new HashMap<>();
 
-    /** Get a hash for the object, given a proxy. */
-    public static byte[] generateHashFromObject(ICorfuSMRProxyInternal p, Object o) {
-        return p.getSerializer().hash(o);
-    }
 
-    public Optional<ICorfuSMRProxyInternal> getProxy(UUID stream) {
+    Optional<IObjectManager> getWrapper(UUID stream) {
         return conflicts.keySet().stream()
-                .filter(p -> p.getStreamID().equals(stream))
+                .filter(p -> p.getBuilder().getStreamId().equals(stream))
                 .findFirst();
     }
 
     /** Get the hashed conflict set.
      * @return              The hashed conflict set.
      */
-    public Map<UUID, Set<byte[]>> getHashedConflictSet() {
+    Map<UUID, Set<byte[]>> getHashedConflictSet() {
         return conflicts.entrySet().stream()
                 .collect(Collectors.toMap(
                         // Key = UUID
-                        e -> e.getKey().getStreamID(),
+                        e -> e.getKey().getBuilder().getStreamId(),
                         // Value = Generated hash.
                         e -> e.getValue().stream()
-                                .map(o -> ConflictSet.generateHashFromObject(e.getKey(), o))
+                                .map(o ->
+                                        ((ObjectBuilder)(e.getKey()).getBuilder()).getSerializer()
+                                                .hash(o))
                                 .collect(Collectors.toSet()),
                         // Merge function, in case key was already mapped
                         // (If two proxies have the same stream).
@@ -57,14 +58,15 @@ public class ConflictSet {
     }
 
     /** Add an operation into this conflict set. */
-    public void add(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
+    void add(@Nonnull IObjectManager manager, @Nullable Object[] conflictObjects) {
+
         if (conflictObjects == null) {
             return;
         }
 
         // Add the conflict objects to the set for this proxy,
         // creating a new set if needed.
-        conflicts.compute(proxy, (p, c) -> {
+        conflicts.compute(manager, (p, c) -> {
             // If key not previously mapped
             if (c == null) {
                 c = new HashSet<>();

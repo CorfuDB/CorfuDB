@@ -7,7 +7,7 @@ package org.corfudb.runtime.object;
  * Created by mwei on 11/10/16.
  */
 @FunctionalInterface
-public interface ICorfuSMRAccess<R, T> {
+public interface IStateMachineAccess<R, T> {
 
     /** Access the state of the SMR object.
      *

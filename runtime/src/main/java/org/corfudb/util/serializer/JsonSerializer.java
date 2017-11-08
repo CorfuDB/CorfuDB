@@ -14,7 +14,7 @@ import java.util.UUID;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuWrapper;
 
 
 /**
@@ -85,7 +85,7 @@ public class JsonSerializer implements ISerializer {
     @Override
     public void serialize(Object o, ByteBuf b) {
         String className = o == null ? "null" : o.getClass().getName();
-        if (className.endsWith(ICorfuSMR.CORFUSMR_SUFFIX)) {
+        if (className.endsWith(ICorfuWrapper.CORFUSMR_SUFFIX)) {
             className = "CorfuObject";
             byte[] classNameBytes = className.getBytes();
             b.writeShort(classNameBytes.length);
@@ -94,7 +94,7 @@ public class JsonSerializer implements ISerializer {
             byte[] smrClassNameBytes = smrClass.getBytes();
             b.writeShort(smrClassNameBytes.length);
             b.writeBytes(smrClassNameBytes);
-            UUID id = ((ICorfuSMR) o).getCorfuStreamID();
+            UUID id = ((ICorfuWrapper) o).getId$CORFU();
             log.trace("Serializing a CorfuObject of type {} as a stream pointer to {}",
                     smrClass, id);
             b.writeLong(id.getMostSignificantBits());

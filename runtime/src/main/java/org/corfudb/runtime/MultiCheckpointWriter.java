@@ -13,8 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuWrapper;
+import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -24,7 +24,7 @@ import org.corfudb.util.serializer.ISerializer;
 @Slf4j
 public class MultiCheckpointWriter<T extends Map> {
     @Getter
-    private List<ICorfuSMR<T>> maps = new ArrayList<>();
+    private List<ICorfuWrapper<T>> maps = new ArrayList<>();
 
     @Getter
     private List<Long> checkpointLogAddresses = new ArrayList<>();
@@ -36,7 +36,7 @@ public class MultiCheckpointWriter<T extends Map> {
     /** Add a map to the list of maps to be checkpointed by this class. */
     @SuppressWarnings("unchecked")
     public void addMap(T map) {
-        maps.add((ICorfuSMR<T>) map);
+        maps.add((ICorfuWrapper<T>) map);
     }
 
     /** Add map(s) to the list of maps to be checkpointed by this class. */
@@ -77,29 +77,29 @@ public class MultiCheckpointWriter<T extends Map> {
         log.info("appendCheckpoints: appending checkpoints for {} maps", maps.size());
         final long cpStart = System.currentTimeMillis();
         try {
-            for (ICorfuSMR<T> map : maps) {
-                UUID streamId = map.getCorfuStreamID();
+            for (ICorfuWrapper<T> map : maps) {
+                UUID streamId = map.getId$CORFU();
                 final long mapCpStart = System.currentTimeMillis();
                 while (true) {
                     CheckpointWriter<T> cpw = new CheckpointWriter(rt, streamId, author, (T) map);
                     cpw.setEnablePutAll(enablePutAll);
                     ISerializer serializer =
-                            ((CorfuCompileProxy<Map>) map.getCorfuSMRProxy())
+                            ((ObjectBuilder) map.getObjectManager$CORFU().getBuilder())
                                     .getSerializer();
                     cpw.setSerializer(serializer);
                     cpw.setPostAppendFunc(postAppendFunc);
                     log.trace("appendCheckpoints: checkpoint map {} begin",
-                            Utils.toReadableId(map.getCorfuStreamID()));
+                            Utils.toReadableId(map.getId$CORFU()));
                     try {
                         List<Long> addresses = cpw.appendCheckpoint();
                         log.trace("appendCheckpoints: checkpoint map {} end",
-                                Utils.toReadableId(map.getCorfuStreamID()));
+                                Utils.toReadableId(map.getId$CORFU()));
                         checkpointLogAddresses.addAll(addresses);
                         break;
                     } catch (TransactionAbortedException ae) {
                         log.warn("appendCheckpoints: checkpoint map {} "
                                         + "TransactionAbortedException, retry",
-                                Utils.toReadableId(map.getCorfuStreamID()));
+                                Utils.toReadableId(map.getId$CORFU()));
                     }
                 }
                 final long mapCpEnd = System.currentTimeMillis();

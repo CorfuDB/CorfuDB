@@ -114,7 +114,7 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
     @Override
     public List<SMREntry> getSMRUpdates(UUID id) {
         MultiSMREntry entry = entryMap.get(id);
-        return entryMap.get(id) == null ? Collections.emptyList() :
+        return entry  == null ? Collections.emptyList() :
                 entry.getUpdates();
     }
 

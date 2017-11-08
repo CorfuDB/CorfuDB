@@ -15,7 +15,8 @@ import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.ObjectType;
 import org.corfudb.annotations.PassThrough;
 import org.corfudb.annotations.TransactionalMethod;
-import org.corfudb.runtime.object.AbstractCorfuWrapper;
+import org.corfudb.runtime.object.ICorfuObject;
+
 import sun.misc.CRC16;
 
 /**
@@ -25,7 +26,7 @@ import sun.misc.CRC16;
 @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
 @CorfuObject(constructorType = ConstructorType.PERSISTED,
         objectType = ObjectType.STATELESS)
-public class FGMap<K, V> extends AbstractCorfuWrapper<FGMap<K,V>> implements Map<K, V> {
+public class FGMap<K, V>  implements Map<K, V>, ICorfuObject<FGMap<K,V>> {
 
     @Getter
     public final int numBuckets;
@@ -40,13 +41,13 @@ public class FGMap<K, V> extends AbstractCorfuWrapper<FGMap<K,V>> implements Map
 
     @PassThrough
     UUID getStreamID(int partition) {
-        return new UUID(getStreamID().getMostSignificantBits(),
-                getStreamID().getLeastSignificantBits() + (partition + 1));
+        return new UUID(getId$CORFU().getMostSignificantBits(),
+                getId$CORFU().getLeastSignificantBits() + (partition + 1));
     }
 
     @PassThrough
     Map<K, V> getPartitionMap(int partition) {
-        return getBuilder()
+        return getRuntime().getObjectsView().build()
                 .setTypeToken(new TypeToken<SMRMap<K,V>>() {})
                 .setStreamID(getStreamID(partition))
                 .open();

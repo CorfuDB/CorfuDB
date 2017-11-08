@@ -56,6 +56,6 @@ public class TransactionBuilder {
      * to the builder.
      */
     public void begin() {
-        Transactions.begin(type.get.apply(this));
+        Transactions.begin(type.get.apply(this, Transactions.getContext()));
     }
 }
