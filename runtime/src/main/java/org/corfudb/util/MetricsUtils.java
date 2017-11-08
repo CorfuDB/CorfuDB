@@ -1,6 +1,7 @@
 package org.corfudb.util;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.CsvReporter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricFilter;
 import com.codahale.metrics.MetricRegistry;
@@ -106,12 +107,11 @@ public class MetricsUtils {
                 return metricsReportingEnabled;
             };
 
-            Slf4jReporter reporter1 = Slf4jReporter.forRegistry(metrics)
+            CsvReporter reporter1 = CsvReporter.forRegistry(metrics)
                     .convertRatesTo(TimeUnit.SECONDS)
                     .convertDurationsTo(TimeUnit.MILLISECONDS)
-                    .outputTo(LoggerFactory.getLogger("org.corfudb.metricsdata"))
                     .filter(f)
-                    .build();
+                    .build(statDir);
             reporter1.start(interval, TimeUnit.SECONDS);
         }
     }
