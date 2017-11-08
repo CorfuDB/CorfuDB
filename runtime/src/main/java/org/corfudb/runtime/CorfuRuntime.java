@@ -282,7 +282,7 @@ public class CorfuRuntime {
         getAddressSpaceView().setMetrics(metrics != null
                 ? metrics : CorfuRuntime.getDefaultMetrics());
         synchronized (metrics) {
-            if (metrics.getNames().isEmpty()) {
+            if (!metrics.getNames().isEmpty()) {
 //                MetricsUtils.addJvmMetrics(metrics, mp);
                 MetricsUtils.metricsReportingSetup(metrics);
             }
