@@ -117,7 +117,7 @@ public class CheckpointWriter<T extends Map> {
         this.author = author;
         this.map = map;
         checkpointId = UUID.randomUUID();
-        checkpointStreamID = CorfuRuntime.getStreamID(streamId.toString() + "_cp");
+        checkpointStreamID = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
         sv = rt.getStreamsView();
     }
 

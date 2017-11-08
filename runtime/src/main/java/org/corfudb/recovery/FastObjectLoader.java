@@ -9,7 +9,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -44,6 +48,12 @@ import static org.corfudb.runtime.view.Address.isAddress;
  * be applied before the normal entries starting after the checkpoint start address.
  *
  * If used in the recoverSequencer mode, it will reconstruct the stream tails.
+ *
+ * There are two main modes, blacklist and whitelist. These two modes are mutually exclusive:
+ * In blacklist mode, we will process every streams as long as they are not in the streamToIgnore
+ * list. In whitelist mode, only the streams present in streamsToLoad will be loaded. We make
+ * sure to also include the checkpoint streams for each of them.
+ *
  *
  * Created by rmichoud on 6/14/17.
  */
@@ -90,6 +100,32 @@ public class FastObjectLoader {
     @Setter
     @Getter
     private boolean logHasNoCheckPoint = false;
+
+    private boolean whiteList = false;
+    private List<UUID> streamsToLoad = new ArrayList<>();
+
+    /**
+     * Enable whiteList mode where we only reconstruct
+     * the streams provided through this api. In this mode,
+     * we will only process the streams present in streamsToLoad.
+     * All the others are ignored.
+     * @param streamsToLoad
+     */
+    public FastObjectLoader addStreamsToLoad(List<String> streamsToLoad) {
+        if (streamsToIgnore.size() != 0) {
+            throw new IllegalStateException("Cannot add a whitelist when there are already streams to ignore");
+        }
+
+        whiteList = true;
+
+        streamsToLoad.forEach(streamName -> {
+            this.streamsToLoad.add(CorfuRuntime.getStreamID(streamName));
+            // Generate the streamsCheckpointId (we need to allow them as well)
+            this.streamsToLoad.add(CorfuRuntime.getCheckpointStreamIdFromName(streamName));
+        });
+
+        return this;
+    }
 
     /**
      * We can add streams to be ignored during the
@@ -141,7 +177,15 @@ public class FastObjectLoader {
     }
 
     public void addStreamToIgnore(String streamName) {
+        // In a whitelist mode, we cannot add streams to the blacklist
+        if (whiteList) {
+            throw new IllegalStateException("Cannot add a stream to the blacklist (streamsToIgnore)" +
+                    "in whitelist mode.");
+        }
+
         streamsToIgnore.add(CorfuRuntime.getStreamID(streamName));
+        // Ignore also checkpoint of this stream
+        streamsToIgnore.add(CorfuRuntime.getCheckpointStreamIdFromName(streamName));
     }
 
     /**
@@ -222,29 +266,85 @@ public class FastObjectLoader {
         }
     }
 
+    /**
+     * It is a valid state to have entries that are checkpointed but the log was not fully
+     * trimmed yet. This means that some entries are at the same time in their own slot and in
+     * the checkpoint. We must avoid to process them twice.
+     *
+     * This comes especially relevant when the operation order affects the end result.
+     * (e.g. clear() operation)
+     *
+     * @param streamId stream id to validate
+     * @param entry entry under scrutinization.
+     * @return if the entry is already part of the checkpoint we started from.
+     */
+    private boolean entryAlreadyContainedInCheckpoint(UUID streamId, SMREntry entry) {
+        return streamsMetaData.containsKey(streamId) && entry.getEntry().getGlobalAddress() <
+                streamsMetaData.get(streamId).getHeadAddress();
+    }
 
     /**
      * Check if this entry is relevant
      *
-     * Entries before checkpoint starts are irrelevant since they are
-     * contained in the checkpoint.
+     * There are 3 cases where an entry should not be processed:
+     *   1. In whitelist mode, if the stream is not in the whitelist (streamToLoad)
+     *   2. In blacklist mode, if the stream is in the blacklist (streamToIgnore)
+     *   3. If the entry was already processed in the previous checkpoint.
      *
      * @param streamId identifies the Corfu stream
      * @param entry entry to potentially apply
      * @return if we need to apply the entry.
      */
-    private boolean shouldEntryBeApplied(UUID streamId, SMREntry entry) {
+    private boolean shouldEntryBeApplied(UUID streamId, SMREntry entry, boolean isCheckpointEntry) {
+        // 1.
+        // In white list mode, ignore everything that is not in the list (the list contains the streams
+        // passed by the client + derived checkpoint streams).
+        if (whiteList && !streamsToLoad.contains(streamId)) {
+            return false;
+        }
+
+        // 2.
         // We ignore the transaction stream ID because it is a raw stream
         // We don't want to create a Map for it.
         if (streamId == runtime.getObjectsView().TRANSACTION_STREAM_ID || streamsToIgnore.contains(streamId)) {
             return false;
         }
 
-        if (!streamsMetaData.containsKey(streamId) || entry.getEntry().getGlobalAddress() >
-                streamsMetaData.get(streamId).getHeadAddress()) {
-            return true;
+        // 3.
+        // If the entry was already processed with the previous checkpoint.
+        if (!isCheckpointEntry && entryAlreadyContainedInCheckpoint(streamId, entry)) {
+            return false;
         }
-        return false;
+
+        return true;
+    }
+
+    private boolean shouldStreamBeProcessed(UUID streamId) {
+        if (whiteList) {
+            return streamsToLoad.contains(streamId);
+        }
+
+        return !streamsToIgnore.contains(streamId);
+    }
+
+    /**
+     * If none of the streams in the logData should be processed, we
+     * can simply ignore this logData.
+     *
+     * In the case of a mix of streams we need to process and other that we don't,
+     * we will still go ahead with the process.
+     *
+     * @param logData
+     * @return
+     */
+    private boolean shouldLogDataBeProcessed(ILogData logData) {
+        boolean shouldProcess = false;
+        for (UUID id : logData.getStreams()) {
+            if (shouldStreamBeProcessed(id)){
+                shouldProcess = true;
+            }
+        }
+        return shouldProcess;
     }
 
     Map<UUID, FastLoadedStateMachineStream> streamMap = new HashMap<>();
@@ -259,7 +359,7 @@ public class FastObjectLoader {
      */
     private void applySmrEntryToStream(UUID streamId, SMREntry entry,
                                        long globalAddress, boolean isCheckPointEntry) {
-        if (isCheckPointEntry || shouldEntryBeApplied(streamId, entry)) {
+        if (shouldEntryBeApplied(streamId, entry, isCheckPointEntry)) {
 
             // Get the serializer type from the entry
             ISerializer serializer = Serializers.getSerializer(entry.getSerializerType().getType());
@@ -423,7 +523,7 @@ public class FastObjectLoader {
         switch (logData.getType()) {
             case DATA:
                 // Checkpoint should have been processed first
-                if (!isCheckPointEntry(logData)) {
+                if (!isCheckPointEntry(logData) && shouldLogDataBeProcessed(logData)) {
                     updateCorfuObject(logData);
                 }
                 break;
@@ -481,7 +581,8 @@ public class FastObjectLoader {
      * @param logData
      */
     private void findCheckPointsInLogAddress(long address, ILogData logData) {
-        if (logData.hasCheckpointMetadata()) {
+        if (logData.hasCheckpointMetadata() &&
+                shouldLogDataBeProcessed(logData)) {
             // Only one stream per checkpoint
             UUID streamId = logData.getCheckpointedStreamId();
             StreamMetaData streamMeta;

@@ -420,7 +420,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                                         Object[] objects, Runnable l1, Runnable l2,
                                         boolean write1, boolean write2, boolean write3)
             throws Exception {
-        final UUID checkpointStreamID = CorfuRuntime.getStreamID(streamId.toString() + "_cp");
+        final UUID checkpointStreamID = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
         BackpointerStreamView sv = new BackpointerStreamView(r, checkpointStreamID);
         Map<CheckpointEntry.CheckpointDictKey, String> mdKV = new HashMap<>();
         mdKV.put(CheckpointEntry.CheckpointDictKey.START_TIME, "The perfect time");

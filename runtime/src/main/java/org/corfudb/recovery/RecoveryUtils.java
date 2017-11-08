@@ -7,6 +7,7 @@ import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+
 import org.corfudb.runtime.object.ICorfuWrapper;
 import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.runtime.view.ObjectsView;

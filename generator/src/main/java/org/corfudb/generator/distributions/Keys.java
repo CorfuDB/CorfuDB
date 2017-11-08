@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * This class implements the distribution of keys that can be inserted
@@ -23,8 +22,8 @@ public class Keys implements DataSet {
 
     @Override
     public void populate() {
-        for (int x = 0; x < numKeys; x++) {
-            mapkeys.add(UUID.randomUUID().toString());
+        for(int x = 0; x < numKeys; x++) {
+            mapkeys.add("key_" + Integer.toString(x));
         }
     }
 

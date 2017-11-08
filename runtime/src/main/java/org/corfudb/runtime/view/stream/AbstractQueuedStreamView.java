@@ -307,14 +307,12 @@ public abstract class AbstractQueuedStreamView extends
             log.trace("Previous[{}] updated queue {}, ptr={}, prev={}", this, context.resolvedQueue,
                     context.globalPointer, prevAddress);
         }
-        // Clear the read queue
         context.readQueue.clear();
 
         // If still null, we're done.
         if (prevAddress == null) {
             return null;
         }
-
         // Update the global pointer
         context.globalPointer = prevAddress;
         return read(prevAddress);

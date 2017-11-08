@@ -102,7 +102,8 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         getManagementServer(SERVERS.PORT_2).shutdown();
 
         // Seal
-        Layout currentLayout = rt.getLayoutView().getCurrentLayout();
+        Layout currentLayout = (Layout) rt.getLayoutView().getCurrentLayout().clone();
+        currentLayout.setRuntime(rt);
         currentLayout.setEpoch(currentLayout.getEpoch() + 1);
         currentLayout.moveServersToEpoch();
 
