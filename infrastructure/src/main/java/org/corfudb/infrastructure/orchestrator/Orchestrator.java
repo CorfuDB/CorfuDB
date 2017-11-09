@@ -2,10 +2,12 @@ package org.corfudb.infrastructure.orchestrator;
 
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.format.Types;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.Request;
 import org.corfudb.runtime.CorfuRuntime;
 
 import javax.annotation.Nonnull;
@@ -29,15 +31,19 @@ public class Orchestrator {
     final Callable<CorfuRuntime> getRuntime;
 
     public Orchestrator(@Nonnull Callable<CorfuRuntime> runtime) {
+
         this.getRuntime = runtime;
+        System.out.println("-------------- orchestrator");
     }
 
     public void handle(@Nonnull CorfuPayloadMsg<OrchestratorRequest> msg,
                        @Nonnull ChannelHandlerContext ctx,
                        @Nonnull IServerRouter r) {
 
+        System.out.println("-------------- here");
         OrchestratorRequest req = msg.getPayload();
         dispatch(req);
+        System.out.println("-------------- here2");
         r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE.msg());
     }
 
@@ -54,7 +60,12 @@ public class Orchestrator {
      */
     @Nonnull
     private Workflow getWorkflow(@Nonnull OrchestratorRequest req) {
-        return null;
+        Request payload = req.getRequest();
+        if (payload.getType().equals(Types.OrchestratorRequestType.ADD_NODE)) {
+            return new AddNodeWorkflow(payload);
+        }
+
+        throw new RuntimeException("Unknown request");
     }
 
     /**
@@ -65,6 +76,7 @@ public class Orchestrator {
     void run(@Nonnull Workflow workflow) {
 
         log.info("Started workflow {}", workflow.getName());
+        long startTime = System.currentTimeMillis();
 
         for (Action action : workflow.getActions()) {
             try {
@@ -72,10 +84,12 @@ public class Orchestrator {
                 action.execute(getRuntime.call());
                 log.info("Action {} Status {}", action.getName(), ActionStatus.COMPLETED);
             } catch (Exception e) {
-                log.info("Action {} Status {} {}", action.getName(), ActionStatus.ERROR, e);
+                log.info("Action {} Status {}", action.getName(), ActionStatus.ERROR, e);
                 return;
             }
         }
-        log.info("Completed workflow {}", workflow.getName());
+
+        long stopTime = System.currentTimeMillis();
+        log.info("Completed workflow {} in {} ms", workflow.getName(), stopTime - startTime);
     }
 }

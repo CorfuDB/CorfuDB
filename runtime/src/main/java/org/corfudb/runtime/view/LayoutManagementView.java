@@ -166,7 +166,7 @@ public class LayoutManagementView extends AbstractView {
 
     public void stateTransfer(String endpoint, Layout.LayoutSegment segment) {
 
-        final long chunkSize = 5_000;
+        final long chunkSize = 2500;
 
         for (long chunkStart = segment.getStart(); chunkStart < segment.getEnd()
                 ; chunkStart = chunkStart + chunkSize) {

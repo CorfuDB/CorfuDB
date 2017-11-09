@@ -27,6 +27,7 @@ public class OrchestratorRequest implements ICorfuPayload<OrchestratorRequest> {
     public OrchestratorRequest(ByteBuf buf) {
         OrchestratorRequestType requestType = OrchestratorRequestType.forNumber(buf.readInt());
         byte[] bytes = new byte[buf.readInt()];
+        buf.readBytes(bytes);
         request = mapRequest(requestType, bytes);
     }
 

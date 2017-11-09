@@ -23,9 +23,9 @@ public interface Action {
 
     /**
      * Execute the action.
-     * @param runtime A that the action will use to execute
+     * @param runtime A runtime that the action will use to execute
      * @return State that other dependent actions require to execute.
      */
     @Nonnull
-    void execute(@Nonnull CorfuRuntime runtime);
+    void execute(@Nonnull CorfuRuntime runtime) throws Exception;
 }
