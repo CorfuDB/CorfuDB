@@ -85,7 +85,7 @@ public class StreamTest extends AbstractTransactionsTest {
         map.put(key, val);
 
         assertThatThrownBy(() ->TXEnd())
-                .isInstanceOf(TransactionAbortedException.class);
+                .isInstanceOf(AppendException.class);
     }
 
     @Test

@@ -136,7 +136,7 @@ public class CorfuRuntime {
      */
     @Getter
     @Setter
-    public int writeRetry = 3;
+    public int writeRetry = 100;
 
     /**
      * Sets expireAfterAccess and expireAfterWrite in seconds.

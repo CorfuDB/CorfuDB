@@ -1,7 +1,7 @@
 package org.corfudb.generator;
 
 import ch.qos.logback.classic.Logger;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.object.transactions.Transactions;
 import org.slf4j.LoggerFactory;
 
 /**
@@ -25,7 +25,7 @@ public class Correctness {
         if (transactionPrefix) {
             String txOperation = "Tx" + operation;
             correctnessLogger.info("{}, {}", txOperation,
-                    TransactionalContext.getCurrentContext().getSnapshotTimestamp());
+                   Transactions.getReadSnapshot());
         } else {
             correctnessLogger.info(operation);
         }

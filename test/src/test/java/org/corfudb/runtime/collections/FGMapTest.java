@@ -306,7 +306,7 @@ public class FGMapTest extends AbstractViewTest {
                 .open();
 
         final int num_threads = PARAMETERS.CONCURRENCY_SOME;
-        final int num_records = PARAMETERS.NUM_ITERATIONS_LARGE;
+        final int num_records = PARAMETERS.NUM_ITERATIONS_LOW;
 
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_records;

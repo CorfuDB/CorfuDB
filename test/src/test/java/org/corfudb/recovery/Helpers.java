@@ -7,9 +7,8 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.object.ICorfuWrapper;
+import org.corfudb.runtime.object.VersionedObjectManager;
 import org.corfudb.runtime.view.ObjectsView;
 
 import java.util.Map;
@@ -39,19 +38,14 @@ public class Helpers{
                 .open();
     }
 
-    static CorfuCompileProxy getCorfuCompileProxy(CorfuRuntime cr, String streamName, Class type) {
+
+    static VersionedObjectManager getVersionLockedObject(CorfuRuntime cr, String streamName, Class type) {
         ObjectsView.ObjectID mapId = new ObjectsView.
                 ObjectID(CorfuRuntime.getStreamID(streamName), type);
 
-        return ((CorfuCompileProxy) ((ICorfuSMR) cr.getObjectsView().
+        return (VersionedObjectManager) ((ICorfuWrapper)cr.getObjectsView().
                 getObjectCache().
-                get(mapId)).
-                getCorfuSMRProxy());
-    }
-
-    static VersionLockedObject getVersionLockedObject(CorfuRuntime cr, String streamName, Class type) {
-        CorfuCompileProxy cp = getCorfuCompileProxy(cr, streamName, type);
-        return cp.getUnderlyingObject();
+                get(mapId)).getObjectManager$CORFU();
     }
 
     static void assertThatMapIsNotBuilt(CorfuRuntime rt, String streamName, Class type) {
@@ -65,8 +59,8 @@ public class Helpers{
                                      Map<String, String> map, Class type) {
 
         // Get raw maps (VersionLockedObject)
-        VersionLockedObject vo1 = getVersionLockedObject(rt1, streamName, type);
-        VersionLockedObject vo1Prime = getVersionLockedObject(rt2, streamName, type);
+        VersionedObjectManager vo1 = getVersionLockedObject(rt1, streamName, type);
+        VersionedObjectManager vo1Prime = getVersionLockedObject(rt2, streamName, type);
 
         // Assert that UnderlyingObjects are at the same version
         // If they are at the same version, a sync on the object will
