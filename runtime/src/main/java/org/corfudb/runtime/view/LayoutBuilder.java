@@ -193,7 +193,7 @@ public class LayoutBuilder {
 
         List<LayoutSegment> layoutSegmentList = layout.getSegments();
         if (layoutSegmentList.get(segmentIndex).start
-                != layoutSegmentList.get(segmentIndex - 1).start) {
+                != layoutSegmentList.get(segmentIndex - 1).end) {
             throw new LayoutModificationException("Cannot merge disjoint segments.");
         }
 

@@ -19,13 +19,13 @@ public interface Action {
      * @return Name of action
      */
     @Nonnull
-    public abstract String getName();
+    String getName();
 
     /**
      * Execute the action.
-     * @param runtime A that the action will use to execute
+     * @param runtime A runtime that the action will use to execute
      * @return State that other dependent actions require to execute.
      */
     @Nonnull
-    public abstract Map<String, Object> execute(@Nonnull CorfuRuntime runtime);
+    Map<String, Object> execute(@Nonnull CorfuRuntime runtime) throws Exception ;
 }

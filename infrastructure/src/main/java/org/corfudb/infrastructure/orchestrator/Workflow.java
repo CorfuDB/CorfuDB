@@ -17,12 +17,12 @@ public interface Workflow {
      * Return the name of this workflow
      * @return workflow's name
      */
-    public abstract String getName();
+    String getName();
 
     /**
      * Returns the ordered that are associated with
      * this workflow.
      * @return List of actions
      */
-    public abstract List<Action> getActions();
+    List<Action> getActions();
 }
