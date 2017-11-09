@@ -4,6 +4,7 @@ import static java.lang.Math.min;
 
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAccumulator;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -78,7 +79,8 @@ public class VersionedObjectManager<T> implements IObjectManager<T> {
     private final ObjectBuilder<T> builder;
 
     /** Pending requests, which are used to "jump" linearized reads forward whenever possible. */
-    private final AtomicLong pendingRequest = new AtomicLong(Address.NEVER_READ);
+    private final LongAccumulator pendingRequest =
+            new LongAccumulator(Math::max, Address.NEVER_READ);
 
     /**
      * Construct a new versioned object manager with the given stream, wrapper and builder.
@@ -103,7 +105,7 @@ public class VersionedObjectManager<T> implements IObjectManager<T> {
         final IStateMachineStream stream = getActiveStream();
         long address = stream.append(smrUpdateFunction, args, conflictObject, keepUpcallResult);
         // Update the pending request queue, in case another thread is syncing.
-        pendingRequest.updateAndGet(x -> Math.max(x, address));
+        pendingRequest.accumulate(address);
         return address;
     }
 
@@ -197,7 +199,7 @@ public class VersionedObjectManager<T> implements IObjectManager<T> {
         }
         final long syncAddress = checkAddress;
         if (syncAddress != Address.MAX) {
-            pendingRequest.updateAndGet(x -> Math.max(x, syncAddress));
+            pendingRequest.accumulate(syncAddress);
         }
         try {
             ts = lock.writeLock();
