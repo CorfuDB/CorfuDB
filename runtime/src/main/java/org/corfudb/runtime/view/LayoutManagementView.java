@@ -168,7 +168,7 @@ public class LayoutManagementView extends AbstractView {
             log.debug("addNode: exception while adding", e);
         }
     }
-
+    
     /**
      * Attempts to merge the last 2 segments.
      *

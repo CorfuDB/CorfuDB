@@ -18,7 +18,7 @@ import static org.corfudb.format.Types.OrchestratorRequestType.ADD_NODE;
 public class OrchestratorRequest implements ICorfuPayload<OrchestratorRequest> {
 
     @Getter
-    public Request request;
+    public final Request request;
 
     public OrchestratorRequest(Request request) {
         this.request = request;
@@ -27,6 +27,7 @@ public class OrchestratorRequest implements ICorfuPayload<OrchestratorRequest> {
     public OrchestratorRequest(ByteBuf buf) {
         OrchestratorRequestType requestType = OrchestratorRequestType.forNumber(buf.readInt());
         byte[] bytes = new byte[buf.readInt()];
+        buf.readBytes(bytes);
         request = mapRequest(requestType, bytes);
     }
 
@@ -39,10 +40,13 @@ public class OrchestratorRequest implements ICorfuPayload<OrchestratorRequest> {
     }
 
     static Request mapRequest(OrchestratorRequestType type, byte[] payload) {
-        if (type.equals(ADD_NODE)) {
-            return new AddNodeRequest(payload);
-        } else {
-            throw new RuntimeException("Unknown Orchestrator Type");
+        switch (type) {
+            case ADD_NODE:
+                return new AddNodeRequest(payload);
+            case QUERY:
+                return new QueryRequest(payload);
+            default:
+                throw new IllegalStateException("mapRequest: Unknown Type");
         }
     }
 }

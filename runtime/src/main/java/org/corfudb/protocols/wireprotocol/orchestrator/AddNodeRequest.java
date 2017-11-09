@@ -3,6 +3,8 @@ package org.corfudb.protocols.wireprotocol.orchestrator;
 import lombok.Getter;
 import org.corfudb.format.Types.OrchestratorRequestType;
 
+import java.nio.charset.StandardCharsets;
+
 import static org.corfudb.format.Types.OrchestratorRequestType.ADD_NODE;
 
 /**
@@ -21,7 +23,7 @@ public class AddNodeRequest implements Request {
     }
 
     public AddNodeRequest(byte[] buf) {
-        endpoint = new String(buf);
+        endpoint = new String(buf, StandardCharsets.UTF_8);
     }
 
     @Override
@@ -31,6 +33,6 @@ public class AddNodeRequest implements Request {
 
     @Override
     public byte[] getSerialized() {
-        return endpoint.getBytes();
+        return endpoint.getBytes(StandardCharsets.UTF_8);
     }
 }

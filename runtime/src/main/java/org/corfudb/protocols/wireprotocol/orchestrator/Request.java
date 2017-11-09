@@ -1,6 +1,5 @@
 package org.corfudb.protocols.wireprotocol.orchestrator;
 
-import io.netty.buffer.ByteBuf;
 import org.corfudb.format.Types.OrchestratorRequestType;
 
 /**
@@ -18,7 +17,7 @@ public interface Request {
     OrchestratorRequestType getType();
 
     /**
-     * Serialize this request into a ByteBuf
+     * Serialize this request into a byte array
      * @return serialized bytes of the request
      */
     byte[] getSerialized();

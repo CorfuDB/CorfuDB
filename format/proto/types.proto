@@ -14,10 +14,20 @@ enum CheckpointEntryType {
     END = 2;
 }
 
-// Workflow types that the orchestrator service can execute
+// The type of requests that can be made to the Orchestrator Service
 enum OrchestratorRequestType {
+    // Query a workflow id
+    QUERY = 0;
     // Add a new node to the cluster
     ADD_NODE = 1;
+}
+
+// Orchestrator responses
+enum OrchestratorResponseType {
+    // The status of a workflow
+    WORKFLOW_STATUS = 0;
+    // Id of a created workflow
+    WORKFLOW_ID = 1;
 }
 
 message DataRank {

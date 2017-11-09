@@ -4,6 +4,7 @@ import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import lombok.Getter;
@@ -13,8 +14,11 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
@@ -111,9 +115,19 @@ public class ManagementClient implements IClient {
         return router.sendMessageAndGetCompletable(CorfuMsgType.HEARTBEAT_REQUEST.msg());
     }
 
-    public CompletableFuture<OrchestratorResponse> addNodeRequest(String endpoint) {
+    public AddNodeResponse addNodeRequest(String endpoint) throws Exception {
         OrchestratorRequest req = new OrchestratorRequest(new AddNodeRequest(endpoint));
-        return router.sendMessageAndGetCompletable(CorfuMsgType.ORCHESTRATOR_REQUEST
+        CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
+                .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));
+        return (AddNodeResponse) resp.get().getResponse();
+    }
+
+    public QueryResponse queryRequest(UUID workflowId) throws Exception {
+        OrchestratorRequest req = new OrchestratorRequest(new QueryRequest(workflowId));
+        CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
+                .ORCHESTRATOR_REQUEST
+                .payloadMsg(req));
+        return (QueryResponse) resp.get().getResponse();
     }
 }
