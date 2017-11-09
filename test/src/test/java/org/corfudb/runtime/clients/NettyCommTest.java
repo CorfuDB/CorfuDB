@@ -18,6 +18,10 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import javax.net.ssl.SSLException;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
@@ -26,7 +30,9 @@ import org.corfudb.infrastructure.NettyServerRouter;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
+import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.security.tls.TlsUtils;
+import org.junit.Rule;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -35,6 +41,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ssl.SSLEngine;
+import org.junit.rules.TemporaryFolder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,6 +50,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @Slf4j
 public class NettyCommTest extends AbstractCorfuTest {
+
+    @Rule
+    public TemporaryFolder reloadFolder = new TemporaryFolder();
 
 
     private Integer findRandomOpenPort() throws IOException {
@@ -321,6 +331,87 @@ public class NettyCommTest extends AbstractCorfuTest {
             });
     }
 
+    @Test
+    public void testTlsUpdateServerTrust() throws Exception {
+        reloadedTrustManagerTestHelper(false);
+    }
+
+    @Test
+    public void testTlsUpdateClientTrust() throws Exception {
+        reloadedTrustManagerTestHelper(true);
+    }
+
+    /**
+     * Create a trust store that will fail the SSL handshake, check if fails,
+     * then replace it, and check if pass.
+     * @param replaceClientTrust
+     * @throws Exception
+     */
+    private void reloadedTrustManagerTestHelper(boolean replaceClientTrust) throws Exception {
+        NettyServerRouter serverRouter = new NettyServerRouter(new ImmutableMap.Builder<String, Object>().build());
+        serverRouter.addServer(new BaseServer());
+        int port = findRandomOpenPort();
+
+        File clientTrustNoServer = new File("src/test/resources/security/reload/client_trust_no_server.jks");
+        File serverTrustNoClient = new File("src/test/resources/security/reload/server_trust_no_client.jks");
+        File clientTrustWithServer = new File("src/test/resources/security/reload/client_trust_with_server.jks");
+        File serverTrustWithClient = new File("src/test/resources/security/reload/server_trust_with_client.jks");
+        File serverTrustFile = reloadFolder.newFile("temp_server.jks");
+        File clientTrustFile = reloadFolder.newFile("temp_client.jks");
+
+        if (replaceClientTrust) {
+            Files.copy(clientTrustNoServer.toPath(), clientTrustFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(serverTrustWithClient.toPath(), serverTrustFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        } else {
+            Files.copy(clientTrustWithServer.toPath(), clientTrustFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(serverTrustNoClient.toPath(), serverTrustFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
+
+
+        NettyServerData serverData = new NettyServerData(port);
+        String[] ciphers = {"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"};
+        String[] protocols = {"TLSv1.2"};
+        serverData.enableTls(
+                "src/test/resources/security/reload/server_key.jks",
+                "src/test/resources/security/reload/password",
+                serverTrustFile.getAbsolutePath(),
+                "src/test/resources/security/reload/password",
+                true,
+                ciphers,
+                protocols);
+        serverData.bootstrapServer();
+
+
+        NettyClientRouter clientRouter = new NettyClientRouter("localhost", port,
+                true,
+                "src/test/resources/security/reload/client_key.jks",
+                "src/test/resources/security/reload/password",
+                clientTrustFile.getAbsolutePath(),
+                "src/test/resources/security/reload/password",
+                false,
+                null,
+                null);
+        clientRouter.addClient(new BaseClient());
+        clientRouter.start();
+
+        assertThat(clientRouter.getClient(BaseClient.class).pingSync()).isFalse();
+
+        clientRouter.stop();
+
+
+        if (replaceClientTrust) {
+            Files.copy(clientTrustWithServer.toPath(), clientTrustFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        } else {
+            Files.copy(serverTrustWithClient.toPath(), serverTrustFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        clientRouter.start();
+        assertThat(clientRouter.getClient(BaseClient.class).pingSync()).isTrue();
+        clientRouter.stop();
+
+        serverData.shutdownServer();
+    }
+
     void runWithBaseServer(NettyServerDataConstructor nsdc,
             NettyClientRouterConstructor ncrc, NettyCommFunction actionFn)
             throws Exception {
@@ -389,24 +480,12 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         public void enableTls(String ksFile, String ksPasswordFile, String tsFile, String tsPasswordFile,
             boolean mutualAuth, String[] ciphers, String[] protocols) throws Exception {
-            this.sslContext =
-                    TlsUtils.enableTls(TlsUtils.SslContextType.SERVER_CONTEXT,
-                            ksFile, e -> {
-                                throw new RuntimeException("Could not load keys from the key " +
-                                        "store: " + e.getClass().getSimpleName(), e);
-                            },
-                            ksPasswordFile, e -> {
-                                throw new RuntimeException("Could not read the key store " +
-                                        "password file: " + e.getClass().getSimpleName(), e);
-                            },
-                            tsFile, e -> {
-                                throw new RuntimeException("Could not load keys from the trust " +
-                                        "store: " + e.getClass().getSimpleName(), e);
-                            },
-                            tsPasswordFile, e -> {
-                                throw new RuntimeException("Could not read the trust store " +
-                                        "password file: " + e.getClass().getSimpleName(), e);
-                            });
+            try {
+                this.sslContext = SslContextConstructor.constructSslContext(true,
+                        ksFile, ksPasswordFile, tsFile, tsPasswordFile);
+            } catch (SSLException e) {
+                throw new RuntimeException(e);
+            }
             this.tlsMutualAuthEnabled = mutualAuth;
             this.enabledTlsCipherSuites = ciphers;
             this.enabledTlsProtocols = protocols;
