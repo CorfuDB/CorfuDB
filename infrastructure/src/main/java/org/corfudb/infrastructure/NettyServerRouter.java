@@ -57,7 +57,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
                             exception.getMessage(),
                             exception);
                 } else {
-                    log.warn("onTermination: Thread terminated (completed normally).");
+                    log.debug("onTermination: Thread terminated (completed normally).");
                 }
                 super.onTermination(exception);
             }
