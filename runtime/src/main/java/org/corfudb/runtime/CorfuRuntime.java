@@ -279,8 +279,6 @@ public class CorfuRuntime {
         nodeRouters = new ConcurrentHashMap<>();
         retryRate = 5;
 
-        getAddressSpaceView().setMetrics(metrics != null
-                ? metrics : CorfuRuntime.getDefaultMetrics());
         synchronized (metrics) {
             if (metrics.getNames().isEmpty()) {
 //                MetricsUtils.addJvmMetrics(metrics, mp);
