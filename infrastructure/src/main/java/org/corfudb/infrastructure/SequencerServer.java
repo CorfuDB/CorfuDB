@@ -194,7 +194,7 @@ public class SequencerServer extends AbstractServer {
     * @param conflictParam The conflict parameter.
     * @return A conflict hash code.
     */
-    public String getConflictHashCode(UUID streamId, byte[] conflictParam) {
+    private String getConflictHashCode(UUID streamId, byte[] conflictParam) {
         return streamId.toString() + Utils.bytesToHex(conflictParam);
     }
 
@@ -212,7 +212,7 @@ public class SequencerServer extends AbstractServer {
      * @return Returns the type of token reponse based on whether the txn commits, or the abort
      *     cause.
      */
-    public TokenType txnCanCommit(TxResolutionInfo txInfo, /** Input. */
+    private TokenType txnCanCommit(TxResolutionInfo txInfo, /** Input. */
                                   AtomicReference<byte[]> conflictKey /** Output. */) {
         log.trace("Commit-req[{}]", txInfo);
         final long txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
@@ -287,7 +287,7 @@ public class SequencerServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    public void handleTokenQuery(CorfuPayloadMsg<TokenRequest> msg,
+    private void handleTokenQuery(CorfuPayloadMsg<TokenRequest> msg,
                                  ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
 
