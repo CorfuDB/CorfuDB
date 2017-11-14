@@ -26,11 +26,21 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
      * @param epoch current epoch
      * @param backpointerMap  map of backpointers for all requested streams
      */
+    @Deprecated
     public TokenResponse(long tokenValue, long epoch, Map<UUID, Long> backpointerMap) {
         respType = TokenType.NORMAL;
         conflictKey = NO_CONFLICT_KEY;
         token = new Token(tokenValue, epoch);
         this.backpointerMap = backpointerMap;
+        this.conflictStream = EMPTY_UUID;
+    }
+
+    public TokenResponse(long tokenValue, long epoch, BackpointerResponse backpointerMap) {
+        respType = TokenType.NORMAL;
+        conflictKey = NO_CONFLICT_KEY;
+        token = new Token(tokenValue, epoch);
+        this.backpointerMap = Collections.emptyMap();
+        this.response = backpointerMap;
         this.conflictStream = EMPTY_UUID;
     }
 
@@ -49,6 +59,15 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
         this.conflictStream = conflictStream;
         token = new Token(address, epoch);
         this.backpointerMap = Collections.emptyMap();
+    }
+
+    public TokenResponse(TokenType type, byte[] conflictKey, UUID conflictStream,
+                         Token token, Map<UUID, Long> backpointerMap) {
+        respType = type;
+        this.conflictKey = conflictKey;
+        this.conflictStream = conflictStream;
+        this.token = token;
+        this.backpointerMap = backpointerMap;
     }
 
 
@@ -70,6 +89,8 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     /** The backpointer map, if available. */
     final Map<UUID, Long> backpointerMap;
 
+    BackpointerResponse response = null;
+
     /**
      * Deserialization Constructor from a Bytebuf to TokenResponse.
      *
@@ -77,8 +98,8 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
      */
     public TokenResponse(ByteBuf buf) {
         respType = TokenType.values()[ICorfuPayload.fromBuffer(buf, Byte.class)];
-        Long tokenValue = ICorfuPayload.fromBuffer(buf, Long.class);
-        Long epoch = ICorfuPayload.fromBuffer(buf, Long.class);
+        long tokenValue = buf.readLong();
+        long epoch = buf.readLong();
         token = new Token(tokenValue, epoch);
 
         if (respType.isAborted()) {
@@ -96,14 +117,18 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, respType);
 
-        ICorfuPayload.serialize(buf, token.getTokenValue());
-        ICorfuPayload.serialize(buf, token.getEpoch());
+        buf.writeLong(token.getTokenValue());
+        buf.writeLong(token.getEpoch());
 
         if (respType.isAborted()) {
             ICorfuPayload.serialize(buf, conflictKey);
             ICorfuPayload.serialize(buf, conflictStream);
         } else {
-            ICorfuPayload.serialize(buf, backpointerMap);
+            if (response != null) {
+                ICorfuPayload.serialize(buf, response);
+            } else {
+                ICorfuPayload.serialize(buf, backpointerMap);
+            }
         }
     }
 

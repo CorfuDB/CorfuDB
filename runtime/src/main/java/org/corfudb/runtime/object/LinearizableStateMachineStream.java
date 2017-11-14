@@ -111,8 +111,8 @@ public class LinearizableStateMachineStream implements IStateMachineStream {
      */
     @Override
     public long check() {
-        TokenResponse tr =  runtime.getSequencerView().nextToken(Collections.singleton(streamView
-                .getId()), 0);
+        TokenResponse tr =  runtime.getSequencerView().nextToken(Collections
+                .singletonList(streamView.getId()), 0);
         return tr.getTokenValue();
     }
 

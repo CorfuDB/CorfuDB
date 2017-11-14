@@ -147,7 +147,7 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
      */
     default void useToken(IToken token) {
         setGlobalAddress(token.getTokenValue());
-        if (token.getBackpointerMap().size() > 0) {
+        if (!token.getBackpointerMap().isEmpty()) {
             setBackpointerMap(token.getBackpointerMap());
         }
     }

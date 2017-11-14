@@ -1,8 +1,10 @@
 package org.corfudb.runtime.clients;
 
+import com.google.common.collect.Lists;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -47,9 +49,28 @@ public class SequencerClient implements IClient {
         return msg.getPayload();
     }
 
+    /** Deprecated method, use a {@link List} for the streamIDs parameter instead. */
+    @Deprecated
     public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens) {
         return router.sendMessageAndGetCompletable(
-                CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs)));
+                CorfuMsgType.TOKEN_REQ.payloadMsg(
+                        new TokenRequest(numTokens, Lists.newArrayList(streamIDs))));
+    }
+
+    public CompletableFuture<TokenResponse> nextToken(List<UUID> streamIDs, long numTokens) {
+        return router.sendMessageAndGetCompletable(
+                CorfuMsgType.TOKEN_REQ.payloadMsg(
+                        new TokenRequest(numTokens, streamIDs)));
+    }
+
+    /** Deprecated method, use a {@link List} for the streamIDs parameter instead. */
+    @Deprecated
+    public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens,
+                                                      TxResolutionInfo conflictInfo) {
+        return router.sendMessageAndGetCompletable(
+                CorfuMsgType.TOKEN_REQ
+                        .payloadMsg(new TokenRequest(numTokens,
+                                Lists.newArrayList(streamIDs), conflictInfo)));
     }
 
     /**
@@ -60,7 +81,7 @@ public class SequencerClient implements IClient {
      * @param conflictInfo Transaction resolution conflict parameters.
      * @return A completable future with the token response from the sequencer.
      */
-    public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens,
+    public CompletableFuture<TokenResponse> nextToken(List<UUID> streamIDs, long numTokens,
                                                       TxResolutionInfo conflictInfo) {
         return router.sendMessageAndGetCompletable(
                 CorfuMsgType.TOKEN_REQ

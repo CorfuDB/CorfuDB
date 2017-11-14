@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -14,6 +15,7 @@ import java.util.UUID;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -58,7 +60,7 @@ public abstract class AbstractOptimisticTransaction extends
     /** Construct a new optimistic transaction with the given builder and parent.
      *
      * @param builder   A builder for the transaction.
-     * @param parent    An optional parent.
+     * @param context   The context this transaction was built under.
      */
     AbstractOptimisticTransaction(@Nonnull TransactionBuilder builder,
                                   @Nonnull TransactionContext context) {
@@ -87,12 +89,11 @@ public abstract class AbstractOptimisticTransaction extends
         }
 
         // Write to the transaction stream if transaction logging is enabled
-        Set<UUID> affectedStreams = context.getWriteSet()
+        List<UUID> affectedStreams = Lists.newArrayList(context.getWriteSet()
                 .getWriteSet()
-                .getEntryMap().keySet();
+                .getEntryMap().keySet());
 
         if (this.builder.runtime.getObjectsView().isTransactionLogging()) {
-            affectedStreams = new HashSet<>(affectedStreams);
             affectedStreams.add(TRANSACTION_STREAM_ID);
         }
 
@@ -155,7 +156,7 @@ public abstract class AbstractOptimisticTransaction extends
                                  @Nonnull final Map<IObjectManager, Set<Object>>
                                          conflictSet,
                                  @Nonnull final Map<UUID, Set<byte[]>> hashedConflictSet,
-                                 @Nonnull final Set<UUID> affectedStreams) {
+                                 @Nonnull final List<UUID> affectedStreams) {
         log.debug("preciseCommit[{}]: Imprecise conflict detected, resolving...", this);
         TransactionAbortedException currentException = originalException;
 
@@ -299,7 +300,7 @@ public abstract class AbstractOptimisticTransaction extends
             // Otherwise, fetch a read token from the sequencer the linearize
             // ourselves against.
             long currentTail = builder.runtime
-                    .getSequencerView().nextToken(Collections.emptySet(),
+                    .getSequencerView().nextToken(Collections.emptyList(),
                             0).getToken().getTokenValue();
             log.trace("SnapshotTimestamp[{}] {}", this, currentTail);
             context.setReadSnapshot(currentTail);

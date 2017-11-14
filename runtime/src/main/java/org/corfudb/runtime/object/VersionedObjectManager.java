@@ -198,13 +198,14 @@ public class VersionedObjectManager<T> implements IObjectManager<T> {
             }
         }
         final long syncAddress = checkAddress;
-        if (syncAddress != Address.MAX) {
+        if (syncAddress != Address.MAX && syncAddress != Address.UP_TO_DATE) {
             pendingRequest.accumulate(syncAddress);
         }
         try {
             ts = lock.writeLock();
             switchToActiveStreamUnsafe();
-            syncObjectUnsafe(syncAddress == Address.UP_TO_DATE ? Address.MAX :
+            syncObjectUnsafe(syncAddress == Address.UP_TO_DATE
+                             || syncAddress == Address.MAX ? Address.MAX :
                     Math.max(checkAddress, pendingRequest.get()), conflictObject);
             return accessFunction.access(object);
         } finally {

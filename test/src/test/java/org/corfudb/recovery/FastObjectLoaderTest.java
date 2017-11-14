@@ -196,14 +196,14 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         SequencerClient seq = getDefaultRuntime().getRouter(getDefaultConfigurationString())
                 .getClient(SequencerClient.class);
 
-        seq.nextToken(null, 1);
+        seq.nextToken(Collections.emptyList(), 1);
         luc.fillHole(getDefaultRuntime().getSequencerView()
                 .nextToken(Collections.emptySet(), 0)
                 .getTokenValue());
 
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
 
-        seq.nextToken(null, 1);
+        seq.nextToken(Collections.emptyList(), 1);
         luc.fillHole(getDefaultRuntime().getSequencerView()
                 .nextToken(Collections.emptySet(), 0)
                 .getTokenValue());

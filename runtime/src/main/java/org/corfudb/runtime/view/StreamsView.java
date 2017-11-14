@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -8,6 +9,7 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import com.google.common.collect.Lists;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.StreamCOWEntry;
@@ -73,7 +75,7 @@ public class StreamsView extends AbstractView {
         boolean written = false;
         while (!written) {
             TokenResponse tokenResponse =
-                    runtime.getSequencerView().nextToken(Collections.singleton(destination), 1);
+                    runtime.getSequencerView().nextToken(Collections.singletonList(destination), 1);
             if (tokenResponse.getBackpointerMap().get(destination) != null
                     && Address.isAddress(tokenResponse.getBackpointerMap().get(destination))) {
                 // Reading from this address will cause a hole fill
@@ -96,24 +98,32 @@ public class StreamsView extends AbstractView {
         return get(destination);
     }
 
-    /**
-     * Append to multiple streams simultaneously, possibly providing
-     * information on how to resolve conflicts.
-     *
-     * @param streamIDs    The streams to append to.
-     * @param object       The object to append to each stream.
-     * @param conflictInfo Conflict information for the sequencer to check.
-     * @return The address the entry was written to.
-     * @throws TransactionAbortedException If the transaction was aborted by
-     *                                     the sequencer.
-     */
+
+    /** Deprecated, use List for streamIds parameter. */
+    @Deprecated
     public long append(@Nonnull Set<UUID> streamIDs, @Nonnull Object object,
+                       @Nullable TxResolutionInfo conflictInfo) throws TransactionAbortedException {
+        return append(Lists.newArrayList(streamIDs), object, conflictInfo);
+    }
+
+        /**
+         * Append to multiple streams simultaneously, possibly providing
+         * information on how to resolve conflicts.
+         *
+         * @param streamIds    The streams to append to.
+         * @param object       The object to append to each stream.
+         * @param conflictInfo Conflict information for the sequencer to check.
+         * @return The address the entry was written to.
+         * @throws TransactionAbortedException If the transaction was aborted by
+         *                                     the sequencer.
+         */
+    public long append(@Nonnull List<UUID> streamIds, @Nonnull Object object,
                        @Nullable TxResolutionInfo conflictInfo) throws TransactionAbortedException {
 
         // Go to the sequencer, grab an initial token.
         TokenResponse tokenResponse = conflictInfo == null
-                ? runtime.getSequencerView().nextToken(streamIDs, 1) // Token w/o conflict info
-                : runtime.getSequencerView().nextToken(streamIDs, 1,
+                ? runtime.getSequencerView().nextToken(streamIds, 1) // Token w/o conflict info
+                : runtime.getSequencerView().nextToken(streamIds, 1,
                 conflictInfo); // Token w/ conflict info
 
         for (int x = 0; x < runtime.getWriteRetry(); x++) {
@@ -171,12 +181,12 @@ public class StreamsView extends AbstractView {
                 log.warn("append[{}]: Overwritten after {} retries, streams {}",
                         tokenResponse.getTokenValue(),
                         x,
-                        streamIDs.stream().map(Utils::toReadableId).collect(Collectors.toSet()));
+                        streamIds.stream().map(Utils::toReadableId).collect(Collectors.toSet()));
 
                 TokenResponse temp;
                 if (conflictInfo == null) {
                     // Token w/o conflict info
-                    temp = runtime.getSequencerView().nextToken(streamIDs, 1);
+                    temp = runtime.getSequencerView().nextToken(streamIds, 1);
                 } else {
 
                     // On retry, check for conflicts only from the previous
@@ -184,7 +194,7 @@ public class StreamsView extends AbstractView {
                     conflictInfo.setSnapshotTimestamp(tokenResponse.getToken().getTokenValue());
 
                     // Token w/ conflict info
-                    temp = runtime.getSequencerView().nextToken(streamIDs,
+                    temp = runtime.getSequencerView().nextToken(streamIds,
                             1, conflictInfo);
                 }
 
@@ -198,7 +208,7 @@ public class StreamsView extends AbstractView {
             } catch (StaleTokenException se) {
                 // the epoch changed from when we grabbed the token from sequencer
                 log.warn("append[{}]: StaleToken , streams {}", tokenResponse.getTokenValue(),
-                        streamIDs.stream().map(Utils::toReadableId).collect(Collectors.toSet()));
+                        streamIds.stream().map(Utils::toReadableId).collect(Collectors.toSet()));
 
                 throw new TransactionAbortedException(
                         conflictInfo,
@@ -212,7 +222,7 @@ public class StreamsView extends AbstractView {
         log.error("append[{}]: failed after {} retries , streams {}, write size {} bytes",
                 tokenResponse.getTokenValue(),
                 runtime.getWriteRetry(),
-                streamIDs.stream().map(Utils::toReadableId).collect(Collectors.toSet()),
+                streamIds.stream().map(Utils::toReadableId).collect(Collectors.toSet()),
                 ILogData.getSerializedSize(object));
         throw new AppendException();
     }

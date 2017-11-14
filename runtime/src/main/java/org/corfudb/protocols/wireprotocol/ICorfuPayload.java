@@ -44,6 +44,7 @@ public interface ICorfuPayload<T> {
                 .put(Byte.class, ByteBuf::readByte)
                 .put(Integer.class, ByteBuf::readInt)
                 .put(Long.class, ByteBuf::readLong)
+                .put(long.class, ByteBuf::readLong)
                 .put(Boolean.class, ByteBuf::readBoolean)
                 .put(Double.class, ByteBuf::readDouble)
                 .put(Float.class, ByteBuf::readFloat)

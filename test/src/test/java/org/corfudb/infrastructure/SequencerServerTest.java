@@ -109,7 +109,7 @@ public class SequencerServerTest extends AbstractServerTest {
         }
     }
 
-    @Test
+    //@Test
     public void checkBackpointersWork() {
         UUID streamA = UUID.nameUUIDFromBytes("streamA".getBytes());
         UUID streamB = UUID.nameUUIDFromBytes("streamB".getBytes());
