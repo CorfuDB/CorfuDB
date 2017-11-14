@@ -7,6 +7,7 @@ import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -122,6 +123,7 @@ public class ManagementServer extends AbstractServer {
             String localAddress = opts.get("--address") + ":" + opts.get("<port>");
 
             Layout singleLayout = new Layout(
+                    UUID.randomUUID(),
                     Collections.singletonList(localAddress),
                     Collections.singletonList(localAddress),
                     Collections.singletonList(new Layout.LayoutSegment(

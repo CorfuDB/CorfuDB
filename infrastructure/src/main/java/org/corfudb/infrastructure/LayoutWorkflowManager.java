@@ -255,6 +255,7 @@ public class LayoutWorkflowManager {
      */
     public Layout build() {
         return new Layout(
+                layout.getClusterId(),
                 layout.getLayoutServers(),
                 layout.getSequencers(),
                 layout.getSegments(),
