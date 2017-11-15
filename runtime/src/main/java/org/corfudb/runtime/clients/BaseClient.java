@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import lombok.Getter;
@@ -16,6 +17,7 @@ import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
+import org.corfudb.runtime.exceptions.WrongClusterIdException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 
 /**
@@ -162,6 +164,19 @@ public class BaseClient implements IClient {
     private static Object handleWrongEpoch(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx,
                                            IClientRouter r) {
         throw new WrongEpochException(msg.getPayload());
+    }
+
+    /**
+     * Handle a WRONG_CLUSTER_ID response from the server.
+     *
+     * @param msg The wrong cluster id message
+     * @param ctx The context the message was sent under
+     * @param r   A reference to the router
+     * @return none, throw a wrong cluster id exception instead.
+     */
+    @ClientHandler(type = CorfuMsgType.WRONG_CLUSTER_ID)
+    private static Object handleWrongClusterId(CorfuPayloadMsg<UUID> msg, ChannelHandlerContext ctx, IClientRouter r) {
+        throw new WrongClusterIdException(msg.getPayload());
     }
 
     /**

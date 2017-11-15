@@ -8,6 +8,7 @@ import com.google.gson.JsonParseException;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.UUID;
 
 /**
  * Created by rmichoud on 4/13/17.
@@ -28,11 +29,13 @@ public class LayoutDeserializer implements JsonDeserializer {
         if (unsafeLayout.unresponsiveServers == null) {
             unsafeLayout.unresponsiveServers = new ArrayList<>();
         }
+        // Read clusterId from JSON. If not present generate one randomly.
+        UUID clusterId = unsafeLayout.clusterId == null ? UUID.randomUUID() : unsafeLayout.clusterId;
 
         /* Similar to a copy constructor. This constructor holds all the validation for
         constructing a layout. */
         Layout safeLayout = new Layout(unsafeLayout.layoutServers, unsafeLayout.sequencers,
-                unsafeLayout.segments, unsafeLayout.unresponsiveServers, unsafeLayout.epoch);
+                unsafeLayout.segments, unsafeLayout.unresponsiveServers, unsafeLayout.epoch, clusterId);
 
         return safeLayout;
 

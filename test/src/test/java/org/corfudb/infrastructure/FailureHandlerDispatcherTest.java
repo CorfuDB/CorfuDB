@@ -59,6 +59,7 @@ public class FailureHandlerDispatcherTest extends AbstractViewTest {
         failureHandlerDispatcher.dispatchHandler(failureHandlerPolicy, originalLayout, corfuRuntime, failedServers);
 
         Layout expectedLayout = new TestLayoutBuilder()
+                .setClusterId(originalLayout.getClusterId())
                 .setEpoch(2L)
                 .addLayoutServer(SERVERS.PORT_0)
                 .addLayoutServer(SERVERS.PORT_1)

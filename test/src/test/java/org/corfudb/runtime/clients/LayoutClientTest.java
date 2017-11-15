@@ -85,6 +85,7 @@ public class LayoutClientTest extends AbstractClientTest {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);
+        client.getRouter().setClusterId(TestLayoutBuilder.getSingleClusterId());
         long epoch = layout.getEpoch();
         assertThat(client.prepare(epoch, RANK_HIGH).get() != null)
                 .isEqualTo(true);
@@ -105,6 +106,7 @@ public class LayoutClientTest extends AbstractClientTest {
         long epoch = layout.getEpoch();
         assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);
+        client.getRouter().setClusterId(TestLayoutBuilder.getSingleClusterId());
 
         assertThat(client.prepare(epoch, RANK_HIGH).get() != null)
                 .isEqualTo(true);
@@ -124,6 +126,7 @@ public class LayoutClientTest extends AbstractClientTest {
         long epoch = layout.getEpoch();
         assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);
+        client.getRouter().setClusterId(TestLayoutBuilder.getSingleClusterId());
 
         assertThat(client.prepare(epoch, RANK_HIGH).get() != null)
                 .isEqualTo(true);
@@ -146,6 +149,7 @@ public class LayoutClientTest extends AbstractClientTest {
         long epoch = layout.getEpoch();
         assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);
+        client.getRouter().setClusterId(TestLayoutBuilder.getSingleClusterId());
 
         assertThat(client.prepare(epoch, RANK_HIGH).get() != null)
                 .isEqualTo(true);

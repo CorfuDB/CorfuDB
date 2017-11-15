@@ -55,6 +55,11 @@ public class Layout implements Cloneable {
             .registerTypeAdapter(Layout.class, new LayoutDeserializer())
             .create();
     /**
+     * The clusterID of this layout cluster.
+     */
+    @Getter
+    final UUID clusterId;
+    /**
      * A list of layout servers in the layout.
      */
     @Getter
@@ -94,7 +99,7 @@ public class Layout implements Cloneable {
      */
     public Layout(@NonNull List<String> layoutServers, @NonNull List<String> sequencers,
                   @NonNull List<LayoutSegment> segments, @NonNull List<String> unresponsiveServers,
-                  long epoch) {
+                  long epoch, @NonNull UUID clusterId) {
 
         this.layoutServers = layoutServers;
         this.sequencers = sequencers;
@@ -118,11 +123,16 @@ public class Layout implements Cloneable {
                 throw new IllegalArgumentException("One segment has an empty list of stripes");
             }
         }
+        this.clusterId = clusterId;
+    }
+
+    public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments, List<String> unresponsiveServers, long epoch) {
+        this(layoutServers, sequencers, segments, unresponsiveServers, epoch, UUID.randomUUID());
     }
 
     public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments,
                   long epoch) {
-        this(layoutServers, sequencers, segments, new ArrayList<String>(), epoch);
+        this(layoutServers, sequencers, segments, new ArrayList<>(), epoch, UUID.randomUUID());
     }
 
     /**

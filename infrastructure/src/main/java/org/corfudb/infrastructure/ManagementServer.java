@@ -7,6 +7,7 @@ import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -120,6 +121,7 @@ public class ManagementServer extends AbstractServer {
 
         if ((Boolean) opts.get("--single")) {
             String localAddress = opts.get("--address") + ":" + opts.get("<port>");
+            UUID clusterId = serverContext.getClusterId() == null ? UUID.randomUUID() : serverContext.getClusterId();
 
             Layout singleLayout = new Layout(
                     Collections.singletonList(localAddress),
@@ -134,7 +136,9 @@ public class ManagementServer extends AbstractServer {
                                     )
                             )
                     )),
-                    0L
+                    Collections.emptyList(),
+                    0L,
+                    clusterId
             );
 
             safeUpdateLayout(singleLayout);
@@ -261,7 +265,7 @@ public class ManagementServer extends AbstractServer {
     public synchronized void handleManagementBootstrap(CorfuPayloadMsg<Layout> msg,
                                                        ChannelHandlerContext ctx, IServerRouter r,
                                                        boolean isMetricsEnabled) {
-        if (latestLayout != null) {
+        if (latestLayout != null || bootstrapEndpoint != null) {
             // We are already bootstrapped, bootstrap again is not allowed.
             log.warn("Got a request to bootstrap a server which is already bootstrapped, "
                     + "rejecting!");

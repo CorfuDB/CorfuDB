@@ -15,6 +15,7 @@ import org.corfudb.runtime.clients.TestRule;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -40,6 +41,13 @@ public class TestServerRouter implements IServerRouter {
 
     @Getter
     int port = 0;
+
+    @Getter
+    private UUID clusterId;
+
+    public void setClusterId (UUID clusterId) {
+        this.clusterId = this.clusterId == null ? clusterId : this.clusterId;
+    }
 
     public TestServerRouter() {
         reset();
@@ -107,9 +115,34 @@ public class TestServerRouter implements IServerRouter {
         return true;
     }
 
+    /**
+     * Validate the clusterId of the CorfuMsg, and send a WRONG_CLUSTER_ID response
+     * if the server clusterId does not match. Ignored if message has ignoreClusterId
+     * flag set to true.
+     *
+     * @param msg   The incoming message to validate.
+     * @param ctx   The context of the channel handler.
+     * @return      True, if the cluster ID matches else false.
+     */
+    public boolean validateClusterId(CorfuMsg msg, ChannelHandlerContext ctx) {
+        UUID clusterId = getClusterId();
+
+        if (!msg.getMsgType().getIgnoreClusterId()
+                && getClusterId() != null
+                && msg.getClusterId() != null
+                && !msg.getClusterId().equals(clusterId)) {
+            sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_CLUSTER_ID,
+                    clusterId));
+            log.trace("Incoming message with wrong clusterID, got {}, expected {}, message was: {}",
+                    msg.getClusterId(), clusterId, msg);
+            return false;
+        }
+        return true;
+    }
+
     public void sendServerMessage(CorfuMsg msg) {
         AbstractServer as = handlerMap.get(msg.getMsgType());
-        if (validateEpoch(msg, null)) {
+        if (validateClusterId(msg, null) && validateEpoch(msg, null)) {
             if (as != null) {
                 as.handleMessage(msg, null, this);
             } else {
@@ -122,7 +155,7 @@ public class TestServerRouter implements IServerRouter {
 
     public void sendServerMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
         AbstractServer as = handlerMap.get(msg.getMsgType());
-        if (validateEpoch(msg, ctx)) {
+        if (validateClusterId(msg, ctx) && validateEpoch(msg, ctx)) {
             if (as != null) {
                 as.handleMessage(msg, ctx, this);
             }
