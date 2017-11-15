@@ -30,7 +30,7 @@
     <logger name="io.netty.buffer" level="INFO"/>
 
     <!-- Correctness -->
-    <logger name="correctness" level="INFO" additivity="false">
+    <logger name="correctness" level="TRACE" additivity="false">
         <appender-ref ref="CORRECTNESS"/>
     </logger>
 
