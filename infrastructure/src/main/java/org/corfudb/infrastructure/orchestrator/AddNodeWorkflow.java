@@ -1,8 +1,13 @@
 package org.corfudb.infrastructure.orchestrator;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.Request;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.OutrankedException;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.Layout;
 
 import javax.annotation.Nonnull;
@@ -20,6 +25,7 @@ import static org.corfudb.format.Types.OrchestratorRequestType.ADD_NODE;
  * @author Maithem
  */
 @NotThreadSafe
+@Slf4j
 public class AddNodeWorkflow implements Workflow {
 
     final AddNodeRequest request;
@@ -51,7 +57,16 @@ public class AddNodeWorkflow implements Workflow {
 
         @Override
         public void execute(@Nonnull CorfuRuntime runtime) throws Exception {
-            runtime.getLayoutManagementView().bootstrapNewNode(request.getEndpoint());
+            for (;;) {
+                try {
+                    runtime.getLayoutManagementView().bootstrapNewNode(request.getEndpoint());
+                    return;
+                } catch (NetworkException e) {
+                    log.error("Network exception while bootstraping new node", e);
+                    Thread.sleep(30*1000);
+                    continue;
+                }
+            }
         }
     }
 
@@ -69,13 +84,28 @@ public class AddNodeWorkflow implements Workflow {
 
         @Override
         public void execute(@Nonnull CorfuRuntime runtime) throws Exception {
-            Layout currentLayout = (Layout) runtime.getLayoutView().getLayout().clone();
-            runtime.getLayoutManagementView().addNode(currentLayout, request.getEndpoint(),
-                    true, true,
-                    true, false,
-                    0);
-            runtime.invalidateLayout();
-            newLayout = (Layout) runtime.getLayoutView().getLayout().clone();
+            for (;;) {
+                try {
+                    Layout currentLayout = (Layout) runtime.getLayoutView().getLayout().clone();
+
+                    if (currentLayout.containsEndpoint(request.getEndpoint())) {
+                        log.info("Node {} already exists in the layout", request.getEndpoint());
+                        return;
+                    }
+
+                    runtime.getLayoutManagementView().addNode(currentLayout, request.getEndpoint(),
+                            true, true,
+                            true, false,
+                            0);
+
+                    runtime.invalidateLayout();
+                    newLayout = (Layout) runtime.getLayoutView().getLayout().clone();
+                    return;
+                } catch (QuorumUnreachableException | OutrankedException e) {
+                    log.error("Failed adding new node to the layout, retrying", e);
+                    Thread.sleep(30*1000);
+                }
+            }
         }
     }
 

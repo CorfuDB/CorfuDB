@@ -126,6 +126,10 @@ public class Layout implements Cloneable {
         this(layoutServers, sequencers, segments, new ArrayList<String>(), epoch);
     }
 
+    public boolean containsEndpoint(String address) {
+        return layoutServers.contains(address) || sequencers.contains(address);
+    }
+
     /**
      * Get a layout from a JSON string.
      */

@@ -10,6 +10,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -294,7 +295,7 @@ public class LogUnitServer extends AbstractServer {
     private void replicateRawData(CorfuPayloadMsg<RawDataMsg> msg,
                                   ChannelHandlerContext ctx, IServerRouter r,
                                   boolean isMetricsEnabled) {
-        Map<Long, LogData> rawDataMap = msg.getPayload().getRawDataMap();
+        List<LogData> rawDataMap = msg.getPayload().getEntries();
         for (Long address : rawDataMap.keySet()) {
             // bypass the cache.
             batchWriter.write(address, rawDataMap.get(address));

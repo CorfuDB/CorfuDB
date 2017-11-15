@@ -4,8 +4,10 @@ import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -177,14 +179,22 @@ public class LayoutManagementView extends AbstractView {
                             Range.closed(chunkStart, chunkEnd),
                             DiscreteDomain.longs()));
 
+            List<LogData> entries = new ArrayList<>();
+            for (long x = chunkStart; x <= chunkEnd; x++) {
+                if (dataMap.get(x) == null) {
+                    log.error("Missing address {} in range {}-{}", x, chunkStart, chunkEnd);
+                    throw new RuntimeException("Missing address");
+                }
+
+                entries.add((LogData) dataMap.get(x));
+            }
+
+
             // Redirect these logEntries to the newNode.
             boolean replicationSuccess = CFUtils.getUninterruptibly(runtime
                     .getRouter(endpoint)
                     .getClient(LogUnitClient.class)
-                    .replicateRawData(new RawDataMsg(dataMap.entrySet().parallelStream()
-                            .collect(Collectors
-                                    .toMap(Map.Entry::getKey,
-                                            entry -> (LogData) entry.getValue())))));
+                    .replicateRawData(new RawDataMsg(entries)));
 
             if (!replicationSuccess) {
                 throw new RuntimeException("Replication failure.");
