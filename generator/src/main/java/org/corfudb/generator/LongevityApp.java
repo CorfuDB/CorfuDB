@@ -61,19 +61,27 @@ public class LongevityApp {
     }
 
     /**
-     * Let the workers finish naturally (thanks to the timer) and then kill
+     * Give a chance to the workers to finish naturally (thanks to the timer) and then kill
      * the producer and the checkpointer.
      *
      * At the end of the duration, we give some margin for the workers to finish their task before shutting
      * down the thread pool.
-     * If the application is hung (which can happen when something goes wrong) we will still terminate.
+     *
+     * If the application is hung (which can happen when something goes wrong) we do a hard exit. If any thread
+     * is not playing nice with Interrupted exceptions (which can be a bug as well), this is the only way to
+     * be sure we terminate.
      */
     private void waitForAppToFinish() {
         workers.shutdown();
         try {
-            workers.awaitTermination(durationMs + APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
+            boolean finishedInTime = workers.
+                    awaitTermination(durationMs + APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
+            String livenessState = finishedInTime ? "Success" : "Fail";
+            Correctness.recordOperation("Liveness, " + livenessState, false);
+            if (!finishedInTime) {
+                System.exit(1);
+            }
         } catch (InterruptedException e) {
-            log.error("Operation was stuck", e);
             Thread.currentThread().interrupt();
         } finally {
             taskProducer.shutdownNow();
