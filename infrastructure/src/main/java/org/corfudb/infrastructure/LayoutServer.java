@@ -6,6 +6,7 @@ import java.lang.invoke.MethodHandles;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -100,6 +101,7 @@ public class LayoutServer extends AbstractServer {
     private void getSingleNodeLayout() {
         String localAddress = opts.get("--address") + ":" + opts.get("<port>");
         setCurrentLayout(new Layout(
+                UUID.randomUUID(),
                 Collections.singletonList(localAddress),
                 Collections.singletonList(localAddress),
                 Collections.singletonList(new LayoutSegment(

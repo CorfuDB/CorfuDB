@@ -31,7 +31,9 @@ public class LayoutDeserializer implements JsonDeserializer {
 
         /* Similar to a copy constructor. This constructor holds all the validation for
         constructing a layout. */
-        Layout safeLayout = new Layout(unsafeLayout.layoutServers, unsafeLayout.sequencers,
+        Layout safeLayout = new Layout(
+                unsafeLayout.clusterId,
+                unsafeLayout.layoutServers, unsafeLayout.sequencers,
                 unsafeLayout.segments, unsafeLayout.unresponsiveServers, unsafeLayout.epoch);
 
         return safeLayout;

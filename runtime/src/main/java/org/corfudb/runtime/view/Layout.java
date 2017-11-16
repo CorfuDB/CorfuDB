@@ -74,6 +74,12 @@ public class Layout implements Cloneable {
      */
     @Getter
     List<String> unresponsiveServers;
+
+    /** A unique identifier for the "cluster". Stays constant through the lifetime
+     *  of the layout (through epoch changes). */
+    @Getter
+    UUID clusterId;
+
     /**
      * The epoch of this layout.
      */
@@ -92,10 +98,12 @@ public class Layout implements Cloneable {
      * Defensive constructor since we can create a Layout from a JSON file.
      * JSON deserialize is forced through this constructor.
      */
-    public Layout(@NonNull List<String> layoutServers, @NonNull List<String> sequencers,
+    public Layout(@Nonnull UUID clusterId,
+                  @NonNull List<String> layoutServers, @NonNull List<String> sequencers,
                   @NonNull List<LayoutSegment> segments, @NonNull List<String> unresponsiveServers,
                   long epoch) {
 
+        this.clusterId = clusterId;
         this.layoutServers = layoutServers;
         this.sequencers = sequencers;
         this.segments = segments;
@@ -120,9 +128,12 @@ public class Layout implements Cloneable {
         }
     }
 
-    public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments,
+    public Layout(@Nonnull UUID clusterId,
+                  @Nonnull List<String> layoutServers,
+                  @Nonnull List<String> sequencers,
+                  @Nonnull List<LayoutSegment> segments,
                   long epoch) {
-        this(layoutServers, sequencers, segments, new ArrayList<String>(), epoch);
+        this(clusterId, layoutServers, sequencers, segments, new ArrayList<String>(), epoch);
     }
 
     /**
