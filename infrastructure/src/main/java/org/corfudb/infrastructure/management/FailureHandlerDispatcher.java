@@ -115,6 +115,7 @@ public class FailureHandlerDispatcher {
         }
 
         // Check if our proposed layout got selected and committed.
+        corfuRuntime.getLayoutView().getLayout();
         corfuRuntime.invalidateLayout();
         if (corfuRuntime.getLayoutView().getLayout().equals(newLayout)) {
             log.info("New Layout committed = {}", newLayout);

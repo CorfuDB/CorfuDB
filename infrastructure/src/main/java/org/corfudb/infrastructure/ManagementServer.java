@@ -467,30 +467,9 @@ public class ManagementServer extends AbstractServer {
     private void failureDetectorTask() {
 
         CorfuRuntime corfuRuntime = getCorfuRuntime();
+        corfuRuntime.invalidateLayout();
 
-        // Query all layout servers to get quorum Layout.
-        Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap = new HashMap<>();
-        for (String layoutServer : latestLayout.getLayoutServers()) {
-            layoutCompletableFutureMap.put(
-                    layoutServer, getCorfuRuntime().getRouter(layoutServer)
-                            .getClient(LayoutClient.class).getLayout());
-        }
-
-        Layout quorumLayout;
-
-        try {
-            // Retrieve the correct layout from quorum of members to reseal servers.
-            // If we are unable to reach a consensus from a quorum we get an exception and abort the
-            // epoch correction phase.
-            quorumLayout = fetchQuorumLayout(layoutCompletableFutureMap.values()
-                    .toArray(new CompletableFuture[layoutCompletableFutureMap.size()]));
-
-            // Update local layout copy.
-            safeUpdateLayout(quorumLayout);
-
-        } catch (QuorumUnreachableException que) {
-            log.error("Unable to fetch quorum layout. ", que);
-        }
+        safeUpdateLayout(corfuRuntime.getLayoutView().getLayout());
 
         // Execute the failure detection policy once.
         failureDetectorPolicy.executePolicy(latestLayout, corfuRuntime);
@@ -500,7 +479,7 @@ public class ManagementServer extends AbstractServer {
 
         // Corrects out of phase epoch issues if present in the report. This method performs
         // re-sealing of all nodes if required and catchup of a layout server to the current state.
-        correctOutOfPhaseEpochs(layoutCompletableFutureMap, pollReport);
+        correctOutOfPhaseEpochs(pollReport);
 
         // Analyze the poll report and trigger failure handler if needed.
         analyzePollReportAndTriggerHandler(pollReport);
@@ -606,9 +585,7 @@ public class ManagementServer extends AbstractServer {
      *
      * @param pollReport Poll Report from running the failure detection policy.
      */
-    private void correctOutOfPhaseEpochs(
-            Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap,
-            PollReport pollReport) {
+    private void correctOutOfPhaseEpochs(PollReport pollReport) {
 
         // Check if handler has been initiated.
         if (!startFailureHandler) {
@@ -629,6 +606,24 @@ public class ManagementServer extends AbstractServer {
         }
 
         try {
+
+            // Query all layout servers to get quorum Layout.
+            Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap = new HashMap<>();
+            for (String layoutServer : latestLayout.getLayoutServers()) {
+                layoutCompletableFutureMap.put(
+                        layoutServer, getCorfuRuntime().getRouter(layoutServer)
+                                .getClient(LayoutClient.class).getLayout());
+            }
+
+            // Retrieve the correct layout from quorum of members to reseal servers.
+            // If we are unable to reach a consensus from a quorum we get an exception and
+            // abort the epoch correction phase.
+            Layout quorumLayout = fetchQuorumLayout(layoutCompletableFutureMap.values()
+                    .toArray(new CompletableFuture[layoutCompletableFutureMap.size()]));
+
+            // Update local layout copy.
+            safeUpdateLayout(quorumLayout);
+
             // We clone the layout to not pollute the original latestLayout.
             Layout sealLayout = (Layout) latestLayout.clone();
             sealLayout.setRuntime(getCorfuRuntime());
