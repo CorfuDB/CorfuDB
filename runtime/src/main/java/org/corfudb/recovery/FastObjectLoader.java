@@ -238,7 +238,7 @@ public class FastObjectLoader {
     }
 
     private void findAndSetLogTail() {
-        logTail = runtime.getSequencerView().nextToken(Collections.emptyList(), 0).getTokenValue();
+        logTail = runtime.getSequencerView().query().getTokenValue();
     }
 
     private void resetAddressProcessed() {

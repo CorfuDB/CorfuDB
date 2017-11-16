@@ -31,7 +31,7 @@ public class SnapshotTxOperation extends Operation {
             // Safety Hack for not having snapshot in the future
 
             long currentMax = state.getRuntime().getSequencerView()
-                    .nextToken(Collections.emptyList(), 0)
+                    .query()
                     .getToken().getTokenValue();
 
             long snapShotAddress = Long.min(trimMark + delta, currentMax);

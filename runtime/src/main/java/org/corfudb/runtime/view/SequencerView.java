@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import javax.annotation.Nonnull;
+
 import com.google.common.collect.Lists;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -21,10 +23,12 @@ public class SequencerView extends AbstractView {
         super(runtime);
     }
 
-    /** Deprecated. Use List as a streamIds parameter instead. */
-    @Deprecated
-    public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens) {
-        return nextToken(Lists.newArrayList(streamIDs), numTokens);
+    public TokenResponse query() {
+        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).query()));
+    }
+
+    public TokenResponse query(@Nonnull UUID stream) {
+        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).query(stream)));
     }
 
     /**
@@ -38,6 +42,7 @@ public class SequencerView extends AbstractView {
      * @param numTokens The number of tokens to reserve.
      * @return The first token retrieved.
      */
+    @Deprecated
     public TokenResponse nextToken(List<UUID> streamIds, int numTokens) {
         return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0)
                 .nextToken(streamIds, numTokens)));
@@ -45,18 +50,34 @@ public class SequencerView extends AbstractView {
 
     /** Deprecated. Use List as a streamIds parameter instead. */
     @Deprecated
+    public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens) {
+        return nextToken(Lists.newArrayList(streamIDs), numTokens);
+    }
+
+    /** Deprecated. Use List as a streamIds parameter instead. */
+    @Deprecated
     public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens,
                                    TxResolutionInfo conflictInfo) {
-        return nextToken(Lists.newArrayList(streamIDs), numTokens, conflictInfo);
+        if (numTokens > 1) {
+            throw new UnsupportedOperationException("Requesting more than one token "
+                    + "no longer supported");
+        } else if (numTokens <= 0) {
+            throw new UnsupportedOperationException("Querying with conflict info "
+                    + "no longer supported");
+        }
+        return nextToken(Lists.newArrayList(streamIDs), conflictInfo);
     }
 
 
-    public TokenResponse nextToken(List<UUID> streamIDs, int numTokens,
-                                   TxResolutionInfo conflictInfo) {
-        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).nextToken(
-                streamIDs, numTokens, conflictInfo)));
+    public TokenResponse nextToken(List<UUID> streamIDs, TxResolutionInfo conflictInfo) {
+        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0)
+                .nextToken(streamIDs, conflictInfo)));
     }
 
+    public TokenResponse nextToken(List<UUID> streamIDs) {
+        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0)
+                .nextToken(streamIDs)));
+    }
 
     public void trimCache(long address) {
         getCurrentLayout().getSequencer(0)

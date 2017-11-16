@@ -3,18 +3,11 @@ package org.corfudb.runtime.object.transactions;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.google.common.reflect.TypeToken;
 
-import java.util.Collections;
 import java.util.Map;
 
 import org.corfudb.infrastructure.SequencerServer;
-import org.corfudb.infrastructure.TestLayoutBuilder;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.AbstractObjectTest;
-import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.Layout;
-import org.junit.Before;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,7 +39,8 @@ public class SequencerCacheTest extends AbstractObjectTest {
         }
 
         SequencerServer sequencerServer = getSequencer(0);
-        Cache<String, Long> cache = sequencerServer.getConflictToGlobalTailCache();
+        Cache<SequencerServer.ConflictObject, Long> cache = sequencerServer
+                .getConflictToTailCache();
         assertThat(cache.asMap().size()).isEqualTo(numTxn);
         getDefaultRuntime().getAddressSpaceView().prefixTrim(trimAddress);
         assertThat(cache.asMap().size()).isEqualTo(trimAddress);

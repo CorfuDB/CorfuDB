@@ -300,8 +300,7 @@ public abstract class AbstractOptimisticTransaction extends
             // Otherwise, fetch a read token from the sequencer the linearize
             // ourselves against.
             long currentTail = builder.runtime
-                    .getSequencerView().nextToken(Collections.emptyList(),
-                            0).getToken().getTokenValue();
+                    .getSequencerView().query().getToken().getTokenValue();
             log.trace("SnapshotTimestamp[{}] {}", this, currentTail);
             context.setReadSnapshot(currentTail);
             return currentTail;

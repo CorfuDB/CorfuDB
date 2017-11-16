@@ -302,7 +302,7 @@ public class CheckpointWriter<T extends Map> {
      */
     public static long startGlobalSnapshotTxn(CorfuRuntime rt) {
         TokenResponse tokenResponse =
-                rt.getSequencerView().nextToken(Collections.emptyList(), 0);
+                rt.getSequencerView().query();
         long globalTail = tokenResponse.getToken().getTokenValue();
         rt.getObjectsView().TXBuild()
                 .setType(TransactionType.SNAPSHOT)

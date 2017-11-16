@@ -19,6 +19,14 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     public static byte[] NO_CONFLICT_KEY = new byte[]{};
     public static UUID EMPTY_UUID = new UUID(0L, 0L);
 
+    public TokenResponse(long tokenValue, long epoch) {
+        respType = TokenType.NORMAL;
+        conflictKey = NO_CONFLICT_KEY;
+        token = new Token(tokenValue, epoch);
+        this.backpointerMap = Collections.emptyMap();
+        this.conflictStream = EMPTY_UUID;
+    }
+
     /**
      * Constructor for TokenResponse.
      *

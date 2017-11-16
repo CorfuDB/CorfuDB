@@ -75,7 +75,7 @@ public class StreamsView extends AbstractView {
         boolean written = false;
         while (!written) {
             TokenResponse tokenResponse =
-                    runtime.getSequencerView().nextToken(Collections.singletonList(destination), 1);
+                    runtime.getSequencerView().nextToken(Collections.singletonList(destination));
             if (tokenResponse.getBackpointerMap().get(destination) != null
                     && Address.isAddress(tokenResponse.getBackpointerMap().get(destination))) {
                 // Reading from this address will cause a hole fill
@@ -122,9 +122,10 @@ public class StreamsView extends AbstractView {
 
         // Go to the sequencer, grab an initial token.
         TokenResponse tokenResponse = conflictInfo == null
-                ? runtime.getSequencerView().nextToken(streamIds, 1) // Token w/o conflict info
-                : runtime.getSequencerView().nextToken(streamIds, 1,
-                conflictInfo); // Token w/ conflict info
+                // Token w/o conflict info
+                ? runtime.getSequencerView().nextToken(streamIds)
+                // Token w/ conflict info
+                : runtime.getSequencerView().nextToken(streamIds, conflictInfo);
 
         for (int x = 0; x < runtime.getWriteRetry(); x++) {
 
@@ -186,7 +187,7 @@ public class StreamsView extends AbstractView {
                 TokenResponse temp;
                 if (conflictInfo == null) {
                     // Token w/o conflict info
-                    temp = runtime.getSequencerView().nextToken(streamIds, 1);
+                    temp = runtime.getSequencerView().nextToken(streamIds);
                 } else {
 
                     // On retry, check for conflicts only from the previous
@@ -194,8 +195,7 @@ public class StreamsView extends AbstractView {
                     conflictInfo.setSnapshotTimestamp(tokenResponse.getToken().getTokenValue());
 
                     // Token w/ conflict info
-                    temp = runtime.getSequencerView().nextToken(streamIds,
-                            1, conflictInfo);
+                    temp = runtime.getSequencerView().nextToken(streamIds, conflictInfo);
                 }
 
                 // We need to fix the token (to use the stream addresses- may
