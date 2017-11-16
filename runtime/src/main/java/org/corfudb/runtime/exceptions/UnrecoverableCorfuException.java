@@ -11,4 +11,8 @@ public class UnrecoverableCorfuException extends RuntimeException {
     public UnrecoverableCorfuException(String description) {
         super(description);
     }
+
+    public UnrecoverableCorfuException(Throwable innerException) {
+        super(innerException);
+    }
 }

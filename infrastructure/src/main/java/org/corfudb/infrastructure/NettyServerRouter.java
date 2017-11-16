@@ -4,8 +4,8 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 
+import java.util.EnumMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinWorkerThread;
@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 
 
 /**
@@ -86,7 +87,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     /**
      * This map stores the mapping from message type to netty server handler.
      */
-    Map<CorfuMsgType, AbstractServer> handlerMap;
+    Map<CorfuMsgType, CorfuMsgHandler.Handler> handlerMap;
 
     BaseServer baseServer;
 
@@ -102,7 +103,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      * @param opts map of options (FIXME: unused)
      */
     public NettyServerRouter(Map<String, Object> opts) {
-        handlerMap = new ConcurrentHashMap<>();
+        handlerMap = new EnumMap<>(CorfuMsgType.class);
         baseServer = new BaseServer();
         addServer(baseServer);
     }
@@ -114,9 +115,9 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      */
     public void addServer(AbstractServer server) {
         // Iterate through all types of CorfuMsgType, registering the handler
-        server.getHandler().getHandledTypes()
+        server.getMsgHandler().getHandledTypes()
                 .forEach(x -> {
-                    handlerMap.put(x, server);
+                    handlerMap.put(x, server.getMsgHandler().getHandler(x));
                     log.trace("Registered {} to handle messages of type {}", server, x);
                 });
     }
@@ -127,7 +128,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      */
     public void removeServer(AbstractServer server) {
         // Iterate through all types of CorfuMsgType, un-registering the handler
-        server.getHandler().getHandledTypes()
+        server.getMsgHandler().getHandledTypes()
                 .forEach(x -> {
                     handlerMap.remove(x, server);
                     log.trace("Un-Registered {} to handle messages of type {}", server, x);
@@ -181,7 +182,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
             // pipeline.
             CorfuMsg m = ((CorfuMsg) msg);
             // We get the handler for this message from the map
-            AbstractServer handler = handlerMap.get(m.getMsgType());
+            CorfuMsgHandler.Handler<CorfuMsg> handler = handlerMap.get(m.getMsgType());
             if (handler == null) {
                 // The message was unregistered, we are dropping it.
                 log.warn("Received unregistered message {}, dropping", m);
@@ -194,13 +195,14 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
                     }
                     handlerWorkers.submit(() -> {
                         try {
-                            handler.handleMessage(m, ctx, this);
-                        } catch (Throwable t) {
-                            log.error("channelRead: Handling {} failed due to {}:{}",
-                                    m != null ? m.getMsgType() : "UNKNOWN",
-                                    t.getClass().getSimpleName(),
-                                    t.getMessage(),
-                                    t);
+                            handler.handle(m, ctx, this);
+                        } catch (Exception ex) {
+                            // Log the exception during handling
+                            log.error("handle: Unhandled exception processing {} message",
+                                    m.getMsgType(), ex);
+                            sendResponse(ctx, m,
+                                    CorfuMsgType.ERROR_SERVER_EXCEPTION
+                                            .payloadMsg(new ExceptionMsg(ex)));
                         }
                     });
                 }
