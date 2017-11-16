@@ -27,7 +27,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     /* snapshot timestamp of the txn. */
     @Getter
     @Setter
-    Long snapshotTimestamp;
+    long snapshotTimestamp;
 
     /** A set of poisoned streams, which have a conflict against all updates. */
 

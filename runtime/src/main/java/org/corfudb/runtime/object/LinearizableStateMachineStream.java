@@ -111,8 +111,7 @@ public class LinearizableStateMachineStream implements IStateMachineStream {
      */
     @Override
     public long check() {
-        TokenResponse tr =  runtime.getSequencerView().nextToken(Collections.singleton(streamView
-                .getId()), 0);
+        TokenResponse tr =  runtime.getSequencerView().query(streamView.getId());
         return tr.getTokenValue();
     }
 
@@ -222,15 +221,19 @@ public class LinearizableStateMachineStream implements IStateMachineStream {
     public long append(@Nonnull String smrMethod,
                        @Nonnull Object[] smrArguments,
                        @Nullable Object[] conflictObjects,
-                       boolean saveEntry) {
+                       final boolean saveEntry) {
         SMREntry entry = new SMREntry(smrMethod, smrArguments, serializer);
         return streamView.append(entry, t -> {
-            entryMap.put(t.getTokenValue(), Optional.empty());
+            if (saveEntry) {
+                entryMap.put(t.getTokenValue(), Optional.empty());
+            }
             return true;
         }, t -> {
+            if (saveEntry) {
                 entryMap.remove(t.getTokenValue());
+            }
                 return true;
-            });
+         });
     }
 
     /**

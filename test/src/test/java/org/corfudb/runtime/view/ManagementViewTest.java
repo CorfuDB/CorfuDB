@@ -420,8 +420,8 @@ public class ManagementViewTest extends AbstractViewTest {
         sv.append(testPayload);
         sv.append(testPayload);
 
-        assertThat(getSequencer(SERVERS.PORT_1).getGlobalLogTail().get()).isEqualTo(beforeFailure);
-        assertThat(getSequencer(SERVERS.PORT_0).getGlobalLogTail().get()).isEqualTo(0L);
+        assertThat(getSequencer(SERVERS.PORT_1).getLogTail()).isEqualTo(beforeFailure);
+        assertThat(getSequencer(SERVERS.PORT_0).getLogTail()).isEqualTo(0L);
 
         induceSequencerFailureAndWait();
 
@@ -431,7 +431,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 0);
         // verify that a failover sequencer was started with the correct starting-tail
         //
-        assertThat(getSequencer(SERVERS.PORT_0).getGlobalLogTail().get()).isEqualTo(beforeFailure);
+        assertThat(getSequencer(SERVERS.PORT_0).getLogTail()).isEqualTo(beforeFailure);
 
         sv.append(testPayload);
         sv.append(testPayload);
@@ -461,10 +461,10 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(getCorfuRuntime().getLayoutView().getLayout()).isEqualTo(expectedLayout);
 
         // verify that the new sequencer is advancing the tail properly
-        assertThat(getSequencer(SERVERS.PORT_0).getGlobalLogTail().get()).isEqualTo(afterFailure);
+        assertThat(getSequencer(SERVERS.PORT_0).getLogTail()).isEqualTo(afterFailure);
 
         // sanity check that no other sequencer is active
-        assertThat(getSequencer(SERVERS.PORT_2).getGlobalLogTail().get()).isEqualTo(0L);
+        assertThat(getSequencer(SERVERS.PORT_2).getLogTail()).isEqualTo(0L);
 
     }
 

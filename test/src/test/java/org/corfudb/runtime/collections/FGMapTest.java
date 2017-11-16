@@ -6,6 +6,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -318,7 +319,7 @@ public class FGMapTest extends AbstractViewTest {
         });
 
         long startTime = System.currentTimeMillis();
-        executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
+        executeScheduled(num_threads, PARAMETERS.TIMEOUT_NORMAL);
         calculateRequestsPerSecond("OPS", num_records * num_threads, startTime);
     }
 }
