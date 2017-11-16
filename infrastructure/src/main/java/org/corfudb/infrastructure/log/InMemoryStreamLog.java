@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.log;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,6 +33,15 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         logCache = new ConcurrentHashMap();
         trimmed = ConcurrentHashMap.newKeySet();
         startingAddress = 0;
+    }
+
+    @Override
+    public synchronized void append(List<LogData> entries) {
+        for (LogData entry : entries) {
+            if (isTrimmed(entry.getGlobalAddress()) || logCache.containsKey(entry.getGlobalAddress())) {
+                continue;
+            }
+        }
     }
 
     @Override

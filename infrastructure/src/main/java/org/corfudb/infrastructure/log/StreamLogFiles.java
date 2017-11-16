@@ -25,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -32,11 +33,13 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nullable;
@@ -911,6 +914,51 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 new UUID(rank.getUuidMostSignificant(), rank.getUuidLeastSignificant()));
     }
 
+    private Map<Long, AddressMetaData> writeRecord(SegmentHandle fh,
+                                             List<LogData> entries) throws IOException {
+        Map<Long, AddressMetaData> recordsMap = new HashMap<>();
+
+        List<ByteBuffer> entryBuffs = new ArrayList<>();
+        int totalBytes = 0;
+
+        List<Metadata> metadataList = new ArrayList<>();
+
+        for (int ind = 0; ind < entries.size(); ind++) {
+            LogData curr = entries.get(ind);
+            LogEntry logEntry = getLogEntry(curr.getGlobalAddress(), curr);
+            Metadata metadata = getMetadata(logEntry);
+            metadataList.add(metadata);
+            ByteBuffer record = getByteBuffer(metadata, logEntry);
+            totalBytes += record.limit();
+            entryBuffs.add(record);
+        }
+
+        // Account for the delimiters
+        totalBytes += (Short.BYTES * entryBuffs.size());
+        ByteBuffer allRecordsBuf = ByteBuffer.allocate(totalBytes);
+
+        try (MultiReadWriteLock.AutoCloseableLock ignored =
+                     segmentLocks.acquireWriteLock(fh.getSegment())) {
+            for (int ind = 0; ind < entryBuffs.size(); ind++) {
+                long channelOffset = fh.logChannel.position()
+                        + allRecordsBuf.position() + Short.BYTES + METADATA_SIZE;
+                allRecordsBuf.putShort(RECORD_DELIMITER);
+                allRecordsBuf.put(entryBuffs.get(ind));
+                Metadata metadata = metadataList.get(ind);
+                recordsMap.put(entries.get(ind).getGlobalAddress(),
+                        new AddressMetaData(metadata.getChecksum(),
+                                metadata.getLength(), channelOffset));
+            }
+
+            allRecordsBuf.flip();
+            fh.logChannel.write(allRecordsBuf);
+            channelsToSync.add(fh.logChannel);
+            syncTailSegment(entries.get(entries.size() - 1).getGlobalAddress());
+        }
+
+        return recordsMap;
+    }
+
     /**
      * Write a log entry record to a file.
      *
@@ -919,7 +967,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param entry   The LogData to append.
      * @return Returns metadata for the written record
      */
-    private AddressMetaData writeRecord(SegmentHandle fh, long address,
+    private AddressMetaData writeRecords(SegmentHandle fh, long address,
                                         LogData entry) throws IOException {
         LogEntry logEntry = getLogEntry(address, entry);
         Metadata metadata = getMetadata(logEntry);
@@ -946,6 +994,65 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         return new AddressMetaData(metadata.getChecksum(), metadata.getLength(), channelOffset);
     }
 
+    long getSegment(LogData entry) {
+        return entry.getGlobalAddress() / RECORDS_PER_LOG_FILE;
+    }
+
+    @Override
+    public void append(List<LogData> entries) {
+        // ignore empty list?
+
+        // check if the entries range cross a segment
+        LogData first = entries.get(0);
+        LogData last = entries.get(entries.size() - 1);
+        SegmentHandle firstSh = getSegmentHandleForAddress(first.getGlobalAddress());
+        SegmentHandle lastSh = getSegmentHandleForAddress(last.getGlobalAddress());
+
+        long segmentDiff = lastSh.getSegment() - firstSh.getSegment();
+
+        if (segmentDiff > 1) {
+            // Range overlaps more than two segments
+            throw new RuntimeException("Write range too large!");
+        }
+
+        List<LogData> segOneEntries = new ArrayList<>();
+        List<LogData> segTwoEntries = new ArrayList<>();
+        long base = first.getGlobalAddress();
+
+        for (int ind = 0; ind < entries.size(); ind++) {
+            LogData curr = entries.get(ind);
+
+            if (!curr.getGlobalAddress().equals(base + ind)) {
+                throw new RuntimeException("Entries not in sequential order!");
+            }
+
+            if (getSegment(curr) == firstSh.getSegment() &&
+                    !firstSh.knownAddresses.containsKey(curr.getGlobalAddress())) {
+                segOneEntries.add(curr);
+            } else if (getSegment(curr) == lastSh.getSegment() &&
+                    !lastSh.knownAddresses.containsKey(curr.getGlobalAddress())) {
+                segTwoEntries.add(curr);
+            }
+        }
+
+        try {
+            Map<Long, AddressMetaData> firstSegAddresses = writeRecord(firstSh, segOneEntries);
+            firstSh.getKnownAddresses().putAll(firstSegAddresses);
+
+            if (!segTwoEntries.isEmpty()) {
+                Map<Long, AddressMetaData> lastSegAddresses = writeRecord(lastSh, segTwoEntries);
+                lastSh.getKnownAddresses().putAll(lastSegAddresses);
+            }
+        } catch (IOException e) {
+            log.error("Disk_write[{}-{}]: Exception", first.getGlobalAddress(),
+                    last.getGlobalAddress(), e);
+            throw new RuntimeException(e);
+        } finally {
+            firstSh.release();
+            lastSh.release();
+        }
+    }
+
     @Override
     public void append(long address, LogData entry) {
         if(isTrimmed(address)) {
@@ -964,11 +1071,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 } else {
                     // the method below might throw DataOutrankedException or ValueAdoptedException
                     assertAppendPermittedUnsafe(address, entry);
-                    AddressMetaData addressMetaData = writeRecord(fh, address, entry);
+                    AddressMetaData addressMetaData = writeRecords(fh, address, entry);
                     fh.getKnownAddresses().put(address, addressMetaData);
                 }
             } else {
-                AddressMetaData addressMetaData = writeRecord(fh, address, entry);
+                AddressMetaData addressMetaData = writeRecords(fh, address, entry);
                 fh.getKnownAddresses().put(address, addressMetaData);
             }
             log.trace("Disk_write[{}]: Written to disk.", address);
