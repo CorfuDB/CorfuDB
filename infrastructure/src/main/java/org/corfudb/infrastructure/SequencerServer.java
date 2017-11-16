@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -34,7 +32,6 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 import org.eclipse.collections.api.map.primitive.MutableObjectLongMap;
 import org.eclipse.collections.impl.map.mutable.primitive.ObjectLongHashMap;
@@ -49,7 +46,8 @@ import org.eclipse.collections.impl.map.mutable.primitive.ObjectLongHashMap;
  * basis. Finally, the sequencer also decides if transactions may commit, if the client provides
  * optional transaction resolution information. This information contains a set of hash codes a
  * operation conflicts with - the sequencer checks that each hash code was not modified between
- * a client provided address and the current {@logTail}. If the check passes, the sequencer issues
+ * a client provided address and the current {@code logTail}. If the check passes, the sequencer
+ * issues
  * an address allowing the transaction to commit, otherwise, the sequencer aborts the transaction
  * without issuing an address.
  *
@@ -142,12 +140,8 @@ public class SequencerServer extends AbstractServer {
      * Handler for this server.
      */
     @Getter
-    private CorfuMsgHandler handler = new CorfuMsgHandler()
-            .generateHandlers(MethodHandles.lookup(), this);
-
-    private static final String metricsPrefix = "corfu.server.sequencer.";
-    private static Counter counterTokenSum;
-    private static Counter counterToken0;
+    private final CorfuMsgHandler msgHandler = CorfuMsgHandler
+            .generateHandler(MethodHandles.lookup(), this);
 
 
     @Getter
@@ -180,10 +174,6 @@ public class SequencerServer extends AbstractServer {
             logTail = initialToken;
         }
 
-        MetricRegistry metrics = serverContext.getMetrics();
-        counterTokenSum = metrics.counter(metricsPrefix + "token-sum");
-        counterToken0 = metrics.counter(metricsPrefix + "token-query");
-
         long cacheSize = 250_000;
         if (opts.get("--sequencer-cache-size") != null) {
             cacheSize = Long.parseLong((String) opts.get("--sequencer-cache-size"));
@@ -194,7 +184,8 @@ public class SequencerServer extends AbstractServer {
                 .maximumSize(cacheSize)
                 .removalListener((ConflictObject k, Long v, RemovalCause cause) -> {
                     if (!RemovalCause.REPLACED.equals(cause)) {
-                        log.trace("Updating maxConflictWildcard. Old value = '{}', new value='{}'"
+                        log.trace("ctor: Updating maxConflictWildcard. Old value" +
+                                        " = '{}', new value='{}'"
                                         + " conflictParam = '{}'. Removal cause = '{}'",
                                 maxConflictWildcard, v, k, cause);
                         maxConflictWildcard = Math.max(v, maxConflictWildcard);
@@ -210,13 +201,11 @@ public class SequencerServer extends AbstractServer {
      * @param msg                   The trim request message.
      * @param ctx                   The incoming channel handler context.
      * @param r                     The server router handling the request.
-     * @param isMetricsEnabled      Whether metrics are enabled or not.
      */
-    @ServerHandler(type = CorfuMsgType.SEQUENCER_TRIM_REQ, opTimer = metricsPrefix + "trimCache")
+    @ServerHandler(type = CorfuMsgType.SEQUENCER_TRIM_REQ)
     public void trimCache(@Nonnull CorfuPayloadMsg<Long> msg,
                           @Nonnull ChannelHandlerContext ctx,
-                          IServerRouter r,
-                          boolean isMetricsEnabled) {
+                          IServerRouter r) {
         long ts = 0;
         try {
             ts = lock.writeLock();
@@ -247,12 +236,10 @@ public class SequencerServer extends AbstractServer {
      * @param msg                   The bootstrap message.
      * @param ctx                   The incoming channel handler context.
      * @param r                     The server router handling the request.
-     * @param isMetricsEnabled      Whether metrics are enabled or not.
      */
-    @ServerHandler(type = CorfuMsgType.BOOTSTRAP_SEQUENCER, opTimer = metricsPrefix + "bootstrap")
+    @ServerHandler(type = CorfuMsgType.BOOTSTRAP_SEQUENCER)
     public void bootstrapServer(CorfuPayloadMsg<SequencerTailsRecoveryMsg> msg,
-                            ChannelHandlerContext ctx, IServerRouter r,
-                            boolean isMetricsEnabled) {
+                            ChannelHandlerContext ctx, IServerRouter r) {
         long ts = lock.writeLock();
         try {
             long initialToken = msg.getPayload().getGlobalTail();
@@ -261,7 +248,7 @@ public class SequencerServer extends AbstractServer {
 
             // Stale bootstrap request should be discarded.
             if (readyStateEpoch > readyEpoch) {
-                log.info("Sequencer already bootstrapped at epoch {}. "
+                log.info("bootstrapServer: Sequencer already bootstrapped at epoch {}. "
                         + "Discarding bootstrap request with epoch {}", readyStateEpoch,
                         readyEpoch);
                 r.sendResponse(ctx, msg, CorfuMsgType.NACK.msg());
@@ -295,7 +282,7 @@ public class SequencerServer extends AbstractServer {
             // Mark the sequencer as ready after the tails have been populated.
             readyStateEpoch = readyEpoch;
 
-            log.info("Sequencer reset with token = {}, streamTailMap = {},"
+            log.info("bootstrapServer: Sequencer reset with token = {}, streamTailMap = {},"
                             + " readyStateEpoch = {}",
                     initialToken, streamTailMap, readyStateEpoch);
         } finally {
@@ -311,21 +298,12 @@ public class SequencerServer extends AbstractServer {
      * @param msg                   The token request message.
      * @param ctx                   The incoming channel handler context.
      * @param r                     The server router handling the request.
-     * @param isMetricsEnabled      Whether metrics are enabled or not.
      */
-    @ServerHandler(type = CorfuMsgType.TOKEN_REQ, opTimer = metricsPrefix + "token-req")
+    @ServerHandler(type = CorfuMsgType.TOKEN_REQ)
     public void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
-                             ChannelHandlerContext ctx, IServerRouter r,
-                             boolean isMetricsEnabled) {
+                             ChannelHandlerContext ctx, IServerRouter r) {
         final TokenRequest req = msg.getPayload();
         final long serverEpoch = r.getServerEpoch();
-
-        // metrics collection
-        if (req.getReqType() == TokenRequest.TK_QUERY) {
-            MetricsUtils.incConditionalCounter(isMetricsEnabled, counterToken0, 1);
-        } else {
-            MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTokenSum, 1);
-        }
 
         CorfuMsg response;
         // dispatch request handler according to request type
@@ -353,17 +331,6 @@ public class SequencerServer extends AbstractServer {
         }
 
         r.sendResponse(ctx, msg, response);
-    }
-
-    /**
-    * Get the conflict hash code for a stream ID and conflict param.
-    *
-    * @param streamId      The stream ID.
-    * @param conflictParam The conflict parameter.
-    * @return A conflict hash code.
-    */
-    private String getConflictHashCode(UUID streamId, byte[] conflictParam) {
-        return streamId.toString() + Utils.bytesToHex(conflictParam);
     }
 
     /**
@@ -457,7 +424,7 @@ public class SequencerServer extends AbstractServer {
 
         // If the tx has no snapshot (conflict-free) then issue the tokens.
         if (txSnapshotTimestamp == Address.NO_SNAPSHOT) {
-            log.debug("handleTxToken[{}]: Conflict-free TX");
+            log.debug("handleTxToken: Conflict-free TX");
             long ts = lock.writeLock();
             try {
                 return handleAllocationUnsafe(request, txInfo, serverEpoch);
@@ -467,7 +434,7 @@ public class SequencerServer extends AbstractServer {
         }
 
         if (txSnapshotTimestamp < trimMark) {
-            log.debug("ABORT[{}] snapshot-ts[{}] trimMark-ts[{}]", txInfo,
+            log.debug("handleTxToken: ABORT[{}] snapshot-ts[{}] trimMark-ts[{}]", txInfo,
                     txSnapshotTimestamp, trimMark);
             return CorfuMsgType.TOKEN_RES.payloadMsg(
                     new TokenResponse(TokenType.TX_ABORT_SEQ_TRIM, trimMark, serverEpoch));

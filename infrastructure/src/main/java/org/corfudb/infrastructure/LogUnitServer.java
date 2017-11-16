@@ -85,8 +85,8 @@ public class LogUnitServer extends AbstractServer {
      * Handler for the base server.
      */
     @Getter
-    private CorfuMsgHandler handler = new CorfuMsgHandler()
-            .generateHandlers(MethodHandles.lookup(), this);
+    private final CorfuMsgHandler msgHandler = CorfuMsgHandler
+            .generateHandler(MethodHandles.lookup(), this);
 
     /**
      * This cache services requests for data at various addresses. In a memory implementation,
@@ -99,8 +99,6 @@ public class LogUnitServer extends AbstractServer {
     private final StreamLog streamLog;
 
     private final BatchWriter<Long, ILogData> batchWriter;
-
-    private static final String metricsPrefix = "corfu.server.logunit.";
 
     /**
      * Returns a new LogUnitServer.
@@ -144,26 +142,24 @@ public class LogUnitServer extends AbstractServer {
     /**
      * Service an incoming request for maximum global address the log unit server has written.
      */
-    @ServerHandler(type = CorfuMsgType.TAIL_REQUEST, opTimer = metricsPrefix + "tailReq")
-    public void handleTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r,
-                                  boolean isMetricsEnabled) {
+    @ServerHandler(type = CorfuMsgType.TAIL_REQUEST)
+    public void handleTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(streamLog.getGlobalTail()));
     }
 
     /**
      * Service an incoming request to retrieve the starting address of this logging unit.
      */
-    @ServerHandler(type = CorfuMsgType.TRIM_MARK_REQUEST, opTimer = metricsPrefix + "headReq")
-    public void handleHeadRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+    @ServerHandler(type = CorfuMsgType.TRIM_MARK_REQUEST)
+    public void handleHeadRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(streamLog.getTrimMark()));
     }
 
     /**
      * Service an incoming write request.
      */
-    @ServerHandler(type = CorfuMsgType.WRITE, opTimer = metricsPrefix + "write")
-    public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
-                      boolean isMetricsEnabled) {
+    @ServerHandler(type = CorfuMsgType.WRITE)
+    public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("log write: global: {}, streams: {}, backpointers: {}", msg
                 .getPayload().getGlobalAddress(), msg.getPayload().getData().getBackpointerMap());
 
@@ -181,9 +177,8 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.READ_REQUEST, opTimer = metricsPrefix + "read")
-    private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
-                      boolean isMetricsEnabled) {
+    @ServerHandler(type = CorfuMsgType.READ_REQUEST)
+    private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("read: {}", msg.getPayload().getRange());
         ReadResponse rr = new ReadResponse();
         try {
@@ -202,9 +197,8 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.MULTIPLE_READ_REQUEST, opTimer = metricsPrefix + "multiRead")
-    private void multiRead(CorfuPayloadMsg<MultipleReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
-                           boolean isMetricsEnabled) {
+    @ServerHandler(type = CorfuMsgType.MULTIPLE_READ_REQUEST)
+    private void multiRead(CorfuPayloadMsg<MultipleReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("multiRead: {}", msg.getPayload().getAddresses());
 
         ReadResponse rr = new ReadResponse();
@@ -223,10 +217,9 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.FILL_HOLE, opTimer = metricsPrefix + "fill-hole")
+    @ServerHandler(type = CorfuMsgType.FILL_HOLE)
     private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
-                          IServerRouter r,
-                          boolean isMetricsEnabled) {
+                          IServerRouter r) {
         try {
             dataCache.put(msg.getPayload().getAddress(), LogData.HOLE);
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
@@ -242,9 +235,8 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.TRIM, opTimer = metricsPrefix + "fill-hole")
-    private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r,
-                      boolean isMetricsEnabled) {
+    @ServerHandler(type = CorfuMsgType.TRIM)
+    private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         batchWriter.trim(msg.getPayload().getAddress());
         //TODO(Maithem): should we return an error if the write fails
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
@@ -252,8 +244,7 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.PREFIX_TRIM)
     private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
-                            IServerRouter r,
-                            boolean isMetricsEnabled) {
+                            IServerRouter r) {
         try {
             batchWriter.prefixTrim(msg.getPayload().getAddress());
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
@@ -262,9 +253,8 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.COMPACT_REQUEST, opTimer = metricsPrefix + "compact")
-    private void compact(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean
-            isMetricsEnabled) {
+    @ServerHandler(type = CorfuMsgType.COMPACT_REQUEST)
+    private void compact(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         try {
             streamLog.compact();
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
@@ -275,9 +265,8 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.FLUSH_CACHE, opTimer = metricsPrefix + "flush-cache")
-    private void flushCache(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r, boolean
-            isMetricsEnabled) {
+    @ServerHandler(type = CorfuMsgType.FLUSH_CACHE)
+    private void flushCache(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         try {
             dataCache.invalidateAll();
         } catch (RuntimeException e) {

@@ -239,15 +239,19 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         testServerMap.entrySet().parallelStream()
                 .forEach(e -> {
                     e.getValue().layoutServer
-                            .handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(l)),
+                            .getMsgHandler().getHandler(CorfuMsgType.LAYOUT_BOOTSTRAP)
+                            .handle(CorfuMsgType.LAYOUT_BOOTSTRAP
+                                            .payloadMsg(new LayoutBootstrapRequest(l)),
                                     null, e.getValue().serverRouter);
-                    e.getValue().managementServer
-                            .handleMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(l),
+                    e.getValue().managementServer.getMsgHandler()
+                            .getHandler(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST)
+                            .handle(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(l),
                                     null, e.getValue().serverRouter);
                 });
         TestServer primarySequencerNode = testServerMap.get(l.getSequencers().get(0));
-        primarySequencerNode.sequencerServer
-                .handleMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerTailsRecoveryMsg(0L,
+        primarySequencerNode.sequencerServer.getMsgHandler()
+                .getHandler(CorfuMsgType.BOOTSTRAP_SEQUENCER)
+                .handle(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerTailsRecoveryMsg(0L,
                         Collections.EMPTY_MAP, l.getEpoch())), null, primarySequencerNode.serverRouter);
     }
 

@@ -3,19 +3,20 @@ package org.corfudb.infrastructure;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
+import java.util.EnumMap;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.runtime.clients.TestChannelContext;
 import org.corfudb.runtime.clients.TestRule;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -28,7 +29,7 @@ public class TestServerRouter implements IServerRouter {
     public List<CorfuMsg> responseMessages;
 
     @Getter
-    public Map<CorfuMsgType, AbstractServer> handlerMap;
+    public Map<CorfuMsgType, CorfuMsgHandler.Handler> handlerMap;
 
     public List<TestRule> rules;
 
@@ -53,7 +54,7 @@ public class TestServerRouter implements IServerRouter {
     public void reset() {
         this.responseMessages = new ArrayList<>();
         this.requestCounter = new AtomicLong();
-        this.handlerMap = new ConcurrentHashMap<>();
+        this.handlerMap = new EnumMap<>(CorfuMsgType.class);
         this.rules = new ArrayList<>();
     }
 
@@ -79,9 +80,9 @@ public class TestServerRouter implements IServerRouter {
      */
     @Override
     public void addServer(AbstractServer server) {
-        server.getHandler()
+        server.getMsgHandler()
                 .getHandledTypes().forEach(x -> {
-            handlerMap.put(x, server);
+            handlerMap.put(x, server.getMsgHandler().getHandler(x));
             log.trace("Registered {} to handle messages of type {}", server, x);
         });
     }
@@ -108,10 +109,19 @@ public class TestServerRouter implements IServerRouter {
     }
 
     public void sendServerMessage(CorfuMsg msg) {
-        AbstractServer as = handlerMap.get(msg.getMsgType());
+        CorfuMsgHandler.Handler h = handlerMap.get(msg.getMsgType());
         if (validateEpoch(msg, null)) {
-            if (as != null) {
-                as.handleMessage(msg, null, this);
+            if (h != null) {
+                try {
+                    h.handle(msg, null, this);
+                } catch (Exception ex) {
+                    // Log the exception during handling
+                    log.error("handle: Unhandled exception processing {} message",
+                            msg.getMsgType(), ex);
+                    sendResponse(null, msg,
+                            CorfuMsgType.ERROR_SERVER_EXCEPTION
+                                    .payloadMsg(new ExceptionMsg(ex)));
+                }
             } else {
                 log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
             }
@@ -121,10 +131,19 @@ public class TestServerRouter implements IServerRouter {
     }
 
     public void sendServerMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
-        AbstractServer as = handlerMap.get(msg.getMsgType());
+        CorfuMsgHandler.Handler h = handlerMap.get(msg.getMsgType());
         if (validateEpoch(msg, ctx)) {
-            if (as != null) {
-                as.handleMessage(msg, ctx, this);
+            if (h != null) {
+                try {
+                    h.handle(msg, ctx, this);
+                } catch (Exception ex) {
+                    // Log the exception during handling
+                    log.error("handle: Unhandled exception processing {} message",
+                            msg.getMsgType(), ex);
+                    sendResponse(ctx, msg,
+                            CorfuMsgType.ERROR_SERVER_EXCEPTION
+                                    .payloadMsg(new ExceptionMsg(ex)));
+                }
             }
             else {
                 log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
