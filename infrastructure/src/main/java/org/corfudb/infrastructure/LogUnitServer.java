@@ -191,7 +191,7 @@ public class LogUnitServer extends AbstractServer {
                     l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
                 ILogData e = dataCache.get(l);
                 if (e == null) {
-                    rr.put(l, LogData.EMPTY);
+                    rr.put(l, LogData.getEmpty(l));
                 } else {
                     rr.put(l, (LogData) e);
                 }
@@ -212,7 +212,7 @@ public class LogUnitServer extends AbstractServer {
             for (Long l : msg.getPayload().getAddresses()) {
                 ILogData e = dataCache.get(l);
                 if (e == null) {
-                    rr.put(l, LogData.EMPTY);
+                    rr.put(l, LogData.getEmpty(l));
                 } else {
                     rr.put(l, (LogData) e);
                 }
@@ -228,7 +228,8 @@ public class LogUnitServer extends AbstractServer {
                           IServerRouter r,
                           boolean isMetricsEnabled) {
         try {
-            dataCache.put(msg.getPayload().getAddress(), LogData.HOLE);
+            long address = msg.getPayload().getAddress();
+            dataCache.put(address, LogData.getHole(address));
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
 
         } catch (OverwriteException e) {

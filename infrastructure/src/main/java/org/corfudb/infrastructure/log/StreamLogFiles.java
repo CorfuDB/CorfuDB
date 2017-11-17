@@ -983,13 +983,13 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public LogData read(long address) {
         if (isTrimmed(address)) {
-            return LogData.TRIMMED;
+            return LogData.getTrimmed(address);
         }
         SegmentHandle sh = getSegmentHandleForAddress(address);
 
         try {
             if (sh.getPendingTrims().contains(address)) {
-                return LogData.TRIMMED;
+                return LogData.getTrimmed(address);
             }
             return readRecord(sh, address);
         } catch (IOException e) {
