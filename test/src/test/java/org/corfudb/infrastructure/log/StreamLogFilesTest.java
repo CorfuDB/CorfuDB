@@ -10,8 +10,10 @@ import io.netty.buffer.ByteBuf;
 import java.io.File;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import io.netty.buffer.Unpooled;
@@ -66,6 +68,39 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         })
                 .isInstanceOf(OverwriteException.class);
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+    }
+
+    @Test
+    public void testBatchWrite() throws Exception {
+        StreamLog log = new StreamLogFiles(getContext(), false);
+
+        List<LogData> writeEntries = new ArrayList<>();
+        for (int x = 0; x < 2000; x++) {
+            ByteBuf b = Unpooled.buffer();
+            byte[] streamEntry = new byte[4000];
+            Serializers.CORFU.serialize(streamEntry, b);
+            LogData l = new LogData(DataType.DATA, b);
+            l.setGlobalAddress((long) x);
+            writeEntries.add(l);
+        }
+
+        log.append(writeEntries);
+        log.sync(true);
+
+        List<LogData> readEntries = new ArrayList<>();
+        for (int x = 0; x < 2000; x++) {
+            readEntries.add(log.read((long) x));
+        }
+
+        assertThat(writeEntries).hasSameSizeAs(readEntries);
+
+        for (int x = 0; x < 2000; x++) {
+            LogData e1 = writeEntries.get(x);
+            LogData e2 = readEntries.get(x);
+
+            assertThat(e1.getGlobalAddress()).isEqualTo(e2.getGlobalAddress());
+            assertThat(e1.getData()).isEqualTo(e2.getData());
+        }
     }
 
     @Test

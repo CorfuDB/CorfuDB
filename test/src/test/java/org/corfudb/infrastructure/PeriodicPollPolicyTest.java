@@ -1,5 +1,8 @@
 package org.corfudb.infrastructure;
 
+import org.corfudb.infrastructure.management.IFailureDetectorPolicy;
+import org.corfudb.infrastructure.management.PeriodicPollPolicy;
+import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.view.AbstractViewTest;

@@ -51,6 +51,7 @@ public class Layout implements Cloneable {
     /**
      * A Gson parser.
      */
+    @Getter
     static final Gson parser = new GsonBuilder()
             .registerTypeAdapter(Layout.class, new LayoutDeserializer())
             .create();
@@ -123,6 +124,10 @@ public class Layout implements Cloneable {
     public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments,
                   long epoch) {
         this(layoutServers, sequencers, segments, new ArrayList<String>(), epoch);
+    }
+
+    public boolean containsEndpoint(String address) {
+        return layoutServers.contains(address) || sequencers.contains(address);
     }
 
     /**

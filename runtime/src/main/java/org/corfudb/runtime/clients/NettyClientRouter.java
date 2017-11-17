@@ -242,7 +242,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         clientID = UUID.randomUUID();
         connected = false;
         timeoutConnect = 500;
-        timeoutResponse = 5000;
+        timeoutResponse = 5000* 10;
         timeoutRetry = 1000;
 
         handlerMap = new ConcurrentHashMap<>();

@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.format.Types.NodeMetrics;
 import org.corfudb.infrastructure.*;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.junit.After;
 import org.junit.Test;
 
@@ -20,8 +21,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class ManagementClientTest extends AbstractClientTest {
 
-    ManagementClient client;
-    ManagementServer server;
+    private ManagementClient client;
+    private ManagementServer server;
 
     @Override
     Set<AbstractServer> getServersForTest() {
@@ -30,6 +31,7 @@ public class ManagementClientTest extends AbstractClientTest {
                 .setMemory(true)
                 .setSingle(true)
                 .setServerRouter(serverRouter)
+                .setPort(SERVERS.PORT_0)
                 .build();
         server = new ManagementServer(serverContext);
         return new ImmutableSet.Builder<AbstractServer>()
@@ -38,6 +40,8 @@ public class ManagementClientTest extends AbstractClientTest {
                 .add(new LayoutServer(serverContext))
                 // Required for management server to be able to bootstrap the sequencer.
                 .add(new SequencerServer(serverContext))
+                .add(new LogUnitServer(serverContext))
+                .add(new BaseServer())
                 .build();
     }
 
@@ -70,6 +74,12 @@ public class ManagementClientTest extends AbstractClientTest {
         assertThatThrownBy(() ->
                 client.bootstrapManagement(TestLayoutBuilder.single(SERVERS.PORT_0)).get())
                 .isInstanceOf(ExecutionException.class);
+    }
+
+    @Test
+    public void addNodeWorkflowRPCTest() throws Exception {
+            assertThat(client.addNodeRequest("localhost:9000").get())
+                    .isInstanceOf(OrchestratorResponse.class);
     }
 
     /**

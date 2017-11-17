@@ -5,7 +5,10 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -19,14 +22,26 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.format.Types.NodeMetrics;
+import org.corfudb.infrastructure.orchestrator.Orchestrator;
+import org.corfudb.infrastructure.management.FailureHandlerDispatcher;
+import org.corfudb.infrastructure.management.IFailureDetectorPolicy;
+import org.corfudb.infrastructure.management.PollReport;
+
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequest;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.view.IFailureHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.QuorumFuturesFactory;
+
+import javax.annotation.Nonnull;
 
 /**
  * Instantiates and performs failure detection and handling asynchronously.
@@ -99,8 +114,11 @@ public class ManagementServer extends AbstractServer {
     @Getter
     private volatile CompletableFuture<Boolean> sequencerBootstrappedFuture;
 
+    private final Orchestrator orchestrator;
+
     /**
      * Returns new ManagementServer.
+     *
      * @param serverContext context object providing parameters and objects
      */
     public ManagementServer(ServerContext serverContext) {
@@ -160,6 +178,8 @@ public class ManagementServer extends AbstractServer {
         } catch (RejectedExecutionException err) {
             log.error("Error scheduling failure detection task, {}", err);
         }
+
+        orchestrator = new Orchestrator(this::getCorfuRuntime);
     }
 
     private void bootstrapPrimarySequencerServer() {
@@ -242,10 +262,26 @@ public class ManagementServer extends AbstractServer {
     boolean checkBootstrap(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (latestLayout == null && bootstrapEndpoint == null) {
             log.warn("Received message but not bootstrapped! Message={}", msg);
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR));
             return false;
         }
         return true;
+    }
+
+    /**
+     * Forward an orchestrator request to the orchestrator service.
+     *
+     * @param msg corfu message containing ORCHESTRATOR_REQUEST
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
+     */
+    @ServerHandler(type = CorfuMsgType.ORCHESTRATOR_REQUEST, opTimer = metricsPrefix
+            + "orchestrator-request")
+    public synchronized void handleOrchestratorMsg(@Nonnull CorfuPayloadMsg<OrchestratorRequest> msg,
+                                                   @Nonnull ChannelHandlerContext ctx,
+                                                   @Nonnull IServerRouter r,
+                                                   boolean isMetricsEnabled) {
+        log.debug("Received an orchestrator message {}", msg);
+        orchestrator.handle(msg, ctx, r);
     }
 
     /**
@@ -285,13 +321,10 @@ public class ManagementServer extends AbstractServer {
     public synchronized void initiateFailureHandler(CorfuMsg msg, ChannelHandlerContext ctx,
                                                     IServerRouter r,
                                                     boolean isMetricsEnabled) {
-        if (isShutdown()) {
-            log.warn("Management Server received {} but is shutdown.", msg.getMsgType().toString());
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
-            return;
-        }
+
         // This server has not been bootstrapped yet, ignore all requests.
         if (!checkBootstrap(msg, ctx, r)) {
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR));
             return;
         }
 
@@ -317,21 +350,25 @@ public class ManagementServer extends AbstractServer {
     public synchronized void handleFailureDetectedMsg(CorfuPayloadMsg<FailureDetectorMsg> msg,
                                                       ChannelHandlerContext ctx, IServerRouter r,
                                                       boolean isMetricsEnabled) {
-        if (isShutdown()) {
-            log.warn("Management Server received {} but is shutdown.", msg.getMsgType().toString());
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
-            return;
-        }
+
         // This server has not been bootstrapped yet, ignore all requests.
         if (!checkBootstrap(msg, ctx, r)) {
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR));
             return;
         }
 
         log.info("Received Failures : {}", msg.getPayload().getNodes());
         try {
-            failureHandlerDispatcher.dispatchHandler(failureHandlerPolicy, (Layout) latestLayout
-                    .clone(), getCorfuRuntime(), msg.getPayload().getNodes());
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+            boolean result = failureHandlerDispatcher.dispatchHandler(
+                    failureHandlerPolicy,
+                    (Layout) latestLayout.clone(),
+                    getCorfuRuntime(),
+                    msg.getPayload().getNodes());
+            if (result) {
+                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+            } else {
+                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
+            }
         } catch (CloneNotSupportedException e) {
             log.error("Failure Handler could not clone layout: {}", e);
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
@@ -477,6 +514,17 @@ public class ManagementServer extends AbstractServer {
             return;
         }
 
+        // If node has been removed. Then it should not attempt to change layout.
+        if (!latestLayout.getAllServers().contains(getLocalEndpoint()) ||
+                latestLayout.getUnresponsiveServers().contains(getLocalEndpoint())) {
+            log.warn("This Server is not a part of the active layout. Aborting failure handling.");
+            return;
+        }
+
+        // Corrects out of phase epoch issues if present in the report. This method performs
+        // re-sealing of all nodes if required and catchup of a layout server to the current state.
+        correctOutOfPhaseEpochs(pollReport);
+
         final ManagementClient localManagementClient = corfuRuntime.getRouter(getLocalEndpoint())
                 .getClient(ManagementClient.class);
 
@@ -499,30 +547,164 @@ public class ManagementServer extends AbstractServer {
                 // Failures detected - unresponsive servers.
                 // We check if these servers are the same set of servers which are marked as
                 // unresponsive in the layout. If yes take no action. Else trigger handler.
-                log.info("Failures detected. Failed nodes : {}", pollReport.toString());
                 // Check if this failure has already been recognized.
                 //TODO: Does not handle the un-marking case where markedSet is a superset of
                 // pollFailures.
                 for (String failedServer : pollReport.getFailingNodes()) {
                     if (!latestLayout.getUnresponsiveServers().contains(failedServer)) {
+                        log.info("Failures detected. Failed nodes : {}", pollReport.toString());
                         localManagementClient.handleFailure(pollReport.getFailingNodes()).get();
                         return;
                     }
                 }
                 log.debug("Failure already taken care of.");
 
-            } else {
+            } else if (!pollReport.getFailingNodes().isEmpty()) {
                 // CASE 3:
-                // Failures detected but not marked in the layout or
-                // some servers have been partially sealed to new epoch or stuck on
-                // the previous epoch.
+                // Failures detected but not marked in the layout
+                log.info("Failures detected. Failed nodes : {}", pollReport.toString());
                 localManagementClient.handleFailure(pollReport.getFailingNodes()).get();
-                // TODO: Only re-sealing needed if server stuck on a previous epoch.
+
+            } else if (pollReport.getFailingNodes().isEmpty()
+                    && (pollReport.getOutOfPhaseEpochNodes().keySet()
+                    .containsAll(latestLayout.getLayoutServers()))) {
+                // CASE 4:
+                // All Layout servers have been sealed but there is no client to take this forward
+                // and fill the slot by proposing a new layout.
+                // In this case we pass an empty set to propose the same layout again and fill the
+                // layout slot to un-block the data plane operations.
+                log.info("Layout servers sealed but no layout proposed. "
+                        + "Filling slot with same layout and incremented epoch: {}", latestLayout);
+                localManagementClient.handleFailure(pollReport.getFailingNodes()).get();
             }
 
         } catch (Exception e) {
             log.error("Exception invoking failure handler : {}", e);
         }
+    }
+
+    /**
+     * Corrects out of phase epochs by resealing the servers.
+     * This would also need to update trailing layout servers.
+     *
+     * @param pollReport Poll Report from running the failure detection policy.
+     */
+    private void correctOutOfPhaseEpochs(PollReport pollReport) {
+        final Map<String, Long> outOfPhaseEpochNodes = pollReport.getOutOfPhaseEpochNodes();
+        if (outOfPhaseEpochNodes.isEmpty()) {
+            return;
+        }
+
+        try {
+            // Query all layout servers to get quorum Layout.
+            Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap = new HashMap<>();
+            for (String layoutServer : latestLayout.getLayoutServers()) {
+                layoutCompletableFutureMap.put(
+                        layoutServer, getCorfuRuntime().getRouter(layoutServer)
+                                .getClient(LayoutClient.class).getLayout());
+            }
+
+            // Retrieve the correct layout from quorum of members to reseal servers.
+            // If we are unable to reach a consensus from a quorum we get an exception and abort the
+            // epoch correction phase.
+            safeUpdateLayout(fetchQuorumLayout(layoutCompletableFutureMap.values()
+                    .toArray(new CompletableFuture[layoutCompletableFutureMap.size()])
+            ));
+
+            // We clone the layout to not pollute the original latestLayout.
+            Layout sealLayout = (Layout) latestLayout.clone();
+            sealLayout.setRuntime(getCorfuRuntime());
+
+            // In case of a partial seal, a set of servers can be sealed with a higher epoch.
+            // We should be able to detect this and bring the rest of the servers to this epoch.
+            long maxOutOfPhaseEpoch = Collections.max(outOfPhaseEpochNodes.values());
+            if (maxOutOfPhaseEpoch > latestLayout.getEpoch()) {
+                sealLayout.setEpoch(maxOutOfPhaseEpoch);
+            }
+
+            // Re-seal all servers with the latestLayout epoch.
+            // This has no effect on up-to-date servers. Only the trailing servers are caught up.
+            sealLayout.moveServersToEpoch();
+
+            // Check if any layout server has a stale layout.
+            // If yes patch it (commit) with the latestLayout (received from quorum).
+            updateTrailingLayoutServers(layoutCompletableFutureMap);
+
+        } catch (CloneNotSupportedException | QuorumUnreachableException e) {
+            log.error("Error in correcting server epochs: {}", e);
+        }
+    }
+
+    /**
+     * Fetches the updated layout from quorum of layout servers.
+     *
+     * @return quorum agreed layout.
+     * @throws QuorumUnreachableException If unable to receive consensus on layout.
+     */
+    private Layout fetchQuorumLayout(CompletableFuture<Layout>[] completableFutures)
+            throws QuorumUnreachableException {
+
+        QuorumFuturesFactory.CompositeFuture<Layout> quorumFuture = QuorumFuturesFactory
+                .getQuorumFuture(
+                        Comparator.comparing(Layout::asJSONString),
+                        completableFutures);
+        try {
+            return quorumFuture.get();
+        } catch (ExecutionException | InterruptedException e) {
+            if (e.getCause() instanceof QuorumUnreachableException) {
+                throw (QuorumUnreachableException) e.getCause();
+            }
+
+            int reachableServers = (int) Arrays.stream(completableFutures)
+                    .filter(booleanCompletableFuture -> !booleanCompletableFuture
+                            .isCompletedExceptionally()).count();
+            throw new QuorumUnreachableException(reachableServers, completableFutures.length);
+        }
+    }
+
+    /**
+     * Finds all trailing layout servers and patches them with the latestLayout
+     * retrieved by quorum.
+     *
+     * @throws QuorumUnreachableException
+     */
+    private void updateTrailingLayoutServers(Map<String,
+            CompletableFuture<Layout>> layoutCompletableFutureMap)
+            throws QuorumUnreachableException {
+
+        // Patch trailing layout servers with latestLayout.
+        layoutCompletableFutureMap.keySet().forEach(layoutServer -> {
+            Layout layout = null;
+            try {
+                layout = layoutCompletableFutureMap.get(layoutServer).get();
+            } catch (InterruptedException | ExecutionException e) {
+                // Expected wrong epoch exception if layout server fell behind and has stale
+                // layout and server epoch.
+                log.warn("updateTrailingLayoutServers: layout fetch failed: {}", e);
+            }
+
+            // Do nothing if this layout server is updated with the latestLayout.
+            if (layout != null && layout.equals(latestLayout)) {
+                return;
+            }
+            try {
+                // Committing this layout directly to the trailing layout servers.
+                // This is safe because this layout is acquired by a quorum fetch which confirms
+                // that there was a consensus on this layout and has been committed to a quorum.
+                boolean result = getCorfuRuntime().getRouter(layoutServer)
+                        .getClient(LayoutClient.class)
+                        .committed(latestLayout.getEpoch(), latestLayout).get();
+                if (result) {
+                    log.debug("Layout Server: {} successfully patched with latest layout : {}",
+                            layoutServer, latestLayout);
+                } else {
+                    log.debug("Layout Server: {} patch with latest layout failed : {}",
+                            layoutServer, latestLayout);
+                }
+            } catch (InterruptedException | ExecutionException e) {
+                log.error("Updating layout servers failed due to : {}", e);
+            }
+        });
     }
 
     /**

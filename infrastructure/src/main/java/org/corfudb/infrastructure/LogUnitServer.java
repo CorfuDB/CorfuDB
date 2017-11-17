@@ -10,6 +10,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -28,6 +29,7 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
+import org.corfudb.protocols.wireprotocol.RawDataMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
@@ -286,6 +288,17 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
+    /**
+     * Handles requests for replicating
+     */
+    @ServerHandler(type = CorfuMsgType.RAW_DATA_REPLICATE, opTimer = metricsPrefix + "replicate")
+    private void replicateRawData(CorfuPayloadMsg<RawDataMsg> msg,
+                                  ChannelHandlerContext ctx, IServerRouter r,
+                                  boolean isMetricsEnabled) {
+        List<LogData> entries = msg.getPayload().getEntries();
+        batchWriter.bulkWrite(entries);
+        r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
+    }
 
     /**
      * Retrieve the LogUnitEntry from disk, given an address.

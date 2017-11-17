@@ -1,10 +1,15 @@
 package org.corfudb.integration;
 
+import org.HdrHistogram.Histogram;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
+import org.junit.Test;
 
+import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
@@ -14,55 +19,39 @@ import static org.assertj.core.api.Assertions.assertThat;
  * A set integration tests that exercise the stream API.
  */
 
-public class StreamIT extends AbstractIT {
-    static String corfuSingleNodeHost;
-    static int corfuSingleNodePort;
+public class StreamIT  {
 
-    @Before
-    public void loadProperties() throws Exception {
-        corfuSingleNodeHost = (String) PROPERTIES.get("corfuSingleNodeHost");
-        corfuSingleNodePort = Integer.parseInt((String) PROPERTIES.get("corfuSingleNodePort"));
-    }
+    static final long a = 3600000000000L;
+    static final int b = 3;
+    static final double c = 1.0;
+    static Histogram histogram = new Histogram(a, b);
 
-//    @Test
+    @Test
     public void simpleStreamTest() throws Exception {
 
-        Process corfuServerProcess = new CorfuServerRunner()
-                .setHost(corfuSingleNodeHost)
-                .setPort(corfuSingleNodePort)
-                .runServer();
+        CorfuRuntime rt = new CorfuRuntime("localhost:9000").connect();
 
-        CorfuRuntime rt = createDefaultRuntime();
-        rt.setCacheDisabled(true);
+/*
+        ManagementClient managementClient = rt.getRouter("localhost:9000").getClient(ManagementClient.class);
 
-        Random rand = new Random();
+        managementClient.addNodeRequest("localhost:9003").get();
 
-        UUID streamId = CorfuRuntime.getStreamID(Integer.toString(rand.nextInt()));
+        System.out.println("Done");
 
-        IStreamView s1 = rt.getStreamsView().get(streamId);
+*/
+        //Map<String, String> map = rt.getObjectsView().build().setType(SMRMap.class).setStreamName("map2").open();
 
-        // Verify that the stream is empty
-        assertThat(s1.hasNext())
-                .isFalse();
-
-        // Generate and append random data
-        int entrySize = Integer.valueOf(PROPERTIES.getProperty("largeEntrySize"));
-        final int numEntries = 100;
-        byte[][] data = new byte[numEntries][entrySize];
-
-        for(int x = 0; x < numEntries; x++) {
-            rand.nextBytes(data[x]);
-            s1.append(data[x]);
+        final int iter = 30000 * 4;
+        final int payload = 4000 * 2;
+        byte[] data = new byte[payload];
+        for (int x = 0; x < iter; x++) {
+            long startTime = System.currentTimeMillis();
+            rt.getStreamsView().get(CorfuRuntime.getStreamID("s1")).append(data);
+            long stopTime = System.currentTimeMillis();
+            histogram.recordValue(stopTime - startTime);
         }
 
-        // Read back the data and verify it is correct
-        for(int x = 0; x < numEntries; x++) {
-            ILogData entry = s1.nextUpTo(x);
-            byte[] tmp = (byte[]) entry.getPayload(rt);
+        histogram.outputPercentileDistribution(System.out, c);
 
-            assertThat(tmp).isEqualTo(data[x]);
-        }
-
-        assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
     }
 }

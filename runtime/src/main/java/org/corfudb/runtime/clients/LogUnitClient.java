@@ -27,6 +27,7 @@ import org.corfudb.protocols.wireprotocol.FillHoleRequest;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
+import org.corfudb.protocols.wireprotocol.RawDataMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
@@ -448,5 +449,16 @@ public class LogUnitClient implements IClient {
                 CorfuRuntime.getMpLUC()
                         + getHost() + ":" + getPort().toString() + "-" + opName);
         return t.time();
+    }
+
+    /**
+     * Sends a request to replicate the addresses for the given rawDataMsg
+     *
+     * @param rawDataMsg RawDataMsg received from the log unit server.
+     * @return Completable future which returns true on success.
+     */
+    public CompletableFuture<Boolean> replicateRawData(RawDataMsg rawDataMsg) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.RAW_DATA_REPLICATE
+                .payloadMsg(rawDataMsg));
     }
 }

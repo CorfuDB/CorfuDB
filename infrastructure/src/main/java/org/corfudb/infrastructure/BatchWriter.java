@@ -54,8 +54,23 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
         try {
             CompletableFuture<Void> cf = new CompletableFuture();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.WRITE,
-                    (Long) key, (LogData) value, cf));
+                    (Long) key, (LogData) value, null,cf));
             cf.get();
+        } catch (Exception e) {
+            log.trace("Write Exception {}", e);
+            if (e.getCause() instanceof RuntimeException) {
+                throw (RuntimeException)e.getCause();
+            } else {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    public void bulkWrite(List<LogData> entries) {
+        try {
+            CompletableFuture<Void> cf = new CompletableFuture();
+            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.BULK_WRITE,
+                    null,null, entries, cf));
         } catch (Exception e) {
             log.trace("Write Exception {}", e);
             if (e.getCause() instanceof RuntimeException) {
@@ -75,7 +90,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
         try {
             CompletableFuture<Void> cf = new CompletableFuture();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.TRIM,
-                    address, null, cf));
+                    address, null, null, cf));
             cf.get();
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -91,7 +106,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
         try {
             CompletableFuture<Void> cf = new CompletableFuture();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.PREFIX_TRIM,
-                    address, null, cf));
+                    address, null, null,cf));
             cf.get();
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -167,6 +182,15 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                         res.add(currOp);
                     } catch (OverwriteException | DataOutrankedException e) {
                         currOp.setException(e);
+                        res.add(currOp);
+                    } catch (Exception e) {
+                        currOp.setException(e);
+                        res.add(currOp);
+                    }
+                } else if (currOp.getType() == BatchWriterOperation.Type.BULK_WRITE) {
+                    try {
+                        streamLog.append(currOp.getEntries());
+                        currOp.setException(null);
                         res.add(currOp);
                     } catch (Exception e) {
                         currOp.setException(e);
