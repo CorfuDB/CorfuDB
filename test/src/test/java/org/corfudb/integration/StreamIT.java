@@ -41,8 +41,8 @@ public class StreamIT  {
 */
         //Map<String, String> map = rt.getObjectsView().build().setType(SMRMap.class).setStreamName("map2").open();
 
-        final int iter = 30000;
-        final int payload = 4000;
+        final int iter = 30000 * 4;
+        final int payload = 4000 * 2;
         byte[] data = new byte[payload];
         for (int x = 0; x < iter; x++) {
             long startTime = System.currentTimeMillis();

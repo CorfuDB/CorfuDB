@@ -295,11 +295,8 @@ public class LogUnitServer extends AbstractServer {
     private void replicateRawData(CorfuPayloadMsg<RawDataMsg> msg,
                                   ChannelHandlerContext ctx, IServerRouter r,
                                   boolean isMetricsEnabled) {
-        List<LogData> rawDataMap = msg.getPayload().getEntries();
-        for (Long address : rawDataMap.keySet()) {
-            // bypass the cache.
-            batchWriter.write(address, rawDataMap.get(address));
-        }
+        List<LogData> entries = msg.getPayload().getEntries();
+        batchWriter.bulkWrite(entries);
         r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
     }
 

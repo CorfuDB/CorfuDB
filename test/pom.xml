@@ -30,6 +30,13 @@
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>
+        <!-- https://mvnrepository.com/artifact/org.hdrhistogram/HdrHistogram -->
+        <dependency>
+            <groupId>org.hdrhistogram</groupId>
+            <artifactId>HdrHistogram</artifactId>
+            <version>2.1.10</version>
+        </dependency>
+
 
     </dependencies>
 
