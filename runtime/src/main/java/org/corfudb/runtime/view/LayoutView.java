@@ -146,7 +146,13 @@ public class LayoutView extends AbstractView {
                     .toArray(CompletableFuture[]::new);
             // count successes.
             acceptList = stream(prepareList)
-                    .map(x -> x.getNow(null))
+                    .map(x -> {
+                        try {
+                            return x.getNow(null);
+                        } catch (Exception e) {
+                            return null;
+                        }
+                    })
                     .filter(x -> x != null)
                     .toArray(LayoutPrepareResponse[]::new);
 
@@ -161,9 +167,22 @@ public class LayoutView extends AbstractView {
         // Return any layouts that have been proposed before.
         List<LayoutPrepareResponse> list = Arrays.stream(acceptList)
                 .filter(x -> x.getLayout() != null)
-                .limit(1)
                 .collect(Collectors.toList());
-        return !list.isEmpty() ? list.get(0).getLayout() : null;
+        if (list.isEmpty()) {
+            return null;
+        } else {
+            // Choose the layout with the highest rank proposed before.
+            long highestReturnedRank = Long.MIN_VALUE;
+            Layout layoutWithHighestRank = null;
+
+            for (LayoutPrepareResponse layoutPrepareResponse : list) {
+                if (layoutPrepareResponse.getRank() > highestReturnedRank) {
+                    highestReturnedRank = layoutPrepareResponse.getRank();
+                    layoutWithHighestRank = layoutPrepareResponse.getLayout();
+                }
+            }
+            return layoutWithHighestRank;
+        }
     }
 
     /**
@@ -219,7 +238,13 @@ public class LayoutView extends AbstractView {
 
             // count successes.
             long count = stream(proposeList)
-                    .map(x -> x.getNow(false))
+                    .map(x -> {
+                        try {
+                            return x.getNow(false);
+                        } catch (Exception e) {
+                            return false;
+                        }
+                    })
                     .filter(x -> x)
                     .count();
 
