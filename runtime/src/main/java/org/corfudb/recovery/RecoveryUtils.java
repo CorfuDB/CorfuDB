@@ -74,25 +74,6 @@ public class RecoveryUtils {
         }
     }
 
-    /**
-     * Get a range of LogData from the server
-     *
-     * This is using the underlying bulk read implementation for
-     * fetching a range of addresses. This read will return
-     * a map ordered by address.
-     *
-     * It uses a ClosedOpen range : [start, end)
-     * (e.g [0, 5) == (0,1,2,3,4))
-     *
-     * @param start start address for the bulk read
-     * @param end end address for the bulk read
-     * @return logData map ordered by addresses (increasing)
-     */
-    static Map<Long, ILogData> getLogData(CorfuRuntime runtime, long start, long end) {
-        return runtime.getAddressSpaceView().
-                cacheFetch(ContiguousSet.create(Range.closedOpen(start, end), DiscreteDomain.longs()));
-    }
-
     /** Deserialize a logData by getting the logEntry
      *
      * Getting the underlying logEntry should trigger deserialization only once.

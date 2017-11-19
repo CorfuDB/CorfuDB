@@ -16,6 +16,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import java.util.stream.StreamSupport;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -179,18 +180,18 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.READ_REQUEST)
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.trace("read: {}", msg.getPayload().getRange());
+        //log.trace("read: {}", msg.getPayload().getRange());
         ReadResponse rr = new ReadResponse();
         try {
-            for (Long l = msg.getPayload().getRange().lowerEndpoint();
-                    l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
-                ILogData e = dataCache.get(l);
-                if (e == null) {
-                    rr.put(l, LogData.EMPTY);
-                } else {
-                    rr.put(l, (LogData) e);
-                }
-            }
+            StreamSupport.stream(msg.getPayload().getAddresses().spliterator(), true)
+                    .forEach(l -> {
+                        ILogData e = dataCache.get(l);
+                        if (e == null) {
+                            rr.put(l, LogData.EMPTY);
+                        } else {
+                            rr.put(l, (LogData) e);
+                        }
+                    });
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
         } catch (DataCorruptionException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());

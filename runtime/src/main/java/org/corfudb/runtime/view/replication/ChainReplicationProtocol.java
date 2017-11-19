@@ -77,7 +77,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
      * {@inheritDoc}
      */
     @Override
-    public Map<Long, ILogData> readAll(Layout layout, List<Long> globalAddresses) {
+    public Map<Long, ILogData> readAll(Layout layout, Iterable<Long> globalAddresses) {
         long startAddress = globalAddresses.iterator().next();
         int numUnits = layout.getSegmentLength(startAddress);
         log.trace("readAll[{}]: chain {}/{}", globalAddresses, numUnits, numUnits);
@@ -91,32 +91,6 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         for (Map.Entry<Long, LogData> entry : logResult.entrySet()) {
             ILogData value = entry.getValue();
             if (value == null || value.isEmpty()) {
-                value = read(layout, entry.getKey());
-            }
-
-            returnResult.put(entry.getKey(), value);
-        }
-
-        return returnResult;
-    }
-
-    @Override
-    public Map<Long, ILogData> readRange(Layout layout, Set<Long> globalAddresses) {
-        Range<Long> range = Range.encloseAll(globalAddresses);
-        long startAddress = range.lowerEndpoint();
-        long endAddress = range.upperEndpoint();
-        int numUnits = layout.getSegmentLength(startAddress);
-        log.trace("readRange[{}-{}]: chain {}/{}", startAddress, endAddress, numUnits, numUnits);
-
-        Map<Long, LogData> logResult = CFUtils.getUninterruptibly(layout
-                .getLogUnitClient(startAddress, numUnits - 1)
-                .read(range)).getAddresses();
-
-        //in case of a hole, do a normal read and use its hole fill policy
-        Map<Long, ILogData> returnResult = new TreeMap<>();
-        for (Map.Entry<Long, LogData> entry: logResult.entrySet()){
-            ILogData value = entry.getValue();
-            if (value == null || value.isEmpty()){
                 value = read(layout, entry.getKey());
             }
 

@@ -5,6 +5,7 @@ import io.netty.buffer.ByteBuf;
 import java.util.HashMap;
 import java.util.Map;
 
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
@@ -24,7 +25,7 @@ public class ReadResponse implements ICorfuPayload<ReadResponse> {
     }
 
     public ReadResponse() {
-        addresses = new HashMap<Long, LogData>();
+        addresses = new ConcurrentHashMap<Long, LogData>();
     }
 
     public void put(Long address, LogData data) {

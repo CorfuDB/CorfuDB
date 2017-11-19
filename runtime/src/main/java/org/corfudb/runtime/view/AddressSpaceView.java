@@ -7,12 +7,22 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.Iterables;
 
+import java.util.AbstractMap;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Spliterator;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -184,6 +194,110 @@ public class AddressSpaceView extends AbstractView {
         return addressesMap;
     }
 
+    /** Get a stream of entries corresponding to the addresses given,
+     *  optionally bypassing the cache.
+     *
+     * @param addresses     The addresses to read.
+     * @param cached        Whether or not to bypass the cache for reads.
+     * @return              A stream of entries corresponding to the addresses given
+     *                      in {@code addresses}.
+     */
+    public Stream<Map.Entry<Long, ILogData>> stream(Iterable<Long> addresses,
+                                                    boolean cached) {
+        return StreamSupport.stream(spliterator(addresses, cached), false);
+    }
+
+    /** Get a spliterator corresponding to the addresses given,
+     * optionally bypassing the cache.
+     * @param addresses     The addresses to read.
+     * @param cached        Whether or not to bypass the cache for reads.
+     * @return              A spliterator for the addresses given in {@code addresses}.
+     */
+    public Spliterator<Map.Entry<Long, ILogData>> spliterator(
+            @Nonnull final Iterable<Long> addresses,
+            final boolean cached) {
+
+        final int batchSize = runtime.getBulkReadSize();
+        final Iterable<List<Long>> batches = Iterables.partition(addresses, batchSize);
+        final Iterator<List<Long>> batchesIterator = batches.iterator();
+
+        return new Spliterator<Map.Entry<Long, ILogData>>() {
+
+            List<Long> currentBatch;
+            Map<Long, ILogData> currentBatchResult;
+            int index;
+
+            boolean getNextBatch() {
+                if (batchesIterator.hasNext()) {
+                    index = 0;
+                    currentBatch = batchesIterator.next();
+                    if (!cached) {
+                        currentBatchResult =
+                                layoutHelper(l -> l.getReplicationMode(currentBatch.get(0))
+                                        .getReplicationProtocol(runtime)
+                                        .readAll(l, currentBatch));
+                    } else {
+                        currentBatchResult = readCache.getAll(currentBatch);
+                    }
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+
+            @Override
+            public boolean tryAdvance(Consumer<? super Map.Entry<Long, ILogData>> action) {
+                if (currentBatch == null || index > currentBatch.size() - 1) {
+                    if (!getNextBatch()) {
+                        return false;
+                    }
+                }
+                Long batchAddress = currentBatch.get(index++);
+                ILogData data = currentBatchResult.get(batchAddress);
+                action.accept(new AbstractMap.SimpleImmutableEntry<>(batchAddress, data));
+                return true;
+            }
+
+            @Override
+            public void forEachRemaining(Consumer<? super Map.Entry<Long, ILogData>> action) {
+                // Consume the current batch, if present.
+                if (currentBatch != null) {
+                    for (int i = index; i < currentBatch.size(); i++) {
+                        Long address = currentBatch.get(i);
+                        action.accept(
+                            new AbstractMap.SimpleImmutableEntry<>
+                                    (address, currentBatchResult.get(address)));
+                    }
+                }
+                // Consume all remaining batches
+                while (getNextBatch()) {
+                    for (int i = index; i < currentBatch.size(); i++) {
+                        Long address = currentBatch.get(i);
+                        action.accept(
+                                new AbstractMap.SimpleImmutableEntry<>
+                                        (address, currentBatchResult.get(address)));
+                    }
+                }
+            }
+
+            @Override
+            public Spliterator<Map.Entry<Long, ILogData>> trySplit() {
+                return null;
+            }
+
+            @Override
+            public long estimateSize() {
+                return 0;
+            }
+
+            @Override
+            public int characteristics() {
+                return Spliterator.ORDERED | Spliterator.NONNULL
+                        | Spliterator.DISTINCT | Spliterator.IMMUTABLE;
+            }
+        };
+    }
+
     /**
      * Get the first address in the address space.
      */
@@ -299,18 +413,19 @@ public class AddressSpaceView extends AbstractView {
      * @param addresses collection of addresses to read from.
      * @return A result to be cached
      */
-    public @Nonnull
-    Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
+    private @Nonnull Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
         Map<Long, ILogData> allAddresses = new HashMap<>();
 
         Iterable<List<Long>> batches = Iterables.partition(addresses, runtime.getBulkReadSize());
-
+        System.out.println("call: " + addresses);
         for (List<Long> batch : batches) {
             try {
                 //doesn't handle the case where some address have a different replication mode
                 allAddresses.putAll(layoutHelper(l -> l.getReplicationMode(batch.iterator().next())
                         .getReplicationProtocol(runtime)
                         .readAll(l, batch)));
+
+                System.out.println("batch " + batch);
             } catch (Exception e) {
                 log.error("cacheFetch: Couldn't read addresses {}", batch, e);
             }
@@ -318,20 +433,6 @@ public class AddressSpaceView extends AbstractView {
 
         return allAddresses;
     }
-
-    /**
-     * Fetch a collection of addresses.
-     *
-     * @param addresses collection of addresses to read from.
-     * @return A result to be cached
-     */
-    public @Nonnull
-    Map<Long, ILogData> cacheFetch(Set<Long> addresses) {
-        return layoutHelper(l -> l.getReplicationMode(addresses.iterator().next())
-                .getReplicationProtocol(runtime)
-                .readRange(l, addresses));
-    }
-
 
     /**
      * Explicitly fetch a given address, bypassing the cache.

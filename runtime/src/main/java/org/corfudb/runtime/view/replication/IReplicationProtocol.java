@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 import javax.annotation.Nonnull;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -69,31 +70,9 @@ public interface IReplicationProtocol {
      *                              addresses, hole filling if necessary.
      */
     default @Nonnull
-            Map<Long, ILogData> readAll(Layout layout, List<Long> globalAddresses) {
-        return globalAddresses.parallelStream()
-                .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(layout, a)))
-                .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
-    }
-
-    /** Read data from a range.
-     *
-     * <p>This method functions exactly like a readAll, except
-     * that it returns the result for a range of addresses.
-     *
-     * <p>An implementation may optimize for this type of
-     * bulk request, but the default implementation
-     * just performs multiple reads (possible in parallel).
-     *
-     * @param layout                The layout to use for the readRange.
-     * @param globalAddresses       A list of addresses to read from.
-     * @return                      A map of addresses to committed
-     *                              addresses, hole filling if necessary.
-     */
-    default @Nonnull
-    Map<Long, ILogData> readRange(Layout layout, Set<Long> globalAddresses) {
-        return globalAddresses.parallelStream()
-                .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(layout, a)))
-                .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
+            Map<Long, ILogData> readAll(Layout layout, Iterable<Long> globalAddresses) {
+        return StreamSupport.stream(globalAddresses.spliterator(), true)
+                .collect(Collectors.toMap(a -> a, a -> read(layout, a)));
     }
 
     /** Peek data from a given address.
@@ -125,10 +104,9 @@ public interface IReplicationProtocol {
      * @return                      A map of addresses to uncommitted
      *                              addresses, without hole filling.
      */
-    default @Nonnull Map<Long, ILogData> peekAll(Layout layout, Set<Long> globalAddresses) {
-        return globalAddresses.parallelStream()
-                .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, peek(layout, a)))
-                .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
+    default @Nonnull Map<Long, ILogData> peekAll(Layout layout, Iterable<Long> globalAddresses) {
+        return StreamSupport.stream(globalAddresses.spliterator(), true)
+                .collect(Collectors.toMap(a -> a, a -> peek(layout, a)));
     }
 
 }
