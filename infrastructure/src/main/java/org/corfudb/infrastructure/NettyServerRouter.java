@@ -36,54 +36,6 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     public static final String PREFIX_EPOCH = "SERVER_EPOCH";
     public static final String KEY_EPOCH = "CURRENT";
 
-    public static class ServerThreadFactory
-            implements ForkJoinPool.ForkJoinWorkerThreadFactory {
-
-        public static final String THREAD_PREFIX = "ServerRouter-";
-        final AtomicInteger threadNumber = new AtomicInteger(0);
-
-        public static class ServerWorkerThread extends ForkJoinWorkerThread {
-
-            protected ServerWorkerThread(final ForkJoinPool pool, final String threadName) {
-                super(pool);
-                this.setName(threadName);
-                this.setUncaughtExceptionHandler(NettyServerRouter::handleUncaughtException);
-            }
-
-            @Override
-            protected void onTermination(Throwable exception) {
-                if (exception != null) {
-                    log.error("onTermination: Thread terminated due to {}:{}",
-                            exception.getClass().getSimpleName(),
-                            exception.getMessage(),
-                            exception);
-                } else {
-                    log.warn("onTermination: Thread terminated (completed normally).");
-                }
-                super.onTermination(exception);
-            }
-        }
-
-        @Override
-        public ForkJoinWorkerThread newThread(ForkJoinPool pool) {
-            return new ServerWorkerThread(pool,
-                    THREAD_PREFIX + threadNumber.getAndIncrement());
-        }
-    }
-
-    protected static void handleUncaughtException(Thread t, @Nonnull Throwable e) {
-        log.error("handleUncaughtException[{}]: Uncaught {}:{}",
-                t.getName(),
-                e.getClass().getSimpleName(),
-                e.getMessage(),
-                e);
-    }
-
-    protected final ExecutorService handlerWorkers =
-            new ForkJoinPool(Runtime.getRuntime().availableProcessors(),
-                    new ServerThreadFactory(),
-                    NettyServerRouter::handleUncaughtException, true);
-
     /**
      * This map stores the mapping from message type to netty server handler.
      */
@@ -193,18 +145,16 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
                         log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(),
                                 msg);
                     }
-                    handlerWorkers.submit(() -> {
-                        try {
-                            handler.handle(m, ctx, this);
-                        } catch (Exception ex) {
-                            // Log the exception during handling
-                            log.error("handle: Unhandled exception processing {} message",
-                                    m.getMsgType(), ex);
-                            sendResponse(ctx, m,
-                                    CorfuMsgType.ERROR_SERVER_EXCEPTION
-                                            .payloadMsg(new ExceptionMsg(ex)));
-                        }
-                    });
+                    try {
+                        handler.handle(m, ctx, this);
+                    } catch (Exception ex) {
+                        // Log the exception during handling
+                        log.error("handle: Unhandled exception processing {} message",
+                                m.getMsgType(), ex);
+                        sendResponse(ctx, m,
+                                CorfuMsgType.ERROR_SERVER_EXCEPTION
+                                        .payloadMsg(new ExceptionMsg(ex)));
+                    }
                 }
             }
         } catch (Exception e) {

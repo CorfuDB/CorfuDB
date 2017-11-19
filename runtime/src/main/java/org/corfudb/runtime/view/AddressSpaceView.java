@@ -417,15 +417,12 @@ public class AddressSpaceView extends AbstractView {
         Map<Long, ILogData> allAddresses = new HashMap<>();
 
         Iterable<List<Long>> batches = Iterables.partition(addresses, runtime.getBulkReadSize());
-        System.out.println("call: " + addresses);
         for (List<Long> batch : batches) {
             try {
                 //doesn't handle the case where some address have a different replication mode
                 allAddresses.putAll(layoutHelper(l -> l.getReplicationMode(batch.iterator().next())
                         .getReplicationProtocol(runtime)
                         .readAll(l, batch)));
-
-                System.out.println("batch " + batch);
             } catch (Exception e) {
                 log.error("cacheFetch: Couldn't read addresses {}", batch, e);
             }
