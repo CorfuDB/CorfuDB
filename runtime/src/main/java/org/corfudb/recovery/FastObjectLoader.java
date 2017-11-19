@@ -1,5 +1,9 @@
 package org.corfudb.recovery;
 
+import com.google.common.collect.ContiguousSet;
+import com.google.common.collect.DiscreteDomain;
+import com.google.common.collect.Range;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -30,6 +34,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.IStateMachineStream;
 import org.corfudb.runtime.object.VersionedObjectManager;
 import org.corfudb.runtime.view.Address;
@@ -186,47 +191,6 @@ public class FastObjectLoader {
         streamsToIgnore.add(CorfuRuntime.getStreamID(streamName));
         // Ignore also checkpoint of this stream
         streamsToIgnore.add(CorfuRuntime.getCheckpointStreamIdFromName(streamName));
-    }
-
-    /**
-     * Necromancer Utilities
-     *
-     * Necromancy is a supposed practice of magic involving communication with the deceased
-     * – either by summoning their spirit as an apparition or raising them bodily. This suits
-     * what this thread is tasked with, bringing back the SMR Maps from their grave (the Log).
-     *
-     */
-    private void summonNecromancer() {
-        necromancer = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-                .setNameFormat("necromancer-%d").build());
-        futureList = new ArrayList<>();
-    }
-
-    private void invokeNecromancer(Map<Long, ILogData> logDataMap, BiConsumer<Long, ILogData> resurrectionSpell) {
-        futureList.add(necromancer.submit(() -> {
-            logDataMap.forEach((address, logData) -> {
-                resurrectionSpell.accept(address, logData);
-            });
-        }));
-    }
-
-    private void killNecromancer() {
-        necromancer.shutdown();
-        try {
-            necromancer.awaitTermination(timeoutInMinutesForLoading, TimeUnit.MINUTES);
-        } catch (InterruptedException e) {
-            String msg = "Necromancer is taking too long to load the maps. Gave up.";
-            log.error(msg);
-            fail(msg);
-        }
-        for (Future future : futureList) {
-            try {
-                future.get();
-            } catch (ExecutionException | InterruptedException e) {
-                log.error("Error in invokingNecromancer task : {}", e);
-                fail("FastSMRLoader recovery failed.");
-            }
-        }
     }
 
     /**
@@ -495,7 +459,7 @@ public class FastObjectLoader {
     private void handleRetry() {
 
         retryIteration++;
-        if (retryIteration > numberOfAttempt) {
+        if (retryIteration >= numberOfAttempt) {
             log.error("processLogData[]: retried {} number of times and failed", retryIteration);
             throw new RuntimeException("FastObjectLoader failed after too many retry (" + retryIteration + ")");
         }
@@ -694,45 +658,44 @@ public class FastObjectLoader {
     /**
      * This method will apply for each address the consumer given in parameter.
      *
-     * The Necromancer thread is used to do the heavy lifting.
      * @param logDataProcessor
      */
     private void applyForEachAddress(BiConsumer<Long, ILogData> logDataProcessor) {
+        while (true) {
+            try {
+                runtime.getAddressSpaceView().stream(
+                        ContiguousSet.create(Range.closedOpen(logHead, logTail + 1),
+                                DiscreteDomain.longs()), false)
+                        .forEachOrdered(e -> {
+                            final long address = e.getKey();
+                            final ILogData logData = e.getValue();
+                            if (address != addressProcessed + 1) {
+                                fail("We missed an entry (got "
+                                        + address
+                                        + " expected "
+                                        + (addressProcessed + 1)
+                                        + "). It can lead to correctness issues.");
+                            }
+                            if (logData.getType() == DataType.TRIMMED) {
+                                log.warn("applyForEachAddress[{}, start={}] address is trimmed",
+                                        address, logHead);
+                                handleRetry();
+                                throw new TrimmedException();
+                            }
+                            logDataProcessor.accept(address, logData);
+                            addressProcessed++;
 
-        summonNecromancer();
-        nextRead = logHead;
-        while (nextRead <= logTail) {
-            final long start = nextRead;
-            final long stopNotIncluded = Math.min(start + batchReadSize, logTail + 1);
-            nextRead = stopNotIncluded;
-            final Map<Long, ILogData> range = getLogData(runtime, start, stopNotIncluded);
 
-            // Sanity
-            boolean canProcessRange = true;
-            for(Map.Entry<Long, ILogData> entry : range.entrySet()) {
-                long address = entry.getKey();
-                ILogData logData = entry.getValue();
-                if (address != addressProcessed + 1) {
-                    fail("We missed an entry. It can lead to correctness issues.");
-                }
-                addressProcessed++;
-
-                if (logData.getType() == DataType.TRIMMED) {
-                    log.warn("applyForEachAddress[{}, start={}] address is trimmed", address, logHead);
-                    handleRetry();
-                    canProcessRange = false;
-                    break;
-                }
-
-                if(address % STATUS_UPDATE_PACE == 0) {
-                    log.info("applyForEachAddress: read up to {}", address);
-                }
-            }
-            if (canProcessRange) {
-                invokeNecromancer(range, logDataProcessor);
+                            if (address % STATUS_UPDATE_PACE == 0) {
+                                log.info("applyForEachAddress: read up to {}", address);
+                            }
+                        });
+                return;
+            } catch (TrimmedException te) {
+                log.warn("applyForEachAddress: gave up due to trim ");
+                addressProcessed = logHead - 1;
             }
         }
-        killNecromancer();
     }
 
     @Data

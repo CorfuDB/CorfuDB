@@ -333,10 +333,10 @@ public class LogUnitClient implements IClient {
      * @param range Range of global offsets.
      * @return CompletableFuture which returns a ReadResponse on completion.
      */
-    public CompletableFuture<ReadResponse> read(Range<Long> range) {
+    public CompletableFuture<ReadResponse> read(Iterable<Long> addresses) {
         Timer.Context context = getTimerContext("readRange");
         CompletableFuture<ReadResponse> cf = router.sendMessageAndGetCompletable(
-                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(range)));
+                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(addresses)));
         return cf.thenApply(x -> {
             context.stop();
             return x;
