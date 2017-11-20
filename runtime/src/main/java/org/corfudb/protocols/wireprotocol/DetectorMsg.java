@@ -13,17 +13,20 @@ import lombok.Data;
  */
 @Data
 @AllArgsConstructor
-public class FailureDetectorMsg implements ICorfuPayload<FailureDetectorMsg> {
+public class DetectorMsg implements ICorfuPayload<DetectorMsg> {
+    private Long detectorEpoch;
     private Set<String> failedNodes;
     private Set<String> healedNodes;
 
-    public FailureDetectorMsg(ByteBuf buf) {
+    public DetectorMsg(ByteBuf buf) {
+        detectorEpoch = ICorfuPayload.fromBuffer(buf, Long.class);
         failedNodes = ICorfuPayload.setFromBuffer(buf, String.class);
         healedNodes = ICorfuPayload.setFromBuffer(buf, String.class);
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
+        ICorfuPayload.serialize(buf, detectorEpoch);
         ICorfuPayload.serialize(buf, failedNodes);
         ICorfuPayload.serialize(buf, healedNodes);
     }

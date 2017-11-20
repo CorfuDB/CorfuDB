@@ -33,7 +33,6 @@ Options:
                            (do (get-router server localcmd)
                                (.get (.bootstrapLayout (get-layout-client) new-layout))
                                (.get (.bootstrapManagement (get-management-client) new-layout))
-                               (.get (.initiateFailureHandler (get-management-client)))
                             ))
                         (println "New layout installed!")
                         )

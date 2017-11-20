@@ -25,7 +25,6 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.Sleep;
 import org.junit.Before;
 import org.junit.Test;
 
