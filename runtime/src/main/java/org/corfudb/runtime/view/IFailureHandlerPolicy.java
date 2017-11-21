@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure;
+package org.corfudb.runtime.view;
 
 import java.util.Set;
 

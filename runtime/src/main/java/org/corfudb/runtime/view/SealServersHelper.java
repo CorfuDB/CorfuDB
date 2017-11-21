@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -83,12 +84,23 @@ public class SealServersHelper {
                     .filter(pair -> layoutStripe.getLogServers().contains(pair.getKey()))
                     .map(pair -> pair.getValue())
                     .toArray(CompletableFuture[]::new);
+            QuorumFuturesFactory.CompositeFuture<Boolean> quorumFuture =
+                    QuorumFuturesFactory.getFirstWinsFuture(Boolean::compareTo, completableFutures);
+            boolean success = false;
             try {
-                for (CompletableFuture<Boolean> cf : completableFutures) {
-                    CFUtils.getUninterruptibly(cf, TimeoutException.class, NetworkException.class);
+                success = quorumFuture.get();
+            } catch (ExecutionException | InterruptedException e) {
+                if (e.getCause() instanceof QuorumUnreachableException) {
+                    throw (QuorumUnreachableException) e.getCause();
                 }
-            } catch (TimeoutException | NetworkException e) {
-                throw new QuorumUnreachableException(0, layoutStripe.getLogServers().size());
+            }
+            int reachableServers = (int) Arrays.stream(completableFutures)
+                    .filter(booleanCompletableFuture ->
+                            !booleanCompletableFuture.isCompletedExceptionally()).count();
+
+            if (!success) {
+                throw new QuorumUnreachableException(reachableServers,
+                        completableFutures.length);
             }
         }
     }
