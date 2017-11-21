@@ -11,14 +11,12 @@ import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.junit.Test;
 
@@ -87,18 +85,29 @@ public class LogUnitClientTest extends AbstractClientTest {
     }
 
     @Test
+    public void readingEmptyAddress() throws Exception {
+        final long address0 = 0;
+        LogData r = client.read(address0).get().getAddresses().get(0L);
+        assertThat(r.isEmpty()).isTrue();
+        assertThat(r.getGlobalAddress()).isEqualTo(address0);
+        assertThat(LogData.getEmpty(0)).isEqualTo(LogData.getEmpty(0));
+    }
+
+    @Test
     public void readingTrimmedAddress() throws Exception {
         byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
-        client.write(1, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
-        LogData r = client.read(0).get().getAddresses().get(0L);
+        final long address0 = 0;
+        final long address1 = 1;
+        client.write(address0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
+        client.write(address1, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
+        LogData r = client.read(address0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
-        r = client.read(1).get().getAddresses().get(1L);
+        r = client.read(address1).get().getAddresses().get(1L);
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
 
-        client.prefixTrim(0);
+        client.prefixTrim(address0);
         client.compact();
 
         // For logunit cach flush
@@ -106,9 +115,10 @@ public class LogUnitClientTest extends AbstractClientTest {
         serverRouter.reset();
         serverRouter.addServer(server2);
 
-        assertThat(client.read(0).get().getAddresses().get(0L).isTrimmed()).isTrue();
-        assertThat(r.getType())
-                .isEqualTo(DataType.DATA);
+        LogData trimmedAddress = client.read(address0).get().getAddresses().get(0L);
+
+        assertThat(trimmedAddress.isTrimmed()).isTrue();
+        assertThat(trimmedAddress.getGlobalAddress()).isEqualTo(address0);
     }
 
     @Test
@@ -225,12 +235,14 @@ public class LogUnitClientTest extends AbstractClientTest {
     public void holeFillCannotBeOverwritten()
             throws Exception {
         byte[] testString = "hello world".getBytes();
-        client.fillHole(0).get();
-        LogData r = client.read(0).get().getAddresses().get(0L);
+        final long address0 = 0;
+        client.fillHole(address0).get();
+        LogData r = client.read(address0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.HOLE);
+        assertThat(r.getGlobalAddress()).isEqualTo(address0);
 
-        assertThatThrownBy(() -> client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get())
+        assertThatThrownBy(() -> client.write(address0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get())
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(OverwriteException.class);
     }

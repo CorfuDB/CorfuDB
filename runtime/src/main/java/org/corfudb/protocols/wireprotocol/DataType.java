@@ -16,9 +16,9 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum DataType implements ICorfuPayload<DataType> {
     DATA(0, true),
-    EMPTY(1, false),
+    EMPTY(1, true),
     HOLE(2, true),
-    TRIMMED(3, false),
+    TRIMMED(3, true),
     RANK_ONLY(4, true);
 
     final int val;

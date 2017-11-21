@@ -93,10 +93,10 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public LogData read(long address) {
         if (isTrimmed(address)) {
-            return LogData.TRIMMED;
+            return LogData.getTrimmed(address);
         }
         if (trimmed.contains(address)) {
-            return LogData.TRIMMED;
+            return LogData.getTrimmed(address);
         }
 
         return logCache.get(address);
