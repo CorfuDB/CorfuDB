@@ -1,21 +1,19 @@
-package org.corfudb.infrastructure;
+package org.corfudb.runtime.view;
 
 import java.util.Set;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
-import org.corfudb.runtime.view.Layout;
 
 /**
- * Conserves the failures.
+ * Handles the failures.
  *
  * <p>Created by zlokhandwala on 11/21/16.
  */
-public class ConservativeFailureHandlerPolicy implements IFailureHandlerPolicy {
+public class PurgeFailurePolicy implements IFailureHandlerPolicy {
 
     /**
-     * Modifies the layout by marking the failed nodes as unresponsive but still keeping them in
-     * the layout.
+     * Modifies the layout by removing/purging the set failed nodes.
      *
      * @param originalLayout Original Layout which needs to be modified.
      * @param corfuRuntime   Connected runtime to attach to the new layout.
@@ -25,13 +23,14 @@ public class ConservativeFailureHandlerPolicy implements IFailureHandlerPolicy {
      * @throws CloneNotSupportedException  Clone not supported for layout.
      */
     @Override
-    public Layout generateLayout(Layout originalLayout, CorfuRuntime corfuRuntime,
-                                 Set<String> failedNodes)
+    public Layout generateLayout(Layout originalLayout, CorfuRuntime corfuRuntime, Set<String>
+            failedNodes)
             throws LayoutModificationException, CloneNotSupportedException {
-        LayoutWorkflowManager layoutManager = new LayoutWorkflowManager(originalLayout);
-        Layout newLayout = layoutManager
-                .moveResponsiveSequencerToTop(failedNodes)
-                .addUnresponsiveServers(failedNodes)
+        LayoutBuilder layoutBuilder = new LayoutBuilder(originalLayout);
+        Layout newLayout = layoutBuilder
+                .removeLayoutServers(failedNodes)
+                .removeSequencerServers(failedNodes)
+                .removeLogunitServers(failedNodes)
                 .build();
         newLayout.setRuntime(corfuRuntime);
         newLayout.setEpoch(newLayout.getEpoch() + 1);
