@@ -4,6 +4,7 @@ org.corfudb.generator.distributions
 org.corfudb.generator.operations
 org.corfudb.infrastructure
 org.corfudb.infrastructure.log
+org.corfudb.infrastructure.management
 org.corfudb.logReader
 org.corfudb.protocols.logprotocol
 org.corfudb.protocols.wireprotocol
