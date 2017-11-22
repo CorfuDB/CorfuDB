@@ -6,6 +6,7 @@ import org.corfudb.runtime.view.Layout;
 import org.junit.After;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -24,8 +25,23 @@ public class ManagementServerTest extends AbstractServerTest {
     @Override
     public ManagementServer getDefaultServer() {
         // Adding layout server for management server runtime to connect to.
-        router.addServer(new LayoutServer(new ServerContextBuilder().setSingle(true).setServerRouter(getRouter()).build()));
-        managementServer = new ManagementServer(new ServerContextBuilder().setSingle(false).setServerRouter(getRouter()).build());
+        ServerContext serverContext = new ServerContextBuilder()
+                .setSingle(true)
+                .setPort(SERVERS.PORT_0)
+                .setServerRouter(getRouter())
+                .build();
+        // Required for management server to fetch layout.
+        router.addServer(new LayoutServer(serverContext));
+        router.addServer(new BaseServer());
+        // Required to fetch global tails while handling failures.
+        router.addServer(new LogUnitServer(serverContext));
+        // Required for management server to bootstrap during initialization.
+        router.addServer(new SequencerServer(serverContext));
+        managementServer = new ManagementServer(new ServerContextBuilder()
+                .setSingle(false)
+                .setPort(SERVERS.PORT_0)
+                .setServerRouter(getRouter())
+                .build());
         return managementServer;
     }
 
@@ -64,11 +80,13 @@ public class ManagementServerTest extends AbstractServerTest {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         Set<String> set = new HashSet<>();
         set.add("key");
-        sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(new FailureDetectorMsg(set)));
+        sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
+                new FailureDetectorMsg(Collections.singleton("key"), Collections.emptySet())));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR);
         sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
-        sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(new FailureDetectorMsg(set)));
+        sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
+                new FailureDetectorMsg(Collections.singleton("key"), Collections.emptySet())));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
     }
 }

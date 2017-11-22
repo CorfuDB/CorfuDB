@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.infrastructure.management.LayoutWorkflowManager;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;

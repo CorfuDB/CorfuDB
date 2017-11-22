@@ -1,10 +1,14 @@
 package org.corfudb.infrastructure;
 
+import org.corfudb.infrastructure.management.FailureHandlerDispatcher;
+import org.corfudb.infrastructure.management.IFailureHandlerPolicy;
+import org.corfudb.infrastructure.management.PurgeFailurePolicy;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -56,7 +60,12 @@ public class FailureHandlerDispatcherTest extends AbstractViewTest {
 
         FailureHandlerDispatcher failureHandlerDispatcher = new FailureHandlerDispatcher();
         IFailureHandlerPolicy failureHandlerPolicy = new PurgeFailurePolicy();
-        failureHandlerDispatcher.dispatchHandler(failureHandlerPolicy, originalLayout, corfuRuntime, failedServers);
+        failureHandlerDispatcher
+                .dispatchHandler(failureHandlerPolicy,
+                        originalLayout,
+                        corfuRuntime,
+                        failedServers,
+                        Collections.emptySet());
 
         Layout expectedLayout = new TestLayoutBuilder()
                 .setEpoch(2L)

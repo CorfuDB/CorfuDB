@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.management;
 
 import java.util.Map;
 import java.util.Set;
@@ -39,46 +39,13 @@ public class FailureHandlerDispatcher {
     public boolean recoverCluster(Layout recoveryLayout, CorfuRuntime corfuRuntime) {
 
         try {
-            // Seals and increments the epoch.
-            recoveryLayout.setRuntime(corfuRuntime);
-            sealEpoch(recoveryLayout);
-
-            // Attempts to update all the layout servers with the modified layout.
-            while (true) {
-                try {
-                    corfuRuntime.getLayoutView().updateLayout(recoveryLayout, prepareRank);
-                    prepareRank++;
-                } catch (OutrankedException oe) {
-                    // Update rank since outranked.
-                    log.error("Retrying layout update with higher rank: {}", oe);
-                    // Update rank to be able to outrank other competition and complete paxos.
-                    prepareRank = oe.getNewRank() + 1;
-                    continue;
-                }
-                break;
-            }
-
-            // Check if our proposed layout got selected and committed.
-            corfuRuntime.invalidateLayout();
-            if (corfuRuntime.getLayoutView().getLayout().equals(recoveryLayout)) {
-                log.info("Layout Recovered = {}", recoveryLayout);
-            } else {
-                log.warn("Layout recovered with a different layout = {}",
-                        corfuRuntime.getLayoutView().getLayout());
-            }
-
-            //TODO: Since sequencer reset is moved after paxos. Make sure the runtime has the latest
-            //TODO: layout view and latest client router epoch. (Use quorum layout fetch.)
-            //TODO: Handle condition if primary sequencer is not marked ready, reset fails.
-            // Reconfigure servers if required
-            // Primary sequencer would already be in a not-ready state since its in recovery.
-            reconfigureServers(corfuRuntime, recoveryLayout, recoveryLayout, true);
-
+            Layout newLayout = (Layout)recoveryLayout.clone();
+            newLayout.setEpoch(recoveryLayout.getEpoch() + 1);
+            return runLayoutReconfiguration(recoveryLayout, newLayout, corfuRuntime, true);
         } catch (Exception e) {
             log.error("Error: recovery: {}", e);
             return false;
         }
-        return true;
     }
 
     /**
@@ -91,48 +58,79 @@ public class FailureHandlerDispatcher {
      * @param corfuRuntime  Connected corfu runtime instance
      * @param failedServers Set of failed server addresses
      */
-    public void dispatchHandler(IFailureHandlerPolicy failureHandlerPolicy, Layout currentLayout,
-                                CorfuRuntime corfuRuntime, Set<String> failedServers) {
+    public boolean dispatchHandler(IFailureHandlerPolicy failureHandlerPolicy,
+                                   Layout currentLayout,
+                                   CorfuRuntime corfuRuntime,
+                                   Set<String> failedServers,
+                                   Set<String> healedServers) {
 
         try {
-
             // Generates a new layout by removing the failed nodes from the existing layout
-            Layout newLayout = failureHandlerPolicy.generateLayout(currentLayout, corfuRuntime,
-                    failedServers);
+            Layout newLayout = failureHandlerPolicy
+                    .generateLayout(currentLayout, corfuRuntime, failedServers, healedServers);
 
-            // Seals and increments the epoch.
-            currentLayout.setRuntime(corfuRuntime);
-            sealEpoch(currentLayout);
-
-            // Attempts to update all the layout servers with the modified layout.
-            try {
-                corfuRuntime.getLayoutView().updateLayout(newLayout, prepareRank);
-                prepareRank++;
-            } catch (OutrankedException oe) {
-                // Update rank since outranked.
-                log.error("Conflict in updating layout by failureHandlerDispatcher: {}", oe);
-                // Update rank to be able to outrank other competition and complete paxos.
-                prepareRank = oe.getNewRank() + 1;
-            }
-
-            // Check if our proposed layout got selected and committed.
-            corfuRuntime.invalidateLayout();
-            if (corfuRuntime.getLayoutView().getLayout().equals(newLayout)) {
-                log.info("Failed node removed. New Layout committed = {}", newLayout);
-            } else {
-                log.warn("Layout recovered with a different layout = {}",
-                        corfuRuntime.getLayoutView().getLayout());
-            }
-
-            //TODO: Since sequencer reset is moved after paxos. Make sure the runtime has the latest
-            //TODO: layout view and latest client router epoch. (Use quorum layout fetch.)
-            //TODO: Handle condition if primary sequencer is not marked ready, reset fails.
-            // Reconfigure servers if required
-            reconfigureServers(corfuRuntime, currentLayout, newLayout, false);
-
+            return runLayoutReconfiguration(currentLayout, newLayout, corfuRuntime, true);
         } catch (Exception e) {
             log.error("Error: dispatchHandler: {}", e);
+            return false;
         }
+    }
+
+    /**
+     * Runs the layout reconfiguration process.
+     * Seals the layout.
+     * Runs paxos.
+     * During paxos if in recovery mode, we increment rank until committed on same epoch.
+     * If not in recovery, we fail with outrankedException.
+     * The new committed layout is then verified by invalidating the runtime.
+     * Finally we reconfigure the servers (bootstrapping sequencer.)
+     *
+     * @param currentLayout   Layout which needs to be sealed.
+     * @param newLayout    New layout to be committed.
+     * @param corfuRuntime Runtime to use to commit new layout.
+     * @param recovery     Flag. True if recovery mode.
+     * @return Boolean - Result of reconfiguration.
+     * @throws Exception Exception if reconfiguration failure.
+     */
+    private boolean runLayoutReconfiguration(Layout currentLayout, Layout newLayout,
+                                             CorfuRuntime corfuRuntime, final boolean recovery)
+            throws Exception {
+
+        // Seals the incremented epoch (Assumes newLayout epoch = currentLayout epoch + 1).
+        newLayout.setRuntime(corfuRuntime);
+        currentLayout.setRuntime(corfuRuntime);
+        currentLayout.setEpoch(currentLayout.getEpoch() + 1);
+        sealEpoch(currentLayout);
+
+        try {
+            corfuRuntime.getLayoutView().updateLayout(newLayout, prepareRank);
+            prepareRank++;
+        } catch (OutrankedException oe) {
+            // Update rank since outranked.
+            log.error("Layout update attempt outranked: {}", oe);
+            // Update rank to be able to outrank other competition and complete paxos.
+            prepareRank = oe.getNewRank() + 1;
+            // If outranked, we retry in the next scheduled cycle.
+            return false;
+        }
+
+        // Check if our proposed layout got selected and committed.
+        corfuRuntime.invalidateLayout();
+        if (corfuRuntime.getLayoutView().getLayout().equals(newLayout)) {
+            log.info("New Layout committed = {}", newLayout);
+        } else {
+            log.warn("Layout recovered with a different layout = {}",
+                    corfuRuntime.getLayoutView().getLayout());
+        }
+
+        //TODO: Since sequencer reset is moved after paxos. Make sure the runtime has the latest
+        //TODO: layout view and latest client router epoch. (Use quorum layout fetch.)
+        //TODO: Handle condition if primary sequencer is not marked ready, reset fails.
+        // Reconfigure servers if required
+        // Primary sequencer would be in a not-ready state if its in recovery mode.
+        reconfigureServers(corfuRuntime, currentLayout, newLayout, recovery);
+
+        return true;
     }
 
     /**
@@ -142,7 +140,6 @@ public class FailureHandlerDispatcher {
      * @param layout Layout to be sealed
      */
     private void sealEpoch(Layout layout) throws QuorumUnreachableException {
-        layout.setEpoch(layout.getEpoch() + 1);
         layout.moveServersToEpoch();
     }
 
@@ -232,6 +229,7 @@ public class FailureHandlerDispatcher {
 
     /**
      * Verifies whether there are any invalid streamTails.
+     *
      * @param streamTails Stream tails map obtained from the fastSMRLoader.
      */
     private void verifyStreamTailsMap(Map<UUID, Long> streamTails) {
