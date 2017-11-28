@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object.transactions;
 
+import java.util.concurrent.CompletableFuture;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -38,11 +39,11 @@ public class WriteAfterWriteTransaction
 
         /** {@inheritDoc} */
         @Override
-        public long append(@Nonnull String smrMethod,
+        public CompletableFuture<Object> append(@Nonnull String smrMethod,
                            @Nonnull Object[] smrArguments,
-                           @Nullable Object[] conflictObjects, boolean keepEntry) {
+                           @Nullable Object[] conflictObjects, boolean returnUpcall) {
             writerContext.getConflictSet().add(manager, conflictObjects);
-            return super.append(smrMethod, smrArguments, conflictObjects, keepEntry);
+            return super.append(smrMethod, smrArguments, conflictObjects, returnUpcall);
         }
 
 

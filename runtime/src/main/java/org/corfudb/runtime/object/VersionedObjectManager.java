@@ -3,7 +3,7 @@ package org.corfudb.runtime.object;
 import static java.lang.Math.min;
 
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.LongAccumulator;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Function;
@@ -98,70 +98,35 @@ public class VersionedObjectManager<T> implements IObjectManager<T> {
      * {@inheritDoc}
      */
     @Override
-    public long logUpdate(@Nonnull String smrUpdateFunction,
+    public Object logUpdate(@Nonnull String smrUpdateFunction,
                           boolean keepUpcallResult,
                           @Nullable Object[] conflictObject,
                           Object... args) {
         final IStateMachineStream stream = getActiveStream();
-        long address = stream.append(smrUpdateFunction, args, conflictObject, keepUpcallResult);
-        // Update the pending request queue, in case another thread is syncing.
-        pendingRequest.accumulate(address);
-        return address;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @SuppressWarnings("unchecked")
-    @Override
-    public <R> R getUpcallResult(long address, @Nullable Object[] conflictObject) {
-        long ts = 0;
-        try {
-            IStateMachineStream stream = getActiveStream();
-            IStateMachineOp entry = stream.consumeEntry(address);
-
-            // If there is no upcall present, we must obtain it (via syncing).
-            if (entry == null) {
-                // If the object is write-locked, this means some other thread is syncing
-                // the object forward. This might have our update, so we wait until the write
-                // lock is removed.
-                if (lock.isWriteLocked()) {
-                    // We don't have a way to "park" or wait for the lock yet,
-                    // so we will spin.
-                    for (int i = 0; i < 1000000; i++) {
-                        entry = stream.consumeEntry(address);
-                        if (entry != null) {
-                            return (R) entry.getUpcallResult();
-                        }
-                        if (!lock.isWriteLocked()) {
-                            break;
-                        }
-                    }
-                }
-                // We need to sync the object forward in order to get the upcall result.
-                try {
-                    ts = lock.writeLock();
-                    switchToActiveStreamUnsafe();
-                    // Potentially pick up other updates.
-                    syncObjectUnsafe(Address.MAX, conflictObject);
-                    entry = stream.consumeEntry(address);
-                } finally {
-                    lock.unlock(ts);
-                }
+        CompletableFuture<Object> result =
+            stream.append(smrUpdateFunction, args, conflictObject, keepUpcallResult);
+        if (keepUpcallResult) {
+            if (result == null) {
+                throw new UnrecoverableCorfuException("Requested an upcall but no future returned");
             }
-
-            if (entry != null && entry.isUpcallResultPresent()) {
-                return (R) entry.getUpcallResult();
+            long ts = 0;
+            if (result.isDone()) {
+                return result.join();
             }
-            throw new RuntimeException("Attempted to get the result "
-                    + "of an upcall@" + address + " but we are @"
-                    + getVersionUnsafe()
-                    + " and we don't have a copy");
-        } catch (TrimmedException te) {
-            throw new TrimmedUpcallException(address);
+            try {
+                ts = lock.writeLock();
+                switchToActiveStreamUnsafe();
+                // Potentially pick up other updates.
+                syncObjectUnsafe(Address.MAX, conflictObject);
+                return result.join();
+            } catch (TrimmedException te) {
+                throw new TrimmedUpcallException();
+            } finally {
+                lock.unlock(ts);
+            }
         }
+        return null;
     }
-
 
     /**
      * {@inheritDoc}

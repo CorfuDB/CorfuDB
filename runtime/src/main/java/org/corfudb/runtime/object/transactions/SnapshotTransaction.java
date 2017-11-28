@@ -2,6 +2,7 @@ package org.corfudb.runtime.object.transactions;
 
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
@@ -111,9 +112,9 @@ public class SnapshotTransaction extends AbstractTransaction {
          * Unsupported operation.
          */
         @Override
-        public long append(@Nonnull String smrMethod,
+        public CompletableFuture<Object> append(@Nonnull String smrMethod,
                            @Nonnull Object[] smrArguments,
-                           @Nullable Object[] conflictObjects, boolean keepEntry) {
+                           @Nullable Object[] conflictObjects, boolean returnUpcall) {
             throw new UnsupportedOperationException("Snapshot stream doesn't support append");
         }
 
@@ -123,7 +124,7 @@ public class SnapshotTransaction extends AbstractTransaction {
          */
         @Override
         @Nullable
-        public IStateMachineOp consumeEntry(long address) {
+        public Object getUpcallResult(long address) {
             throw new UnsupportedOperationException("Snapshot stream cannot keep entries");
         }
 

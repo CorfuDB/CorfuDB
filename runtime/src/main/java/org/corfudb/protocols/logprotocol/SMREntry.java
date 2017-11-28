@@ -7,6 +7,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import java.util.function.Consumer;
+import javax.annotation.Nonnull;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -64,19 +66,7 @@ public class SMREntry extends LogEntry implements ISMRConsumable, IStateMachineO
     @Getter
     public boolean undoable;
 
-    /** The upcall result, if present. */
-    @Getter
-    public transient Object upcallResult;
-
-    /** If there is an upcall result for this modification. */
-    @Getter
-    public transient boolean upcallResultPresent = false;
-
-    /** Set the upcall result for this entry. */
-    public void setUpcallResult(Object result) {
-        upcallResult = result;
-        upcallResultPresent = true;
-    }
+    transient volatile Consumer<Object> upcallConsumer;
 
     /** Set the undo record for this entry. */
     public void setUndoRecord(Object object) {
@@ -163,10 +153,20 @@ public class SMREntry extends LogEntry implements ISMRConsumable, IStateMachineO
             return wrapper.getCorfuBuilder().getRawInstance();
         }
 
-        upcallResult =
-              wrapper.getCorfuSMRUpcallMap().get(getSMRMethod()).upcall(object, getSMRArguments());
-        upcallResultPresent = true;
+        Object upcallResult = wrapper.getCorfuSMRUpcallMap()
+                    .get(getSMRMethod()).upcall(object, getSMRArguments());
+
+        if (upcallConsumer != null) {
+            upcallConsumer.accept(upcallResult);
+            upcallConsumer = null;
+        }
+
         return object;
+    }
+
+    @Override
+    public void setUpcallConsumer(@Nonnull Consumer<Object> consumer) {
+        this.upcallConsumer = consumer;
     }
 
     @Override

@@ -2,6 +2,7 @@ package org.corfudb.runtime.object.transactions;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -14,6 +15,8 @@ import org.corfudb.runtime.object.IStateMachineOp;
 import org.corfudb.runtime.object.IStateMachineStream;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectBuilder;
+import org.eclipse.collections.api.map.primitive.MutableLongObjectMap;
+import org.eclipse.collections.impl.map.mutable.primitive.LongObjectHashMap;
 
 /** An optimistic state machine stream which supports recording updates into the
  *  write set of a transaction, and undoing those updates when syncing to
@@ -122,22 +125,26 @@ public abstract class AbstractOptimisticStateMachineStream extends
      * {@inheritDoc}
      */
     @Override
-    public long append(@Nonnull String smrMethod,
+    public CompletableFuture<Object> append(@Nonnull String smrMethod,
                        @Nonnull Object[] smrArguments,
-                       @Nullable Object[] conflictObjects, boolean keepEntry) {
+                       @Nullable Object[] conflictObjects, boolean returnUpcall) {
         SMREntry smrEntry = new SMREntry(smrMethod, smrArguments,
                 ((ObjectBuilder)manager.getBuilder()).getSerializer());
-        return writerContext.getWriteSet().add(manager, smrEntry, conflictObjects);
+        writerContext.getWriteSet().add(manager, smrEntry, conflictObjects);
+        if (returnUpcall) {
+            CompletableFuture cf = new CompletableFuture();
+            smrEntry.setUpcallConsumer(cf::complete);
+            return cf;
+        }
+        return null;
     }
 
     /**
      * {@inheritDoc}
      */
     @Override
-    public IStateMachineOp consumeEntry(long address) {
-        IStateMachineOp op = writerContext.getWriteSet().getWriteSet()
-                .getSMRUpdates(parent.getId()).get((int) address);
-        return op.isUpcallResultPresent() ? op : null;
+    public Object getUpcallResult(long address) {
+        return null;
     }
 
     @Override

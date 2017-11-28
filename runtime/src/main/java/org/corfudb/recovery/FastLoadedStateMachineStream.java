@@ -5,6 +5,8 @@ import com.google.common.collect.Streams;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -45,6 +47,11 @@ public class FastLoadedStateMachineStream implements IStateMachineStream {
         @Override
         public <T> T apply(ICorfuWrapper<T> wrapper, T object) {
             return originalOp.apply(wrapper, object);
+        }
+
+        @Override
+        public void setUpcallConsumer(@Nonnull Consumer<Object> consumer) {
+            originalOp.setUpcallConsumer(consumer);
         }
 
         IStateMachineOp getUndoOperation() {
@@ -107,14 +114,16 @@ public class FastLoadedStateMachineStream implements IStateMachineStream {
     }
 
     @Override
-    public long append(@Nonnull String smrMethod, @Nonnull Object[] smrArguments, Object[] conflictObjects, boolean keepEntry) {
-        return parent.append(smrMethod, smrArguments, conflictObjects, keepEntry);
+    public CompletableFuture<Object> append(@Nonnull String smrMethod,
+                                            @Nonnull Object[] smrArguments,
+                            Object[] conflictObjects, boolean returnUpcall) {
+        return parent.append(smrMethod, smrArguments, conflictObjects, returnUpcall);
     }
 
     @Override
     @Nullable
-    public IStateMachineOp consumeEntry(long address) {
-        return parent.consumeEntry(address);
+    public Object getUpcallResult(long address) {
+        return parent.getUpcallResult(address);
     }
 
     /**
