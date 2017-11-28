@@ -247,7 +247,7 @@ public class LinearizableStateMachineStream implements IStateMachineStream {
             throw new RuntimeException("Requested to consume entry " + address
                     + " but never requested to save!");
         }
-        if (op.isPresent()) {
+        if (op.isPresent() && op.get().isUpcallResultPresent()) {
             entryMap.remove(address);
             return op.get();
         }
