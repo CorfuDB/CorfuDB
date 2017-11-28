@@ -9,8 +9,8 @@ package org.corfudb.runtime.exceptions;
  */
 public class TrimmedUpcallException extends TrimmedException {
 
-    public TrimmedUpcallException(long address) {
-        super("Attempted to get upcall result @" + address
+    public TrimmedUpcallException() {
+        super("Attempted to get upcall result"
                 + " but it was trimmed before we could read it");
     }
 }

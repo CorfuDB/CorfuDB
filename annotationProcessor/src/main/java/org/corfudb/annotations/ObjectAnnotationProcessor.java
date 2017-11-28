@@ -142,8 +142,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
         Mutator mutator = smrMethod.getAnnotation(Mutator.class);
         return  (mutator != null && !mutator.name().equals("")) ? mutator.name() :
                 (mutatorAccessor != null && !mutatorAccessor.name().equals(""))
-                        ?
-                mutatorAccessor.name() : smrMethod.getSimpleName().toString();
+                        ? mutatorAccessor.name() : smrMethod.getSimpleName().toString();
     }
 
     /** Class to hold data about SMR Methods. */
@@ -487,8 +486,11 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     // If a mutator, then log the update.
                     if (mutator != null || mutatorAccessor != null) {
                         ms.addStatement(
-                                (mutatorAccessor != null ? "long address"
-                                        + CORFUSMR_FIELD + " = " : "")
+                                (mutatorAccessor != null
+                                    && !smrMethod.getReturnType().getKind().equals(TypeKind.VOID)
+                                    ? "return ("
+                                        + ParameterizedTypeName.get(smrMethod.getReturnType())
+                                        + ")" : "")
                                         + "getObjectManager$$CORFU().logUpdate($S,$L,$L$L$L)",
                                 getSmrFunctionName(smrMethod),
                                 // Don't need upcall result for mutators
@@ -507,17 +509,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                     // If an accessor (or not annotated), return the object
                     // by doing the underlying call.
                     if (mutatorAccessor != null) {
-                        // If the return to the mutatorAccessor is void, we don't need
-                        // to do anything...
-                        if (!smrMethod.getReturnType().getKind().equals(TypeKind.VOID)) {
-                            ms.addStatement("return ("
-                                    + ParameterizedTypeName.get(smrMethod.getReturnType())
-                                    + ") getObjectManager$$CORFU().getUpcallResult(address"
-                                    + CORFUSMR_FIELD
-                                    +  ", "
-                                    + (m.hasConflictAnnotations ? conflictField : "null")
-                                    + ")");
-                        }
+                        // don't do anything
                     } else if (transactional != null) {
                         // If transactional, begin the transaction
                         ms.addCode(smrMethod.getReturnType().getKind().equals(TypeKind.VOID)

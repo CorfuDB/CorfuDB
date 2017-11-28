@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
 /** Interface for a manager, which manages an object.
@@ -45,17 +46,8 @@ public interface IObjectManager<T> {
      * @param conflictObject
      * @return
      */
-    long logUpdate(String smrUpdateFunction, boolean keepUpcallResult,
+    Object logUpdate(String smrUpdateFunction, boolean keepUpcallResult,
                        Object[] conflictObject, Object... args);
-
-    /** Get the result of an upcall.
-     *
-     * @param address
-     * @param conflictObject
-     * @param <R>
-     * @return
-     */
-    <R> R getUpcallResult(long address, Object[] conflictObject);
 
     /** Access the state of an object.
      *

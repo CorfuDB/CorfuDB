@@ -3,11 +3,10 @@ package org.corfudb.runtime.object;
 import java.util.Collections;
 import java.util.List;
 import java.util.ListIterator;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Spliterator;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -25,7 +24,11 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnrecoverableCorfuException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.serializer.ISerializer;
+import org.eclipse.collections.api.map.primitive.MutableLongObjectMap;
+import org.eclipse.collections.impl.map.mutable.primitive.LongObjectHashMap;
+import org.eclipse.collections.impl.map.mutable.primitive.SynchronizedLongObjectMap;
 
 /**
  * An implementation of a state machine stream which has linearizable semantics over
@@ -53,9 +56,10 @@ public class LinearizableStateMachineStream implements IStateMachineStream {
     private final ISerializer serializer;
 
     /** A map which keeps track of entries which have been requested to be saved for calls to
-     * {@link #consumeEntry(long)}.
+     * {@link #getUpcallResult(long)}.
      */
-    final Map<Long, Optional<IStateMachineOp>> entryMap = new ConcurrentHashMap<>();
+    final MutableLongObjectMap<CompletableFuture<Object>> entryMap =
+        new SynchronizedLongObjectMap<>(new LongObjectHashMap<>());
 
     /** Generate a new linearizable state machine stream from a streamview.
      *
@@ -207,10 +211,11 @@ public class LinearizableStateMachineStream implements IStateMachineStream {
                     .map(this::dataAndCheckpointMapper)
                     .flatMap(List::stream)
                     .map(x -> {
-                        if (entryMap.containsKey(x.getAddress())) {
-                            entryMap.put(x.getAddress(), Optional.of(x));
+                        CompletableFuture<Object> cf = entryMap.get(x.getAddress());
+                        if (cf != null) {
+                            x.setUpcallConsumer(cf::complete);
                         }
-                        return (IStateMachineOp) x;
+                        return x;
                     });
         }
     }
@@ -219,40 +224,25 @@ public class LinearizableStateMachineStream implements IStateMachineStream {
      * {@inheritDoc}
      */
     @Override
-    public long append(@Nonnull String smrMethod,
+    public CompletableFuture<Object> append(@Nonnull String smrMethod,
                        @Nonnull Object[] smrArguments,
                        @Nullable Object[] conflictObjects,
-                       final boolean saveEntry) {
+                       final boolean returnUpcall) {
         SMREntry entry = new SMREntry(smrMethod, smrArguments, serializer);
-        return streamView.append(entry, t -> {
-            if (saveEntry) {
-                entryMap.put(t.getTokenValue(), Optional.empty());
-            }
-            return true;
-        }, t -> {
-            if (saveEntry) {
-                entryMap.remove(t.getTokenValue());
-            }
+        if (returnUpcall) {
+            CompletableFuture<Object> cf = new CompletableFuture<>();
+            streamView.append(entry, t -> {
+                entryMap.put(t.getTokenValue(), cf);
                 return true;
-         });
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    @Nullable
-    public IStateMachineOp consumeEntry(long address) {
-        Optional<IStateMachineOp> op = entryMap.get(address);
-        if (op == null) {
-            throw new UnrecoverableCorfuException("Requested to consume entry " + address
-                    + " but never requested to save!");
+            }, t -> {
+                entryMap.remove(t.getTokenValue());
+                return true;
+            });
+            return cf;
+        } else {
+            streamView.append(entry, t -> true, t -> true);
+            return null;
         }
-        if (op.isPresent() && op.get().isUpcallResultPresent()) {
-            entryMap.remove(address);
-            return op.get();
-        }
-        return null;
     }
 
     /**

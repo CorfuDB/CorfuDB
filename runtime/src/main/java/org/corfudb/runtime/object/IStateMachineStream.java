@@ -1,6 +1,8 @@
 package org.corfudb.runtime.object;
 
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
@@ -106,37 +108,23 @@ public interface IStateMachineStream {
     }
 
     /** Append a new state machine operation into the stream, providing optional conflict
-     * information and whether or not to keep track of the entry for use in an upcall later in a
-     * subsequent call to {@link #consumeEntry(long)}.
+     * information and whether or not to return a completable future which can be used to
+     * retrieve an upcall result.
      *
      * @param smrMethod         The name of the state machine method being called
      * @param smrArguments      Arguments to the state machine method
      * @param conflictObjects   An optional array of objects which describes fine-grained
      *                          conflict information.
-     * @param keepEntry         True, if we should keep the entry for so it can be retrieved in a
-     *                          future call to {@link #consumeEntry(long)}.
-     * @return                  The address that the entry was appended to. This address can be
-     *                          passed to {@link #consumeEntry(long)} or
-     *                          {{@link #sync(long, Object[])}}.
+     * @param returnUpcall      True, if we should return a completable future to obtain an
+     *                          upcall with.
+     * @return                  A completable future which can be used to obtain an upcall
+     *                          result.
      */
-    long append(@Nonnull String smrMethod,
+    @Nullable CompletableFuture<Object> append(@Nonnull String smrMethod,
                 @Nonnull Object[] smrArguments,
                 @Nullable Object[] conflictObjects,
-                boolean keepEntry);
+                boolean returnUpcall);
 
-    /** Consumes a state machine entry, returning the state machine operation at the given address.
-     * Typically used to obtain the result of an upcall. This address must have been provided by
-     * a previous call to {@link #append(String, Object[], Object[], boolean)} with the
-     * {@code keepEntry} flag set to true.
-     *
-     * <p> If no upcall result is yet present, {@code null} is returned.
-     *
-     * @param address           An address provided by a previous call to
-     *                          {@link #append(String, Object[], Object[], boolean)}
-     * @return                  The state machine entry appended to the given address, or
-     *                          {@code null}, if not upcall result is present.
-     */
-    @Nullable IStateMachineOp consumeEntry(long address);
 
     /** Get the parent stream of this stream, if present, or null if the stream has no parent.
      *
