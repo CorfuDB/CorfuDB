@@ -135,8 +135,9 @@ public abstract class AbstractOptimisticStateMachineStream extends
      */
     @Override
     public IStateMachineOp consumeEntry(long address) {
-        return writerContext.getWriteSet().getWriteSet()
+        IStateMachineOp op = writerContext.getWriteSet().getWriteSet()
                 .getSMRUpdates(parent.getId()).get((int) address);
+        return op.isUpcallResultPresent() ? op : null;
     }
 
     @Override

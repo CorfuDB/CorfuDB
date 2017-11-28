@@ -121,7 +121,7 @@ public class VersionedObjectManager<T> implements IObjectManager<T> {
             IStateMachineOp entry = stream.consumeEntry(address);
 
             // If there is no upcall present, we must obtain it (via syncing).
-            if (entry == null || !entry.isUpcallResultPresent()) {
+            if (entry == null) {
                 // If the object is write-locked, this means some other thread is syncing
                 // the object forward. This might have our update, so we wait until the write
                 // lock is removed.
@@ -129,10 +129,8 @@ public class VersionedObjectManager<T> implements IObjectManager<T> {
                     // We don't have a way to "park" or wait for the lock yet,
                     // so we will spin.
                     for (int i = 0; i < 1000000; i++) {
-                        if (entry == null) {
-                            entry = stream.consumeEntry(address);
-                        }
-                        if (entry != null && entry.isUpcallResultPresent()) {
+                        entry = stream.consumeEntry(address);
+                        if (entry != null) {
                             return (R) entry.getUpcallResult();
                         }
                         if (!lock.isWriteLocked()) {

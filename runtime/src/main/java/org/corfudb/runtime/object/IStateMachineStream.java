@@ -129,9 +129,12 @@ public interface IStateMachineStream {
      * a previous call to {@link #append(String, Object[], Object[], boolean)} with the
      * {@code keepEntry} flag set to true.
      *
+     * <p> If no upcall result is yet present, {@code null} is returned.
+     *
      * @param address           An address provided by a previous call to
      *                          {@link #append(String, Object[], Object[], boolean)}
-     * @return                  The state machine entry appended to the given address.
+     * @return                  The state machine entry appended to the given address, or
+     *                          {@code null}, if not upcall result is present.
      */
     @Nullable IStateMachineOp consumeEntry(long address);
 
