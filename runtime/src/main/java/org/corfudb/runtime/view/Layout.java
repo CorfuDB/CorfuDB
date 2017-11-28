@@ -51,6 +51,7 @@ public class Layout implements Cloneable {
     /**
      * A Gson parser.
      */
+    @Getter
     static final Gson parser = new GsonBuilder()
             .registerTypeAdapter(Layout.class, new LayoutDeserializer())
             .create();
@@ -502,12 +503,12 @@ public class Layout implements Cloneable {
         ReplicationMode replicationMode;
 
         /**
-         * The address the layout segment starts at.
+         * The address the layout segment starts at. (included in the segment)
          */
         long start;
 
         /**
-         * The address the layout segment ends at.
+         * The address the layout segment ends at. (excluded from the segment)
          */
         long end;
 

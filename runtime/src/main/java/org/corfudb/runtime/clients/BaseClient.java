@@ -16,6 +16,7 @@ import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
+import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 
 /**
@@ -191,5 +192,19 @@ public class BaseClient implements IClient {
         log.warn("Server threw exception for request {}", msg.getRequestID(),
                 msg.getPayload().getThrowable());
         throw msg.getPayload().getThrowable();
+    }
+
+    /**
+     * Handle a ERROR_SHUTDOWN_EXCEPTION response from the server.
+     *
+     * @param msg The shutdown exception message
+     * @param ctx The context the message was sent under
+     * @param r   A reference to the router
+     * @return none, throw a shutdown exception instead.
+     */
+    @ClientHandler(type = CorfuMsgType.ERROR_SHUTDOWN_EXCEPTION)
+    private static Object handleShutdownException(CorfuMsg msg, ChannelHandlerContext ctx,
+                                                  IClientRouter r) {
+        throw new ShutdownException();
     }
 }

@@ -2,9 +2,9 @@ package org.corfudb.infrastructure;
 
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.infrastructure.management.LayoutWorkflowManager;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutBuilder;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Created by zlokhandwala on 10/26/16.
  */
-public class LayoutWorkflowManagerTest extends AbstractCorfuTest {
+public class LayoutBuilderTest extends AbstractCorfuTest {
 
     final int SERVER_ENTRY_3 = 3;
     final int SERVER_ENTRY_4 = 4;
@@ -62,7 +62,7 @@ public class LayoutWorkflowManagerTest extends AbstractCorfuTest {
         allNodes.add(TestLayoutBuilder.getEndpoint(SERVERS.PORT_4));
 
         Set<String> failedNodes = new HashSet<String>();
-        LayoutWorkflowManager layoutWorkflowManager = new LayoutWorkflowManager(originalLayout);
+        LayoutBuilder layoutBuilder = new LayoutBuilder(originalLayout);
 
         //Preparing failed nodes set.
         failedNodes.addAll(allNodes);
@@ -74,17 +74,17 @@ public class LayoutWorkflowManagerTest extends AbstractCorfuTest {
 
         // Deleting all Layout Servers
         assertThatThrownBy(() ->
-                layoutWorkflowManager.removeLayoutServers(failedNodes).build()
+                layoutBuilder.removeLayoutServers(failedNodes).build()
         ).isInstanceOf(LayoutModificationException.class);
 
         //Deleting all Sequencer Servers
         assertThatThrownBy(() ->
-                layoutWorkflowManager.removeSequencerServers(failedNodes).build()
+                layoutBuilder.removeSequencerServers(failedNodes).build()
         ).isInstanceOf(LayoutModificationException.class);
 
         //Deleting all Log unit Servers
         assertThatThrownBy(() ->
-                layoutWorkflowManager.removeLogunitServers(failedNodes).build()
+                layoutBuilder.removeLogunitServers(failedNodes).build()
         ).isInstanceOf(LayoutModificationException.class);
 
         // Deleting all nodes in one stripe
@@ -92,7 +92,7 @@ public class LayoutWorkflowManagerTest extends AbstractCorfuTest {
         failedNodes.add(allNodes.get(0));
         failedNodes.add(allNodes.get(2));
         assertThatThrownBy(() ->
-                layoutWorkflowManager.removeLogunitServers(failedNodes).build()
+                layoutBuilder.removeLogunitServers(failedNodes).build()
         ).isInstanceOf(LayoutModificationException.class);
 
 
@@ -124,7 +124,7 @@ public class LayoutWorkflowManagerTest extends AbstractCorfuTest {
         failedNodes.add(allNodes.get(0));
         failedNodes.add(allNodes.get(SERVER_ENTRY_4));
 
-        Layout actualLayout = layoutWorkflowManager.removeLayoutServers(failedNodes)
+        Layout actualLayout = layoutBuilder.removeLayoutServers(failedNodes)
                 .removeLogunitServers(failedNodes)
                 .removeSequencerServers(failedNodes)
                 .build();
@@ -150,30 +150,90 @@ public class LayoutWorkflowManagerTest extends AbstractCorfuTest {
                 .build();
 
         // Remove SERVERS.PORT_1 & SERVERS.PORT_2 from layout server
-        layoutWorkflowManager.removeLayoutServer(allNodes.get(1));
-        layoutWorkflowManager.removeLayoutServer(allNodes.get(2));
+        layoutBuilder.removeLayoutServer(allNodes.get(1));
+        layoutBuilder.removeLayoutServer(allNodes.get(2));
         // No effect on removing removed node
-        layoutWorkflowManager.removeLayoutServer(allNodes.get(2));
+        layoutBuilder.removeLayoutServer(allNodes.get(2));
         // Remove SERVERS.PORT_3 from layout server should throw error.
         assertThatThrownBy(() ->
-                layoutWorkflowManager.removeLayoutServer(allNodes.get(SERVER_ENTRY_3))
+                layoutBuilder.removeLayoutServer(allNodes.get(SERVER_ENTRY_3))
         ).isInstanceOf(LayoutModificationException.class);
         // Remove SERVERS.PORT_1 from sequencers
-        layoutWorkflowManager.removeSequencerServer(allNodes.get(1));
+        layoutBuilder.removeSequencerServer(allNodes.get(1));
         // No effect on removing removed node
-        layoutWorkflowManager.removeSequencerServer(allNodes.get(1));
+        layoutBuilder.removeSequencerServer(allNodes.get(1));
         // Remove SERVERS.PORT_2 from sequencer server should throw error.
         assertThatThrownBy(() ->
-                layoutWorkflowManager.removeSequencerServer(allNodes.get(2))
+                layoutBuilder.removeSequencerServer(allNodes.get(2))
         ).isInstanceOf(LayoutModificationException.class);
         // Remove SERVERS.PORT_1 from logunits
-        layoutWorkflowManager.removeLogunitServer(allNodes.get(1));
+        layoutBuilder.removeLogunitServer(allNodes.get(1));
         // No effect on removing removed node
-        layoutWorkflowManager.removeLogunitServer(allNodes.get(1));
+        layoutBuilder.removeLogunitServer(allNodes.get(1));
         // Remove SERVERS.PORT_2 from logunit server should throw error.
         assertThatThrownBy(() ->
-                layoutWorkflowManager.removeLogunitServer(allNodes.get(2))
+                layoutBuilder.removeLogunitServer(allNodes.get(2))
         ).isInstanceOf(LayoutModificationException.class);
-        assertThat(layoutWorkflowManager.build()).isEqualTo(expectedLayout);
+        assertThat(layoutBuilder.build()).isEqualTo(expectedLayout);
+    }
+
+    /**
+     * Tests the modification of the layout by the addition of new nodes.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void checkAdditionOfNodes() throws Exception {
+
+        Layout originalLayout = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_0)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        LayoutBuilder layoutBuilder = new LayoutBuilder(originalLayout);
+
+        final long globalLogTail = 50L;
+        layoutBuilder.addLayoutServer(SERVERS.ENDPOINT_1);
+        layoutBuilder.addSequencerServer(SERVERS.ENDPOINT_2);
+        layoutBuilder.addLogunitServer(1, globalLogTail, SERVERS.ENDPOINT_3);
+
+        // Expected layout
+        Layout expectedLayout = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_2)
+                .buildSegment()
+                .setEnd(globalLogTail + 1)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .buildSegment()
+                .setStart(globalLogTail + 1)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addToSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.PORT_3)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        assertThat(layoutBuilder.build()).isEqualTo(expectedLayout);
     }
 }

@@ -90,7 +90,8 @@ public enum CorfuMsgType {
     HEARTBEAT_REQUEST(75, TypeToken.of(CorfuMsg.class), true),
     HEARTBEAT_RESPONSE(76, new TypeToken<CorfuPayloadMsg<byte[]>>(){}, true),
 
-    ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true)
+    ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true),
+    ERROR_SHUTDOWN_EXCEPTION(201, TypeToken.of(CorfuMsg.class), true)
     ;
 
 
