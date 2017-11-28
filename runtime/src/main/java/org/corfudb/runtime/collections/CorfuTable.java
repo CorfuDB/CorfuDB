@@ -163,7 +163,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
 
     /** Default constructor. Generates a table without any secondary indexes. */
     public CorfuTable() {
-        log.error("CorfuTable: Creating a table without secondary indexes! Secondary index lookup"
+        log.debug("CorfuTable: Creating a table without secondary indexes! Secondary index lookup"
             + " will DEGRADE to a full scan");
     }
 
