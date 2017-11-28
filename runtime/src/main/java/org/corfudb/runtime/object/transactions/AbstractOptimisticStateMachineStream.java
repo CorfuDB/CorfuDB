@@ -139,14 +139,6 @@ public abstract class AbstractOptimisticStateMachineStream extends
         return null;
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public Object getUpcallResult(long address) {
-        return null;
-    }
-
     @Override
     public boolean equals(Object o) {
         if (this == o) {

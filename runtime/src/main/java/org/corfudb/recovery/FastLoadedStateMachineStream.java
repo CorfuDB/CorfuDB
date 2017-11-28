@@ -120,12 +120,6 @@ public class FastLoadedStateMachineStream implements IStateMachineStream {
         return parent.append(smrMethod, smrArguments, conflictObjects, returnUpcall);
     }
 
-    @Override
-    @Nullable
-    public Object getUpcallResult(long address) {
-        return parent.getUpcallResult(address);
-    }
-
     /**
      * Return the parent, which is null, since this stream must be the new root
      * @return  The parent stream, which is null.

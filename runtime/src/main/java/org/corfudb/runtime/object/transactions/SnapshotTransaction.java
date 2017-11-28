@@ -120,16 +120,6 @@ public class SnapshotTransaction extends AbstractTransaction {
 
         /**
          * {@inheritDoc}
-         * Unsupported operation.
-         */
-        @Override
-        @Nullable
-        public Object getUpcallResult(long address) {
-            throw new UnsupportedOperationException("Snapshot stream cannot keep entries");
-        }
-
-        /**
-         * {@inheritDoc}
          */
         @Override
         public UUID getId() {

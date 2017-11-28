@@ -115,6 +115,10 @@ public class VersionedObjectManager<T> implements IObjectManager<T> {
             }
             try {
                 ts = lock.writeLock();
+                // Possibly completed by another thread.
+                if (result.isDone()) {
+                    return result.join();
+                }
                 switchToActiveStreamUnsafe();
                 // Potentially pick up other updates.
                 syncObjectUnsafe(Address.MAX, conflictObject);

@@ -249,24 +249,6 @@ public class LinearizableStateMachineStream implements IStateMachineStream {
      * {@inheritDoc}
      */
     @Override
-    @Nullable
-    public Object getUpcallResult(long address) {
-        CompletableFuture<Object> op = entryMap.get(address);
-        if (op == null) {
-            throw new UnrecoverableCorfuException("Requested to consume entry " + address
-                    + " but never requested to save!");
-        }
-        if (op.isDone()) {
-            entryMap.remove(address);
-            return CFUtils.getUninterruptibly(op);
-        }
-        throw new IllegalStateException("Upcall result unavailable (address=" + address  + ")");
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
     public UUID getId() {
         return streamView.getId();
     }
