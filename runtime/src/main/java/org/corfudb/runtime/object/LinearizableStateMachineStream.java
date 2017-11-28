@@ -22,6 +22,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.UnrecoverableCorfuException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
@@ -244,7 +245,7 @@ public class LinearizableStateMachineStream implements IStateMachineStream {
     public IStateMachineOp consumeEntry(long address) {
         Optional<IStateMachineOp> op = entryMap.get(address);
         if (op == null) {
-            throw new RuntimeException("Requested to consume entry " + address
+            throw new UnrecoverableCorfuException("Requested to consume entry " + address
                     + " but never requested to save!");
         }
         if (op.isPresent() && op.get().isUpcallResultPresent()) {
