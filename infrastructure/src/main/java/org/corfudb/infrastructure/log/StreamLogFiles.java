@@ -25,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -32,11 +33,13 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nullable;
@@ -912,6 +915,58 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     /**
+     * Write a list of LogData entries to the log file.
+     * @param sh segment handle to the logfile
+     * @param entries list of LogData entries to write.
+     * @return A map of AddressMetaData for the written records
+     * @throws IOException
+     */
+    private Map<Long, AddressMetaData> writeRecords(SegmentHandle sh,
+                                             List<LogData> entries) throws IOException {
+        Map<Long, AddressMetaData> recordsMap = new HashMap<>();
+
+        List<ByteBuffer> entryBuffs = new ArrayList<>();
+        int totalBytes = 0;
+
+        List<Metadata> metadataList = new ArrayList<>();
+
+        for (int ind = 0; ind < entries.size(); ind++) {
+            LogData curr = entries.get(ind);
+            LogEntry logEntry = getLogEntry(curr.getGlobalAddress(), curr);
+            Metadata metadata = getMetadata(logEntry);
+            metadataList.add(metadata);
+            ByteBuffer record = getByteBuffer(metadata, logEntry);
+            totalBytes += record.limit();
+            entryBuffs.add(record);
+        }
+
+        // Account for the delimiters
+        totalBytes += (Short.BYTES * entryBuffs.size());
+        ByteBuffer allRecordsBuf = ByteBuffer.allocate(totalBytes);
+
+        try (MultiReadWriteLock.AutoCloseableLock ignored =
+                     segmentLocks.acquireWriteLock(sh.getSegment())) {
+            for (int ind = 0; ind < entryBuffs.size(); ind++) {
+                long channelOffset = sh.logChannel.position()
+                        + allRecordsBuf.position() + Short.BYTES + METADATA_SIZE;
+                allRecordsBuf.putShort(RECORD_DELIMITER);
+                allRecordsBuf.put(entryBuffs.get(ind));
+                Metadata metadata = metadataList.get(ind);
+                recordsMap.put(entries.get(ind).getGlobalAddress(),
+                        new AddressMetaData(metadata.getChecksum(),
+                                metadata.getLength(), channelOffset));
+            }
+
+            allRecordsBuf.flip();
+            sh.logChannel.write(allRecordsBuf);
+            channelsToSync.add(sh.logChannel);
+            syncTailSegment(entries.get(entries.size() - 1).getGlobalAddress());
+        }
+
+        return recordsMap;
+    }
+
+    /**
      * Write a log entry record to a file.
      *
      * @param fh      The file handle to use.
@@ -944,6 +999,129 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
 
         return new AddressMetaData(metadata.getChecksum(), metadata.getLength(), channelOffset);
+    }
+
+    long getSegment(LogData entry) {
+        return entry.getGlobalAddress() / RECORDS_PER_LOG_FILE;
+    }
+
+    /**
+     * Pre-process a range of entries to be written. This includes
+     * removing trimmed entries and advancing the trim mark appropriately.
+     * @param range range of entries
+     * @return A subset of range; entries to be written
+     */
+    List<LogData> preprocess(List<LogData> range) {
+        List<LogData> processed  = new ArrayList<>();
+        for (int x = 0; x < range.size(); x++) {
+            // TODO(Maithem) Add an extra check to make
+            // sure that trimmed entres don't alternate
+            // with non-trimmed entries
+            LogData curr = range.get(x);
+            if (curr.isTrimmed()) {
+                // We don't need to write trimmed entries
+                // because we already track the trim mark
+                prefixTrim(curr.getGlobalAddress());
+                continue;
+            } else if (isTrimmed(curr.getGlobalAddress())) {
+                // This is the case where the client tries to
+                // write a range of addresses, but before the
+                // request starts, a prefix trim request executes
+                // on this logging unit, as a consequence trimming
+                // all of, or part of the range.
+                continue;
+            }
+            else {
+                processed.add(curr);
+            }
+        }
+        return processed;
+    }
+
+    /**
+     * This method verifies that a range of entries doesn't
+     * span more than two segments and that the log addresses
+     * are ordered sequentially.
+     * @param range entries to verify
+     * @return return true if the range is valid.
+     */
+    boolean verify(List<LogData> range) {
+
+        // Make sure that entries are ordered sequentially
+        long firstAddress = range.get(0).getGlobalAddress();
+        for (int x = 1; x < range.size(); x++) {
+            if (range.get(x).getGlobalAddress() !=
+                    firstAddress + x) {
+                return false;
+            }
+        }
+
+        // Check if the range spans more than two segments
+        long lastAddress = range.get(range.size() - 1).getGlobalAddress();
+        long firstSegment = firstAddress / RECORDS_PER_LOG_FILE;
+        long endSegment = lastAddress / RECORDS_PER_LOG_FILE;
+
+        if (endSegment - firstSegment > 1) {
+            return false;
+        }
+
+        return true;
+    }
+
+    @Override
+    public void append(List<LogData> range) {
+        // Remove trimmed entries
+        List<LogData> entries = preprocess(range);
+
+        if (entries.isEmpty()) {
+            log.info("No entries to write.");
+            return;
+        }
+
+        if (!verify(entries)) {
+            // Range overlaps more than two segments
+            throw new IllegalArgumentException("Write range too large!");
+        }
+
+        // check if the entries range cross a segment
+        LogData first = entries.get(0);
+        LogData last = entries.get(entries.size() - 1);
+        SegmentHandle firstSh = getSegmentHandleForAddress(first.getGlobalAddress());
+        SegmentHandle lastSh = getSegmentHandleForAddress(last.getGlobalAddress());
+
+        List<LogData> segOneEntries = new ArrayList<>();
+        List<LogData> segTwoEntries = new ArrayList<>();
+
+        for (int ind = 0; ind < entries.size(); ind++) {
+            LogData curr = entries.get(ind);
+
+            if (getSegment(curr) == firstSh.getSegment() &&
+                    !firstSh.knownAddresses.containsKey(curr.getGlobalAddress())) {
+                segOneEntries.add(curr);
+            } else if (getSegment(curr) == lastSh.getSegment() &&
+                    !lastSh.knownAddresses.containsKey(curr.getGlobalAddress())) {
+                segTwoEntries.add(curr);
+            }
+        }
+
+        try {
+            if (!segOneEntries.isEmpty()) {
+                Map<Long, AddressMetaData> firstSegAddresses = writeRecords(firstSh, segOneEntries);
+                firstSh.getKnownAddresses().putAll(firstSegAddresses);
+            }
+
+            if (!segTwoEntries.isEmpty()) {
+                Map<Long, AddressMetaData> lastSegAddresses = writeRecords(lastSh, segTwoEntries);
+                lastSh.getKnownAddresses().putAll(lastSegAddresses);
+            }
+        } catch (IOException e) {
+            log.error("Disk_write[{}-{}]: Exception", first.getGlobalAddress(),
+                    last.getGlobalAddress(), e);
+            throw new RuntimeException(e);
+        } finally {
+            firstSh.release();
+            lastSh.release();
+        }
     }
 
     @Override

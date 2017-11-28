@@ -2,6 +2,8 @@ package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import org.corfudb.format.Types;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
@@ -18,6 +20,7 @@ import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.io.File;
@@ -91,6 +94,57 @@ public class LogUnitClientTest extends AbstractClientTest {
         assertThat(r.isEmpty()).isTrue();
         assertThat(r.getGlobalAddress()).isEqualTo(address0);
         assertThat(LogData.getEmpty(0)).isEqualTo(LogData.getEmpty(0));
+    }
+
+    @Test
+    public void writeNonSequentialRange() throws Exception {
+        final long address0 = 0;
+        final long address4 = 4;
+
+        List<LogData> entries = new ArrayList<>();
+        ByteBuf b = Unpooled.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        LogData ld0 = new LogData(DataType.DATA, b);
+        ld0.setGlobalAddress(address0);
+        entries.add(ld0);
+
+        LogData ld4 = new LogData(DataType.DATA, b);
+        ld4.setGlobalAddress(address4);
+        entries.add(ld4);
+
+        assertThatThrownBy(() -> client.writeRange(entries).get())
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    public void writeRange() throws Exception {
+        final int numIter = 100;
+
+        List<LogData> entries = new ArrayList<>();
+        for (int x = 0; x < numIter; x++) {
+            ByteBuf b = Unpooled.buffer();
+            byte[] streamEntry = "Payload".getBytes();
+            Serializers.CORFU.serialize(streamEntry, b);
+            LogData ld = new LogData(DataType.DATA, b);
+            ld.setGlobalAddress((long) x);
+            entries.add(ld);
+        }
+
+        client.writeRange(entries).get();
+
+        // "Restart the logging unit
+        LogUnitServer server2 = new LogUnitServer(serverContext);
+        serverRouter.reset();
+        serverRouter.addServer(server2);
+
+        List<LogData> readEntries = new ArrayList<>();
+        for (int x = 0; x < numIter; x++) {
+            LogData ld = client.read(x).get().getAddresses().get((long) x);
+            readEntries.add(ld);
+        }
+
+        assertThat(entries).isEqualTo(readEntries);
     }
 
     @Test
