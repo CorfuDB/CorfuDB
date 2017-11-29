@@ -71,6 +71,7 @@ public enum CorfuMsgType {
     ERROR_OOS(53, TypeToken.of(CorfuMsg.class)),
     ERROR_RANK(54, TypeToken.of(CorfuMsg.class)),
     ERROR_NOENTRY(55, TypeToken.of(CorfuMsg.class)),
+    RANGE_WRITE(56, new TypeToken<CorfuPayloadMsg<RangeWriteMsg>>(){}),
     ERROR_DATA_CORRUPTION(57, TypeToken.of(CorfuMsg.class)),
     ERROR_DATA_OUTRANKED(58, TypeToken.of(CorfuMsg.class)),
     ERROR_VALUE_ADOPTED(59,new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
@@ -89,7 +90,8 @@ public enum CorfuMsgType {
     HEARTBEAT_REQUEST(75, TypeToken.of(CorfuMsg.class), true),
     HEARTBEAT_RESPONSE(76, new TypeToken<CorfuPayloadMsg<byte[]>>(){}, true),
 
-    ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true)
+    ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true),
+    ERROR_SHUTDOWN_EXCEPTION(201, TypeToken.of(CorfuMsg.class), true)
     ;
 
 

@@ -81,6 +81,31 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         }
     }
 
+    /** Test if seeking the stream after resetting and then calling previous
+     *  returns the correct entry.
+     */
+    @Test
+    public void seekSkipTest() {
+        CorfuRuntime runtime = getDefaultRuntime();
+        IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
+        final byte[] ENTRY_0 = {0};
+        final byte[] ENTRY_1 = {1};
+        final byte[] ENTRY_2 = {2};
+
+        sv.append(ENTRY_0);
+        sv.append(ENTRY_1);
+        sv.append(ENTRY_2);
+        sv.reset();
+
+        // This moves the stream pointer so the NEXT read will be 2
+        // (the pointer is at 1).
+        sv.seek(2);
+
+        // The previous entry should be ENTRY_0
+        assertThat((byte[])sv.previous().getPayload(runtime))
+                .isEqualTo(ENTRY_0);
+    }
+
 
     @Test
     public void moreReadQueueTest() {

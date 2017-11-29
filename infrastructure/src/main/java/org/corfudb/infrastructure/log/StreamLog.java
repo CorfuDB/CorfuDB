@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.log;
 
 import java.io.IOException;
+import java.util.List;
 
 import org.corfudb.protocols.wireprotocol.LogData;
 
@@ -18,6 +19,15 @@ public interface StreamLog {
      * @param entry    entry to append to the log
      */
     void append(long address, LogData entry);
+
+    /**
+     * Append a range of consecutive entries ordered by their addresses.
+     * Entries that are trimmed, or overwrites other addresses are ignored
+     * (i.e. they are not written) and an OverwriteException is not thrown.
+     *
+     * @param entries
+     */
+    void append(List<LogData> entries);
 
     /**
      * Given an address, read the corresponding stream entry.

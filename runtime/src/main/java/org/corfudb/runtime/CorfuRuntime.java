@@ -30,12 +30,15 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutManagementView;
 import org.corfudb.runtime.view.LayoutView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
+
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Version;
@@ -93,6 +96,11 @@ public class CorfuRuntime {
      */
     @Getter(lazy = true)
     private final ObjectsView objectsView = new ObjectsView(this);
+    /**
+     * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
+     */
+    @Getter(lazy = true)
+    private final LayoutManagementView layoutManagementView = new LayoutManagementView(this);
     /**
      * A list of known layout servers.
      */
@@ -278,8 +286,6 @@ public class CorfuRuntime {
         nodeRouters = new ConcurrentHashMap<>();
         retryRate = 5;
 
-        getAddressSpaceView().setMetrics(metrics != null
-                ? metrics : CorfuRuntime.getDefaultMetrics());
         synchronized (metrics) {
             if (metrics.getNames().isEmpty()) {
 //                MetricsUtils.addJvmMetrics(metrics, mp);
@@ -371,6 +377,14 @@ public class CorfuRuntime {
     @SuppressWarnings("checkstyle:abbreviation")
     public static UUID getStreamID(String string) {
         return UUID.nameUUIDFromBytes(string.getBytes());
+    }
+
+    public static UUID getCheckpointStreamIdFromId(UUID streamId) {
+        return getStreamID(streamId.toString() + StreamsView.CHECKPOINT_SUFFIX);
+    }
+
+    public static UUID getCheckpointStreamIdFromName(String streamName) {
+        return getCheckpointStreamIdFromId(CorfuRuntime.getStreamID(streamName));
     }
 
     /**
@@ -479,9 +493,9 @@ public class CorfuRuntime {
     private CompletableFuture<Layout> fetchLayout() {
         return CompletableFuture.<Layout>supplyAsync(() -> {
 
+            List<String> layoutServersCopy = new ArrayList<>(layoutServers);
             while (true) {
-                List<String> layoutServersCopy =  layoutServers.stream().collect(
-                        Collectors.toList());
+
                 Collections.shuffle(layoutServersCopy);
                 // Iterate through the layout servers, attempting to connect to one
                 for (String s : layoutServersCopy) {
@@ -497,8 +511,8 @@ public class CorfuRuntime {
                         // If the layout we got has a smaller epoch than the router,
                         // we discard it.
                         if (l.getEpoch() < router.getEpoch()) {
-                            log.warn("fetchLayout: Received a layout with epoch {} from server {}:{}" +
-                                            " smaller than router epoch {}, discarded.",
+                            log.warn("fetchLayout: Received a layout with epoch {} from server "
+                                            + "{}:{} smaller than router epoch {}, discarded.",
                                     l.getEpoch(), router.getHost(),
                                     router.getPort(), router.getEpoch());
                             continue;
@@ -517,8 +531,15 @@ public class CorfuRuntime {
                         // it is acceptable (at least the code on 10/13/2016 does not have issues)
                         // but setEpoch of routers needs to be synchronized as those variables are
                         // not local.
-                        l.getAllServers().stream().map(getRouterFunction).forEach(x ->
-                                x.setEpoch(l.getEpoch()));
+                        try {
+                            l.getAllServers().stream().map(getRouterFunction).forEach(x ->
+                                    x.setEpoch(l.getEpoch()));
+                        } catch (NetworkException ne) {
+                            // We have already received the layout and there is no need to keep client waiting.
+                            // NOTE: This is true assuming this happens only at router creation.
+                            // If not we also have to take care of setting the latest epoch on Client Router.
+                            log.warn("fetchLayout: Error getting router : {}", ne);
+                        }
                         layoutServers = l.getLayoutServers();
                         layout = layoutFuture;
                         //FIXME Synchronization END
@@ -529,7 +550,8 @@ public class CorfuRuntime {
                         log.warn("Tried to get layout from {} but failed with exception:", s, e);
                     }
                 }
-                log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}s.", retryRate);
+                log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}s.",
+                        retryRate);
                 try {
                     Thread.sleep(retryRate * 1000);
                 } catch (InterruptedException e) {

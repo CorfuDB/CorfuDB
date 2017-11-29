@@ -1,16 +1,14 @@
 package org.corfudb.infrastructure.log;
 
-import io.netty.util.internal.ConcurrentSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -33,8 +31,21 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
      */
     public InMemoryStreamLog() {
         logCache = new ConcurrentHashMap();
-        trimmed = new ConcurrentSet<>();
+        trimmed = ConcurrentHashMap.newKeySet();
         startingAddress = 0;
+    }
+
+    @Override
+    public synchronized void append(List<LogData> entries) {
+        for (LogData entry : entries) {
+            if (isTrimmed(entry.getGlobalAddress()) || logCache.containsKey(entry.getGlobalAddress())) {
+                continue;
+            }
+
+            logCache.put(entry.getGlobalAddress(), entry);
+            globalTail.getAndUpdate(maxTail -> entry.getGlobalAddress() > maxTail
+                    ? entry.getGlobalAddress() : maxTail);
+        }
     }
 
     @Override
@@ -96,10 +107,10 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public LogData read(long address) {
         if (isTrimmed(address)) {
-            return LogData.TRIMMED;
+            return LogData.getTrimmed(address);
         }
         if (trimmed.contains(address)) {
-            return LogData.TRIMMED;
+            return LogData.getTrimmed(address);
         }
 
         return logCache.get(address);

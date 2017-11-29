@@ -20,6 +20,7 @@ import java.util.List;
  */
 public class Operations implements DataSet {
 
+    private State state;
     final List<Operation> allOperations;
 
     public Operations(State state) {
@@ -30,10 +31,17 @@ public class Operations implements DataSet {
                 new SnapshotTxOperation(state),
                 new SleepOperation(state),
                 new RemoveOperation(state));
+//              TODO: Fix nestedTx path to enable it
+//              new NestedTxOperation(state));
+        this.state = state;
     }
 
     public void populate() {
         //no-op
+    }
+
+    public Operation getRandomOperation() {
+        return allOperations.get(state.rand.nextInt(allOperations.size()));
     }
 
     public List<Operation> getDataSet() {

@@ -74,12 +74,13 @@ public class ManagementClient implements IClient {
     /**
      * Sends the failure detected to the relevant management server.
      *
-     * @param nodes The failed nodes map to be handled.
+     * @param failedNodes The failed nodes set to be handled.
+     * @param healedNodes The healed nodes set to be handled.
      * @return A future which will be return TRUE if completed successfully else returns FALSE.
      */
-    public CompletableFuture<Boolean> handleFailure(Set nodes) {
+    public CompletableFuture<Boolean> handleFailure(Set failedNodes, Set healedNodes) {
         return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED
-                .payloadMsg(new FailureDetectorMsg(nodes)));
+                .payloadMsg(new FailureDetectorMsg(failedNodes, healedNodes)));
     }
 
     /**
