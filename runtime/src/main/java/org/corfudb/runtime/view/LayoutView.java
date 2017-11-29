@@ -298,6 +298,10 @@ public class LayoutView extends AbstractView {
                 timeouts++;
             }
             responses++;
+            commitList = Arrays.stream(commitList)
+                    .filter(x -> !x.isCompletedExceptionally())
+                    .toArray(CompletableFuture[]::new);
+
             log.debug("committed: Successful responses={}, timeouts={}", responses, timeouts);
         }
     }

@@ -10,6 +10,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -28,6 +29,7 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
+import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
@@ -37,7 +39,6 @@ import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
 
@@ -287,6 +288,18 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
+
+    /**
+     * Services incoming range write calls.
+     */
+    @ServerHandler(type = CorfuMsgType.RANGE_WRITE, opTimer = metricsPrefix + "rangeWrite")
+    private void rangeWrite(CorfuPayloadMsg<RangeWriteMsg> msg,
+                                  ChannelHandlerContext ctx, IServerRouter r,
+                                  boolean isMetricsEnabled) {
+        List<LogData> entries = msg.getPayload().getEntries();
+        batchWriter.bulkWrite(entries);
+        r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
+    }
 
     /**
      * Retrieve the LogUnitEntry from disk, given an address.

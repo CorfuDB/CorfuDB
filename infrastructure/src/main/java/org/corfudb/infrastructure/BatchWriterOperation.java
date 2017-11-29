@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import lombok.Data;
@@ -15,6 +16,7 @@ public class BatchWriterOperation {
     public enum Type {
         SHUTDOWN,
         WRITE,
+        RANGE_WRITE,
         TRIM,
         PREFIX_TRIM
     }
@@ -22,9 +24,11 @@ public class BatchWriterOperation {
     private final Type type;
     private final Long address;
     private final LogData logData;
+    private final List<LogData> entries;
     private final CompletableFuture future;
     private Exception exception;
 
+
     public static BatchWriterOperation SHUTDOWN = new BatchWriterOperation(Type.SHUTDOWN,
-            null, null, null);
+            null, null, null, null);
 }
