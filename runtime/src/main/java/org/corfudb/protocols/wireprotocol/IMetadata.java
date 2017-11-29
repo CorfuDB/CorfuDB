@@ -189,7 +189,27 @@ public interface IMetadata {
         final int type;
         @Getter
         final TypeToken<?> componentType;
+        @Getter
+        final Class[] typeParameters;
+        @Getter
+        final Class<?> rawType;
 
+        LogUnitMetadataType(int type, TypeToken<?> componentType) {
+            this.type = type;
+            this.componentType = componentType;
+
+            this.rawType = componentType.getRawType();
+            if (rawType.isAssignableFrom(Map.class)) {
+                typeParameters =  new Class[] {componentType.resolveType(
+                    Map.class.getTypeParameters()[0]).getRawType(),
+                    componentType.resolveType(Map.class.getTypeParameters()[1]).getRawType()};
+            } else if (rawType.isAssignableFrom(Set.class)) {
+                typeParameters =  new Class[] {componentType.resolveType(
+                    Set.class.getTypeParameters()[0]).getRawType()};
+            } else {
+                typeParameters =  new Class[0];
+            }
+        }
         public byte asByte() {
             return (byte) type;
         }
@@ -199,6 +219,8 @@ public interface IMetadata {
                         .collect(Collectors.toMap(LogUnitMetadataType::asByte,
                                 Function.identity()));
     }
+
+
 
     @Value
     @AllArgsConstructor
