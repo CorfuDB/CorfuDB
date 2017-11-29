@@ -11,6 +11,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
+import javax.annotation.Nonnull;
 
 /**
  * Created by mwei on 9/15/15.
@@ -101,11 +102,10 @@ public class CFUtils {
      * @param <T>      Ignored, since the future will always timeout.
      * @return A completable future that will time out.
      */
-    public static <T> CompletableFuture<T> failAfter(Duration duration) {
+    public static <T> CompletableFuture<T> failAfter(@Nonnull final Duration duration) {
         final CompletableFuture<T> promise = new CompletableFuture<>();
         scheduler.schedule(() -> {
-            final TimeoutException ex = new TimeoutException("Timeout after "
-                    + duration.toMillis() + " ms");
+            final TimeoutException ex = new TimeoutException();
             return promise.completeExceptionally(ex);
         }, duration.toMillis(), TimeUnit.MILLISECONDS);
         return promise;
