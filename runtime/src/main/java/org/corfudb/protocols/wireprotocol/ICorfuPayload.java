@@ -254,11 +254,21 @@ public interface ICorfuPayload<T> {
                                                                                 Class<K> keyClass,
                                                                                 Class<V> objClass) {
         EnumMap<K, V> metadataMap =
-                new EnumMap<>(keyClass);
+            new EnumMap<>(keyClass);
         byte numEntries = buf.readByte();
         while (numEntries > 0 && buf.isReadable()) {
             K type = fromBuffer(buf, keyClass);
-            V value = (V)fromBuffer(buf, type.getComponentType());
+            V value;
+
+            Class<?> raw = type.getRawType();
+            if (raw.isAssignableFrom(Map.class)) {
+                value = (V) mapFromBuffer(buf, type.getTypeParameters()[0],
+                    type.getTypeParameters()[1]);
+            } else if (raw.isAssignableFrom(Set.class)){
+                value = (V) setFromBuffer(buf, type.getTypeParameters()[0]);
+            } else {
+                value = (V) fromBuffer(buf, raw);
+            }
             metadataMap.put(type, value);
             numEntries--;
         }
