@@ -112,12 +112,27 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     @Getter
     @Setter
     public long timeoutConnect;
+
     /**
-     * Sync call response timeout (milliseconds).
+     * Sync call response timeout (milliseconds). Deprecated.
+     * This field is no longer in sync with timeoutResponseDuration and is provided for
+     * legacy code only.
      */
+    @Deprecated
+    @Getter
+    public long timeoutResponse;
+
+    /** Set the timeout response duration. */
     @Getter
     @Setter
-    public long timeoutResponse;
+    public Duration timeoutResponseDuration;
+
+    @Deprecated
+    public void setTimeoutResponse(long timeoutResponse) {
+        this.timeoutResponse = timeoutResponse;
+        timeoutResponseDuration = Duration.ofMillis(timeoutResponse);
+    }
+
     /**
      * Retry interval after timeout (milliseconds).
      */
@@ -242,7 +257,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         clientID = UUID.randomUUID();
         connected = false;
         timeoutConnect = 500;
-        timeoutResponse = 5000;
+        setTimeoutResponse(5000);
         timeoutRetry = 1000;
 
         handlerMap = new ConcurrentHashMap<>();
@@ -543,7 +558,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             // Generate a timeout future, which will complete exceptionally
             // if the main future is not completed.
             final CompletableFuture<T> cfTimeout =
-                    CFUtils.within(cfElapsed, Duration.ofMillis(timeoutResponse));
+                    CFUtils.within(cfElapsed, timeoutResponseDuration);
             cfTimeout.exceptionally(e -> {
 //                MetricsUtils.incConditionalCounter(isEnabled, counterSendTimeout, 1);
                 outstandingRequests.remove(thisRequest);
