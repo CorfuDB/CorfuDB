@@ -6,6 +6,7 @@ import java.lang.invoke.MethodHandles;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -22,6 +23,7 @@ import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 
 /**
  * A client to the Management Server.
@@ -115,19 +117,19 @@ public class ManagementClient implements IClient {
         return router.sendMessageAndGetCompletable(CorfuMsgType.HEARTBEAT_REQUEST.msg());
     }
 
-    public CreateWorkflowResponse addNodeRequest(String endpoint) throws Exception {
+    public CreateWorkflowResponse addNodeRequest(String endpoint) {
         OrchestratorRequest req = new OrchestratorRequest(new AddNodeRequest(endpoint));
         CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));
-        return (CreateWorkflowResponse) resp.get().getResponse();
+        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp).getResponse();
     }
 
-    public QueryResponse queryRequest(UUID workflowId) throws Exception {
+    public QueryResponse queryRequest(UUID workflowId) {
         OrchestratorRequest req = new OrchestratorRequest(new QueryRequest(workflowId));
         CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));
-        return (QueryResponse) resp.get().getResponse();
+        return (QueryResponse) CFUtils.getUninterruptibly(resp).getResponse();
     }
 }

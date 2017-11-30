@@ -153,6 +153,8 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
   ([runtime] (.. runtime (getSequencerView))))
 (defn get-layout-view ([] (.. *r (getLayoutView)))
   ([runtime] (.. runtime (getLayoutView))))
+(defn get-management-view ([] (.. *r (getManagementView)))
+      ([runtime] (.. runtime (getManagementView))))
 (defn get-stream ([stream] (.. (.. *r (getStreamsView)) (get stream))))
 
 ; Helper functions
