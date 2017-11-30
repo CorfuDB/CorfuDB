@@ -111,7 +111,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     "src/test/resources/security/storepass",
                     "src/test/resources/security/trust1.jks",
                     "src/test/resources/security/storepass",
-                    false, null, null);
+                    false, null, null, 5000);
             },
             (r, d) -> {
                 assertThat(r.getClient(BaseClient.class).pingSync())
@@ -143,7 +143,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     "src/test/resources/security/storepass",
                     "src/test/resources/security/trust1.jks",
                     "src/test/resources/security/storepass",
-                    false, null, null);
+                    false, null, null, 5000);
             },
             (r, d) -> {
                 assertThat(r.getClient(BaseClient.class).pingSync())
@@ -175,7 +175,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     "src/test/resources/security/storepass",
                     "src/test/resources/security/trust2.jks",
                     "src/test/resources/security/storepass",
-                    false, null, null);
+                    false, null, null, 5000);
             },
             (r, d) -> {
                 assertThat(r.getClient(BaseClient.class).pingSync())
@@ -207,7 +207,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     "src/test/resources/security/storepass",
                     "src/test/resources/security/trust1.jks",
                     "src/test/resources/security/storepass",
-                    false, null, null);
+                    false, null, null, 5000);
             },
             (r, d) -> {
                 assertThat(r.getClient(BaseClient.class).pingSync())
@@ -239,7 +239,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     "src/test/resources/security/storepass",
                     "src/test/resources/security/trust1.jks",
                     "src/test/resources/security/storepass",
-                    false, null, null);
+                    false, null, null, 5000);
             },
             (r, d) -> {
                 assertThat(r.getClient(BaseClient.class).pingSync())
@@ -276,7 +276,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     "src/test/resources/security/storepass",
                     true,
                     "src/test/resources/security/username1",
-                    "src/test/resources/security/userpass1");
+                    "src/test/resources/security/userpass1", 5000);
             },
             (r, d) -> {
                 assertThat(r.getClient(BaseClient.class).pingSync())
@@ -313,7 +313,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     "src/test/resources/security/storepass",
                     true,
                     "src/test/resources/security/username1",
-                    "src/test/resources/security/userpass2");
+                    "src/test/resources/security/userpass2", 5000);
             },
             (r, d) -> {
                 assertThat(r.getClient(BaseClient.class).pingSync())

@@ -146,6 +146,13 @@ public class CorfuRuntime {
     public int writeRetry = 3;
 
     /**
+     * Set the timeout for rpc requests
+     */
+    @Getter
+    @Setter
+    public long timeoutResponse = 5000;
+
+    /**
      * Sets expireAfterAccess and expireAfterWrite in seconds.
      */
     @Getter
@@ -262,7 +269,7 @@ public class CorfuRuntime {
                 // Generate a new router, start it and add it to the table.
                 NettyClientRouter router = new NettyClientRouter(host, port,
                         tlsEnabled, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
-                        saslPlainTextEnabled, usernameFile, passwordFile);
+                        saslPlainTextEnabled, usernameFile, passwordFile, timeoutResponse);
                 log.debug("Connecting to new router {}:{}", host, port);
                 try {
                     router.addClient(new LayoutClient())

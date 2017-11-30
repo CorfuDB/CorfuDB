@@ -194,8 +194,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      *
      * @param endpoint Endpoint to connect to.
      */
-    public NettyClientRouter(String endpoint) {
-        this(endpoint.split(":")[0], Integer.parseInt(endpoint.split(":")[1]));
+    public NettyClientRouter(String endpoint, long timeoutResponse) {
+        this(endpoint.split(":")[0], Integer.parseInt(endpoint.split(":")[1]), timeoutResponse);
     }
 
     /**
@@ -204,17 +204,17 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * @param host Host to connect to.
      * @param port Port to connect to.
      */
-    public NettyClientRouter(String host, Integer port) {
+    public NettyClientRouter(String host, Integer port, long timeoutResponse) {
         this(host, port, false, null, null, null,
-                null, false, null, null);
+                null, false, null, null, timeoutResponse);
     }
 
     public NettyClientRouter(String host, Integer port, Boolean tls,
                              String keyStore, String ksPasswordFile, String trustStore,
                              String tsPasswordFile, Boolean saslPlainText, String usernameFile,
-                             String passwordFile) {
+                             String passwordFile, long timeoutResponse) {
         this(host, port, tls, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
-                saslPlainText, usernameFile, passwordFile, null);
+                saslPlainText, usernameFile, passwordFile, null, timeoutResponse);
     }
 
     /**
@@ -235,14 +235,14 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     public NettyClientRouter(String host, Integer port, Boolean tls,
                              String keyStore, String ksPasswordFile, String trustStore,
                              String tsPasswordFile, Boolean saslPlainText, String usernameFile,
-                             String passwordFile, MetricRegistry metricRegistry) {
+                             String passwordFile, MetricRegistry metricRegistry, long responseTimeout) {
         this.host = host;
         this.port = port;
 
         clientID = UUID.randomUUID();
         connected = false;
         timeoutConnect = 500;
-        timeoutResponse = 5000;
+        timeoutResponse = responseTimeout;
         timeoutRetry = 1000;
 
         handlerMap = new ConcurrentHashMap<>();
