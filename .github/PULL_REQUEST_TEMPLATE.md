@@ -1,8 +1,11 @@
 ## Overview
 
-Description: 
+Description:
 
-Related issue(s) (if applicable): Fixes #<issue-number>
+Why should this be merged: 
+
+Related issue(s) (if applicable): #1023
+
 
 ## Checklist (Definition of Done):
 
