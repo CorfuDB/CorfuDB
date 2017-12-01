@@ -263,7 +263,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         if (indexFunctions.isEmpty()) {
             // If there are no index functions, use the entire map
             entryStream = mainMap.entrySet().parallelStream();
-            log.warn("getByIndexAndFilter: Attempted getByIndexAndFilter without indexing");
+            log.debug("getByIndexAndFilter: Attempted getByIndexAndFilter without indexing");
         } else {
             Map<I, Map<K, V>> secondaryMap = indexMap.get(indexFunction);
             if (secondaryMap != null) {
