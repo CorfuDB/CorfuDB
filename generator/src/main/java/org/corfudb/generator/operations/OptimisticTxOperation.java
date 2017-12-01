@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
 import org.corfudb.generator.State;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.view.Address;
 
 import java.util.List;
 
@@ -43,6 +44,11 @@ public class OptimisticTxOperation extends Operation {
 
             Correctness.recordTransactionMarkers(true, shortName, Correctness.TX_END,
                     Long.toString(timestamp));
+            
+            if (Address.isAddress(timestamp)) {
+                state.setLastSuccessfulWriteOperationTimestamp(System.currentTimeMillis());
+            }
+
         } catch (TransactionAbortedException tae) {
             Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_ABORTED);
         }
