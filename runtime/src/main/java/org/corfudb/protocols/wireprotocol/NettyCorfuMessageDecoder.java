@@ -21,7 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 @Sharable
 public class NettyCorfuMessageDecoder extends MessageToMessageDecoder<ByteBuf> {
 
-
+    /** {@inheritDoc} */
     protected void decode(@Nonnull ChannelHandlerContext channelHandlerContext,
                           @Nonnull ByteBuf byteBuf,
                           @Nonnull List<Object> list) throws Exception {

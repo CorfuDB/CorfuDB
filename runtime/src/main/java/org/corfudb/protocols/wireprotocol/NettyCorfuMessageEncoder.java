@@ -21,6 +21,7 @@ public class NettyCorfuMessageEncoder extends MessageToMessageEncoder<CorfuMsg> 
 
     private final LongAccumulator maxValue = new LongAccumulator(Math::max, Long.MIN_VALUE);
 
+    /** {@inheritDoc} */
     @Override
     protected void encode(
         @Nonnull ChannelHandlerContext ctx,
