@@ -4,7 +4,7 @@ Description:
 
 Why should this be merged: 
 
-Related issue(s) (if applicable): #1023
+Related issue(s) (if applicable): #<number>
 
 
 ## Checklist (Definition of Done):
