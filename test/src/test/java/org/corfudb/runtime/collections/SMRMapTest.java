@@ -78,13 +78,16 @@ public class SMRMapTest extends AbstractViewTest {
                 .setTypeToken(new TypeToken<SMRMap<Long, Double>>() {})
                 .open();
 
+        final double PRIMITIVE_1 = 2.4;
+        final double PRIMITIVE_2 = 4.5;
+
         testMap.clear();
-        assertThat(testMap.put(1L, 2.4))
+        assertThat(testMap.put(1L, PRIMITIVE_1))
                 .isNull();
-        assertThat(testMap.put(1L, 4.5))
-                .isEqualTo(2.4);
+        assertThat(testMap.put(1L, PRIMITIVE_2))
+                .isEqualTo(PRIMITIVE_1);
         assertThat(testMap.get(1L))
-                .isEqualTo(4.5);
+                .isEqualTo(PRIMITIVE_2);
     }
 
     @Test
