@@ -34,14 +34,14 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
     private BlockingQueue<BatchWriterOperation> operationsQueue;
     final ExecutorService writerService = Executors
             .newSingleThreadExecutor(new ThreadFactoryBuilder()
-            .setDaemon(false)
-            .setNameFormat("LogUnit-Write-Processor-%d")
-            .build());
+                    .setDaemon(false)
+                    .setNameFormat("LogUnit-Write-Processor-%d")
+                    .build());
 
     /**
      * Returns a new BatchWriter for a stream log.
      *
-     * @param streamLog  stream log for writes (can be in memory or file)
+     * @param streamLog stream log for writes (can be in memory or file)
      */
     public BatchWriter(StreamLog streamLog) {
         this.streamLog = streamLog;
@@ -54,12 +54,27 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
         try {
             CompletableFuture<Void> cf = new CompletableFuture();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.WRITE,
-                    (Long) key, (LogData) value, cf));
+                    (Long) key, (LogData) value, null, cf));
             cf.get();
         } catch (Exception e) {
             log.trace("Write Exception {}", e);
             if (e.getCause() instanceof RuntimeException) {
-                throw (RuntimeException)e.getCause();
+                throw (RuntimeException) e.getCause();
+            } else {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    public void bulkWrite(List<LogData> entries) {
+        try {
+            CompletableFuture<Void> cf = new CompletableFuture();
+            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.RANGE_WRITE,
+                    null, null, entries, cf));
+        } catch (Exception e) {
+            log.trace("Write Exception {}", e);
+            if (e.getCause() instanceof RuntimeException) {
+                throw (RuntimeException) e.getCause();
             } else {
                 throw new RuntimeException(e);
             }
@@ -69,13 +84,13 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
     /**
      * Trim an address from the log.
      *
-     * @param address  log address to trim
+     * @param address log address to trim
      */
     public void trim(@Nonnull long address) {
         try {
             CompletableFuture<Void> cf = new CompletableFuture();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.TRIM,
-                    address, null, cf));
+                    address, null, null, cf));
             cf.get();
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -85,13 +100,13 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
     /**
      * Trim addresses from log up to a prefix.
      *
-     * @param address  prefix address to trim to (inclusive)
+     * @param address prefix address to trim to (inclusive)
      */
     public void prefixTrim(@Nonnull long address) {
         try {
             CompletableFuture<Void> cf = new CompletableFuture();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.PREFIX_TRIM,
-                    address, null, cf));
+                    address, null, null, cf));
             cf.get();
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -137,47 +152,43 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                     }
                 }
 
-                if (currOp == BatchWriterOperation.SHUTDOWN) {
-                    log.trace("Shutting down the write processor");
-                    break;
-                }
                 if (currOp == null) {
                     lastOp = null;
                     continue;
-                }
-
-                if (currOp.getType() == BatchWriterOperation.Type.TRIM) {
-                    streamLog.trim(currOp.getAddress());
-                    currOp.setException(null);
-                    res.add(currOp);
-                } else if (currOp.getType() == BatchWriterOperation.Type.PREFIX_TRIM) {
+                } else if (currOp == BatchWriterOperation.SHUTDOWN) {
+                    log.trace("Shutting down the write processor");
+                    streamLog.sync(true);
+                    break;
+                } else {
                     try {
-                        streamLog.prefixTrim(currOp.getAddress());
-                        currOp.setException(null);
-                        res.add(currOp);
-                    } catch (TrimmedException e) {
-                        currOp.setException(e);
-                        res.add(currOp);
-                    }
-
-                } else if (currOp.getType() == BatchWriterOperation.Type.WRITE) {
-                    try {
-                        streamLog.append(currOp.getAddress(), currOp.getLogData());
-                        currOp.setException(null);
-                        res.add(currOp);
-                    } catch (OverwriteException | DataOutrankedException e) {
-                        currOp.setException(e);
-                        res.add(currOp);
+                        switch (currOp.getType()) {
+                            case TRIM:
+                                streamLog.trim(currOp.getAddress());
+                                res.add(currOp);
+                                break;
+                            case PREFIX_TRIM:
+                                streamLog.prefixTrim(currOp.getAddress());
+                                res.add(currOp);
+                                break;
+                            case WRITE:
+                                streamLog.append(currOp.getAddress(), currOp.getLogData());
+                                res.add(currOp);
+                                break;
+                            case RANGE_WRITE:
+                                streamLog.append(currOp.getEntries());
+                                res.add(currOp);
+                                break;
+                            default:
+                                log.warn("Unknown BatchWriterOperation {}", currOp);
+                        }
                     } catch (Exception e) {
                         currOp.setException(e);
                         res.add(currOp);
                     }
-                } else {
-                    log.warn("Unknown BatchWriterOperation {}", currOp);
-                }
 
-                processed++;
-                lastOp = currOp;
+                    processed++;
+                    lastOp = currOp;
+                }
             }
         } catch (Exception e) {
             log.error("Caught exception in the write processor {}", e);

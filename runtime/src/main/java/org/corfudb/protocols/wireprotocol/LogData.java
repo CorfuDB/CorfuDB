@@ -20,9 +20,6 @@ import org.corfudb.util.serializer.Serializers;
 @Slf4j
 public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
-    public static final LogData EMPTY = new LogData(DataType.EMPTY);
-    public static final LogData HOLE = new LogData(DataType.HOLE);
-    public static final LogData TRIMMED = new LogData(DataType.TRIMMED);
     public static final int NOT_KNOWN = -1;
 
     @Getter
@@ -36,6 +33,24 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     private int lastKnownSize = NOT_KNOWN;
 
     private final transient AtomicReference<Object> payload = new AtomicReference<>();
+
+    public static LogData getTrimmed(long address) {
+        LogData logData = new LogData(DataType.TRIMMED);
+        logData.setGlobalAddress(address);
+        return logData;
+    }
+
+    public static LogData getHole(long address) {
+        LogData logData = new LogData(DataType.HOLE);
+        logData.setGlobalAddress(address);
+        return logData;
+    }
+
+    public static LogData getEmpty(long address) {
+        LogData logData = new LogData(DataType.EMPTY);
+        logData.setGlobalAddress(address);
+        return logData;
+    }
 
     /**
      * Return the payload.
@@ -60,13 +75,13 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                         value = actualValue == null ? this.payload : actualValue;
                         this.payload.set(value);
                         copyBuf.release();
+                        lastKnownSize = data.length;
                         data = null;
                     }
                 }
             }
         }
 
-        data = null;
         return value;
     }
 
@@ -93,8 +108,9 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     @Override
     public int getSizeEstimate() {
-        if (data != null) {
-            return data.length;
+        byte[] tempData = data;
+        if (tempData != null) {
+            return tempData.length;
         } else if (lastKnownSize != NOT_KNOWN) {
             return lastKnownSize;
         }
@@ -207,6 +223,17 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         }
         if (type.isMetadataAware()) {
             ICorfuPayload.serialize(buf, metadataMap);
+        }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == this) {
+            return true;
+        } else if (!(o instanceof LogData)) {
+            return false;
+        } else {
+            return compareTo((LogData) o) == 0;
         }
     }
 

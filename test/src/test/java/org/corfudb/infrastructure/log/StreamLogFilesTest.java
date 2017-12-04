@@ -10,11 +10,14 @@ import io.netty.buffer.ByteBuf;
 import java.io.File;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import io.netty.buffer.Unpooled;
+import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
@@ -66,6 +69,184 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         })
                 .isInstanceOf(OverwriteException.class);
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+    }
+
+    @Test
+    public void testBatchWrite() throws Exception {
+        ServerContext sc = getContext();
+        StreamLog log = new StreamLogFiles(sc, false);
+
+        // A range write that spans two segments
+        final int numSegments = 2;
+        final int numIter = StreamLogFiles.RECORDS_PER_LOG_FILE * numSegments;
+        List<LogData> writeEntries = new ArrayList<>();
+        for (int x = 0; x < numIter; x++) {
+            writeEntries.add(getEntry(x));
+        }
+
+        log.append(writeEntries);
+        log.sync(true);
+
+        StreamLog log2 = new StreamLogFiles(sc, false);
+        List<LogData> readEntries = readRange(0, numIter, log2);
+        assertThat(writeEntries).isEqualTo(readEntries);
+    }
+
+    @Test
+    public void testRangeWriteTrim() throws Exception {
+        StreamLog log = new StreamLogFiles(getContext(), false);
+
+        // A range write that has the first 25% of its entries trimmed
+        final int numEntries = 1000;
+        final double trimmedRatio = .25;
+        List<LogData> entries = new ArrayList<>();
+
+        for (int x = 0; x < numEntries; x++) {
+            if (x < trimmedRatio * numEntries) {
+                entries.add(LogData.getTrimmed(x));
+            } else {
+                entries.add(getEntry(x));
+            }
+        }
+
+        log.append(entries);
+        long trimMarkAfterWrite = (long) (numEntries * trimmedRatio);
+        assertThat(log.getTrimMark()).isEqualTo(trimMarkAfterWrite);
+    }
+
+    @Test
+    public void testRangeWriteAfterPrefixTrim() throws Exception {
+        // This test tries to write a range right after a part of the range to be
+        // written is prefix trimmed.
+        ServerContext sc = getContext();
+        StreamLog log = new StreamLogFiles(sc, false);
+        final long trimMark = 1000;
+        final long trimOverlap = 100;
+        final long numEntries = 200;
+        log.prefixTrim(trimMark);
+
+        List<LogData> entries = new ArrayList<>();
+        for (long x = 0; x < numEntries; x++) {
+            long address = trimMark - trimOverlap + x;
+            entries.add(getEntry(address));
+        }
+
+        log.append(entries);
+
+        StreamLog log2 = new StreamLogFiles(sc, false);
+        List<LogData> readEntries = readRange(0L, trimMark - trimOverlap + numEntries, log2);
+
+        List<LogData> notTrimmed = new ArrayList<>();
+        for (LogData entry : readEntries) {
+            if (!entry.isTrimmed()) {
+                notTrimmed.add(entry);
+            }
+        }
+
+        assertThat((long) notTrimmed.size()).isEqualTo(numEntries - trimOverlap - 1);
+    }
+
+    @Test
+    public void badRangeWrite() throws Exception {
+        ServerContext sc = getContext();
+        StreamLog log = new StreamLogFiles(sc, false);
+
+        List<LogData> largeRange = new ArrayList<>();
+        List<LogData> nonSequentialRange = new ArrayList<>();
+        final int numSegments = 3;
+        final int skipGap = 10;
+        final int numEntries = numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE;
+        // Generate two invalid ranges, a large range and a non-sequential range
+        for (long address = 0; address < numEntries; address++) {
+            largeRange.add(getEntry(address));
+            if (address % skipGap == 0) {
+                nonSequentialRange.add(getEntry(address));
+            }
+        }
+
+        String logDir = sc.getServerConfig().get("--log-path") + File.separator + "log";
+        File file = new File(logDir);
+        long logSize = FileUtils.sizeOfDirectory(file);
+
+        // Verify that range writes that span more than 2 segments are rejected
+        assertThatThrownBy(() -> log.append(largeRange))
+                .isInstanceOf(IllegalArgumentException.class);
+        log.sync(true);
+
+        // Verify that a non-sequential range write is rejected
+        assertThatThrownBy(() -> log.append(nonSequentialRange))
+                .isInstanceOf(IllegalArgumentException.class);
+        log.sync(true);
+
+        // Verify that no entries have been written to the log
+        long logSize2 = FileUtils.sizeOfDirectory(file);
+        assertThat(logSize2).isEqualTo(logSize);
+    }
+
+    @Test
+    public void testRangeOverwrite() throws Exception {
+        ServerContext sc = getContext();
+        StreamLog log = new StreamLogFiles(sc, false);
+        final int numIter = 500;
+
+        List<LogData> entries = new ArrayList<>();
+        for (long x = 0; x < numIter; x++) {
+            entries.add(getEntry(x));
+        }
+
+        String logDir = sc.getServerConfig().get("--log-path") + File.separator + "log";
+        File file = new File(logDir);
+        // Write the same range twice
+        log.append(entries);
+        log.sync(true);
+        long logSize = FileUtils.sizeOfDirectory(file);
+        log.append(entries);
+        log.sync(true);
+        long logSize2 = FileUtils.sizeOfDirectory(file);
+        assertThat(logSize2).isEqualTo(logSize);
+    }
+
+    @Test
+    public void writingTrimmedEntries() throws Exception {
+        ServerContext sc = getContext();
+        StreamLog log = new StreamLogFiles(sc, false);
+
+        final long trimMark = 400;
+        final long numEntries = trimMark + 200;
+        log.prefixTrim(trimMark);
+
+        List<LogData> entries = new ArrayList<>();
+        for (int x = 0; x < numEntries; x++) {
+            entries.add(LogData.getTrimmed(x));
+        }
+
+        String logDir = sc.getServerConfig().get("--log-path") + File.separator + "log";
+        File file = new File(logDir);
+        long logSize = FileUtils.sizeOfDirectory(file);
+        log.append(entries);
+        log.sync(true);
+        long logSize2 = FileUtils.sizeOfDirectory(file);
+        assertThat(logSize2).isEqualTo(logSize);
+    }
+
+    /**
+     * Reads the range [a, b) from a specific log
+     */
+    List<LogData> readRange(long a, long b, StreamLog log) {
+        List<LogData> entries = new ArrayList<>();
+        for (long x = a; x < b; x++) {
+            entries.add(log.read(x));
+        }
+        return entries;
+    }
+
+    LogData getEntry(long x) {
+        ByteBuf b = Unpooled.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        LogData ld = new LogData(DataType.DATA, b);
+        ld.setGlobalAddress((long) x);
+        return ld;
     }
 
     @Test

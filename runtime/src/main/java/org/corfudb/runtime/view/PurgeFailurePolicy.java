@@ -1,10 +1,9 @@
-package org.corfudb.infrastructure;
+package org.corfudb.runtime.view;
 
 import java.util.Set;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
-import org.corfudb.runtime.view.Layout;
 
 /**
  * Handles the failures.
@@ -19,16 +18,19 @@ public class PurgeFailurePolicy implements IFailureHandlerPolicy {
      * @param originalLayout Original Layout which needs to be modified.
      * @param corfuRuntime   Connected runtime to attach to the new layout.
      * @param failedNodes    Set of all failed/defected servers.
+     * @param healedNodes    Set of all healed/responsive servers.
      * @return The new and modified layout.
      * @throws LayoutModificationException Thrown if attempt to create an invalid layout.
      * @throws CloneNotSupportedException  Clone not supported for layout.
      */
     @Override
-    public Layout generateLayout(Layout originalLayout, CorfuRuntime corfuRuntime, Set<String>
-            failedNodes)
+    public Layout generateLayout(Layout originalLayout,
+                                 CorfuRuntime corfuRuntime,
+                                 Set<String> failedNodes,
+                                 Set<String> healedNodes)
             throws LayoutModificationException, CloneNotSupportedException {
-        LayoutWorkflowManager layoutManager = new LayoutWorkflowManager(originalLayout);
-        Layout newLayout = layoutManager
+        LayoutBuilder layoutBuilder = new LayoutBuilder(originalLayout);
+        Layout newLayout = layoutBuilder
                 .removeLayoutServers(failedNodes)
                 .removeSequencerServers(failedNodes)
                 .removeLogunitServers(failedNodes)

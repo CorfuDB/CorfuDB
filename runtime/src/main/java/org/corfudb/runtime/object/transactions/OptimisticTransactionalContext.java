@@ -17,6 +17,7 @@ import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -94,20 +95,31 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 .getUnderlyingObject()
                 .access(o -> {
                             WriteSetSMRStream stream = o.getOptimisticStreamUnsafe();
+
+                            // Obtain the stream position as when transaction context last
+                            // remembered it.
+                            long streamReadPosition = getKnownStreamPosition()
+                                    .getOrDefault(proxy.getStreamID(), getSnapshotTimestamp());
+
                             return (
-                                getWriteSetEntrySize(proxy.getStreamID()) == 0 && // No updates
-                                        // And at the correct timestamp
-                                        o.getVersionUnsafe() == getSnapshotTimestamp()
-                                        && (stream == null
-                                            || stream.isStreamCurrentContextThreadCurrentContext())
-                            ); },
+                                    (stream == null || stream.isStreamCurrentContextThreadCurrentContext())
+                                    && (stream != null && getWriteSetEntrySize(proxy.getStreamID()) == stream.pos() + 1
+                                       || (getWriteSetEntrySize(proxy.getStreamID()) == 0 /* No updates. */
+                                          && o.getVersionUnsafe() == streamReadPosition) /* Match timestamp. */
+                                    )
+                            );
+                        },
                         o -> {
                             // inside syncObjectUnsafe, depending on the object
                             // version, we may need to undo or redo
                             // committed changes, or apply forward committed changes.
                             syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, this::setAsOptimisticStream);
+
+                            // Update the global positions map. The value obtained from underlying
+                            // object must be under object's write-lock.
+                            getKnownStreamPosition().put(proxy.getStreamID(), o.getVersionUnsafe());
                         },
-                    o -> accessFunction.access(o)
+                        accessFunction::access
         );
     }
 

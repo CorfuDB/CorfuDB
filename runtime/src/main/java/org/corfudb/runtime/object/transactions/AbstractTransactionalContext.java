@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object.transactions;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -19,8 +20,8 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
-import org.corfudb.runtime.object.ICorfuSMRProxy;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.util.Utils;
@@ -104,7 +105,6 @@ public abstract class AbstractTransactionalContext implements
     @Getter(lazy = true)
     private final long snapshotTimestamp = obtainSnapshotTimestamp();
 
-
     /**
      * The address that the transaction was committed at.
      */
@@ -130,6 +130,12 @@ public abstract class AbstractTransactionalContext implements
     @Getter
     public CompletableFuture<Boolean> completionFuture =
             new CompletableFuture<>();
+
+    /**
+     * Cache of last known position of streams accessed in this transaction.
+     */
+    @Getter
+    private final Map<UUID, Long> knownStreamPosition = new HashMap<>();
 
     AbstractTransactionalContext(TransactionBuilder builder) {
         transactionID = UUID.randomUUID();

@@ -51,6 +51,12 @@ public abstract class AbstractServer {
             return;
         }
 
+        if (isShutdown()) {
+            log.warn("Server received {} but is shutdown.", msg.getMsgType().toString());
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SHUTDOWN_EXCEPTION.msg());
+            return;
+        }
+
         if (!getHandler().handle(msg, ctx, r, isMetricsEnabled)) {
             log.warn("Received unhandled message type {}" , msg.getMsgType());
         }

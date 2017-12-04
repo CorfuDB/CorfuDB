@@ -1,7 +1,5 @@
 package org.corfudb.runtime.object;
 
-import io.netty.util.internal.ConcurrentSet;
-
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -137,8 +135,7 @@ public class VersionLockedObject<T> {
 
         this.newObjectFn = newObjectFn;
         this.object = newObjectFn.get();
-
-        this.pendingUpcalls = new ConcurrentSet<>();
+        this.pendingUpcalls = ConcurrentHashMap.newKeySet();
         this.upcallResults = new ConcurrentHashMap<>();
 
         lock = new StampedLock();
@@ -178,26 +175,26 @@ public class VersionLockedObject<T> {
         // meets the conditions for direct access.
         long ts = lock.tryOptimisticRead();
         if (ts != 0) {
+            try {
             if (directAccessCheckFunction.apply(this)) {
                 log.trace("Access [{}] Direct (optimistic-read) access at {}",
                         this, getVersionUnsafe());
-                try {
                     R ret = accessFunction.apply(object);
                     if (lock.validate(ts)) {
                         return ret;
                     }
-                } catch (Exception e) {
-                    // If we have an exception, we didn't get a chance to validate the the lock.
-                    // If it's still valid, then we should re-throw the exception since it was
-                    // on a correct view of the object.
-                    if (lock.validate(ts)) {
-                        throw e;
-                    }
-                    // Otherwise, it is not on a correct view of the object (the object was
-                    // modified) and we should try again by upgrading the lock.
-                    log.warn("Access [{}] Direct (optimistic-read) exception, upgrading lock",
-                            this);
                 }
+            } catch (Exception e) {
+                // If we have an exception, we didn't get a chance to validate the the lock.
+                // If it's still valid, then we should re-throw the exception since it was
+                // on a correct view of the object.
+                if (lock.validate(ts)) {
+                    throw e;
+                }
+                // Otherwise, it is not on a correct view of the object (the object was
+                // modified) and we should try again by upgrading the lock.
+                log.warn("Access [{}] Direct (optimistic-read) exception, upgrading lock",
+                        this);
             }
         }
         // Next, we just upgrade to a full write lock if the optimistic
@@ -322,7 +319,7 @@ public class VersionLockedObject<T> {
                         return;
                     }
                 } catch (NoRollbackException nre) {
-                    log.warn("OptimisticRollback[{}] to {} failed {}", this, timestamp, nre);
+                    log.warn("Rollback[{}] to {} failed {}", this, timestamp, nre);
                     resetUnsafe();
                 }
             }

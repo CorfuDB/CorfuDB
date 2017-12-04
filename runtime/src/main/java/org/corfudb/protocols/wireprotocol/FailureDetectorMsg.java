@@ -14,14 +14,17 @@ import lombok.Data;
 @Data
 @AllArgsConstructor
 public class FailureDetectorMsg implements ICorfuPayload<FailureDetectorMsg> {
-    private Set<String> nodes;
+    private Set<String> failedNodes;
+    private Set<String> healedNodes;
 
     public FailureDetectorMsg(ByteBuf buf) {
-        nodes = ICorfuPayload.setFromBuffer(buf, String.class);
+        failedNodes = ICorfuPayload.setFromBuffer(buf, String.class);
+        healedNodes = ICorfuPayload.setFromBuffer(buf, String.class);
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, nodes);
+        ICorfuPayload.serialize(buf, failedNodes);
+        ICorfuPayload.serialize(buf, healedNodes);
     }
 }

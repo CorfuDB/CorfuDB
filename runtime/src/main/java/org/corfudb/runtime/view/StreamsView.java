@@ -31,6 +31,12 @@ import org.corfudb.util.Utils;
 @Slf4j
 public class StreamsView extends AbstractView {
 
+    /**
+     * Checkpoint of streams have their own stream id derived from the
+     * stream id. We add the checkpoint suffix to the original stream id.
+     */
+    public static final String CHECKPOINT_SUFFIX = "_cp";
+
     public StreamsView(final CorfuRuntime runtime) {
         super(runtime);
     }

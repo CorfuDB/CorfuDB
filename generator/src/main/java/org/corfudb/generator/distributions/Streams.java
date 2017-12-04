@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * This class implements a distribution over the possible streams that
@@ -14,7 +13,7 @@ import java.util.UUID;
  */
 public class Streams implements DataSet {
 
-    final Set<UUID> streamIds;
+    final Set<String> streamIds;
     final int numStreams;
 
     public Streams(int num) {
@@ -25,12 +24,12 @@ public class Streams implements DataSet {
     @Override
     public void populate() {
         for (int x = 0; x < numStreams; x++) {
-            streamIds.add(UUID.randomUUID());
+            streamIds.add("table_" + Integer.toString(x));
         }
     }
 
     @Override
-    public List<UUID> getDataSet() {
+    public List<String> getDataSet() {
         return new ArrayList<>(streamIds);
     }
 }

@@ -1,10 +1,14 @@
 package org.corfudb.infrastructure;
 
+import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.IFailureHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.PurgeFailurePolicy;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -15,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * depending upon the trigger.
  * Created by zlokhandwala on 11/18/16.
  */
-public class FailureHandlerDispatcherTest extends AbstractViewTest {
+public class ReconfigurationEventHandlerTest extends AbstractViewTest {
 
     /**
      * triggers the handler with failure and checks for update in layout.
@@ -54,9 +58,13 @@ public class FailureHandlerDispatcherTest extends AbstractViewTest {
         Set<String> failedServers = new HashSet<>();
         failedServers.add(getEndpoint(SERVERS.PORT_2));
 
-        FailureHandlerDispatcher failureHandlerDispatcher = new FailureHandlerDispatcher();
+        ReconfigurationEventHandler reconfigurationEventHandler = new ReconfigurationEventHandler();
         IFailureHandlerPolicy failureHandlerPolicy = new PurgeFailurePolicy();
-        failureHandlerDispatcher.dispatchHandler(failureHandlerPolicy, originalLayout, corfuRuntime, failedServers);
+        reconfigurationEventHandler.handleFailure(failureHandlerPolicy,
+                        originalLayout,
+                        corfuRuntime,
+                        failedServers,
+                        Collections.emptySet());
 
         Layout expectedLayout = new TestLayoutBuilder()
                 .setEpoch(2L)

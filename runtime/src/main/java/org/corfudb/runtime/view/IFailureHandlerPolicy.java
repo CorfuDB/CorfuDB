@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure;
+package org.corfudb.runtime.view;
 
 import java.util.Set;
 
@@ -20,10 +20,14 @@ public interface IFailureHandlerPolicy {
      * @param currentLayout Latest instance of the layout.
      * @param corfuRuntime  A connected instance of the Corfu Runtime.
      * @param failedNodes   Set of failed nodes.
+     * @param healedNodes   Set of healed nodes.
      * @return generated layout
      * @throws LayoutModificationException .
      * @throws CloneNotSupportedException  .
      */
-    Layout generateLayout(Layout currentLayout, CorfuRuntime corfuRuntime, Set<String> failedNodes)
+    Layout generateLayout(Layout currentLayout,
+                          CorfuRuntime corfuRuntime,
+                          Set<String> failedNodes,
+                          Set<String> healedNodes)
             throws LayoutModificationException, CloneNotSupportedException;
 }

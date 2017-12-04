@@ -4,7 +4,6 @@ import org.corfudb.CustomSerializer;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -13,20 +12,17 @@ import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuTableTest;
 import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectBuilder;
-import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -35,6 +31,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+
 
 /**
  * Created by rmichoud on 6/16/17.
@@ -42,61 +40,76 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class FastObjectLoaderTest extends AbstractViewTest {
     static final int NUMBER_OF_CHECKPOINTS = 20;
     static final int NUMBER_OF_PUT = 100;
+    static final int SOME = 3;
+    static final int MORE = 5;
 
-    private ILogData.SerializationHandle createEmptyData(long position, DataType type, IMetadata.DataRank rank) {
-        ILogData data = new LogData(type);
-        data.setRank(rank);
-        data.setGlobalAddress(position);
-        return data.getSerializedForm();
+
+    private int key_count = 0;
+    private Map<String, Map> maps = new HashMap<>();
+
+    private <T extends Map<String, String>> void populateMapWithNextKey(T map) {
+        map.put("key" + key_count, "value" + key_count);
+        key_count++;
     }
 
-    private CorfuCompileProxy getCorfuCompileProxy(CorfuRuntime cr, String streamName, Class type) {
-        ObjectsView.ObjectID mapId = new ObjectsView.
-                ObjectID(CorfuRuntime.getStreamID(streamName), type);
-
-        return ((CorfuCompileProxy) ((ICorfuSMR) cr.getObjectsView().
-                getObjectCache().
-                get(mapId)).
-                getCorfuSMRProxy());
-    }
-
-    private VersionLockedObject getVersionLockedObject(CorfuRuntime cr, String streamName, Class type) {
-        CorfuCompileProxy cp = getCorfuCompileProxy(cr, streamName, type);
-        return cp.getUnderlyingObject();
-    }
-
-    private  Map<String, String> createMap(String streamName, CorfuRuntime cr) {
-        return createMap(streamName, cr, SMRMap.class);
-    }
-
-    private <T> Map<String, String> createMap(String streamName, CorfuRuntime cr, Class<T> type) {
-        return (Map<String, String>) cr.getObjectsView().build()
-                .setStreamName(streamName)
-                .setType(type)
-                .open();
-    }
-
-    private void doCheckPointsAfterSnapshot(List<ICorfuSMR<Map>> maps, String author, CorfuRuntime rt){
-        try {
-            for (ICorfuSMR<Map> map : maps) {
-                UUID streamID = map.getCorfuStreamID();
-                while (true) {
-                    CheckpointWriter cpw = new CheckpointWriter(rt, streamID, author, (SMRMap) map);
-                    ISerializer serializer =
-                            ((CorfuCompileProxy<Map>) map.getCorfuSMRProxy())
-                                    .getSerializer();
-                    cpw.setSerializer(serializer);
-                    try {
-                        List<Long> addresses = cpw.appendCheckpoint();
-                        break;
-                    } catch (TransactionAbortedException ae) {
-                        // Don't break!
-                    }
-                }
-            }
-        } finally {
-            rt.getObjectsView().TXEnd();
+    <T extends Map> void populateMaps(int numMaps, CorfuRuntime rt, Class<T> type, boolean reset,
+                                      int keyPerMap) {
+        if (reset) {
+            maps.clear();
+            key_count = 0;
         }
+        for (int i = 0; i < numMaps; i++) {
+            String mapName = "Map" + i;
+            Map currentMap = maps.computeIfAbsent(mapName, (k) ->
+                (T) Helpers.createMap(k, rt, type)
+            );
+
+            for(int j = 0; j < keyPerMap; j++) {
+                populateMapWithNextKey(currentMap);
+            }
+        }
+    }
+
+    private void clearAllMaps() {
+        maps.values().forEach((map) ->
+        map.clear());
+    }
+
+    private long checkPointAll(CorfuRuntime rt) throws Exception {
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        maps.forEach((streamName, map) -> {
+            mcw.addMap(map);
+        });
+        return mcw.appendCheckpoints(rt, "author");
+    }
+
+    private void assertThatMapsAreBuilt(CorfuRuntime rt1, CorfuRuntime rt2) {
+        maps.forEach((streamName, map) -> {
+            Helpers.assertThatMapIsBuilt(rt1, rt2, streamName, map, CorfuTable.class);
+        });
+    }
+    private void assertThatMapsAreBuilt(CorfuRuntime rt) {
+        assertThatMapsAreBuilt(getDefaultRuntime(), rt);
+    }
+
+    private void assertThatMapsAreBuiltWhiteList(CorfuRuntime rt, List<String> whiteList) {
+        maps.forEach((streamName, map) -> {
+            if (whiteList.contains(streamName)) {
+                Helpers.assertThatMapIsBuilt(getDefaultRuntime(), rt, streamName, map, CorfuTable.class);
+            } else {
+                Helpers.assertThatMapIsNotBuilt(rt, streamName, CorfuTable.class);
+            }
+        });
+    }
+
+    private void assertThatMapsAreBuiltIgnore(CorfuRuntime rt, String mapToIgnore) {
+        maps.forEach((streamName, map) -> {
+            if (!streamName.equals(mapToIgnore)) {
+                Helpers.assertThatMapIsBuilt(getDefaultRuntime(), rt, streamName, map, CorfuTable.class);
+            } else {
+                Helpers.assertThatMapIsNotBuilt(rt, streamName, CorfuTable.class);
+            }
+        });
     }
 
     private void assertThatObjectCacheIsTheSameSize(CorfuRuntime rt1, CorfuRuntime rt2) {
@@ -104,41 +117,23 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .isEqualTo(rt1.getObjectsView().getObjectCache().size());
     }
 
-    private void assertThatMapIsBuilt(CorfuRuntime rt1, CorfuRuntime rt2, String streamName,
-                                      Map<String, String> map) {
-        assertThatMapIsBuilt(rt2, rt2, streamName, map, SMRMap.class);
+
+    private void assertThatStreamTailsAreCorrect(Map<UUID, Long> streamTails) {
+        maps.keySet().forEach((streamName) -> {
+            UUID id = CorfuRuntime.getStreamID(streamName);
+            long tail = getDefaultRuntime().getSequencerView().
+                    nextToken(Collections.singleton(id),
+                            0).getToken().getTokenValue();
+            if (streamTails.containsKey(id)) {
+                assertThat(streamTails.get(id)).isEqualTo(tail);
+            }
+        });
     }
 
-    private void assertThatMapIsBuilt(CorfuRuntime rt1, CorfuRuntime rt2, String streamName,
-                                      Map<String, String> map, Class type) {
-
-        // Get raw maps (VersionLockedObject)
-        VersionLockedObject vo1 = getVersionLockedObject(rt1, streamName, type);
-        VersionLockedObject vo1Prime = getVersionLockedObject(rt2, streamName, type);
-
-        // Assert that UnderlyingObjects are at the same version
-        // If they are at the same version, a sync on the object will
-        // be a no op for the new runtime.
-        assertThat(vo1Prime.getVersionUnsafe()).isEqualTo(vo1.getVersionUnsafe());
-
-
-        Map<String, String> mapPrime = createMap(streamName, rt2, type);
-        assertThat(mapPrime.size()).isEqualTo(map.size());
-        mapPrime.forEach((key, value) -> assertThat(value).isEqualTo(map.get(key)));
+    private void assertThatStreamTailsAreCorrectIgnore(Map<UUID, Long> streamTails, String toIgnore) {
+        streamTails.remove(CorfuRuntime.getStreamID(toIgnore));
+        assertThatStreamTailsAreCorrect(streamTails);
     }
-
-
-    private void assertThatMapIsNotReBuilt(CorfuRuntime rt1, CorfuRuntime rt2, String streamName) {
-        ObjectsView.ObjectID mapId = new ObjectsView.
-                ObjectID(CorfuRuntime.getStreamID(streamName), SMRMap.class);
-
-        assertThat((rt1.getObjectsView().getObjectCache().
-                containsKey(mapId))).isTrue();
-
-        assertThat((rt2.getObjectsView().getObjectCache().
-                containsKey(mapId))).isFalse();
-    }
-
 
     /** Test that the maps are reloaded after runtime.connect()
      *
@@ -152,41 +147,27 @@ public class FastObjectLoaderTest extends AbstractViewTest {
      */
     @Test
     public void canReloadMaps() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        Map<String, String> map2 = createMap("Map2", rt1);
+        populateMaps(2, getDefaultRuntime(), CorfuTable.class, true, 2);
 
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-        map2.put("k3", "v3");
-        map2.put("k4", "v4");
-
-        // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatMapIsBuilt(rt1, rt2, "Map2", map2);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
-
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        assertThatMapsAreBuilt(rt2);
     }
 
     @Test
     public void canReadWithCacheDisable() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2);
 
         CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
                 .setCacheDisabled(true)
                 .connect();
 
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
+        FastObjectLoader fol = new FastObjectLoader(rt2)
+                .setDefaultObjectsType(CorfuTable.class);
 
+        fol.loadMaps();
+
+        assertThatMapsAreBuilt(rt2);
+        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
     }
 
 
@@ -197,34 +178,28 @@ public class FastObjectLoaderTest extends AbstractViewTest {
      */
     @Test
     public void canReadHoles() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2);
 
-        LogUnitClient luc = rt1.getRouter(getDefaultConfigurationString())
+        LogUnitClient luc = getDefaultRuntime().getRouter(getDefaultConfigurationString())
                 .getClient(LogUnitClient.class);
-        SequencerClient seq = rt1.getRouter(getDefaultConfigurationString())
+        SequencerClient seq = getDefaultRuntime().getRouter(getDefaultConfigurationString())
                 .getClient(SequencerClient.class);
 
         seq.nextToken(null, 1);
-        luc.fillHole(rt1.getSequencerView()
+        luc.fillHole(getDefaultRuntime().getSequencerView()
                 .nextToken(Collections.emptySet(), 0)
                 .getTokenValue());
 
-        map1.put("k3", "v3");
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
 
         seq.nextToken(null, 1);
-        luc.fillHole(rt1.getSequencerView()
+        luc.fillHole(getDefaultRuntime().getSequencerView()
                 .nextToken(Collections.emptySet(), 0)
                 .getTokenValue());
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        assertThatMapsAreBuilt(rt2);
+        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
 
     }
 
@@ -245,331 +220,138 @@ public class FastObjectLoaderTest extends AbstractViewTest {
      */
     @Test
     public void canRollBack() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, 2);
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-        Map<String, String> map1Prime = createMap("Map1", rt2);
+        Map<String, String> map1Prime = Helpers.createMap("Map0", rt2, CorfuTable.class);
 
         rt2.getObjectsView().TXBuild().setType(TransactionType.SNAPSHOT).setSnapshot(0).begin();
-        assertThat(map1Prime.get("k1")).isEqualTo("v1");
-        assertThat(map1Prime.get("k2")).isNull();
+        assertThat(map1Prime.get("key0")).isEqualTo("value0");
+        assertThat(map1Prime.get("key1")).isNull();
         rt2.getObjectsView().TXEnd();
 
     }
 
     @Test
     public void canLoadWithCustomBulkRead() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-        map1.put("k3", "v3");
-        map1.put("k4", "v4");
-        map1.put("k5", "v5");
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, MORE);
+
 
         CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .setBulkReadSize(2)
                 .connect();
+        FastObjectLoader fsm = new FastObjectLoader(rt2)
+                .setBatchReadSize(2)
+                .setDefaultObjectsType(CorfuTable.class);
+        fsm.loadMaps();
 
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
+        assertThatMapsAreBuilt(rt2);
+        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
     }
 
     @Test
     public void canReadCheckpointWithoutTrim() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-        map1.put("k3", "v3");
-        map1.put("k4", "v4");
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, MORE);
+        checkPointAll(getDefaultRuntime());
 
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) map1);
-        mcw.appendCheckpoints(getRuntime(), "author");
+        checkPointAll(getDefaultRuntime());
 
         // Clear are interesting because if applied in wrong order the map might end up wrong
-        map1.clear();
-        map1.put("k5", "v5");
+        clearAllMaps();
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
 
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-        Map<String, String> mapPrime = createMap("Map1", rt2);
-        mapPrime.size();
-
-
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
-
+        assertThatMapsAreBuilt(rt2);
+        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
     }
 
     @Test
     public void canReadCheckPointMultipleStream() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        Map<String, String> map2 = createMap("Map2", rt1);
-        Map<String, String> map3 = createMap("Map3", rt1);
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true,1);
+        checkPointAll(getDefaultRuntime());
 
-        map1.put("k1", "v1");
-        map2.put("k3", "v3");
-        map3.put("k5", "v5");
+        clearAllMaps();
 
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) map1);
-        mcw.addMap((SMRMap) map2);
-        mcw.addMap((SMRMap) map3);
-        mcw.appendCheckpoints(getRuntime(), "author");
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
 
-        map1.clear();
-        map2.clear();
-        map3.clear();
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
 
-        map1.put("k2", "v2");
-        map2.put("k4", "v4");
-        map3.put("k6", "v6");
-
-        // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatMapIsBuilt(rt1, rt2, "Map2", map2);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
+        assertThatMapsAreBuilt(rt2);
+        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
     }
 
     @Test
     public void canReadMultipleCheckPointMultipleStreams() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        Map<String, String> map2 = createMap("Map2", rt1);
-        Map<String, String> map3 = createMap("Map3", rt1);
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
+        checkPointAll(getDefaultRuntime());
+        clearAllMaps();
 
-        map1.put("k1", "v1");
-        map2.put("k3", "v3");
-        map3.put("k5", "v5");
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 2);
 
+        checkPointAll(getDefaultRuntime());
+        clearAllMaps();
 
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) map1);
-        mcw.addMap((SMRMap) map2);
-        mcw.addMap((SMRMap) map3);
-        mcw.appendCheckpoints(getRuntime(), "author");
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
 
-        map1.clear();
-        map2.clear();
-        map3.clear();
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
 
-        map1.put("k2", "v2");
-        map2.put("k4", "v4");
-        map3.put("k6", "v6");
-
-        map1.put("k7", "v7");
-        map2.put("k9", "v9");
-        map3.put("k11", "v11");
-
-        mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) map1);
-        mcw.addMap((SMRMap) map2);
-        mcw.addMap((SMRMap) map3);
-        mcw.appendCheckpoints(getRuntime(), "author");
-
-        map1.clear();
-        map2.clear();
-        map3.clear();
-
-        map1.put("k8", "v8");
-        map2.put("k10", "v10");
-        map3.put("k12", "v12");
-
-        // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatMapIsBuilt(rt1, rt2, "Map2", map2);
-        assertThatMapIsBuilt(rt1, rt2, "Map3", map3);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
+        assertThatMapsAreBuilt(rt2);
+        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
 
     }
 
     @Test
     public void canReadCheckPointMultipleStreamsTrim() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        Map<String, String> map2 = createMap("Map2", rt1);
-        Map<String, String> map3 = createMap("Map3", rt1);
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
+        long checkpointAddress = checkPointAll(getDefaultRuntime());
+        clearAllMaps();
 
-        map1.put("k1", "v1");
-        map2.put("k3", "v3");
-        map3.put("k5", "v5");
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
+        Helpers.trim(getDefaultRuntime(), checkpointAddress);
 
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) map1);
-        mcw.addMap((SMRMap) map2);
-        mcw.addMap((SMRMap) map3);
-        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
 
-        map1.clear();
-        map2.clear();
-        map3.clear();
-
-        map1.put("k2", "v2");
-        map2.put("k4", "v4");
-        map3.put("k6", "v6");
-
-        // Trim the log
-        getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress - 1);
-        getRuntime().getAddressSpaceView().gc();
-        getRuntime().getAddressSpaceView().invalidateServerCaches();
-        getRuntime().getAddressSpaceView().invalidateClientCache();
-
-        // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatMapIsBuilt(rt1, rt2, "Map2", map2);
-        assertThatMapIsBuilt(rt1, rt2, "Map3", map3);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
+        assertThatMapsAreBuilt(rt2);
+        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
     }
 
     @Test
     public void canReadCheckPointMultipleStreamTrimWithLeftOver() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        Map<String, String> map2 = createMap("Map2", rt1);
-        Map<String, String> map3 = createMap("Map3", rt1);
-
-        map1.put("k1", "v1");
-        map2.put("k3", "v3");
-        map3.put("k5", "v5");
-
-
-
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) map1);
-        mcw.addMap((SMRMap) map2);
-        mcw.addMap((SMRMap) map3);
-        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
+        checkPointAll(getDefaultRuntime());
 
         // Clear are interesting because if applied in wrong order the map might end up wrong
-        map1.clear();
-        map2.clear();
-        map3.clear();
-        map3.put("k6", "v6");
-        map1.put("k2", "v2");
-        map2.put("k4", "v4");
+        clearAllMaps();
 
-        // Trim the log
-        getRuntime().getAddressSpaceView().prefixTrim(2);
-        getRuntime().getAddressSpaceView().gc();
-        getRuntime().getAddressSpaceView().invalidateServerCaches();
-        getRuntime().getAddressSpaceView().invalidateClientCache();
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
 
+        Helpers.trim(getDefaultRuntime(), 2);
 
-        // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
 
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatMapIsBuilt(rt1, rt2, "Map2", map2);
-        assertThatMapIsBuilt(rt1, rt2, "Map3", map3);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
-
-
+        assertThatMapsAreBuilt(rt2);
+        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
     }
 
     @Test
     public void canFindTailsRecoverSequencerMode() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        Map<String, String> map2 = createMap("Map2", rt1);
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-        map2.put("k3", "v3");
-        map2.put("k4", "v4");
+        populateMaps(2, getDefaultRuntime(), CorfuTable.class, true, 2);
 
-        UUID stream1 = CorfuRuntime.getStreamID("Map1");
-        UUID stream2 = CorfuRuntime.getStreamID("Map2");
-
-        long tail1 = rt1.getSequencerView().nextToken(Collections.singleton(stream1), 0).getToken().getTokenValue();
-        long tail2 = rt1.getSequencerView().nextToken(Collections.singleton(stream2), 0).getToken().getTokenValue();
-
-
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .connect();
-
-        FastObjectLoader fsml = new FastObjectLoader(rt2);
-        fsml.setRecoverSequencerMode(true);
-        fsml.loadMaps();
-
-        Map <UUID, Long> streamTails = fsml.getStreamTails();
-
-        assertThat(streamTails.get(stream1)).isEqualTo(tail1);
-        assertThat(streamTails.get(stream2)).isEqualTo(tail2);
+        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
+        assertThatStreamTailsAreCorrect(streamTails);
     }
 
     @Test
     public void canFindTailsWithCheckPoints() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        int mapCount = 0;
-        Map<String, String> map1 = createMap("Map1", rt1);
-        mapCount++;
-        Map<String, String> map2 = createMap("Map2", rt1);
-        mapCount++;
-        Map<String, String> map3 = createMap("Map3", rt1);
-        mapCount++;
+        // 1 tables has 1 entry and 2 tables have 2 entries
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
+        populateMaps(2, getDefaultRuntime(), CorfuTable.class, false, 1);
 
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-        map2.put("k3", "v3");
-        map2.put("k4", "v4");
-        map3.put("k5", "v5");
+        int mapCount = maps.size();
+        checkPointAll(getDefaultRuntime());
 
-        UUID stream1 = CorfuRuntime.getStreamID("Map1");
-        UUID stream2 = CorfuRuntime.getStreamID("Map2");
-        UUID stream3 = CorfuRuntime.getStreamID("Map3");
-
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) map1);
-        mcw.addMap((SMRMap) map2);
-        mcw.addMap((SMRMap) map3);
-        mcw.appendCheckpoints(getRuntime(), "author");
-
-        long tail1 = rt1.getSequencerView().nextToken(Collections.singleton(stream1), 0).getToken().getTokenValue();
-        long tail2 = rt1.getSequencerView().nextToken(Collections.singleton(stream2), 0).getToken().getTokenValue();
-        long tail3 = rt1.getSequencerView().nextToken(Collections.singleton(stream3), 0).getToken().getTokenValue();
-
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-        FastObjectLoader fsm = new FastObjectLoader(rt2);
-        fsm.setRecoverSequencerMode(true);
-        fsm.loadMaps();
-
-        Map<UUID, Long> streamTails = fsm.getStreamTails();
-
-
-        assertThat(streamTails.get(stream1)).isEqualTo(tail1);
-        assertThat(streamTails.get(stream2)).isEqualTo(tail2);
-        assertThat(streamTails.get(stream3)).isEqualTo(tail3);
-
-        // Need to have checkpoint for each stream
+        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
+        assertThatStreamTailsAreCorrect(streamTails);
         assertThat(streamTails.size()).isEqualTo(mapCount * 2);
     }
 
@@ -577,130 +359,68 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canFindTailsWithFailedCheckpoint() throws Exception {
         CorfuRuntime rt1 = getDefaultRuntime();
 
-        Map<String, String> map = createMap("Map1", rt1);
+        Map<String, String> map = Helpers.createMap("Map1", rt1);
         map.put("k1", "v1");
 
         UUID stream1 = CorfuRuntime.getStreamID("Map1");
 
-        CheckpointWriter cpw = new CheckpointWriter(rt1, stream1, "author", (SMRMap) map);
-        CheckpointWriter.startGlobalSnapshotTxn(rt1);
+        CheckpointWriter cpw = new CheckpointWriter(getDefaultRuntime(), stream1,
+                "author", (SMRMap) map);
+        CheckpointWriter.startGlobalSnapshotTxn(getDefaultRuntime());
         try {
             cpw.startCheckpoint();
             cpw.appendObjectState();
         } finally {
-            rt1.getObjectsView().TXEnd();
+            getDefaultRuntime().getObjectsView().TXEnd();
         }
         map.put("k2", "v2");
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-        FastObjectLoader fsm = new FastObjectLoader(rt2);
-        fsm.setRecoverSequencerMode(true);
-        fsm.loadMaps();
-
-        final int streamTailOfMap = 3;
-        final int streamTailOfCheckpoint = 2;
-
-        Map<UUID, Long> streamTails = fsm.getStreamTails();
-
+        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
+        final int streamTailOfMap = SOME;
         assertThat(streamTails.get(stream1)).isEqualTo(streamTailOfMap);
     }
 
     @Test
     public void canFindTailsWithOnlyCheckpointAndTrim() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        int mapCount = 0;
-        Map<String, String> map1 = createMap("Map1", rt1);
-        mapCount++;
-        Map<String, String> map2 = createMap("Map2", rt1);
-        mapCount++;
-        Map<String, String> map3 = createMap("Map3", rt1);
-        mapCount++;
+        // 1 tables has 1 entry and 2 tables have 2 entries
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
+        populateMaps(2, getDefaultRuntime(), CorfuTable.class, false, 1);
+        int mapCount = maps.size();
 
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-        map2.put("k3", "v3");
-        map2.put("k4", "v4");
-        map3.put("k5", "v5");
+        long checkPointAddress = checkPointAll(getDefaultRuntime());
 
-        UUID stream1 = CorfuRuntime.getStreamID("Map1");
-        UUID stream2 = CorfuRuntime.getStreamID("Map2");
-        UUID stream3 = CorfuRuntime.getStreamID("Map3");
-
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) map1);
-        mcw.addMap((SMRMap) map2);
-        mcw.addMap((SMRMap) map3);
-        long address = mcw.appendCheckpoints(getRuntime(), "author");
-
-        long tail1 = rt1.getSequencerView().nextToken(Collections.singleton(stream1), 0).getToken().getTokenValue();
-        long tail2 = rt1.getSequencerView().nextToken(Collections.singleton(stream2), 0).getToken().getTokenValue();
-        long tail3 = rt1.getSequencerView().nextToken(Collections.singleton(stream3), 0).getToken().getTokenValue();
-
-        getRuntime().getAddressSpaceView().prefixTrim(address - 1);
-        getRuntime().getAddressSpaceView().gc();
-        getRuntime().getAddressSpaceView().invalidateServerCaches();
-        getRuntime().getAddressSpaceView().invalidateClientCache();
-
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .connect();
-
-        FastObjectLoader fsm = new FastObjectLoader(rt2);
-        fsm.setRecoverSequencerMode(true);
-        fsm.setLogHead(0);
-        fsm.loadMaps();
-
-        Map<UUID, Long> streamTails = fsm.getStreamTails();
-
-        assertThat(streamTails.get(stream1)).isEqualTo(tail1);
-        assertThat(streamTails.get(stream2)).isEqualTo(tail2);
-        assertThat(streamTails.get(stream3)).isEqualTo(tail3);
-
-        // Need to have checkpoint for each stream
+        Helpers.trim(getDefaultRuntime(), checkPointAddress);
+        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
+        assertThatStreamTailsAreCorrect(streamTails);
         assertThat(streamTails.size()).isEqualTo(mapCount * 2);
-
     }
 
     @Test
     public void canReadRankOnlyEntries() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        Map<String, String> map2 = createMap("Map2", rt1);
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, 2);
 
-        UUID stream1 = CorfuRuntime.getStreamID("Map1");
-        UUID stream2 = CorfuRuntime.getStreamID("Map2");
-
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-
-        LogUnitClient luc = rt1.getRouter(getDefaultConfigurationString())
+        LogUnitClient luc = getDefaultRuntime().getRouter(getDefaultConfigurationString())
                 .getClient(LogUnitClient.class);
-        SequencerClient seq = rt1.getRouter(getDefaultConfigurationString())
+        SequencerClient seq = getDefaultRuntime().getRouter(getDefaultConfigurationString())
                 .getClient(SequencerClient.class);
 
         long address = seq.nextToken(Collections.emptySet(),1).get().getTokenValue();
-        ILogData data = createEmptyData(address, DataType.RANK_ONLY,  new IMetadata.DataRank(2))
+        ILogData data = Helpers.createEmptyData(address, DataType.RANK_ONLY,  new IMetadata.DataRank(2))
                 .getSerialized();
         luc.write(data).get();
 
-        map2.put("k3", "v3");
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
 
         address = seq.nextToken(Collections.emptySet(),1).get().getTokenValue();
-        data = createEmptyData(address, DataType.RANK_ONLY,  new IMetadata.DataRank(2))
+        data = Helpers.createEmptyData(address, DataType.RANK_ONLY,  new IMetadata.DataRank(2))
                 .getSerialized();
         luc.write(data).get();
 
-        map2.put("k4", "v4");
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatMapIsBuilt(rt1, rt2, "Map2", map2);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        assertThatMapsAreBuilt(rt2);
+        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
     }
 
     /**
@@ -710,42 +430,14 @@ public class FastObjectLoaderTest extends AbstractViewTest {
      */
     @Test
     public void canReadWithEntriesInterleavingCPS() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        int mapCount = 0;
-
-        Map<String, String> map1 = createMap("Map1", rt1);
-        mapCount++;
-        Map<String, String> map2 = createMap("Map2", rt1);
-        mapCount++;
-        Map<String, String> map3 = createMap("Map3", rt1);
-        mapCount++;
-
-        // Keeping track of maps
-        List<Map<String, String>> bareMaps = new ArrayList<>();
-        bareMaps.add(map1);
-        bareMaps.add(map2);
-        bareMaps.add(map3);
-
-        // Keeping track of maps
-        map1.put("k1", "v1");
-        map2.put("k2", "v2");
-        map3.put("k3", "v3");
-
-        List<ICorfuSMR<Map>> maps = new ArrayList<>();
-        maps.add((ICorfuSMR<Map>) map1);
-        maps.add((ICorfuSMR<Map>) map2);
-        maps.add((ICorfuSMR<Map>) map3);
-
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
+        int mapCount = maps.size();
 
         ExecutorService checkPointThread = Executors.newFixedThreadPool(1);
         checkPointThread.execute(() -> {
             for (int i = 0; i < NUMBER_OF_CHECKPOINTS; i++) {
                 try {
-                    MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-                    mcw.addMap((SMRMap) map1);
-                    mcw.addMap((SMRMap) map2);
-                    mcw.addMap((SMRMap) map3);
-                    long address = mcw.appendCheckpoints(getRuntime(), "author");
+                    checkPointAll(getDefaultRuntime());
                 } catch (Exception e) {
 
                 }
@@ -754,10 +446,9 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
 
         for (int i = 0; i < NUMBER_OF_PUT; i++) {
-            bareMaps.get(i % maps.size()).put("k" + Integer.toString(i),
+            maps.get("Map" + (i % maps.size())).put("k" + Integer.toString(i),
                     "v" + Integer.toString(i));
         }
-
 
         try {
             checkPointThread.shutdown();
@@ -767,44 +458,14 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         }
 
-
-        // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatMapIsBuilt(rt1, rt2, "Map2", map2);
-        assertThatMapIsBuilt(rt1, rt2, "Map3", map3);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        assertThatMapsAreBuilt(rt2);
+        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
 
 
         // Also test it cans find the tails
-
-        // Create a new runtime with fastloader
-        CorfuRuntime rt3 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-
-        FastObjectLoader fastLoader = new FastObjectLoader(rt3);
-        fastLoader.setRecoverSequencerMode(true);
-        fastLoader.loadMaps();
-
-        Map<UUID, Long> streamTails = fastLoader.getStreamTails();
-
-        UUID stream1 = CorfuRuntime.getStreamID("Map1");
-        UUID stream2 = CorfuRuntime.getStreamID("Map2");
-        UUID stream3 = CorfuRuntime.getStreamID("Map3");
-
-
-        long tail1 = rt1.getSequencerView().nextToken(Collections.singleton(stream1), 0).getToken().getTokenValue();
-        long tail2 = rt1.getSequencerView().nextToken(Collections.singleton(stream2), 0).getToken().getTokenValue();
-        long tail3 = rt1.getSequencerView().nextToken(Collections.singleton(stream3), 0).getToken().getTokenValue();
-
-        assertThat(streamTails.get(stream1)).isEqualTo(tail1);
-        assertThat(streamTails.get(stream2)).isEqualTo(tail2);
-        assertThat(streamTails.get(stream3)).isEqualTo(tail3);
+        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
+        assertThatStreamTailsAreCorrect(streamTails);
 
         // Need to have checkpoint for each stream
         assertThat(streamTails.size()).isEqualTo(mapCount * 2);
@@ -813,93 +474,37 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     @Test
     public void canReadWithTruncatedCheckPoint() throws Exception{
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        Map<String, String> map2 = createMap("Map2", rt1);
-        Map<String, String> map3 = createMap("Map3", rt1);
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
+        long firstCheckpointAddress = checkPointAll(getDefaultRuntime());
 
-        map1.put("k1", "v1");
-        map2.put("k3", "v3");
-        map3.put("k5", "v5");
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
 
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) map1);
-        mcw.addMap((SMRMap) map2);
-        mcw.addMap((SMRMap) map3);
-        long firstCheckpointAddress = mcw.appendCheckpoints(rt1, "author");
-
-        map3.put("k6", "v6");
-        map1.put("k2", "v2");
-        map2.put("k4", "v4");
-
-        mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) map1);
-        mcw.addMap((SMRMap) map2);
-        mcw.addMap((SMRMap) map3);
-        mcw.appendCheckpoints(rt1, "author");
+        checkPointAll(getDefaultRuntime());
 
         // Trim the log removing the checkpoint start of the first checkpoint
-        getRuntime().getAddressSpaceView().prefixTrim(firstCheckpointAddress);
-        getRuntime().getAddressSpaceView().gc();
-        getRuntime().getAddressSpaceView().invalidateServerCaches();
-        getRuntime().getAddressSpaceView().invalidateClientCache();
+        Helpers.trim(getDefaultRuntime(), firstCheckpointAddress);
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatMapIsBuilt(rt1, rt2, "Map2", map2);
-        assertThatMapIsBuilt(rt1, rt2, "Map3", map3);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        assertThatMapsAreBuilt(rt2);
+        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
 
     }
 
     @Test
     public void canReadLogTerminatedWithCheckpoint() throws Exception{
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        Map<String, String> map2 = createMap("Map2", rt1);
-        Map<String, String> map3 = createMap("Map3", rt1);
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
+        checkPointAll(getDefaultRuntime());
 
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-        map2.put("k3", "v3");
-        map2.put("k4", "v4");
-        map3.put("k5", "v5");
-        map3.put("k6", "v6");
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
 
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) map1);
-        mcw.addMap((SMRMap) map2);
-        mcw.addMap((SMRMap) map3);
-        mcw.appendCheckpoints(rt1, "author");
-
-        // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatMapIsBuilt(rt1, rt2, "Map2", map2);
-        assertThatMapIsBuilt(rt1, rt2, "Map3", map3);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
+        assertThatMapsAreBuilt(rt2);
+        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
     }
 
     @Test
     public void canReadWhenTheUserHasNoCheckpoint() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        Map<String, String> map2 = createMap("Map2", rt1);
-        Map<String, String> map3 = createMap("Map3", rt1);
-
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-        map2.put("k3", "v3");
-        map2.put("k4", "v4");
-        map3.put("k5", "v5");
-        map3.put("k6", "v6");
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
 
         // Create a new runtime with fastloader
         CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
@@ -907,28 +512,16 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         FastObjectLoader fsm = new FastObjectLoader(rt2);
         fsm.setLogHasNoCheckPoint(true);
+        fsm.setDefaultObjectsType(CorfuTable.class);
         fsm.loadMaps();
 
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatMapIsBuilt(rt1, rt2, "Map2", map2);
-        assertThatMapIsBuilt(rt1, rt2, "Map3", map3);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
-
+        assertThatMapsAreBuilt(rt2);
+        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
     }
 
     @Test
     public void ignoreStreamForRuntimeButNotStreamTails() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        Map<String, String> map2 = createMap("Map2", rt1);
-        Map<String, String> map3 = createMap("Map3", rt1);
-
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-        map2.put("k3", "v3");
-        map2.put("k4", "v4");
-        map3.put("k5", "v5");
-        map3.put("k6", "v6");
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
 
         // Create a new runtime with fastloader
         CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
@@ -936,110 +529,79 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         FastObjectLoader fsm = new FastObjectLoader(rt2);
         fsm.addStreamToIgnore("Map1");
+        fsm.setDefaultObjectsType(CorfuTable.class);
         fsm.loadMaps();
 
-        assertThatMapIsNotReBuilt(rt1, rt2, "Map1");
-        assertThatMapIsBuilt(rt1, rt2, "Map2", map2);
-        assertThatMapIsBuilt(rt1, rt2, "Map3", map3);
+        assertThatMapsAreBuiltIgnore(rt2, "Map1");
+
+        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
+        assertThatStreamTailsAreCorrectIgnore(streamTails, "Map1");
+    }
+
+    @Test
+    public void ignoreStreamCheckpoint() throws Exception{
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
+        checkPointAll(getDefaultRuntime());
+        populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 2);
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt3 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
                 .connect();
-
-        fsm = new FastObjectLoader(rt3);
+        FastObjectLoader fsm = new FastObjectLoader(rt2);
         fsm.addStreamToIgnore("Map1");
-        fsm.setRecoverSequencerMode(true);
+        fsm.setDefaultObjectsType(CorfuTable.class);
         fsm.loadMaps();
 
-
-        UUID stream1 = CorfuRuntime.getStreamID("Map1");
-        UUID stream2 = CorfuRuntime.getStreamID("Map2");
-        UUID stream3 = CorfuRuntime.getStreamID("Map3");
-        Map<UUID, Long> streamTails = fsm.getStreamTails();
-
-        long tail1 = rt1.getSequencerView().nextToken(Collections.singleton(stream1), 0).getToken().getTokenValue();
-        long tail2 = rt1.getSequencerView().nextToken(Collections.singleton(stream2), 0).getToken().getTokenValue();
-        long tail3 = rt1.getSequencerView().nextToken(Collections.singleton(stream3), 0).getToken().getTokenValue();
-
-        assertThat(streamTails.get(stream1)).isEqualTo(tail1);
-        assertThat(streamTails.get(stream2)).isEqualTo(tail2);
-        assertThat(streamTails.get(stream3)).isEqualTo(tail3);
+        assertThatMapsAreBuiltIgnore(rt2, "Map1");
 
 
     }
 
     @Test(expected = RuntimeException.class)
     public void failBecauseOfTrimAnd1Attempt() throws Exception {
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        Map<String, String> map2 = createMap("Map2", rt1);
-        Map<String, String> map3 = createMap("Map3", rt1);
-
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-        map2.put("k3", "v3");
-        map2.put("k4", "v4");
-        map3.put("k5", "v5");
-        map2.put("k6", "v6");
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
 
         // Create a new runtime with fastloader
         CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
                 .connect();
 
-        int firstMileStone = 2;
+        long firstMileStone = 2;
         FastObjectLoader incrementalLoader = new FastObjectLoader(rt2);
         incrementalLoader.setNumberOfAttempt(1);
         incrementalLoader.setLogTail(firstMileStone);
+        incrementalLoader.setDefaultObjectsType(CorfuTable.class);
         incrementalLoader.loadMaps();
 
-        rt1.getAddressSpaceView().prefixTrim(firstMileStone+2);
-        rt1.getAddressSpaceView().gc();
-        rt1.getAddressSpaceView().invalidateServerCaches();
-        rt1.getAddressSpaceView().invalidateClientCache();
+        Helpers.trim(getDefaultRuntime(),firstMileStone+2);
 
         incrementalLoader.setLogHead(firstMileStone + 1);
-        incrementalLoader.setLogTail(rt1.getSequencerView().nextToken(Collections.emptySet(), 0).getTokenValue());
+        incrementalLoader.setLogTail(getDefaultRuntime().getSequencerView().
+                nextToken(Collections.emptySet(), 0).getTokenValue());
         incrementalLoader.loadMaps();
 
     }
 
     @Test
     public void doNotFailBecauseTrimIsFirst() throws Exception{
-        CorfuRuntime rt1 = getDefaultRuntime();
-        Map<String, String> map1 = createMap("Map1", rt1);
-        Map<String, String> map2 = createMap("Map2", rt1);
-        Map<String, String> map3 = createMap("Map3", rt1);
+        // 1 tables has 1 entry and 2 tables have 2 entries
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
+        populateMaps(2, getDefaultRuntime(), CorfuTable.class, false, 1);
 
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-        map2.put("k3", "v3");
-        map2.put("k4", "v4");
-        map3.put("k5", "v5");
+        long snapShotAddress = checkPointAll(getDefaultRuntime());
+        Helpers.trim(getDefaultRuntime(), snapShotAddress);
 
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) map1);
-        mcw.addMap((SMRMap) map2);
-        mcw.addMap((SMRMap) map3);
-        long snapShotAddress = mcw.appendCheckpoints(getRuntime(), "author");
-
-        getRuntime().getAddressSpaceView().prefixTrim(snapShotAddress - 1);
-        getRuntime().getAddressSpaceView().gc();
-        getRuntime().getAddressSpaceView().invalidateServerCaches();
-        getRuntime().getAddressSpaceView().invalidateClientCache();
-
-        // Create a new runtime with fastloader
         CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
                 .connect();
 
         // Force a read from 0
         FastObjectLoader fsm = new FastObjectLoader(rt2);
         fsm.setLogHead(0L);
+        fsm.setDefaultObjectsType(CorfuTable.class);
         fsm.loadMaps();
 
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatMapIsBuilt(rt1, rt2, "Map2", map2);
-        assertThatMapIsBuilt(rt1, rt2, "Map3", map3);
-        assertThatObjectCacheIsTheSameSize(rt1, rt2);
+        assertThatMapsAreBuilt(rt2);
+
+        assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
     }
 
     @Test
@@ -1048,34 +610,20 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         CorfuRuntime rt1 = new CorfuRuntime(getDefaultConfigurationString())
                 .setTransactionLogging(true)
                 .connect();
+        populateMaps(SOME, rt1, CorfuTable.class, true, 2);
 
-        Map<String, String> map1 = createMap("Map1", rt1);
-        Map<String, String> map2 = createMap("Map2", rt1);
-        Map<String, String> map3 = createMap("Map3", rt1);
-
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-        map2.put("k3", "v3");
-        map3.put("k0", "v0");
         rt1.getObjectsView().TXBegin();
-        map2.put("k4", "v4");
-        map3.put("k5", "v5");
+        maps.get("Map1").put("k4", "v4");
+        maps.get("Map2").put("k5", "v5");
         rt1.getObjectsView().TXEnd();
 
         // We need to read the maps to get to the current version in rt1
-        map2.get("k4");
-        map3.get("k5");
+        maps.get("Map1").size();
+        maps.get("Map2").size();
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .connect();
-
-        FastObjectLoader fsm = new FastObjectLoader(rt2);
-        fsm.loadMaps();
-
-        assertThatMapIsBuilt(rt1, rt2, "Map1", map1);
-        assertThatMapIsBuilt(rt1, rt2, "Map2", map2);
-        assertThatMapIsBuilt(rt1, rt2, "Map3", map3);
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        assertThatMapsAreBuilt(rt1, rt2);
 
         // Ensure that we didn't create a map for the transaction stream.
         assertThatObjectCacheIsTheSameSize(rt1, rt2);
@@ -1088,43 +636,17 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .setTransactionLogging(true)
                 .connect();
 
-        int mapCount = 0;
+        populateMaps(SOME, rt1, CorfuTable.class, true, 2);
+        int mapCount = maps.size();
 
-        Map<String, String> map1 = createMap("Map1", rt1);
-        mapCount++;
-        Map<String, String> map2 = createMap("Map2", rt1);
-        mapCount++;
-        Map<String, String> map3 = createMap("Map3", rt1);
-        mapCount++;
-
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-        map2.put("k3", "v3");
-        map3.put("k0", "v0");
         rt1.getObjectsView().TXBegin();
-        map2.put("k4", "v4");
-        map3.put("k5", "v5");
+        maps.get("Map1").put("k4", "v4");
+        maps.get("Map2").put("k5", "v5");
         rt1.getObjectsView().TXEnd();
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .connect();
-
-        FastObjectLoader fsm = new FastObjectLoader(rt2);
-        fsm.setRecoverSequencerMode(true);
-        fsm.loadMaps();
-
-        UUID stream1 = CorfuRuntime.getStreamID("Map1");
-        UUID stream2 = CorfuRuntime.getStreamID("Map2");
-        UUID stream3 = CorfuRuntime.getStreamID("Map3");
-        Map<UUID, Long> streamTails = fsm.getStreamTails();
-
-        long tail1 = rt1.getSequencerView().nextToken(Collections.singleton(stream1), 0).
-                getToken().getTokenValue();
-        long tail2 = rt1.getSequencerView().nextToken(Collections.singleton(stream2), 0).
-                getToken().getTokenValue();
-        long tail3 = rt1.getSequencerView().nextToken(Collections.singleton(stream3), 0).
-                getToken().getTokenValue();
+        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
+        assertThatStreamTailsAreCorrect(streamTails);
 
 
         UUID transactionStreams = rt1.getObjectsView().TRANSACTION_STREAM_ID;
@@ -1132,13 +654,9 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .nextToken(Collections.singleton(transactionStreams), 0).
                 getToken().getTokenValue();
 
-        assertThat(streamTails.get(stream1)).isEqualTo(tail1);
-        assertThat(streamTails.get(stream2)).isEqualTo(tail2);
-        assertThat(streamTails.get(stream3)).isEqualTo(tail3);
-        assertThat(streamTails.get(transactionStreams)).isEqualTo(tailTransactionStream);
-
         // Also recover the Transaction Stream
         assertThat(streamTails.size()).isEqualTo(mapCount + 1);
+        assertThat(streamTails.get(transactionStreams)).isEqualTo(tailTransactionStream);
 
 
     }
@@ -1151,46 +669,13 @@ public class FastObjectLoaderTest extends AbstractViewTest {
      */
     @Test
     public void doNotReconstructEmptyCheckpoints() throws Exception {
+        // Create SOME maps and only populate 2
+        populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 0);
+        populateMaps(2, getDefaultRuntime(), CorfuTable.class, false, 2);
         CorfuRuntime rt1 = getDefaultRuntime();
-        int mapCount = 0;
-        Map<String, String> map1 = createMap("Map1", rt1);
-        mapCount++;
-        Map<String, String> map2 = createMap("Map2", rt1);
-        mapCount++;
-        Map<String, String> emptyMap = createMap("EmptyMap", rt1);
-        mapCount++;
 
-        map1.put("k1", "v1");
-        map1.put("k2", "v2");
-        map2.put("k3", "v3");
-        map2.put("k4", "v4");
-
-
-        UUID stream1 = CorfuRuntime.getStreamID("Map1");
-        UUID stream2 = CorfuRuntime.getStreamID("Map2");
-        UUID emptyStream = CorfuRuntime.getStreamID("EmptyMap");
-
-        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) map1);
-        mcw.addMap((SMRMap) map2);
-        mcw.addMap((SMRMap) emptyMap);
-        mcw.appendCheckpoints(getRuntime(), "author");
-
-        long tail1 = rt1.getSequencerView().nextToken(Collections.singleton(stream1), 0).getToken().getTokenValue();
-        long tail2 = rt1.getSequencerView().nextToken(Collections.singleton(stream2), 0).getToken().getTokenValue();
-
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .setLoadSmrMapsAtConnect(true)
-                .connect();
-
-        FastObjectLoader fsm = new FastObjectLoader(rt2);
-        fsm.setRecoverSequencerMode(true);
-        fsm.loadMaps();
-
-        Map<UUID, Long> streamTails = fsm.getStreamTails();
-        assertThat(streamTails.get(stream1)).isEqualTo(tail1);
-        assertThat(streamTails.get(stream2)).isEqualTo(tail2);
-        assertThat(streamTails.get(emptyStream)).isNull();
+        checkPointAll(rt1);
+        assertThatStreamTailsAreCorrect(Helpers.getRecoveryStreamTails(getDefaultConfigurationString()));
     }
 
     /**
@@ -1227,7 +712,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .setStreamName("test")
                 .open();
 
-        assertThat(getCorfuCompileProxy(recreatedRuntime, "test", SMRMap.class).getSerializer()).isEqualTo(customSerializer);
+        assertThat(Helpers.getCorfuCompileProxy(recreatedRuntime, "test", SMRMap.class).getSerializer()).isEqualTo(customSerializer);
 
     }
 
@@ -1258,8 +743,8 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .setStreamName("test")
                 .open();
         // Get raw maps (VersionLockedObject)
-        VersionLockedObject vo1 = getVersionLockedObject(originalRuntime, "test", CorfuTable.class);
-        VersionLockedObject vo1Prime = getVersionLockedObject(recreatedRuntime, "test", CorfuTable.class);
+        VersionLockedObject vo1 = Helpers.getVersionLockedObject(originalRuntime, "test", CorfuTable.class);
+        VersionLockedObject vo1Prime = Helpers.getVersionLockedObject(recreatedRuntime, "test", CorfuTable.class);
 
         // Assert that UnderlyingObjects are at the same version
         // If they are at the same version, a sync on the object will
@@ -1267,56 +752,6 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         assertThat(vo1Prime.getVersionUnsafe()).isEqualTo(vo1.getVersionUnsafe());
 
         assertThat(recreatedTable.get("a")).isEqualTo("b");
-
-    }
-
-    @Test
-    public void canRecreateCorfuTableWithCheckpoint() throws Exception {
-        CorfuRuntime originalRuntime = getDefaultRuntime();
-
-        CorfuTable originalTable1 = originalRuntime.getObjectsView().build()
-                .setType(CorfuTable.class)
-                .setStreamName("test1")
-                .open();
-
-        CorfuTable originalTable2 = originalRuntime.getObjectsView().build()
-                .setType(CorfuTable.class)
-                .setStreamName("test2")
-                .open();
-
-        originalTable1.put("a", "b");
-        originalTable2.put("c", "d");
-        originalTable1.put("e", "f");
-        originalTable2.put("g", "h");
-
-        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
-        mcw.addMap((CorfuTable) originalTable1);
-        mcw.addMap((CorfuTable) originalTable2);
-        mcw.appendCheckpoints(getRuntime(), "author");
-
-        originalTable1.put("i", "j");
-        originalTable2.put("k", "l");
-
-        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
-                .connect();
-
-
-
-        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-        ObjectBuilder ob1 = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
-                .setArguments(CorfuTableTest.StringIndexers.class)
-                .setStreamID(CorfuRuntime.getStreamID("test1"));
-        ObjectBuilder ob2 = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
-                .setArguments(CorfuTableTest.StringIndexers.class)
-                .setStreamID(CorfuRuntime.getStreamID("test2"));
-        fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test1"), ob1);
-        fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test2"), ob2);
-
-        fsmr.loadMaps();
-
-
-        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test1", originalTable1, CorfuTable.class);
-        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test2", originalTable2, CorfuTable.class);
 
     }
 
@@ -1346,7 +781,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         fsmr.loadMaps();
 
-        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test", originalTable, CorfuTable.class);
+        Helpers.assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test", originalTable, CorfuTable.class);
 
 
         CorfuTable recreatedTable = recreatedRuntime.getObjectsView().build()
@@ -1358,7 +793,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         assertThat(recreatedTable.getByIndex(CorfuTableTest.StringIndexers.BY_FIRST_LETTER, "a"))
                 .containsExactly("a", "ab");
 
-        getVersionLockedObject(recreatedRuntime, "test", CorfuTable.class).resetUnsafe();
+        Helpers.getVersionLockedObject(recreatedRuntime, "test", CorfuTable.class).resetUnsafe();
 
         recreatedTable.get("k3");
         assertThat(recreatedTable.hasSecondaryIndices()).isTrue();
@@ -1403,8 +838,8 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         fsmr.loadMaps();
 
 
-        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "smrMap", smrMap, SMRMap.class);
-        assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "corfuTable", corfuTable, CorfuTable.class);
+        Helpers.assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "smrMap", smrMap, SMRMap.class);
+        Helpers.assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "corfuTable", corfuTable, CorfuTable.class);
     }
 
     @Test
@@ -1436,8 +871,8 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .setStreamName("test")
                 .open();
         // Get raw maps (VersionLockedObject)
-        VersionLockedObject vo1 = getVersionLockedObject(originalRuntime, "test", CorfuTable.class);
-        VersionLockedObject vo1Prime = getVersionLockedObject(recreatedRuntime, "test", CorfuTable.class);
+        VersionLockedObject vo1 = Helpers.getVersionLockedObject(originalRuntime, "test", CorfuTable.class);
+        VersionLockedObject vo1Prime = Helpers.getVersionLockedObject(recreatedRuntime, "test", CorfuTable.class);
 
         // Assert that UnderlyingObjects are at the same version
         // If they are at the same version, a sync on the object will
@@ -1446,8 +881,84 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         assertThat(recreatedTable.get("a")).isEqualTo("b");
 
-        assertThat(getCorfuCompileProxy(recreatedRuntime, "test", CorfuTable.class).getSerializer())
+        assertThat(Helpers.getCorfuCompileProxy(recreatedRuntime, "test", CorfuTable.class).getSerializer())
                 .isEqualTo(customSerializer);
+
+    }
+    /**
+     * FastObjectLoader can work in white list mode
+     *
+     * In white list mode, the only streams that will be recreated are
+     * the streams that we provide and their checkpoint streams.
+     */
+    @Test
+    public void whiteListMode() throws Exception {
+        populateMaps(MORE, getDefaultRuntime(), CorfuTable.class, true, SOME);
+
+        List<String> streamsToLoad = new ArrayList<>();
+        streamsToLoad.add("Map1");
+        streamsToLoad.add("Map3");
+
+        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString()).connect();
+        FastObjectLoader loader = new FastObjectLoader(rt2)
+                .setDefaultObjectsType(CorfuTable.class)
+                .addStreamsToLoad(streamsToLoad);
+        loader.loadMaps();
+
+        assertThatMapsAreBuiltWhiteList(rt2, streamsToLoad);
+    }
+
+    @Test
+    public void whiteListModeWithCheckPoint() throws Exception {
+        populateMaps(MORE, getDefaultRuntime(), CorfuTable.class, true, SOME);
+
+        checkPointAll(getDefaultRuntime());
+
+        // Add a transaction
+        getDefaultRuntime().getObjectsView().TXBegin();
+        maps.values().forEach((map)->
+                map.put("key_tx", "val_tx")
+        );
+        getDefaultRuntime().getObjectsView().TXEnd();
+
+        // Read all maps to get them at their current version
+        maps.values().forEach((map)->
+            map.size()
+        );
+
+        List<String> streamsToLoad = new ArrayList<>();
+        streamsToLoad.add("Map1");
+        streamsToLoad.add("Map3");
+
+        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString()).connect();
+        FastObjectLoader loader = new FastObjectLoader(rt2)
+                .setDefaultObjectsType(CorfuTable.class)
+                .addStreamsToLoad(streamsToLoad);
+        loader.loadMaps();
+
+        assertThatMapsAreBuiltWhiteList(rt2, streamsToLoad);
+    }
+
+    @Test
+    public void blackListAndWhiteListAreMutuallyExclusive() throws Exception {
+        FastObjectLoader  whiteListLoader = new FastObjectLoader(getDefaultRuntime());
+        FastObjectLoader  blackListLoader = new FastObjectLoader(getDefaultRuntime());
+        List<String> whiteList = new ArrayList<>();
+        whiteList.add("streamToAdd");
+        String streamToIgnore = "streamToIgnore";
+
+
+        whiteListLoader.addStreamsToLoad(whiteList);
+        Throwable thrown = catchThrowable(() -> {
+            whiteListLoader.addStreamToIgnore(streamToIgnore);
+        });
+        assertThat(thrown).isInstanceOf(IllegalStateException.class);
+
+        blackListLoader.addStreamToIgnore("streamToIgnore");
+        thrown = catchThrowable(() -> {
+            blackListLoader.addStreamsToLoad(whiteList);
+        });
+        assertThat(thrown).isInstanceOf(IllegalStateException.class);
 
     }
 }
