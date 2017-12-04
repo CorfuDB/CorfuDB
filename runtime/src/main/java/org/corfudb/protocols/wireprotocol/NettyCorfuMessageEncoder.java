@@ -3,7 +3,6 @@ package org.corfudb.protocols.wireprotocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.MessageToByteEncoder;
 
 import io.netty.handler.codec.MessageToMessageEncoder;
 import java.util.List;
@@ -11,7 +10,6 @@ import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.atomic.LongAccumulator;
-import java.util.function.LongBinaryOperator;
 
 /**
  * Created by mwei on 10/1/15.
