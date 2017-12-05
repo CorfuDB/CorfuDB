@@ -19,6 +19,8 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.codec.compression.Lz4FrameDecoder;
+import io.netty.handler.codec.compression.Lz4FrameEncoder;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
@@ -181,6 +183,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     @Getter
     volatile Boolean connected;
 
+
+    private boolean compression = false;
+
     private Boolean tlsEnabled = false;
 
     private SslContext sslContext;
@@ -207,15 +212,15 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * @param port Port to connect to.
      */
     public NettyClientRouter(String host, Integer port) {
-        this(host, port, false, null, null, null,
+        this(host, port, false,false, null, null, null,
                 null, false, null, null);
     }
 
-    public NettyClientRouter(String host, Integer port, Boolean tls,
+    public NettyClientRouter(String host, Integer port, Boolean compression, Boolean tls,
                              String keyStore, String ksPasswordFile, String trustStore,
                              String tsPasswordFile, Boolean saslPlainText, String usernameFile,
                              String passwordFile) {
-        this(host, port, tls, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
+        this(host, port, compression, tls, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
                 saslPlainText, usernameFile, passwordFile, null);
     }
 
@@ -234,7 +239,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * @param usernameFile   username file path
      * @param passwordFile   password file path
      */
-    public NettyClientRouter(String host, Integer port, Boolean tls,
+    public NettyClientRouter(String host, Integer port, Boolean compression, Boolean tls,
                              String keyStore, String ksPasswordFile, String trustStore,
                              String tsPasswordFile, Boolean saslPlainText, String usernameFile,
                              String passwordFile, MetricRegistry metricRegistry) {
@@ -380,9 +385,15 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             b.handler(new ChannelInitializer<SocketChannel>() {
                 @Override
                 public void initChannel(SocketChannel ch) throws Exception {
+                    if (compression) {
+                        ch.pipeline().addLast(ee, new Lz4FrameEncoder());
+                        ch.pipeline().addLast(ee, new Lz4FrameDecoder());
+                    }
+
                     if (tlsEnabled) {
                         ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
                     }
+
                     ch.pipeline().addLast(new LengthFieldPrepender(4));
                     ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
                             0, 4, 0,
@@ -393,6 +404,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                                         saslPlainTextPasswordFile);
                         ch.pipeline().addLast("sasl/plain-text", saslNettyClient);
                     }
+
                     ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
                     ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
                     ch.pipeline().addLast(ee, router);

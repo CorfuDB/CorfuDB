@@ -12,6 +12,8 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.codec.compression.Lz4FrameDecoder;
+import io.netty.handler.codec.compression.Lz4FrameEncoder;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.ssl.SslContext;
@@ -115,7 +117,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
+                return new NettyClientRouter("localhost", port, false,
                     true,
                     "src/test/resources/security/r1.jks",
                     "src/test/resources/security/storepass",
@@ -147,7 +149,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
+                return new NettyClientRouter("localhost", port, false,
                     true,
                     "src/test/resources/security/r1.jks",
                     "src/test/resources/security/storepass",
@@ -179,7 +181,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
+                return new NettyClientRouter("localhost", port, false,
                     true,
                     "src/test/resources/security/r1.jks",
                     "src/test/resources/security/storepass",
@@ -211,7 +213,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
+                return new NettyClientRouter("localhost", port, false,
                     true,
                     "src/test/resources/security/r2.jks",
                     "src/test/resources/security/storepass",
@@ -243,7 +245,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
+                return new NettyClientRouter("localhost", port, false,
                     true,
                     "src/test/resources/security/r2.jks",
                     "src/test/resources/security/storepass",
@@ -278,7 +280,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
+                return new NettyClientRouter("localhost", port, false,
                     true,
                     "src/test/resources/security/r1.jks",
                     "src/test/resources/security/storepass",
@@ -315,7 +317,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
+                return new NettyClientRouter("localhost", port, false,
                     true,
                     "src/test/resources/security/r1.jks",
                     "src/test/resources/security/storepass",
@@ -467,6 +469,7 @@ public class NettyCommTest extends AbstractCorfuTest {
         EventExecutorGroup ee;
 
         boolean tlsEnabled = false;
+        boolean compression = false;
         SslContext sslContext;
         boolean tlsMutualAuthEnabled = false;
         String[] enabledTlsCipherSuites;
@@ -546,6 +549,11 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         public void initChannel(io.netty.channel.socket.SocketChannel ch) throws Exception {
+                            if (compression) {
+                                ch.pipeline().addLast(ee, new Lz4FrameDecoder());
+                                ch.pipeline().addLast(ee, new Lz4FrameEncoder());
+                            }
+
                             if (tlsEnabled) {
                                 SSLEngine engine = sslContext.newEngine(ch.alloc());
                                 engine.setEnabledCipherSuites(enabledTlsCipherSuites);
@@ -555,11 +563,14 @@ public class NettyCommTest extends AbstractCorfuTest {
                                 }
                                 ch.pipeline().addLast("ssl", new SslHandler(engine));
                             }
+
+
                             ch.pipeline().addLast(new LengthFieldPrepender(FRAME_SIZE));
                             ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, FRAME_SIZE, 0, FRAME_SIZE));
                             if (saslPlainTextAuthEnabled) {
                                 ch.pipeline().addLast("sasl/plain-text", new PlainTextSaslNettyServer());
                             }
+                            
                             ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
                             ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
                             ch.pipeline().addLast(ee, nsr);

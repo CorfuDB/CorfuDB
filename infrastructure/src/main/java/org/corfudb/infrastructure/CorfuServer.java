@@ -16,6 +16,8 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.codec.compression.Lz4FrameDecoder;
+import io.netty.handler.codec.compression.Lz4FrameEncoder;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
@@ -85,6 +87,7 @@ public class CorfuServer {
                     + "<keystore> -f <keystore_password_file>] [-r <truststore> -w "
                     + "<truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>]"
+                    + "(-v)"
                     + "[-x <ciphers>] [-z <tls-protocols>]] <port>\n"
                     + "\n"
                     + "Options:\n"
@@ -97,6 +100,8 @@ public class CorfuServer {
                     + "\n -a <address>, --address=<address>                                      "
                     + "                IP address to advertise to external clients [default: "
                     + "localhost].\n"
+                    + " -v, --enable-compression"
+                    + "                           Run with compression enabled in the RPC layer \n"
                     + " -m, --memory                                                             "
                     + "              Run the unit in-memory (non-persistent).\n"
                     + "                                                                          "
@@ -316,6 +321,7 @@ public class CorfuServer {
         }
 
         Boolean saslPlainTextAuth = (Boolean) opts.get("--enable-sasl-plain-text-auth");
+        boolean compression = (Boolean) opts.get("--enable-compression");
 
         // Create the event loops responsible for servicing inbound messages.
         EventLoopGroup bossGroup;
@@ -378,6 +384,11 @@ public class CorfuServer {
                         @Override
                         public void initChannel(io.netty.channel.socket.SocketChannel ch) throws
                                 Exception {
+                            if (compression) {
+                                ch.pipeline().addLast(ee, new Lz4FrameEncoder());
+                                ch.pipeline().addLast(ee, new Lz4FrameDecoder());
+                            }
+
                             if (tlsEnabled) {
                                 SSLEngine engine = sslContext.newEngine(ch.alloc());
                                 engine.setEnabledCipherSuites(enabledTlsCipherSuites);
@@ -387,6 +398,7 @@ public class CorfuServer {
                                 }
                                 ch.pipeline().addLast("ssl", new SslHandler(engine));
                             }
+
                             ch.pipeline().addLast(new LengthFieldPrepender(4));
                             ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer
                                     .MAX_VALUE, 0, 4, 0, 4));
