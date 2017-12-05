@@ -63,6 +63,14 @@ public class State {
 
     @Getter
     @Setter
+    volatile long lastSuccessfulReadOperationTimestamp = -1;
+
+    @Getter
+    @Setter
+    volatile long lastSuccessfulWriteOperationTimestamp = -1;
+
+    @Getter
+    @Setter
     volatile long trimMark = -1;
 
     public final Random rand;

@@ -67,6 +67,31 @@ public class SMRMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    public void canReadWriteToSinglePrimitive()
+            throws Exception {
+        getRuntime().setCacheDisabled(true);
+        Map<Long, Double> testMap = getRuntime()
+                .getObjectsView()
+                .build()
+                .setStreamName("test")
+                .setSerializer(Serializers.PRIMITIVE)
+                .setTypeToken(new TypeToken<SMRMap<Long, Double>>() {})
+                .open();
+
+        final double PRIMITIVE_1 = 2.4;
+        final double PRIMITIVE_2 = 4.5;
+
+        testMap.clear();
+        assertThat(testMap.put(1L, PRIMITIVE_1))
+                .isNull();
+        assertThat(testMap.put(1L, PRIMITIVE_2))
+                .isEqualTo(PRIMITIVE_1);
+        assertThat(testMap.get(1L))
+                .isEqualTo(PRIMITIVE_2);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     public void canWriteScanAndFilterToSingle()
             throws Exception {
         Map<String, String> corfuInstancesMap = getRuntime()

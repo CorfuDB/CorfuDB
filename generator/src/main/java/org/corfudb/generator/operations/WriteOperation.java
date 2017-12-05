@@ -31,6 +31,10 @@ public class WriteOperation extends Operation {
 
             String correctnessRecord = String.format("%s, %s:%s=%s", shortName, streamId, key, val);
             Correctness.recordOperation(correctnessRecord, TransactionalContext.isInTransaction());
+
+            if (!TransactionalContext.isInTransaction()) {
+                state.setLastSuccessfulWriteOperationTimestamp(System.currentTimeMillis());
+            }
         }
     }
 }
