@@ -520,7 +520,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     public void testGetGlobalTail() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
 
-        assertThat(log.getGlobalTail()).isEqualTo(0);
+        assertThat(log.getGlobalTail()).isEqualTo(-1L);
 
         // Write to multiple segments
         final int segments = 3;
@@ -689,7 +689,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
                 s -> assertThat(new File(s).length()).isEqualTo(0L));
 
         final int expectedFilesAfterReset = 3;
-        final long globalTailAfterReset = 0L;
+        final long globalTailAfterReset = -1L;
         final long trimMarkAfterReset = 0L;
         assertThat(logsDir.list()).hasSize(expectedFilesAfterReset);
         assertThat(log.getGlobalTail()).isEqualTo(globalTailAfterReset);
