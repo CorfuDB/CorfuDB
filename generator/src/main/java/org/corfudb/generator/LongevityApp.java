@@ -38,12 +38,13 @@ public class LongevityApp {
 
     // How much time we live the application hangs once the duration is finished
     // and the application is hanged
-    static final int APPLICATION_TIMEOUT_IN_MS = 20000;
+    static final int APPLICATION_TIMEOUT_IN_MS = 10000;
 
     static final int QUEUE_CAPACITY = 1000;
 
     long startTime;
     int numberThreads;
+
 
     public LongevityApp(long durationMs, int numberThreads, String configurationString, boolean checkPoint) {
         this.durationMs = durationMs;
@@ -58,6 +59,30 @@ public class LongevityApp {
 
         workers = Executors.newFixedThreadPool(numberThreads);
         checkpointer = Executors.newScheduledThreadPool(1);
+    }
+
+    /**
+     * Assess liveness of the application
+     *
+     * If the client was not able to do any operation during the last APPLICATION_TIMEOUT_IN_MS,
+     * we declare liveness of the client as failed. Also, if the client was not able to finish
+     * in time, it is marked as liveness failure.
+     *
+     * @param finishedInTime
+     * @return
+     */
+    private boolean livenessSuccess(boolean finishedInTime) {
+        if (!finishedInTime) {
+            return false;
+        }
+
+        long timeSinceSuccessfulReadOperation = System.currentTimeMillis()
+                - state.getLastSuccessfulReadOperationTimestamp();
+        long timeSinceSuccessfulWriteOperation = System.currentTimeMillis()
+                - state.getLastSuccessfulWriteOperationTimestamp();
+
+        return (timeSinceSuccessfulReadOperation < APPLICATION_TIMEOUT_IN_MS
+                && timeSinceSuccessfulWriteOperation < APPLICATION_TIMEOUT_IN_MS);
     }
 
     /**
@@ -76,7 +101,9 @@ public class LongevityApp {
         try {
             boolean finishedInTime = workers.
                     awaitTermination(durationMs + APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
-            String livenessState = finishedInTime ? "Success" : "Fail";
+
+            String livenessState = livenessSuccess(finishedInTime) ? "Success" : "Fail";
+
             Correctness.recordOperation("Liveness, " + livenessState, false);
             if (!finishedInTime) {
                 System.exit(1);
@@ -86,6 +113,20 @@ public class LongevityApp {
         } finally {
             taskProducer.shutdownNow();
             checkpointer.shutdownNow();
+
+            boolean checkpointHasFinished = false;
+            int exitStatus;
+            try {
+                checkpointHasFinished = checkpointer.awaitTermination(APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                exitStatus = 1;
+            }
+
+            exitStatus = checkpointHasFinished ? 0 : 1;
+            System.exit(exitStatus);
+
+
         }
     }
 

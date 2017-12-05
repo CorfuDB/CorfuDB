@@ -57,6 +57,7 @@ public class SnapshotTxOperation extends Operation {
 
             state.stopTx();
             Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_END);
+            state.setLastSuccessfulReadOperationTimestamp(System.currentTimeMillis());
         } catch (TransactionAbortedException tae) {
             Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_ABORTED);
         }
