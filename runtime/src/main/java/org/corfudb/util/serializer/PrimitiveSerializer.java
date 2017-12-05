@@ -39,9 +39,8 @@ public class PrimitiveSerializer implements ISerializer {
         return type;
     }
 
-    @SuppressWarnings("unchecked")
     private static Map<Class, Primitives> getSerializerMap() {
-        ImmutableMap.Builder b = ImmutableMap.<Class, SerializerFunction>builder();
+        ImmutableMap.Builder<Class, Primitives> b = ImmutableMap.builder();
         Arrays.stream(Primitives.values()).forEach(e -> {
             b.put(e.getClassType(), e);
             if (e.getPrimitiveClass() != null) {
