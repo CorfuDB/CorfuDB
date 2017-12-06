@@ -21,7 +21,7 @@ import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
-import org.corfudb.runtime.exceptions.UnrecoverableCorfuException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
@@ -163,7 +163,7 @@ public class LayoutManagementView extends AbstractView {
             // TODO: Optimize this by retrying or submitting a workflow to retry.
             reconfigureSequencerServers(currentLayout, newLayout, true);
         } catch (InterruptedException | ExecutionException e) {
-            throw new UnrecoverableCorfuException("Bootstrapping sequencer failed", e);
+            throw new UnrecoverableCorfuInterruptedError("Bootstrapping sequencer failed", e);
         }
     }
 
@@ -195,7 +195,7 @@ public class LayoutManagementView extends AbstractView {
         try {
             reconfigureSequencerServers(currentLayout, newLayout, true);
         } catch (InterruptedException | ExecutionException e) {
-            throw new UnrecoverableCorfuException("Bootstrapping sequencer failed", e);
+            throw new UnrecoverableCorfuInterruptedError("Bootstrapping sequencer failed", e);
         }
 
         return true;

@@ -31,7 +31,7 @@ import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.UnrecoverableCorfuException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutManagementView;
@@ -556,7 +556,7 @@ public class CorfuRuntime {
                 try {
                     Thread.sleep(retryRate * 1000);
                 } catch (InterruptedException e) {
-                    throw new UnrecoverableCorfuException("Interrupted while fetching layout", e);
+                    throw new UnrecoverableCorfuInterruptedError("Interrupted while fetching layout", e);
                 }
                 if (isShutdown) {
                     return null;

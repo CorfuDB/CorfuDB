@@ -9,7 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
-import org.corfudb.runtime.exceptions.UnrecoverableCorfuException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 
 /**
@@ -49,7 +49,7 @@ public abstract class AbstractView {
                 try {
                     Thread.sleep(runtime.retryRate * 1000);
                 } catch (InterruptedException ie) {
-                    throw new UnrecoverableCorfuException("Interrupted while fetching layout", ie);
+                    throw new UnrecoverableCorfuInterruptedError("Interrupted while fetching layout", ie);
                 }
             }
         }
@@ -83,7 +83,7 @@ public abstract class AbstractView {
                     try {
                         Thread.sleep(runtime.retryRate * 1000);
                     } catch (InterruptedException ie) {
-                        throw new UnrecoverableCorfuException("Interrupted in layoutHelper", ie);
+                        throw new UnrecoverableCorfuInterruptedError("Interrupted in layoutHelper", ie);
                     }
                 } else if (re instanceof ServerNotReadyException) {
                     log.warn("Server still not ready. Waiting for server to start "
@@ -91,7 +91,7 @@ public abstract class AbstractView {
                     try {
                         Thread.sleep(runtime.retryRate * 1000);
                     } catch (InterruptedException ie) {
-                        throw new UnrecoverableCorfuException("Interrupted in layoutHelper", ie);
+                        throw new UnrecoverableCorfuInterruptedError("Interrupted in layoutHelper", ie);
                     }
                 } else if (re instanceof WrongEpochException) {
                     WrongEpochException we = (WrongEpochException) re;
@@ -102,7 +102,7 @@ public abstract class AbstractView {
                     throw re;
                 }
             } catch (InterruptedException ie) {
-                throw new UnrecoverableCorfuException("Interrupted in layoutHelper", ie);
+                throw new UnrecoverableCorfuInterruptedError("Interrupted in layoutHelper", ie);
             } catch (ExecutionException ex) {
                 log.warn("Error executing remote call, invalidating view and retrying in {}s",
                         runtime.retryRate, ex);
@@ -110,7 +110,7 @@ public abstract class AbstractView {
                 try {
                     Thread.sleep(runtime.retryRate * 1000);
                 } catch (InterruptedException ie) {
-                    throw new UnrecoverableCorfuException("Interrupted in layoutHelper", ie);
+                    throw new UnrecoverableCorfuInterruptedError("Interrupted in layoutHelper", ie);
                 }
             }
         }

@@ -11,7 +11,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
-import org.corfudb.runtime.exceptions.UnrecoverableCorfuException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 /**
  * Created by mwei on 9/15/15.
@@ -40,7 +40,7 @@ public class CFUtils {
             try {
                 return future.get();
             } catch (InterruptedException e) {
-                throw new UnrecoverableCorfuException("Interrupted while completing future", e);
+                throw new UnrecoverableCorfuInterruptedError("Interrupted while completing future", e);
             } catch (ExecutionException ee) {
                 if (throwableA.isInstance(ee.getCause())) {
                     throw (A) ee.getCause();

@@ -12,7 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
-import org.corfudb.runtime.exceptions.UnrecoverableCorfuException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 /**
  * Helper class to seal requested servers.
@@ -88,7 +88,7 @@ public class SealServersHelper {
             try {
                 success = quorumFuture.get();
             } catch (InterruptedException ie) {
-                throw new UnrecoverableCorfuException("Sealing interrupted", ie);
+                throw new UnrecoverableCorfuInterruptedError("Sealing interrupted", ie);
             } catch (ExecutionException e) {
                 if (e.getCause() instanceof QuorumUnreachableException) {
                     throw (QuorumUnreachableException) e.getCause();
@@ -140,7 +140,7 @@ public class SealServersHelper {
         try {
             success = quorumFuture.get();
         } catch (InterruptedException ie) {
-            throw new UnrecoverableCorfuException("Sealing interrupted", ie);
+            throw new UnrecoverableCorfuInterruptedError("Sealing interrupted", ie);
         } catch (ExecutionException e) {
             if (e.getCause() instanceof QuorumUnreachableException) {
                 throw (QuorumUnreachableException) e.getCause();

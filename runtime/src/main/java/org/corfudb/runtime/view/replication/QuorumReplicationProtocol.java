@@ -17,7 +17,6 @@ import java.util.function.Consumer;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.tools.ant.filters.TokenFilter;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -29,7 +28,7 @@ import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.exceptions.UnrecoverableCorfuException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
@@ -226,7 +225,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
             }).setOptions(WRITE_RETRY_SETTINGS).run();
             return otherValueAdopted.get();
         } catch (InterruptedException e) {
-            throw new UnrecoverableCorfuException("Recovery interrupted", e);
+            throw new UnrecoverableCorfuInterruptedError("Recovery interrupted", e);
         } catch (RuntimeException e) {
             throw e;
         }
