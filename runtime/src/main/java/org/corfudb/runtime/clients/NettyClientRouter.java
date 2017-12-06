@@ -36,6 +36,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import javax.net.ssl.SSLException;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -49,6 +50,7 @@ import org.corfudb.runtime.exceptions.UnrecoverableCorfuException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.security.sasl.SaslUtils;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
+import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.security.tls.TlsUtils;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.MetricsUtils;
@@ -271,24 +273,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         counterAsyncOpSent = metrics.counter(pfx + "async-op-sent");
 
         if (tls) {
-            sslContext =
-                    TlsUtils.enableTls(TlsUtils.SslContextType.CLIENT_CONTEXT,
-                            keyStore, e -> {
-                                throw new RuntimeException("Could not read the key store "
-                                        + "password file: " + e.getClass().getSimpleName(), e);
-                            },
-                            ksPasswordFile, e -> {
-                                throw new RuntimeException("Could not load keys from the key "
-                                        + "store: " + e.getClass().getSimpleName(), e);
-                            },
-                            trustStore, e -> {
-                                throw new RuntimeException("Could not read the trust store "
-                                        + "password file: " + e.getClass().getSimpleName(), e);
-                            },
-                            tsPasswordFile, e -> {
-                                throw new RuntimeException("Could not load keys from the trust "
-                                        + "store: " + e.getClass().getSimpleName(), e);
-                            });
+            try {
+                sslContext = SslContextConstructor.constructSslContext(false,
+                        keyStore, ksPasswordFile, trustStore, tsPasswordFile);
+            } catch (SSLException e) {
+                throw new RuntimeException(e);
+            }
             this.tlsEnabled = true;
         }
 
