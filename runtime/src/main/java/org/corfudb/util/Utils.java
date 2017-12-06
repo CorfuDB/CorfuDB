@@ -34,6 +34,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.recovery.RecoveryUtils;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.UnrecoverableCorfuException;
 
 
 /**
@@ -423,7 +424,7 @@ public class Utils {
                 Thread.sleep(millis);
                 return;
             } catch (InterruptedException ie) {
-                log.trace("Interrupted");
+                throw new UnrecoverableCorfuException("Uninterruptible sleep interrupted", ie);
             }
         }
     }

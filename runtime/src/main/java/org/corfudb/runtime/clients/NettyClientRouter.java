@@ -45,6 +45,7 @@ import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.UnrecoverableCorfuException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.security.sasl.SaslUtils;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
@@ -417,7 +418,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                     // shutdown EventLoopGroup
                     workerGroup.shutdownGracefully().sync();
                 } catch (InterruptedException ie) {
-                    log.warn("workerGroup shutdown interrupted : {}", ie);
+                    throw new UnrecoverableCorfuException("Interrupted while shutting down", e);
                 }
                 throw new NetworkException(e.getClass().getSimpleName()
                         + " connecting to endpoint failed", host + ":" + port, e);
@@ -491,7 +492,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 ee.shutdownGracefully().sync();
                 workerGroup.shutdownGracefully().sync();
             } catch (InterruptedException e) {
-                log.error("Interrupted exception in shutting event pool : {}", e);
+                throw new UnrecoverableCorfuException("Interrupted while stopping", e);
             }
         } else {
             ChannelFuture cf = channel.disconnect();

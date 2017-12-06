@@ -29,6 +29,7 @@ import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.UnrecoverableCorfuException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
@@ -225,8 +226,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
             }).setOptions(WRITE_RETRY_SETTINGS).run();
             return otherValueAdopted.get();
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("interrupted", e);
+            throw new UnrecoverableCorfuException("Recovery interrupted", e);
         } catch (RuntimeException e) {
             throw e;
         }

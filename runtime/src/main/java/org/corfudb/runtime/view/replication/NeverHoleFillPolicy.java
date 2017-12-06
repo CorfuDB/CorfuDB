@@ -6,6 +6,7 @@ import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
+import org.corfudb.runtime.exceptions.UnrecoverableCorfuException;
 
 
 /**
@@ -44,7 +45,7 @@ public class NeverHoleFillPolicy implements IHoleFillPolicy {
                     log.trace("Peek[{}] Retrying read {}", address, tryNum);
                     Thread.sleep(waitMs);
                 } catch (InterruptedException ie) {
-                    throw new RuntimeException(ie);
+                    throw new UnrecoverableCorfuException("Peek interrupted", ie);
                 }
             }
             data = peekFunction.apply(address);

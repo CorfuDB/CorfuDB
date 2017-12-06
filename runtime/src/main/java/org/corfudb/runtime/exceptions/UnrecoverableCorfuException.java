@@ -5,7 +5,7 @@ import javax.annotation.Nonnull;
 /** Thrown when a Corfu Client/Server encounters a condition which cannot be recovered from.
  *  Typically, the client/server should abort/quit/exit if such a condition is encountered.
  */
-public class UnrecoverableCorfuException extends RuntimeException {
+public class UnrecoverableCorfuException extends Error {
 
     /** Construct a new {@link UnrecoverableCorfuException} with a root cause.
      *
