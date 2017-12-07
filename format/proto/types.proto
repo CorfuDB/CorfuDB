@@ -18,7 +18,7 @@ enum CheckpointEntryType {
 enum OrchestratorResponseType {
     // The status of a workflow
     WORKFLOW_STATUS = 0;
-    // Id of a created workflow
+    // Return the id of the created workflow
     WORKFLOW_CREATED = 1;
 }
 
