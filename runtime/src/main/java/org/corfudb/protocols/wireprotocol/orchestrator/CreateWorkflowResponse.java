@@ -1,12 +1,11 @@
 package org.corfudb.protocols.wireprotocol.orchestrator;
 
 import lombok.Getter;
-import org.corfudb.format.Types.OrchestratorResponseType;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;
 
-import static org.corfudb.format.Types.OrchestratorResponseType.WORKFLOW_CREATED;
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponseType.WORKFLOW_CREATED;
 
 
 /**

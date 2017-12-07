@@ -38,7 +38,7 @@ public class WorkflowIT extends AbstractIT {
     }
 
     @Test
-    public void AddNodeIT() throws Exception {
+    public void AddRemoveNodeTestIT() throws Exception {
         final String host = "localhost";
         final String streamName = "s1";
         final int n1Port = 9000;
