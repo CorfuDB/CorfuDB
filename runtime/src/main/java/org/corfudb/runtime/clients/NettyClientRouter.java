@@ -407,7 +407,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                     // shutdown EventLoopGroup
                     workerGroup.shutdownGracefully().sync();
                 } catch (InterruptedException ie) {
-                    throw new UnrecoverableCorfuInterruptedError("Interrupted while shutting down", e);
+                    throw new UnrecoverableCorfuInterruptedError(
+                        "Interrupted while shutting down", ie);
                 }
                 throw new NetworkException(e.getClass().getSimpleName()
                         + " connecting to endpoint failed", host + ":" + port, e);
