@@ -48,7 +48,7 @@ public class ManagementClient implements IClient {
 
     @ClientHandler(type = CorfuMsgType.ORCHESTRATOR_RESPONSE)
     private static Object handleOrchestratorResponse(CorfuPayloadMsg<OrchestratorResponse> msg,
-                                                  ChannelHandlerContext ctx, IClientRouter r) {
+                                                     ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }
 
@@ -77,7 +77,7 @@ public class ManagementClient implements IClient {
      *
      * @param l The layout to bootstrap with.
      * @return A completable future which will return TRUE if the
-     *     bootstrap was successful, false otherwise.
+     * bootstrap was successful, false otherwise.
      */
     public CompletableFuture<Boolean> bootstrapManagement(Layout l) {
         return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST
@@ -110,7 +110,7 @@ public class ManagementClient implements IClient {
      * Requests for a heartbeat message containing the node status.
      *
      * @return A future which will return the node health metrics of
-     *     the node which was requested for the heartbeat.
+     * the node which was requested for the heartbeat.
      */
     public CompletableFuture<byte[]> sendHeartbeatRequest() {
         return router.sendMessageAndGetCompletable(CorfuMsgType.HEARTBEAT_REQUEST.msg());

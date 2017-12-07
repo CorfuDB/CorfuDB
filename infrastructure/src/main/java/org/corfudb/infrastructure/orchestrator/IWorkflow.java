@@ -1,4 +1,4 @@
-package org.corfudb.protocols.wireprotocol.orchestrator;
+package org.corfudb.infrastructure.orchestrator;
 
 import java.util.List;
 import java.util.UUID;

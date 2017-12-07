@@ -12,15 +12,4 @@ public interface CreateRequest extends Request {
      * @return
      */
     String getEndpoint();
-
-    /**
-     * Create a workflow instance from this request
-     *
-     * @return IWorkflow instance
-     */
-    default IWorkflow getWorkflow() {
-        return OrchestratorRequestType.typeMap
-                .get(getType().getType())
-                .getWorkflowGenerator().apply(this);
-    }
 }
