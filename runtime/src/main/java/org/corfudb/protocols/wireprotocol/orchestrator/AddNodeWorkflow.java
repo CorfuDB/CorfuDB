@@ -47,6 +47,9 @@ public class AddNodeWorkflow implements IWorkflow {
     @Getter
     final UUID id;
 
+    @Getter
+    final List<Action> actions;
+
     /**
      * Creates a new add node workflow from a request.
      *
@@ -55,19 +58,15 @@ public class AddNodeWorkflow implements IWorkflow {
     public AddNodeWorkflow(Request request) {
         this.id = UUID.randomUUID();
         this.request = (AddNodeRequest) request;
+        actions = Arrays.asList(new BootstrapNode(),
+                new AddNodeToLayout(),
+                new StateTransfer(),
+                new MergeSegments());
     }
 
     @Override
     public String getName() {
         return ADD_NODE.toString();
-    }
-
-    @Override
-    public List<Action> getActions() {
-        return Arrays.asList(new BootstrapNode(),
-                new AddNodeToLayout(),
-                new StateTransfer(),
-                new MergeSegments());
     }
 
     /**
@@ -82,8 +81,6 @@ public class AddNodeWorkflow implements IWorkflow {
 
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
-            changeStatus(ActionStatus.STARTED);
-
             try {
                 runtime.getLayoutManagementView().bootstrapNewNode(request.getEndpoint());
             } catch (Exception e) {
@@ -91,11 +88,9 @@ public class AddNodeWorkflow implements IWorkflow {
                     log.info("BootstrapNode: Node {} already bootstrapped, skipping.", request.getEndpoint());
                 } else {
                     log.error("execute: Error during bootstrap", e);
-                    changeStatus(ActionStatus.ERROR);
+                    throw e;
                 }
             }
-
-            changeStatus(ActionStatus.COMPLETED);
         }
     }
 
@@ -114,16 +109,7 @@ public class AddNodeWorkflow implements IWorkflow {
 
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
-            changeStatus(ActionStatus.STARTED);
             Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());
-
-            if (currentLayout.getAllServers().contains(request.getEndpoint())) {
-                log.info("Node {} already exists in the layout, skipping.", request.getEndpoint());
-                newLayout = currentLayout;
-                changeStatus(ActionStatus.COMPLETED);
-                return;
-            }
-
             runtime.getLayoutManagementView().addNode(currentLayout, request.getEndpoint(),
                     true, true,
                     true, false,
@@ -131,7 +117,6 @@ public class AddNodeWorkflow implements IWorkflow {
 
             runtime.invalidateLayout();
             newLayout = new Layout(runtime.getLayoutView().getLayout());
-            changeStatus(ActionStatus.COMPLETED);
             return;
 
         }

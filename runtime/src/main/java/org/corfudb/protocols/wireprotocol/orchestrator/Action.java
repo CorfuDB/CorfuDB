@@ -41,7 +41,7 @@ public abstract class Action {
             impl(runtime);
             changeStatus(ActionStatus.COMPLETED);
         } catch (Exception e) {
-            log.error("execute: error executing action", e);
+            log.error("execute: error executing action {}", getName(), e);
             changeStatus(ActionStatus.ERROR);
         }
     }

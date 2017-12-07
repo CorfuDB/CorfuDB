@@ -194,7 +194,6 @@ public class Orchestrator {
             log.info("run: Completed workflow {} in {} ms", workflow.getId(), workflowEnd - workflowStart);
         } catch (Exception e) {
             log.error("run: Encountered an error while running workflow {}", workflow.getId(), e);
-            return;
         } finally {
             activeWorkflows.remove(workflow.getId());
             log.debug("run: removed {} from {}", workflow.getId(), activeWorkflows);

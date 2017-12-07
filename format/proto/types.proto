@@ -14,14 +14,6 @@ enum CheckpointEntryType {
     END = 2;
 }
 
-// Orchestrator responses
-enum OrchestratorResponseType {
-    // The status of a workflow
-    WORKFLOW_STATUS = 0;
-    // Id of a created workflow
-    WORKFLOW_CREATED = 1;
-}
-
 message DataRank {
     required int64 rank = 1;
     required int64 uuid_most_significant = 2;

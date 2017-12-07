@@ -1,7 +1,5 @@
 package org.corfudb.protocols.wireprotocol.orchestrator;
 
-import org.corfudb.format.Types.OrchestratorResponseType;
-
 /**
  * An interface that should be implemented by all the orchestrator service responses.
  * @author Maithem
