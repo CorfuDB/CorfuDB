@@ -1,6 +1,7 @@
 package org.corfudb.security.sasl.plaintext;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 
@@ -25,12 +26,15 @@ public class PlainTextSaslNettyServer extends SimpleChannelInboundHandler<ByteBu
 
     private final String mechanisms = "PLAIN";
 
+    private final ChannelHandler decoder;
     static {
         PlainTextSaslServerProvider.initialize();
     }
 
-    public PlainTextSaslNettyServer() throws SaslException {
-        saslServer = Sasl.createSaslServer(mechanisms, "plain", null, null, null);
+    public PlainTextSaslNettyServer(ChannelHandler decoder) throws SaslException {
+        this.decoder = decoder;
+        saslServer = Sasl.createSaslServer(mechanisms, "plain",
+            null, null, null);
     }
 
     @Override
@@ -51,6 +55,7 @@ public class PlainTextSaslNettyServer extends SimpleChannelInboundHandler<ByteBu
 
         if (saslServer.isComplete()) {
             ctx.pipeline().remove(this);
+            ctx.pipeline().remove(decoder);
         }
     }
 }

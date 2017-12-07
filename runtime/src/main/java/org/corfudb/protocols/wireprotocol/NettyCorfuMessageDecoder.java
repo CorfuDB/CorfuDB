@@ -7,6 +7,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandler;
 import io.netty.handler.codec.ByteToMessageDecoder;
 
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.MessageToMessageDecoder;
 import java.util.List;
 
@@ -18,14 +19,17 @@ import lombok.extern.slf4j.Slf4j;
  * Created by mwei on 10/1/15.
  */
 @Slf4j
-@Sharable
-public class NettyCorfuMessageDecoder extends MessageToMessageDecoder<ByteBuf> {
+public class NettyCorfuMessageDecoder extends LengthFieldBasedFrameDecoder {
 
-    /** {@inheritDoc} */
-    protected void decode(@Nonnull ChannelHandlerContext channelHandlerContext,
-                          @Nonnull ByteBuf byteBuf,
-                          @Nonnull List<Object> list) throws Exception {
-        list.add(CorfuMsg.deserialize(byteBuf));
+    public NettyCorfuMessageDecoder() {
+        super(Integer.MAX_VALUE, 0, 4,
+            0, 4);
+    }
+
+    @Override
+    protected Object decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+        ByteBuf buf = (ByteBuf) super.decode(ctx, in);
+        return buf == null ? null : CorfuMsg.deserialize(buf);
     }
 
 }

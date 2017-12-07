@@ -1,5 +1,6 @@
 package org.corfudb.security.sasl;
 
+import io.netty.channel.ChannelHandler;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
@@ -20,7 +21,7 @@ public class SaslUtils {
      * @return PlainTextSaslNettyClient or RuntimeException on error
      */
     public static PlainTextSaslNettyClient enableSaslPlainText(
-            String usernameFile, String passwordFile) {
+            String usernameFile, String passwordFile, ChannelHandler decoder) {
         if (usernameFile == null) {
             throw new RuntimeException("Invalid username file");
         }
@@ -50,7 +51,7 @@ public class SaslUtils {
         PlainTextSaslNettyClient saslNettyClient = null;
 
         try {
-            saslNettyClient = new PlainTextSaslNettyClient(username, password);
+            saslNettyClient = new PlainTextSaslNettyClient(username, password, decoder);
         } catch (SaslException se) {
             throw new RuntimeException("Could not create a SASL Plain Text Netty client"
                     + se.getClass().getSimpleName(), se);

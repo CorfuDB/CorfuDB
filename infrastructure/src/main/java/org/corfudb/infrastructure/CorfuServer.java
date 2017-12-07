@@ -8,6 +8,7 @@ import com.google.common.collect.ImmutableList;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -378,7 +379,6 @@ public class CorfuServer {
         Runtime.getRuntime().addShutdownHook(
                 shutdownThread);
 
-        final NettyCorfuMessageDecoder decoder = new NettyCorfuMessageDecoder();
         final NettyCorfuMessageEncoder encoder = new NettyCorfuMessageEncoder();
         try {
 
@@ -404,13 +404,13 @@ public class CorfuServer {
                                 ch.pipeline().addLast("ssl", new SslHandler(engine));
                             }
                             ch.pipeline().addLast(new LengthFieldPrepender(4));
-                            ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer
-                                    .MAX_VALUE, 0, 4, 0, 4));
                             if (saslPlainTextAuth) {
-                                ch.pipeline().addLast("sasl/plain-text", new
-                                        PlainTextSaslNettyServer());
+                                ChannelHandler decoder = new LengthFieldBasedFrameDecoder
+                                    (Integer.MAX_VALUE, 0, 4, 0, 4);
+                                ch.pipeline().addLast(decoder);
+                                ch.pipeline().addLast("sasl/plain-text", new PlainTextSaslNettyServer(decoder));
                             }
-                            ch.pipeline().addLast(ee, decoder);
+                            ch.pipeline().addLast(new NettyCorfuMessageDecoder());
                             ch.pipeline().addLast(ee, encoder);
                             ch.pipeline().addLast(ee, router);
                         }

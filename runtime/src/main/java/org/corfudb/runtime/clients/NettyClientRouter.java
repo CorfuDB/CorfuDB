@@ -192,9 +192,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     /** The encoder to use to encode Corfu messages. */
     private static final NettyCorfuMessageEncoder ENCODER = new NettyCorfuMessageEncoder();
 
-    /** The decoder for decoding Corfu messages. */
-    private static final NettyCorfuMessageDecoder DECODER = new NettyCorfuMessageDecoder();
-
     /**
      * Creates a new NettyClientRouter connected to the specified endpoint.
      *
@@ -400,16 +397,16 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                         ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
                     }
                     ch.pipeline().addLast(new LengthFieldPrepender(4));
-                    ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
-                            0, 4, 0,
-                            4));
                     if (saslPlainTextEnabled) {
+                        ChannelHandler decoder = new LengthFieldBasedFrameDecoder
+                            (Integer.MAX_VALUE, 0, 4, 0, 4);
+                        ch.pipeline().addLast(decoder);
                         PlainTextSaslNettyClient saslNettyClient =
                                 SaslUtils.enableSaslPlainText(saslPlainTextUsernameFile,
-                                        saslPlainTextPasswordFile);
+                                        saslPlainTextPasswordFile, decoder);
                         ch.pipeline().addLast("sasl/plain-text", saslNettyClient);
                     }
-                    ch.pipeline().addLast(ee, DECODER);
+                    ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
                     ch.pipeline().addLast(ee, ENCODER);
                     ch.pipeline().addLast(ee, router);
                 }
