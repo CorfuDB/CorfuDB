@@ -378,7 +378,10 @@ public class CorfuServer {
         Runtime.getRuntime().addShutdownHook(
                 shutdownThread);
 
+        final NettyCorfuMessageDecoder decoder = new NettyCorfuMessageDecoder();
+        final NettyCorfuMessageEncoder encoder = new NettyCorfuMessageEncoder();
         try {
+
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
@@ -407,8 +410,8 @@ public class CorfuServer {
                                 ch.pipeline().addLast("sasl/plain-text", new
                                         PlainTextSaslNettyServer());
                             }
-                            ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
-                            ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
+                            ch.pipeline().addLast(ee, decoder);
+                            ch.pipeline().addLast(ee, encoder);
                             ch.pipeline().addLast(ee, router);
                         }
                     });
