@@ -94,7 +94,7 @@ public abstract class AbstractView {
                             + "invalidate view", we.getCorrectEpoch());
                     runtime.invalidateLayout();
                 } else {
-                    throw new UnrecoverableCorfuError(re);
+                    throw re;
                 }
             } catch (InterruptedException ie) {
                 throw new UnrecoverableCorfuInterruptedError("Interrupted in layoutHelper", ie);
