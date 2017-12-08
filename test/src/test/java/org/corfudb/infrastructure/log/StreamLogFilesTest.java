@@ -655,4 +655,44 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         final int lastTwoSegmentsFiles = 3 * 2;
         assertThat(logs.list()).hasSize(lastTwoSegmentsFiles);
     }
+
+    /**
+     * Generates and writes 3 files worth data. Then resets the stream log and verifies that the
+     * files and data is cleared.
+     */
+    @Test
+    public void testResetStreamLog() {
+        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        StreamLog log = new StreamLogFiles(getContext(), false);
+
+        final long numSegments = 3;
+        for (long x = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
+            writeToLog(log, x);
+        }
+        final long filesToBeTrimmed = 1;
+        log.prefixTrim(RECORDS_PER_LOG_FILE * (filesToBeTrimmed + 1));
+        log.compact();
+
+        File logsDir = new File(logDir);
+
+        final int expectedFilesBeforeReset = (int) ((numSegments - filesToBeTrimmed) * 3);
+        final long globalTailBeforeReset = (RECORDS_PER_LOG_FILE * numSegments) - 1;
+        final long trimMarkBeforeReset = (RECORDS_PER_LOG_FILE * (filesToBeTrimmed + 1)) + 1;
+        assertThat(logsDir.list()).hasSize(expectedFilesBeforeReset);
+        assertThat(log.getGlobalTail()).isEqualTo(globalTailBeforeReset);
+        assertThat(log.getTrimMark()).isEqualTo(trimMarkBeforeReset);
+
+        log.reset();
+
+        // Files have been deleted and new 0.log files are created due to reset.
+        Arrays.stream(logsDir.list()).forEach(
+                s -> assertThat(new File(s).length()).isEqualTo(0L));
+
+        final int expectedFilesAfterReset = 3;
+        final long globalTailAfterReset = 0L;
+        final long trimMarkAfterReset = 0L;
+        assertThat(logsDir.list()).hasSize(expectedFilesAfterReset);
+        assertThat(log.getGlobalTail()).isEqualTo(globalTailAfterReset);
+        assertThat(log.getTrimMark()).isEqualTo(trimMarkAfterReset);
+    }
 }
