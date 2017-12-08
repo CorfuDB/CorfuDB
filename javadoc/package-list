@@ -13,6 +13,7 @@ org.corfudb.runtime
 org.corfudb.runtime.clients
 org.corfudb.runtime.collections
 org.corfudb.runtime.exceptions
+org.corfudb.runtime.exceptions.unrecoverable
 org.corfudb.runtime.object
 org.corfudb.runtime.object.transactions
 org.corfudb.runtime.view
