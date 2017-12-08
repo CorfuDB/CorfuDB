@@ -381,48 +381,19 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
 
         // Close segments before deleting their corresponding log files
-        int numFiles = 0;
-        long freedBytes = 0;
-        for (SegmentHandle sh : writeChannels.values()) {
-            if (sh.getSegment() <= endSegment) {
-                if (sh.getRefCount() != 0) {
-                    log.warn("trimPrefix: Segment {} is trimmed, but refCount is {},"
-                                    + " attempting to trim anyways", sh.getSegment(),
-                            sh.getRefCount());
-                }
-                sh.close();
-                writeChannels.remove(sh.getFileName());
+        closeSegmentHandlers(endSegment);
+
+        deleteFilesMatchingFilter(file -> {
+            try {
+                String segmentStr = file.getName().split("\\.")[0];
+                return Long.parseLong(segmentStr) < endSegment;
+            } catch (Exception e) {
+                log.warn("trimPrefix: ignoring file {}", file.getName());
+                return false;
             }
-        }
+        });
 
-        File dir = new File(logDir);
-        FileFilter fileFilter = new FileFilter() {
-            public boolean accept(File file) {
-                try {
-                    String segmentStr = file.getName().split("\\.")[0];
-                    return Long.parseLong(segmentStr) < endSegment;
-                } catch (Exception e) {
-                    log.warn("trimPrefix: ignoring file {}", file.getName());
-                    return false;
-                }
-            }
-        };
-
-        File[] files = dir.listFiles(fileFilter);
-
-        for (File file : files) {
-            long delta = file.length();
-
-            if (!file.delete()) {
-                log.error("trimPrefix: Couldn't delete file {}", file.getName());
-            } else {
-                freedBytes += delta;
-                numFiles++;
-            }
-        }
-
-        log.info("trimPrefix: completed, deleted {} files, freed {} bytes, end segment {}",
-                numFiles, freedBytes, endSegment);
+        log.info("trimPrefix: completed, end segment {}", endSegment);
     }
 
     private void spaseCompact() {
@@ -1188,6 +1159,82 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     @Override
     public void release(long address, LogData entry) {
+    }
+
+    /**
+     * Closes all segment handlers up to and including the handler for the endSegment.
+     *
+     * @param endSegment The segment index of the last segment up to (including) the end segment.
+     */
+    private void closeSegmentHandlers(long endSegment) {
+        for (SegmentHandle sh : writeChannels.values()) {
+            if (sh.getSegment() <= endSegment) {
+                if (sh.getRefCount() != 0) {
+                    log.warn("closeSegmentHandlers: Segment {} is trimmed, but refCount is {},"
+                                    + " attempting to trim anyways", sh.getSegment(),
+                            sh.getRefCount());
+                }
+                sh.close();
+                writeChannels.remove(sh.getFileName());
+            }
+        }
+    }
+
+    /**
+     * Deletes all files matching the given filter.
+     *
+     * @param fileFilter File filter to delete files.
+     */
+    private void deleteFilesMatchingFilter(FileFilter fileFilter) {
+        int numFiles = 0;
+        long freedBytes = 0;
+        File dir = new File(logDir);
+        File[] files = dir.listFiles(fileFilter);
+        for (File file : files) {
+            long delta = file.length();
+
+            if (!file.delete()) {
+                log.error("deleteFilesMatchingFilter: Couldn't delete file {}", file.getName());
+            } else {
+                freedBytes += delta;
+                numFiles++;
+            }
+        }
+        log.info("deleteFilesMatchingFilter: completed, deleted {} files, freed {} bytes",
+                numFiles, freedBytes);
+    }
+
+    /**
+     * Resets the Stream log.
+     * Clears all data and resets the handlers.
+     * Usage: To heal a recovering node, we require to wipe off existing data.
+     */
+    @Override
+    public void reset() {
+        // Trim all segments
+        long endSegment = (globalTail.get() / RECORDS_PER_LOG_FILE);
+        log.warn("Global Tail:{}, endSegment={}", globalTail.get(), endSegment);
+
+        // Close segments before deleting their corresponding log files
+        closeSegmentHandlers(endSegment);
+
+        deleteFilesMatchingFilter(file -> {
+            try {
+                String segmentStr = file.getName().split("\\.")[0];
+                return Long.parseLong(segmentStr) <= endSegment;
+            } catch (Exception e) {
+                log.warn("reset: ignoring file {}", file.getName());
+                return false;
+            }
+        });
+
+        serverContext.setStartingAddress(0L);
+        serverContext.setTailSegment(0L);
+        globalTail.set(0L);
+        initializeStartingAddress();
+        initializeMaxGlobalAddress();
+
+        log.info("reset: Completed, end segment {}", endSegment);
     }
 
     @VisibleForTesting

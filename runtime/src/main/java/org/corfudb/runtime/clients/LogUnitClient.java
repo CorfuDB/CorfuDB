@@ -475,4 +475,11 @@ public class LogUnitClient implements IClient {
         return router.sendMessageAndGetCompletable(CorfuMsgType.RANGE_WRITE
                 .payloadMsg(new RangeWriteMsg(range)));
     }
+
+    /**
+     * Send a reset request.
+     */
+    public CompletableFuture<Boolean> resetLogUnit() {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.RESET_LOGUNIT.msg());
+    }
 }

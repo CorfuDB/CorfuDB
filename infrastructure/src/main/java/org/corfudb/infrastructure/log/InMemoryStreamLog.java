@@ -151,4 +151,14 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             }
         }
     }
+
+    @Override
+    public void reset() {
+        startingAddress = 0;
+        globalTail.set(0L);
+        // Clear the trimmed addresses record.
+        trimmed.clear();
+        // Clearing all data from the cache.
+        logCache.clear();
+    }
 }
