@@ -30,6 +30,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectBuilder;
@@ -428,6 +429,8 @@ public class FastObjectLoader {
         LogEntry logEntry;
         try {
             logEntry = deserializeLogData(runtime, logData);
+        } catch (InterruptedException ie) {
+            throw new UnrecoverableCorfuInterruptedError(ie);
         } catch (Exception e) {
             log.error("Cannot deserialize log entry" + logData.getGlobalAddress(), e);
             return;
@@ -556,6 +559,8 @@ public class FastObjectLoader {
                     .setStartAddress(startAddress)
                     .setStarted(true));
 
+        } catch (InterruptedException ie) {
+            throw new UnrecoverableCorfuInterruptedError(ie);
         } catch (Exception e) {
             log.error("findCheckpointsInLogAddress[{}]: "
                     + "Couldn't get the snapshotAddress", address, e);

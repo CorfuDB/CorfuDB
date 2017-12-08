@@ -24,6 +24,7 @@ import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.TrimmedUpcallException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.MetricsUtils;
@@ -393,7 +394,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 try {
                     Thread.sleep(sleepTime);
                 } catch (InterruptedException ie) {
-                    log.warn("TxExecuteInner retry sleep interrupted {}", ie);
+                    throw new UnrecoverableCorfuInterruptedError("Interrupted while retrying tx", ie);
                 }
                 sleepTime = min(sleepTime * 2L, maxSleepTime);
                 retries++;

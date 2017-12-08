@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
@@ -108,7 +109,7 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
                                 return CorfuCompileWrapperBuilder.getWrapper(type, runtime,
                                         streamID, arguments, serializer);
                             } catch (Exception ex) {
-                                throw new RuntimeException(ex);
+                                throw new UnrecoverableCorfuError(ex);
                             }
                         }
                 );
@@ -146,7 +147,7 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
         } catch (Exception ex) {
             log.error("Runtime instrumentation no longer supported and no compiled class found"
                     + " for {}", type);
-            throw new RuntimeException(ex);
+            throw new UnrecoverableCorfuError(ex);
         }
     }
 
