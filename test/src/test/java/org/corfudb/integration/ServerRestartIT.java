@@ -4,6 +4,8 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.CorfuTableTest;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
@@ -18,6 +20,7 @@ import java.io.IOException;
 import java.io.FileOutputStream;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -35,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import com.google.common.reflect.TypeToken;
 
 /**
  * Tests the recovery of the Corfu instance.
@@ -649,6 +653,83 @@ public class ServerRestartIT extends AbstractIT {
 
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
 
+    }
+
+    private CorfuTable createTable(CorfuRuntime corfuRuntime) {
+        return corfuRuntime.getObjectsView().build()
+                .setTypeToken(
+                        new TypeToken<CorfuTable<String, String,
+                                CorfuTableTest.StringIndexers, String>>() {
+                        })
+                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setStreamName("test")
+                .open();
+    }
+
+    /**
+     * Data generation. First 40,000 entries are written to the table.
+     * The log is then check-pointed and trimmed. The server is then restarted.
+     * We now start 2 clients rt2 and rt3, both of which should recreate the log and also
+     * reconstruct the indices.
+     * Finally we assert the reconstructed indices.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testCorfuTableIndexReconstruction() throws Exception {
+
+        // Start server
+        Process corfuProcess = runCorfuServer();
+
+        // Write 40,000 entries.
+        CorfuRuntime rt1 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        CorfuTable<String, String, CorfuTableTest.StringIndexers, String> corfuTable1 =
+                createTable(rt1);
+        final int num = 40_000;
+        for (int i = 0; i < num; i++) {
+            corfuTable1.put(Integer.toString(i), Integer.toString(i));
+        }
+
+        // Checkpoint and trim the log.
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap(corfuTable1);
+        long trimMark = mcw.appendCheckpoints(rt1, "author");
+        Collection<String> c1a =
+                corfuTable1.getByIndex(CorfuTableTest.StringIndexers.BY_FIRST_LETTER, "9");
+        Collection<String> c1b =
+                corfuTable1.getByIndex(CorfuTableTest.StringIndexers.BY_VALUE, "9");
+        rt1.getAddressSpaceView().prefixTrim(trimMark);
+        rt1.getAddressSpaceView().invalidateClientCache();
+        rt1.getAddressSpaceView().invalidateServerCaches();
+        rt1.getAddressSpaceView().gc();
+
+        // Restart the corfu server.
+        assertThat(shutdownCorfuServer(corfuProcess)).isTrue();
+        corfuProcess = runCorfuServer();
+
+        // Start a new client and verify the index.
+        CorfuRuntime rt2 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        CorfuTable<String, String, CorfuTableTest.StringIndexers, String> corfuTable2 =
+                createTable(rt2);
+        Collection<String> c2 =
+                corfuTable2.getByIndex(CorfuTableTest.StringIndexers.BY_FIRST_LETTER, "9");
+        assertThat(c1a.size()).isEqualTo(c2.size());
+        assertThat(c1a.containsAll(c2)).isTrue();
+
+        // Start a new client with cache disabled and fast object loading disabled.
+        CorfuRuntime rt3 = new CorfuRuntime(DEFAULT_ENDPOINT)
+                .setLoadSmrMapsAtConnect(false)
+                .setCacheDisabled(true)
+                .connect();
+        CorfuTable<String, String, CorfuTableTest.StringIndexers, String> corfuTable3 =
+                createTable(rt3);
+        Collection<String> c3 =
+                corfuTable3.getByIndex(CorfuTableTest.StringIndexers.BY_VALUE, "9");
+        assertThat(c1b.size()).isEqualTo(c3.size());
+        assertThat(c1b.containsAll(c3)).isTrue();
+
+        // Stop the corfu server.
+        assertThat(shutdownCorfuServer(corfuProcess)).isTrue();
     }
 }
 
