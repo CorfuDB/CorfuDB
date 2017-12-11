@@ -28,6 +28,7 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
 
 import java.util.Comparator;
@@ -229,7 +230,7 @@ public class AddressSpaceView extends AbstractView {
 
         } catch (Exception e) {
             log.error("prefixTrim: Error while calling prefix trimming {}", address, e);
-            return;
+            throw new UnrecoverableCorfuError("Unexpected error while prefix trimming", e);
         }
     }
 
@@ -311,6 +312,8 @@ public class AddressSpaceView extends AbstractView {
                         .readAll(l, batch)));
             } catch (Exception e) {
                 log.error("cacheFetch: Couldn't read addresses {}", batch, e);
+                throw new UnrecoverableCorfuError(
+                    "Unexpected error during cacheFetch", e);
             }
         }
 
