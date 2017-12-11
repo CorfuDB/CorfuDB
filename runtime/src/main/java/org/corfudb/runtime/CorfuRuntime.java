@@ -53,21 +53,28 @@ import org.corfudb.util.Version;
 public class CorfuRuntime {
 
     static final int DEFAULT_TIMEOUT_MINUTES_FAST_LOADING = 30;
-
     public static final int BULK_READ_SIZE = 10;
 
     @Data
     public static class CorfuRuntimeParameters {
 
-        /** True, if undo logging is disabled. */
+        /**
+         * True, if undo logging is disabled.
+         */
         boolean undoDisabled = false;
 
-        /** True, if optimistic undo logging is disabled. */
+        /**
+         * True, if optimistic undo logging is disabled.
+         */
         boolean optimisticUndoDisabled = false;
 
-        /** Number of times to attempt to read before hole filling. */
+        /**
+         * Number of times to attempt to read before hole filling.
+         */
         int holeFillRetry = 10;
     }
+
+
 
     @Getter
     private final CorfuRuntimeParameters parameters = new CorfuRuntimeParameters();
@@ -239,6 +246,31 @@ public class CorfuRuntime {
     }
 
     /**
+     * These two handlers are provided to give some control on what happen when system is down.
+     *
+     * For applications that want to have specific behaviour when a the system appears unavailable, they can
+     * register their own handler for both before the rpc request and upon network exception.
+     *
+     * An example of how to use these handlers implementing timeout is given in
+     * test/src/test/java/org/corfudb/runtime/CorfuRuntimeTest.java
+     *
+     */
+    public Runnable beforeRpcHandler = () -> {};
+    public Runnable systemDownHandler = () -> {};
+
+
+    public CorfuRuntime registerSystemDownHandler(Runnable handler) {
+        systemDownHandler = handler;
+        return this;
+    }
+
+    public CorfuRuntime registerBeforeRpcHandler(Runnable handler) {
+        beforeRpcHandler = handler;
+        return this;
+    }
+
+
+    /**
      * When set, overrides the default getRouterFunction. Used by the testing
      * framework to ensure the default routers used are for testing.
      */
@@ -360,7 +392,7 @@ public class CorfuRuntime {
      * Stop all routers associated with this Corfu Runtime.
      **/
     public void stop(boolean shutdown) {
-        for (IClientRouter r: nodeRouters.values()) {
+        for (IClientRouter r : nodeRouters.values()) {
             r.stop(shutdown);
         }
         if (!shutdown) {
@@ -426,6 +458,7 @@ public class CorfuRuntime {
     /**
      * If enabled, successful transactions will be written to a special transaction stream
      * (i.e. TRANSACTION_STREAM_ID)
+     *
      * @param enable indicates if transaction logging is enabled
      * @return corfu runtime object
      */
@@ -496,6 +529,8 @@ public class CorfuRuntime {
         return CompletableFuture.<Layout>supplyAsync(() -> {
 
             List<String> layoutServersCopy = new ArrayList<>(layoutServers);
+            beforeRpcHandler.run();
+
             while (true) {
 
                 Collections.shuffle(layoutServersCopy);
@@ -557,6 +592,9 @@ public class CorfuRuntime {
                 }
                 log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}s.",
                         retryRate);
+
+                systemDownHandler.run();
+
                 try {
                     Thread.sleep(retryRate * 1000);
                 } catch (InterruptedException e) {
