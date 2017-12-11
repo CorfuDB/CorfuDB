@@ -2,15 +2,17 @@ package org.corfudb.runtime.view;
 
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -22,6 +24,7 @@ import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.Sleep;
 
 import javax.annotation.Nonnull;
 
@@ -79,29 +82,47 @@ public class LayoutManagementView extends AbstractView {
 
     /**
      * Takes in the existing layout and a set of failed nodes.
-     * It first generates a new layout by removing the failed nodes from the existing layout.
-     * It then seals the epoch to prevent any client from accessing the stale layout.
-     * Finally we run paxos to update all servers with the new layout.
+     * Dispatches a workflow request to heal the node.
      *
      * @param healingHandlerPolicy Policy dictating healing of the reviving node.
      * @param currentLayout        The current layout
-     * @param healedServers        Set of healed server addresses
+     * @param healedServer         Healed server address
      * @throws QuorumUnreachableException  if reconfiguration not accepted by quorum.
-     * @throws OutrankedException          if reconfiguration consensus attempt outranked.
      * @throws LayoutModificationException if attempting to reconfigure with invalid layout.
      */
     public void handleHealing(IReconfigurationHandlerPolicy healingHandlerPolicy,
                               Layout currentLayout,
-                              Set<String> healedServers)
-            throws QuorumUnreachableException, OutrankedException, LayoutModificationException {
+                              String healedServer) {
+        // The healNodeWorkflow request is sent to the tail of the log unit chain to optimize the
+        // time taken to read and replicate the data.
+        List<String> logServers = currentLayout.getSegments().get(0).getStripes().get(0)
+                .getLogServers();
+        String server = logServers.get(logServers.size() - 1);
 
-        // Generates a new layout by adding the healed nodes from the existing layout
-        Layout newLayout = healingHandlerPolicy
-                .generateLayout(currentLayout,
-                        runtime,
-                        Collections.emptySet(),
-                        healedServers);
-        runLayoutReconfiguration(currentLayout, newLayout, false);
+        CreateWorkflowResponse resp = runtime.getRouter(server).getClient(ManagementClient.class)
+                .healNodeRequest(healedServer, true, true, true, 0);
+        UUID workflowId = resp.getWorkflowId();
+
+        final long retryQueryTimeout = 500;
+        // Wait until workflow completed or aborted.
+        while (true) {
+            runtime.invalidateLayout();
+            Layout layout = runtime.getLayoutView().getLayout();
+
+            QueryResponse queryResponse = runtime.getRouter(server)
+                    .getClient(ManagementClient.class)
+                    .queryRequest(workflowId);
+
+            if (!queryResponse.isActive()) {
+                if (!layout.getUnresponsiveServers().contains(healedServer)
+                        && layout.getSegments().size() == 1) {
+                    break;
+                }
+                throw new RuntimeException("Heal node workflow failed");
+            }
+
+            Sleep.MILLISECONDS.sleepUninterruptibly(retryQueryTimeout);
+        }
     }
 
     /**
@@ -179,6 +200,38 @@ public class LayoutManagementView extends AbstractView {
             log.info("Node {} already exists in the layout, skipping.", endpoint);
             newLayout = currentLayout;
         }
+
+        // Add node is successful even if reconfigure sequencer fails.
+        // TODO: Optimize this by retrying or submitting a workflow to retry.
+        reconfigureSequencerServers(currentLayout, newLayout, false);
+    }
+
+    /**
+     * Heals an existing node in the layout.
+     *
+     * @param currentLayout Current layout.
+     * @param endpoint      New endpoint to be added.
+     * @throws QuorumUnreachableException if seal or consensus cannot be achieved.
+     * @throws OutrankedException         if consensus outranked.
+     */
+    public void healNode(Layout currentLayout,
+                         String endpoint)
+            throws QuorumUnreachableException, OutrankedException {
+
+        currentLayout.setRuntime(runtime);
+        sealEpoch(currentLayout);
+
+        LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
+        Layout.LayoutSegment latestSegment =
+                currentLayout.getSegments().get(currentLayout.getSegments().size() - 1);
+        layoutBuilder.addLogunitServer(0,
+                getMaxGlobalTail(latestSegment),
+                endpoint);
+        layoutBuilder.removeUnresponsiveServers(Collections.singleton(endpoint));
+        Layout newLayout = layoutBuilder.build();
+        newLayout.setRuntime(runtime);
+
+        attemptConsensus(newLayout);
 
         // Add node is successful even if reconfigure sequencer fails.
         // TODO: Optimize this by retrying or submitting a workflow to retry.
