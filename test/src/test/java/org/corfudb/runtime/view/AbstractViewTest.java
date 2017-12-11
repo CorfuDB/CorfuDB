@@ -375,7 +375,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         TestServer(ServerContext serverContext) {
             this.serverContext = serverContext;
             this.serverRouter = serverContext.getServerRouter();
-            this.baseServer = new BaseServer();
+            this.baseServer = new BaseServer(ServerContextBuilder.emptyContext());
             this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);

@@ -6,6 +6,7 @@ import java.lang.invoke.MethodHandles;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -24,8 +25,14 @@ public class BaseServer extends AbstractServer {
 
     /** Options map, if available. */
     @Getter
-    @Setter
-    public Map<String, Object> optionsMap = new HashMap<>();
+    final public Map<String, Object> optionsMap;
+
+    final ServerContext serverContext;
+
+    public BaseServer(@Nonnull ServerContext context) {
+        this.serverContext = context;
+        optionsMap = context.getServerConfig();
+    }
 
     /** Handler for the base server. */
     @Getter
@@ -55,7 +62,8 @@ public class BaseServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.VERSION_REQUEST, opTimer = metricsPrefix + "version-request")
     private void getVersion(CorfuMsg msg, ChannelHandlerContext ctx,
                             IServerRouter r, boolean isMetricsEnabled) {
-        VersionInfo vi = new VersionInfo(optionsMap);
+        VersionInfo vi = new VersionInfo(serverContext.getServerConfig(),
+            serverContext.getDataStore().get(String.class, "", ServerContext.NODE_ID));
         r.sendResponse(ctx, msg, new JSONPayloadMsg<>(vi, CorfuMsgType.VERSION_RESPONSE));
     }
 

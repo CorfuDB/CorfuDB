@@ -1,7 +1,6 @@
 package org.corfudb.util;
 
 import com.google.common.io.BaseEncoding;
-import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 import javax.annotation.Nonnull;
@@ -25,8 +24,8 @@ public class UuidUtils {
      *
      * @param uuidString    The base64 URL-safe string to convert.
      *
-     * @throws IllegalArgumentException   If decoding fails due to a malformed string.
      * @return                            A UUID from the string.
+     * @throws IllegalArgumentException   If decoding fails due to a malformed string.
      */
     public static UUID fromBase64(@Nonnull String uuidString) {
         ByteBuffer bb = ByteBuffer.wrap(BaseEncoding.base64Url().decode(uuidString));

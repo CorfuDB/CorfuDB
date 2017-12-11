@@ -27,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.NettyServerRouter;
+import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
@@ -349,7 +350,7 @@ public class NettyCommTest extends AbstractCorfuTest {
      */
     private void reloadedTrustManagerTestHelper(boolean replaceClientTrust) throws Exception {
         NettyServerRouter serverRouter = new NettyServerRouter(new ImmutableMap.Builder<String, Object>().build());
-        serverRouter.addServer(new BaseServer());
+        serverRouter.addServer(new BaseServer(ServerContextBuilder.emptyContext()));
         int port = findRandomOpenPort();
 
         File clientTrustNoServer = new File("src/test/resources/security/reload/client_trust_no_server.jks");
@@ -417,7 +418,7 @@ public class NettyCommTest extends AbstractCorfuTest {
             throws Exception {
 
         NettyServerRouter nsr = new NettyServerRouter(new ImmutableMap.Builder<String, Object>().build());
-        nsr.addServer(new BaseServer());
+        nsr.addServer(new BaseServer(ServerContextBuilder.emptyContext()));
         int port = findRandomOpenPort();
 
         NettyServerData d = nsdc.createNettyServerData(port);
@@ -498,6 +499,7 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         void bootstrapServer() throws Exception {
             NettyServerRouter nsr = new NettyServerRouter(new ImmutableMap.Builder<String, Object>().build());
+            nsr.addServer(new BaseServer(ServerContextBuilder.emptyContext()));
             bossGroup = new NioEventLoopGroup(1, new ThreadFactory() {
                 final AtomicInteger threadNum = new AtomicInteger(0);
 
