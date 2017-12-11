@@ -21,6 +21,7 @@ import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
@@ -161,8 +162,10 @@ public class LayoutManagementView extends AbstractView {
             // Add node is successful even if reconfigure sequencer fails.
             // TODO: Optimize this by retrying or submitting a workflow to retry.
             reconfigureSequencerServers(currentLayout, newLayout, true);
-        } catch (InterruptedException | ExecutionException e) {
-            log.error("Bootstrapping sequencer failed due to exception : ", e);
+        } catch (InterruptedException ie) {
+            throw new UnrecoverableCorfuInterruptedError(ie);
+        } catch (ExecutionException e) {
+            log.debug("addNode: exception while adding", e);
         }
     }
 
@@ -193,8 +196,10 @@ public class LayoutManagementView extends AbstractView {
 
         try {
             reconfigureSequencerServers(currentLayout, newLayout, true);
-        } catch (InterruptedException | ExecutionException e) {
-            log.error("mergeSegments: Bootstrapping sequencer failed due to exception : ", e);
+        } catch (InterruptedException ie) {
+            throw new UnrecoverableCorfuInterruptedError(ie);
+        } catch (ExecutionException e) {
+            log.debug("mergeSegments: exception while merging", e);
         }
 
         return true;

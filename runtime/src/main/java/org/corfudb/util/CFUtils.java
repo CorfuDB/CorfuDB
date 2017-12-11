@@ -11,6 +11,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 /**
  * Created by mwei on 9/15/15.
@@ -36,11 +37,10 @@ public class CFUtils {
                                                       Class<C> throwableC,
                                                       Class<D> throwableD)
             throws A, B, C, D {
-        while (true) {
             try {
                 return future.get();
             } catch (InterruptedException e) {
-                //retry
+                throw new UnrecoverableCorfuInterruptedError("Interrupted while completing future", e);
             } catch (ExecutionException ee) {
                 if (throwableA.isInstance(ee.getCause())) {
                     throw (A) ee.getCause();
@@ -56,7 +56,6 @@ public class CFUtils {
                 }
                 throw new RuntimeException(ee.getCause());
             }
-        }
     }
 
     public static <T,

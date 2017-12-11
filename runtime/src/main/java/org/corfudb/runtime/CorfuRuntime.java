@@ -31,6 +31,8 @@ import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutManagementView;
@@ -546,6 +548,9 @@ public class CorfuRuntime {
 
                         log.debug("Layout server {} responded with layout {}", s, l);
                         return l;
+                    } catch (InterruptedException ie) {
+                        throw new UnrecoverableCorfuInterruptedError(
+                            "Interrupted during layout fetch", ie);
                     } catch (Exception e) {
                         log.warn("Tried to get layout from {} but failed with exception:", s, e);
                     }
@@ -555,7 +560,7 @@ public class CorfuRuntime {
                 try {
                     Thread.sleep(retryRate * 1000);
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    throw new UnrecoverableCorfuInterruptedError("Interrupted while fetching layout", e);
                 }
                 if (isShutdown) {
                     return null;
@@ -589,6 +594,7 @@ public class CorfuRuntime {
             }
         } catch (Exception e) {
             log.error("connect: failed to get version", e);
+            throw new UnrecoverableCorfuError("Failed to get version", e);
         }
     }
 
@@ -606,7 +612,7 @@ public class CorfuRuntime {
             } catch (Exception e) {
                 // A serious error occurred trying to connect to the Corfu instance.
                 log.error("Fatal error connecting to Corfu server instance.", e);
-                throw new RuntimeException(e);
+                throw new UnrecoverableCorfuError(e);
             }
         }
 

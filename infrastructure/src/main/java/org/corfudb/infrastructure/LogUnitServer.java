@@ -302,6 +302,18 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
+     * Resets the log unit server.
+     * Warning: Clears all data.
+     */
+    @ServerHandler(type = CorfuMsgType.RESET_LOGUNIT, opTimer = metricsPrefix + "resetLogUnit")
+    private void resetLogUnit(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r,
+                           boolean isMetricsEnabled) {
+        streamLog.reset();
+        dataCache.invalidateAll();
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+    /**
      * Retrieve the LogUnitEntry from disk, given an address.
      *
      * @param address The address to retrieve the entry from.
