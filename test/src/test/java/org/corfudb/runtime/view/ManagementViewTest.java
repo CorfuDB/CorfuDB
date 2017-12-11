@@ -834,11 +834,12 @@ public class ManagementViewTest extends AbstractViewTest {
         bootstrapAllServers(l);
         CorfuRuntime corfuRuntime = getRuntime(l).connect();
 
+        getManagementServer(SERVERS.PORT_1).shutdown();
+        getManagementServer(SERVERS.PORT_2).shutdown();
+
         setAggressiveTimeouts(l, corfuRuntime,
-                getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
-                getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
-                getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime());
-        setAggressiveDetectorTimeouts(SERVERS.PORT_0, SERVERS.PORT_1, SERVERS.PORT_2);
+                getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
+        setAggressiveDetectorTimeouts(SERVERS.PORT_0);
 
         addServerRule(SERVERS.PORT_2, new TestRule().always().drop());
 
@@ -852,11 +853,11 @@ public class ManagementViewTest extends AbstractViewTest {
                 .containsExactly(SERVERS.ENDPOINT_2);
 
         clearServerRules(SERVERS.PORT_2);
-        while (corfuRuntime.getLayoutView().getLayout().getEpoch() == newEpoch) {
+        final long finalEpoch = 4L;
+        while (corfuRuntime.getLayoutView().getLayout().getEpoch() != finalEpoch) {
             Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             corfuRuntime.invalidateLayout();
         }
-        final long finalEpoch = 3L;
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(finalEpoch);
         assertThat(corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers()).isEmpty();
     }

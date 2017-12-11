@@ -5,6 +5,7 @@ import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
 import java.util.Map;
 
+import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -15,14 +16,13 @@ import org.corfudb.infrastructure.orchestrator.Orchestrator;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 
-import javax.annotation.Nonnull;
 
 /**
  * Handles reconfiguration and workflow requests to the Management Server.
@@ -41,7 +41,8 @@ public class ManagementServer extends AbstractServer {
     private final Map<String, Object> opts;
     private final ServerContext serverContext;
 
-    private CorfuRuntime corfuRuntime;
+    private final Object corfuRuntimeLock = new Object();
+    private volatile CorfuRuntime corfuRuntime;
     /**
      * Policy to be used to handle failures/healing.
      */
@@ -88,23 +89,25 @@ public class ManagementServer extends AbstractServer {
      *
      * @return A connected instance of runtime.
      */
-    public synchronized CorfuRuntime getCorfuRuntime() {
+    public CorfuRuntime getCorfuRuntime() {
 
-        if (corfuRuntime == null) {
-            CorfuRuntime.CorfuRuntimeParameters params =
-                    serverContext.getDefaultRuntimeParameters();
-            corfuRuntime = CorfuRuntime.fromParameters(params);
-            // Runtime can be set up either using the layout or the bootstrapEndpoint address.
-            if (serverContext.getManagementLayout() != null) {
-                serverContext
-                        .getManagementLayout()
-                        .getLayoutServers()
-                        .forEach(ls -> corfuRuntime.addLayoutServer(ls));
-            } else {
-                corfuRuntime.addLayoutServer(getBootstrapEndpoint());
+        synchronized (corfuRuntimeLock) {
+            if (corfuRuntime == null) {
+                CorfuRuntime.CorfuRuntimeParameters params =
+                        serverContext.getDefaultRuntimeParameters();
+                corfuRuntime = CorfuRuntime.fromParameters(params);
+                // Runtime can be set up either using the layout or the bootstrapEndpoint address.
+                if (serverContext.getManagementLayout() != null) {
+                    serverContext
+                            .getManagementLayout()
+                            .getLayoutServers()
+                            .forEach(ls -> corfuRuntime.addLayoutServer(ls));
+                } else {
+                    corfuRuntime.addLayoutServer(getBootstrapEndpoint());
+                }
+                corfuRuntime.connect();
+                log.info("getCorfuRuntime: Corfu Runtime connected successfully");
             }
-            corfuRuntime.connect();
-            log.info("getCorfuRuntime: Corfu Runtime connected successfully");
         }
         return corfuRuntime;
     }
@@ -283,6 +286,7 @@ public class ManagementServer extends AbstractServer {
      */
     public void shutdown() {
         super.shutdown();
+        orchestrator.shutdown();
         managementAgent.shutdown();
 
         // Shut down the Corfu Runtime.
