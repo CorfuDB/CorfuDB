@@ -38,6 +38,9 @@ public class ServerContext {
     private static final String PREFIX_STARTING_ADDRESS = "STARTING_ADDRESS";
     private static final String KEY_STARTING_ADDRESS = "CURRENT";
 
+    /** The node Id, stored as a base64 string. */
+    public static final String NODE_ID = "NODE_ID";
+
     /**
      * various duration constants.
      */

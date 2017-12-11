@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger;
 
 import com.google.common.collect.ImmutableList;
 
+import com.google.common.io.BaseEncoding;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
@@ -22,8 +23,10 @@ import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 
 import java.io.File;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -32,6 +35,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
 
 import javax.net.ssl.SSLException;
@@ -44,6 +48,7 @@ import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.security.tls.TlsUtils;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
@@ -275,6 +280,9 @@ public class CorfuServer {
         // Create a common Server Context for all servers to access.
         serverContext = new ServerContext(opts, router);
 
+        // Generate a node ID if necessary.
+        generateNodeId(serverContext);
+
         // Add each role to the router.
         addSequencer();
         addLayoutServer();
@@ -479,5 +487,22 @@ public class CorfuServer {
     public static void addManagementServer() {
         managementServer = new ManagementServer(serverContext);
         router.addServer(managementServer);
+    }
+
+    /** Generate a Node Id if not present.
+     *
+     * @param context   The server context to use.
+     */
+    private static void generateNodeId(@Nonnull ServerContext context) {
+        String currentId = context.getDataStore().get(String.class, "",
+            ServerContext.NODE_ID);
+        if (currentId == null) {
+            String idString = UuidUtils.asBase64(UUID.randomUUID());
+            log.info("No Node Id, setting to new Id={}", idString);
+            context.getDataStore().put(String.class, "", ServerContext.NODE_ID, idString);
+
+        } else {
+            log.info("Node Id = {}", currentId);
+        }
     }
 }
