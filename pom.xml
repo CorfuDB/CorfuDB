@@ -20,6 +20,7 @@
         <module>generator</module>
     </modules>
 
+
     <packaging>pom</packaging>
     <name>corfu</name>
     <url>http://www.corfudb.org</url>
@@ -294,16 +295,6 @@
                 <configuration>
                     <aggregate>true</aggregate>
                     <additionalparam>-Xdoclint:none</additionalparam>
-                </configuration>
-            </plugin>
-
-            <plugin>
-                <groupId>org.eluder.coveralls</groupId>
-                <artifactId>coveralls-maven-plugin</artifactId>
-                <version>4.3.0</version>
-                <configuration>
-                    <jacocoReports>
-                    </jacocoReports>
                 </configuration>
             </plugin>
             <plugin>
