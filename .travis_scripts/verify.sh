@@ -20,3 +20,4 @@ else
         -Dsonar.organization=corfudb -Dsonar.login=$SONAR_TOKEN -Dtest.travisBuild=true sonar:sonar
     fi
 fi
+
