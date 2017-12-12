@@ -568,14 +568,17 @@ public class CorfuRuntime {
                         // it is acceptable (at least the code on 10/13/2016 does not have issues)
                         // but setEpoch of routers needs to be synchronized as those variables are
                         // not local.
-                        try {
-                            l.getAllServers().stream().map(getRouterFunction).forEach(x ->
-                                    x.setEpoch(l.getEpoch()));
-                        } catch (NetworkException ne) {
-                            // We have already received the layout and there is no need to keep client waiting.
-                            // NOTE: This is true assuming this happens only at router creation.
-                            // If not we also have to take care of setting the latest epoch on Client Router.
-                            log.warn("fetchLayout: Error getting router : {}", ne);
+                        for (String server : l.getAllServers()) {
+                            try {
+                                getRouter(server).setEpoch(l.getEpoch());
+                            } catch (NetworkException ne) {
+                                // We have already received the layout and there is no need to keep
+                                // client waiting.
+                                // NOTE: This is true assuming this happens only at router creation.
+                                // If not we also have to take care of setting the latest epoch on
+                                // Client Router.
+                                log.warn("fetchLayout: Error getting router : {}", ne);
+                            }
                         }
                         layoutServers = l.getLayoutServers();
                         layout = layoutFuture;

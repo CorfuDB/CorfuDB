@@ -81,7 +81,7 @@ public class TestClientRouter implements IClientRouter {
     @Setter
     public UUID clientID;
 
-    private boolean connected = true;
+    private volatile boolean connected = true;
 
     public void simulateDisconnectedEndpoint() {
         connected = false;
