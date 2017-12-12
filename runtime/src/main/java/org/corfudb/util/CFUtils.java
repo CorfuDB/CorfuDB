@@ -92,6 +92,9 @@ public class CFUtils {
                 RuntimeException.class, RuntimeException.class);
     }
 
+    /** A static timeout exception that we complete futures exceptionally with. */
+    static final TimeoutException TIMEOUT_EXCEPTION = new TimeoutException();
+
     /**
      * Generates a completable future which times out.
      * inspired by NoBlogDefFound: http://www.nurkiewicz.com/2014/12/asynchronous-timeouts-with.html
@@ -102,11 +105,8 @@ public class CFUtils {
      */
     public static <T> CompletableFuture<T> failAfter(Duration duration) {
         final CompletableFuture<T> promise = new CompletableFuture<>();
-        scheduler.schedule(() -> {
-            final TimeoutException ex = new TimeoutException("Timeout after "
-                    + duration.toMillis() + " ms");
-            return promise.completeExceptionally(ex);
-        }, duration.toMillis(), TimeUnit.MILLISECONDS);
+        scheduler.schedule(() -> promise.completeExceptionally(TIMEOUT_EXCEPTION),
+                                        duration.toMillis(), TimeUnit.MILLISECONDS);
         return promise;
     }
 
