@@ -51,8 +51,6 @@ public class TlsUtilsTest {
         try {
             TlsUtils.openKeyStore(KEY_STORE_FILE, "fake password");
         } catch (SSLException e) {
-            System.out.println(e.getCause());
-            e.printStackTrace();
             assertEquals("Keystore was tampered with, or password was incorrect",
                     e.getCause().getMessage());
         }
