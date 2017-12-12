@@ -20,7 +20,7 @@ public class TestClientRouterTest extends AbstractCorfuTest {
     @Test
     public void testRuleDropsMessages() {
         TestServerRouter tsr = new TestServerRouter();
-        BaseServer bs = new BaseServer(ServerContextBuilder.emptyContext());
+        BaseServer bs = new BaseServer(ServerContextBuilder.defaultTestContext(0));
         tsr.addServer(bs);
         TestClientRouter tcr = new TestClientRouter(tsr);
 
@@ -41,7 +41,7 @@ public class TestClientRouterTest extends AbstractCorfuTest {
     @Test
     public void onlyDropEpochChangeMessages() {
         TestServerRouter tsr = new TestServerRouter();
-        BaseServer bs = new BaseServer(ServerContextBuilder.emptyContext());
+        BaseServer bs = new BaseServer(ServerContextBuilder.defaultTestContext(0));
         tsr.addServer(bs);
         TestClientRouter tcr = new TestClientRouter(tsr);
 
@@ -63,7 +63,7 @@ public class TestClientRouterTest extends AbstractCorfuTest {
     @Test
     public void doesNotUpdateEpochBackward() throws Exception {
         TestServerRouter tsr = new TestServerRouter();
-        BaseServer bs = new BaseServer(ServerContextBuilder.emptyContext());
+        BaseServer bs = new BaseServer(ServerContextBuilder.defaultTestContext(0));
         tsr.addServer(bs);
         TestClientRouter tcr = new TestClientRouter(tsr);
 

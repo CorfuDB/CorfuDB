@@ -15,7 +15,7 @@ public class BaseServerTest extends AbstractServerTest {
     @Override
     public AbstractServer getDefaultServer() {
         if (bs == null) {
-            bs = new BaseServer(ServerContextBuilder.emptyContext());
+            bs = new BaseServer(ServerContextBuilder.defaultTestContext(0));
         }
         return bs;
     }

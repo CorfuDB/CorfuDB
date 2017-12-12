@@ -1,5 +1,6 @@
 package org.corfudb.runtime.clients;
 
+import org.corfudb.infrastructure.ServerContextBuilder;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -13,7 +14,7 @@ public class NettyClientRouterTest extends NettyCommTest {
 
         runWithBaseServer(
                 (port) -> {
-                    return new NettyServerData(port);
+                    return new NettyServerData(ServerContextBuilder.defaultTestContext(port));
                 },
                 (port) -> {
                     return new NettyClientRouter("localhost", port);
