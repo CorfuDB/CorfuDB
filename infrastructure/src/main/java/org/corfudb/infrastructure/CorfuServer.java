@@ -271,9 +271,6 @@ public class CorfuServer {
         // Create a common Server Context for all servers to access.
         serverContext = new ServerContext(opts, router);
 
-        // Generate a node ID if necessary.
-        generateNodeId(serverContext);
-
         // Add each role to the router.
         router.addServer(new BaseServer(serverContext));
         addSequencer();
@@ -480,22 +477,5 @@ public class CorfuServer {
     public static void addManagementServer() {
         managementServer = new ManagementServer(serverContext);
         router.addServer(managementServer);
-    }
-
-    /** Generate a Node Id if not present.
-     *
-     * @param context   The server context to use.
-     */
-    private static void generateNodeId(@Nonnull ServerContext context) {
-        String currentId = context.getDataStore().get(String.class, "",
-                ServerContext.NODE_ID);
-        if (currentId == null) {
-            String idString = UuidUtils.asBase64(UUID.randomUUID());
-            log.info("No Node Id, setting to new Id={}", idString);
-            context.getDataStore().put(String.class, "", ServerContext.NODE_ID, idString);
-
-        } else {
-            log.info("Node Id = {}", currentId);
-        }
     }
 }

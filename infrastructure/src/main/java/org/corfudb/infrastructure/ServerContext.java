@@ -5,14 +5,18 @@ import com.codahale.metrics.MetricRegistry;
 import java.time.Duration;
 import java.util.Map;
 
+import java.util.UUID;
+import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.Setter;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.IFailureDetectorPolicy;
 import org.corfudb.infrastructure.management.PeriodicPollPolicy;
 import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IFailureHandlerPolicy;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.UuidUtils;
 
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
@@ -30,6 +34,7 @@ import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
  *
  * <p>Created by mdhawan on 8/5/16.
  */
+@Slf4j
 public class ServerContext {
     private static final String PREFIX_EPOCH = "SERVER_EPOCH";
     private static final String KEY_EPOCH = "CURRENT";
@@ -76,6 +81,7 @@ public class ServerContext {
     public ServerContext(Map<String, Object> serverConfig, IServerRouter serverRouter) {
         this.serverConfig = serverConfig;
         this.dataStore = new DataStore(serverConfig);
+        generateNodeId();
         this.serverRouter = serverRouter;
         this.failureDetectorPolicy = new PeriodicPollPolicy();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
@@ -89,6 +95,37 @@ public class ServerContext {
                 MetricsUtils.metricsReportingSetup(metrics);
             }
         }
+    }
+
+
+    /** Generate a Node Id if not present.
+     *
+     */
+    private void generateNodeId() {
+        String currentId = getDataStore().get(String.class, "", ServerContext.NODE_ID);
+        if (currentId == null) {
+            String idString = UuidUtils.asBase64(UUID.randomUUID());
+            log.info("No Node Id, setting to new Id={}", idString);
+            getDataStore().put(String.class, "", ServerContext.NODE_ID, idString);
+        } else {
+            log.info("Node Id = {}", currentId);
+        }
+    }
+
+    /** Get the node id as an UUID.
+     *
+     * @return  A UUID for this node.
+     */
+    public UUID getNodeId() {
+        return UuidUtils.fromBase64(getNodeIdBase64());
+    }
+
+    /** Get the node id as a base64 string.
+     *
+     * @return A node ID for this node, as a base64 string.
+     */
+    public String getNodeIdBase64() {
+        return getDataStore().get(String.class, "", ServerContext.NODE_ID);
     }
 
     /**

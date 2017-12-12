@@ -63,7 +63,7 @@ public class BaseServer extends AbstractServer {
     private void getVersion(CorfuMsg msg, ChannelHandlerContext ctx,
                             IServerRouter r, boolean isMetricsEnabled) {
         VersionInfo vi = new VersionInfo(serverContext.getServerConfig(),
-            serverContext.getDataStore().get(String.class, "", ServerContext.NODE_ID));
+                                         serverContext.getNodeIdBase64());
         r.sendResponse(ctx, msg, new JSONPayloadMsg<>(vi, CorfuMsgType.VERSION_RESPONSE));
     }
 
