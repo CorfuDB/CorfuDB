@@ -2,6 +2,7 @@ package org.corfudb.security.sasl.plaintext;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelDuplexHandler;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 
 import javax.security.sasl.Sasl;
@@ -22,15 +23,18 @@ public class PlainTextSaslNettyClient extends ChannelDuplexHandler {
 
     private SaslClient saslClient;
 
+    private ChannelHandler decoder;
+
     private final String[] mechanisms = {"PLAIN"};
 
     /** Plaintext client constructor. */
-    public PlainTextSaslNettyClient(String username, String password)
+    public PlainTextSaslNettyClient(String username, String password, ChannelHandler decoder)
             throws SaslException {
         PlainTextCallbackHandler cbh = new PlainTextCallbackHandler(username,
                 password);
         saslClient = Sasl.createSaslClient(mechanisms, username,
             "plain", null, null, cbh);
+        this.decoder = decoder;
     }
 
     @Override
@@ -49,6 +53,7 @@ public class PlainTextSaslNettyClient extends ChannelDuplexHandler {
             ByteBuf buf = ctx.alloc().heapBuffer(response.length);
             ByteBuf encoded = buf.writeBytes(response);
             ctx.writeAndFlush(encoded);
+            ctx.pipeline().remove(decoder);
             ctx.pipeline().remove(this);
         }
     }

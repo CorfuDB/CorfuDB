@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -556,9 +557,11 @@ public class NettyCommTest extends AbstractCorfuTest {
                                 ch.pipeline().addLast("ssl", new SslHandler(engine));
                             }
                             ch.pipeline().addLast(new LengthFieldPrepender(FRAME_SIZE));
-                            ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, FRAME_SIZE, 0, FRAME_SIZE));
                             if (saslPlainTextAuthEnabled) {
-                                ch.pipeline().addLast("sasl/plain-text", new PlainTextSaslNettyServer());
+                                ChannelHandler decoder = new LengthFieldBasedFrameDecoder
+                                    (Integer.MAX_VALUE, 0, FRAME_SIZE, 0, FRAME_SIZE);
+                                ch.pipeline().addLast(decoder);
+                                ch.pipeline().addLast("sasl/plain-text", new PlainTextSaslNettyServer(decoder));
                             }
                             ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
                             ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
