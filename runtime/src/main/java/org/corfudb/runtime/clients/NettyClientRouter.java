@@ -522,9 +522,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             outstandingRequests.put(thisRequest, cf);
             // Write the message out to the channel.
             if (ctx == null) {
-                channel.writeAndFlush(message);
+                channel.writeAndFlush(message, channel.voidPromise());
             } else {
-                ctx.writeAndFlush(message);
+                ctx.writeAndFlush(message, ctx.voidPromise());
             }
             log.trace("Sent message: {}", message);
             final CompletableFuture<T> cfElapsed = cf.thenApply(x -> {
@@ -568,7 +568,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         message.setRequestID(thisRequest);
         message.setEpoch(epoch);
         // Write this message out on the channel.
-        outContext.writeAndFlush(message);
+        outContext.writeAndFlush(message, outContext.voidPromise());
 //        MetricsUtils.incConditionalCounter(MetricsUtils
 //                .isMetricsCollectionEnabled(), counterAsyncOpSent, 1);
         log.trace("Sent one-way message: {}", message);
@@ -585,7 +585,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     public void sendResponseToServer(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
         outMsg.setEpoch(epoch);
-        ctx.writeAndFlush(outMsg);
+        ctx.writeAndFlush(outMsg, ctx.voidPromise());
         log.trace("Sent response: {}", outMsg);
     }
 
