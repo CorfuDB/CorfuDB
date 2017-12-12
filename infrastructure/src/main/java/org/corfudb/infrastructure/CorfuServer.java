@@ -17,7 +17,14 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
+import io.netty.channel.epoll.Epoll;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerSocketChannel;
+import io.netty.channel.kqueue.KQueue;
+import io.netty.channel.kqueue.KQueueEventLoopGroup;
+import io.netty.channel.kqueue.KQueueServerSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
@@ -85,7 +92,7 @@ public class CorfuServer {
                     + "<ratio>] [-d <level>] [-p <seconds>] [-M <address>:<port>] [-e [-u "
                     + "<keystore> -f <keystore_password_file>] [-r <truststore> -w "
                     + "<truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] "
-                    + "[-k <seqcache>] [-T <threads>] [-H <seconds>]                               "
+                    + "[-k <seqcache>] [-T <threads>] [-i <channel-implementation>] [-H <seconds>] "
                     + "[-x <ciphers>] [-z <tls-protocols>]] [--agent] <port>\n"
                     + "\n"
                     + "Options:\n"
@@ -101,6 +108,9 @@ public class CorfuServer {
                     + "\n -a <address>, --address=<address>                                      "
                     + "                IP address to advertise to external clients [default: "
                     + "localhost].\n"
+                    + " -i <channel-implementation>, --implementation <channel-implementation>   "
+                    + "              The type of channel to use (auto, nio, epoll, kqueue)"
+                    + "[default: nio].\n"
                     + " -m, --memory                                                             "
                     + "              Run the unit in-memory (non-persistent).\n"
                     + "                                                                          "
@@ -284,7 +294,7 @@ public class CorfuServer {
         try {
             startAndListen(bossGroup,
                 workerGroup,
-                NioServerSocketChannel.class,
+                getServerChannelType(serverContext),
                 b -> configureBootstrapOptions(serverContext, b),
                 serverContext,
                 router,
@@ -365,6 +375,30 @@ public class CorfuServer {
             .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
     }
 
+    /** Get the type of {@link ServerChannel} to use.
+     *
+     * @param context       The {@link ServerContext} to use.
+     * @return              The server channel type.
+     */
+    public static Class<? extends ServerSocketChannel> getServerChannelType(
+            @Nonnull ServerContext context) {
+        final String type = context.getServerConfig(String.class, "--implementation");
+        switch (type) {
+            case "auto":
+                return Epoll.isAvailable() ? EpollServerSocketChannel.class :
+                    KQueue.isAvailable() ? KQueueServerSocketChannel.class :
+                    NioServerSocketChannel.class;
+            case "epoll":
+                return EpollServerSocketChannel.class;
+            case "kqueue":
+                return KQueueServerSocketChannel.class;
+            case "nio":
+                return NioServerSocketChannel.class;
+            default:
+                throw new UnrecoverableCorfuError("Invalid server channel " + type);
+        }
+    }
+
     /** Get a "boss" group, which services (accepts) incoming connections.
      *
      * @param context       The {@link ServerContext} to use.
@@ -374,7 +408,7 @@ public class CorfuServer {
         final ThreadFactory threadFactory = new ThreadFactoryBuilder()
                                                     .setNameFormat("accept-%d")
                                                     .build();
-        EventLoopGroup group = new NioEventLoopGroup(1, threadFactory);
+        EventLoopGroup group = getEventLoop(context, threadFactory, 1);
         log.info("getBossGroup: Type {}", group.getClass().getSimpleName());
         return group;
     }
@@ -394,12 +428,35 @@ public class CorfuServer {
         final int numThreads = requestedThreads == 0
                                 ? Runtime.getRuntime().availableProcessors() * 2
                                     : requestedThreads;
-        EventLoopGroup group = new NioEventLoopGroup(numThreads, threadFactory);
+        EventLoopGroup group = getEventLoop(context, threadFactory, numThreads);
+
         log.info("getWorkerGroup: Type {} with {} threads",
                         group.getClass().getSimpleName(), numThreads);
         return group;
     }
 
+    /** Get a event loop, based on the settings in the {@link ServerContext}.
+     *
+     * @param context       The {@link ServerContext} to use.
+     * @param factory       A {@link ThreadFactory} for creating new threads.
+     * @param numThreads    The number of threads in the group.
+     * @return              A new {@link EventLoopGroup}.
+     */
+    private static EventLoopGroup getEventLoop(@Nonnull ServerContext context,
+            @Nonnull ThreadFactory factory,
+            int numThreads) {
+        final Class<? extends ServerSocketChannel> type = getServerChannelType(context);
+
+        if (type.equals(NioServerSocketChannel.class)) {
+            return new NioEventLoopGroup(numThreads, factory);
+        } else if (type.equals(EpollServerSocketChannel.class)) {
+            return new EpollEventLoopGroup(numThreads, factory);
+        } else if (type.equals(KQueueServerSocketChannel.class)) {
+            return new KQueueEventLoopGroup(numThreads, factory);
+        } else {
+            throw new UnrecoverableCorfuError("Invalid server channel " + type);
+        }
+    }
 
     /** Obtain a {@link ChannelInitializer} which initializes the channel pipeline
      *  for a new {@link ServerChannel}.

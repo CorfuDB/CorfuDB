@@ -30,6 +30,8 @@ public class ServerContextBuilder {
     String truststore = "";
     String truststorePasswordFile = "";
 
+    String implementation = "auto";
+
     String cacheSizeHeapRatio = "0.5";
     String address = "test";
     int port = 9000;
@@ -71,6 +73,7 @@ public class ServerContextBuilder {
                  .put("--truststore", truststore)
                  .put("--truststore-password-file", truststorePasswordFile)
                  .put("--enable-sasl-plain-text-auth", saslPlainTextAuth)
+                 .put("--implementation", implementation)
                  .put("<port>", port);
         ServerContext sc = new ServerContext(builder.build());
         sc.setServerRouter(serverRouter);

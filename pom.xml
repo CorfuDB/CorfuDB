@@ -144,7 +144,7 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId> <!-- Use 'netty-all' for 4.0 or above -->
-            <version>4.1.10.Final</version>
+            <version>4.1.18.Final</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
@@ -162,6 +162,14 @@
     </dependencies>
 
     <build>
+
+        <extensions>
+            <extension>
+                <groupId>kr.motd.maven</groupId>
+                <artifactId>os-maven-plugin</artifactId>
+                <version>1.5.0.Final</version>
+            </extension>
+        </extensions>
 
         <pluginManagement>
             <plugins>
