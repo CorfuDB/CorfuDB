@@ -240,6 +240,8 @@ public class ServerRestartIT extends AbstractIT {
         final int MAX_LIMIT_KEY_RANGE_POST_SHUTDOWN = 200;
         final int CLIENT_DELAY_POST_SHUTDOWN = 50;
 
+        final int CORFU_SERVER_DOWN_TIME = 4000;
+
         final Random rand = getRandomNumberGenerator();
 
         // Run CORFU Server. Expect slight delay until server is running.
@@ -266,15 +268,30 @@ public class ServerRestartIT extends AbstractIT {
         // ShutDown (STOP) CORFU Server
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
 
-        // Execute Transactions (once Corfu Server Shutdown)
-        for (int i = 0; i < ITERATIONS; i++) {
-            assertThat(executeTransaction(runtime, smrMapList, expectedMapList,
-                    MIN_LIMIT_KEY_RANGE_DURING_SHUTDOWN, MAX_LIMIT_KEY_RANGE_DURING_SHUTDOWN,
-                    nested, rand)).isFalse();
-        }
+        // Schedule offline transactions, first one should be stuck and will eventually succeed
+        // on reconnect
+        ScheduledThreadPoolExecutor offline = new ScheduledThreadPoolExecutor(1);
+        ScheduledFuture<Boolean> offlineTransactionsSucceeded = offline.schedule(() -> {
+            for (int i = 0; i < ITERATIONS; i++) {
+                boolean txState = executeTransaction(runtime, smrMapList, expectedMapList,
+                        MIN_LIMIT_KEY_RANGE_DURING_SHUTDOWN, MAX_LIMIT_KEY_RANGE_DURING_SHUTDOWN,
+                        nested, rand);
+
+                if (!txState) {
+                    return false;
+                };
+            }
+
+            return true;
+        },CLIENT_DELAY_POST_SHUTDOWN, TimeUnit.MILLISECONDS);
+        offline.shutdown();
+
+        Thread.sleep(CORFU_SERVER_DOWN_TIME);
 
         // Restart Corfu Server
         Process corfuServerProcessRestart = runCorfuServer();
+        offline.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+
         // Block until server is ready.
         runtime.invalidateLayout();
         runtime.layout.get();
@@ -312,6 +329,7 @@ public class ServerRestartIT extends AbstractIT {
 
         // Data Correctness Validation
         assertThat(future.get()).isTrue();
+        assertThat(offlineTransactionsSucceeded.get()).isTrue();
 
         // ShutDown the server before exiting
         assertThat(shutdownCorfuServer(corfuServerProcessRestart)).isTrue();

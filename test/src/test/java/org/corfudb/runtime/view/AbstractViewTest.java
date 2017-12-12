@@ -82,6 +82,11 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtime.getParameters().setHoleFillRetry(0);
     }
 
+    public void simulateEndpointDisconnected(CorfuRuntime runtime) {
+        ((TestClientRouter) runtime.getRouter(getDefaultEndpoint()))
+                .simulateDisconnectedEndpoint();
+    }
+
     /** Function for obtaining a router, given a runtime and an endpoint.
      *
      * @param runtime       The CorfuRuntime to obtain a router for.
