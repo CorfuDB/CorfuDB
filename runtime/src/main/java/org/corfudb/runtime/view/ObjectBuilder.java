@@ -45,7 +45,7 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
     String streamName;
 
     @Setter
-    ISerializer serializer = Serializers.JSON;
+    ISerializer serializer = Serializers.KRYO;
 
     @Setter
     Set<ObjectOpenOptions> options = EnumSet.noneOf(ObjectOpenOptions.class);
