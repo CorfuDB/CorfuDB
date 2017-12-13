@@ -10,10 +10,10 @@ before interacting with it.
 Node IDs consist of the following components:
 
 - ``<protocol>``: The protocol that used by the node. Currently, only ``tcp`` is supported.
-- ``<host-name>``: The host name the node can be reached at. This can be a DNS name, an IPv4 address or an IPv6 address.
+- ``<host-name>``: The host name the node can be reached at. This can be a DNS name, an IPv4 address or an IPv6 anress.
 If an IPv6 address is provided, it must be delimited by brackets (``[<ipv6-host-name>]``).
 - ``<port>``: The port the node is providing the Corfu service on.
-- ``<id>``: A 128-bit unique identifier for the node. This parameter is optional, andd if not provided, the identifier will not
+- ``<id>``: A 128-bit unique identifier for the node. This parameter is optional, and if not provided, the identifier will not
 be checked at connection time.
 - ``<options>``: A list of options required when connecting to the node, in ``<option-name>=<option-value>`` format. Used for
 settings such as TLS.
@@ -26,10 +26,10 @@ If (``<protocol>``://) is omitted, it is assumed that the protocol is ``tcp``.
 
 If (/``<id>``) is omitted, no identifier checking will be done.
 
-If (?``<options>``) are omittedd, no options will be usedd to connect to the server instance. 
+If (?``<options>``) are omitted, no options will be used to connect to the server instance. 
 
 
-``<id>`` is in base64 url-safe (RFC 4648) 
+``<id>`` is in base64 url-safe (RFC 4648) format.
 
 For example, a node using the ``tcp`` protocol at ``10.0.0.1`` on port ``9000`` with node id ``fZPF5eGIScaq9m1DabhaCQ`` and no
 options would use the string:
