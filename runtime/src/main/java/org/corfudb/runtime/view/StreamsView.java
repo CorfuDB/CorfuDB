@@ -1,6 +1,8 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.Lists;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -97,53 +99,72 @@ public class StreamsView extends AbstractView {
         return get(destination);
     }
 
+
+
+    /** Deprecated, use List for streamIds parameter. */
+    @Deprecated
+    public long append(@Nonnull Set<UUID> streamIDs, @Nonnull Object object,
+        @Nullable TxResolutionInfo conflictInfo) throws TransactionAbortedException {
+        return append(Lists.newArrayList(streamIDs), object, conflictInfo);
+    }
+
     /**
      * Append to multiple streams simultaneously, possibly providing
      * information on how to resolve conflicts.
      *
-     * @param streamIDs    The streams to append to.
+     * @param streamIds    The streams to append to.
      * @param object       The object to append to each stream.
      * @param conflictInfo Conflict information for the sequencer to check.
      * @return The address the entry was written to.
      * @throws TransactionAbortedException If the transaction was aborted by
      *                                     the sequencer.
      */
-    public long append(@Nonnull Set<UUID> streamIDs, @Nonnull Object object,
-                       @Nullable TxResolutionInfo conflictInfo) throws TransactionAbortedException {
+    public long append(@Nonnull List<UUID> streamIds, @Nonnull Object object,
+        @Nullable TxResolutionInfo conflictInfo) throws TransactionAbortedException {
 
         // Go to the sequencer, grab an initial token.
         TokenResponse tokenResponse = conflictInfo == null
-                ? runtime.getSequencerView().nextToken(streamIDs, 1) // Token w/o conflict info
-                : runtime.getSequencerView().nextToken(streamIDs, 1,
-                conflictInfo); // Token w/ conflict info
+            // Token w/o conflict info
+            ? runtime.getSequencerView().nextToken(streamIds)
+            // Token w/ conflict info
+            : runtime.getSequencerView().nextToken(streamIds, conflictInfo);
 
         for (int x = 0; x < runtime.getWriteRetry(); x++) {
 
             // Is our token a valid type?
-            if (tokenResponse.getRespType() == TokenType.TX_ABORT_CONFLICT) {
-                throw new TransactionAbortedException(
+            switch (tokenResponse.getRespType()) {
+                case TX_ABORT_CONFLICT_KEY:
+                    throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.CONFLICT,
                         TransactionalContext.getCurrentContext());
-            } else if (tokenResponse.getRespType() == TokenType.TX_ABORT_NEWSEQ) {
-                throw new TransactionAbortedException(
+                case TX_ABORT_CONFLICT_STREAM:
+                    throw new TransactionAbortedException(
+                        conflictInfo,
+                        tokenResponse.getConflictKey(),
+                        AbortCause.CONFLICT,
+                        TransactionalContext.getCurrentContext());
+                case TX_ABORT_NEWSEQ:
+                    throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.NEW_SEQUENCER,
                         TransactionalContext.getCurrentContext());
-            } else if (tokenResponse.getRespType() == TokenType.TX_ABORT_SEQ_OVERFLOW) {
-                throw new TransactionAbortedException(
+                case TX_ABORT_SEQ_OVERFLOW:
+                    throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.SEQUENCER_OVERFLOW,
                         TransactionalContext.getCurrentContext());
-            } else if (tokenResponse.getRespType() == TokenType.TX_ABORT_SEQ_TRIM) {
-                throw new TransactionAbortedException(
+                case TX_ABORT_SEQ_TRIM:
+                    throw new TransactionAbortedException(
                         conflictInfo,
                         tokenResponse.getConflictKey(),
                         AbortCause.SEQUENCER_TRIM,
                         TransactionalContext.getCurrentContext());
+                default:
+                    // Fall through
             }
 
             // Attempt to write to the log
@@ -155,14 +176,14 @@ public class StreamsView extends AbstractView {
 
                 // We were overwritten, get a new token and try again.
                 log.warn("append[{}]: Overwritten after {} retries, streams {}",
-                        tokenResponse.getTokenValue(),
-                        x,
-                        streamIDs.stream().map(Utils::toReadableId).collect(Collectors.toSet()));
+                    tokenResponse.getTokenValue(),
+                    x,
+                    streamIds.stream().map(Utils::toReadableId).collect(Collectors.toSet()));
 
                 TokenResponse temp;
                 if (conflictInfo == null) {
                     // Token w/o conflict info
-                    temp = runtime.getSequencerView().nextToken(streamIDs, 1);
+                    temp = runtime.getSequencerView().nextToken(streamIds);
                 } else {
 
                     // On retry, check for conflicts only from the previous
@@ -170,34 +191,35 @@ public class StreamsView extends AbstractView {
                     conflictInfo.setSnapshotTimestamp(tokenResponse.getToken().getTokenValue());
 
                     // Token w/ conflict info
-                    temp = runtime.getSequencerView().nextToken(streamIDs,
-                            1, conflictInfo);
+                    temp = runtime.getSequencerView().nextToken(streamIds, conflictInfo);
                 }
 
                 // We need to fix the token (to use the stream addresses- may
                 // eventually be deprecated since these are no longer used)
                 tokenResponse = new TokenResponse(
-                        temp.getRespType(), tokenResponse.getConflictKey(),
-                        temp.getToken(), temp.getBackpointerMap());
+                    temp.getRespType(), tokenResponse.getConflictKey(),
+                    tokenResponse.getConflictStream(),
+                    temp.getToken(), temp.getBackpointerMap());
 
             } catch (StaleTokenException se) {
                 // the epoch changed from when we grabbed the token from sequencer
                 log.warn("append[{}]: StaleToken , streams {}", tokenResponse.getTokenValue(),
-                        streamIDs.stream().map(Utils::toReadableId).collect(Collectors.toSet()));
+                    streamIds.stream().map(Utils::toReadableId).collect(Collectors.toSet()));
 
                 throw new TransactionAbortedException(
-                        conflictInfo,
-                        tokenResponse.getConflictKey(),
-                        AbortCause.NEW_SEQUENCER, // in the future, perhaps define a new AbortCause?
-                        TransactionalContext.getCurrentContext());
+                    conflictInfo,
+                    tokenResponse.getConflictKey(),
+                    AbortCause.NEW_SEQUENCER, // in the future, perhaps define a new AbortCause?
+                    TransactionalContext.getCurrentContext()
+                );
             }
         }
 
         log.error("append[{}]: failed after {} retries , streams {}, write size {} bytes",
-                tokenResponse.getTokenValue(),
-                runtime.getWriteRetry(),
-                streamIDs.stream().map(Utils::toReadableId).collect(Collectors.toSet()),
-                ILogData.getSerializedSize(object));
+            tokenResponse.getTokenValue(),
+            runtime.getWriteRetry(),
+            streamIds.stream().map(Utils::toReadableId).collect(Collectors.toSet()),
+            ILogData.getSerializedSize(object));
         throw new AppendException();
     }
 }

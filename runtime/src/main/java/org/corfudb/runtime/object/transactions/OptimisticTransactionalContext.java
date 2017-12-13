@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object.transactions;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -268,7 +269,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         }
 
         // Write to the transaction stream if transaction logging is enabled
-        Set<UUID> affectedStreams = new HashSet<>(getWriteSetInfo().getWriteSet()
+        List<UUID> affectedStreams = new ArrayList<>(getWriteSetInfo().getWriteSet()
                 .getEntryMap().keySet());
         if (this.builder.runtime.getObjectsView().isTransactionLogging()) {
             affectedStreams.add(TRANSACTION_STREAM_ID);

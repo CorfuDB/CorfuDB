@@ -89,4 +89,7 @@ public class Address {
      * to another stream.
      */
     public static final long COW_BACKPOINTER = -7L;
+
+    /** An address indicating no snapshot was taken for a transaction. */
+    public static final long NO_SNAPSHOT = -8L;
 }
