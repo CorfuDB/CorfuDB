@@ -14,7 +14,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
-import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
@@ -115,12 +115,12 @@ public class ManagementClient implements IClient {
         return router.sendMessageAndGetCompletable(CorfuMsgType.HEARTBEAT_REQUEST.msg());
     }
 
-    public AddNodeResponse addNodeRequest(String endpoint) throws Exception {
+    public CreateWorkflowResponse addNodeRequest(String endpoint) throws Exception {
         OrchestratorRequest req = new OrchestratorRequest(new AddNodeRequest(endpoint));
         CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));
-        return (AddNodeResponse) resp.get().getResponse();
+        return (CreateWorkflowResponse) resp.get().getResponse();
     }
 
     public QueryResponse queryRequest(UUID workflowId) throws Exception {
