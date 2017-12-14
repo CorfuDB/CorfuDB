@@ -33,6 +33,7 @@ import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.security.tls.TlsUtils;
+import org.corfudb.util.NodeLocator;
 import org.junit.Rule;
 import org.junit.Test;
 
@@ -116,7 +117,8 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
+                return new NettyClientRouter(
+                    NodeLocator.builder().host("localhost").port(port).build(),
                     true,
                     "src/test/resources/security/r1.jks",
                     "src/test/resources/security/storepass",
@@ -148,7 +150,8 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
+                return new NettyClientRouter(
+                    NodeLocator.builder().host("localhost").port(port).build(),
                     true,
                     "src/test/resources/security/r1.jks",
                     "src/test/resources/security/storepass",
@@ -180,7 +183,8 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
+                return new NettyClientRouter(
+                    NodeLocator.builder().host("localhost").port(port).build(),
                     true,
                     "src/test/resources/security/r1.jks",
                     "src/test/resources/security/storepass",
@@ -212,7 +216,8 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
+                return new NettyClientRouter(
+                    NodeLocator.builder().host("localhost").port(port).build(),
                     true,
                     "src/test/resources/security/r2.jks",
                     "src/test/resources/security/storepass",
@@ -244,7 +249,8 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
+                return new NettyClientRouter(
+                    NodeLocator.builder().host("localhost").port(port).build(),
                     true,
                     "src/test/resources/security/r2.jks",
                     "src/test/resources/security/storepass",
@@ -279,7 +285,8 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
+                return new NettyClientRouter(
+                    NodeLocator.builder().host("localhost").port(port).build(),
                     true,
                     "src/test/resources/security/r1.jks",
                     "src/test/resources/security/storepass",
@@ -316,7 +323,8 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
+                return new NettyClientRouter(
+                    NodeLocator.builder().host("localhost").port(port).build(),
                     true,
                     "src/test/resources/security/r1.jks",
                     "src/test/resources/security/storepass",
@@ -383,7 +391,8 @@ public class NettyCommTest extends AbstractCorfuTest {
         serverData.bootstrapServer();
 
 
-        NettyClientRouter clientRouter = new NettyClientRouter("localhost", port,
+        NettyClientRouter clientRouter = new NettyClientRouter(
+            NodeLocator.builder().host("localhost").port(port).build(),
                 true,
                 "src/test/resources/security/reload/client_key.jks",
                 "src/test/resources/security/reload/password",

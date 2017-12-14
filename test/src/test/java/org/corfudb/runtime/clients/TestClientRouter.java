@@ -23,6 +23,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import org.corfudb.util.NodeLocator;
 
 import static org.corfudb.AbstractCorfuTest.PARAMETERS;
 
@@ -204,7 +205,9 @@ public class TestClientRouter implements IClientRouter {
         // Simulate a "disconnected endpoint"
         if (!connected) {
             log.trace("Disconnected endpoint " + host + ":" + port);
-            throw new NetworkException("Disconnected endpoint", host + ":" + port);
+            throw new NetworkException("Disconnected endpoint", NodeLocator.builder()
+                                                                    .host(host)
+                                                                    .port(port).build());
         }
 
         // Get the next request ID.
