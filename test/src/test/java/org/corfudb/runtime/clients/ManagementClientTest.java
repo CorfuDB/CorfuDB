@@ -3,12 +3,16 @@ package org.corfudb.runtime.clients;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.format.Types.NodeMetrics;
 import org.corfudb.infrastructure.*;
+import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.junit.After;
 import org.junit.Test;
 
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -74,6 +78,20 @@ public class ManagementClientTest extends AbstractClientTest {
         assertThatThrownBy(() ->
                 client.bootstrapManagement(TestLayoutBuilder.single(SERVERS.PORT_0)).get())
                 .isInstanceOf(ExecutionException.class);
+    }
+
+    @Test
+    public void addNodeWorkflowRPCTest() throws Exception {
+        // Verify that a workflow id is generated for ID node.
+        AddNodeResponse resp = client.addNodeRequest("localhost:9000");
+        assertThat(resp.getWorkflowId()).isNotNull();
+    }
+
+    @Test
+    public void queryWorkflowRPCTest() throws Exception {
+        // verify that non-active workflows return false when queried.
+        QueryResponse resp = client.queryRequest(UUID.randomUUID());
+        assertThat(resp.isActive()).isFalse();
     }
 
     /**

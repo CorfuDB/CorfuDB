@@ -8,11 +8,11 @@ import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 
 /**
@@ -58,10 +58,21 @@ public abstract class AbstractView {
         }
     }
 
+    public <T, A extends RuntimeException, B extends RuntimeException, C extends RuntimeException,
+            D extends RuntimeException> T layoutHelper(LayoutFunction<Layout, T, A, B, C, D>
+                                                               function)
+            throws A, B, C, D {
+        return layoutHelper(function, false);
+    }
+
+
     /**
      * Helper function for view to retrieve layouts.
      * This function will retry the given function indefinitely,
      * invalidating the view if there was a exception contacting the endpoint.
+     *
+     * There is a flag to set if we want the caller to handle Runtime Exceptions. For some
+     * special cases (like writes), we need to do a bit more work upon a Runtime Exception than just retry.
      *
      * @param function The function to execute.
      * @param <T>      The return type of the function.
@@ -69,13 +80,17 @@ public abstract class AbstractView {
      * @param <B>      Any exception the function may throw.
      * @param <C>      Any exception the function may throw.
      * @param <D>      Any exception the function may throw.
+     * @param rethrowAllExceptions if all exceptions are rethrown to caller.
      * @return The return value of the function.
      */
     public <T, A extends RuntimeException, B extends RuntimeException, C extends RuntimeException,
             D extends RuntimeException> T layoutHelper(LayoutFunction<Layout, T, A, B, C, D>
-                                                                          function)
+                                                                          function,
+                                                       boolean rethrowAllExceptions)
             throws A, B, C, D {
-        while (true) {
+
+        runtime.beforeRpcHandler.run();
+        while(true) {
             try {
                 return function.apply(runtime.layout.get());
             } catch (RuntimeException re) {
@@ -93,14 +108,38 @@ public abstract class AbstractView {
                     log.warn("Got a wrong epoch exception, updating epoch to {} and "
                             + "invalidate view", we.getCorrectEpoch());
                     runtime.invalidateLayout();
+                } else if (re instanceof NetworkException) {
+                    log.warn("layoutHelper: System seems unavailable", re);
+
+                    runtime.systemDownHandler.run();
+                    runtime.invalidateLayout();
+
+                    try {
+                        Thread.sleep(runtime.retryRate * 1000);
+                    } catch (InterruptedException e) {
+                        log.warn("Interrupted Exception in layout helper.", e);
+                    }
+
                 } else {
                     throw re;
                 }
+                if (rethrowAllExceptions) {
+                    throw new RuntimeException(re);
+                }
+
             } catch (InterruptedException ie) {
                 throw new UnrecoverableCorfuInterruptedError("Interrupted in layoutHelper", ie);
             } catch (ExecutionException ex) {
                 log.warn("Error executing remote call, invalidating view and retrying in {}s",
                         runtime.retryRate, ex);
+
+                // If SystemUnavailable exception is thrown by the layout.get() completable future,
+                // the exception will materialize as an ExecutionException. In that case, we need to propagate
+                // this exception.
+                if (ex.getCause() instanceof SystemUnavailableError) {
+                    throw (SystemUnavailableError) ex.getCause();
+                }
+
                 runtime.invalidateLayout();
                 Utils.sleepUninterruptibly(runtime.retryRate * 1000);
             }
