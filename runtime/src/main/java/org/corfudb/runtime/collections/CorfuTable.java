@@ -253,6 +253,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      * @return
      */
     @Accessor
+    @SuppressWarnings("unchecked")
     public @Nonnull <P> Collection<P> getByIndexAndFilter(@Nonnull F indexFunction,
                                  @Nonnull ProjectionFunction<K, V, I, P> projectionFunction,
                                  @Nonnull Predicate<? super Map.Entry<K, V>>
@@ -262,8 +263,15 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
 
         if (indexFunctions.isEmpty()) {
             // If there are no index functions, use the entire map
-            entryStream = mainMap.entrySet().parallelStream();
-            log.debug("getByIndexAndFilter: Attempted getByIndexAndFilter without indexing");
+            // Note that this is an ERROR - Currently, the index should be present if an index
+            // is used for a query. If you see the error message below, you should debug
+            // WHY the index was lost, as performance will be extremely slow because the index
+            // will be re-built on every query.
+            log.error("getByIndexAndFilter: Attempted getByIndexAndFilter without indexing");
+            entryStream = mainMap.entrySet().parallelStream()
+                .filter(x ->
+                    indexFunction.getIndexFunction().generateIndex(x.getKey(), x.getValue())
+                                    .equals(index));
         } else {
             Map<I, Map<K, V>> secondaryMap = indexMap.get(indexFunction);
             if (secondaryMap != null) {
