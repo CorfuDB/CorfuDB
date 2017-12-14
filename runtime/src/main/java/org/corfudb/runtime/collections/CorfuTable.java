@@ -159,11 +159,12 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         indexerClass = indexFunctionEnumClass;
         indexFunctions.addAll(EnumSet.allOf(indexFunctionEnumClass));
         indexFunctions.forEach(f -> indexMap.put(f, new HashMap<>()));
+        log.info("CorfuTable: creating CorfuTable with {} as indexer class", indexFunctionEnumClass);
     }
 
     /** Default constructor. Generates a table without any secondary indexes. */
     public CorfuTable() {
-        log.debug("CorfuTable: Creating a table without secondary indexes! Secondary index lookup"
+        log.info("CorfuTable: Creating a table without secondary indexes! Secondary index lookup"
             + " will DEGRADE to a full scan");
     }
 
@@ -284,23 +285,6 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
 
         return projectionFunction.generateProjection(index, entryStream.filter(entryPredicate))
                 .collect(Collectors.toCollection(ArrayList::new));
-    }
-
-
-    /**
-     * Register new index class
-     *
-     * This replaces the current index.
-     *
-     * @param indexFunctionEnumClass
-     */
-    public void registerIndex(Class<F> indexFunctionEnumClass) {
-        indexerClass = indexFunctionEnumClass;
-        indexMap.clear();
-        indexFunctions.clear();
-        indexFunctions.addAll(EnumSet.allOf(indexFunctionEnumClass));
-        indexFunctions.forEach(f -> indexMap.put(f, new HashMap<>()));
-        mainMap.forEach(this::mapSecondaryIndexes);
     }
 
     /** {@inheritDoc} */
