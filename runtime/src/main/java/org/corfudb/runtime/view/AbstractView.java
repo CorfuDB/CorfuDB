@@ -98,11 +98,11 @@ public abstract class AbstractView {
                     log.warn("Timeout executing remote call, invalidating view and retrying in {}s",
                             retryRate);
                     runtime.invalidateLayout();
-                    Utils.sleepUninterruptibly(retryRate * 1000);
+                    Utils.sleepUninterruptibly(retryRate);
                 } else if (re instanceof ServerNotReadyException) {
                     log.warn("Server still not ready. Waiting for server to start "
                             + "accepting requests.");
-                    Utils.sleepUninterruptibly(retryRate * 1000);
+                    Utils.sleepUninterruptibly(retryRate);
                 } else if (re instanceof WrongEpochException) {
                     WrongEpochException we = (WrongEpochException) re;
                     log.warn("Got a wrong epoch exception, updating epoch to {} and "
@@ -130,7 +130,7 @@ public abstract class AbstractView {
             } catch (InterruptedException ie) {
                 throw new UnrecoverableCorfuInterruptedError("Interrupted in layoutHelper", ie);
             } catch (ExecutionException ex) {
-                log.warn("Error executing remote call, invalidating view and retrying in {}s",
+                log.warn("Error executing remote call, invalidating view and retrying in {} ms",
                         retryRate, ex);
 
                 // If SystemUnavailable exception is thrown by the layout.get() completable future,
@@ -141,7 +141,7 @@ public abstract class AbstractView {
                 }
 
                 runtime.invalidateLayout();
-                Utils.sleepUninterruptibly(retryRate * 1000);
+                Utils.sleepUninterruptibly(retryRate);
             }
         }
     }
