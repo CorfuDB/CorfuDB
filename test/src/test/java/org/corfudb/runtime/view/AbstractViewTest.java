@@ -93,7 +93,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param endpoint      An endpoint string for the router.
      * @return
      */
-    private IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
+    protected IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
         runtimeRouterMap.putIfAbsent(runtime, new ConcurrentHashMap<>());
         if (!endpoint.startsWith("test:")) {
             throw new RuntimeException("Unsupported endpoint in test: " + endpoint);
@@ -355,6 +355,15 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return "test:" + port;
     }
 
+    /**
+     * Get the port from the endpoint.
+     *
+     * @param endpoint The endpoint string.
+     * @return The port in the endpoint.
+     */
+    public Integer getPort(String endpoint) {
+        return Integer.parseInt(endpoint.split(":")[1]);
+    }
 
     // Private
 
