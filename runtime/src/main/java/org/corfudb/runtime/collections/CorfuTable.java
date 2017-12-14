@@ -269,9 +269,10 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
             // will be re-built on every query.
             log.error("getByIndexAndFilter: Attempted getByIndexAndFilter without indexing");
             entryStream = mainMap.entrySet().parallelStream()
-                .filter(x ->
-                    indexFunction.getIndexFunction().generateIndex(x.getKey(), x.getValue())
-                                    .equals(index));
+                .filter(x -> indexFunction.getIndexFunction()
+                        .generateIndex(x.getKey(), x.getValue())
+                        .stream()
+                        .anyMatch(index::equals));
         } else {
             Map<I, Map<K, V>> secondaryMap = indexMap.get(indexFunction);
             if (secondaryMap != null) {
