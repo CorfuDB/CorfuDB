@@ -27,7 +27,7 @@ enum OrchestratorResponseType {
     // The status of a workflow
     WORKFLOW_STATUS = 0;
     // Id of a created workflow
-    WORKFLOW_ID = 1;
+    WORKFLOW_CREATE = 1;
 }
 
 message DataRank {
