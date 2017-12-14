@@ -106,7 +106,9 @@ public class CorfuTableTest extends AbstractViewTest {
                                  MapEntry.entry("k3", "b"));
     }
 
-
+    /** Make sure we can still read on the index even if it was
+     *  never present.
+     */
     @Test
     @SuppressWarnings("unchecked")
     public void canReadWithFailedIndex() {

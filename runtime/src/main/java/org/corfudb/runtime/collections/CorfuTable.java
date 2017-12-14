@@ -261,7 +261,9 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
                                  I index) {
         Stream<Map.Entry<K,V>> entryStream;
 
-        if (indexFunctions.isEmpty()) {
+        Map<I, Map<K, V>> secondaryMap = indexMap.get(indexFunction);
+
+        if (indexFunctions.isEmpty() || secondaryMap == null) {
             // If there are no index functions, use the entire map
             // Note that this is an ERROR - Currently, the index should be present if an index
             // is used for a query. If you see the error message below, you should debug
@@ -274,20 +276,11 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
                         .stream()
                         .anyMatch(index::equals));
         } else {
-            Map<I, Map<K, V>> secondaryMap = indexMap.get(indexFunction);
-            if (secondaryMap != null) {
-                // Otherwise, use the secondary index that was generated.
-                if (secondaryMap.get(index) != null) {
-                    entryStream = secondaryMap.get(index).entrySet().stream();
-                } else {
-                    entryStream = Stream.empty();
-                }
+            // Otherwise, use the secondary index that was generated.
+            if (secondaryMap.get(index) != null) {
+                entryStream = secondaryMap.get(index).entrySet().stream();
             } else {
-                // For some reason the function is not present (maybe someone passed the
-                // wrong function).
-                log.error("getByIndexAndFilter: Attempted to read from a index function which"
-                        + "is not available, falling back to no secondary index");
-                entryStream = mainMap.entrySet().parallelStream();
+                entryStream = Stream.empty();
             }
         }
 
