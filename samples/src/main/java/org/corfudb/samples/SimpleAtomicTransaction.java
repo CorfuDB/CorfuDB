@@ -87,6 +87,7 @@ public class SimpleAtomicTransaction extends BaseCorfuAppUtils {
     /**
      * this method initiates activity
      */
+    @SuppressWarnings("checkstyle:printLine") // Sample code
     @Override
     void action() {
         /**

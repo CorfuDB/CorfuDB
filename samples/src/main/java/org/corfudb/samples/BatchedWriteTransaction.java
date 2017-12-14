@@ -62,6 +62,7 @@ public class BatchedWriteTransaction extends BaseCorfuAppUtils {
         workload2();
     }
 
+    @SuppressWarnings("checkstyle:printLine") // Sample code
     void workload1() {
         /**
          * Instantiate a Corfu Stream named "A" dedicated to an SMRmap object
@@ -92,6 +93,7 @@ public class BatchedWriteTransaction extends BaseCorfuAppUtils {
         System.out.println("time to populate map in batches (msecs): " + (endt - startt));
     }
 
+    @SuppressWarnings("checkstyle:printLine") // Sample code
     void workload2() {
         /**
          * Instantiate a collection of Corfu streams, each one dedicated to an SMRmap instance

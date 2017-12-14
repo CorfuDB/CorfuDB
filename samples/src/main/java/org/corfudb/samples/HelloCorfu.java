@@ -31,6 +31,7 @@ public class HelloCorfu {
         return corfuRuntime;
     }
 
+    @SuppressWarnings("checkstyle:printLine") // Sample code
     public static void main(String[] args) {
         // Parse the options given, using docopt.
         Map<String, Object> opts =
