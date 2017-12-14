@@ -7,7 +7,7 @@ import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
-import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
@@ -19,7 +19,6 @@ import org.corfudb.runtime.view.Layout;
 
 import javax.annotation.Nonnull;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -34,7 +33,6 @@ import static org.corfudb.format.Types.OrchestratorRequestType.QUERY;
  * cluster. Initiated through RPC, the orchestrator will create a workflow instance and attempt
  * to execute all its actions.
  *
- * <p>
  * Created by Maithem on 10/25/17.
  */
 
@@ -42,7 +40,7 @@ import static org.corfudb.format.Types.OrchestratorRequestType.QUERY;
 public class Orchestrator {
 
     final Callable<CorfuRuntime> getRuntime;
-    final Map<String, UUID> activeWorkflows = new ConcurrentHashMap();
+    final Map<UUID, String> activeWorkflows = new ConcurrentHashMap();
 
     public Orchestrator(@Nonnull Callable<CorfuRuntime> runtime) {
         this.getRuntime = runtime;
@@ -65,41 +63,46 @@ public class Orchestrator {
         QueryRequest req = (QueryRequest) msg.getPayload().getRequest();
 
         Response resp;
-        if (activeWorkflows.values().contains(req.getId())) {
+        if (activeWorkflows.containsKey(req.getId())) {
             resp = new QueryResponse(true);
+            log.trace("handleQuery: returning active for id {}", req.getId());
         } else {
             resp = new QueryResponse(false);
+            log.trace("handleQuery: returning not active for id {}", req.getId());
         }
 
         r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
-                .payloadMsg(new OrchestratorResponse(resp )));
+                .payloadMsg(new OrchestratorResponse(resp)));
     }
 
     void addNode(CorfuPayloadMsg<OrchestratorRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        CompletableFuture.runAsync(() -> {
-            AddNodeRequest req = (AddNodeRequest) msg.getPayload().getRequest();
-            if (activeWorkflows.containsKey(req.getEndpoint())) {
-                // An add node workflow is already executing for this endpoint, return
-                // existing workflow id.
-                OrchestratorResponse resp = new OrchestratorResponse(
-                        new AddNodeResponse(activeWorkflows.get(req.getEndpoint())));
-                r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
-                        .payloadMsg(resp));
-                return;
-            } else {
-                // Create a new workflow for this endpoint and return a new workflow id
-                Workflow workflow = getWorkflow(msg.getPayload());
-                activeWorkflows.put(req.getEndpoint(), workflow.getId());
-                OrchestratorResponse resp = new OrchestratorResponse(new AddNodeResponse(workflow.getId()));
-                r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
-                        .payloadMsg(resp));
+        AddNodeRequest req = (AddNodeRequest) msg.getPayload().getRequest();
+        if (findUUID(req.getEndpoint()) != null) {
+            // An add node workflow is already executing for this endpoint, return
+            // existing workflow id.
+            OrchestratorResponse resp = new OrchestratorResponse(
+                    new CreateWorkflowResponse(findUUID(req.getEndpoint())));
+            r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
+                    .payloadMsg(resp));
+            log.trace("addNode: ignoring req for {}", findUUID(req.getEndpoint()));
+            return;
+        } else {
+            // Create a new workflow for this endpoint and return a new workflow id
+            Workflow workflow = getWorkflow(msg.getPayload());
+            activeWorkflows.put(workflow.getId(), req.getEndpoint());
+            log.trace("addNode: putting id  {}", workflow.getId());
+            OrchestratorResponse resp = new OrchestratorResponse(new CreateWorkflowResponse(workflow.getId()));
+            r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
+                    .payloadMsg(resp));
+            CompletableFuture.runAsync(() -> {
                 run(workflow);
-            }
-        });
+            });
+        }
     }
 
     /**
      * Create a workflow instance from an orchestrator request
+     *
      * @param req Orchestrator request
      * @return Workflow instance
      */
@@ -116,13 +119,14 @@ public class Orchestrator {
     /**
      * Run a particular workflow, which entails executing all its defined
      * actions
+     *
      * @param workflow instance to run
      */
     void run(@Nonnull Workflow workflow) {
         CorfuRuntime rt = null;
 
         try {
-            Layout currLayout =  getRuntime.call().layout.get();
+            Layout currLayout = getRuntime.call().layout.get();
             String servers = String.join(",", currLayout.getLayoutServers());
             rt = new CorfuRuntime(servers)
                     .setCacheDisabled(true)
@@ -154,11 +158,20 @@ public class Orchestrator {
             log.error("run: Encountered an error while running workflow {}", workflow.getId(), e);
             return;
         } finally {
+            activeWorkflows.remove(workflow.getId());
+            log.debug("run: removed {} from {}",workflow.getId(), activeWorkflows);
             if (rt != null) {
                 rt.shutdown();
             }
-
-            activeWorkflows.remove(workflow.getId());
         }
+    }
+
+    UUID findUUID(String endpoint) {
+        for (Map.Entry<UUID, String> entry : activeWorkflows.entrySet()) {
+            if (entry.getValue().equals(endpoint)) {
+                return entry.getKey();
+            }
+        }
+        return null;
     }
 }

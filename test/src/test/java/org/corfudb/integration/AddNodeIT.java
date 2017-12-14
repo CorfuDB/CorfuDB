@@ -1,16 +1,14 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.SMRMap;
 import org.junit.Test;
 
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -31,9 +29,9 @@ public class AddNodeIT extends AbstractIT {
 
     final String host = "localhost";
 
-    final int maxTries = 5;
+    final int maxTries = 10;
 
-    final int sleepTime = 1000;
+    final int sleepTime = 5_000;
 
     String getConnectionString(int port) {
         return host + ":" + port;
@@ -75,7 +73,7 @@ public class AddNodeIT extends AbstractIT {
         ManagementClient mgmt = n1Rt.getRouter(getConnectionString(n1Port))
                 .getClient(ManagementClient.class);
 
-        AddNodeResponse resp = mgmt.addNodeRequest(getConnectionString(n2Port));
+        CreateWorkflowResponse resp = mgmt.addNodeRequest(getConnectionString(n2Port));
 
         assertThat(resp.getWorkflowId()).isNotNull();
 
@@ -84,6 +82,9 @@ public class AddNodeIT extends AbstractIT {
         n1Rt.invalidateLayout();
         final int clusterSizeN2 = 2;
         assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+
+        // Verify that the workflow ID for node 2 is no longer active
+        assertThat(mgmt.queryRequest(resp.getWorkflowId()).isActive()).isFalse();
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
@@ -104,7 +105,7 @@ public class AddNodeIT extends AbstractIT {
                 .setPort(n3Port)
                 .runServer();
 
-        AddNodeResponse resp2 = mgmt.addNodeRequest(getConnectionString(n3Port));
+        CreateWorkflowResponse resp2 = mgmt.addNodeRequest(getConnectionString(n3Port));
         assertThat(resp2.getWorkflowId()).isNotNull();
 
         waitForWorkflow(resp2.getWorkflowId(), n1Rt, n1Port);
@@ -113,6 +114,8 @@ public class AddNodeIT extends AbstractIT {
         n1Rt.invalidateLayout();
         final int clusterSizeN3 = 3;
         assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
+        // Verify that the workflow ID for node 3 is no longer active
+        assertThat(mgmt.queryRequest(resp2.getWorkflowId()).isActive()).isFalse();
         for (int x = 0; x < numEntries; x++) {
             String v = (String) table.get(String.valueOf(x));
             assertThat(v).isEqualTo(String.valueOf(x));

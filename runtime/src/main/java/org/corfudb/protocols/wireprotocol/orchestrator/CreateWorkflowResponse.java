@@ -6,29 +6,29 @@ import org.corfudb.format.Types.OrchestratorResponseType;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 
-import static org.corfudb.format.Types.OrchestratorResponseType.WORKFLOW_ID;
+import static org.corfudb.format.Types.OrchestratorResponseType.WORKFLOW_CREATE;
 
 /**
- * AddNodeResponse returns the UUID of the add node workflow that was requested.
+ * CreateWorkflowResponse returns the UUID of a created workflow.
  * @author Maithem
  */
-public class AddNodeResponse implements Response {
+public class CreateWorkflowResponse implements Response {
 
     @Getter
     public UUID workflowId;
 
-    public AddNodeResponse(UUID workflowId) {
+    public CreateWorkflowResponse(UUID workflowId) {
         this.workflowId = workflowId;
     }
 
-    public AddNodeResponse(byte[] buf) {
+    public CreateWorkflowResponse(byte[] buf) {
         ByteBuffer bytes = ByteBuffer.wrap(buf);
         this.workflowId = new UUID(bytes.getLong(), bytes.getLong());
     }
 
     @Override
     public OrchestratorResponseType getType() {
-        return WORKFLOW_ID;
+        return WORKFLOW_CREATE;
     }
 
     @Override
