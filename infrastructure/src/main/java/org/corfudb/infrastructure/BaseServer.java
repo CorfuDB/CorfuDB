@@ -1,22 +1,18 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
-
 import java.lang.invoke.MethodHandles;
-import java.util.Map;
-
 import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.util.Utils;
+import org.corfudb.util.Sleep;
 
 /**
  * Created by mwei on 12/8/15.
@@ -101,7 +97,7 @@ public class BaseServer extends AbstractServer {
                                 IServerRouter r, boolean isMetricsEnabled) {
         log.warn("Remote reset requested from client " + msg.getClientID());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-        Utils.sleepUninterruptibly(500); // Sleep, to make sure that all channels are flushed...
+        Sleep.MILLISECONDS.sleepUninterruptibly(500); // Sleep, to make sure that all channels are flushed...
         System.exit(100);
     }
 }

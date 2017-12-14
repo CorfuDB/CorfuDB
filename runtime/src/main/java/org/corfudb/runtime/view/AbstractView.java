@@ -1,19 +1,17 @@
 package org.corfudb.runtime.view;
 
+import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
-
 import javax.annotation.Nonnull;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.util.Utils;
+import org.corfudb.util.Sleep;
 
 /**
  * All views inherit from AbstractView.
@@ -49,11 +47,7 @@ public abstract class AbstractView {
                 log.warn("Error executing remote call, invalidating view and retrying in {}s",
                         runtime.getParameters().getConnectionRetryRate(), ex);
                 runtime.invalidateLayout();
-                try {
-                    Thread.sleep(runtime.getParameters().getConnectionRetryRate().toMillis());
-                } catch (InterruptedException ie) {
-                    throw new UnrecoverableCorfuInterruptedError("Interrupted while fetching layout", ie);
-                }
+                Sleep.sleepUninterruptibly(runtime.getParameters().getConnectionRetryRate());
             }
         }
     }
@@ -89,7 +83,7 @@ public abstract class AbstractView {
                                                        boolean rethrowAllExceptions)
             throws A, B, C, D {
         runtime.beforeRpcHandler.run();
-        final long retryRate = runtime.getParameters().getConnectionRetryRate().toMillis();
+        final Duration retryRate = runtime.getParameters().getConnectionRetryRate();
         while (true) {
             try {
                 return function.apply(runtime.layout.get());
@@ -98,11 +92,11 @@ public abstract class AbstractView {
                     log.warn("Timeout executing remote call, invalidating view and retrying in {}s",
                             retryRate);
                     runtime.invalidateLayout();
-                    Utils.sleepUninterruptibly(retryRate);
+                    Sleep.sleepUninterruptibly(retryRate);
                 } else if (re instanceof ServerNotReadyException) {
                     log.warn("Server still not ready. Waiting for server to start "
                             + "accepting requests.");
-                    Utils.sleepUninterruptibly(retryRate);
+                    Sleep.sleepUninterruptibly(retryRate);
                 } else if (re instanceof WrongEpochException) {
                     WrongEpochException we = (WrongEpochException) re;
                     log.warn("Got a wrong epoch exception, updating epoch to {} and "
@@ -113,15 +107,7 @@ public abstract class AbstractView {
 
                     runtime.systemDownHandler.run();
                     runtime.invalidateLayout();
-
-                    try {
-                        Thread.sleep(runtime.getParameters().getConnectionRetryRate().toMillis());
-                    } catch (InterruptedException e) {
-                        log.warn("Interrupted Exception in layout helper.", e);
-                        Thread.currentThread().interrupt();
-                        throw new UnrecoverableCorfuInterruptedError("Interrupted Exception in layout helper.", e);
-                    }
-
+                    Sleep.sleepUninterruptibly(retryRate);
                 } else {
                     throw re;
                 }
@@ -143,7 +129,7 @@ public abstract class AbstractView {
                 }
 
                 runtime.invalidateLayout();
-                Utils.sleepUninterruptibly(retryRate);
+                Sleep.sleepUninterruptibly(retryRate);
             }
         }
     }

@@ -17,6 +17,7 @@ public class SleepOperation extends Operation {
     }
 
     @Override
+    @SuppressWarnings("checkstyle:ThreadSleep")
     public void execute() {
         Random rand = new Random();
 
