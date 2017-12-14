@@ -253,6 +253,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
      * @return
      */
     @Accessor
+    @SuppressWarnings("unchecked")
     public @Nonnull <P> Collection<P> getByIndexAndFilter(@Nonnull F indexFunction,
                                  @Nonnull ProjectionFunction<K, V, I, P> projectionFunction,
                                  @Nonnull Predicate<? super Map.Entry<K, V>>
@@ -260,27 +261,33 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
                                  I index) {
         Stream<Map.Entry<K,V>> entryStream;
 
-        if (indexFunctions.isEmpty()) {
-            // If there are no index functions, use the entire map
-            entryStream = mainMap.entrySet().parallelStream();
-            log.debug("getByIndexAndFilter: Attempted getByIndexAndFilter without indexing");
-        } else {
-            Map<I, Map<K, V>> secondaryMap = indexMap.get(indexFunction);
-            if (secondaryMap != null) {
-                // Otherwise, use the secondary index that was generated.
-                if (secondaryMap.get(index) != null) {
-                    entryStream = secondaryMap.get(index).entrySet().stream();
-                } else {
-                    entryStream = Stream.empty();
-                }
-            } else {
-                // For some reason the function is not present (maybe someone passed the
-                // wrong function).
-                log.error("getByIndexAndFilter: Attempted to read from a index function which"
-                        + "is not available, falling back to no secondary index");
-                entryStream = mainMap.entrySet().parallelStream();
-            }
+        Map<I, Map<K, V>> secondaryMap = indexMap.get(indexFunction);
+
+        if (indexFunctions.isEmpty() || secondaryMap == null) {
+            // If there are no index functions, regenerate....
+            log.error("getByIndexAndFilter: Attempted getByIndexAndFilter without indexing");
+            log.error("getByIndexAndFilter: Regenerating index... {}", indexFunction);
+            HashMap<I, Map<K, V>> thisIndexMap = new HashMap<>();
+            indexMap.put(indexFunction, thisIndexMap);
+            indexFunctions.add(indexFunction);
+            mainMap.entrySet().stream()
+                .forEach(e -> {
+                    Collection<I> indexes =
+                        indexFunction.getIndexFunction()
+                            .generateIndex(e.getKey(), e.getValue());
+                    indexes.forEach(i -> thisIndexMap.computeIfAbsent((I) i,
+                        (I) -> new HashMap<>()).put(e.getKey(), e.getValue()));
+                });
+            secondaryMap = indexMap.get(indexFunction);
         }
+
+        // Otherwise, use the secondary index that was generated.
+        if (secondaryMap.get(index) != null) {
+            entryStream = secondaryMap.get(index).entrySet().stream();
+        } else {
+            entryStream = Stream.empty();
+        }
+
 
         return projectionFunction.generateProjection(index, entryStream.filter(entryPredicate))
                 .collect(Collectors.toCollection(ArrayList::new));
