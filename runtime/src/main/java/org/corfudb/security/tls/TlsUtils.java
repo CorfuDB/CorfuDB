@@ -12,7 +12,6 @@ import java.security.cert.CertificateException;
 import javax.net.ssl.SSLException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.StringUtils;
 
 /**
  * Utilities for common options parsing and session configuration for
@@ -78,15 +77,15 @@ public class TlsUtils {
      *      Wraps the IOException.
      */
     public static String getKeyStorePassword(String passwordFilePath) throws SSLException {
-        if (!StringUtils.isEmpty(passwordFilePath)) {
-            try {
-                return (new String(Files.readAllBytes(Paths.get(passwordFilePath)))).trim();
-            } catch (IOException e) {
-                String errorMessage = "Unable to read password file " + passwordFilePath + ".";
-                log.error(errorMessage, e);
-                throw new SSLException(errorMessage, e);
-            }
+        if (passwordFilePath == null || passwordFilePath.isEmpty()) {
+            return "";
         }
-        return "";
+        try {
+            return (new String(Files.readAllBytes(Paths.get(passwordFilePath)))).trim();
+        } catch (IOException e) {
+            String errorMessage = "Unable to read password file " + passwordFilePath + ".";
+            log.error(errorMessage, e);
+            throw new SSLException(errorMessage, e);
+        }
     }
 }
