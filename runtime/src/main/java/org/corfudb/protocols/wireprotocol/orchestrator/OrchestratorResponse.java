@@ -40,8 +40,8 @@ public class OrchestratorResponse implements ICorfuPayload<OrchestratorResponse>
         switch (type) {
             case WORKFLOW_STATUS:
                 return new QueryResponse(payload);
-            case WORKFLOW_ID:
-                return new AddNodeResponse(payload);
+            case WORKFLOW_CREATE:
+                return new CreateWorkflowResponse(payload);
             default:
                 throw new IllegalStateException("mapResponse: Unknown Type");
         }
