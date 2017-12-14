@@ -42,7 +42,7 @@ public class ManagementClientTest extends AbstractClientTest {
                 // Required for management server to be able to bootstrap the sequencer.
                 .add(new SequencerServer(serverContext))
                 .add(new LogUnitServer(serverContext))
-                .add(new BaseServer())
+                .add(new BaseServer(serverContext))
                 .build();
     }
 
