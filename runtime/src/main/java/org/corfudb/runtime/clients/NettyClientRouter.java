@@ -36,6 +36,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import javax.annotation.Nonnull;
 import javax.net.ssl.SSLException;
 import lombok.Getter;
 import lombok.Setter;
@@ -45,7 +46,9 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.security.sasl.SaslUtils;
@@ -103,31 +106,26 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     }
 
     /**
-     * The id of this client.
-     */
-    @Getter
-    @Setter
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-    public UUID clientID;
-    /**
      * New connection timeout (milliseconds).
      */
     @Getter
     @Setter
     public long timeoutConnect;
+
     /**
      * Sync call response timeout (milliseconds).
      */
     @Getter
     @Setter
     public long timeoutResponse;
+
     /**
      * Retry interval after timeout (milliseconds).
      */
     @Getter
     @Setter
     public long timeoutRetry;
+
     /**
      * The current request ID.
      */
@@ -171,6 +169,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     @Getter
     final NodeLocator node;
 
+    private final CorfuRuntimeParameters parameters;
+
     @Deprecated
     @Override
     public Integer getPort() {
@@ -188,16 +188,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     @Getter
     volatile Boolean connected;
 
-    private Boolean tlsEnabled = false;
-
     private SslContext sslContext;
-
-    private Boolean saslPlainTextEnabled = false;
-
-    private String saslPlainTextUsernameFile;
-
-    private String saslPlainTextPasswordFile;
-
     /**
      * Creates a new NettyClientRouter connected to the specified endpoint.
      *
@@ -217,8 +208,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     @Deprecated
     public NettyClientRouter(String host, Integer port) {
         this(NodeLocator.builder().host(host).port(port).build(),
-            false, null, null, null,
-                null, false, null, null);
+             CorfuRuntimeParameters.builder().build());
     }
 
     /**
@@ -233,8 +223,16 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         String tsPasswordFile, Boolean saslPlainText, String usernameFile,
         String passwordFile) {
         this(NodeLocator.builder().host(host).port(port).build(),
-            tls, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
-            saslPlainText, usernameFile, passwordFile);
+            CorfuRuntimeParameters.builder()
+                .tlsEnabled(tls)
+                .keyStore(keyStore)
+                .ksPasswordFile(ksPasswordFile)
+                .trustStore(trustStore)
+                .tsPasswordFile(tsPasswordFile)
+                .saslPlainTextEnabled(saslPlainText)
+                .usernameFile(usernameFile)
+                .passwordFile(passwordFile)
+                .build());
     }
 
     /**
@@ -242,26 +240,17 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * specified tls and sasl options.
      *
      * @param node           The node to connect to.
-     * @param tls            TLS enable flag.
-     * @param keyStore       Key store to be used.
-     * @param ksPasswordFile Key store password file path.
-     * @param trustStore     Trust store to be used.
-     * @param tsPasswordFile Trust store password file path.
-     * @param saslPlainText  Sasl to be used.
-     * @param usernameFile   username file path
-     * @param passwordFile   password file path
+     * @param parameters     A {@link CorfuRuntimeParameters} with the desired configuration.
      */
-    public NettyClientRouter(NodeLocator node, Boolean tls,
-                             String keyStore, String ksPasswordFile, String trustStore,
-                             String tsPasswordFile, Boolean saslPlainText, String usernameFile,
-                             String passwordFile) {
-
+    public NettyClientRouter(@Nonnull NodeLocator node,
+                             @Nonnull CorfuRuntimeParameters parameters) {
         this.node = node;
-        clientID = UUID.randomUUID();
+        this.parameters = parameters;
+
         connected = false;
-        timeoutConnect = 500;
-        timeoutResponse = 5000;
-        timeoutRetry = 1000;
+        timeoutConnect = parameters.getConnectionTimeout().toMillis();
+        timeoutResponse = parameters.getRequestTimeout().toMillis();
+        timeoutRetry = parameters.getConnectionRetryRate().toMillis();
 
         handlerMap = new ConcurrentHashMap<>();
         clientList = new ArrayList<>();
@@ -284,20 +273,16 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         counterSendTimeout = metrics.counter(pfx + "send-timeout");
         counterAsyncOpSent = metrics.counter(pfx + "async-op-sent");
 
-        if (tls) {
+        if (parameters.isTlsEnabled()) {
             try {
                 sslContext = SslContextConstructor.constructSslContext(false,
-                        keyStore, ksPasswordFile, trustStore, tsPasswordFile);
+                        parameters.getKeyStore(),
+                        parameters.getKsPasswordFile(),
+                        parameters.getTrustStore(),
+                        parameters.getTsPasswordFile());
             } catch (SSLException e) {
-                throw new RuntimeException(e);
+                throw new UnrecoverableCorfuError(e);
             }
-            this.tlsEnabled = true;
-        }
-
-        if (saslPlainText) {
-            saslPlainTextUsernameFile = usernameFile;
-            saslPlainTextPasswordFile = passwordFile;
-            saslPlainTextEnabled = true;
         }
 
         addClient(new BaseClient());
@@ -393,17 +378,17 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             b.handler(new ChannelInitializer<SocketChannel>() {
                 @Override
                 public void initChannel(SocketChannel ch) throws Exception {
-                    if (tlsEnabled) {
+                    if (parameters.isTlsEnabled()) {
                         ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
                     }
                     ch.pipeline().addLast(new LengthFieldPrepender(4));
                     ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
                             0, 4, 0,
                             4));
-                    if (saslPlainTextEnabled) {
+                    if (parameters.isSaslPlainTextEnabled()) {
                         PlainTextSaslNettyClient saslNettyClient =
-                                SaslUtils.enableSaslPlainText(saslPlainTextUsernameFile,
-                                        saslPlainTextPasswordFile);
+                                SaslUtils.enableSaslPlainText(parameters.getUsernameFile(),
+                                        parameters.getPasswordFile());
                         ch.pipeline().addLast("sasl/plain-text", saslNettyClient);
                     }
                     ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
@@ -525,7 +510,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             // Get the next request ID.
             final long thisRequest = requestID.getAndIncrement();
             // Set the message fields.
-            message.setClientID(clientID);
+            message.setClientID(parameters.getClientId());
             message.setRequestID(thisRequest);
             message.setEpoch(epoch);
 
@@ -576,7 +561,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
         // Set the base fields for this message.
-        message.setClientID(clientID);
+        message.setClientID(parameters.getClientId());
         message.setRequestID(thisRequest);
         message.setEpoch(epoch);
         // Write this message out on the channel.
@@ -650,9 +635,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     private boolean validateEpochAndClientID(CorfuMsg msg, ChannelHandlerContext ctx) {
         // Check if the message is intended for us. If not, drop the message.
-        if (!msg.getClientID().equals(clientID)) {
+        if (!msg.getClientID().equals(parameters.getClientId())) {
             log.warn("Incoming message intended for client {}, our id is {}, dropping!",
-                    msg.getClientID(), clientID);
+                    msg.getClientID(), parameters.getClientId());
             return false;
         }
         // Check if the message is in the right epoch.
