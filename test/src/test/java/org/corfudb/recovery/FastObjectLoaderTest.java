@@ -1347,7 +1347,11 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(originalTable);
         long cpAddress = mcw.appendCheckpoints(originalRuntime, "author");
-        Helpers.trim(originalRuntime, cpAddress);
+
+        originalRuntime.getAddressSpaceView().prefixTrim(cpAddress - 1);
+        originalRuntime.getAddressSpaceView().gc();
+        originalRuntime.getAddressSpaceView().invalidateServerCaches();
+        originalRuntime.getAddressSpaceView().invalidateClientCache();
 
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
