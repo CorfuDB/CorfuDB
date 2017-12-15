@@ -4,7 +4,7 @@ This document describes the format of Corfu node locators, which are used to ref
 
 Corfu node locators consist of the following components:
 
-- ``<protocol>``: The protocol that used by the node. Currently, only ``tcp`` is supported.
+- ``<protocol>``: The protocol that is used by the node. Currently, only ``tcp`` is supported.
 - ``<host-name>``: The host name the node can be reached at. This can be a DNS name, an IPv4 address or an IPv6 address.
 If an IPv6 address is provided, it must be delimited by brackets (``[<ipv6-host-name>]``).
 - ``<port>``: The port the node is providing the Corfu service on.
