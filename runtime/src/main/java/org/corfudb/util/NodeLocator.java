@@ -1,5 +1,6 @@
 package org.corfudb.util;
 
+import java.io.Serializable;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;
@@ -18,7 +19,9 @@ import lombok.Singular;
  */
 @Data
 @Builder
-public class NodeLocator {
+public class NodeLocator implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     /** Represents protocols for Corfu nodes. */
     public enum Protocol {
