@@ -179,8 +179,7 @@ public class ObjectsView extends AbstractView {
             return AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
         } else {
             long totalTime = System.currentTimeMillis() - context.getStartTime();
-            log.trace("TXEnd[{}] time={} ms",
-                    context, totalTime);
+            log.trace("TXEnd[{}] time={} ms", context, totalTime);
             try {
                 return TransactionalContext.getCurrentContext().commitTransaction();
             } catch (TransactionAbortedException e) {
@@ -203,7 +202,7 @@ public class ObjectsView extends AbstractView {
                 throw tae;
 
             } catch (Exception e) {
-               log.error("TXEnd: Unexpected exception", e);
+               log.error("TXEnd[{}]: Unexpected exception", context, e);
                 TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
                     -1L);
                 TransactionAbortedException tae = new TransactionAbortedException(txInfo,
