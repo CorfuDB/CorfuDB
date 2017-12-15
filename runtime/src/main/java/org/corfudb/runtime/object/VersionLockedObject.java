@@ -15,6 +15,7 @@ import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.NoRollbackException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
@@ -606,7 +607,7 @@ public class VersionLockedObject<T> {
                         entry.setUpcallResult(res);
                     } catch (Exception e) {
                         log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
-                        throw new RuntimeException(e);
+                        throw new UnrecoverableCorfuError(e);
                     }
                 });
     }
