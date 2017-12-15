@@ -1,5 +1,6 @@
 package org.corfudb.util;
 
+import com.google.common.collect.ImmutableMap;
 import java.io.Serializable;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -41,7 +42,7 @@ public class NodeLocator implements Serializable {
     @Builder.Default private UUID nodeId = null;
 
     /** A map of options. */
-    @Singular final Map<String, String> options;
+    @Singular final ImmutableMap<String, String> options;
 
     /** Parse a node locator string.
      *
