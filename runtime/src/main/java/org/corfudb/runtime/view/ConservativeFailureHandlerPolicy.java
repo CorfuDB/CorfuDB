@@ -34,6 +34,7 @@ public class ConservativeFailureHandlerPolicy implements IFailureHandlerPolicy {
         LayoutBuilder layoutBuilder = new LayoutBuilder(originalLayout);
         Layout newLayout = layoutBuilder
                 .assignResponsiveSequencerAsPrimary(failedNodes)
+                .removeLogunitServers(failedNodes)
                 .removeUnResponsiveServers(healedNodes)
                 .addUnresponsiveServers(failedNodes)
                 .build();

@@ -41,6 +41,32 @@ public class CorfuTableTest extends AbstractViewTest {
                 = (i, s) -> s.map(entry -> entry.getValue());
     }
 
+
+    @Test
+    public void openingCorfuTableTwice() {
+        CorfuTable<String, String, StringIndexers, String>
+                instance1 = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(
+                        new TypeToken<CorfuTable<String, String, StringIndexers, String>>() {})
+                .setArguments(StringIndexers.class)
+                .setStreamName("test")
+                .open();
+
+        assertThat(instance1.hasSecondaryIndices()).isTrue();
+
+        CorfuTable<String, String, StringIndexers, String>
+                instance2 = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(
+                        new TypeToken<CorfuTable<String, String, StringIndexers, String>>() {})
+                .setStreamName("test")
+                .open();
+
+        // Verify that the first the indexer is set on the first open
+        // TODO(Maithem): This might seem like weird semantics, but we
+        // address it once we tackle the lifecycle of SMRObjects.
+        assertThat(instance2.getIndexerClass()).isEqualTo(instance1.getIndexerClass());
+    }
+
     @Test
     @SuppressWarnings("unchecked")
     public void canReadFromEachIndex() {
@@ -104,72 +130,6 @@ public class CorfuTableTest extends AbstractViewTest {
                 .containsExactly(MapEntry.entry("k1", "a"),
                                  MapEntry.entry("k2", "ab"),
                                  MapEntry.entry("k3", "b"));
-    }
-
-    /**
-     * Create a CorfuTable without index and add an indexer
-     * post-creation (CorfuTable already have entries).
-     */
-    @Test
-    public void canSetIndexIfNoneSoFar() {
-        CorfuTable<String, String, CorfuTable.NoSecondaryIndex, Void>
-                corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setType(CorfuTable.class)
-                .setStreamName("test")
-                .open();
-
-        corfuTable.put("k1", "a");
-        corfuTable.put("k2", "ab");
-        corfuTable.put("k3", "b");
-
-        CorfuTable<String, String, StringIndexers, String>
-                corfuTableWithIndex = getDefaultRuntime().getObjectsView().build()
-                .setType(CorfuTable.class)
-                .setArguments(StringIndexers.class)
-                .setStreamName("test")
-                .open();
-
-        assertThat(corfuTableWithIndex.get("k1")).isEqualTo("a");
-        assertThat(corfuTableWithIndex.get("k2")).isEqualTo("ab");
-        assertThat(corfuTableWithIndex.get("k3")).isEqualTo("b");
-
-        assertThat(corfuTableWithIndex.getByIndex(StringIndexers.BY_FIRST_LETTER, "a"))
-                .containsExactly("a", "ab");
-
-        assertThat(corfuTableWithIndex.getByIndex(StringIndexers.BY_VALUE, "ab"))
-                .containsExactly("ab");
-
-    }
-
-    /**
-     * Replace the existing indexer with another one.
-     */
-    @Test
-    public void canSetNewIndex() {
-        CorfuTable<String, String, StringIndexers, String>
-                corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(CorfuTable.<String, String, StringIndexers, String>getTableType())
-                .setArguments(StringIndexers.class)
-                .setStreamName("test")
-                .open();
-
-        corfuTable.put("k1", "a");
-        corfuTable.put("k2", "ab");
-        corfuTable.put("k3", "b");
-
-        assertThat(corfuTable.getByIndex(StringIndexers.BY_FIRST_LETTER, "a"))
-                .containsExactly("a", "ab");
-
-
-        CorfuTable<String, String, OtherStringIndexer, String>
-                corfuTableWithIndex = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(CorfuTable.<String, String, OtherStringIndexer, String>getTableType())
-                .setArguments(OtherStringIndexer.class)
-                .setStreamName("test")
-                .open();
-
-        assertThat(corfuTableWithIndex.getByIndex(OtherStringIndexer.BY_LAST_LETTER, "b"))
-                .containsExactly("ab", "b");
     }
 
     /**
