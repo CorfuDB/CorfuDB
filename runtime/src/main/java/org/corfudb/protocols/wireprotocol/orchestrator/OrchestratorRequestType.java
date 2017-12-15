@@ -29,7 +29,12 @@ public enum OrchestratorRequestType {
     /**
      * Remove node from the cluster
      */
-    REMOVE_NODE(2, RemoveNodeWorkflow::new, RemoveNodeRequest::new);
+    REMOVE_NODE(2, RemoveNodeWorkflow::new, RemoveNodeRequest::new),
+
+    /**
+     * Force remove a node from the cluster
+     */
+    FORCE_REMOVE(3, ForceRemoveWorkflow::new, ForceRemoveRequest::new);
 
     @Getter
     public final int type;

@@ -212,6 +212,24 @@ public class LayoutManagementView extends AbstractView {
     }
 
     /**
+     * Attempts to force comment a new layout to the cluster.
+     *
+     * @param currentLayout the current layout
+     * @param forceLayout the new layout to force
+     * @throws QuorumUnreachableException
+     */
+    public void forceLayout(@Nonnull Layout currentLayout, @Nonnull Layout forceLayout)
+            throws QuorumUnreachableException {
+        currentLayout.setRuntime(runtime);
+        sealEpoch(currentLayout);
+
+        runtime.getLayoutView().forceLayout(forceLayout);
+        forceLayout.setRuntime(runtime);
+
+        reconfigureSequencerServers(currentLayout, forceLayout, true);
+    }
+
+    /**
      * Runs the layout reconfiguration process.
      * Seals the layout.
      * Runs paxos.
@@ -340,6 +358,7 @@ public class LayoutManagementView extends AbstractView {
         Map<UUID, Long> streamTails = Collections.emptyMap();
 
         // Reconfigure Primary Sequencer if required
+        log.info("reconfigureSequencerServers: orig {} new {}", originalLayout, newLayout);
         if (forceReconfigure
                 || !originalLayout.getSequencers().get(0).equals(newLayout.getSequencers()
                 .get(0))) {

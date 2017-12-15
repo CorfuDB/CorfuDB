@@ -22,6 +22,8 @@ import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
 
+import javax.annotation.Nonnull;
+
 /**
  * A client to the layout server.
  * <p>
@@ -150,6 +152,16 @@ public class LayoutClient implements IClient {
     public CompletableFuture<Boolean> committed(long epoch, Layout layout) {
         return router.sendMessageAndGetCompletable(CorfuMsgType.LAYOUT_COMMITTED
                 .payloadMsg(new LayoutCommittedRequest(epoch, layout)));
+    }
+
+    /**
+     * Send a force commit layout request to a layout server
+     * @param layout the new layout to force commit
+     * @return true if it was committed, otherwise false.
+     */
+    public CompletableFuture<Boolean> force(@Nonnull Layout layout) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.LAYOUT_FORCE
+                .payloadMsg(new LayoutCommittedRequest(layout.getEpoch(), layout)));
     }
 
 }
