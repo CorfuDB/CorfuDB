@@ -196,9 +196,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
 
         // Perform underlying access
         try {
-            return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp
-                            && !o.isOptimisticallyModifiedUnsafe(),
-                    o -> o.syncObjectUnsafe(timestamp),
+            return underlyingObject.access(o -> o.syncObjectUnsafe(timestamp),
                     o -> accessMethod.access(o));
         } catch (TrimmedException te) {
             log.warn("Access[{}] Encountered Trim, reset and retry", this);

@@ -46,10 +46,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
         // In snapshot transactions, there are no conflicts.
         // Hence, we do not need to add this access to a conflict set
         // do not add: addToReadSet(proxy, conflictObject);
-        return proxy.getUnderlyingObject().access(o -> o.getVersionUnsafe()
-                        == getSnapshotTimestamp()
-                        && !o.isOptimisticallyModifiedUnsafe(),
-                o -> {
+        return proxy.getUnderlyingObject().access(o -> {
                     syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, null);
                 },
                 o -> accessFunction.access(o));
