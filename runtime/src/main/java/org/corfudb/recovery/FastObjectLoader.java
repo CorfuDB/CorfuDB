@@ -281,7 +281,7 @@ public class FastObjectLoader {
             // Create an Object only for non-checkpoints
 
             // If it is a special type, create it with the object builder
-            if (objectType != defaultObjectsType) {
+            if (customTypeStreams.containsKey(streamId)) {
                 createObjectIfNotExist(customTypeStreams.get(streamId), serializer);
             }
             else {

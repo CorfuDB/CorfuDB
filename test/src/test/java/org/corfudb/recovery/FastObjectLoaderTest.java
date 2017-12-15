@@ -1344,10 +1344,16 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
                 .connect();
 
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap(originalTable);
+        long cpAddress = mcw.appendCheckpoints(originalRuntime, "author");
+        Helpers.trim(originalRuntime, cpAddress);
+
+
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
         fsmr.addIndexerToCorfuTableStream("test",
                 CorfuTableTest.StringIndexers.class);
-
+        fsmr.setDefaultObjectsType(CorfuTable.class);
         fsmr.loadMaps();
 
         assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test", originalTable, CorfuTable.class);
