@@ -54,7 +54,7 @@ public class NodeLocator {
 
             final URI url = new URI(toParse);
 
-            // Get the proto from the enum
+            // Get the protocol from the enum
             Protocol proto = Protocol.valueOf(url.getScheme().toUpperCase());
 
             // Host/port are as in a URL
@@ -74,7 +74,7 @@ public class NodeLocator {
             if (url.getQuery() == null || url.getQuery().equals("")) {
                 options = Collections.emptyMap();
             } else {
-                String[] query = url.getQuery().split("\\&");
+                String[] query = url.getQuery().split("&");
                 options = Arrays.stream(query)
                     .map(keyValue -> keyValue.split("="))
                     .collect(Collectors.toMap(kv -> kv[0], kv -> kv[1]));

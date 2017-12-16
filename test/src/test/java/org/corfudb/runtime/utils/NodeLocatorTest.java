@@ -43,12 +43,13 @@ public class NodeLocatorTest extends AbstractViewTest {
                                         .host("localhost")
                                         .port(1)
                                         .nodeId(UUID.nameUUIDFromBytes("test".getBytes()))
-                                        .options(ImmutableMap.<String,String>builder()
-                                                            .put("test", "test2").build())
+                                        .option("test1", "test2")
+                                        .option("test2", "test3")
                                         .protocol(Protocol.TCP)
                                         .build();
         NodeLocator parsed = NodeLocator.parseString(locator.toString());
 
+        System.out.println(locator.toString());
         assertThat(locator)
             .isEqualTo(parsed);
 
