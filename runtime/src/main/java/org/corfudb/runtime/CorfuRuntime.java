@@ -77,7 +77,7 @@ public class CorfuRuntime {
          *
          * <p>If using this utility, you need to be sure that no one
          * is accessing objects until the tables are loaded
-         * (i.e. when connect return)
+         * (i.e. when connect returns)
          */
         @Default boolean useFastLoader = false;
 
@@ -87,8 +87,8 @@ public class CorfuRuntime {
         /**
          * How much time the Fast Loader has to get the maps up to date.
          *
-         * <p>Once the timeout is reached, the Fast Loader give up. Every maps that are
-         * not up to date will be loaded through normal path.</p>
+         * <p>Once the timeout is reached, the Fast Loader gives up. Every map that is
+         * not up to date will be loaded through normal path.
          *
          */
         @Default Duration fastLoaderTimeout = Duration.ofMinutes(30);
@@ -622,12 +622,13 @@ public class CorfuRuntime {
         return this;
     }
 
-    // Below are deprecated methods which should no longer used and may be deprecated in the future.
+    // Below are deprecated methods which should no longer be
+    // used and may be deprecated in the future.
 
     // region Deprecated Constructors
     /**
      * Constructor for CorfuRuntime.
-     *
+     * @deprecated Use {@link CorfuRuntime#fromParameters(CorfuRuntimeParameters)}
      **/
     @Deprecated
     public CorfuRuntime() {
@@ -638,6 +639,7 @@ public class CorfuRuntime {
      * Parse a configuration string and get a CorfuRuntime.
      *
      * @param configurationString The configuration string to parse.
+     * @deprecated Use {@link CorfuRuntime#fromParameters(CorfuRuntimeParameters)}
      */
     @Deprecated
     public CorfuRuntime(String configurationString) {
