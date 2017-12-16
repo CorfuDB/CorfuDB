@@ -1,5 +1,7 @@
 package org.corfudb.util;
 
+import com.google.common.collect.ImmutableMap;
+import java.io.Serializable;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;
@@ -18,7 +20,9 @@ import lombok.Singular;
  */
 @Data
 @Builder
-public class NodeLocator {
+public class NodeLocator implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     /** Represents protocols for Corfu nodes. */
     public enum Protocol {
@@ -38,7 +42,7 @@ public class NodeLocator {
     @Builder.Default private UUID nodeId = null;
 
     /** A map of options. */
-    @Singular final Map<String, String> options;
+    @Singular final ImmutableMap<String, String> options;
 
     /** Parse a node locator string.
      *
