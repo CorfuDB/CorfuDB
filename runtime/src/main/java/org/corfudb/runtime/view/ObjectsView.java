@@ -20,6 +20,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
@@ -178,37 +179,36 @@ public class ObjectsView extends AbstractView {
             return AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
         } else {
             long totalTime = System.currentTimeMillis() - context.getStartTime();
-            log.trace("TXCommit[{}] time={} ms",
-                    context, totalTime);
+            log.trace("TXEnd[{}] time={} ms", context, totalTime);
             try {
                 return TransactionalContext.getCurrentContext().commitTransaction();
             } catch (TransactionAbortedException e) {
-                log.warn("TXCommit[{}] Exception {}", context, e);
+                log.warn("TXEnd[{}] Aborted Exception {}", context, e);
                 TransactionalContext.getCurrentContext().abortTransaction(e);
                 throw e;
-            } catch (Exception e) {
-                log.warn("TXCommit[{}] Exception {}", context, e);
-                AbortCause abortCause;
-
-                if (e instanceof NetworkException) {
-                    abortCause = AbortCause.NETWORK;
-                } else {
-                    abortCause = AbortCause.UNDEFINED;
-                }
-
+            } catch (NetworkException e) {
+                log.warn("TXEnd[{}] Network Exception {}", context, e);
                 long snapshotTimestamp;
                 try {
                     snapshotTimestamp = context.getSnapshotTimestamp();
                 } catch (NetworkException ne) {
                     snapshotTimestamp = -1L;
                 }
-
                 TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
-                        snapshotTimestamp);
+                    snapshotTimestamp);
                 TransactionAbortedException tae = new TransactionAbortedException(txInfo,
-                        null, null, abortCause, e, context);
+                    null, null, AbortCause.NETWORK, e, context);
                 context.abortTransaction(tae);
                 throw tae;
+
+            } catch (Exception e) {
+               log.error("TXEnd[{}]: Unexpected exception", context, e);
+                TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
+                    -1L);
+                TransactionAbortedException tae = new TransactionAbortedException(txInfo,
+                    null, null, AbortCause.UNDEFINED, e, context);
+                context.abortTransaction(tae);
+                throw new UnrecoverableCorfuError("Unexpected exception during commit", e);
             } finally {
                 TransactionalContext.removeContext();
             }

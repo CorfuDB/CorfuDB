@@ -268,7 +268,7 @@ public class AddressSpaceView extends AbstractView {
 
         } catch (Exception e) {
             log.error("prefixTrim: Error while calling prefix trimming {}", address, e);
-            return;
+            throw new UnrecoverableCorfuError("Unexpected error while prefix trimming", e);
         }
     }
 
@@ -350,6 +350,8 @@ public class AddressSpaceView extends AbstractView {
                         .readAll(l, batch)));
             } catch (Exception e) {
                 log.error("cacheFetch: Couldn't read addresses {}", batch, e);
+                throw new UnrecoverableCorfuError(
+                    "Unexpected error during cacheFetch", e);
             }
         }
 
