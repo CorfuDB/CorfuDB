@@ -53,6 +53,7 @@ import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
 
 
 /**
@@ -93,8 +94,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     public void setEpoch(long epoch){
         if (epoch < this.epoch) {
-            log.warn("setEpoch: Rejected attempt to set the router {}:{} to epoch {} smaller than current epoch {}",
-                    host, port, epoch, this.epoch);
+            log.warn("setEpoch: Rejected attempt to set the "
+                    + "router {} to epoch {} smaller than current epoch {}",
+                    node, epoch, this.epoch);
             return;
         }
         this.epoch = epoch;
@@ -165,16 +167,21 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * Whether or not this router is shutdown.
      */
     public volatile boolean shutdown;
-    /**
-     * The host that this router is routing requests for.
-     */
+
     @Getter
-    String host;
-    /**
-     * The port that this router is routing requests for.
-     */
-    @Getter
-    Integer port;
+    final NodeLocator node;
+
+    @Deprecated
+    @Override
+    public Integer getPort() {
+        return node.getPort();
+    }
+
+    @Deprecated
+    public String getHost() {
+        return node.getHost();
+    }
+
     /**
      * Flag, if we are connected.
      */
@@ -196,6 +203,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      *
      * @param endpoint Endpoint to connect to.
      */
+    @Deprecated
     public NettyClientRouter(String endpoint) {
         this(endpoint.split(":")[0], Integer.parseInt(endpoint.split(":")[1]));
     }
@@ -206,25 +214,34 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * @param host Host to connect to.
      * @param port Port to connect to.
      */
+    @Deprecated
     public NettyClientRouter(String host, Integer port) {
-        this(host, port, false, null, null, null,
+        this(NodeLocator.builder().host(host).port(port).build(),
+            false, null, null, null,
                 null, false, null, null);
     }
 
+    /**
+     * Creates a new NettyClientRouter connected to the specified host and port.
+     *
+     * @param host Host to connect to.
+     * @param port Port to connect to.
+     */
+    @Deprecated
     public NettyClientRouter(String host, Integer port, Boolean tls,
-                             String keyStore, String ksPasswordFile, String trustStore,
-                             String tsPasswordFile, Boolean saslPlainText, String usernameFile,
-                             String passwordFile) {
-        this(host, port, tls, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
-                saslPlainText, usernameFile, passwordFile, null);
+        String keyStore, String ksPasswordFile, String trustStore,
+        String tsPasswordFile, Boolean saslPlainText, String usernameFile,
+        String passwordFile) {
+        this(NodeLocator.builder().host(host).port(port).build(),
+            tls, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
+            saslPlainText, usernameFile, passwordFile);
     }
 
     /**
      * Creates a new NettyClientRouter connected to the specified host and port with the
      * specified tls and sasl options.
      *
-     * @param host           Host to connect to.
-     * @param port           Port to conect to.
+     * @param node           The node to connect to.
      * @param tls            TLS enable flag.
      * @param keyStore       Key store to be used.
      * @param ksPasswordFile Key store password file path.
@@ -234,13 +251,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * @param usernameFile   username file path
      * @param passwordFile   password file path
      */
-    public NettyClientRouter(String host, Integer port, Boolean tls,
+    public NettyClientRouter(NodeLocator node, Boolean tls,
                              String keyStore, String ksPasswordFile, String trustStore,
                              String tsPasswordFile, Boolean saslPlainText, String usernameFile,
-                             String passwordFile, MetricRegistry metricRegistry) {
-        this.host = host;
-        this.port = port;
+                             String passwordFile) {
 
+        this.node = node;
         clientID = UUID.randomUUID();
         connected = false;
         timeoutConnect = 500;
@@ -255,10 +271,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
         MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
 
-        if (metricRegistry != null) {
-            metrics = metricRegistry;
-        }
-        String pfx = CorfuRuntime.getMpCR() + host + ":" + port.toString() + ".";
+        String pfx = CorfuRuntime.getMpCR() + node + ".";
         synchronized (metrics) {
             if (!metrics.getNames().contains(pfx + "connected")) {
                 gaugeConnected = metrics.register(pfx + "connected", () -> connected ? 1 : 0);
@@ -411,7 +424,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                         "Interrupted while shutting down", ie);
                 }
                 throw new NetworkException(e.getClass().getSimpleName()
-                        + " connecting to endpoint failed", host + ":" + port, e);
+                        + " connecting to endpoint failed", node, e);
             }
         }
     }
@@ -419,13 +432,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     synchronized void connectChannel(Bootstrap b, long c) {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerConnect)) {
-            ChannelFuture cf = b.connect(host, port);
+            ChannelFuture cf = b.connect(node.getHost(), node.getPort());
             cf.syncUninterruptibly();
             if (!cf.awaitUninterruptibly(timeoutConnect)) {
                 cf.channel().close();   // close port
 //                MetricsUtils.incConditionalCounter(isEnabled, counterConnectFailed, 1);
-                throw new NetworkException(c + " Timeout connecting to endpoint",
-                        host + ":" + port);
+                throw new NetworkException(c + " Timeout connecting to endpoint", node);
             }
             channel = cf.channel();
         }
@@ -434,7 +446,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             outstandingRequests.forEach((reqId, reqCompletableFuture) -> {
 //                MetricsUtils.incConditionalCounter(isEnabled, counterSendDisconnected, 1);
                 reqCompletableFuture.completeExceptionally(new NetworkException("Disconnected",
-                        host + ":" + port));
+                    node));
                 outstandingRequests.remove(reqId);
             });
             if (!shutdown) {
@@ -504,9 +516,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                                                                  CorfuMsg message) {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         if (!connected) {
-            log.trace("Disconnected endpoint " + host + ":" + port);
+            log.trace("Disconnected endpoint {}", node);
             MetricsUtils.incConditionalCounter(isEnabled, counterSendDisconnected, 1);
-            throw new NetworkException("Disconnected endpoint", host + ":" + port);
+            throw new NetworkException("Disconnected endpoint", node);
         } else {
             final Timer.Context context = MetricsUtils
                     .getConditionalContext(isEnabled, timerSyncOp);

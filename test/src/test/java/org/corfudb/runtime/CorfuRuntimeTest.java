@@ -18,6 +18,7 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -287,7 +288,11 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         // Note: This does not simulate NetworkException while message transfer or connection.
         CorfuRuntime.overrideGetRouterFunction = (corfuRuntime, endpoint) -> {
             if (failedNode.get() != null && endpoint.equals(failedNode.get())) {
-                throw new NetworkException("Test server not responding : ", endpoint);
+                throw new NetworkException("Test server not responding : ",
+                    NodeLocator.builder()
+                        .host(endpoint.split(":")[0])
+                        .port(Integer.parseInt(endpoint.split(":")[1]))
+                        .build());
             }
             if (!endpoint.startsWith("test:")) {
                 throw new RuntimeException("Unsupported endpoint in test: " + endpoint);

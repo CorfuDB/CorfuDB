@@ -43,6 +43,7 @@ import org.corfudb.runtime.view.StreamsView;
 
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Version;
 
 /**
@@ -290,14 +291,13 @@ public class CorfuRuntime {
                 if (nodeRouters.containsKey(address)) {
                     return nodeRouters.get(address);
                 }
-                // Parse the string in host:port format.
-                String host = address.split(":")[0];
-                Integer port = Integer.parseInt(address.split(":")[1]);
+
+                NodeLocator node = NodeLocator.parseString(address);
                 // Generate a new router, start it and add it to the table.
-                NettyClientRouter router = new NettyClientRouter(host, port,
+                NettyClientRouter router = new NettyClientRouter(node,
                         tlsEnabled, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
                         saslPlainTextEnabled, usernameFile, passwordFile);
-                log.debug("Connecting to new router {}:{}", host, port);
+                log.debug("Connecting to new router {}", node);
                 try {
                     router.addClient(new LayoutClient())
                             .addClient(new SequencerClient())
