@@ -59,8 +59,6 @@ import org.corfudb.runtime.view.Layout.LayoutSegment;
 @Slf4j
 public class LayoutServer extends AbstractServer {
 
-    private static final String PREFIX_LAYOUT = "LAYOUT";
-    private static final String KEY_LAYOUT = "CURRENT";
     private static final String PREFIX_PHASE_1 = "PHASE_1";
     private static final String KEY_SUFFIX_PHASE_1 = "RANK";
     private static final String PREFIX_PHASE_2 = "PHASE_2";
@@ -185,35 +183,6 @@ public class LayoutServer extends AbstractServer {
             log.warn("handleMessageLayoutBootstrap: Got a request to bootstrap a server which is "
                     + "already bootstrapped, rejecting!");
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.LAYOUT_ALREADY_BOOTSTRAP));
-        }
-    }
-
-    /**
-     * Respond to a epoch change message.
-     *
-     * @param msg The incoming message
-     * @param ctx The channel context
-     * @param r   The server router.
-     */
-    @ServerHandler(type = CorfuMsgType.SET_EPOCH, opTimer = metricsPrefix + "set-epoch")
-    public synchronized void handleMessageSetEpoch(@NonNull CorfuPayloadMsg<Long> msg,
-                                                   ChannelHandlerContext ctx,
-                                                   @NonNull IServerRouter r,
-                                                   @NonNull boolean isMetricsEnabled) {
-        if (!checkBootstrap(msg, ctx, r)) {
-            return;
-        }
-        long serverEpoch = getServerEpoch();
-        if (msg.getPayload() >= serverEpoch) {
-            log.info("handleMessageSetEpoch: Received SET_EPOCH, moving to new epoch {}",
-                    msg.getPayload());
-            serverContext.setServerEpoch(msg.getPayload(), r);
-            r.setServerEpoch(msg.getPayload());
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
-        } else {
-            log.debug("handleMessageSetEpoch: Rejected SET_EPOCH current={}, requested={}",
-                    serverEpoch, msg.getPayload());
-            r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
         }
     }
 
@@ -371,7 +340,7 @@ public class LayoutServer extends AbstractServer {
 
 
     public Layout getCurrentLayout() {
-        return serverContext.getDataStore().get(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT);
+        return serverContext.getCurrentLayout();
     }
 
     /**
@@ -380,7 +349,7 @@ public class LayoutServer extends AbstractServer {
      * @param layout layout to set
      */
     public void setCurrentLayout(Layout layout) {
-        serverContext.getDataStore().put(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT, layout);
+        serverContext.setCurrentLayout(layout);
         // set the layout in history as well
         setLayoutInHistory(layout);
     }

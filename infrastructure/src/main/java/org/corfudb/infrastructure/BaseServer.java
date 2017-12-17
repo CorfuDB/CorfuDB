@@ -3,18 +3,19 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
-import java.util.HashMap;
 import java.util.Map;
 
 import javax.annotation.Nonnull;
 import lombok.Getter;
-import lombok.Setter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.Utils;
 
 /**
@@ -60,6 +61,31 @@ public class BaseServer extends AbstractServer {
         VersionInfo vi = new VersionInfo(serverContext.getServerConfig(),
                                          serverContext.getNodeIdBase64());
         r.sendResponse(ctx, msg, new JSONPayloadMsg<>(vi, CorfuMsgType.VERSION_RESPONSE));
+    }
+
+    /**
+     * Respond to a epoch change message.
+     *
+     * @param msg The incoming message
+     * @param ctx The channel context
+     * @param r   The server router.
+     */
+    @ServerHandler(type = CorfuMsgType.SET_EPOCH, opTimer = metricsPrefix + "set-epoch")
+    public synchronized void handleMessageSetEpoch(@NonNull CorfuPayloadMsg<Long> msg,
+                                                   ChannelHandlerContext ctx,
+                                                   @NonNull IServerRouter r,
+                                                   @NonNull boolean isMetricsEnabled) {
+        try {
+            log.info("handleMessageSetEpoch: Received SET_EPOCH, moving to new epoch {}",
+                msg.getPayload());
+            serverContext.setServerEpoch(msg.getPayload(), r);
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+        } catch (WrongEpochException e) {
+            log.debug("handleMessageSetEpoch: Rejected SET_EPOCH current={}, requested={}",
+                e.getCorrectEpoch(), msg.getPayload());
+            r.sendResponse(ctx, msg,
+                new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, e.getCorrectEpoch()));
+        }
     }
 
     /** Reset the JVM. This mechanism leverages that corfu_server runs in a bash script
