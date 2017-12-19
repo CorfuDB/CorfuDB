@@ -1,6 +1,7 @@
 package org.corfudb.runtime.exceptions;
 
 import lombok.Getter;
+import org.corfudb.util.NodeLocator;
 
 /**
  * Created by mwei on 12/14/15.
@@ -8,15 +9,16 @@ import lombok.Getter;
 public class NetworkException extends RuntimeException {
 
     @Getter
-    String endpoint;
+    NodeLocator node;
 
-    public NetworkException(String message, String endpoint) {
-        super(message + " [endpoint=" + endpoint + "]");
-        this.endpoint = endpoint;
+
+    public NetworkException(String message, NodeLocator node) {
+        super(message + " [endpoint=" + node.toString() + "]");
+        this.node = node;
     }
 
-    public NetworkException(String message, String endpoint, Throwable cause) {
-        super(message + " [endpoint=" + endpoint + "]", cause);
-        this.endpoint = endpoint;
+    public NetworkException(String message, NodeLocator node, Throwable cause) {
+        super(message + " [endpoint=" + node.toString() + "]", cause);
+        this.node = node;
     }
 }

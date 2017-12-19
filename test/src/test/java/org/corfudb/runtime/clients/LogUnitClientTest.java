@@ -16,6 +16,7 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -320,14 +321,15 @@ public class LogUnitClientTest extends AbstractClientTest {
     public void multiReadTest() throws Exception {
         byte[] payload = "payload".getBytes();
 
+        CorfuRuntimeParameters p = CorfuRuntimeParameters.builder().build();
         final int numBatches = 3;
-        for (long x = 0; x < numBatches * CorfuRuntime.BULK_READ_SIZE; x++) {
+        for (long x = 0; x < numBatches * p.getBulkReadSize(); x++) {
             client.write(x, Collections.emptySet(), null, payload, Collections.emptyMap()).get();
         }
 
         // Read half a batch
         List<Long> halfBatch = new ArrayList<>();
-        final int half = CorfuRuntime.BULK_READ_SIZE / 2;
+        final int half = p.getBulkReadSize() / 2;
         for (long x = 0; x < half; x++) {
             halfBatch.add(x);
         }
@@ -337,7 +339,7 @@ public class LogUnitClientTest extends AbstractClientTest {
 
         // Read two batches
         List<Long> twoBatchAddresses = new ArrayList<>();
-        final int twoBatches = CorfuRuntime.BULK_READ_SIZE * 2;
+        final int twoBatches = p.getBulkReadSize() * 2;
         for (long x = 0; x < twoBatches; x++) {
             twoBatchAddresses.add(x);
         }

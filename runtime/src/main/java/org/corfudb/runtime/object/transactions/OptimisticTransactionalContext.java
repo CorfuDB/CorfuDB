@@ -19,6 +19,8 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.AppendException;
+import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
@@ -278,26 +280,32 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // This step currently happens all at once, and we get an
         // address of -1L if it is rejected.
         long address = -1L;
+        final TxResolutionInfo txInfo =
+            // TxResolution info:
+            // 1. snapshot timestamp
+            // 2. a map of conflict params, arranged by streamID's
+            // 3. a map of write conflict-params, arranged by
+            // streamID's
+            new TxResolutionInfo(getTransactionID(),
+                getSnapshotTimestamp(),
+                conflictSet.getHashedConflictSet(),
+                getWriteSetInfo().getHashedConflictSet());
 
-        address = this.builder.runtime.getStreamsView()
+        try {
+            address = this.builder.runtime.getStreamsView()
                 .append(
-
-                        // a set of stream-IDs that contains the affected streams
-                        affectedStreams,
-
-                        // a MultiObjectSMREntry that contains the update(s) to objects
-                        collectWriteSetEntries(),
-
-                        // TxResolution info:
-                        // 1. snapshot timestamp
-                        // 2. a map of conflict params, arranged by streamID's
-                        // 3. a map of write conflict-params, arranged by
-                        // streamID's
-                        new TxResolutionInfo(getTransactionID(),
-                                getSnapshotTimestamp(),
-                                conflictSet.getHashedConflictSet(),
-                                getWriteSetInfo().getHashedConflictSet())
+                    // a set of stream-IDs that contains the affected streams
+                    affectedStreams,
+                    // a MultiObjectSMREntry that contains the update(s) to objects
+                    collectWriteSetEntries(),
+                    txInfo
                 );
+        } catch (AppendException oe) {
+            // We were overwritten (and the original snapshot is now conflicting),
+            // which means we must abort.
+            throw new TransactionAbortedException(txInfo, null, null,
+                AbortCause.CONFLICT, oe, this);
+        }
 
         log.trace("Commit[{}] Acquire address {}", this, address);
 

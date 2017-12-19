@@ -5,6 +5,7 @@ import javax.annotation.Nonnull;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
+import org.corfudb.util.Utils;
 
 
 /** A hole filling policy which reads several times,
@@ -43,11 +44,7 @@ public class ReadWaitHoleFillPolicy implements IHoleFillPolicy {
         do {
             // If this is not the first try, sleep before trying again
             if (tryNum != 0) {
-                try {
-                    Thread.sleep(waitMs);
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
+                Utils.sleepUninterruptibly(waitMs);
             }
             // Try the read
             ILogData data = peekFunction.apply(address);

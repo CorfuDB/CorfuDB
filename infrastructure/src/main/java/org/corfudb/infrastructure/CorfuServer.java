@@ -1,10 +1,14 @@
 package org.corfudb.infrastructure;
 
+import static org.fusesource.jansi.Ansi.Color.BLUE;
+import static org.fusesource.jansi.Ansi.Color.MAGENTA;
+import static org.fusesource.jansi.Ansi.Color.RED;
+import static org.fusesource.jansi.Ansi.Color.WHITE;
+import static org.fusesource.jansi.Ansi.ansi;
+
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
-
 import com.google.common.collect.ImmutableList;
-
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
@@ -20,10 +24,10 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
-
 import java.io.File;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,29 +35,21 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
+import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
-
 import javax.net.ssl.SSLException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
-import org.corfudb.security.tls.TlsUtils;
 import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
-
-import static org.fusesource.jansi.Ansi.Color.BLUE;
-import static org.fusesource.jansi.Ansi.Color.MAGENTA;
-import static org.fusesource.jansi.Ansi.Color.RED;
-import static org.fusesource.jansi.Ansi.Color.WHITE;
-import static org.fusesource.jansi.Ansi.ansi;
 
 /**
  * This is the new Corfu server single-process executable.
@@ -276,11 +272,11 @@ public class CorfuServer {
         serverContext = new ServerContext(opts, router);
 
         // Add each role to the router.
+        router.addServer(new BaseServer(serverContext));
         addSequencer();
         addLayoutServer();
         addLogUnit();
         addManagementServer();
-        router.baseServer.setOptionsMap(opts);
 
         // Setup SSL if needed
         Boolean tlsEnabled = (Boolean) opts.get("--enable-tls");
@@ -307,9 +303,11 @@ public class CorfuServer {
             }
 
             try {
-                sslContext = SslContextConstructor.constructSslContext(true, (String) opts.get("--keystore"),
+                sslContext = SslContextConstructor.constructSslContext(true,
+                        (String) opts.get("--keystore"),
                         (String) opts.get("--keystore-password-file"),
-                        (String) opts.get("--truststore"), (String) opts.get("--truststore-password-file"));
+                        (String) opts.get("--truststore"),
+                        (String) opts.get("--truststore-password-file"));
             } catch (SSLException e) {
                 log.error("Could not build the SSL context", e);
                 System.exit(1);
