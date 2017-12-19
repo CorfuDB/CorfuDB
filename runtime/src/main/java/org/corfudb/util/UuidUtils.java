@@ -5,7 +5,7 @@ import java.nio.ByteBuffer;
 import java.util.UUID;
 import javax.annotation.Nonnull;
 
-/** A collection of utilities to manage and maniupulate UUIDs. */
+/** A collection of utilities to manage and manipulate UUIDs. */
 public class UuidUtils {
 
     /** Generate a base64 URL-safe string from a given UUID.

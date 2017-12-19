@@ -29,6 +29,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
@@ -143,6 +144,18 @@ public class FastObjectLoader {
         customTypeStreams.put(streamId, ob);
     }
 
+    /**
+     * Add an indexer to a stream (that backs a CorfuTable)
+     * @param streamName
+     * @param indexer
+     */
+    public void addIndexerToCorfuTableStream(String streamName, Class<?> indexer) {
+        UUID streamId = CorfuRuntime.getStreamID(streamName);
+        ObjectBuilder ob = new ObjectBuilder(runtime).setType(CorfuTable.class)
+                .setArguments(indexer).setStreamID(streamId);
+        addCustomTypeStream(streamId, ob);
+    }
+
     private Class getStreamType(UUID streamId) {
         if (customTypeStreams.containsKey(streamId)) {
             return customTypeStreams.get(streamId).getType();
@@ -172,7 +185,7 @@ public class FastObjectLoader {
 
     public FastObjectLoader(@Nonnull final CorfuRuntime corfuRuntime) {
         this.runtime = corfuRuntime;
-        loadInCache = !corfuRuntime.cacheDisabled;
+        loadInCache = !corfuRuntime.getParameters().isCacheDisabled();
         streamsMetaData = new HashMap<>();
     }
 
@@ -369,7 +382,7 @@ public class FastObjectLoader {
             // Create an Object only for non-checkpoints
 
             // If it is a special type, create it with the object builder
-            if (objectType != defaultObjectsType) {
+            if (customTypeStreams.containsKey(streamId)) {
                 createObjectIfNotExist(customTypeStreams.get(streamId), serializer);
             }
             else {

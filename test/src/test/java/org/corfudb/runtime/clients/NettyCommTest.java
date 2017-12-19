@@ -30,9 +30,11 @@ import org.corfudb.infrastructure.NettyServerRouter;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.security.tls.TlsUtils;
+import org.corfudb.util.NodeLocator;
 import org.junit.Rule;
 import org.junit.Test;
 
@@ -115,15 +117,16 @@ public class NettyCommTest extends AbstractCorfuTest {
                     protocols);
                 return d;
             },
-            (port) -> {
-                return new NettyClientRouter("localhost", port,
-                    true,
-                    "src/test/resources/security/r1.jks",
-                    "src/test/resources/security/storepass",
-                    "src/test/resources/security/trust1.jks",
-                    "src/test/resources/security/storepass",
-                    false, null, null);
-            },
+            (port) -> new NettyClientRouter(
+                    NodeLocator.builder().host("localhost").port(port).build(),
+                    CorfuRuntimeParameters.builder()
+                    .tlsEnabled(true)
+                    .keyStore("src/test/resources/security/r1.jks")
+                    .ksPasswordFile("src/test/resources/security/storepass")
+                    .trustStore("src/test/resources/security/trust1.jks")
+                    .tsPasswordFile("src/test/resources/security/storepass")
+                    .build())
+            ,
             (r, d) -> {
                 assertThat(r.getClient(BaseClient.class).pingSync())
                     .isTrue();
@@ -148,13 +151,15 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
-                    true,
-                    "src/test/resources/security/r1.jks",
-                    "src/test/resources/security/storepass",
-                    "src/test/resources/security/trust1.jks",
-                    "src/test/resources/security/storepass",
-                    false, null, null);
+                return new NettyClientRouter(
+                    NodeLocator.builder().host("localhost").port(port).build(),
+                    CorfuRuntimeParameters.builder()
+                        .tlsEnabled(true)
+                        .keyStore("src/test/resources/security/r1.jks")
+                        .ksPasswordFile("src/test/resources/security/storepass")
+                        .trustStore("src/test/resources/security/trust1.jks")
+                        .tsPasswordFile("src/test/resources/security/storepass")
+                        .build());
             },
             (r, d) -> {
                 assertThat(r.getClient(BaseClient.class).pingSync())
@@ -180,13 +185,15 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
-                    true,
-                    "src/test/resources/security/r1.jks",
-                    "src/test/resources/security/storepass",
-                    "src/test/resources/security/trust2.jks",
-                    "src/test/resources/security/storepass",
-                    false, null, null);
+                return new NettyClientRouter(
+                    NodeLocator.builder().host("localhost").port(port).build(),
+                    CorfuRuntimeParameters.builder()
+                        .tlsEnabled(true)
+                        .keyStore("src/test/resources/security/r1.jks")
+                        .ksPasswordFile("src/test/resources/security/storepass")
+                        .trustStore("src/test/resources/security/trust2.jks")
+                        .tsPasswordFile("src/test/resources/security/storepass")
+                        .build());
             },
             (r, d) -> {
                 assertThat(r.getClient(BaseClient.class).pingSync())
@@ -212,13 +219,15 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
-                    true,
-                    "src/test/resources/security/r2.jks",
-                    "src/test/resources/security/storepass",
-                    "src/test/resources/security/trust1.jks",
-                    "src/test/resources/security/storepass",
-                    false, null, null);
+                return new NettyClientRouter(
+                    NodeLocator.builder().host("localhost").port(port).build(),
+                    CorfuRuntimeParameters.builder()
+                        .tlsEnabled(true)
+                        .keyStore("src/test/resources/security/r2.jks")
+                        .ksPasswordFile("src/test/resources/security/storepass")
+                        .trustStore("src/test/resources/security/trust1.jks")
+                        .tsPasswordFile("src/test/resources/security/storepass")
+                        .build());
             },
             (r, d) -> {
                 assertThat(r.getClient(BaseClient.class).pingSync())
@@ -244,13 +253,15 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
-                    true,
-                    "src/test/resources/security/r2.jks",
-                    "src/test/resources/security/storepass",
-                    "src/test/resources/security/trust1.jks",
-                    "src/test/resources/security/storepass",
-                    false, null, null);
+                return new NettyClientRouter(
+                    NodeLocator.builder().host("localhost").port(port).build(),
+                    CorfuRuntimeParameters.builder()
+                        .tlsEnabled(true)
+                        .keyStore("src/test/resources/security/r2.jks")
+                        .ksPasswordFile("src/test/resources/security/storepass")
+                        .trustStore("src/test/resources/security/trust1.jks")
+                        .tsPasswordFile("src/test/resources/security/storepass")
+                        .build());
             },
             (r, d) -> {
                 assertThat(r.getClient(BaseClient.class).pingSync())
@@ -279,15 +290,18 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
-                    true,
-                    "src/test/resources/security/r1.jks",
-                    "src/test/resources/security/storepass",
-                    "src/test/resources/security/trust1.jks",
-                    "src/test/resources/security/storepass",
-                    true,
-                    "src/test/resources/security/username1",
-                    "src/test/resources/security/userpass1");
+                return new NettyClientRouter(
+                    NodeLocator.builder().host("localhost").port(port).build(),
+                    CorfuRuntimeParameters.builder()
+                        .tlsEnabled(true)
+                        .keyStore("src/test/resources/security/r1.jks")
+                        .ksPasswordFile("src/test/resources/security/storepass")
+                        .trustStore("src/test/resources/security/trust1.jks")
+                        .tsPasswordFile("src/test/resources/security/storepass")
+                        .saslPlainTextEnabled(true)
+                        .usernameFile("src/test/resources/security/username1")
+                        .passwordFile("src/test/resources/security/userpass1")
+                        .build());
             },
             (r, d) -> {
                 assertThat(r.getClient(BaseClient.class).pingSync())
@@ -316,15 +330,18 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return d;
             },
             (port) -> {
-                return new NettyClientRouter("localhost", port,
-                    true,
-                    "src/test/resources/security/r1.jks",
-                    "src/test/resources/security/storepass",
-                    "src/test/resources/security/trust1.jks",
-                    "src/test/resources/security/storepass",
-                    true,
-                    "src/test/resources/security/username1",
-                    "src/test/resources/security/userpass2");
+                return new NettyClientRouter(
+                    NodeLocator.builder().host("localhost").port(port).build(),
+                    CorfuRuntimeParameters.builder()
+                        .tlsEnabled(true)
+                        .keyStore("src/test/resources/security/r1.jks")
+                        .ksPasswordFile("src/test/resources/security/storepass")
+                        .trustStore("src/test/resources/security/trust1.jks")
+                        .tsPasswordFile("src/test/resources/security/storepass")
+                        .saslPlainTextEnabled(true)
+                        .usernameFile("src/test/resources/security/username1")
+                        .passwordFile("src/test/resources/security/userpass2")
+                        .build());
             },
             (r, d) -> {
                 assertThat(r.getClient(BaseClient.class).pingSync())
@@ -383,15 +400,16 @@ public class NettyCommTest extends AbstractCorfuTest {
         serverData.bootstrapServer();
 
 
-        NettyClientRouter clientRouter = new NettyClientRouter("localhost", port,
-                true,
-                "src/test/resources/security/reload/client_key.jks",
-                "src/test/resources/security/reload/password",
-                clientTrustFile.getAbsolutePath(),
-                "src/test/resources/security/reload/password",
-                false,
-                null,
-                null);
+        NettyClientRouter clientRouter = new NettyClientRouter(
+            NodeLocator.builder().host("localhost").port(port).build(),
+            CorfuRuntimeParameters.builder()
+                .tlsEnabled(true)
+                .keyStore("src/test/resources/security/reload/client_key.jks")
+                .ksPasswordFile("src/test/resources/security/reload/password")
+                .trustStore(clientTrustFile.getAbsolutePath())
+                .tsPasswordFile("src/test/resources/security/reload/password")
+                .build());
+
         clientRouter.addClient(new BaseClient());
         clientRouter.start();
 

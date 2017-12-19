@@ -180,7 +180,7 @@ public abstract class AbstractTransactionalContext implements
                                     long snapshotTimestamp,
                                     ICorfuSMRProxyInternal proxy,
                                     @Nullable Consumer<VersionLockedObject> optimisticStreamSetter) {
-        for (int x = 0; x < this.builder.getRuntime().getTrimRetry(); x++) {
+        for (int x = 0; x < this.builder.getRuntime().getParameters().getTrimRetry(); x++) {
             try {
                 if (optimisticStreamSetter != null) {
                     // Swap ourselves to be the active optimistic stream.
@@ -196,7 +196,7 @@ public abstract class AbstractTransactionalContext implements
                 // If a trim is encountered, we must reset the object
                 vlo.resetUnsafe();
                 if (!te.isRetriable()
-                        || x == this.builder.getRuntime().getTrimRetry() - 1) {
+                        || x == this.builder.getRuntime().getParameters().getTrimRetry() - 1) {
                     // abort the transaction
                     TransactionAbortedException tae =
                             new TransactionAbortedException(

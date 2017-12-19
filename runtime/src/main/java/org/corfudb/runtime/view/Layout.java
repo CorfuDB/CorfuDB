@@ -427,7 +427,7 @@ public class Layout implements Cloneable {
 
             @Override
             public IReplicationProtocol getReplicationProtocol(CorfuRuntime r) {
-                if (r.isHoleFillingDisabled()) {
+                if (r.getParameters().isHoleFillingDisabled()) {
                     return new ChainReplicationProtocol(new NeverHoleFillPolicy(100));
                 } else {
                     return new ChainReplicationProtocol(new ReadWaitHoleFillPolicy(100,
@@ -453,7 +453,7 @@ public class Layout implements Cloneable {
 
             @Override
             public IReplicationProtocol getReplicationProtocol(CorfuRuntime r) {
-                if (r.isHoleFillingDisabled()) {
+                if (r.getParameters().isHoleFillingDisabled()) {
                     return new QuorumReplicationProtocol(new NeverHoleFillPolicy(100));
                 } else {
                     return new QuorumReplicationProtocol(new ReadWaitHoleFillPolicy(100,

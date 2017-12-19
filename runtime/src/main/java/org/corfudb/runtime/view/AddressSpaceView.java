@@ -47,9 +47,9 @@ public class AddressSpaceView extends AbstractView {
      * A cache for read results.
      */
     final LoadingCache<Long, ILogData> readCache = Caffeine.<Long, ILogData>newBuilder()
-            .maximumSize(runtime.getNumCacheEntries())
-            .expireAfterAccess(runtime.getCacheExpiryTime(), TimeUnit.SECONDS)
-            .expireAfterWrite(runtime.getCacheExpiryTime(), TimeUnit.SECONDS)
+            .maximumSize(runtime.getParameters().getNumCacheEntries())
+            .expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
+            .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .recordStats()
             .build(new CacheLoader<Long, ILogData>() {
                 @Override
@@ -158,7 +158,7 @@ public class AddressSpaceView extends AbstractView {
         }, true);
 
         // Cache the successful write
-        if (!runtime.isCacheDisabled()) {
+        if (!runtime.getParameters().isCacheDisabled()) {
             readCache.put(token.getTokenValue(), ld);
         }
     }
@@ -185,7 +185,7 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which be cached.
      */
     public @Nonnull ILogData read(long address) {
-        if (!runtime.isCacheDisabled()) {
+        if (!runtime.getParameters().isCacheDisabled()) {
             ILogData data = readCache.get(address);
             if (data == null || data.getType() == DataType.EMPTY) {
                 throw new RuntimeException("Unexpected return of empty data at address "
@@ -206,7 +206,7 @@ public class AddressSpaceView extends AbstractView {
      */
     public Map<Long, ILogData> read(Iterable<Long> addresses) {
         Map<Long, ILogData> addressesMap;
-        if (!runtime.isCacheDisabled()) {
+        if (!runtime.getParameters().isCacheDisabled()) {
             addressesMap = readCache.getAll(addresses);
         } else {
             addressesMap = this.cacheFetch(addresses);
@@ -268,7 +268,7 @@ public class AddressSpaceView extends AbstractView {
 
         } catch (Exception e) {
             log.error("prefixTrim: Error while calling prefix trimming {}", address, e);
-            return;
+            throw new UnrecoverableCorfuError("Unexpected error while prefix trimming", e);
         }
     }
 
@@ -340,7 +340,8 @@ public class AddressSpaceView extends AbstractView {
     Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
         Map<Long, ILogData> allAddresses = new HashMap<>();
 
-        Iterable<List<Long>> batches = Iterables.partition(addresses, runtime.getBulkReadSize());
+        Iterable<List<Long>> batches = Iterables.partition(addresses,
+            runtime.getParameters().getBulkReadSize());
 
         for (List<Long> batch : batches) {
             try {
@@ -350,6 +351,8 @@ public class AddressSpaceView extends AbstractView {
                         .readAll(l, batch)));
             } catch (Exception e) {
                 log.error("cacheFetch: Couldn't read addresses {}", batch, e);
+                throw new UnrecoverableCorfuError(
+                    "Unexpected error during cacheFetch", e);
             }
         }
 
