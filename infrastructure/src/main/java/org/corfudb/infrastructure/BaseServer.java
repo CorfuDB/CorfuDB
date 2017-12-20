@@ -23,15 +23,10 @@ import org.corfudb.util.Utils;
 @Slf4j
 public class BaseServer extends AbstractServer {
 
-    /** Options map, if available. */
-    @Getter
-    final public Map<String, Object> optionsMap;
-
     final ServerContext serverContext;
 
     public BaseServer(@Nonnull ServerContext context) {
         this.serverContext = context;
-        optionsMap = context.getServerConfig();
     }
 
     /** Handler for the base server. */

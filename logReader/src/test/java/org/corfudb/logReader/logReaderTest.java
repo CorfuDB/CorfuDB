@@ -35,7 +35,7 @@ public class logReaderTest {
         configs.put("--log-path", LOG_BASE_PATH);
         configs.put("--no-verify", false);
         configs .put("--cache-heap-ratio", "0.5");
-        return new ServerContext(configs, null);
+        return new ServerContext(configs);
     }
 
     @Before

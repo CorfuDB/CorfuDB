@@ -60,6 +60,7 @@ public class ServerContext {
     private final DataStore dataStore;
 
     @Getter
+    @Setter
     private IServerRouter serverRouter;
 
     @Getter
@@ -76,13 +77,11 @@ public class ServerContext {
     /**
      * Returns a new ServerContext.
      * @param serverConfig map of configuration strings to objects
-     * @param serverRouter server router
      */
-    public ServerContext(Map<String, Object> serverConfig, IServerRouter serverRouter) {
+    public ServerContext(Map<String, Object> serverConfig) {
         this.serverConfig = serverConfig;
         this.dataStore = new DataStore(serverConfig);
         generateNodeId();
-        this.serverRouter = serverRouter;
         this.failureDetectorPolicy = new PeriodicPollPolicy();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
 
@@ -128,6 +127,18 @@ public class ServerContext {
         return getDataStore().get(String.class, "", ServerContext.NODE_ID);
     }
 
+    /** Get a field from the server configuration map.
+     *
+     * @param type          The type of the field.
+     * @param optionName    The name of the option to retrieve.
+     * @param <T>           The type of the field to return.
+     * @return              The field with the give option name.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T getServerConfig(Class<T> type, String optionName) {
+        return (T) getServerConfig().get(optionName);
+    }
+
     /**
      * The epoch of this router. This is managed by the base server implementation.
      */
@@ -140,11 +151,9 @@ public class ServerContext {
      * Set the serverRouter epoch.
      * @param serverEpoch the epoch to set
      */
-    public void setServerEpoch(long serverEpoch) {
+    public void setServerEpoch(long serverEpoch, IServerRouter r) {
         dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
-        // Set the epoch in the router as well.
-        //TODO need to figure out if we can remove this redundancy
-        serverRouter.setServerEpoch(serverEpoch);
+        r.setServerEpoch(serverEpoch);
     }
 
     public long getTailSegment() {

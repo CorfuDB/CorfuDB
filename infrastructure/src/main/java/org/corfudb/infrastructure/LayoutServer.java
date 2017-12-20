@@ -177,7 +177,7 @@ public class LayoutServer extends AbstractServer {
             log.info("handleMessageLayoutBootstrap: Bootstrap with new layout={}, {}",
                     msg.getPayload().getLayout(), msg);
             setCurrentLayout(msg.getPayload().getLayout());
-            serverContext.setServerEpoch(getCurrentLayout().getEpoch());
+            serverContext.setServerEpoch(getCurrentLayout().getEpoch(), r);
             //send a response that the bootstrap was successful.
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
         } else {
@@ -207,7 +207,8 @@ public class LayoutServer extends AbstractServer {
         if (msg.getPayload() >= serverEpoch) {
             log.info("handleMessageSetEpoch: Received SET_EPOCH, moving to new epoch {}",
                     msg.getPayload());
-            setServerEpoch(msg.getPayload());
+            serverContext.setServerEpoch(msg.getPayload(), r);
+            r.setServerEpoch(msg.getPayload());
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
         } else {
             log.debug("handleMessageSetEpoch: Rejected SET_EPOCH current={}, requested={}",
@@ -364,7 +365,7 @@ public class LayoutServer extends AbstractServer {
         }
 
         setCurrentLayout(commitLayout);
-        setServerEpoch(msg.getPayload().getEpoch());
+        serverContext.setServerEpoch(msg.getPayload().getEpoch(), r);
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
 
@@ -407,10 +408,6 @@ public class LayoutServer extends AbstractServer {
     public void setLayoutInHistory(Layout layout) {
         serverContext.getDataStore().put(Layout.class, PREFIX_LAYOUTS, String.valueOf(layout
                 .getEpoch()), layout);
-    }
-
-    private void setServerEpoch(long serverEpoch) {
-        serverContext.setServerEpoch(serverEpoch);
     }
 
     private long getServerEpoch() {

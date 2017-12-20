@@ -141,7 +141,9 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param config    The configuration to use for the server.
      */
     public void addServer(int port, Map<String, Object> config) {
-        addServer(port, new ServerContext(config, new TestServerRouter(port)));
+        ServerContext sc = new ServerContext(config);
+        sc.setServerRouter(new TestServerRouter(port));
+        addServer(port, sc);
     }
 
     /**
@@ -383,13 +385,17 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
         TestServer(Map<String, Object> optsMap)
         {
-            this(new ServerContext(optsMap, new TestServerRouter()));
+            this(new ServerContext(optsMap));
+            serverContext.setServerRouter(new TestServerRouter());
         }
 
         TestServer(ServerContext serverContext) {
             this.serverContext = serverContext;
             this.serverRouter = serverContext.getServerRouter();
-            this.baseServer = new BaseServer(ServerContextBuilder.emptyContext());
+            if (serverRouter == null) {
+                serverRouter = new TestServerRouter();
+            }
+            this.baseServer = new BaseServer(serverContext);
             this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);
@@ -404,7 +410,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
         TestServer(int port)
         {
-            this(ServerContextBuilder.defaultContext(port).getServerConfig());
+            this(ServerContextBuilder.defaultTestContext(port).getServerConfig());
         }
 
         void addToTest(int port, AbstractViewTest test) {
