@@ -1,12 +1,15 @@
 package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Map;
 import java.util.Random;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -89,14 +92,17 @@ public class ClusterReconfigIT extends AbstractIT {
 
         Thread t = new Thread(() -> {
             while (true) {
-                try {
-                    runtime.getObjectsView().TXBegin();
-                    map.put(Integer.toString(r.nextInt()), data);
-                    runtime.getObjectsView().TXEnd();
-                } catch (Exception e) {
-                }
+                assertThatCode(() -> {
+                    try {
+                        runtime.getObjectsView().TXBegin();
+                        map.put(Integer.toString(r.nextInt()), data);
+                        runtime.getObjectsView().TXEnd();
+                    } catch (TransactionAbortedException e) {
+                    }
+                }).doesNotThrowAnyException();
             }
         });
+        t.setDaemon(true);
         t.start();
 
         runtime.getManagementView().addNode("localhost:9001");
