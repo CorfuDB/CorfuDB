@@ -13,8 +13,10 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.IFailureDetectorPolicy;
 import org.corfudb.infrastructure.management.PeriodicPollPolicy;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IFailureHandlerPolicy;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.UuidUtils;
 
@@ -38,6 +40,8 @@ import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 public class ServerContext {
     private static final String PREFIX_EPOCH = "SERVER_EPOCH";
     private static final String KEY_EPOCH = "CURRENT";
+    private static final String PREFIX_LAYOUT = "LAYOUT";
+    private static final String KEY_LAYOUT = "CURRENT";
     private static final String PREFIX_TAIL_SEGMENT = "TAIL_SEGMENT";
     private static final String KEY_TAIL_SEGMENT = "CURRENT";
     private static final String PREFIX_STARTING_ADDRESS = "STARTING_ADDRESS";
@@ -139,10 +143,25 @@ public class ServerContext {
         return (T) getServerConfig().get(optionName);
     }
 
+    /** Get the current {@link Layout} stored in the {@link DataStore}.
+     *  @return The current stored {@link Layout}
+     */
+    public Layout getCurrentLayout() {
+        return getDataStore().get(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT);
+    }
+
+    /** Set the current {@link Layout} stored in the {@link DataStore}.
+     *
+     * @param layout The {@link Layout} to set in the {@link DataStore}.
+     */
+    public void setCurrentLayout(Layout layout) {
+        getDataStore().put(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT, layout);
+    }
+
     /**
      * The epoch of this router. This is managed by the base server implementation.
      */
-    public long getServerEpoch() {
+    public synchronized long getServerEpoch() {
         Long epoch = dataStore.get(Long.class, PREFIX_EPOCH, KEY_EPOCH);
         return epoch == null ? 0 : epoch;
     }
@@ -151,9 +170,17 @@ public class ServerContext {
      * Set the serverRouter epoch.
      * @param serverEpoch the epoch to set
      */
-    public void setServerEpoch(long serverEpoch, IServerRouter r) {
-        dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
-        r.setServerEpoch(serverEpoch);
+    public synchronized void setServerEpoch(long serverEpoch, IServerRouter r) {
+        Long lastEpoch = dataStore.get(Long.class, PREFIX_EPOCH, KEY_EPOCH);
+        if (lastEpoch == null || lastEpoch < serverEpoch) {
+            dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
+            r.setServerEpoch(serverEpoch);
+        } else if (serverEpoch == lastEpoch) {
+            // Setting to the same epoch, don't need to do anything.
+        } else {
+            // Regressing, throw an exception.
+            throw new WrongEpochException(lastEpoch);
+        }
     }
 
     public long getTailSegment() {
