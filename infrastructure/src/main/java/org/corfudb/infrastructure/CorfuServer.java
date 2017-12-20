@@ -291,7 +291,7 @@ public class CorfuServer {
     /** A functional interface for receiving and configuring a {@link ServerBootstrap}.
      */
     @FunctionalInterface
-    interface BootstrapConfigurer {
+    public interface BootstrapConfigurer {
 
         /** Configure a {@link ServerBootstrap}.
          *
