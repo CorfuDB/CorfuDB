@@ -36,7 +36,7 @@ public class ServerContextBuilder {
     String seqCache = "1000";
     String managementBootstrapEndpoint = null;
     IServerRouter serverRouter;
-    int numThreads = 0;
+    String numThreads = "0";
 
     public ServerContextBuilder() {
 
