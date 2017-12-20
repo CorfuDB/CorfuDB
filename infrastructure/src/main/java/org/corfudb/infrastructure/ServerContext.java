@@ -82,7 +82,6 @@ public class ServerContext {
         this.serverConfig = serverConfig;
         this.dataStore = new DataStore(serverConfig);
         generateNodeId();
-        this.serverRouter = serverRouter;
         this.failureDetectorPolicy = new PeriodicPollPolicy();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
 
