@@ -5,6 +5,12 @@ import java.util.concurrent.TimeUnit;
 
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
+/** Utils for sleeping with or without interruptions using timeunits, much like
+ *  {@link TimeUnit}'s sleep functionality.
+ *
+ *  Use these methods rather than {@link Thread#sleep(long)} or {@link TimeUnit#sleep(long)}
+ *  because they handle {@linbk InterruptedException} properly.
+ */
 public enum Sleep {
     NANOSECONDS {
         @Override
