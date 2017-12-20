@@ -98,6 +98,8 @@ public class ClusterReconfigIT extends AbstractIT {
                         map.put(Integer.toString(r.nextInt()), data);
                         runtime.getObjectsView().TXEnd();
                     } catch (TransactionAbortedException e) {
+                        // A transaction aborted exception is expected during
+                        // some reconfiguration cases.
                     }
                 }).doesNotThrowAnyException();
             }
