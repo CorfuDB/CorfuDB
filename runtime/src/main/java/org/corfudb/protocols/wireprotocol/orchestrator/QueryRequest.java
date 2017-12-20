@@ -1,12 +1,11 @@
 package org.corfudb.protocols.wireprotocol.orchestrator;
 
 import lombok.Getter;
-import org.corfudb.format.Types.OrchestratorRequestType;
 
 import java.nio.ByteBuffer;
 import java.util.UUID;
 
-import static org.corfudb.format.Types.OrchestratorRequestType.QUERY;
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.QUERY;
 
 /**
  * An orchestrator request that queries a specific workflow's ID.

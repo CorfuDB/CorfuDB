@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.orchestrator;
+package org.corfudb.protocols.wireprotocol.orchestrator;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
