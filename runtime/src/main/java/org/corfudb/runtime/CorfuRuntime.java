@@ -42,6 +42,7 @@ import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutManagementView;
 import org.corfudb.runtime.view.LayoutView;
+import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
@@ -205,6 +206,11 @@ public class CorfuRuntime {
      */
     @Getter(lazy = true)
     private final LayoutManagementView layoutManagementView = new LayoutManagementView(this);
+    /**
+     * A view of the Management Service.
+     */
+    @Getter(lazy = true)
+    private final ManagementView managementView = new ManagementView(this);
     /**
      * A list of known layout servers.
      */
