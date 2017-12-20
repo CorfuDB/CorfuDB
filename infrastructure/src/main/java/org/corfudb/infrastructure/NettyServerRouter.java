@@ -100,7 +100,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     @Getter
     final List<AbstractServer> servers;
 
-    /** Construct an new {@link NettyServerRouter}.
+    /** Construct a new {@link NettyServerRouter}.
      *
      * @param servers   A list of {@link AbstractServer}s this router will route
      *                  messages for.
