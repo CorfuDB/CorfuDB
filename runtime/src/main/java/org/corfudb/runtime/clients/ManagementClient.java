@@ -6,7 +6,6 @@ import java.lang.invoke.MethodHandles;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -16,7 +15,7 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
-import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
@@ -118,7 +117,7 @@ public class ManagementClient implements IClient {
     }
 
     public CreateWorkflowResponse addNodeRequest(String endpoint) {
-        OrchestratorRequest req = new OrchestratorRequest(new AddNodeRequest(endpoint));
+        OrchestratorMsg req = new OrchestratorMsg(new AddNodeRequest(endpoint));
         CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));
@@ -126,7 +125,7 @@ public class ManagementClient implements IClient {
     }
 
     public QueryResponse queryRequest(UUID workflowId) {
-        OrchestratorRequest req = new OrchestratorRequest(new QueryRequest(workflowId));
+        OrchestratorMsg req = new OrchestratorMsg(new QueryRequest(workflowId));
         CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));

@@ -1,11 +1,10 @@
 package org.corfudb.protocols.wireprotocol.orchestrator;
 
 import lombok.Getter;
-import org.corfudb.format.Types.OrchestratorRequestType;
 
 import java.nio.charset.StandardCharsets;
 
-import static org.corfudb.format.Types.OrchestratorRequestType.ADD_NODE;
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.ADD_NODE;
 
 /**
  *
@@ -13,7 +12,7 @@ import static org.corfudb.format.Types.OrchestratorRequestType.ADD_NODE;
  *
  * @author Maithem
  */
-public class AddNodeRequest implements Request {
+public class AddNodeRequest implements CreateRequest {
 
     @Getter
     public String endpoint;

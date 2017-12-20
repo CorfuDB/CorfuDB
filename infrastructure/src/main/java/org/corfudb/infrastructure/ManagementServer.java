@@ -33,7 +33,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
-import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.ManagementClient;
@@ -278,7 +278,7 @@ public class ManagementServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.ORCHESTRATOR_REQUEST, opTimer = metricsPrefix
             + "orchestrator-request")
-    public synchronized void handleOrchestratorMsg(@Nonnull CorfuPayloadMsg<OrchestratorRequest> msg,
+    public synchronized void handleOrchestratorMsg(@Nonnull CorfuPayloadMsg<OrchestratorMsg> msg,
                                                    @Nonnull ChannelHandlerContext ctx,
                                                    @Nonnull IServerRouter r,
                                                    boolean isMetricsEnabled) {

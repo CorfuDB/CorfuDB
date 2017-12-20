@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.orchestrator;
+package org.corfudb.protocols.wireprotocol.orchestrator;
 
 import java.util.List;
 import java.util.UUID;
@@ -12,7 +12,7 @@ import java.util.UUID;
  * Created by Maithem on 10/25/17.
  */
 
-public interface Workflow {
+public interface IWorkflow {
 
     /**
      * Gets the unique identifier of this workflow instance
@@ -32,4 +32,13 @@ public interface Workflow {
      * @return List of actions
      */
     List<Action> getActions();
+
+    /**
+     * Returns whether all the actions completed successfully or not.
+     * @return true if all actions completed successfully
+     */
+    default boolean completed() {
+        return getActions().stream()
+                .allMatch(a -> a.getStatus().equals(ActionStatus.COMPLETED));
+    }
 }

@@ -6,7 +6,8 @@ import org.corfudb.format.Types.OrchestratorResponseType;
 import java.nio.ByteBuffer;
 import java.util.UUID;
 
-import static org.corfudb.format.Types.OrchestratorResponseType.WORKFLOW_CREATE;
+import static org.corfudb.format.Types.OrchestratorResponseType.WORKFLOW_CREATED;
+
 
 /**
  * CreateWorkflowResponse returns the UUID of a created workflow.
@@ -28,7 +29,7 @@ public class CreateWorkflowResponse implements Response {
 
     @Override
     public OrchestratorResponseType getType() {
-        return WORKFLOW_CREATE;
+        return WORKFLOW_CREATED;
     }
 
     @Override
