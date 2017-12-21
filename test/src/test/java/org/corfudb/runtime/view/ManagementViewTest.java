@@ -214,6 +214,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 .addLogUnit(SERVERS.PORT_2)
                 .addToSegment()
                 .addToLayout()
+                .setClusterId(UUID.randomUUID())
                 .build();
         bootstrapAllServers(l);
         corfuRuntime = getRuntime(l).connect();
@@ -424,6 +425,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 .addToSegment()
                 .addToLayout()
                 .addUnresponsiveServer(SERVERS.PORT_0)
+                .setClusterId(getCorfuRuntime().getLayoutView().getLayout().getClusterId())
                 .build();
 
         assertThat(getCorfuRuntime().getLayoutView().getLayout()).isEqualTo(expectedLayout);

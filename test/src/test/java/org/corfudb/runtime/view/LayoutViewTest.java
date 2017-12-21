@@ -65,6 +65,7 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addLogUnit(SERVERS.PORT_0)
                 .addToSegment()
                 .addToLayout()
+                .setClusterId(r.clusterId)
                 .build();
         l.setRuntime(r);
         l.moveServersToEpoch();

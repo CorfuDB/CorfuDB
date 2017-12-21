@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import java.util.UUID;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -111,7 +112,8 @@ public class LayoutServer extends AbstractServer {
                                 )
                         )
                 )),
-                0L
+                0L,
+                UUID.randomUUID()
         ));
     }
 

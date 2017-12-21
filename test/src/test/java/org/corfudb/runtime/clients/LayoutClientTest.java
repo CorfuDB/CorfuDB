@@ -48,11 +48,12 @@ public class LayoutClientTest extends AbstractClientTest {
     @Test
     public void bootstrapServerInstallsNewLayout()
             throws Exception {
-        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(SERVERS.PORT_0)).get())
+        Layout l = TestLayoutBuilder.single(SERVERS.PORT_0);
+        assertThat(client.bootstrapLayout(l).get())
                 .isEqualTo(true);
 
         assertThat(client.getLayout().get().asJSONString())
-                .isEqualTo(TestLayoutBuilder.single(SERVERS.PORT_0).asJSONString());
+                .isEqualTo(l.asJSONString());
     }
 
     @Test
