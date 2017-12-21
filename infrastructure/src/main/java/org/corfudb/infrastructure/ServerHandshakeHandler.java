@@ -10,7 +10,6 @@ import io.netty.util.AttributeKey;
 import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -19,6 +18,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.HandshakeMsg;
 import org.corfudb.protocols.wireprotocol.HandshakeResponse;
+import org.corfudb.protocols.wireprotocol.HandshakeState;
 
 /**
  * The ServerHandshakeHandler waits for the handshake message, validates and sends
@@ -31,8 +31,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
 
     private final UUID nodeId;
     private final String corfuVersion;
-    private final AtomicBoolean handshakeComplete;
-    private final AtomicBoolean handshakeFailed;
+    private final HandshakeState state;
     private final int timeoutInSeconds;
     private final Queue<CorfuMsg> messages = new ArrayDeque();
     private static final  AttributeKey<UUID> clientIdAttrKey = AttributeKey.valueOf("ClientID");
@@ -46,12 +45,11 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
      * @param nodeId Current Server Node Identifier.
      * @param corfuVersion Version of Corfu in Server Node.
      */
-    public ServerHandshakeHandler(UUID nodeId, String corfuVersion, int timeoutInSeconds) {
+    public ServerHandshakeHandler(UUID nodeId, String corfuVersion, String timeoutInSeconds) {
         this.nodeId = nodeId;
         this.corfuVersion = corfuVersion;
-        this.timeoutInSeconds = timeoutInSeconds;
-        this.handshakeComplete = new AtomicBoolean(false);
-        this.handshakeFailed = new AtomicBoolean(false);
+        this.timeoutInSeconds = Integer.parseInt(timeoutInSeconds);
+        this.state = new HandshakeState();
     }
 
     /**
@@ -64,11 +62,11 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object m) throws Exception {
 
-        if (this.handshakeFailed.get()) {
+        if (this.state.failed()) {
             return;
         }
 
-        if (this.handshakeComplete.get()) {
+        if (this.state.completed()) {
             // If handshake completed successfully, but still a message came through this handler,
             // send on to the next handler in order to avoid message loss.
             super.channelRead(ctx, m);
@@ -85,7 +83,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         } catch (ClassCastException e) {
             log.warn("channelRead: Non-handshake message received by handshake handler." +
                     " Send upstream only if handshake succeeded.");
-            if (this.handshakeComplete.get()) {
+            if (this.state.completed()) {
                 // Only send upstream if handshake is complete.
                 super.channelRead(ctx, m);
             } else {
@@ -163,7 +161,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         log.debug("channelInactive: Channel closed.");
-        if (!this.handshakeComplete.get()) {
+        if (!this.state.completed()) {
             this.fireHandshakeFailed(ctx);
         }
     }
@@ -182,14 +180,14 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
 
         if (cause instanceof ReadTimeoutException) {
             // Read timeout: no inbound traffic detected in a period of time.
-            if (handshakeFailed.get()) {
+            if (this.state.failed()) {
                 log.debug("exceptionCaught: Handshake timeout checker: already failed.");
                 return;
             }
 
-            if (!handshakeComplete.get()) {
+            if (!this.state.completed()) {
                 log.error("exceptionCaught: Handshake timeout checker: timed out. Close Connection.");
-                handshakeFailed.set(true);
+                this.state.set(true, false);
                 ctx.channel().close();
             } else {
                 log.debug("exceptionCaught: Handshake timeout " +
@@ -219,12 +217,12 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
             throws Exception {
-        if (this.handshakeFailed.get()) {
+        if (this.state.failed()) {
             // If handshake failed, discard messages.
             return;
         }
 
-        if (this.handshakeComplete.get()) {
+        if (this.state.completed()) {
             log.debug("write: Handshake already completed, not appending corfu message to queue");
             super.write(ctx, msg, promise);
         } else {
@@ -238,8 +236,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
      * @param ctx channel handler context
      */
     private void fireHandshakeFailed(ChannelHandlerContext ctx) {
-        this.handshakeComplete.set(true);
-        this.handshakeFailed.set(true);
+        this.state.set(true, true);
         ctx.channel().close();
     }
 
@@ -247,8 +244,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
      * Signal handshake as succeeded.
      */
     private void fireHandshakeSucceeded() {
-        this.handshakeComplete.set(true);
-        this.handshakeFailed.set(false);
+        this.state.set(false, true);
     }
 }
 

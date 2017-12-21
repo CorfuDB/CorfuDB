@@ -37,6 +37,7 @@ public class ServerContextBuilder {
     String managementBootstrapEndpoint = null;
     IServerRouter serverRouter;
     String numThreads = "0";
+    String handshakeTimeout = "10";
 
     public ServerContextBuilder() {
 
@@ -49,6 +50,7 @@ public class ServerContextBuilder {
                 .put("--single", single)
                 .put("--memory", memory)
                 .put("--Threads", numThreads)
+                .put("--HandshakeTimeout", handshakeTimeout)
                 .put("--sequencer-cache-size", seqCache);
         if (logPath != null) {
          builder.put("--log-path", logPath);

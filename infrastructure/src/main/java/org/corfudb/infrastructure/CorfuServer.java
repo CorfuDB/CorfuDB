@@ -495,7 +495,7 @@ public class CorfuServer {
                 ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
                         Version.getVersionString() + "("
                                 + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")",
-                        context.getServerConfig(Integer.class, "--HandshakeTimeout")));
+                        context.getServerConfig(String.class, "--HandshakeTimeout")));
                 // Route the message to the server class.
                 ch.pipeline().addLast(router);
             }

@@ -9,7 +9,6 @@ import io.netty.handler.timeout.ReadTimeoutHandler;
 import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -31,8 +30,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     private final UUID clientId;
     private final UUID nodeId;
     private final int handshakeTimeout;
-    private final AtomicBoolean handshakeComplete;
-    private final AtomicBoolean handshakeFailed;
+    private final HandshakeState handshakeState;
     private final Queue<CorfuMsg> messages = new ArrayDeque();
     private static final String READ_TIMEOUT_HANDLER = "readTimeoutHandler";
 
@@ -54,8 +52,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             this.nodeId = serverId;
         }
         this.handshakeTimeout = handshakeTimeout;
-        this.handshakeComplete = new AtomicBoolean(false);
-        this.handshakeFailed = new AtomicBoolean(false);
+        this.handshakeState = new HandshakeState();
     }
 
     /**
@@ -69,12 +66,12 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     public void channelRead(ChannelHandlerContext ctx, Object m)
             throws Exception {
 
-        if (this.handshakeFailed.get()) {
+        if (this.handshakeState.failed()) {
             // if handshake has already failed, return
             return;
         }
 
-        if (this.handshakeComplete.get()) {
+        if (this.handshakeState.completed()) {
             // If handshake completed successfully, but still a message came through this handler,
             // send on to the next handler in order to avoid message loss.
             super.channelRead(ctx, m);
@@ -91,7 +88,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         } catch (ClassCastException e) {
             log.warn("channelRead: Non-handshake message received by handshake handler. Send upstream only " +
                     "if handshake succeeded.");
-            if (this.handshakeComplete.get()) {
+            if (this.handshakeState.completed()) {
                 // Only send upstream if handshake is complete.
                 super.channelRead(ctx, m);
             } else {
@@ -164,7 +161,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         log.debug("channelInactive: Channel closed.");
-        if (!this.handshakeComplete.get()) {
+        if (!this.handshakeState.completed()) {
             this.fireHandshakeFailed(ctx);
         }
     }
@@ -182,16 +179,17 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         log.error("exceptionCaught: Exception caught.");
         if (cause instanceof ReadTimeoutException) {
             // Handshake has failed or completed. If none is True, handshake timed out.
-            if (handshakeFailed.get()) {
+            if (this.handshakeState.failed()) {
                 log.debug("exceptionCaught: Handshake timeout checker: already failed.");
                 return;
             }
 
-            if (!handshakeComplete.get()) {
+            if (!this.handshakeState.completed()) {
                 // If handshake did not complete nor failed, it timed out.
                 // Force failure.
-                log.error("exceptionCaught: Handshake timeout checker: timed out. Close Connection.");
-                handshakeFailed.set(true);
+                log.error("exceptionCaught: Handshake timeout checker: timed out." +
+                        " Close Connection.");
+                this.handshakeState.set(true, false);
                 ctx.channel().close();
             } else {
                 // Handshake completed successfully,
@@ -217,14 +215,14 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
             throws Exception {
-        if (this.handshakeFailed.get()) {
+        if (this.handshakeState.failed()) {
             return;
         }
 
         // If the handshake hasn't failed but completed meanwhile and
         // messages still passed through this handler, then forward
         // them downwards.
-        if (this.handshakeComplete.get()) {
+        if (this.handshakeState.completed()) {
             super.write(ctx, msg, promise);
         } else {
             // Otherwise, queue messages in order until the handshake
@@ -239,8 +237,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      * @param ctx channel handler context
      */
     private void fireHandshakeFailed(ChannelHandlerContext ctx) {
-        this.handshakeComplete.set(true);
-        this.handshakeFailed.set(true);
+        this.handshakeState.set(true, true);
         log.error("fireHandshakeFailed: Handshake Failed. Close Channel.");
         ctx.channel().close();
     }
@@ -249,8 +246,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      * Signal handshake as succeeded.
      */
     private void fireHandshakeSucceeded() {
-        this.handshakeComplete.set(true);
-        this.handshakeFailed.set(false);
+        this.handshakeState.set(false, true);
     }
 }
 
