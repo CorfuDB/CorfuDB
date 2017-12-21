@@ -106,13 +106,11 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         // which indicates node id matching is not required.
         if (serverId.equals(UUID.fromString("00000000-0000-0000-0000-000000000000"))) {
             log.info("channelRead: node id matching is not requested by client.");
-        } else {
-            if (!serverId.equals(this.nodeId)) {
-                log.error("channelRead: Invalid handshake: this is " + this.nodeId +
-                        " and client is trying to connect to " + serverId);
-                this.fireHandshakeFailed(ctx);
-                return;
-            }
+        } else if (!serverId.equals(this.nodeId)) {
+            log.error("channelRead: Invalid handshake: this is " + this.nodeId +
+                    " and client is trying to connect to " + serverId);
+            this.fireHandshakeFailed(ctx);
+            return;
         }
 
         // Store clientID as a channel attribute.

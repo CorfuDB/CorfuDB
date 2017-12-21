@@ -106,8 +106,11 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         UUID serverId = handshakeResponse.getPayload().getServerId();
         String corfuVersion = handshakeResponse.getPayload().getCorfuVersion();
 
-        // Handshake Validation
-        if (!this.nodeId.equals(serverId)) {
+        // Validate handshake, but first verify if node identifier is set to default (all 0's)
+        // which indicates node id matching is not required.
+        if (this.nodeId.equals(UUID.fromString("00000000-0000-0000-0000-000000000000"))) {
+            log.info("channelRead: node id matching is not requested by client.");
+        } else if (!this.nodeId.equals(serverId)) {
             // Validation failed, client opened a socket to server with id
             // 'nodeId', instead server's id is 'serverId'
             log.error("channelRead: Handshake validation failed. Server node id mismatch.");
