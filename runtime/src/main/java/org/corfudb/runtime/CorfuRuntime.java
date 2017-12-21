@@ -109,6 +109,11 @@ public class CorfuRuntime {
         @Default long cacheExpiryTime = Long.MAX_VALUE;
         // endregion
 
+        // region Handshake Parameters
+        /** Sets handshake timeout in seconds. */
+        @Default int handshakeTimeout = 10;
+        // endregion
+
         // region Stream Parameters
         /** Whether or not to disable backpointers. */
         @Default boolean backpointersDisabled = false;
@@ -403,7 +408,7 @@ public class CorfuRuntime {
     }
 
     /**
-     * Get corfy runtime version.
+     * Get corfu runtime version.
      **/
     public static String getVersionString() {
         if (Version.getVersionString().contains("SNAPSHOT")
