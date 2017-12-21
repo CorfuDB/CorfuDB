@@ -68,8 +68,7 @@ public class ManagementClientTest extends AbstractClientTest {
      *
      * @throws Exception
      */
-    // Disabled because AbstractClientTest can't test async calls
-   // @Test
+    @Test
     public void handleBootstrap()
             throws Exception {
         // Since the servers are started as single nodes thus already bootstrapped.
@@ -78,8 +77,7 @@ public class ManagementClientTest extends AbstractClientTest {
                 .isInstanceOf(ExecutionException.class);
     }
 
-    // Disabled because AbstractClientTest can't test async calls
-   // @Test
+    @Test
     public void queryWorkflowRPCTest() throws Exception {
         // verify that non-active workflows return false when queried.
         QueryResponse resp = client.queryRequest(UUID.randomUUID());
@@ -91,11 +89,9 @@ public class ManagementClientTest extends AbstractClientTest {
      *
      * @throws Exception
      */
-    // Disabled because AbstractClientTest can't test async calls
-   // @Test
+    @Test
     public void handleFailure()
             throws Exception {
-
         // Since the servers are started as single nodes thus already bootstrapped.
         assertThat(
                 client.handleFailure(Collections.singleton("key"), Collections.emptySet()).get())
@@ -107,10 +103,10 @@ public class ManagementClientTest extends AbstractClientTest {
      *
      * @throws Exception
      */
-    // Disabled because AbstractClientTest can't test async calls
-   // @Test
+    @Test
     public void initiateFailureHandler()
             throws Exception {
+        client.bootstrapManagement(TestLayoutBuilder.single(0));
         assertThat(client.initiateFailureHandler().get()).isEqualTo(true);
     }
 
@@ -119,8 +115,7 @@ public class ManagementClientTest extends AbstractClientTest {
      *
      * @throws Exception
      */
-    // Disabled because AbstractClientTest can't test async calls
-    //@Test
+    @Test
     public void sendHeartbeatRequest()
             throws Exception {
         byte[] buffer = client.sendHeartbeatRequest().get();

@@ -140,7 +140,12 @@ public class ManagementServer extends AbstractServer {
             recovered = true;
         }
 
-        if ((Boolean) opts.get("--single")) {
+        synchronized (this.serverContext) {
+            if ((Boolean) opts.get("--single")) {
+                if (serverContext.getCurrentLayout() == null) {
+                    serverContext.setCurrentLayout(serverContext.getNewSingleNodeLayout());
+                }
+            }
             safeUpdateLayout(serverContext.getCurrentLayout());
         }
 
