@@ -12,6 +12,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.exceptions.unrecoverable.RuntimeShutdownError;
 import org.corfudb.util.CFUtils;
 
 import java.time.Duration;
@@ -83,6 +84,8 @@ public class TestClientRouter implements IClientRouter {
     public UUID clientID;
 
     private volatile boolean connected = true;
+
+    private volatile boolean shutdown = false;
 
     public void simulateDisconnectedEndpoint() {
         connected = false;
@@ -202,6 +205,10 @@ public class TestClientRouter implements IClientRouter {
      */
     @Override
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message) {
+        if (shutdown) {
+            throw new RuntimeShutdownError();
+        }
+
         // Simulate a "disconnected endpoint"
         if (!connected) {
             log.trace("Disconnected endpoint " + host + ":" + port);
@@ -352,11 +359,13 @@ public class TestClientRouter implements IClientRouter {
      */
     @Override
     public void stop() {
+        shutdown = true;
         //TODO - pause pipeline
     }
 
     @Override
     public void stop(boolean unused) {
+        shutdown = true;
         //TODO - pause pipeline
     }
 

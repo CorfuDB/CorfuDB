@@ -156,6 +156,7 @@ public class ServerContext implements AutoCloseable {
         return CorfuRuntime.CorfuRuntimeParameters.builder()
                 .nettyEventLoop(clientGroup)
                 .shutdownNettyEventLoop(false)
+                .threadPrefix((String) serverConfig.get("--Prefix"))
                 .tlsEnabled((Boolean) serverConfig.get("--enable-tls"))
                 .keyStore((String) serverConfig.get("--keystore"))
                 .ksPasswordFile((String) serverConfig.get("--keystore-password-file"))

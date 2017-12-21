@@ -67,6 +67,7 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
                             .addClient(new LayoutClient())
                             .addClient(new LogUnitClient())
                             .addClient(new ManagementClient());
+                    runtime.nodeRouters.put(endpoint, tcn);
                     return tcn;
                 }
         );

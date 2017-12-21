@@ -69,6 +69,7 @@ public class AbstractCorfuTest {
     public static MemoryAppender<ILoggingEvent> LOG_APPENDER;
     public static PatternLayoutEncoder LOG_ENCODER;
     public static final int LOG_ELEMENTS = 25;
+
     @BeforeClass
     public static void initLogging() {
         LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();

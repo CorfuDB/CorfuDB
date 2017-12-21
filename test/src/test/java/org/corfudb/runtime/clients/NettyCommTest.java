@@ -422,7 +422,8 @@ public class NettyCommTest extends AbstractCorfuTest {
     private void reloadedTrustManagerTestHelper(boolean replaceClientTrust) throws Exception {
         NettyServerRouter serverRouter =
             new NettyServerRouter(Collections.singletonList(
-                new BaseServer(ServerContextBuilder.emptyContext())));
+                new BaseServer(ServerContextBuilder.emptyContext())),
+                ServerContextBuilder.defaultContext(0));
         int port = findRandomOpenPort();
 
         File clientTrustNoServer = new File("src/test/resources/security/reload/client_trust_no_server.jks");
@@ -544,7 +545,9 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         void bootstrapServer() throws Exception {
             NettyServerRouter nsr =
-                new NettyServerRouter(Collections.singletonList(new BaseServer(serverContext)));
+                new NettyServerRouter(
+                    Collections.singletonList(new BaseServer(serverContext)),
+                    serverContext);
             f = CorfuServer.startAndListen(serverContext.getBossGroup(),
                                             serverContext.getWorkerGroup(),
                                             b -> CorfuServer.configureBootstrapOptions(

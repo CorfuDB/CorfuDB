@@ -205,6 +205,7 @@ public class LayoutManagementView extends AbstractView {
         //TODO: Handle condition if primary sequencer is not marked ready, reset fails.
         // Reconfigure servers if required
         // Primary sequencer would be in a not-ready state if its in recovery mode.
+        runtime.invalidateLayout();
         reconfigureSequencerServers(currentLayout, newLayout, forceSequencerRecovery);
     }
 

@@ -67,13 +67,7 @@ public class LogUnitServer extends AbstractServer {
     /**
      * A scheduler, which is used to schedule periodic tasks like garbage collection.
      */
-    private final ScheduledExecutorService scheduler =
-            Executors.newScheduledThreadPool(
-                    1,
-                    new ThreadFactoryBuilder()
-                            .setDaemon(true)
-                            .setNameFormat("LogUnit-Maintenance-%d")
-                            .build());
+    private final ScheduledExecutorService scheduler;
 
     private ScheduledFuture<?> compactor;
 
@@ -123,7 +117,14 @@ public class LogUnitServer extends AbstractServer {
             streamLog = new StreamLogFiles(serverContext, (Boolean) opts.get("--no-verify"));
         }
 
-        batchWriter = new BatchWriter(streamLog);
+        batchWriter = new BatchWriter<>(serverContext, streamLog);
+
+        scheduler = Executors.newScheduledThreadPool(
+                1,
+                new ThreadFactoryBuilder()
+                    .setDaemon(true)
+                    .setNameFormat(serverContext.getThreadPrefix() + "LogUnit-Maintenance-%d")
+                    .build());
 
         dataCache = Caffeine.<Long, ILogData>newBuilder()
                 .<Long, ILogData>weigher((k, v) -> ((LogData) v).getData() == null ? 1 : (

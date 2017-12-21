@@ -182,6 +182,12 @@ public class CorfuServer {
                 new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe)
                         .parse(args);
 
+        // Switch the thread name, if requested.
+        final String threadPrefix = (String) opts.get("--Prefix");
+        if (!threadPrefix.equals("")) {
+            Thread.currentThread().setName(threadPrefix);
+        }
+
         // Print a nice welcome message.
         AnsiConsole.systemInstall();
         printLogo();
@@ -234,11 +240,11 @@ public class CorfuServer {
                     .add(new ManagementServer(serverContext))
                     .build();
 
-            NettyServerRouter router = new NettyServerRouter(servers);
+            NettyServerRouter router = new NettyServerRouter(servers, serverContext);
 
             // Register shutdown handler
-            Thread shutdownThread = new Thread(() -> cleanShutdown(router));
-            shutdownThread.setName("ShutdownThread");
+            Thread shutdownThread = new Thread(() -> cleanShutdown(serverContext, router));
+            shutdownThread.setName(serverContext.getThreadPrefix() + "ShutdownThread");
             Runtime.getRuntime().addShutdownHook(shutdownThread);
 
             startAndListen(serverContext.getBossGroup(),
@@ -420,8 +426,9 @@ public class CorfuServer {
     /**
      * Attempt to cleanly shutdown all the servers.
      */
-    public static void cleanShutdown(@Nonnull NettyServerRouter router) {
-        log.info("CleanShutdown: Starting Cleanup.");
+    public static void cleanShutdown(@Nonnull ServerContext context,
+                                    @Nonnull NettyServerRouter router) {
+        log.info("cleanShutdown: Starting Cleanup.");
         // Create a list of servers
         final List<AbstractServer> servers = router.getServers();
 
@@ -435,22 +442,24 @@ public class CorfuServer {
         CompletableFuture[] shutdownFutures = servers.stream()
                 .map(s -> CompletableFuture.runAsync(() -> {
                     try {
-                        Thread.currentThread().setName(s.getClass().getSimpleName()
+                        Thread.currentThread().setName(
+                                context.getThreadPrefix()
+                                + s.getClass().getSimpleName()
                                 + "-shutdown");
-                        log.info("CleanShutdown: Shutting down {}",
+                        log.info("cleanShutdown: Shutting down {}",
                                 s.getClass().getSimpleName());
                         s.shutdown();
-                        log.info("CleanShutdown: Cleanly shutdown {}",
+                        log.info("cleanShutdown: Cleanly shutdown {}",
                                 s.getClass().getSimpleName());
                     } catch (Exception e) {
-                        log.error("CleanShutdown: Failed to cleanly shutdown {}",
+                        log.error("cleanShutdown: Failed to cleanly shutdown {}",
                                 s.getClass().getSimpleName(), e);
                     }
                 }, shutdownService))
                 .toArray(CompletableFuture[]::new);
 
         CompletableFuture.allOf(shutdownFutures).join();
-        log.info("CleanShutdown: Shutdown Complete.");
+        log.info("cleanShutdown: Shutdown Complete.");
     }
 
     /**

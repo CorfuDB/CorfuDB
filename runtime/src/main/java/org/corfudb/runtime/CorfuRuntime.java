@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -14,7 +15,12 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.StampedLock;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -40,9 +46,13 @@ import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.NoBootstrapException;
+import org.corfudb.runtime.exceptions.RequestTimeoutException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.exceptions.unrecoverable.RuntimeShutdownError;
+import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutManagementView;
@@ -51,6 +61,8 @@ import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
+
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
@@ -197,6 +209,36 @@ public class CorfuRuntime {
 
         /** The initial list of layout servers. */
         @Singular List<NodeLocator> layoutServers;
+
+        /** If true, automatically connects the runtime at construction time, so that
+         *  an explicit call to {@link this#connect()} is not needed.
+         *
+         */
+        @Default boolean autoConnect = false;
+
+        /** Netty channel options, if provided. If no options are set, we default to
+         *  the defaults in {@link this#DEFAULT_CHANNEL_OPTIONS}.
+         */
+        @Singular Map<ChannelOption, Object> customNettyChannelOptions;
+
+        /** Default channel options, used if there are no options in the
+         * {@link this#customNettyChannelOptions} field.
+         */
+        static final Map<ChannelOption, Object> DEFAULT_CHANNEL_OPTIONS =
+                ImmutableMap.<ChannelOption, Object>builder()
+                .put(ChannelOption.TCP_NODELAY, true)
+                .put(ChannelOption.SO_KEEPALIVE, true)
+                .put(ChannelOption.SO_REUSEADDR, true)
+                .build();
+
+        /** Get the netty channel options to be used by the netty client implementation.
+         *
+         * @return  A map containing options which should be applied to each netty channel.
+         */
+        public Map<ChannelOption, Object> getNettyChannelOptions() {
+            return customNettyChannelOptions.size() == 0
+                ? DEFAULT_CHANNEL_OPTIONS : customNettyChannelOptions;
+        }
         //endregion
 
         //region Threading Parameters
@@ -225,28 +267,44 @@ public class CorfuRuntime {
          */
         @Default boolean shutdownNettyEventLoop = true;
 
-        /** Netty channel options, if provided. If no options are set, we default to
-         *  the defaults in {@link this#DEFAULT_CHANNEL_OPTIONS}.
-         */
-        @Singular Map<ChannelOption, Object> customNettyChannelOptions;
-
-        /** Default channel options, used if there are no options in the
-         * {@link this#customNettyChannelOptions} field.
-         */
-        static final Map<ChannelOption, Object> DEFAULT_CHANNEL_OPTIONS =
-                ImmutableMap.<ChannelOption, Object>builder()
-                    .put(ChannelOption.TCP_NODELAY, true)
-                    .put(ChannelOption.SO_KEEPALIVE, true)
-                    .put(ChannelOption.SO_REUSEADDR, true)
-                .build();
-
-        /** Get the netty channel options to be used by the netty client implementation.
+        /** A thread pool for executing I/O related tasks. These threads may block,
+         * so ensure there are sufficient threads in the pool
+         * ({@link Executors#newCachedThreadPool()} is recommended).
          *
-         * @return  A map containing options which should be applied to each netty channel.
+         * <p>If not specified, the runtime will generate an executor based on a
+         * {@link Executors#newCachedThreadPool()}.
          */
-        public Map<ChannelOption, Object> getNettyChannelOptions() {
-            return customNettyChannelOptions.size() == 0
-                ? DEFAULT_CHANNEL_OPTIONS : customNettyChannelOptions;
+        ExecutorService ioExecutor;
+
+        /** A string which will be used to set the
+         * {@link com.google.common.util.concurrent.ThreadFactoryBuilder#nameFormat} for the
+         * {@code ioExecutor}. By default, this is set to "io-%d".
+         * If you provide your own {@code ioExecutor}, this field is ignored.
+         */
+        @Default String ioExecutorThreadFormat = "io-%d";
+
+        /** Whether or not to shutdown the ioExecutor when the runtime is shutdown. */
+        @Default boolean shutdownIoExecutor = true;
+
+        /** A prefix which will be applied to all thread names we generate.
+         *  If supplied, all threads generated by {@link ThreadFactory}s generated by
+         *  the runtime will be prefixed with this string. Useful if multiple runtimes
+         *  are in use in a system. Does not apply to {@link Executor}s or {@link EventLoopGroup}s
+         *  which are supplied by the user.
+         */
+        @Default String threadPrefix = "";
+
+        /** Get the thread name, with the prefix if set.
+         *
+         * @param threadFormat  The format to prefix.
+         * @return              A prefixed thread format.
+         */
+        public @Nonnull String getPrefixedThreadFormat(@Nonnull String threadFormat) {
+            if (threadPrefix.equals("")) {
+                return threadFormat;
+            } else {
+                return threadPrefix + "-" + threadFormat;
+            }
         }
 
         /** A {@link UncaughtExceptionHandler} which handles threads that have an uncaught
@@ -264,11 +322,19 @@ public class CorfuRuntime {
     @Getter
     private final CorfuRuntimeParameters parameters;
 
+    // Methods for getting views
+    // region Views
     /**
      * The {@link EventLoopGroup} provided to netty routers.
      */
     @Getter
     private final EventLoopGroup nettyEventLoop;
+
+    /**
+     * The {@link ExecutorService} to execute IO-bound tasks on.
+     */
+    @Getter
+    private final ExecutorService ioExecutor;
 
     /**
      * A view of the layout service in the Corfu server instance.
@@ -307,6 +373,8 @@ public class CorfuRuntime {
     @Getter(lazy = true)
     private final ManagementView managementView = new ManagementView(this);
 
+    //endregion Views
+
     /**
      * A list of known layout servers.
      */
@@ -321,6 +389,13 @@ public class CorfuRuntime {
      * A completable future containing a layout, when completed.
      */
     public volatile CompletableFuture<Layout> layout;
+
+    /**
+     * A stamped lock which ensures only a single layout update occurs at a time.
+     * The thread which updates the layout acquires the write lock. All other threads
+     * wait using a read lock.
+     */
+    private final StampedLock layoutLock = new StampedLock();
 
     /** The {@link UUID} of the cluster we are currently connected to, or null, if
      *  there is no cluster yet.
@@ -360,15 +435,16 @@ public class CorfuRuntime {
     /**
      * These two handlers are provided to give some control on what happen when system is down.
      *
-     * For applications that want to have specific behaviour when a the system appears unavailable, they can
-     * register their own handler for both before the rpc request and upon network exception.
+     * <p>For applications that want to have specific behaviour when a the system appears
+     * unavailable, they can register their own handler for both before the rpc request
+     * and upon network exception.
      *
-     * An example of how to use these handlers implementing timeout is given in
+     * <p>An example of how to use these handlers implementing timeout is given in
      * test/src/test/java/org/corfudb/runtime/CorfuRuntimeTest.java
      *
      */
-    public Runnable beforeRpcHandler = () -> {};
-    public Runnable systemDownHandler = () -> {};
+    public Runnable beforeRpcHandler = () -> { };
+    public Runnable systemDownHandler = () -> { };
 
 
     public CorfuRuntime registerSystemDownHandler(Runnable handler) {
@@ -406,8 +482,8 @@ public class CorfuRuntime {
                         NodeLocator node = NodeLocator.parseString(address);
                         // Generate a new router, start it and add it to the table.
                         NettyClientRouter newRouter = new NettyClientRouter(node,
-                            getNettyEventLoop(),
-                            getParameters());
+                                getNettyEventLoop(),
+                                getParameters());
                         log.debug("Connecting to new router {}", node);
                         try {
                             newRouter.addClient(new LayoutClient())
@@ -416,6 +492,9 @@ public class CorfuRuntime {
                                     ? metrics : CorfuRuntime.getDefaultMetrics()))
                                 .addClient(new ManagementClient())
                                 .start();
+                            if (layout.isDone()) {
+                                newRouter.setEpoch(CFUtils.getUninterruptibly(layout).getEpoch());
+                            }
                         } catch (Exception e) {
                             log.warn("Error connecting to router", e);
                             throw e;
@@ -457,6 +536,20 @@ public class CorfuRuntime {
         nettyEventLoop = parameters.nettyEventLoop == null ? getNewEventLoopGroup()
                                                             : parameters.nettyEventLoop;
 
+        // Generate or set the ioExecutor
+        ioExecutor = parameters.ioExecutor == null ? getNewIoExecutor()
+                                                    : parameters.ioExecutor;
+
+        // Generate a new layout future. When the layout is invalidated for the
+        // first time, this future will be completed.
+        layout = new CompletableFuture<>();
+
+        // If automatic connection is requested, we will asynchronously fetch
+        // and update the layout.
+        if (parameters.autoConnect) {
+            ioExecutor.submit(this::invalidateLayout);
+        }
+
         synchronized (metrics) {
             if (metrics.getNames().isEmpty()) {
                 MetricsUtils.metricsReportingSetup(metrics);
@@ -465,84 +558,143 @@ public class CorfuRuntime {
         log.info("Corfu runtime version {} initialized.", getVersionString());
     }
 
-    /** Get a new {@link EventLoopGroup} for scheduling threads for Netty. The
-     *  {@link EventLoopGroup} is typically passed to a router.
-     *
-     * @return  An {@link EventLoopGroup}.
-     */
-    private EventLoopGroup getNewEventLoopGroup() {
-        // Calculate the number of threads which should be available in the thread pool.
-        int numThreads = parameters.nettyEventLoopThreads == 0
-                            ? Runtime.getRuntime().availableProcessors() * 2 :
-                            parameters.nettyEventLoopThreads;
-        ThreadFactory factory = new ThreadFactoryBuilder()
-                                    .setDaemon(true)
-                                    .setNameFormat(parameters.nettyEventLoopThreadFormat)
-                                    .setUncaughtExceptionHandler(this::handleUncaughtThread)
-                                    .build();
-        return parameters.socketType.getGenerator().generate(numThreads, factory);
-    }
-
-    /** Function which is called whenever the runtime encounters an uncaught thread.
-     *
-     * @param thread        The thread which terminated.
-     * @param throwable     The throwable which caused the thread to terminate.
-     */
-    private void handleUncaughtThread(@Nonnull Thread thread, @Nonnull Throwable throwable) {
-        if (parameters.getUncaughtExceptionHandler() != null) {
-            parameters.getUncaughtExceptionHandler().uncaughtException(thread, throwable);
-        } else {
-            log.error("handleUncaughtThread: {} terminated with throwable of type {}",
-                    thread.getName(),
-                    throwable.getClass().getSimpleName(),
-                    throwable);
-        }
-    }
-
     /**
-     * Shuts down the CorfuRuntime.
-     * Stops async tasks from fetching the layout.
-     * Cannot reuse the runtime once shutdown is called.
+     * Shutdown the runtime, stop asynchronous tasks and free resources.
+     *
+     * <p>Once the runtime is shutdown, requests will fail with an exception and the
+     * runtime cannot be reused. {@link this#isShutdown()} will return true to reflect
+     * that the runtime is shutdown.
+     *
+     * <p>This method is synchronized to prevent multiple callers from initiating
+     * a shutdown, and is therefore thread-safe (the runtime will only be shutdown once).
      */
-    public void shutdown() {
-        // Stopping async task from fetching layout.
-        isShutdown = true;
-        if (layout != null) {
-            try {
-                layout.cancel(true);
-            } catch (Exception e) {
-                log.error("Runtime shutting down. Exception in terminating fetchLayout: {}", e);
-            }
+    public synchronized void shutdown() {
+        // If we are already shutdown, throw a shutdown error.
+        if (isShutdown) {
+            return;
         }
 
-        stop(true);
+        log.info("shutdown: Corfu runtime shutting down");
+        // Set the shutdown flag to true. This stops any active layout acquisition
+        // from retrying.
+        isShutdown = true;
 
-        // Shutdown the event loop
+        // Generate a new layout which completes exceptionally. This stops any thread
+        // which is trying to get a layout.
+        layout = new CompletableFuture<>();
+        layout.completeExceptionally(new RuntimeShutdownError());
+
+        // Stop each active router. This stops network RPC.
+        nodeRouters.forEach((name, router) -> router.stop());
+
+        // Shutdown our executors, if requested.
+        if (parameters.shutdownIoExecutor) {
+            ioExecutor.shutdown();
+        }
+
+        // Shutdown the event loop, if requested.
         if (parameters.shutdownNettyEventLoop) {
             nettyEventLoop.shutdownGracefully().syncUninterruptibly();
         }
+
+
+        log.info("shutdown: Corfu runtime successfully shutdown");
     }
 
-    /**
-     * Stop all routers associated with this runtime & disconnect them.
+    /** Connect to the Corfu cluster.
+     *
+     * <p>When the method returns, the Corfu cluster is connected and the {@link CorfuRuntime}
+     * can access Corfu cluster services.
+     *
+     * @return  This {@link CorfuRuntime}, to support chaining calls.
      */
-    public void stop() {
-        stop(false);
+    public CorfuRuntime connect() {
+        if (!layout.isDone()) {
+            invalidateLayout();
+        }
+        return this;
+    }
+
+    /** Asynchronously connect to the Corfu cluster.
+     *
+     *  <p>When the connection to the Corfu cluster is completed, the supplied future
+     *  will be completed and the runtime can access Corfu cluster services.
+     *
+     *  @return A future which is completed when the Corfu cluster is connected.
+     */
+    @SuppressWarnings("unchecked")
+    public Future<Void> connectAsync() {
+        if (!layout.isDone()) {
+            // Submit a request to invalidate the layout on an IO thread.
+            ioExecutor.submit(this::invalidateLayout);
+            // This cast is needed because the caller should not expect a layout in the
+            // return (the return is void).
+            return (Future) layout;
+        } else {
+            return CompletableFuture.completedFuture(null);
+        }
     }
 
     /**
-     * Stop all routers associated with this Corfu Runtime.
-     **/
-    public void stop(boolean shutdown) {
-        for (IClientRouter r : nodeRouters.values()) {
-            r.stop(shutdown);
-        }
-        if (!shutdown) {
-            // N.B. An icky side-effect of this clobbering is leaking
-            // Pthreads, namely the Netty client-side worker threads.
-            nodeRouters = new ConcurrentHashMap<>();
+     * Invalidate and update the current layout.
+     *
+     * <p>This function updates the current layout by connecting to each known
+     * layout servers and checking if a new layout is available. If a new layout
+     * is available, {@link this#layout} will be completed with the new layout.
+     *
+     * <p>While a retrieval is in progress, {@link this#layout} will be replaced
+     * with a incomplete future. This forces clients which retrieve the future
+     * after {@link this#layout} has been invalidated to wait for the layout to be
+     * updated.
+     *
+     * <p>This function is thread-safe. Multiple threads may call this method
+     * simultaneously, {@link this#layoutLock} ensures that only a single thread
+     * retrieves the layout. This thread obtains a write lock while it calls the
+     * internal method {@link this#fetchLayout()} which does the actual work of getting
+     * a new layout. All other threads obtain a read lock, which blocks until the writer
+     * thread is complete. Once the writer completes, the readers unblock and exit
+     * without updating the layout, since the writer thread has completed their
+     * writer for them.
+     */
+    public void invalidateLayout() {
+        // First, we attempt to grab the layout lock
+        long ts = layoutLock.tryWriteLock();
+        try {
+            if (ts == 0) {
+                // If we enter this function and a layout retrieval is in progress,
+                // (i.e. the lock is taken and ts is 0)
+                // We wait for the lock to be released and the layout to be updated
+                // by taking a read lock. When the call to readLock unblocks,
+                // the layout has been updated by the writer thread.
+                // The read lock will be released by the try-finally block.
+                ts = layoutLock.readLock();
+            } else {
+                // Otherwise, we have the lock and can be guaranteed we are that we will be the
+                // only thread updating the layout.
+                log.info("invalidateLayout: Attempting layout update...");
+
+                // First, invalidate the layout by installing a new future. All clients
+                // which were working on the previous layout will eventually encounter
+                // a WrongEpochException if there really was a layout issue.
+                //
+                // If this is the first time we are run, the layout will not be done, so
+                // we don't generate a new future (since clients waiting may have used that
+                // layout.
+                if (layout.isDone()) {
+                    layout = new CompletableFuture<>();
+                }
+
+                // Fetch the layout.
+                // When the task is complete, the layout future will be completed with the layout.
+                fetchLayout();
+            }
+        } finally {
+            // Release the lock.
+            layoutLock.unlock(ts);
         }
     }
+
+
 
     /**
      * Get a UUID for a named stream.
@@ -570,7 +722,7 @@ public class CorfuRuntime {
         if (Version.getVersionString().contains("SNAPSHOT")
                 || Version.getVersionString().contains("source")) {
             return Version.getVersionString() + "("
-                    + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")";
+                + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")";
         }
         return Version.getVersionString();
     }
@@ -596,20 +748,9 @@ public class CorfuRuntime {
     public CorfuRuntime parseConfigurationString(String configurationString) {
         // Parse comma sep. list.
         layoutServers = Pattern.compile(",")
-                .splitAsStream(configurationString)
-                .map(String::trim)
-                .collect(Collectors.toList());
-        return this;
-    }
-
-    /**
-     * Add a layout server to the list of servers known by the CorfuRuntime.
-     *
-     * @param layoutServer A layout server to use.
-     * @return A CorfuRuntime, to support the builder pattern.
-     */
-    public CorfuRuntime addLayoutServer(String layoutServer) {
-        layoutServers.add(layoutServer);
+            .splitAsStream(configurationString)
+            .map(String::trim)
+            .collect(Collectors.toList());
         return this;
     }
 
@@ -623,24 +764,191 @@ public class CorfuRuntime {
         return getRouterFunction.apply(address);
     }
 
-    /**
-     * Invalidate the current layout.
-     * If the layout has been previously invalidated and a new layout has not yet been retrieved,
-     * this function does nothing.
+
+    /** Function which is called whenever the runtime encounters an uncaught thread.
+     *
+     * @param thread        The thread which terminated.
+     * @param throwable     The throwable which caused the thread to terminate.
      */
-    public synchronized void invalidateLayout() {
-        // Is there a pending request to retrieve the layout?
-        if (!layout.isDone()) {
-            // Don't create a new request for a layout if there is one pending.
+    private void handleUncaughtThread(@Nonnull Thread thread, @Nonnull Throwable throwable) {
+        if (parameters.getUncaughtExceptionHandler() != null) {
+            parameters.getUncaughtExceptionHandler().uncaughtException(thread, throwable);
+        } else {
+            log.error("handleUncaughtThread: {} terminated with throwable of type {}",
+                    thread.getName(),
+                    throwable.getClass().getSimpleName(),
+                    throwable);
+        }
+    }
+
+    /** Get a new {@link EventLoopGroup} for scheduling threads for Netty. The
+     *  {@link EventLoopGroup} is typically passed to a router.
+     *
+     * @return  An {@link EventLoopGroup}.
+     */
+    private EventLoopGroup getNewEventLoopGroup() {
+        // Calculate the number of threads which should be available in the thread pool.
+        int numThreads = parameters.nettyEventLoopThreads == 0
+                ? Runtime.getRuntime().availableProcessors() * 2 :
+                parameters.nettyEventLoopThreads;
+        ThreadFactory factory = new ThreadFactoryBuilder()
+                .setDaemon(true)
+                .setNameFormat(parameters.getPrefixedThreadFormat(
+                                    parameters.nettyEventLoopThreadFormat))
+                .setUncaughtExceptionHandler(this::handleUncaughtThread)
+                .build();
+        return parameters.socketType.getGenerator().generate(numThreads, factory);
+    }
+
+    /** Get a new {@link ExecutorService} for scheduling IO-bound tasks.
+     *
+     * @return  An {@link ExecutorService}.
+     */
+    private ExecutorService getNewIoExecutor() {
+        ThreadFactory factory = new ThreadFactoryBuilder()
+                .setDaemon(true)
+                .setNameFormat(parameters.getPrefixedThreadFormat(
+                        parameters.ioExecutorThreadFormat))
+                .setUncaughtExceptionHandler(this::handleUncaughtThread)
+                .build();
+        return Executors.newCachedThreadPool(factory);
+    }
+
+    /** Fetch a new layout, completing the layout in {@link this#layout}.
+     *
+     *  <p>The {@link this#layoutLock} ensures that there is only a single invocation of this
+     *  method at a time. When the method is executed, we fulfill the layout, or complete it
+     *  exceptionally if we could not retrieve the layout.
+     *
+     *  <p>This method tries to fetch a layout from each server in {@link this#layoutServers}
+     *  in random order. If all layout servers are unavailable, then we sleep for the duration
+     *  specified in {@link CorfuRuntimeParameters#connectionRetryRate} before retrying.
+     *
+     *  <p>The fetching thread can be stopped by setting {@link this#isShutdown} to true. This
+     *  will cause the fetching thread to terminate on the next retry with a
+     *  {@link UnrecoverableCorfuError}.
+     */
+    private void fetchLayout() {
+        if (layout.isDone()) {
+            log.warn("fetchLayout: Requested new layout but future already done!");
             return;
         }
-        layout = fetchLayout();
+
+        while (!isShutdown) {
+            // Every pass, we want to check using the current list of known
+            // layout servers in random order. We make sure to connect to
+            // all layout servers on the list in each pass.
+            List<String> serversToCheck = new ArrayList<>(layoutServers);
+            Collections.shuffle(serversToCheck);
+
+            for (String server : serversToCheck) {
+                try {
+                    // Get the layout from the server we chose.
+                    final Layout newLayout = getLayoutFromServer(server);
+
+                    // Update the epoch of all the active routers
+                    newLayout.getAllServers().forEach((name) -> {
+                        IClientRouter router = getRouter(name);
+                        log.debug("fetchLayout: Updating the epoch for {} from {} to {}",
+                                name,
+                                router.getEpoch(),
+                                newLayout.getEpoch());
+                        router.setEpoch(newLayout.getEpoch());
+                    });
+
+                    // And remove routers which we're no longer using
+                    Sets.difference(nodeRouters.keySet(), newLayout.getAllServers())
+                            .immutableCopy()
+                            .forEach(e -> {
+                                nodeRouters.get(e).stop();
+                                nodeRouters.remove(e);
+                            });
+
+                    // Use the new layout's list of servers
+                    layoutServers = newLayout.getLayoutServers();
+
+                    // Update the future, releasing any clients waiting on it and finishing
+                    // our task of updating the layout.
+                    layout.complete(newLayout);
+
+                    // Check the version of each layout server and log (informational)
+                    logServerVersions();
+
+                    // If fast loading was requested, load maps before restarting.
+                    if (parameters.isUseFastLoader()
+                                && getObjectsView().getObjectCache().isEmpty()) {
+                        FastObjectLoader fastLoader = new FastObjectLoader(this)
+                                .setBatchReadSize(parameters.getBulkReadSize())
+                                .setTimeoutInMinutesForLoading(
+                                    (int) parameters.fastLoaderTimeout.toMinutes());
+                        fastLoader.loadMaps();
+                    }
+                    log.info("fetchLayout: Successfully installed new layout from {} in epoch {}",
+                            server, newLayout.getEpoch());
+                    return;
+                } catch (RequestTimeoutException | NetworkException | WrongEpochException
+                            | WrongClusterException | TimeoutException | NoBootstrapException e) {
+                    // We had a problem connecting to this layout server, so we retry using the
+                    // next server in the list.
+                    log.info("fetchLayout: {} connecting to {}",
+                            e.getClass().getSimpleName(), server, e);
+                }
+            }
+            // Run the system down handler.
+            try {
+                systemDownHandler.run();
+            } catch (SystemUnavailableError e) {
+                layout.completeExceptionally(e);
+                log.error("invalidateLayout: Terminating due to system unavailable request", e);
+                return;
+            }
+            log.warn("fetchLayout: Couldn't connect to any layout servers, retrying in {}",
+                    parameters.connectionRetryRate);
+            // Sleep and retry
+            Sleep.sleepUninterruptibly(parameters.connectionRetryRate);
+        }
+
+        log.warn("fetchLayout: Terminated due to shutdown, cancelling future.");
+        layout.completeExceptionally(new RuntimeShutdownError());
+        throw new RuntimeShutdownError();
+    }
+
+    /** Get a layout from a layout server.
+     *
+     * @param server                The server to fetch a {@link Layout} from.
+     * @return                      The {@link Layout} retrieved from the server.
+     * @throws TimeoutException     If the server timed out servicing the request.
+     * @throws NetworkException     If there was a network issue communicating to the server.
+     * @throws WrongEpochException  If the remote server was in the wrong epoch.
+     */
+    private Layout getLayoutFromServer(@Nonnull String server)
+            throws TimeoutException {
+        log.info("getLayoutFromServer: Trying {}", server);
+        IClientRouter router = getRouter(server);
+        // Try to get a layout.
+        Layout layout =
+                CFUtils.getUninterruptibly(router.getClient(LayoutClient.class).getLayout(),
+                        TimeoutException.class, NetworkException.class, WrongEpochException.class);
+
+        // If the layout we got has a smaller epoch than the router,
+        // we discard it.
+        if (layout.getEpoch() < router.getEpoch()) {
+            log.warn("fetchLayout: Received a layout with epoch {} from server "
+                    + "{}:{} smaller than router epoch {}, discarded.",
+                    layout.getEpoch(), router.getHost(), router.getPort(), router.getEpoch());
+            throw new WrongEpochException(router.getEpoch());
+        }
+
+        checkClusterId(layout);
+        layout.setRuntime(this);
+
+        return layout;
     }
 
     /** Check if the cluster Id of the layout matches the client cluster Id.
      *  If the client cluster Id is null, we update the client cluster Id.
      *
-     *  If both the layout cluster Id and the client cluster Id is null, the check is skipped.
+     *  <p>If both the layout cluster Id and the client cluster Id is null, the check is skipped.
      *  This can only occur in the case of legacy cluster without a cluster Id.
      *
      *  @param  layout  The layout to check.
@@ -658,154 +966,44 @@ public class CorfuRuntime {
         }
     }
 
-    /**
-     * Return a completable future which is guaranteed to contain a layout.
-     * This future will continue retrying until it gets a layout.
-     * If you need this completable future to fail, you should chain it with a timeout.
-     *
-     * @return A completable future containing a layout.
+    /** Log the version information for each server on the console.
+     *  Does not cause a failure in case of a version mismatch.
      */
-    private CompletableFuture<Layout> fetchLayout() {
-        return CompletableFuture.<Layout>supplyAsync(() -> {
+    @SuppressWarnings("unchecked")
+    private void logServerVersions() {
+        // Get a map of servers to futures with version information.
+        Map<String, CompletableFuture<VersionInfo>> futures =
+                CFUtils.getUninterruptibly(layout).getAllServers().stream()
+                .collect(Collectors.toMap(
+                    // Key = server string
+                    s -> s,
+                    // Value = VersionInfo future
+                    s -> getRouter(s).getClient(BaseClient.class).getVersionInfo()));
 
-            List<String> layoutServersCopy = new ArrayList<>(layoutServers);
-            beforeRpcHandler.run();
-
-            while (true) {
-
-                Collections.shuffle(layoutServersCopy);
-                // Iterate through the layout servers, attempting to connect to one
-                for (String s : layoutServersCopy) {
-                    log.debug("Trying connection to layout server {}", s);
-                    try {
-                        IClientRouter router = getRouter(s);
-                        // Try to get a layout.
-                        CompletableFuture<Layout> layoutFuture = router
-                                .getClient(LayoutClient.class).getLayout();
-                        // Wait for layout
-                        Layout l = layoutFuture.get();
-
-                        // If the layout we got has a smaller epoch than the router,
-                        // we discard it.
-                        if (l.getEpoch() < router.getEpoch()) {
-                            log.warn("fetchLayout: Received a layout with epoch {} from server "
-                                            + "{}:{} smaller than router epoch {}, discarded.",
-                                    l.getEpoch(), router.getHost(),
-                                    router.getPort(), router.getEpoch());
-                            continue;
-                        }
-
-                        checkClusterId(l);
-
-                        l.setRuntime(this);
-                        // this.layout should only be assigned to the new layout future
-                        // once it has been completely constructed and initialized.
-                        // For example, assigning this.layout = l
-                        // before setting the layout's runtime can result in other threads
-                        // trying to access a layout with  a null runtime.
-                        // FIXME Synchronization START
-                        // We are updating multiple variables and we need the update to be
-                        // synchronized across all variables.
-                        // Since the variable layoutServers is used only locally within the class
-                        // it is acceptable (at least the code on 10/13/2016 does not have issues)
-                        // but setEpoch of routers needs to be synchronized as those variables are
-                        // not local.
-                        for (String server : l.getAllServers()) {
-                            try {
-                                getRouter(server).setEpoch(l.getEpoch());
-                            } catch (NetworkException ne) {
-                                // We have already received the layout and there is no need to keep
-                                // client waiting.
-                                // NOTE: This is true assuming this happens only at router creation.
-                                // If not we also have to take care of setting the latest epoch on
-                                // Client Router.
-                                log.warn("fetchLayout: Error getting router : {}", server,  ne);
-                            }
-                        }
-                        layoutServers = l.getLayoutServers();
-                        layout = layoutFuture;
-                        //FIXME Synchronization END
-
-                        log.debug("Layout server {} responded with layout {}", s, l);
-                        return l;
-                    } catch (InterruptedException ie) {
-                        throw new UnrecoverableCorfuInterruptedError(
-                            "Interrupted during layout fetch", ie);
-                    } catch (Exception e) {
-                        log.warn("Tried to get layout from {} but failed with exception:", s, e);
-                    }
+        // Print out each version information.
+        futures.forEach((server, versionFuture) -> {
+            try {
+                VersionInfo version = CFUtils.getUninterruptibly(versionFuture,
+                        TimeoutException.class,
+                        NetworkException.class);
+                if (version.getVersion() == null) {
+                    log.error("logServerVersions[{}]: Unexpected version, "
+                            + "server is too old to return version information", server);
+                } else if (!version.getVersion().equals(getVersionString())) {
+                    log.error("logServerVersions[{}]: expected version {}, "
+                            + "but server version is {}",
+                            server, getVersionString(), version.getVersion());
+                } else {
+                    log.info("logServerVersions[{}]: client version {}, server version is {}",
+                            server, getVersionString(), version.getVersion());
                 }
-
-                log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}",
-                        parameters.connectionRetryRate);
-
-                systemDownHandler.run();
-
-                Sleep.sleepUninterruptibly(parameters.connectionRetryRate);
-                if (isShutdown) {
-                    return null;
-                }
+            } catch (TimeoutException | NetworkException e) {
+                log.warn("logServerVersions[{}]: Attempted to get server version "
+                        + "but hit an exception", server, e);
             }
         });
     }
 
-    @SuppressWarnings("unchecked")
-    private void checkVersion() {
-        try {
-            CompletableFuture<VersionInfo>[] futures = layout.get().getLayoutServers()
-                    .stream().map(this::getRouter)
-                    .map(r -> r.getClient(BaseClient.class))
-                    .map(BaseClient::getVersionInfo)
-                    .toArray(CompletableFuture[]::new);
-
-            CompletableFuture.allOf(futures).join();
-
-            for (CompletableFuture<VersionInfo> cf : futures) {
-                if (cf.get().getVersion() == null) {
-                    log.error("Unexpected server version, server is too old to return"
-                            + " version information");
-                } else if (!cf.get().getVersion().equals(getVersionString())) {
-                    log.error("connect: expected version {}, but server version is {}",
-                            getVersionString(), cf.get().getVersion());
-                } else {
-                    log.info("connect: client version {}, server version is {}",
-                            getVersionString(), cf.get().getVersion());
-                }
-            }
-        } catch (Exception e) {
-            log.error("connect: failed to get version", e);
-            throw new UnrecoverableCorfuError("Failed to get version", e);
-        }
-    }
-
-    /**
-     * Connect to the Corfu server instance.
-     * When this function returns, the Corfu server is ready to be accessed.
-     */
-    public synchronized CorfuRuntime connect() {
-        if (layout == null) {
-            log.info("Connecting to Corfu server instance, layout servers={}", layoutServers);
-            // Fetch the current layout and save the future.
-            layout = fetchLayout();
-            try {
-                layout.get();
-            } catch (Exception e) {
-                // A serious error occurred trying to connect to the Corfu instance.
-                log.error("Fatal error connecting to Corfu server instance.", e);
-                throw new UnrecoverableCorfuError(e);
-            }
-        }
-
-        checkVersion();
-
-        if (parameters.isUseFastLoader()) {
-            FastObjectLoader fastLoader = new FastObjectLoader(this)
-                    .setBatchReadSize(parameters.getBulkReadSize())
-                    .setTimeoutInMinutesForLoading((int) parameters.fastLoaderTimeout.toMinutes());
-            fastLoader.loadMaps();
-        }
-        return this;
-    }
 
     // Below are deprecated methods which should no longer be
     // used and may be deprecated in the future.
@@ -841,7 +1039,7 @@ public class CorfuRuntime {
      **/
     @Deprecated
     public CorfuRuntime enableTls(String keyStore, String ksPasswordFile, String trustStore,
-        String tsPasswordFile) {
+            String tsPasswordFile) {
         log.warn("enableTls: Deprecated, please set parameters instead");
         parameters.keyStore = keyStore;
         parameters.ksPasswordFile = ksPasswordFile;
@@ -991,6 +1189,43 @@ public class CorfuRuntime {
         log.warn("setTrimRetry: Deprecated, please set parameters instead");
         parameters.setFastLoaderTimeout(Duration.ofMinutes(timeout));
         return this;
+    }
+
+
+    /**
+     * Add a layout server to the list of servers known by the CorfuRuntime.
+     *
+     * @param layoutServer A layout server to use.
+     * @return A CorfuRuntime, to support the builder pattern.
+     * @deprecated This method is deprecated. Please use the {@link CorfuRuntimeParameters} object.
+     */
+    @Deprecated
+    public CorfuRuntime addLayoutServer(@Nonnull String layoutServer) {
+        layoutServers.add(layoutServer);
+        return this;
+    }
+
+    /**
+     * Stop all routers associated with this runtime & disconnect them.
+     *
+     * @deprecated It is no longer possible to "stop" but not "shutdown" the runtime.
+     *             Please call {@link this#shutdown()} instead.
+     */
+    @Deprecated
+    public void stop() {
+        log.warn("stop: Calling deprecated stop() method, call shutdown() instead");
+        stop(false);
+    }
+
+    /**
+     * Stop all routers associated with this runtime & disconnect them.
+     *
+     * @deprecated It is no longer possible to "stop" but not "shutdown" the runtime.
+     *             Please call {@link this#shutdown()} instead.
+     */
+    @Deprecated
+    public void stop(boolean shutdown) {
+        shutdown();
     }
     // endregion
 }

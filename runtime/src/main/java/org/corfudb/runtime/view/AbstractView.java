@@ -86,6 +86,7 @@ public abstract class AbstractView {
         final Duration retryRate = runtime.getParameters().getConnectionRetryRate();
         while (true) {
             try {
+                runtime.beforeRpcHandler.run();
                 return function.apply(runtime.layout.get());
             } catch (RuntimeException re) {
                 if (re.getCause() instanceof TimeoutException) {
@@ -99,13 +100,11 @@ public abstract class AbstractView {
                     Sleep.sleepUninterruptibly(retryRate);
                 } else if (re instanceof WrongEpochException) {
                     WrongEpochException we = (WrongEpochException) re;
-                    log.warn("Got a wrong epoch exception, updating epoch to {} and "
-                            + "invalidate view", we.getCorrectEpoch());
+                    log.warn("Got a wrong epoch exception, updating epoch to {} by "
+                            + "invalidating layout", we.getCorrectEpoch());
                     runtime.invalidateLayout();
                 } else if (re instanceof NetworkException) {
                     log.warn("layoutHelper: System seems unavailable", re);
-
-                    runtime.systemDownHandler.run();
                     runtime.invalidateLayout();
                     Sleep.sleepUninterruptibly(retryRate);
                 } else {
@@ -121,11 +120,8 @@ public abstract class AbstractView {
                 log.warn("Error executing remote call, invalidating view and retrying in {} ms",
                         retryRate, ex);
 
-                // If SystemUnavailable exception is thrown by the layout.get() completable future,
-                // the exception will materialize as an ExecutionException. In that case, we need to propagate
-                // this exception.
-                if (ex.getCause() instanceof SystemUnavailableError) {
-                    throw (SystemUnavailableError) ex.getCause();
+                if (ex.getCause() instanceof Error) {
+                    throw (Error) ex.getCause();
                 }
 
                 runtime.invalidateLayout();
