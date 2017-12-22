@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -13,6 +14,7 @@ import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.util.CFUtils;
 
 /**
  * Helper class to seal requested servers.
@@ -79,21 +81,20 @@ public class SealServersHelper {
         for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {
             CompletableFuture<Boolean>[] completableFutures =
                     completableFutureMap.entrySet().stream()
-                    .filter(pair -> layoutStripe.getLogServers().contains(pair.getKey()))
-                    .map(pair -> pair.getValue())
-                    .toArray(CompletableFuture[]::new);
+                            .filter(pair -> layoutStripe.getLogServers().contains(pair.getKey()))
+                            .map(pair -> pair.getValue())
+                            .toArray(CompletableFuture[]::new);
             QuorumFuturesFactory.CompositeFuture<Boolean> quorumFuture =
                     QuorumFuturesFactory.getFirstWinsFuture(Boolean::compareTo, completableFutures);
+
             boolean success = false;
             try {
-                success = quorumFuture.get();
-            } catch (InterruptedException ie) {
-                throw new UnrecoverableCorfuInterruptedError("Sealing interrupted", ie);
-            } catch (ExecutionException e) {
-                if (e.getCause() instanceof QuorumUnreachableException) {
-                    throw (QuorumUnreachableException) e.getCause();
-                }
+                success = CFUtils.getUninterruptibly(quorumFuture,
+                        TimeoutException.class, QuorumUnreachableException.class);
+            } catch (TimeoutException e) {
+                log.error("waitForChainSegmentSeal: timeout", e);
             }
+
             int reachableServers = (int) Arrays.stream(completableFutures)
                     .filter(booleanCompletableFuture ->
                             !booleanCompletableFuture.isCompletedExceptionally()).count();

@@ -3,6 +3,7 @@ package org.corfudb.samples;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.transactions.TransactionType;
 
 import java.util.ArrayList;
@@ -97,7 +98,9 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
             try {
                 th.join(THREAD_TIMEOUT);
             } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
                 System.out.println("Thread timeout!");
+                throw new UnrecoverableCorfuInterruptedError(ie);
             }
         });
 
@@ -115,7 +118,9 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
             try {
                 th.join(THREAD_TIMEOUT);
             } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
                 System.out.println("Thread timeout!");
+                throw new UnrecoverableCorfuInterruptedError(ie);
             }
         });
 

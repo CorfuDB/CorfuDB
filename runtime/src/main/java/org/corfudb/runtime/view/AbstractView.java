@@ -118,6 +118,8 @@ public abstract class AbstractView {
                         Thread.sleep(runtime.getParameters().getConnectionRetryRate().toMillis());
                     } catch (InterruptedException e) {
                         log.warn("Interrupted Exception in layout helper.", e);
+                        Thread.currentThread().interrupt();
+                        throw new UnrecoverableCorfuInterruptedError("Interrupted Exception in layout helper.", e);
                     }
 
                 } else {

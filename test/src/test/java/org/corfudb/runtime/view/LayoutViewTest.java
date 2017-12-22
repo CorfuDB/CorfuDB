@@ -322,7 +322,7 @@ public class LayoutViewTest extends AbstractViewTest {
         newLayout.setRuntime(corfuRuntime);
 
         // Keep old layout untouched for assertion
-        Layout oldLayout = (Layout) l.clone();
+        Layout oldLayout = new Layout(l);
         l.setEpoch(l.getEpoch() + 1);
         l.moveServersToEpoch();
 

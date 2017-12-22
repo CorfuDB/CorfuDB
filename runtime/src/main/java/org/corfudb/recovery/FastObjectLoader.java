@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -35,6 +34,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectBuilder;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -233,12 +233,8 @@ public class FastObjectLoader {
             fail(msg);
         }
         for (Future future : futureList) {
-            try {
-                future.get();
-            } catch (ExecutionException | InterruptedException e) {
-                log.error("Error in invokingNecromancer task : {}", e);
-                fail("FastSMRLoader recovery failed.");
-            }
+            CFUtils.getUninterruptibly(future);
+
         }
     }
 

@@ -772,7 +772,7 @@ public class ManagementViewTest extends AbstractViewTest {
     @Test
     public void unblockSealedCluster() throws Exception {
         CorfuRuntime corfuRuntime = getDefaultRuntime();
-        Layout l = (Layout) corfuRuntime.getLayoutView().getLayout().clone();
+        Layout l = new Layout(corfuRuntime.getLayoutView().getLayout());
 
         corfuRuntime.getRouter(SERVERS.ENDPOINT_0).getClient(ManagementClient.class)
                 .initiateFailureHandler().get();

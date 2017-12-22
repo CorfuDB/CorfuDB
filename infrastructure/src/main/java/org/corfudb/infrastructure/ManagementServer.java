@@ -205,16 +205,11 @@ public class ManagementServer extends AbstractServer {
     }
 
     private boolean recover() {
-        try {
             boolean recoveryResult = reconfigurationEventHandler
-                    .recoverCluster((Layout) latestLayout.clone(), getCorfuRuntime());
+                    .recoverCluster(new Layout(latestLayout), getCorfuRuntime());
             safeUpdateLayout(corfuRuntime.getLayoutView().getLayout());
             return recoveryResult;
-        } catch (CloneNotSupportedException e) {
-            log.error("Failure Handler could not clone layout: {}", e);
-            log.error("Recover: Node will remain blocked until recovered successfully.");
-            return false;
-        }
+
     }
 
     /**
@@ -361,10 +356,9 @@ public class ManagementServer extends AbstractServer {
 
         log.info("handleFailureDetectedMsg: Received Failures : {}",
                 msg.getPayload().getFailedNodes());
-        try {
             boolean result = reconfigurationEventHandler.handleFailure(
                     failureHandlerPolicy,
-                    (Layout) latestLayout.clone(),
+                    new Layout(latestLayout),
                     getCorfuRuntime(),
                     msg.getPayload().getFailedNodes(),
                     msg.getPayload().getHealedNodes());
@@ -374,10 +368,7 @@ public class ManagementServer extends AbstractServer {
                 log.error("handleFailureDetectedMsg: failure handling unsuccessful.");
                 r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
             }
-        } catch (CloneNotSupportedException e) {
-            log.error("handleFailureDetectedMsg: Failure Handler could not clone layout: {}", e);
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
-        }
+
     }
 
     /**
@@ -647,7 +638,7 @@ public class ManagementServer extends AbstractServer {
             safeUpdateLayout(quorumLayout);
 
             // We clone the layout to not pollute the original latestLayout.
-            Layout sealLayout = (Layout) latestLayout.clone();
+            Layout sealLayout = new Layout(latestLayout);
             sealLayout.setRuntime(getCorfuRuntime());
 
             // In case of a partial seal, a set of servers can be sealed with a higher epoch.
@@ -665,7 +656,7 @@ public class ManagementServer extends AbstractServer {
             // If yes patch it (commit) with the latestLayout (received from quorum).
             updateTrailingLayoutServers(layoutCompletableFutureMap);
 
-        } catch (CloneNotSupportedException | QuorumUnreachableException e) {
+        } catch (QuorumUnreachableException e) {
             log.error("Error in correcting server epochs: {}", e);
         }
     }
