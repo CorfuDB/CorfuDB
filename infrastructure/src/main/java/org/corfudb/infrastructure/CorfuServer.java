@@ -6,10 +6,9 @@ import static org.fusesource.jansi.Ansi.Color.RED;
 import static org.fusesource.jansi.Ansi.Color.WHITE;
 import static org.fusesource.jansi.Ansi.ansi;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -24,6 +23,7 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
+
 import java.io.File;
 import java.util.List;
 import java.util.Map;
@@ -33,10 +33,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -48,6 +51,10 @@ import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+
 
 /**
  * This is the new Corfu server single-process executable.
@@ -78,7 +85,7 @@ public class CorfuServer {
                     + "<ratio>] [-d <level>] [-p <seconds>] [-M <address>:<port>] [-e [-u "
                     + "<keystore> -f <keystore_password_file>] [-r <truststore> -w "
                     + "<truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] "
-                    + "[-k <seqcache>] [-T <threads>]"
+                    + "[-k <seqcache>] [-T <threads>] [-H <seconds>]                               "
                     + "[-x <ciphers>] [-z <tls-protocols>]] [--agent] <port>\n"
                     + "\n"
                     + "Options:\n"
@@ -108,6 +115,8 @@ public class CorfuServer {
                     + "              If there is no log, then this will be the size of the log unit"
                     + "\n                                                                        "
                     + "                evicted entries will be auto-trimmed. [default: 0.5].\n"
+                    + " -H <seconds>, --HandshakeTimeout=<sceonds>                               "
+                    + "              Handshake timeout in seconds [default: 10].\n               "
                     + " -t <token>, --initial-token=<token>                                      "
                     + "              The first token the sequencer will issue, or -1 to recover\n"
                     + "                                                                          "
@@ -483,6 +492,10 @@ public class CorfuServer {
                 // Transform the framed message into a Corfu message.
                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
+                ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
+                        Version.getVersionString() + "("
+                                + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")",
+                        context.getServerConfig(String.class, "--HandshakeTimeout")));
                 // Route the message to the server class.
                 ch.pipeline().addLast(router);
             }
