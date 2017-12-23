@@ -685,7 +685,7 @@ public class ServerRestartIT extends AbstractIT {
     }
 
     /**
-     * Data generation. First 40,000 entries are written to the table.
+     * Data generation. First 1000 entries are written to the table.
      * The log is then check-pointed and trimmed. The server is then restarted.
      * We now start 2 clients rt2 and rt3, both of which should recreate the log and also
      * reconstruct the indices.
@@ -699,11 +699,11 @@ public class ServerRestartIT extends AbstractIT {
         // Start server
         Process corfuProcess = runCorfuServer();
 
-        // Write 40,000 entries.
+        // Write 1000 entries.
         CorfuRuntime rt1 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
         CorfuTable<String, String, CorfuTableTest.StringIndexers, String> corfuTable1 =
                 createTable(rt1);
-        final int num = 40_000;
+        final int num = 1000;
         for (int i = 0; i < num; i++) {
             corfuTable1.put(Integer.toString(i), Integer.toString(i));
         }

@@ -41,7 +41,7 @@ public class SealIT extends AbstractIT{
          *   3. Propose the new layout by driving paxos.
          */
 
-        Layout currentLayout = (Layout) cr1.getLayoutView().getCurrentLayout().clone();
+        Layout currentLayout = new Layout(cr1.getLayoutView().getCurrentLayout());
         currentLayout.setRuntime(cr1);
         /* 1 */
         currentLayout.setEpoch(currentLayout.getEpoch() + 1);
