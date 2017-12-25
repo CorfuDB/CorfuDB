@@ -102,7 +102,7 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
                     historyStatus.put(allServers[i], true);  // Assume it's up until we think it
                     // isn't.
                 }
-                historyRouters[i] = corfuRuntime.getRouterFunction.apply(allServers[i]);
+                historyRouters[i] = corfuRuntime.getRouter(allServers[i]);
                 historyPollFailures[i] = 0;
                 historyPollEpochExceptions[i] = 0;
             }

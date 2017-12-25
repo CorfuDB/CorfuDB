@@ -291,39 +291,6 @@ public class CorfuRuntime {
      */
     public static BiFunction<CorfuRuntime, String, IClientRouter> overrideGetRouterFunction = null;
 
-    /**
-     * A function to handle getting routers. Used by test framework to inject
-     * a test router. Can also be used to provide alternative logic for obtaining
-     * a router.
-     */
-    @Getter
-    @Setter
-    public Function<String, IClientRouter> getRouterFunction = overrideGetRouterFunction != null
-            ? (address) -> overrideGetRouterFunction.apply(this, address) : (address) -> {
-
-                // Return an existing router if we already have one.
-                if (nodeRouters.containsKey(address)) {
-                    return nodeRouters.get(address);
-                }
-
-                NodeLocator node = NodeLocator.parseString(address);
-                // Generate a new router, start it and add it to the table.
-                NettyClientRouter router = new NettyClientRouter(node, getParameters());
-                log.debug("Connecting to new router {}", node);
-                try {
-                    router.addClient(new LayoutClient())
-                            .addClient(new SequencerClient())
-                            .addClient(new LogUnitClient().setMetricRegistry(metrics != null
-                                            ? metrics : CorfuRuntime.getDefaultMetrics()))
-                            .addClient(new ManagementClient())
-                            .start();
-                    nodeRouters.put(address, router);
-                } catch (Exception e) {
-                    log.warn("Error connecting to router", e);
-                }
-                return router;
-            };
-
     public static CorfuRuntime fromParameters(@Nonnull CorfuRuntimeParameters parameters) {
         return new CorfuRuntime(parameters);
     }
@@ -464,7 +431,31 @@ public class CorfuRuntime {
      * @return The router.
      */
     public IClientRouter getRouter(String address) {
-        return getRouterFunction.apply(address);
+        if (overrideGetRouterFunction != null) {
+            return overrideGetRouterFunction.apply(this, address);
+        }
+
+        return nodeRouters.computeIfAbsent(address, x -> {
+            // Return an existing router if we already have one.
+            if (nodeRouters.containsKey(address)) {
+                return nodeRouters.get(address);
+            }
+
+            NodeLocator node = NodeLocator.parseString(address);
+            // Generate a new router, start it and add it to the table.
+            NettyClientRouter router = new NettyClientRouter(node, getParameters());
+            log.debug("Connecting to new router {}", node);
+
+            router.addClient(new LayoutClient())
+                    .addClient(new SequencerClient())
+                    .addClient(new LogUnitClient().setMetricRegistry(metrics != null
+                            ? metrics : CorfuRuntime.getDefaultMetrics()))
+                    .addClient(new ManagementClient())
+                    .start();
+            nodeRouters.put(address, router);
+
+            return router;
+        });
     }
 
     /**
