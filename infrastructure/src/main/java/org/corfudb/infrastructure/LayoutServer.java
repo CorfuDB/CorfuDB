@@ -24,6 +24,8 @@ import org.corfudb.protocols.wireprotocol.LayoutProposeResponse;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 
+import javax.annotation.Nonnull;
+
 /**
  * The layout server serves layouts, which are used by clients to find the
  * Corfu infrastructure.
@@ -128,6 +130,35 @@ public class LayoutServer extends AbstractServer {
 
 
     /**
+     * Handle a force layout request. Force layout enables the server to bypass consensus
+     * and accept a new layout.
+     *
+     * @param msg              corfu message containing LAYOUT_FORCE
+     * @param ctx              netty ChannelHandlerContext
+     * @param r                server router
+     * @param isMetricsEnabled True if metrics are enabled, False otherwise
+     */
+    @ServerHandler(type = CorfuMsgType.LAYOUT_FORCE, opTimer = metricsPrefix + "force-layout")
+    public synchronized void handleLayoutForce(@Nonnull CorfuPayloadMsg<LayoutCommittedRequest> msg,
+                                               @Nonnull ChannelHandlerContext ctx,
+                                               @Nonnull IServerRouter r,
+                                               boolean isMetricsEnabled) {
+        LayoutCommittedRequest req = msg.getPayload();
+
+        if (req.getEpoch() != getServerEpoch()) {
+            // return can't force old epochs
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.WRONG_EPOCH));
+            log.warn("handleLayoutForce: Trying to force a layout with an old epoch. Layout {}, " +
+                            "current epoch", req.getLayout(), getServerEpoch());
+            return;
+        }
+
+        setCurrentLayout(req.getLayout());
+        log.warn("handleLayoutForce: Forcing new layout {}", req.getLayout());
+        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+    }
+
+    /**
      * Handle a layout request message.
      *
      * @param msg              corfu message containing LAYOUT_REQUEST
@@ -156,6 +187,8 @@ public class LayoutServer extends AbstractServer {
                     epoch, serverEpoch);
         }
     }
+
+
 
     /**
      * Sets the new layout if the server has not been bootstrapped with one already.

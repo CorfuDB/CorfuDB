@@ -51,6 +51,33 @@ public class LayoutView extends AbstractView {
     }
 
     /**
+     * Send a force layout request to all the layout servers in the new forced layout
+     * @param layout the new layout to force
+     */
+    public void forceLayout(@Nonnull Layout layout) {
+
+        log.warn("forceLayout: forcing layout {}", layout);
+        CompletableFuture<Boolean>[] forceList = layout.getLayoutServers().stream()
+                .map(x -> {
+                    CompletableFuture<Boolean> cf = new CompletableFuture<>();
+                    try {
+                        // Connection to router can cause network exception too.
+                        LayoutClient layoutClient = runtime.getRouter(x)
+                                .getClient(LayoutClient.class);
+
+                        cf =  layoutClient.force(layout);
+                    } catch (NetworkException e) {
+                        log.error("forceLayout: Couldn't force layout on {}", x);
+                        cf.completeExceptionally(e);
+                    }
+                    return cf;
+                })
+                .toArray(CompletableFuture[]::new);
+
+        CompletableFuture.allOf(forceList);
+    }
+
+    /**
      * Drives the consensus protocol for persisting the new Layout.
      * TODO currently the code can drive only one Layout change.
      * If it has to drive a previously incomplete round

@@ -45,12 +45,13 @@ public enum CorfuMsgType {
     LAYOUT_QUERY(17, new TypeToken<CorfuPayloadMsg<Long>>(){}),
     LAYOUT_BOOTSTRAP(18, new TypeToken<CorfuPayloadMsg<LayoutBootstrapRequest>>(){}, true),
     LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), true),
+    LAYOUT_FORCE(20, new TypeToken<CorfuPayloadMsg<LayoutCommittedRequest>>(){}, true),
 
     // Sequencer Messages
-    TOKEN_REQ(20, new TypeToken<CorfuPayloadMsg<TokenRequest>>(){}),
-    TOKEN_RES(21, new TypeToken<CorfuPayloadMsg<TokenResponse>>(){}),
-    BOOTSTRAP_SEQUENCER(22, new TypeToken<CorfuPayloadMsg<SequencerTailsRecoveryMsg>>(){}),
-    SEQUENCER_TRIM_REQ(23, new TypeToken<CorfuPayloadMsg<Long>>() {}),
+    TOKEN_REQ(25, new TypeToken<CorfuPayloadMsg<TokenRequest>>(){}),
+    TOKEN_RES(26, new TypeToken<CorfuPayloadMsg<TokenResponse>>(){}),
+    BOOTSTRAP_SEQUENCER(27, new TypeToken<CorfuPayloadMsg<SequencerTailsRecoveryMsg>>(){}),
+    SEQUENCER_TRIM_REQ(28, new TypeToken<CorfuPayloadMsg<Long>>() {}),
 
     // Logging Unit Messages
     WRITE(30, new TypeToken<CorfuPayloadMsg<WriteRequest>>() {}),

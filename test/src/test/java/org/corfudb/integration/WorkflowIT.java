@@ -124,9 +124,144 @@ public class WorkflowIT extends AbstractIT {
         n1Rt.invalidateLayout();
         assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
 
+        // Force remove node 3
+        CreateWorkflowResponse resp4 = mgmt.forceRemoveNode(getConnectionString(n3Port));
+        waitForWorkflow(resp4.getWorkflowId(), n1Rt, n1Port);
+        n1Rt.invalidateLayout();
+        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(1);
+
+        // Re-add node 2
+        CreateWorkflowResponse resp5 = mgmt.addNodeRequest(getConnectionString(n2Port));
+        waitForWorkflow(resp5.getWorkflowId(), n1Rt, n1Port);
+        n1Rt.invalidateLayout();
+        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+
         for (int x = 0; x < numEntries; x++) {
             String v = (String) table.get(String.valueOf(x));
             assertThat(v).isEqualTo(String.valueOf(x));
+        }
+    }
+
+    @Test
+    public void clusterResizingTest1() throws Exception {
+        // This tests will resize the cluster according to the following
+        // order: add node -> add node -> remove node -> add node -> add node
+        final int n0Port = 9000;
+        final int n1Port = 9001;
+        final int n2Port = 9002;
+
+        final int clusterSizeN1 = 1;
+        final int clusterSizeN2 = 2;
+        final int clusterSizeN3 = 3;
+
+        new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n0Port)
+                .setSingle(true)
+                .runServer();
+
+        new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n1Port)
+                .runServer();
+
+        new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n2Port)
+                .runServer();
+
+        CorfuRuntime n0Rt = new CorfuRuntime(getConnectionString(n0Port)).connect();
+        CorfuTable table = n0Rt.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setStreamName("table1").open();
+
+        final int iter = 100;
+        for (int x = 0; x < iter; x++) {
+            table.put(String.valueOf(x), String.valueOf(x));
+        }
+
+        ManagementClient mgmt = n0Rt.getRouter(getConnectionString(n0Port))
+                .getClient(ManagementClient.class);
+
+        UUID id1 = mgmt.addNodeRequest(getConnectionString(n1Port)).getWorkflowId();
+        waitForWorkflow(id1, n0Rt, n0Port);
+
+        n0Rt.invalidateLayout();
+        assertThat(n0Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+
+        UUID id2 = mgmt.forceRemoveNode(getConnectionString(n1Port)).getWorkflowId();
+        waitForWorkflow(id2, n0Rt, n0Port);
+        assertThat(n0Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN1);
+
+        UUID id3 = mgmt.addNodeRequest(getConnectionString(n1Port)).getWorkflowId();
+        waitForWorkflow(id3, n0Rt, n0Port);
+
+        UUID id4 = mgmt.addNodeRequest(getConnectionString(n2Port)).getWorkflowId();
+        waitForWorkflow(id4, n0Rt, n0Port);
+
+        n0Rt.invalidateLayout();
+        assertThat(n0Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
+
+        UUID id5 = mgmt.removeNode(getConnectionString(n1Port)).getWorkflowId();
+        waitForWorkflow(id5, n0Rt, n0Port);
+        assertThat(n0Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+
+        n0Rt.invalidateLayout();
+
+        for (int x = 0; x < iter; x++) {
+            assertThat(table.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
+        }
+    }
+
+    @Test
+    public void clusterResizingTest2() throws Exception {
+        final int n0Port = 9000;
+        final int n1Port = 9001;
+
+        final int clusterSizeN1 = 1;
+        final int clusterSizeN2 = 2;
+
+        new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n0Port)
+                .setSingle(true)
+                .runServer();
+
+        Process p2 = new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n1Port)
+                .runServer();
+
+        CorfuRuntime n0Rt = new CorfuRuntime(getConnectionString(n0Port)).connect();
+        CorfuTable table = n0Rt.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setStreamName("table1").open();
+
+        final int iter = 100;
+        for (int x = 0; x < iter; x++) {
+            table.put(String.valueOf(x), String.valueOf(x));
+        }
+
+        ManagementClient mgmt = n0Rt.getRouter(getConnectionString(n0Port))
+                .getClient(ManagementClient.class);
+
+        UUID id1 = mgmt.addNodeRequest(getConnectionString(n1Port)).getWorkflowId();
+        waitForWorkflow(id1, n0Rt, n0Port);
+
+        n0Rt.invalidateLayout();
+        assertThat(n0Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+
+        // Kill one node from a two node cluster
+        p2.destroy();
+
+        // Force remove the "failed" node
+        CreateWorkflowResponse resp4 = mgmt.forceRemoveNode(getConnectionString(n1Port));
+        waitForWorkflow(resp4.getWorkflowId(), n0Rt, n0Port);
+        n0Rt.invalidateLayout();
+        assertThat(n0Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN1);
+
+        for (int x = 0; x < iter; x++) {
+            assertThat(table.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
         }
     }
 
