@@ -13,8 +13,6 @@ import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
 
-import javax.annotation.Nonnull;
-
 /**
  * Allows us to make modifications to a layout.
  *
@@ -53,16 +51,6 @@ public class LayoutBuilder {
     }
 
     /**
-     * Set layout's epoch
-     * @param epoch epoch to set
-     * @return this builder
-     */
-    public LayoutBuilder setEpoch(long epoch) {
-        this.epoch = epoch;
-        return this;
-    }
-
-    /**
      * Adds unresponsive servers in the list.
      *
      * @param endpoints Endpoints to be added.
@@ -81,16 +69,6 @@ public class LayoutBuilder {
      */
     public LayoutBuilder removeUnResponsiveServers(Set<String> endpoints) {
         layout.getUnresponsiveServers().removeAll(endpoints);
-        return this;
-    }
-
-    /**
-     * Removes an unresponsive server
-     * @param endpoint the endpoint of the server to remove
-     * @return this builder
-     */
-    public LayoutBuilder removeUnResponsiveServer(@Nonnull String endpoint) {
-        layout.getUnresponsiveServers().remove(endpoint);
         return this;
     }
 
@@ -365,23 +343,26 @@ public class LayoutBuilder {
      */
     public LayoutBuilder removeLogunitServer(String endpoint) {
 
-        Layout tempLayout = new Layout(layout);
-
-        List<LayoutSegment> layoutSegments = tempLayout.getSegments();
+        List<LayoutSegment> layoutSegments = layout.getSegments();
         for (LayoutSegment layoutSegment : layoutSegments) {
-            Layout.ReplicationMode mode = layoutSegment.getReplicationMode();
             for (LayoutStripe layoutStripe : layoutSegment.getStripes()) {
-                int minReplicationFactor = 0;
-                if (mode == Layout.ReplicationMode.CHAIN_REPLICATION) {
-                    minReplicationFactor = 2;
-                } else if (mode == Layout.ReplicationMode.QUORUM_REPLICATION) {
-                    throw new IllegalStateException("Unsupported operation!");
+
+                List<String> loguintServers = layoutStripe.getLogServers();
+
+                for (int k = 0; k < loguintServers.size(); k++) {
+                    if (loguintServers.get(k).equals(endpoint)) {
+                        if (loguintServers.size() == 1) {
+                            throw new LayoutModificationException(
+                                    "Attempting to remove all logunit. No replicas available.");
+                        }
+                        loguintServers.remove(k);
+                        return this;
+                    }
                 }
-                removeFromStripe(endpoint, layoutStripe, minReplicationFactor);
+
             }
         }
 
-        layout = tempLayout;
         return this;
     }
 
