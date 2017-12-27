@@ -30,7 +30,7 @@ public class ServerContextBuilder {
     String truststore = "";
     String truststorePasswordFile = "";
 
-    String implementation = "auto";
+    String implementation = "nio";
 
     String cacheSizeHeapRatio = "0.5";
     String address = "test";
