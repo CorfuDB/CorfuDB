@@ -544,7 +544,7 @@ public class NettyCommTest extends AbstractCorfuTest {
             workerGroup = CorfuServer.getWorkerGroup(serverContext);
             f = CorfuServer.startAndListen(bossGroup,
                                             workerGroup,
-                                            NioServerSocketChannel.class,
+                                            CorfuServer.getServerChannelType(serverContext),
                                             b -> CorfuServer.configureBootstrapOptions(
                                                 serverContext, b),
                                             serverContext,
