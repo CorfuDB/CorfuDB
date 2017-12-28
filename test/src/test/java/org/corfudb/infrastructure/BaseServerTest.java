@@ -30,8 +30,8 @@ public class BaseServerTest extends AbstractServerTest {
     @Test
     public void shutdownServerDoesNotRespond() {
         getDefaultServer().shutdown();
-        Assertions.assertThat(getLastMessage())
-                .isNull();
+        Assertions.assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsgType.ERROR_SHUTDOWN_EXCEPTION);
         sendMessage(new CorfuMsg(CorfuMsgType.PING));
         Assertions.assertThat(getLastMessage())
                 .isNull();
