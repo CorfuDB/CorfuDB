@@ -6,6 +6,7 @@ import com.google.common.collect.Maps;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.IServerRouter;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.Action;
@@ -19,12 +20,16 @@ import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.Response;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.NodeLocator;
 
 import javax.annotation.Nonnull;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * The orchestrator is a stateless service that runs on all management servers and its purpose
@@ -39,10 +44,15 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public class Orchestrator {
 
+    final ServerContext serverContext;
+
     final Callable<CorfuRuntime> getRuntime;
+
     final BiMap<UUID, String> activeWorkflows = Maps.synchronizedBiMap(HashBiMap.create());
 
-    public Orchestrator(@Nonnull Callable<CorfuRuntime> runtime) {
+    public Orchestrator(@Nonnull Callable<CorfuRuntime> runtime,
+                        @Nonnull ServerContext serverContext) {
+        this.serverContext = serverContext;
         this.getRuntime = runtime;
     }
 
@@ -143,12 +153,23 @@ public class Orchestrator {
     void run(@Nonnull IWorkflow workflow) {
         CorfuRuntime rt = null;
         try {
-            Layout currLayout = getRuntime.call().layout.get();
-            String servers = String.join(",", currLayout.getLayoutServers());
-            rt = new CorfuRuntime(servers)
-                    .setCacheDisabled(true)
-                    .setLoadSmrMapsAtConnect(false)
-                    .connect();
+            getRuntime.call().invalidateLayout();
+            Layout currLayout = getRuntime.call().getLayoutView().getLayout();
+
+            List<NodeLocator> servers = currLayout.getAllServers().stream()
+                    .map(NodeLocator::parseString)
+                    .collect(Collectors.toList());
+
+            // Create a new runtime for this workflow. Since this runtime will
+            // only be used to execute this workflow, it doesn't need a cache and has
+            // the default authentication config parameters as the ManagementServer's
+            // runtime
+            CorfuRuntimeParameters params = serverContext.getDefaultRuntimeParameters();
+            params.setCacheDisabled(true);
+            params.setUseFastLoader(false);
+            params.setLayoutServers(servers);
+
+            rt = CorfuRuntime.fromParameters(params).connect();
 
             log.info("run: Started workflow {} id {}", workflow.getName(), workflow.getId());
             long workflowStart = System.currentTimeMillis();

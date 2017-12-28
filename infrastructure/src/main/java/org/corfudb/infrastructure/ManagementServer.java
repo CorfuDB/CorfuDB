@@ -35,6 +35,7 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.SequencerClient;
@@ -181,7 +182,7 @@ public class ManagementServer extends AbstractServer {
             log.error("Error scheduling failure detection task, {}", err);
         }
 
-        orchestrator = new Orchestrator(this::getCorfuRuntime);
+        orchestrator = new Orchestrator(this::getCorfuRuntime, serverContext);
     }
 
     private void bootstrapPrimarySequencerServer() {
@@ -399,18 +400,8 @@ public class ManagementServer extends AbstractServer {
     public synchronized CorfuRuntime getCorfuRuntime() {
 
         if (corfuRuntime == null) {
-            corfuRuntime = new CorfuRuntime();
-            if ((Boolean) opts.get("--enable-tls")) {
-                corfuRuntime.enableTls((String) opts.get("--keystore"),
-                        (String) opts.get("--keystore-password-file"),
-                        (String) opts.get("--truststore"),
-                        (String) opts.get("--truststore-password-file"));
-                if ((Boolean) opts.get("--enable-sasl-plain-text-auth")) {
-                    corfuRuntime.enableSaslPlainText(
-                            (String) opts.get("--sasl-plain-text-username-file"),
-                            (String) opts.get("--sasl-plain-text-password-file"));
-                }
-            }
+            CorfuRuntimeParameters params = serverContext.getDefaultRuntimeParameters();
+            corfuRuntime = CorfuRuntime.fromParameters(params);
             // Runtime can be set up either using the layout or the bootstrapEndpoint address.
             if (latestLayout != null) {
                 latestLayout.getLayoutServers().forEach(ls -> corfuRuntime.addLayoutServer(ls));
