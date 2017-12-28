@@ -336,7 +336,7 @@ public class CorfuRuntime {
         this.parameters = parameters;
         layoutServers = new ArrayList<>();
         layoutServers.addAll(this.parameters.getLayoutServers().stream()
-                                .map(NodeLocator::toString)
+                                .map(NodeLocator::getConnectionString)
                                 .collect(Collectors.toList()));
         nodeRouters = new ConcurrentHashMap<>();
 
