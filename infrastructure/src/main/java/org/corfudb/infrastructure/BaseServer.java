@@ -28,10 +28,9 @@ public class BaseServer extends AbstractServer {
 
     /** Handler for the base server. */
     @Getter
-    private final CorfuMsgHandler handler = new CorfuMsgHandler()
-            .generateHandlers(MethodHandles.lookup(), this);
+    private final CorfuMsgHandler handler =
+            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
 
-    private static final String metricsPrefix = "corfu.server.base.";
 
     /** Respond to a ping message.
      *
@@ -39,9 +38,8 @@ public class BaseServer extends AbstractServer {
      * @param ctx   The channel context
      * @param r     The server router.
      */
-    @ServerHandler(type = CorfuMsgType.PING, opTimer = metricsPrefix + "ping")
-    private static void ping(CorfuMsg msg, ChannelHandlerContext ctx,
-                             IServerRouter r, boolean isMetricsEnabled) {
+    @ServerHandler(type = CorfuMsgType.PING)
+    private static void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         r.sendResponse(ctx, msg, CorfuMsgType.PONG.msg());
     }
 
@@ -51,9 +49,8 @@ public class BaseServer extends AbstractServer {
      * @param ctx   The channel context
      * @param r     The server router.
      */
-    @ServerHandler(type = CorfuMsgType.VERSION_REQUEST, opTimer = metricsPrefix + "version-request")
-    private void getVersion(CorfuMsg msg, ChannelHandlerContext ctx,
-                            IServerRouter r, boolean isMetricsEnabled) {
+    @ServerHandler(type = CorfuMsgType.VERSION_REQUEST)
+    private void getVersion(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         VersionInfo vi = new VersionInfo(serverContext.getServerConfig(),
                                          serverContext.getNodeIdBase64());
         r.sendResponse(ctx, msg, new JSONPayloadMsg<>(vi, CorfuMsgType.VERSION_RESPONSE));
@@ -66,21 +63,20 @@ public class BaseServer extends AbstractServer {
      * @param ctx The channel context
      * @param r   The server router.
      */
-    @ServerHandler(type = CorfuMsgType.SET_EPOCH, opTimer = metricsPrefix + "set-epoch")
+    @ServerHandler(type = CorfuMsgType.SET_EPOCH)
     public synchronized void handleMessageSetEpoch(@NonNull CorfuPayloadMsg<Long> msg,
                                                    ChannelHandlerContext ctx,
-                                                   @NonNull IServerRouter r,
-                                                   @NonNull boolean isMetricsEnabled) {
+                                                   @NonNull IServerRouter r) {
         try {
             log.info("handleMessageSetEpoch: Received SET_EPOCH, moving to new epoch {}",
-                msg.getPayload());
+                    msg.getPayload());
             serverContext.setServerEpoch(msg.getPayload(), r);
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
         } catch (WrongEpochException e) {
             log.debug("handleMessageSetEpoch: Rejected SET_EPOCH current={}, requested={}",
-                e.getCorrectEpoch(), msg.getPayload());
+                    e.getCorrectEpoch(), msg.getPayload());
             r.sendResponse(ctx, msg,
-                new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, e.getCorrectEpoch()));
+                    new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, e.getCorrectEpoch()));
         }
     }
 
@@ -93,11 +89,11 @@ public class BaseServer extends AbstractServer {
      * @param r     The server router.
      */
     @ServerHandler(type = CorfuMsgType.RESET)
-    private static void doReset(CorfuMsg msg, ChannelHandlerContext ctx,
-                                IServerRouter r, boolean isMetricsEnabled) {
+    private static void doReset(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.warn("Remote reset requested from client " + msg.getClientID());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-        Sleep.MILLISECONDS.sleepUninterruptibly(500); // Sleep, to make sure that all channels are flushed...
+        // Sleep, to make sure that all channels are flushed...
+        Sleep.MILLISECONDS.sleepUninterruptibly(500);
         System.exit(100);
     }
 }

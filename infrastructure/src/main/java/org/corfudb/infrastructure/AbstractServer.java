@@ -43,7 +43,6 @@ public abstract class AbstractServer {
         if (isShutdown()) {
             return;
         }
-        boolean isMetricsEnabled = MetricsUtils.isMetricsCollectionEnabled();
 
         if (!this.isServerReadyToHandleMsg(msg)) {
             log.warn("Received message {} but Server not ready." , msg.getMsgType());
@@ -57,8 +56,8 @@ public abstract class AbstractServer {
             return;
         }
 
-        if (!getHandler().handle(msg, ctx, r, isMetricsEnabled)) {
-            log.warn("Received unhandled message type {}" , msg.getMsgType());
+        if (!getHandler().handle(msg, ctx, r)) {
+            log.warn("Received unhandled message type {}", msg.getMsgType());
         }
     }
 
