@@ -40,22 +40,6 @@ public abstract class AbstractServer {
      * @param r   The router that took in the message.
      */
     public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        if (isShutdown()) {
-            return;
-        }
-
-        if (!this.isServerReadyToHandleMsg(msg)) {
-            log.warn("Received message {} but Server not ready." , msg.getMsgType());
-            r.sendResponse(ctx, msg, CorfuMsgType.NOT_READY.msg());
-            return;
-        }
-
-        if (isShutdown()) {
-            log.warn("Server received {} but is shutdown.", msg.getMsgType().toString());
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SHUTDOWN_EXCEPTION.msg());
-            return;
-        }
-
         if (!getHandler().handle(msg, ctx, r)) {
             log.warn("Received unhandled message type {}", msg.getMsgType());
         }

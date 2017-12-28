@@ -196,6 +196,14 @@ public class CorfuMsgHandler {
         }
     }
 
+    /** Generate a conditional handler, which instruments the handler with metrics if enabled
+     *  and checks whether the server is shutdown and ready.
+     * @param server        The {@link AbstractServer} the message is being handled for.
+     * @param type          The {@link CorfuMsgType} the message is being handled for.
+     * @param handler       The {@link Handler} which handles the message.
+     * @return              A new {@link Handler} which conditionally executes the handler
+     *                      based on preconditions (whether the server is shutdown/ready).
+     */
     private Handler<CorfuMsg> generateConditionalHandler(@Nonnull final AbstractServer server,
             @Nonnull final CorfuMsgType type,
             @Nonnull final Handler<CorfuMsg> handler) {
@@ -203,6 +211,8 @@ public class CorfuMsgHandler {
             // If metrics are disabled, register the handler without instrumentation.
             return (msg, ctx, r) -> {
                 if (server.isShutdown()) {
+                    log.warn("Server received {} but is shutdown.", msg.getMsgType().toString());
+                    r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SHUTDOWN_EXCEPTION.msg());
                     return;
                 }
 
@@ -219,6 +229,8 @@ public class CorfuMsgHandler {
             // And wrap the handler around a new lambda which measures the execution time.
             return (msg, ctx, r) -> {
                 if (server.isShutdown()) {
+                    log.warn("Server received {} but is shutdown.", msg.getMsgType().toString());
+                    r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SHUTDOWN_EXCEPTION.msg());
                     return;
                 }
 
