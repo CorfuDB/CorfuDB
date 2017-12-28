@@ -6,6 +6,7 @@ import java.util.Random;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.util.Sleep;
 
 
 /**
@@ -68,7 +69,7 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
             sleepTime = base + extraWait;
             sleepTime -= sleepTime * randomPart;
         }
-        Thread.sleep(sleepTime);
+        Sleep.MILLISECONDS.sleepUninterruptibly(sleepTime);
     }
 
 }

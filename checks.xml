@@ -35,7 +35,17 @@
             <property name="eachLine" value="true"/>
         </module>
     <module name="SuppressWarningsFilter" />
+
+
+
     <module name="TreeWalker">
+        <module name="RegexpSinglelineJava">
+            <property name="severity" value="error"/>
+            <property name="id" value="ThreadSleep"/>
+            <property name="format" value="Thread.sleep\("/>
+            <property name="message" value="Don't use Thread.sleep, use org.corfudb.util.Sleep"/>
+            <property name="ignoreComments" value="true"/>
+        </module>
 	<module name="SuppressWarningsHolder" />
         <module name="OuterTypeFilename"/>
         <module name="IllegalTokenText">
