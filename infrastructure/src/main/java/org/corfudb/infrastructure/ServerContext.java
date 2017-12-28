@@ -160,6 +160,14 @@ public class ServerContext {
     }
 
 
+    public synchronized boolean installSingleNodeLayoutIfAbsent() {
+        if ((Boolean) getServerConfig().get("--single") && getCurrentLayout() == null) {
+            setCurrentLayout(getNewSingleNodeLayout());
+            return true;
+        }
+        return false;
+    }
+
     /** Get a new single node layout used for self-bootstrapping a server started with
      *  the -s flag.
      *

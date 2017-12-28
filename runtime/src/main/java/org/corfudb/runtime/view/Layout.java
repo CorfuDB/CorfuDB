@@ -366,6 +366,7 @@ public class Layout {
         this.segments = layoutCopy.getSegments();
         this.unresponsiveServers = layoutCopy.getUnresponsiveServers();
         this.epoch = layoutCopy.getEpoch();
+        this.clusterId = layoutCopy.clusterId;
     }
 
     public enum ReplicationMode {

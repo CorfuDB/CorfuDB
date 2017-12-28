@@ -13,7 +13,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -134,20 +133,15 @@ public class ManagementServer extends AbstractServer {
                 ? opts.get("--management-server").toString() : null;
         sequencerBootstrappedFuture = new CompletableFuture<>();
 
+
         safeUpdateLayout(getCurrentLayout());
         // If no state was preserved, there is no layout to recover.
         if (latestLayout == null) {
             recovered = true;
         }
 
-        synchronized (this.serverContext) {
-            if ((Boolean) opts.get("--single")) {
-                if (serverContext.getCurrentLayout() == null) {
-                    serverContext.setCurrentLayout(serverContext.getNewSingleNodeLayout());
-                }
-            }
-            safeUpdateLayout(serverContext.getCurrentLayout());
-        }
+        serverContext.installSingleNodeLayoutIfAbsent();
+        safeUpdateLayout(serverContext.getCurrentLayout());
 
         this.failureDetectorPolicy = serverContext.getFailureDetectorPolicy();
         this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();
