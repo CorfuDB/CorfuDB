@@ -21,8 +21,6 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.util.CFUtils;
 
-import javax.annotation.Nonnull;
-
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
  *
@@ -102,36 +100,6 @@ public class LayoutManagementView extends AbstractView {
                 .initiateFailureHandler());
 
         log.info("bootstrapNewNode: New node {} bootstrapped.", endpoint);
-    }
-
-    /**
-     * Best effort attempt to removes a node from the layout.
-     *
-     * @param currentLayout the layout to remove the node from
-     * @param endpoint the node to remove
-     */
-    public void removeNode(@Nonnull Layout currentLayout,
-                           @Nonnull String endpoint) throws QuorumUnreachableException,
-            OutrankedException {
-
-        LayoutBuilder builder = new LayoutBuilder(currentLayout);
-        Layout newLayout = builder.removeLayoutServer(endpoint)
-                .removeSequencerServer(endpoint)
-                .removeLogunitServer(endpoint)
-                .removeUnResponsiveServer(endpoint)
-                .setEpoch(currentLayout.getEpoch() + 1)
-                .build();
-
-        // Seal after constructing the layout, so that the system
-        // isn't blocked if the builder throws an exception
-        currentLayout.setRuntime(runtime);
-        sealEpoch(currentLayout);
-
-        newLayout.setRuntime(runtime);
-        attemptConsensus(newLayout);
-
-        reconfigureSequencerServers(currentLayout, newLayout, false);
-
     }
 
     /**
