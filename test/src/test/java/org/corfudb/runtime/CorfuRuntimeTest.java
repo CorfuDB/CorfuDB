@@ -121,6 +121,16 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         return l;
     }
 
+    @Test
+    public void connectWithCorfuRuntimeParameters() throws Exception {
+        CorfuRuntime.CorfuRuntimeParameters parameters = CorfuRuntime.CorfuRuntimeParameters.builder()
+                .layoutServer(NodeLocator.parseString(getEndpoint(SERVERS.PORT_0)))
+                .build();
+        CorfuRuntime rt = CorfuRuntime.fromParameters(parameters).connect();
+        rt.invalidateLayout();
+        assertThat(rt.getLayoutView().getLayout()).isEqualTo(get3NodeLayout());
+    }
+
     /**
      * Ensures that we will not accept a Layout that is obsolete.
      *

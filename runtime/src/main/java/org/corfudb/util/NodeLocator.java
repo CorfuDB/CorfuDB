@@ -37,6 +37,10 @@ public class NodeLocator implements Serializable {
 
     /** The port number on the host the node is located on. */
     final int port;
+    
+    public String getConnectionString() {
+        return host + ":" + port;
+    }
 
     /** The ID of the node. Can be null if node id matching is not requested. */
     @Builder.Default private UUID nodeId = null;
