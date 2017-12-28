@@ -59,9 +59,6 @@ public class Orchestrator {
             case ADD_NODE:
                 dispatch(msg, ctx, r);
                 break;
-            case REMOVE_NODE:
-                dispatch(msg, ctx, r);
-                break;
             default:
                 log.error("handle: Unknown request type {}", orchReq.getRequest().getType());
         }

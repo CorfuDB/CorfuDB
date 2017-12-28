@@ -38,7 +38,7 @@ public class WorkflowIT extends AbstractIT {
     }
 
     @Test
-    public void AddRemoveNodeTestIT() throws Exception {
+    public void AddNodeIT() throws Exception {
         final String host = "localhost";
         final String streamName = "s1";
         final int n1Port = 9000;
@@ -117,12 +117,6 @@ public class WorkflowIT extends AbstractIT {
         assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
         // Verify that the workflow ID for node 3 is no longer active
         assertThat(mgmt.queryRequest(resp2.getWorkflowId()).isActive()).isFalse();
-
-        // Remove node 2
-        CreateWorkflowResponse  resp3 = mgmt.removeNode(getConnectionString(n2Port));
-        waitForWorkflow(resp3.getWorkflowId(), n1Rt, n1Port);
-        n1Rt.invalidateLayout();
-        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
 
         for (int x = 0; x < numEntries; x++) {
             String v = (String) table.get(String.valueOf(x));
