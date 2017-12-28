@@ -49,7 +49,26 @@ public class NodeLocatorTest extends AbstractViewTest {
                                         .build();
         NodeLocator parsed = NodeLocator.parseString(locator.toString());
 
-        System.out.println(locator.toString());
+        assertThat(locator)
+            .isEqualTo(parsed);
+
+        assertThat(locator)
+            .isEqualToComparingFieldByField(parsed);
+    }
+
+    @Test
+    public void nodeCanBeConvertedBackAndForthWithNoNodeId() {
+        NodeLocator locator = NodeLocator.builder()
+            .host("localhost")
+            .port(1)
+            .nodeId(null)
+            .option("test1", "test2")
+            .option("test2", "test3")
+            .protocol(Protocol.TCP)
+            .build();
+
+        NodeLocator parsed = NodeLocator.parseString(locator.toString());
+
         assertThat(locator)
             .isEqualTo(parsed);
 

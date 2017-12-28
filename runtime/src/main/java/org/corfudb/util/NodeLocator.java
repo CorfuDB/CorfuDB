@@ -67,7 +67,8 @@ public class NodeLocator implements Serializable {
 
             // Node ID is from the path, if present.
             UUID nodeId;
-            if (url.getPath().equals("")) {
+            if (url.getPath().equals("") || url.getPath().equals("/")) {
+                // No path, so nodeId is null
                 nodeId = null;
             } else {
                 nodeId = UuidUtils.fromBase64(url.getPath().replaceFirst("/", ""));
