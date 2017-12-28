@@ -25,6 +25,5 @@ public class UnrecoverableCorfuInterruptedError extends UnrecoverableCorfuError 
     public UnrecoverableCorfuInterruptedError( @Nonnull String message,
                                                @Nonnull InterruptedException cause) {
         super(message, cause);
-        Thread.currentThread().interrupt();
     }
 }
