@@ -50,6 +50,7 @@ import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
+import org.corfudb.util.Sleep;
 import org.corfudb.util.Version;
 
 /**
@@ -563,11 +564,7 @@ public class CorfuRuntime {
 
                 systemDownHandler.run();
 
-                try {
-                    Thread.sleep(parameters.connectionRetryRate.toMillis());
-                } catch (InterruptedException e) {
-                    throw new UnrecoverableCorfuInterruptedError("Interrupted while fetching layout", e);
-                }
+                Sleep.sleepUninterruptibly(parameters.connectionRetryRate);
                 if (isShutdown) {
                     return null;
                 }

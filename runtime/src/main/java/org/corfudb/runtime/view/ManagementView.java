@@ -10,6 +10,7 @@ import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
 
 /**
@@ -40,7 +41,8 @@ public class ManagementView extends AbstractView {
             QueryResponse response = runtime.getRouter(server)
                     .getClient(ManagementClient.class)
                     .queryRequest(workflowId);
-            log.info("isWorkflowActive: {} on server:{} = {}", workflowId, server, response.isActive());
+            log.info("isWorkflowActive: {} on server:{} = {}",
+                workflowId, server, response.isActive());
             return response.isActive();
         });
     }
@@ -66,7 +68,7 @@ public class ManagementView extends AbstractView {
             UUID workflowId = addNodeResponse.getWorkflowId();
 
             while (isWorkflowActive(server, workflowId)) {
-                Utils.sleepUninterruptibly(layoutRefreshTimeout);
+                Sleep.MILLISECONDS.sleepUninterruptibly(layoutRefreshTimeout);
             }
 
             runtime.invalidateLayout();

@@ -60,6 +60,7 @@ import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
+import org.corfudb.util.Sleep;
 
 
 /**
@@ -449,7 +450,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 //                        MetricsUtils.incConditionalCounter(isEnabled,
 //                                counterConnectFailed, 1);
                         log.warn("Exception while reconnecting, retry in {} ms", timeoutRetry);
-                        Thread.sleep(timeoutRetry);
+                        Sleep.MILLISECONDS.sleepUninterruptibly(timeoutRetry);
                     }
                 }
             }
