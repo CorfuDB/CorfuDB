@@ -160,6 +160,11 @@ public class ServerContext {
     }
 
 
+    /** Install a single node layout if and only if no layout is currently installed.
+     *  Synchronized, so this method is thread-safe.
+     *
+     *  @return True, if a new layout was installed, false otherwise.
+     */
     public synchronized boolean installSingleNodeLayoutIfAbsent() {
         if ((Boolean) getServerConfig().get("--single") && getCurrentLayout() == null) {
             setCurrentLayout(getNewSingleNodeLayout());
@@ -172,9 +177,23 @@ public class ServerContext {
      *  the -s flag.
      *
      *  @returns A new single node layout with a unique cluster Id
+     *  @throws IllegalArgumentException    If the cluster id was not auto, base64 or a UUID string
      */
     public Layout getNewSingleNodeLayout() {
-        UUID clusterId = UUID.randomUUID();
+        final String clusterIdString = (String) getServerConfig().get("--cluster-id");
+        UUID clusterId;
+        if (clusterIdString.equals("auto")) {
+            clusterId = UUID.randomUUID();
+        } else {
+            // Is it a UUID?
+            try {
+                clusterId = UUID.fromString(clusterIdString);
+            } catch (IllegalArgumentException ignore) {
+                // Invalid UUID, try next
+            }
+            // Must be a base64 id, otherwise we will throw InvalidArgumentException
+            clusterId = UuidUtils.fromBase64(clusterIdString);
+        }
         log.info("getNewSingleNodeLayout: Bootstrapping with cluster Id {} [{}]",
             clusterId, UuidUtils.asBase64(clusterId));
         String localAddress = getServerConfig().get("--address") + ":"
