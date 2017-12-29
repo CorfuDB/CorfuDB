@@ -9,11 +9,11 @@ public class WrongClusterException extends RuntimeException {
 
     /** The cluster we expected to connect to. */
     @Getter
-    UUID expectedCluster;
+    final UUID expectedCluster;
 
     /** The cluster we actually ended up connecting to. */
     @Getter
-    UUID actualCluster;
+    final UUID actualCluster;
 
     /** Create a new {@link org.corfudb.runtime.exceptions.WrongClusterException}.
      *
@@ -26,5 +26,7 @@ public class WrongClusterException extends RuntimeException {
             + ((expectedCluster == null) ? "null" : UuidUtils.asBase64(expectedCluster))
             + " Actual: "
             + ((actualCluster == null) ? "null" : UuidUtils.asBase64(actualCluster)));
+        this.expectedCluster = expectedCluster;
+        this.actualCluster = actualCluster;
     }
 }
