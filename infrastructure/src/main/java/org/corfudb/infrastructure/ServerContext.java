@@ -6,13 +6,15 @@ import java.time.Duration;
 import java.util.Map;
 
 import java.util.UUID;
-import javax.annotation.Nonnull;
+
 import lombok.Getter;
 import lombok.Setter;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.IFailureDetectorPolicy;
 import org.corfudb.infrastructure.management.PeriodicPollPolicy;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IFailureHandlerPolicy;
@@ -100,6 +102,18 @@ public class ServerContext {
         }
     }
 
+    public CorfuRuntimeParameters getDefaultRuntimeParameters() {
+        return CorfuRuntime.CorfuRuntimeParameters.builder()
+                .tlsEnabled((Boolean) serverConfig.get("--enable-tls"))
+                .keyStore((String) serverConfig.get("--keystore"))
+                .ksPasswordFile((String) serverConfig.get("--keystore-password-file"))
+                .trustStore((String) serverConfig.get("--truststore"))
+                .tsPasswordFile((String) serverConfig.get("--truststore-password-file"))
+                .saslPlainTextEnabled((Boolean) serverConfig.get("--enable-sasl-plain-text-auth"))
+                .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
+                .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
+                .build();
+    }
 
     /** Generate a Node Id if not present.
      *
