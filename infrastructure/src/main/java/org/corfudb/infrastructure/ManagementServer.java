@@ -68,8 +68,6 @@ public class ManagementServer extends AbstractServer {
     private static final String PREFIX_MANAGEMENT = "MANAGEMENT";
     private static final String KEY_LAYOUT = "LAYOUT";
 
-    private static final String metricsPrefix = "corfu.server.management-server.";
-
     private CorfuRuntime corfuRuntime;
     /**
      * Policy to be used to detect failures.

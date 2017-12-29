@@ -1,15 +1,13 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.MetricRegistry;
+import static org.corfudb.protocols.wireprotocol.TokenType.TX_ABORT_SEQ_OVERFLOW;
+
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-
 import io.netty.channel.ChannelHandlerContext;
-
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
 import java.util.Map;
@@ -18,11 +16,9 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -33,10 +29,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
-
-import static org.corfudb.protocols.wireprotocol.TokenType.TX_ABORT_SEQ_OVERFLOW;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -127,11 +120,8 @@ public class SequencerServer extends AbstractServer {
      */
     @Getter
     private final CorfuMsgHandler handler =
-        CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
+            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
 
-    private static final String metricsPrefix = "corfu.server.sequencer.";
-    private static Counter counterTokenSum;
-    private static Counter counterToken0;
 
     @Getter
     @Setter
@@ -162,10 +152,6 @@ public class SequencerServer extends AbstractServer {
         } else {
             globalLogTail.set(initialToken);
         }
-
-        MetricRegistry metrics = serverContext.getMetrics();
-        counterTokenSum = metrics.counter(metricsPrefix + "token-sum");
-        counterToken0 = metrics.counter(metricsPrefix + "token-query");
 
         long cacheSize = 250_000;
         if (opts.get("--sequencer-cache-size") != null) {
