@@ -7,6 +7,7 @@ import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.docopt.Docopt;
 import org.docopt.DocoptExitException;
 
@@ -52,6 +53,7 @@ public class logReader {
         fileStreamOut = null;
     }
 
+    @SuppressWarnings("checkstyle:printLine") // Utility
     public final int run(final String[] args) {
         try {
             boolean ret = init(args);
@@ -62,6 +64,7 @@ public class logReader {
         return readAll();
     }
 
+    @SuppressWarnings({"checkstyle:printLine", "checkstyle:print"}) // Utility
     public final boolean init(final String[] args) {
         Docopt parser = new Docopt(USAGE);
         parser.withExit(false);
@@ -116,7 +119,7 @@ public class logReader {
                     fileChannelOut = fileStreamOut.getChannel();
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                throw new UnrecoverableCorfuError(e);
             }
             return true;
         }
@@ -128,7 +131,7 @@ public class logReader {
         try {
             recordCnt = processLogFile();
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new UnrecoverableCorfuError(e);
         }
         return recordCnt;
     }
@@ -144,7 +147,7 @@ public class logReader {
                 fileStreamOut = null;
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new UnrecoverableCorfuError(e);
         }
     }
 
@@ -185,6 +188,7 @@ public class logReader {
         fcOut.write(recordBuffer);
     }
 
+    @SuppressWarnings({"checkstyle:printLine", "checkstyle:print"}) // Utility
     public final void printLogEntry(final LogEntry entry, final boolean showBinary) {
         System.out.format("Global address: %d\n", entry.getGlobalAddress());
         System.out.format("Log Entry streams (%d):  ", entry.getStreamsCount());
@@ -286,6 +290,7 @@ public class logReader {
         return new logHeader();
     }
 
+    @SuppressWarnings("checkstyle:printLine")
     final LogEntryExtended processRecord() throws IOException {
         ByteBuffer commaBuffer = ByteBuffer.allocate(2);
         int bytesRead = fileChannelIn.read(commaBuffer);
@@ -310,6 +315,7 @@ public class logReader {
         return new LogEntryExtended(leNew, bytesRead, cksum);
     }
 
+    @SuppressWarnings("checkstyle:printLine")
     final void openLogFile(final int display) throws IOException {
         logHeader hdr = processHeader();
         if (display > 0) {
@@ -341,6 +347,7 @@ public class logReader {
         return null;
     }
 
+    @SuppressWarnings("checkstyle:printLine")
     final int processLogFile() throws IOException {
         int display = op.getOpType() == Operation.OperationType.DISPLAY ? 1
                 : op.getOpType() == Operation.OperationType.DISPLAY_ALL ? 2 : 0;

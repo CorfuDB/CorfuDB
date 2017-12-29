@@ -72,6 +72,7 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
      * This is where activity is started
      */
     @Override
+    @SuppressWarnings("checkstyle:printLine") // Sample code
     void action() {
 
         final int NUM_THREADS = 2;
@@ -140,6 +141,7 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
     /**
      * This method initiates all the data structures for this program
      */
+    @SuppressWarnings({"checkstyle:printLine", "checkstyle:print"}) // Sample code
     void generateMaps() {
         /**
          * Instantiate three streams with three SMRmap objects
@@ -170,6 +172,7 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
      *
      * @param readPrecent ratio of reads (to 100)
      */
+    @SuppressWarnings({"checkstyle:printLine", "checkstyle:print"}) // Sample code
     void mixedReadWriteLoad1(int threadNum, int readPrecent) {
         System.out.print("running mixedRWload1..");
         long startt = System.currentTimeMillis();
@@ -194,7 +197,6 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
                         System.out.println(threadNum +
                                 ": exception on iteration " + i + "," + j
                                 + ", r=" + r1 + "," + r2 + "," + r3);
-                        e.printStackTrace();
                         return;
                     }
                 }

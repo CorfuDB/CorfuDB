@@ -51,7 +51,7 @@ public class Generator {
                 try {
                     operation.execute();
                 } catch (Exception ex) {
-                    ex.printStackTrace();
+                    throw new RuntimeException(ex);
                 }
             }
         };
@@ -66,7 +66,7 @@ public class Generator {
             try {
                 appsFutures[x].get();
             } catch (Exception e) {
-                System.out.println("App Exception: " + e);
+                throw new RuntimeException(e);
             }
         }
     }

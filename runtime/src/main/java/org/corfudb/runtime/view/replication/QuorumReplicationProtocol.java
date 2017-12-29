@@ -71,20 +71,14 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
         log.trace("Peek[{}]: quorum {}/{}", address, numUnits, numUnits);
         try {
             ReadResponse readResponse = null;
-            try {
-                CompletableFuture<ReadResponse>[] futures = new CompletableFuture[numUnits];
-                for (int i = 0; i < numUnits; i++) {
-                    futures[i] = layout.getLogUnitClient(address, i).read(address);
-                }
-                QuorumFuturesFactory.CompositeFuture<ReadResponse> future =
-                        QuorumFuturesFactory.getQuorumFuture(new ReadResponseComparator(address),
-                                futures);
-                readResponse = CFUtils.getUninterruptibly(future, QuorumUnreachableException.class);
-            } catch (QuorumUnreachableException e) {
-                e.printStackTrace();
-                log.debug(e.getMessage(), e);
-                return null;
+            CompletableFuture<ReadResponse>[] futures = new CompletableFuture[numUnits];
+            for (int i = 0; i < numUnits; i++) {
+                futures[i] = layout.getLogUnitClient(address, i).read(address);
             }
+            QuorumFuturesFactory.CompositeFuture<ReadResponse> future =
+                    QuorumFuturesFactory.getQuorumFuture(new ReadResponseComparator(address),
+                            futures);
+            readResponse = CFUtils.getUninterruptibly(future, QuorumUnreachableException.class);
             if (readResponse != null) {
                 LogData result = readResponse.getAddresses().get(address);
                 if (result != null && !isEmptyType(result.getType())) {
@@ -195,7 +189,6 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
                         CFUtils.getUninterruptibly(future, QuorumUnreachableException.class,
                                 OverwriteException.class, DataOutrankedException.class);
                     } catch (LogUnitException | QuorumUnreachableException e) {
-                        e.printStackTrace();
                         ReadResponse rr = getAdoptedValueWithHighestRankIfPresent(
                                 address, future.getThrowables());
                         if (rr != null) { // check
@@ -216,10 +209,8 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
                     log.trace("Write done[{}]: {}", address);
                     return dh.getRef();
                 } catch (QuorumUnreachableException | DataOutrankedException e) {
-                    e.printStackTrace();
                     throw new RetryNeededException();
                 } catch (RuntimeException e) {
-                    e.printStackTrace();
                     throw e;
                 }
             }).setOptions(WRITE_RETRY_SETTINGS).run();

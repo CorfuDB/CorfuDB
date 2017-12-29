@@ -186,29 +186,6 @@ public class CorfuServer {
                     + "              Show version\n";
 
     /**
-     * Print the corfu logo.
-     */
-    public static void printLogo() {
-        System.out.println(ansi().fg(WHITE).a("▄████████  ▄██████▄     ▄████████    ▄████████ ███"
-                + "    █▄").reset());
-        System.out.println(ansi().fg(WHITE).a("███    ███ ███    ███   ███    ███   ███    ███ "
-                + "███    ███").reset());
-        System.out.println(ansi().fg(WHITE).a("███    █▀  ███    ███   ███    ███   ███    █▀  "
-                + "███    ███").reset());
-        System.out.println(ansi().fg(WHITE).a("███        ███    ███  ▄███▄▄▄▄██▀  ▄███▄▄▄     "
-                + "███    ███").reset());
-        System.out.println(ansi().fg(WHITE).a("███        ███    ███ ▀▀███▀▀▀▀▀   ▀▀███▀▀▀     "
-                + "███    ███").reset());
-        System.out.println(ansi().fg(WHITE).a("███    █▄  ███    ███ ▀███████████   ███        "
-                + "███    ███").reset());
-        System.out.println(ansi().fg(WHITE).a("███    ███ ███    ███   ███    ███   ███        "
-                + "███    ███").reset());
-        System.out.println(ansi().fg(WHITE).a("████████▀   ▀██████▀    ███    ███   ███        "
-                + "████████▀").reset());
-        System.out.println(ansi().fg(WHITE).a("                        ███    ███").reset());
-    }
-
-    /**
      * Main program entry point.
      * @param args  command line argument strings
      */
@@ -222,14 +199,15 @@ public class CorfuServer {
         AnsiConsole.systemInstall();
         printLogo();
         int port = Integer.parseInt((String) opts.get("<port>"));
-        System.out.println(ansi().a("Welcome to ").fg(RED).a("CORFU ").fg(MAGENTA).a("SERVER")
+        println(ansi().a("Welcome to ").fg(RED).a("CORFU ").fg(MAGENTA).a("SERVER")
                 .reset());
-        System.out.println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
+        println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
                 .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));
-        System.out.println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
-        System.out.println(ansi().a("Service directory: ").fg(WHITE).a(
+        println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
+        println(ansi().a("Service directory: ").fg(WHITE).a(
                 (Boolean) opts.get("--memory") ? "MEMORY mode" :
                         opts.get("--log-path")).reset());
+
 
         // Pick the correct logging level before outputting error messages.
         final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
@@ -577,5 +555,32 @@ public class CorfuServer {
 
         CompletableFuture.allOf(shutdownFutures).join();
         log.info("CleanShutdown: Shutdown Complete.");
+    }
+
+    /**
+     * Print the corfu logo.
+     */
+    private static void printLogo() {
+        println(ansi().fg(WHITE).toString());
+        println("▄████████  ▄██████▄     ▄████████    ▄████████ ███    █▄");
+        println("███    ███ ███    ███   ███    ███   ███    ██████    ███");
+        println("███    █▀  ███    ███   ███    ███   ███    █▀ ███    ███");
+        println("███        ███    ███  ▄███▄▄▄▄██▀  ▄███▄▄▄    ███    ███");
+        println("███        ███    ███ ▀▀███▀▀▀▀▀   ▀▀███▀▀▀    ███    ███");
+        println("███    █▄  ███    ███ ▀███████████   ███       ███    ███");
+        println("███    ███ ███    ███   ███    ███   ███       ███    ███");
+        println("████████▀   ▀██████▀    ███    ███   ███       ████████▀ ");
+        println("                        ███    ███");
+        println(ansi().reset().toString());
+    }
+
+    /** Print an object to the console, followed by a newline.
+     *  Call this method instead of calling System.out.println().
+     *
+     * @param line  The object to print.
+     */
+    @SuppressWarnings("checkstyle:printLine")
+    private static void println(Object line) {
+        System.out.println(line);
     }
 }
