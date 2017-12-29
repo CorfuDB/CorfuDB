@@ -189,10 +189,9 @@ public class ServerContext {
             try {
                 clusterId = UUID.fromString(clusterIdString);
             } catch (IllegalArgumentException ignore) {
-                // Invalid UUID, try next
+                // Must be a base64 id, otherwise we will throw InvalidArgumentException again
+                clusterId = UuidUtils.fromBase64(clusterIdString);
             }
-            // Must be a base64 id, otherwise we will throw InvalidArgumentException
-            clusterId = UuidUtils.fromBase64(clusterIdString);
         }
         log.info("getNewSingleNodeLayout: Bootstrapping with cluster Id {} [{}]",
             clusterId, UuidUtils.asBase64(clusterId));
