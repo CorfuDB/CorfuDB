@@ -1,39 +1,52 @@
 package org.corfudb.infrastructure;
 
 import com.codahale.metrics.Timer;
-
 import io.netty.channel.ChannelHandlerContext;
-import lombok.extern.slf4j.Slf4j;
-
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
+import javax.annotation.Nonnull;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.ExceptionMsg;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.MetricsUtils;
 
 /**
- * This class simplifies writing switch(msg.getType()) statements.
+ * This class implements message handlers for {@link AbstractServer} implementations.
+ * Servers define methods with signatures which follow the signature of the {@link Handler}
+ * functional interface, and generate a handler using the
+ * {@link this#generateHandler(MethodHandles.Lookup, AbstractServer)} method.
  *
  * <p>For maximum performance, make the handlers static whenever possible.
+ * Handlers should be as short as possible (not block), since handler threads come from a
+ * shared pool used by all servers. Blocking operations should be offloaded to I/O threads.
  *
  * <p>Created by mwei on 7/26/16.
  */
 @Slf4j
 public class CorfuMsgHandler {
 
+    /**
+     * A functional interface for server message handlers. Server message handlers should
+     * be fast and not block. If a handler blocks for an extended period of time, it will
+     * exhaust the server's thread pool. I/O and other long operations should be handled
+     * on another thread.
+     */
     @FunctionalInterface
     interface Handler<T extends CorfuMsg> {
-        void handle(T corfuMsg, ChannelHandlerContext ctx, IServerRouter r,
-                    boolean isMetricsEnabled);
+        void handle(@Nonnull T corfuMsg,
+                    @Nonnull ChannelHandlerContext ctx,
+                    @Nonnull IServerRouter r);
     }
 
     /** The handler map. */
@@ -47,9 +60,19 @@ public class CorfuMsgHandler {
         return handlerMap.keySet();
     }
 
+    /** Get a handler for a specific message type.
+     *
+     * @param type  The type to retrieve a handler for.
+     * @return      A handler for the requested message type.
+     */
+    @SuppressWarnings("unchecked")
+    public Handler<CorfuMsg> getHandler(CorfuMsgType type) {
+        return handlerMap.get(type);
+    }
+
     /** Construct a new instance of CorfuMsgHandler. */
     public CorfuMsgHandler() {
-        handlerMap = new ConcurrentHashMap<>();
+        handlerMap = new EnumMap<>(CorfuMsgType.class);
     }
 
     /** Add a handler to this message handler.
@@ -75,95 +98,151 @@ public class CorfuMsgHandler {
      *                  False otherwise.
      */
     @SuppressWarnings("unchecked")
-    public boolean handle(CorfuMsg message, ChannelHandlerContext ctx, IServerRouter r,
-                          boolean isMetricsEnabled) {
-        if (handlerMap.containsKey(message.getMsgType())) {
+    public boolean handle(CorfuMsg message, ChannelHandlerContext ctx, IServerRouter r) {
+        // Get the handler for the message type
+        final Handler<CorfuMsg> handler = handlerMap.get(message.getMsgType());
+        // If present...
+        if (handler != null) {
             try {
-                handlerMap.get(message.getMsgType()).handle(message, ctx, r, isMetricsEnabled);
+                handler.handle(message, ctx, r);
             } catch (Exception ex) {
+                // Log the exception during handling
                 log.error("handle: Unhandled exception processing {} message",
                         message.getMsgType(), ex);
                 r.sendResponse(ctx, message,
                         CorfuMsgType.ERROR_SERVER_EXCEPTION.payloadMsg(new ExceptionMsg(ex)));
             }
-            return true;
+            // Otherwise log the unexpected message.
+        } else {
+            log.error("handle: Unregistered message type {}", message.getMsgType());
         }
-        return false;
+
+        return handler != null;
     }
 
     /** Generate handlers for a particular server.
      *
      * @param caller    The context that is being used. Call MethodHandles.lookup() to obtain.
-     * @param o         The object that implements the server.
-     * @return          new message handler for caller class
+     * @param server    The object that implements the server.
+     * @return          New message handler for caller class
      */
-    public CorfuMsgHandler generateHandlers(final MethodHandles.Lookup caller, final Object o) {
-        Arrays.stream(o.getClass().getDeclaredMethods())
-                .filter(x -> x.isAnnotationPresent(ServerHandler.class))
-                .forEach(x -> {
-                    ServerHandler a = x.getAnnotation(ServerHandler.class);
-
-                    if (!x.getParameterTypes()[0].isAssignableFrom(a.type().messageType
-                            .getRawType())) {
-                        throw new RuntimeException("Incorrect message type, expected "
-                                + a.type().messageType.getRawType() + " but provided "
-                                + x.getParameterTypes()[0]);
-                    }
-                    if (handlerMap.containsKey(a.type())) {
-                        throw new RuntimeException("Handler for " + a.type()
-                                + " already registered!");
-                    }
-                    // convert the method into a Java8 Lambda for maximum execution speed...
-                    try {
-                        Handler h;
-                        if (Modifier.isStatic(x.getModifiers())) {
-                            MethodHandle mh = caller.unreflect(x);
-                            MethodType mt = mh.type().changeParameterType(0, CorfuMsg.class);
-                            h = (Handler) LambdaMetafactory.metafactory(caller,
-                                    "handle", MethodType.methodType(Handler.class),
-                                    mt, mh, mh.type())
-                                    .getTarget().invokeExact();
-
-                        } else {
-                            // instance method, so we need to capture the type.
-                            MethodType mt = MethodType.methodType(x.getReturnType(),
-                                    x.getParameterTypes());
-                            MethodHandle mh = caller.findVirtual(o.getClass(), x.getName(), mt);
-                            MethodType mtGeneric = mh.type().changeParameterType(1, CorfuMsg.class);
-                            h = (Handler) LambdaMetafactory.metafactory(caller,
-                                    "handle", MethodType.methodType(Handler.class, o.getClass()),
-                                    mtGeneric.dropParameterTypes(0,1), mh,
-                                    mh.type().dropParameterTypes(0,1)).getTarget()
-                                    .bindTo(o).invoke();
-                        }
-
-                        // If there is an annotation element for opTimer that is not "", then
-                        // find/create its timer *outside* of the lambda that we create.
-                        // The lambda may be called very frequently, so avoid touching the metrics
-                        // registry on a hot code path.
-                        final Timer t;
-                        if (!a.opTimer().equals("")) {
-                            t = ServerContext.getMetrics().timer(a.opTimer());
-                        } else {
-                            t = null;
-                        }
-                        // Now create the lambda that wraps the lambda-like-thing that's
-                        // stored in 'h' and insert it into the handlerMap.
-                        handlerMap.put(a.type(),
-                                (CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r,
-                                 boolean isMetricsEnabled) -> {
-                                    try (Timer.Context timerCxt
-                                                 = MetricsUtils.getConditionalContext(
-                                            t != null && isMetricsEnabled, t)) {
-                                        h.handle(msg, ctx, r, isMetricsEnabled);
-                                    }
-                            });
-                    } catch (Throwable e) {
-                        log.error("Exception during incoming message handling", e);
-                        throw new RuntimeException(e);
-                    }
-                });
-        return this;
+    public static CorfuMsgHandler generateHandler(@Nonnull final MethodHandles.Lookup caller,
+            @Nonnull final AbstractServer server) {
+        CorfuMsgHandler handler = new CorfuMsgHandler();
+        Arrays.stream(server.getClass().getDeclaredMethods())
+            .filter(method -> method.isAnnotationPresent(ServerHandler.class))
+            .forEach(method -> handler.registerMethod(caller, server, method));
+        return handler;
     }
 
+
+
+    /** Takes a method annotated with the {@link org.corfudb.infrastructure.ServerHandler}
+     *  annotation, converts it into a lambda, and registers it in the {@code handlerMap}.
+     * @param caller   The context that is being used. Call MethodHandles.lookup() to obtain.
+     * @param server   The object that implements the server.
+     * @param method   The method to be registered. Must be annotated with the
+     *                 {@link ServerHandler} annotation.
+     */
+    @SuppressWarnings("unchecked")
+    private void registerMethod(@Nonnull final MethodHandles.Lookup caller,
+            @Nonnull final AbstractServer server,
+            @Nonnull final Method method) {
+        final ServerHandler annotation = method.getAnnotation(ServerHandler.class);
+
+        if (!method.getParameterTypes()[0].isAssignableFrom(annotation.type().messageType
+                .getRawType())) {
+            throw new UnrecoverableCorfuError("Incorrect message type, expected "
+                + annotation.type().messageType.getRawType() + " but provided "
+                + method.getParameterTypes()[0]);
+        }
+        if (handlerMap.containsKey(annotation.type())) {
+            throw new UnrecoverableCorfuError("Handler for " + annotation.type()
+                + " already registered!");
+        }
+        // convert the method into a Java8 Lambda for maximum execution speed...
+        try {
+            Handler<CorfuMsg> h;
+            if (Modifier.isStatic(method.getModifiers())) {
+                MethodHandle mh = caller.unreflect(method);
+                MethodType mt = mh.type().changeParameterType(0, CorfuMsg.class);
+                h = (Handler<CorfuMsg>) LambdaMetafactory.metafactory(caller,
+                    "handle", MethodType.methodType(Handler.class),
+                    mt, mh, mh.type())
+                    .getTarget().invokeExact();
+
+            } else {
+                // instance method, so we need to capture the type.
+                MethodType mt = MethodType.methodType(method.getReturnType(),
+                        method.getParameterTypes());
+                MethodHandle mh = caller.findVirtual(server.getClass(), method.getName(), mt);
+                MethodType mtGeneric = mh.type().changeParameterType(1, CorfuMsg.class);
+                h = (Handler<CorfuMsg>) LambdaMetafactory.metafactory(caller,
+                    "handle",
+                    MethodType.methodType(Handler.class, server.getClass()),
+                    mtGeneric.dropParameterTypes(0, 1), mh,
+                    mh.type().dropParameterTypes(0, 1)).getTarget()
+                    .bindTo(server).invoke();
+            }
+            // Install pre-conditions on handler
+            final Handler<CorfuMsg> handler =
+                    generateConditionalHandler(server, annotation.type(), h);
+            // Install the handler in the map
+            handlerMap.put(annotation.type(), handler);
+        } catch (Throwable e) {
+            log.error("Exception during message handler registration", e);
+            throw new UnrecoverableCorfuError(e);
+
+        }
+    }
+
+    /** Generate a conditional handler, which instruments the handler with metrics if enabled
+     *  and checks whether the server is shutdown and ready.
+     * @param server        The {@link AbstractServer} the message is being handled for.
+     * @param type          The {@link CorfuMsgType} the message is being handled for.
+     * @param handler       The {@link Handler} which handles the message.
+     * @return              A new {@link Handler} which conditionally executes the handler
+     *                      based on preconditions (whether the server is shutdown/ready).
+     */
+    private Handler<CorfuMsg> generateConditionalHandler(@Nonnull final AbstractServer server,
+            @Nonnull final CorfuMsgType type,
+            @Nonnull final Handler<CorfuMsg> handler) {
+        if (!MetricsUtils.isMetricsCollectionEnabled()) {
+            // If metrics are disabled, register the handler without instrumentation.
+            return (msg, ctx, r) -> {
+                if (server.isShutdown()) {
+                    log.warn("Server received {} but is shutdown.", msg.getMsgType().toString());
+                    r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SHUTDOWN_EXCEPTION.msg());
+                    return;
+                }
+
+                if (!server.isServerReadyToHandleMsg(msg)) {
+                    r.sendResponse(ctx, msg, CorfuMsgType.NOT_READY.msg());
+                    return;
+                }
+
+                handler.handle(msg, ctx, r);
+            };
+        } else {
+            // Otherwise, generate a timer based on the operation name
+            final Timer timer = ServerContext.getMetrics().timer(type.toString());
+            // And wrap the handler around a new lambda which measures the execution time.
+            return (msg, ctx, r) -> {
+                if (server.isShutdown()) {
+                    log.warn("Server received {} but is shutdown.", msg.getMsgType().toString());
+                    r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SHUTDOWN_EXCEPTION.msg());
+                    return;
+                }
+
+                if (!server.isServerReadyToHandleMsg(msg)) {
+                    r.sendResponse(ctx, msg, CorfuMsgType.NOT_READY.msg());
+                    return;
+                }
+
+                try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {
+                    handler.handle(msg, ctx, r);
+                }
+            };
+        }
+    }
 }
