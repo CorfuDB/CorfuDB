@@ -7,6 +7,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.exceptions.LayoutModificationException;
@@ -413,7 +414,8 @@ public class LayoutBuilder {
                 layout.getSequencers(),
                 layout.getSegments(),
                 layout.getUnresponsiveServers(),
-                this.epoch);
+                this.epoch,
+                layout.getClusterId());
     }
 
 }

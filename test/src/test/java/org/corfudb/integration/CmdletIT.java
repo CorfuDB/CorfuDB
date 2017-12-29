@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import java.util.UUID;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
@@ -39,7 +40,8 @@ public class CmdletIT extends AbstractIT {
                         -1L,
                         Collections.singletonList(new Layout.LayoutStripe(Collections.singletonList(ENDPOINT))))),
                 Collections.EMPTY_LIST,
-                0L);
+                0L,
+                UUID.randomUUID());
     }
 
     static public String runCmdletGetOutput(String command) throws Exception {

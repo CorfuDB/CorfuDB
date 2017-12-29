@@ -92,7 +92,6 @@ public class ManagementClientTest extends AbstractClientTest {
     @Test
     public void handleFailure()
             throws Exception {
-
         // Since the servers are started as single nodes thus already bootstrapped.
         assertThat(
                 client.handleFailure(Collections.singleton("key"), Collections.emptySet()).get())
@@ -107,6 +106,7 @@ public class ManagementClientTest extends AbstractClientTest {
     @Test
     public void initiateFailureHandler()
             throws Exception {
+        client.bootstrapManagement(TestLayoutBuilder.single(0));
         assertThat(client.initiateFailureHandler().get()).isEqualTo(true);
     }
 

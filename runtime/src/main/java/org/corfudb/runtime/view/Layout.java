@@ -17,6 +17,7 @@ import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
 
+import javax.annotation.Nullable;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -89,19 +90,27 @@ public class Layout {
     @Setter
     transient CorfuRuntime runtime;
 
+    /** The unique Id for the Corfu cluster represented by this layout.
+     *  Should remain consistent for the lifetime of the layout. May be
+     *  {@code null} in a legacy layout.
+     */
+    @Getter
+    UUID clusterId;
+
     /**
      * Defensive constructor since we can create a Layout from a JSON file.
      * JSON deserialize is forced through this constructor.
      */
     public Layout(@NonNull List<String> layoutServers, @NonNull List<String> sequencers,
                   @NonNull List<LayoutSegment> segments, @NonNull List<String> unresponsiveServers,
-                  long epoch) {
+                  long epoch, @Nullable UUID clusterId) {
 
         this.layoutServers = layoutServers;
         this.sequencers = sequencers;
         this.segments = segments;
         this.unresponsiveServers = unresponsiveServers;
         this.epoch = epoch;
+        this.clusterId = clusterId;
 
         /* Assert that we constructed a valid Layout */
         if (this.layoutServers.size() == 0) {
@@ -122,8 +131,8 @@ public class Layout {
     }
 
     public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments,
-                  long epoch) {
-        this(layoutServers, sequencers, segments, new ArrayList<String>(), epoch);
+                  long epoch, UUID clusterId) {
+        this(layoutServers, sequencers, segments, new ArrayList<String>(), epoch, clusterId);
     }
 
     /**
@@ -357,6 +366,7 @@ public class Layout {
         this.segments = layoutCopy.getSegments();
         this.unresponsiveServers = layoutCopy.getUnresponsiveServers();
         this.epoch = layoutCopy.getEpoch();
+        this.clusterId = layoutCopy.clusterId;
     }
 
     public enum ReplicationMode {
