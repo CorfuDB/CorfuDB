@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
@@ -8,6 +9,7 @@ import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
@@ -20,6 +22,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 1/6/16.
@@ -65,6 +68,7 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addLogUnit(SERVERS.PORT_0)
                 .addToSegment()
                 .addToLayout()
+                .setClusterId(r.clusterId)
                 .build();
         l.setRuntime(r);
         l.moveServersToEpoch();
@@ -72,6 +76,31 @@ public class LayoutViewTest extends AbstractViewTest {
         r.invalidateLayout();
         assertThat(r.getLayoutView().getLayout().epoch)
                 .isEqualTo(1L);
+    }
+
+    /** Make sure that trying to set a layout with the wrong cluster id results
+     *  in a wrong epoch exception.
+     */
+    @Test
+    public void cannotSetLayoutWithWrongId()
+        throws Exception {
+        CorfuRuntime r = getDefaultRuntime().connect();
+        Layout l = new TestLayoutBuilder()
+            .setEpoch(1)
+            .addLayoutServer(SERVERS.PORT_0)
+            .addSequencer(SERVERS.PORT_0)
+            .buildSegment()
+            .buildStripe()
+            .addLogUnit(SERVERS.PORT_0)
+            .addToSegment()
+            .addToLayout()
+            .setClusterId(UUID.nameUUIDFromBytes("wrong cluster".getBytes()))
+            .build();
+        l.setRuntime(r);
+        l.moveServersToEpoch();
+        r.invalidateLayout();
+        assertThatThrownBy(() -> r.getLayoutView().updateLayout(l, 1L))
+            .isInstanceOf(WrongClusterException.class);
     }
 
     @Test

@@ -69,8 +69,6 @@ public class ManagementServer extends AbstractServer {
     private static final String PREFIX_MANAGEMENT = "MANAGEMENT";
     private static final String KEY_LAYOUT = "LAYOUT";
 
-    private static final String metricsPrefix = "corfu.server.management-server.";
-
     private CorfuRuntime corfuRuntime;
     /**
      * Policy to be used to detect failures.
@@ -133,33 +131,15 @@ public class ManagementServer extends AbstractServer {
                 ? opts.get("--management-server").toString() : null;
         sequencerBootstrappedFuture = new CompletableFuture<>();
 
+
         safeUpdateLayout(getCurrentLayout());
         // If no state was preserved, there is no layout to recover.
         if (latestLayout == null) {
             recovered = true;
         }
 
-        if ((Boolean) opts.get("--single")) {
-            String localAddress = opts.get("--address") + ":" + opts.get("<port>");
-
-            Layout singleLayout = new Layout(
-                    Collections.singletonList(localAddress),
-                    Collections.singletonList(localAddress),
-                    Collections.singletonList(new Layout.LayoutSegment(
-                            Layout.ReplicationMode.CHAIN_REPLICATION,
-                            0L,
-                            -1L,
-                            Collections.singletonList(
-                                    new Layout.LayoutStripe(
-                                            Collections.singletonList(localAddress)
-                                    )
-                            )
-                    )),
-                    0L
-            );
-
-            safeUpdateLayout(singleLayout);
-        }
+        serverContext.installSingleNodeLayoutIfAbsent();
+        safeUpdateLayout(serverContext.getCurrentLayout());
 
         this.failureDetectorPolicy = serverContext.getFailureDetectorPolicy();
         this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();
@@ -214,11 +194,11 @@ public class ManagementServer extends AbstractServer {
     }
 
     /**
-     * Handler for the base server.
+     * Handler for this server.
      */
     @Getter
-    private CorfuMsgHandler handler = new CorfuMsgHandler()
-            .generateHandlers(MethodHandles.lookup(), this);
+    private final CorfuMsgHandler handler =
+        CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
 
     /**
      * Thread safe updating of layout only if new layout has higher epoch value.
@@ -228,14 +208,20 @@ public class ManagementServer extends AbstractServer {
     private synchronized void safeUpdateLayout(Layout layout) {
         // Cannot update with a null layout.
         if (layout == null) {
+            log.warn("safeUpdateLayout: Attempted to update with null layout");
             return;
         }
 
         // Update only if new layout has a higher epoch than the existing layout.
         if (latestLayout == null || layout.getEpoch() > latestLayout.getEpoch()) {
             latestLayout = layout;
+            log.info("safeUpdateLayout: Updating to new layout at epoch {}",
+                    latestLayout.getEpoch());
             // Persisting this new updated layout
             setCurrentLayout(latestLayout);
+        } else {
+            log.warn("safeUpdateLayout: Ignoring layout because new epoch {} <= old epoch {}",
+                    layout.getEpoch(), latestLayout.getEpoch());
         }
     }
 
@@ -272,12 +258,10 @@ public class ManagementServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    @ServerHandler(type = CorfuMsgType.ORCHESTRATOR_REQUEST, opTimer = metricsPrefix
-            + "orchestrator-request")
+    @ServerHandler(type = CorfuMsgType.ORCHESTRATOR_REQUEST)
     public synchronized void handleOrchestratorMsg(@Nonnull CorfuPayloadMsg<OrchestratorMsg> msg,
                                                    @Nonnull ChannelHandlerContext ctx,
-                                                   @Nonnull IServerRouter r,
-                                                   boolean isMetricsEnabled) {
+                                                   @Nonnull IServerRouter r) {
         log.debug("Received an orchestrator message {}", msg);
         orchestrator.handle(msg, ctx, r);
     }
@@ -290,11 +274,9 @@ public class ManagementServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    @ServerHandler(type = CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST, opTimer = metricsPrefix
-            + "bootstrap-request")
+    @ServerHandler(type = CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST)
     public synchronized void handleManagementBootstrap(CorfuPayloadMsg<Layout> msg,
-                                                       ChannelHandlerContext ctx, IServerRouter r,
-                                                       boolean isMetricsEnabled) {
+                                                       ChannelHandlerContext ctx, IServerRouter r) {
         if (latestLayout != null) {
             // We are already bootstrapped, bootstrap again is not allowed.
             log.warn("Got a request to bootstrap a server which is already bootstrapped, "
@@ -314,11 +296,9 @@ public class ManagementServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    @ServerHandler(type = CorfuMsgType.MANAGEMENT_START_FAILURE_HANDLER, opTimer = metricsPrefix
-            + "start-failure-handler")
+    @ServerHandler(type = CorfuMsgType.MANAGEMENT_START_FAILURE_HANDLER)
     public synchronized void initiateFailureHandler(CorfuMsg msg, ChannelHandlerContext ctx,
-                                                    IServerRouter r,
-                                                    boolean isMetricsEnabled) {
+                                                    IServerRouter r) {
 
         // This server has not been bootstrapped yet, ignore all requests.
         if (!checkBootstrap(msg, ctx, r)) {
@@ -343,11 +323,9 @@ public class ManagementServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    @ServerHandler(type = CorfuMsgType.MANAGEMENT_FAILURE_DETECTED, opTimer = metricsPrefix
-            + "failure-detected")
+    @ServerHandler(type = CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)
     public synchronized void handleFailureDetectedMsg(CorfuPayloadMsg<FailureDetectorMsg> msg,
-                                                      ChannelHandlerContext ctx, IServerRouter r,
-                                                      boolean isMetricsEnabled) {
+                                                      ChannelHandlerContext ctx, IServerRouter r) {
 
         // This server has not been bootstrapped yet, ignore all requests.
         if (!checkBootstrap(msg, ctx, r)) {
@@ -381,10 +359,8 @@ public class ManagementServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    @ServerHandler(type = CorfuMsgType.HEARTBEAT_REQUEST, opTimer = metricsPrefix
-            + "heartbeat-request")
-    public void handleHeartbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r,
-                                       boolean isMetricsEnabled) {
+    @ServerHandler(type = CorfuMsgType.HEARTBEAT_REQUEST)
+    public void handleHeartbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         // Currently builds a default instance of the model.
         // TODO: Collect metrics from Layout, Sequencer and LogUnit Servers.
         NodeMetrics nodeMetrics = NodeMetrics.getDefaultInstance();
@@ -409,7 +385,7 @@ public class ManagementServer extends AbstractServer {
                 corfuRuntime.addLayoutServer(bootstrapEndpoint);
             }
             corfuRuntime.connect();
-            log.info("Corfu Runtime connected successfully");
+            log.info("getCorfuRuntime: Corfu Runtime connected successfully");
         }
         return corfuRuntime;
     }

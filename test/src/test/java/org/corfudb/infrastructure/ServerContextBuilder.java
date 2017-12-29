@@ -41,6 +41,8 @@ public class ServerContextBuilder {
     String numThreads = "0";
     String handshakeTimeout = "10";
 
+    String clusterId = "auto";
+
     public ServerContextBuilder() {
 
     }
@@ -73,6 +75,7 @@ public class ServerContextBuilder {
                  .put("--truststore", truststore)
                  .put("--truststore-password-file", truststorePasswordFile)
                  .put("--enable-sasl-plain-text-auth", saslPlainTextAuth)
+                 .put("--cluster-id", clusterId)
                  .put("--implementation", implementation)
                  .put("<port>", port);
         ServerContext sc = new ServerContext(builder.build());

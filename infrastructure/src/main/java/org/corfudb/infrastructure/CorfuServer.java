@@ -93,13 +93,16 @@ public class CorfuServer {
                     + "<keystore> -f <keystore_password_file>] [-r <truststore> -w "
                     + "<truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-i <channel-implementation>] [-H <seconds>] "
-                    + "[-x <ciphers>] [-z <tls-protocols>]] [--agent] <port>\n"
+                    + "[-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] [--agent] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
                     + "              Set the path to the storage file for the log unit.\n"
                     + " -s, --single                                                             "
                     + "              Deploy a single-node configuration.\n"
+                    + " -I <cluster-id>, --cluster-id=<cluster-id>"
+                    + "              For a single node configuration the cluster id to use in UUID,"
+                    + "              base64 format, or auto to randomly generate [default: auto].\n"
                     + " -T <threads>, --Threads=<threads>                                        "
                     + "              Number of corfu server worker threads, or 0 to use 2x the "
                     + "              number of available processors [default: 0].\n"
@@ -141,7 +144,7 @@ public class CorfuServer {
                     + " -d <level>, --log-level=<level>                                          "
                     + "              Set the logging level, valid levels are: \n"
                     + "                                                                          "
-                    + "              ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].\n"
+                    + "              ALL,ERROR,WARN,INFO,DEBUG,TRACE,OFF [default: INFO].\n"
                     + " -M <address>:<port>, --management-server=<address>:<port>                "
                     + "              Layout endpoint to seed Management Server\n"
                     + " -n, --no-verify                                                          "
@@ -207,28 +210,9 @@ public class CorfuServer {
 
 
         // Pick the correct logging level before outputting error messages.
-        Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-        switch ((String) opts.get("--log-level")) {
-            case "ERROR":
-                root.setLevel(Level.ERROR);
-                break;
-            case "WARN":
-                root.setLevel(Level.WARN);
-                break;
-            case "INFO":
-                root.setLevel(Level.INFO);
-                break;
-            case "DEBUG":
-                root.setLevel(Level.DEBUG);
-                break;
-            case "TRACE":
-                root.setLevel(Level.TRACE);
-                break;
-            default:
-                root.setLevel(Level.INFO);
-                log.warn("Level {} not recognized, defaulting to level INFO",
-                        opts.get("--log-level"));
-        }
+        final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        final Level level = Level.toLevel(((String)opts.get("--log-level")).toUpperCase());
+        root.setLevel(level);
 
         log.debug("Started with arguments: " + opts);
 

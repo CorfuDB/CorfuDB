@@ -7,6 +7,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import java.util.UUID;
+import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -77,43 +79,24 @@ public class LayoutServer extends AbstractServer {
      * Handler for this server.
      */
     @Getter
-    private CorfuMsgHandler handler = new CorfuMsgHandler()
-            .generateHandlers(MethodHandles.lookup(), this);
-
-    private static final String metricsPrefix = "corfu.server.layout.";
+    private final CorfuMsgHandler handler =
+            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
 
     /**
      * Returns new LayoutServer for context.
      *
      * @param serverContext context object providing settings and objects
      */
-    public LayoutServer(ServerContext serverContext) {
+    public LayoutServer(@Nonnull ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
 
-        if (getCurrentLayout() == null && (Boolean) opts.get("--single")) {
-            getSingleNodeLayout();
+        if (serverContext.installSingleNodeLayoutIfAbsent()) {
+            setLayoutInHistory(serverContext.getCurrentLayout());
         }
     }
 
-    private void getSingleNodeLayout() {
-        String localAddress = opts.get("--address") + ":" + opts.get("<port>");
-        setCurrentLayout(new Layout(
-                Collections.singletonList(localAddress),
-                Collections.singletonList(localAddress),
-                Collections.singletonList(new LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        Collections.singletonList(
-                                new Layout.LayoutStripe(
-                                        Collections.singletonList(localAddress)
-                                )
-                        )
-                )),
-                0L
-        ));
-    }
+
 
     boolean checkBootstrap(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (getCurrentLayout() == null) {
@@ -133,12 +116,10 @@ public class LayoutServer extends AbstractServer {
      * @param msg              corfu message containing LAYOUT_REQUEST
      * @param ctx              netty ChannelHandlerContext
      * @param r                server router
-     * @param isMetricsEnabled True if metrics are enabled, False otherwise
      */
-    @ServerHandler(type = CorfuMsgType.LAYOUT_REQUEST, opTimer = metricsPrefix + "request")
+    @ServerHandler(type = CorfuMsgType.LAYOUT_REQUEST)
     public synchronized void handleMessageLayoutRequest(CorfuPayloadMsg<Long> msg,
-                                                        ChannelHandlerContext ctx, IServerRouter r,
-                                                        boolean isMetricsEnabled) {
+                                                    ChannelHandlerContext ctx, IServerRouter r) {
         if (!checkBootstrap(msg, ctx, r)) {
             return;
         }
@@ -164,12 +145,11 @@ public class LayoutServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    @ServerHandler(type = CorfuMsgType.LAYOUT_BOOTSTRAP, opTimer = metricsPrefix + "bootstrap")
+    @ServerHandler(type = CorfuMsgType.LAYOUT_BOOTSTRAP)
     public synchronized void handleMessageLayoutBootstrap(
             @NonNull CorfuPayloadMsg<LayoutBootstrapRequest> msg,
             ChannelHandlerContext ctx,
-            @NonNull IServerRouter r,
-            @NonNull boolean isMetricsEnabled) {
+            @NonNull IServerRouter r) {
 
         if (getCurrentLayout() == null) {
             log.info("handleMessageLayoutBootstrap: Bootstrap with new layout={}, {}",
@@ -195,12 +175,11 @@ public class LayoutServer extends AbstractServer {
      */
     // TODO this can work under a separate lock for this step as it does not change the global
     // components
-    @ServerHandler(type = CorfuMsgType.LAYOUT_PREPARE, opTimer = metricsPrefix + "prepare")
+    @ServerHandler(type = CorfuMsgType.LAYOUT_PREPARE)
     public synchronized void handleMessageLayoutPrepare(
             @NonNull CorfuPayloadMsg<LayoutPrepareRequest> msg,
             ChannelHandlerContext ctx,
-            @NonNull IServerRouter r,
-            @NonNull boolean isMetricsEnabled) {
+            @NonNull IServerRouter r) {
 
         // Check if the prepare is for the correct epoch
         if (!checkBootstrap(msg, ctx, r)) {
@@ -245,12 +224,11 @@ public class LayoutServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    @ServerHandler(type = CorfuMsgType.LAYOUT_PROPOSE, opTimer = metricsPrefix + "propose")
+    @ServerHandler(type = CorfuMsgType.LAYOUT_PROPOSE)
     public synchronized void handleMessageLayoutPropose(
             @NonNull CorfuPayloadMsg<LayoutProposeRequest> msg,
             ChannelHandlerContext ctx,
-            @NonNull IServerRouter r,
-            @NonNull boolean isMetricsEnabled) {
+            @NonNull IServerRouter r) {
 
         if (!checkBootstrap(msg, ctx, r)) {
             return;
@@ -316,12 +294,11 @@ public class LayoutServer extends AbstractServer {
     // TODO as this message is not set to ignore EPOCH.
     // TODO How do we handle holes in history if we let in layout commit message. Maybe we have a
     // hole filling process
-    @ServerHandler(type = CorfuMsgType.LAYOUT_COMMITTED, opTimer = metricsPrefix + "committed")
+    @ServerHandler(type = CorfuMsgType.LAYOUT_COMMITTED)
     public synchronized void handleMessageLayoutCommit(
             @NonNull CorfuPayloadMsg<LayoutCommittedRequest> msg,
             ChannelHandlerContext ctx,
-            @NonNull IServerRouter r,
-            @NonNull boolean isMetricsEnabled) {
+            @NonNull IServerRouter r) {
 
         Layout commitLayout = msg.getPayload().getLayout();
         if (!checkBootstrap(msg, ctx, r)) {

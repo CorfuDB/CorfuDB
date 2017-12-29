@@ -1,15 +1,13 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.MetricRegistry;
+import static org.corfudb.protocols.wireprotocol.TokenType.TX_ABORT_SEQ_OVERFLOW;
+
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-
 import io.netty.channel.ChannelHandlerContext;
-
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
 import java.util.Map;
@@ -18,11 +16,9 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -33,10 +29,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
-
-import static org.corfudb.protocols.wireprotocol.TokenType.TX_ABORT_SEQ_OVERFLOW;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -126,12 +119,9 @@ public class SequencerServer extends AbstractServer {
      * Handler for this server.
      */
     @Getter
-    private CorfuMsgHandler handler = new CorfuMsgHandler()
-            .generateHandlers(MethodHandles.lookup(), this);
+    private final CorfuMsgHandler handler =
+            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
 
-    private static final String metricsPrefix = "corfu.server.sequencer.";
-    private static Counter counterTokenSum;
-    private static Counter counterToken0;
 
     @Getter
     @Setter
@@ -162,10 +152,6 @@ public class SequencerServer extends AbstractServer {
         } else {
             globalLogTail.set(initialToken);
         }
-
-        MetricRegistry metrics = serverContext.getMetrics();
-        counterTokenSum = metrics.counter(metricsPrefix + "token-sum");
-        counterToken0 = metrics.counter(metricsPrefix + "token-query");
 
         long cacheSize = 250_000;
         if (opts.get("--sequencer-cache-size") != null) {
@@ -316,10 +302,9 @@ public class SequencerServer extends AbstractServer {
                 TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, Collections.emptyMap())));
     }
 
-    @ServerHandler(type = CorfuMsgType.SEQUENCER_TRIM_REQ, opTimer = metricsPrefix + "trimCache")
+    @ServerHandler(type = CorfuMsgType.SEQUENCER_TRIM_REQ)
     public synchronized void trimCache(CorfuPayloadMsg<Long> msg,
-                                       ChannelHandlerContext ctx, IServerRouter r,
-                                       boolean isMetricsEnabled) {
+                                       ChannelHandlerContext ctx, IServerRouter r) {
         log.info("trimCache: Starting cache eviction");
         if (trimMark < msg.getPayload()) {
             // Advance the trim mark, if the new trim request has a higher trim mark.
@@ -340,10 +325,9 @@ public class SequencerServer extends AbstractServer {
     /**
      * Service an incoming request to reset the sequencer.
      */
-    @ServerHandler(type = CorfuMsgType.BOOTSTRAP_SEQUENCER, opTimer = metricsPrefix + "reset")
+    @ServerHandler(type = CorfuMsgType.BOOTSTRAP_SEQUENCER)
     public synchronized void resetServer(CorfuPayloadMsg<SequencerTailsRecoveryMsg> msg,
-                                         ChannelHandlerContext ctx, IServerRouter r,
-                                         boolean isMetricsEnabled) {
+                                         ChannelHandlerContext ctx, IServerRouter r) {
         long initialToken = msg.getPayload().getGlobalTail();
         final Map<UUID, Long> streamTails = msg.getPayload().getStreamTails();
         final long readyEpoch = msg.getPayload().getReadyStateEpoch();
@@ -391,19 +375,10 @@ public class SequencerServer extends AbstractServer {
     /**
      * Service an incoming token request.
      */
-    @ServerHandler(type = CorfuMsgType.TOKEN_REQ, opTimer = metricsPrefix + "token-req")
+    @ServerHandler(type = CorfuMsgType.TOKEN_REQ)
     public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
-                                          ChannelHandlerContext ctx, IServerRouter r,
-                                          boolean isMetricsEnabled) {
+                                          ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
-
-        // metrics collection
-        if (req.getReqType() == TokenRequest.TK_QUERY) {
-            MetricsUtils.incConditionalCounter(isMetricsEnabled, counterToken0, 1);
-        } else {
-            MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTokenSum, req
-                    .getNumTokens());
-        }
 
         // dispatch request handler according to request type
         switch (req.getReqType()) {

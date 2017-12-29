@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import java.util.Set;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 
 /**
@@ -9,6 +10,7 @@ import org.corfudb.runtime.CorfuRuntime;
  *
  * <p>Created by zlokhandwala on 11/21/16.
  */
+@Slf4j
 public class PurgeFailurePolicy implements IFailureHandlerPolicy {
 
     /**
@@ -33,6 +35,7 @@ public class PurgeFailurePolicy implements IFailureHandlerPolicy {
                 .build();
         newLayout.setRuntime(corfuRuntime);
         newLayout.setEpoch(newLayout.getEpoch() + 1);
+        log.info("generateLayout: new Layout {}", newLayout);
         return newLayout;
     }
 }
