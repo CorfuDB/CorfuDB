@@ -144,7 +144,7 @@ public class CorfuServer {
                     + " -d <level>, --log-level=<level>                                          "
                     + "              Set the logging level, valid levels are: \n"
                     + "                                                                          "
-                    + "              ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].\n"
+                    + "              ALL,ERROR,WARN,INFO,DEBUG,TRACE,OFF [default: INFO].\n"
                     + " -M <address>:<port>, --management-server=<address>:<port>                "
                     + "              Layout endpoint to seed Management Server\n"
                     + " -n, --no-verify                                                          "
@@ -232,28 +232,9 @@ public class CorfuServer {
                         opts.get("--log-path")).reset());
 
         // Pick the correct logging level before outputting error messages.
-        Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-        switch ((String) opts.get("--log-level")) {
-            case "ERROR":
-                root.setLevel(Level.ERROR);
-                break;
-            case "WARN":
-                root.setLevel(Level.WARN);
-                break;
-            case "INFO":
-                root.setLevel(Level.INFO);
-                break;
-            case "DEBUG":
-                root.setLevel(Level.DEBUG);
-                break;
-            case "TRACE":
-                root.setLevel(Level.TRACE);
-                break;
-            default:
-                root.setLevel(Level.INFO);
-                log.warn("Level {} not recognized, defaulting to level INFO",
-                        opts.get("--log-level"));
-        }
+        final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        final Level level = Level.toLevel(((String)opts.get("--log-level")).toUpperCase());
+        root.setLevel(level);
 
         log.debug("Started with arguments: " + opts);
 
