@@ -102,7 +102,7 @@ public class CorfuServer {
                     + "              Deploy a single-node configuration.\n"
                     + " -I <cluster-id>, --cluster-id=<cluster-id>"
                     + "              For a single node configuration the cluster id to use in UUID,"
-                    + "              base64 format, or auto to randomly generate [default: auto]."
+                    + "              base64 format, or auto to randomly generate [default: auto].\n"
                     + " -T <threads>, --Threads=<threads>                                        "
                     + "              Number of corfu server worker threads, or 0 to use 2x the "
                     + "              number of available processors [default: 0].\n"
