@@ -64,7 +64,7 @@ public class logReader {
         return readAll();
     }
 
-    @SuppressWarnings("checkstyle:printLine") // Utility
+    @SuppressWarnings({"checkstyle:printLine", "checkstyle:print"}) // Utility
     public final boolean init(final String[] args) {
         Docopt parser = new Docopt(USAGE);
         parser.withExit(false);
@@ -188,7 +188,7 @@ public class logReader {
         fcOut.write(recordBuffer);
     }
 
-    @SuppressWarnings("checkstyle:printLine")
+    @SuppressWarnings({"checkstyle:printLine", "checkstyle:print"}) // Utility
     public final void printLogEntry(final LogEntry entry, final boolean showBinary) {
         System.out.format("Global address: %d\n", entry.getGlobalAddress());
         System.out.format("Log Entry streams (%d):  ", entry.getStreamsCount());
