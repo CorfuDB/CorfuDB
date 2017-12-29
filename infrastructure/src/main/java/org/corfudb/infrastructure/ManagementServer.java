@@ -133,33 +133,15 @@ public class ManagementServer extends AbstractServer {
                 ? opts.get("--management-server").toString() : null;
         sequencerBootstrappedFuture = new CompletableFuture<>();
 
+
         safeUpdateLayout(getCurrentLayout());
         // If no state was preserved, there is no layout to recover.
         if (latestLayout == null) {
             recovered = true;
         }
 
-        if ((Boolean) opts.get("--single")) {
-            String localAddress = opts.get("--address") + ":" + opts.get("<port>");
-
-            Layout singleLayout = new Layout(
-                    Collections.singletonList(localAddress),
-                    Collections.singletonList(localAddress),
-                    Collections.singletonList(new Layout.LayoutSegment(
-                            Layout.ReplicationMode.CHAIN_REPLICATION,
-                            0L,
-                            -1L,
-                            Collections.singletonList(
-                                    new Layout.LayoutStripe(
-                                            Collections.singletonList(localAddress)
-                                    )
-                            )
-                    )),
-                    0L
-            );
-
-            safeUpdateLayout(singleLayout);
-        }
+        serverContext.installSingleNodeLayoutIfAbsent();
+        safeUpdateLayout(serverContext.getCurrentLayout());
 
         this.failureDetectorPolicy = serverContext.getFailureDetectorPolicy();
         this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();
@@ -228,14 +210,20 @@ public class ManagementServer extends AbstractServer {
     private synchronized void safeUpdateLayout(Layout layout) {
         // Cannot update with a null layout.
         if (layout == null) {
+            log.warn("safeUpdateLayout: Attempted to update with null layout");
             return;
         }
 
         // Update only if new layout has a higher epoch than the existing layout.
         if (latestLayout == null || layout.getEpoch() > latestLayout.getEpoch()) {
             latestLayout = layout;
+            log.info("safeUpdateLayout: Updating to new layout at epoch {}",
+                    latestLayout.getEpoch());
             // Persisting this new updated layout
             setCurrentLayout(latestLayout);
+        } else {
+            log.warn("safeUpdateLayout: Ignoring layout because new epoch {} <= old epoch {}",
+                    layout.getEpoch(), latestLayout.getEpoch());
         }
     }
 
@@ -409,7 +397,7 @@ public class ManagementServer extends AbstractServer {
                 corfuRuntime.addLayoutServer(bootstrapEndpoint);
             }
             corfuRuntime.connect();
-            log.info("Corfu Runtime connected successfully");
+            log.info("getCorfuRuntime: Corfu Runtime connected successfully");
         }
         return corfuRuntime;
     }

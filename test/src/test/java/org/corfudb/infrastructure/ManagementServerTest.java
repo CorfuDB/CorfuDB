@@ -26,7 +26,7 @@ public class ManagementServerTest extends AbstractServerTest {
     public ManagementServer getDefaultServer() {
         // Adding layout server for management server runtime to connect to.
         ServerContext serverContext = new ServerContextBuilder()
-                .setSingle(true)
+                .setSingle(false)
                 .setPort(SERVERS.PORT_0)
                 .setServerRouter(getRouter())
                 .build();
@@ -72,21 +72,4 @@ public class ManagementServerTest extends AbstractServerTest {
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP_ERROR);
     }
 
-    /**
-     * Triggering the failure handler with and without bootstrapping the server.
-     */
-    @Test
-    public void triggerFailureHandler() {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
-        Set<String> set = new HashSet<>();
-        set.add("key");
-        sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
-                new FailureDetectorMsg(Collections.singleton("key"), Collections.emptySet())));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR);
-        sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
-        sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
-                new FailureDetectorMsg(Collections.singleton("key"), Collections.emptySet())));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
-    }
 }

@@ -7,6 +7,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import java.util.UUID;
+import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -87,33 +89,16 @@ public class LayoutServer extends AbstractServer {
      *
      * @param serverContext context object providing settings and objects
      */
-    public LayoutServer(ServerContext serverContext) {
+    public LayoutServer(@Nonnull ServerContext serverContext) {
         this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
 
-        if (getCurrentLayout() == null && (Boolean) opts.get("--single")) {
-            getSingleNodeLayout();
+        if (serverContext.installSingleNodeLayoutIfAbsent()) {
+            setLayoutInHistory(serverContext.getCurrentLayout());
         }
     }
 
-    private void getSingleNodeLayout() {
-        String localAddress = opts.get("--address") + ":" + opts.get("<port>");
-        setCurrentLayout(new Layout(
-                Collections.singletonList(localAddress),
-                Collections.singletonList(localAddress),
-                Collections.singletonList(new LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        Collections.singletonList(
-                                new Layout.LayoutStripe(
-                                        Collections.singletonList(localAddress)
-                                )
-                        )
-                )),
-                0L
-        ));
-    }
+
 
     boolean checkBootstrap(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (getCurrentLayout() == null) {

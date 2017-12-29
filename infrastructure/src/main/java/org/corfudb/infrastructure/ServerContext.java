@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import com.codahale.metrics.MetricRegistry;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.Map;
 
 import java.util.UUID;
@@ -19,6 +20,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IFailureHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.UuidUtils;
 
@@ -155,6 +157,62 @@ public class ServerContext {
     @SuppressWarnings("unchecked")
     public <T> T getServerConfig(Class<T> type, String optionName) {
         return (T) getServerConfig().get(optionName);
+    }
+
+
+    /** Install a single node layout if and only if no layout is currently installed.
+     *  Synchronized, so this method is thread-safe.
+     *
+     *  @return True, if a new layout was installed, false otherwise.
+     */
+    public synchronized boolean installSingleNodeLayoutIfAbsent() {
+        if ((Boolean) getServerConfig().get("--single") && getCurrentLayout() == null) {
+            setCurrentLayout(getNewSingleNodeLayout());
+            return true;
+        }
+        return false;
+    }
+
+    /** Get a new single node layout used for self-bootstrapping a server started with
+     *  the -s flag.
+     *
+     *  @returns A new single node layout with a unique cluster Id
+     *  @throws IllegalArgumentException    If the cluster id was not auto, base64 or a UUID string
+     */
+    public Layout getNewSingleNodeLayout() {
+        final String clusterIdString = (String) getServerConfig().get("--cluster-id");
+        UUID clusterId;
+        if (clusterIdString.equals("auto")) {
+            clusterId = UUID.randomUUID();
+        } else {
+            // Is it a UUID?
+            try {
+                clusterId = UUID.fromString(clusterIdString);
+            } catch (IllegalArgumentException ignore) {
+                // Must be a base64 id, otherwise we will throw InvalidArgumentException again
+                clusterId = UuidUtils.fromBase64(clusterIdString);
+            }
+        }
+        log.info("getNewSingleNodeLayout: Bootstrapping with cluster Id {} [{}]",
+            clusterId, UuidUtils.asBase64(clusterId));
+        String localAddress = getServerConfig().get("--address") + ":"
+            + getServerConfig().get("<port>");
+        return new Layout(
+            Collections.singletonList(localAddress),
+            Collections.singletonList(localAddress),
+            Collections.singletonList(new LayoutSegment(
+                Layout.ReplicationMode.CHAIN_REPLICATION,
+                0L,
+                -1L,
+                Collections.singletonList(
+                    new Layout.LayoutStripe(
+                        Collections.singletonList(localAddress)
+                    )
+                )
+            )),
+            0L,
+            clusterId
+        );
     }
 
     /** Get the current {@link Layout} stored in the {@link DataStore}.

@@ -18,6 +18,7 @@ import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
 
@@ -75,6 +76,12 @@ public class LayoutView extends AbstractView {
             log.error("Runtime layout has epoch {} but expected {} to move to epoch {}",
                     currentLayout.getEpoch(), epoch - 1, epoch);
             throw new WrongEpochException(epoch - 1);
+        }
+        if (currentLayout.getClusterId() != null
+            && !currentLayout.getClusterId().equals(layout.getClusterId())) {
+            log.error("updateLayout: Requested layout has cluster Id {} but expected {}",
+                    layout.getClusterId(), currentLayout.getClusterId());
+            throw new WrongClusterException(currentLayout.getClusterId(), layout.getClusterId());
         }
         //phase 1: prepare with a given rank.
         Layout alreadyProposedLayout = prepare(epoch, rank);
