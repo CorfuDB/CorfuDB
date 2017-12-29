@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Random;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadFactory;
@@ -38,9 +37,12 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLException;
+
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
@@ -50,6 +52,7 @@ import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.security.sasl.SaslUtils;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
@@ -57,6 +60,7 @@ import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
+import org.corfudb.util.Sleep;
 
 
 /**
@@ -393,6 +397,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                     }
                     ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
                     ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
+                    ch.pipeline().addLast(ee, new ClientHandshakeHandler(parameters.getClientId(),
+                            node.getNodeId(), parameters.getHandshakeTimeout()));
                     ch.pipeline().addLast(ee, router);
                 }
             });
@@ -444,7 +450,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 //                        MetricsUtils.incConditionalCounter(isEnabled,
 //                                counterConnectFailed, 1);
                         log.warn("Exception while reconnecting, retry in {} ms", timeoutRetry);
-                        Thread.sleep(timeoutRetry);
+                        Sleep.MILLISECONDS.sleepUninterruptibly(timeoutRetry);
                     }
                 }
             }

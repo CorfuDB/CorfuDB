@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.orchestrator;
+package org.corfudb.protocols.wireprotocol.orchestrator;
 
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
@@ -7,8 +7,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
-import org.corfudb.protocols.wireprotocol.orchestrator.Request;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
@@ -22,7 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 import javax.annotation.concurrent.NotThreadSafe;
 
-import static org.corfudb.format.Types.OrchestratorRequestType.ADD_NODE;
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.ADD_NODE;
 
 /**
  * A definition of a workflow that adds a new node to the cluster. This workflow
@@ -34,7 +32,7 @@ import static org.corfudb.format.Types.OrchestratorRequestType.ADD_NODE;
  */
 @NotThreadSafe
 @Slf4j
-public class AddNodeWorkflow implements Workflow {
+public class AddNodeWorkflow implements IWorkflow {
 
     final AddNodeRequest request;
 
@@ -117,7 +115,7 @@ public class AddNodeWorkflow implements Workflow {
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
             changeStatus(ActionStatus.STARTED);
-            Layout currentLayout = (Layout) runtime.getLayoutView().getLayout().clone();
+            Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());
 
             if (currentLayout.getAllServers().contains(request.getEndpoint())) {
                 log.info("Node {} already exists in the layout, skipping.", request.getEndpoint());
@@ -132,7 +130,7 @@ public class AddNodeWorkflow implements Workflow {
                     0);
 
             runtime.invalidateLayout();
-            newLayout = (Layout) runtime.getLayoutView().getLayout().clone();
+            newLayout = new Layout(runtime.getLayoutView().getLayout());
             changeStatus(ActionStatus.COMPLETED);
             return;
 

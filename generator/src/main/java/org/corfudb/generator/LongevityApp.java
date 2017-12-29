@@ -125,8 +125,6 @@ public class LongevityApp {
 
             exitStatus = checkpointHasFinished ? 0 : 1;
             System.exit(exitStatus);
-
-
         }
     }
 

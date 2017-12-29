@@ -118,6 +118,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .addLogUnit(SERVERS.PORT_3)
                 .addToSegment()
                 .addToLayout()
+                .setClusterId(originalLayout.getClusterId())
                 .build();
 
         failedNodes.clear();

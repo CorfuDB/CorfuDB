@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -17,11 +16,10 @@ import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.util.CFUtils;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
@@ -45,10 +43,9 @@ public class LayoutManagementView extends AbstractView {
      * @return True if the cluster was recovered, False otherwise
      */
     public void recoverCluster(Layout recoveryLayout)
-            throws QuorumUnreachableException, OutrankedException, InterruptedException,
-            ExecutionException, LayoutModificationException, CloneNotSupportedException {
+            throws QuorumUnreachableException, OutrankedException {
 
-        Layout newLayout = (Layout) recoveryLayout.clone();
+        Layout newLayout = new Layout(recoveryLayout);
         newLayout.setEpoch(recoveryLayout.getEpoch() + 1);
         newLayout.setRuntime(runtime);
         runLayoutReconfiguration(recoveryLayout, newLayout, true);
@@ -68,8 +65,7 @@ public class LayoutManagementView extends AbstractView {
                               Layout currentLayout,
                               Set<String> failedServers,
                               Set<String> healedServers)
-            throws QuorumUnreachableException, OutrankedException, InterruptedException,
-            ExecutionException, LayoutModificationException, CloneNotSupportedException {
+            throws QuorumUnreachableException, OutrankedException {
 
         // Generates a new layout by removing the failed nodes from the existing layout
         Layout newLayout = failureHandlerPolicy
@@ -89,23 +85,19 @@ public class LayoutManagementView extends AbstractView {
      * initiates failure handling capabilities on the management server.
      *
      * @param endpoint New node endpoint.
-     * @throws InterruptedException       if bootstrapping interrupted.
-     * @throws ExecutionException         if bootstrapping fails.
-     * @throws CloneNotSupportedException if layout clone fails.
      */
-    public void bootstrapNewNode(String endpoint)
-            throws InterruptedException, ExecutionException, CloneNotSupportedException {
+    public void bootstrapNewNode(String endpoint) {
 
         // Bootstrap the to-be added node with the old layout.
         IClientRouter newEndpointRouter = runtime.getRouter(endpoint);
-        Layout layout = (Layout) runtime.getLayoutView().getLayout().clone();
+        Layout layout = new Layout(runtime.getLayoutView().getLayout());
         // Ignoring call result as the call returns ACK or throws an exception.
-        newEndpointRouter.getClient(LayoutClient.class)
-                .bootstrapLayout(layout).get();
-        newEndpointRouter.getClient(ManagementClient.class)
-                .bootstrapManagement(layout).get();
-        newEndpointRouter.getClient(ManagementClient.class)
-                .initiateFailureHandler().get();
+        CFUtils.getUninterruptibly(newEndpointRouter.getClient(LayoutClient.class)
+                .bootstrapLayout(layout));
+        CFUtils.getUninterruptibly(newEndpointRouter.getClient(ManagementClient.class)
+                .bootstrapManagement(layout));
+        CFUtils.getUninterruptibly(newEndpointRouter.getClient(ManagementClient.class)
+                .initiateFailureHandler());
 
         log.info("bootstrapNewNode: New node {} bootstrapped.", endpoint);
     }
@@ -120,11 +112,8 @@ public class LayoutManagementView extends AbstractView {
      * @param isLogUnitServer      is a log unit server
      * @param isUnresponsiveServer is an unresponsive server
      * @param logUnitStripeIndex   stripe index to be added into if its a log unit.
-     * @throws CloneNotSupportedException if layout clone fails.
      * @throws QuorumUnreachableException if seal or consensus cannot be achieved.
      * @throws OutrankedException         if consensus outranked.
-     * @throws InterruptedException       if fetching global tail interrupted.
-     * @throws ExecutionException         if fetching global tail failed.
      */
     public void addNode(Layout currentLayout,
                         String endpoint,
@@ -133,8 +122,7 @@ public class LayoutManagementView extends AbstractView {
                         boolean isLogUnitServer,
                         boolean isUnresponsiveServer,
                         int logUnitStripeIndex)
-            throws CloneNotSupportedException, QuorumUnreachableException, OutrankedException,
-            InterruptedException, ExecutionException {
+            throws QuorumUnreachableException, OutrankedException {
 
         currentLayout.setRuntime(runtime);
         sealEpoch(currentLayout);
@@ -158,15 +146,10 @@ public class LayoutManagementView extends AbstractView {
 
         attemptConsensus(newLayout);
 
-        try {
             // Add node is successful even if reconfigure sequencer fails.
             // TODO: Optimize this by retrying or submitting a workflow to retry.
             reconfigureSequencerServers(currentLayout, newLayout, false);
-        } catch (InterruptedException ie) {
-            throw new UnrecoverableCorfuInterruptedError(ie);
-        } catch (ExecutionException e) {
-            log.error("addNode: Bootstrapping sequencer failed due to exception : ", e);
-        }
+
     }
     
     /**
@@ -174,14 +157,11 @@ public class LayoutManagementView extends AbstractView {
      *
      * @param currentLayout Current layout
      * @return True if merge successful, else False.
-     * @throws CloneNotSupportedException  if layout clne fails.
      * @throws QuorumUnreachableException  if seal or consensus could not be achieved.
-     * @throws LayoutModificationException if merge not possible in layout.
      * @throws OutrankedException          if consensus is outranked.
      */
     public boolean mergeSegments(Layout currentLayout)
-            throws CloneNotSupportedException, QuorumUnreachableException,
-            LayoutModificationException, OutrankedException {
+            throws QuorumUnreachableException, OutrankedException {
 
         currentLayout.setRuntime(runtime);
         sealEpoch(currentLayout);
@@ -193,15 +173,7 @@ public class LayoutManagementView extends AbstractView {
         newLayout.setRuntime(runtime);
 
         attemptConsensus(newLayout);
-
-        try {
-            reconfigureSequencerServers(currentLayout, newLayout, false);
-        } catch (InterruptedException ie) {
-            throw new UnrecoverableCorfuInterruptedError(ie);
-        } catch (ExecutionException e) {
-            log.error("mergeSegments: Bootstrapping sequencer failed due to exception : ", e);
-        }
-
+        reconfigureSequencerServers(currentLayout, newLayout, false);
         return true;
     }
 
@@ -220,8 +192,7 @@ public class LayoutManagementView extends AbstractView {
      */
     private void runLayoutReconfiguration(Layout currentLayout, Layout newLayout,
                                           final boolean forceSequencerRecovery)
-            throws QuorumUnreachableException, OutrankedException, InterruptedException,
-            ExecutionException {
+            throws QuorumUnreachableException, OutrankedException {
 
         // Seals the incremented epoch (Assumes newLayout epoch = currentLayout epoch + 1).
         currentLayout.setRuntime(runtime);
@@ -287,17 +258,17 @@ public class LayoutManagementView extends AbstractView {
      * @param layout Current layout.
      * @return The max global log tail obtained from the log unit servers.
      */
-    private long getMaxGlobalTail(Layout layout)
-            throws ExecutionException, InterruptedException {
+    private long getMaxGlobalTail(Layout layout) {
         long maxTokenRequested = 0;
         for (Layout.LayoutSegment segment : layout.getSegments()) {
 
             // Query the tail of every log unit in every stripe.
             if (segment.getReplicationMode().equals(Layout.ReplicationMode.CHAIN_REPLICATION)) {
                 for (Layout.LayoutStripe stripe : segment.getStripes()) {
-                    maxTokenRequested = Math.max(maxTokenRequested, runtime.getRouter(stripe
+                    long tail = CFUtils.getUninterruptibly(runtime.getRouter(stripe
                             .getLogServers().get(0))
-                            .getClient(LogUnitClient.class).getTail().get());
+                            .getClient(LogUnitClient.class).getTail());
+                    maxTokenRequested = Math.max(maxTokenRequested, tail);
                 }
             } else if (segment.getReplicationMode()
                     .equals(Layout.ReplicationMode.QUORUM_REPLICATION)) {
@@ -310,7 +281,8 @@ public class LayoutManagementView extends AbstractView {
                     QuorumFuturesFactory.CompositeFuture<Long> quorumFuture =
                             QuorumFuturesFactory.getQuorumFuture(Comparator.naturalOrder(),
                                     completableFutures);
-                    maxTokenRequested = Math.max(maxTokenRequested, quorumFuture.get());
+                    maxTokenRequested = Math.max(maxTokenRequested,
+                            CFUtils.getUninterruptibly(quorumFuture));
                 }
             }
         }
@@ -328,8 +300,7 @@ public class LayoutManagementView extends AbstractView {
      * @param forceReconfigure Flag to force reconfiguration.
      */
     private void reconfigureSequencerServers(Layout originalLayout, Layout
-            newLayout, boolean forceReconfigure)
-            throws InterruptedException, ExecutionException {
+            newLayout, boolean forceReconfigure) {
 
         long maxTokenRequested = 0L;
         Map<UUID, Long> streamTails = Collections.emptyMap();
@@ -355,8 +326,8 @@ public class LayoutManagementView extends AbstractView {
         }
 
         // Configuring the new sequencer.
-        boolean sequencerBootstrapResult = newLayout.getSequencer(0)
-                .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch()).get();
+        boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(newLayout.getSequencer(0)
+                .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch()));
         if (sequencerBootstrapResult) {
             log.info("Sequencer bootstrap successful.");
         } else {

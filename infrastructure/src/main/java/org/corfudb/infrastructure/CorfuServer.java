@@ -6,10 +6,9 @@ import static org.fusesource.jansi.Ansi.Color.RED;
 import static org.fusesource.jansi.Ansi.Color.WHITE;
 import static org.fusesource.jansi.Ansi.ansi;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -18,12 +17,20 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
+import io.netty.channel.epoll.Epoll;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerSocketChannel;
+import io.netty.channel.kqueue.KQueue;
+import io.netty.channel.kqueue.KQueueEventLoopGroup;
+import io.netty.channel.kqueue.KQueueServerSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
+
 import java.io.File;
 import java.util.List;
 import java.util.Map;
@@ -33,10 +40,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -48,6 +58,10 @@ import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+
 
 /**
  * This is the new Corfu server single-process executable.
@@ -78,14 +92,17 @@ public class CorfuServer {
                     + "<ratio>] [-d <level>] [-p <seconds>] [-M <address>:<port>] [-e [-u "
                     + "<keystore> -f <keystore_password_file>] [-r <truststore> -w "
                     + "<truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] "
-                    + "[-k <seqcache>] [-T <threads>]"
-                    + "[-x <ciphers>] [-z <tls-protocols>]] [--agent] <port>\n"
+                    + "[-k <seqcache>] [-T <threads>] [-i <channel-implementation>] [-H <seconds>] "
+                    + "[-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] [--agent] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
                     + "              Set the path to the storage file for the log unit.\n"
                     + " -s, --single                                                             "
                     + "              Deploy a single-node configuration.\n"
+                    + " -I <cluster-id>, --cluster-id=<cluster-id>"
+                    + "              For a single node configuration the cluster id to use in UUID,"
+                    + "              base64 format, or auto to randomly generate [default: auto].\n"
                     + " -T <threads>, --Threads=<threads>                                        "
                     + "              Number of corfu server worker threads, or 0 to use 2x the "
                     + "              number of available processors [default: 0].\n"
@@ -94,6 +111,9 @@ public class CorfuServer {
                     + "\n -a <address>, --address=<address>                                      "
                     + "                IP address to advertise to external clients [default: "
                     + "localhost].\n"
+                    + " -i <channel-implementation>, --implementation <channel-implementation>   "
+                    + "              The type of channel to use (auto, nio, epoll, kqueue)"
+                    + "[default: nio].\n"
                     + " -m, --memory                                                             "
                     + "              Run the unit in-memory (non-persistent).\n"
                     + "                                                                          "
@@ -108,6 +128,8 @@ public class CorfuServer {
                     + "              If there is no log, then this will be the size of the log unit"
                     + "\n                                                                        "
                     + "                evicted entries will be auto-trimmed. [default: 0.5].\n"
+                    + " -H <seconds>, --HandshakeTimeout=<sceonds>                               "
+                    + "              Handshake timeout in seconds [default: 10].\n               "
                     + " -t <token>, --initial-token=<token>                                      "
                     + "              The first token the sequencer will issue, or -1 to recover\n"
                     + "                                                                          "
@@ -256,7 +278,7 @@ public class CorfuServer {
         try {
             startAndListen(bossGroup,
                 workerGroup,
-                NioServerSocketChannel.class,
+                getServerChannelType(serverContext),
                 b -> configureBootstrapOptions(serverContext, b),
                 serverContext,
                 router,
@@ -337,6 +359,30 @@ public class CorfuServer {
             .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
     }
 
+    /** Get the type of {@link ServerChannel} to use.
+     *
+     * @param context       The {@link ServerContext} to use.
+     * @return              The server channel type.
+     */
+    public static Class<? extends ServerSocketChannel> getServerChannelType(
+            @Nonnull ServerContext context) {
+        final String type = context.getServerConfig(String.class, "--implementation");
+        switch (type) {
+            case "auto":
+                return Epoll.isAvailable() ? EpollServerSocketChannel.class :
+                    KQueue.isAvailable() ? KQueueServerSocketChannel.class :
+                    NioServerSocketChannel.class;
+            case "epoll":
+                return EpollServerSocketChannel.class;
+            case "kqueue":
+                return KQueueServerSocketChannel.class;
+            case "nio":
+                return NioServerSocketChannel.class;
+            default:
+                throw new UnrecoverableCorfuError("Invalid server channel " + type);
+        }
+    }
+
     /** Get a "boss" group, which services (accepts) incoming connections.
      *
      * @param context       The {@link ServerContext} to use.
@@ -346,7 +392,7 @@ public class CorfuServer {
         final ThreadFactory threadFactory = new ThreadFactoryBuilder()
                                                     .setNameFormat("accept-%d")
                                                     .build();
-        EventLoopGroup group = new NioEventLoopGroup(1, threadFactory);
+        EventLoopGroup group = getEventLoop(context, threadFactory, 1);
         log.info("getBossGroup: Type {}", group.getClass().getSimpleName());
         return group;
     }
@@ -366,12 +412,35 @@ public class CorfuServer {
         final int numThreads = requestedThreads == 0
                                 ? Runtime.getRuntime().availableProcessors() * 2
                                     : requestedThreads;
-        EventLoopGroup group = new NioEventLoopGroup(numThreads, threadFactory);
+        EventLoopGroup group = getEventLoop(context, threadFactory, numThreads);
+
         log.info("getWorkerGroup: Type {} with {} threads",
                         group.getClass().getSimpleName(), numThreads);
         return group;
     }
 
+    /** Get a event loop, based on the settings in the {@link ServerContext}.
+     *
+     * @param context       The {@link ServerContext} to use.
+     * @param factory       A {@link ThreadFactory} for creating new threads.
+     * @param numThreads    The number of threads in the group.
+     * @return              A new {@link EventLoopGroup}.
+     */
+    private static EventLoopGroup getEventLoop(@Nonnull ServerContext context,
+            @Nonnull ThreadFactory factory,
+            int numThreads) {
+        final Class<? extends ServerSocketChannel> type = getServerChannelType(context);
+
+        if (type.equals(NioServerSocketChannel.class)) {
+            return new NioEventLoopGroup(numThreads, factory);
+        } else if (type.equals(EpollServerSocketChannel.class)) {
+            return new EpollEventLoopGroup(numThreads, factory);
+        } else if (type.equals(KQueueServerSocketChannel.class)) {
+            return new KQueueEventLoopGroup(numThreads, factory);
+        } else {
+            throw new UnrecoverableCorfuError("Invalid server channel " + type);
+        }
+    }
 
     /** Obtain a {@link ChannelInitializer} which initializes the channel pipeline
      *  for a new {@link ServerChannel}.
@@ -464,6 +533,10 @@ public class CorfuServer {
                 // Transform the framed message into a Corfu message.
                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
+                ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
+                        Version.getVersionString() + "("
+                                + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")",
+                        context.getServerConfig(String.class, "--HandshakeTimeout")));
                 // Route the message to the server class.
                 ch.pipeline().addLast(router);
             }

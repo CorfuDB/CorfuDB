@@ -1,30 +1,35 @@
 package org.corfudb.infrastructure.orchestrator;
 
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
+import com.google.common.collect.Maps;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.format.Types;
 import org.corfudb.infrastructure.IServerRouter;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.Action;
+import org.corfudb.protocols.wireprotocol.orchestrator.ActionStatus;
+import org.corfudb.protocols.wireprotocol.orchestrator.CreateRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
-import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.IWorkflow;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
-import org.corfudb.protocols.wireprotocol.orchestrator.Request;
 import org.corfudb.protocols.wireprotocol.orchestrator.Response;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.NodeLocator;
 
 import javax.annotation.Nonnull;
-import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-
-import static org.corfudb.format.Types.OrchestratorRequestType.QUERY;
+import java.util.stream.Collectors;
 
 /**
  * The orchestrator is a stateless service that runs on all management servers and its purpose
@@ -39,27 +44,48 @@ import static org.corfudb.format.Types.OrchestratorRequestType.QUERY;
 @Slf4j
 public class Orchestrator {
 
-    final Callable<CorfuRuntime> getRuntime;
-    final Map<UUID, String> activeWorkflows = new ConcurrentHashMap();
+    final ServerContext serverContext;
 
-    public Orchestrator(@Nonnull Callable<CorfuRuntime> runtime) {
+    final Callable<CorfuRuntime> getRuntime;
+
+    final BiMap<UUID, String> activeWorkflows = Maps.synchronizedBiMap(HashBiMap.create());
+
+    public Orchestrator(@Nonnull Callable<CorfuRuntime> runtime,
+                        @Nonnull ServerContext serverContext) {
+        this.serverContext = serverContext;
         this.getRuntime = runtime;
     }
 
-    public void handle(@Nonnull CorfuPayloadMsg<OrchestratorRequest> msg,
+    public void handle(@Nonnull CorfuPayloadMsg<OrchestratorMsg> msg,
                        @Nonnull ChannelHandlerContext ctx,
                        @Nonnull IServerRouter r) {
 
-        OrchestratorRequest orchReq = msg.getPayload();
+        OrchestratorMsg orchReq = msg.getPayload();
 
-        if (orchReq.getRequest().getType() == QUERY) {
-            handleQuery(msg, ctx, r);
-        } else {
-            addNode(msg, ctx, r);
+        switch (orchReq.getRequest().getType()) {
+            case QUERY:
+                query(msg, ctx, r);
+                break;
+            case ADD_NODE:
+                dispatch(msg, ctx, r);
+                break;
+            default:
+                log.error("handle: Unknown request type {}", orchReq.getRequest().getType());
         }
     }
 
-    void handleQuery(CorfuPayloadMsg<OrchestratorRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    /**
+     *
+     * Query a workflow id.
+     *
+     * Queries a workflow id and returns true if this orchestrator is still
+     * executing the workflow, otherwise return false.
+     *
+     * @param msg corfu message containing the query request
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
+     */
+    void query(CorfuPayloadMsg<OrchestratorMsg> msg, ChannelHandlerContext ctx, IServerRouter r) {
         QueryRequest req = (QueryRequest) msg.getPayload().getRequest();
 
         Response resp;
@@ -75,45 +101,47 @@ public class Orchestrator {
                 .payloadMsg(new OrchestratorResponse(resp)));
     }
 
-    void addNode(CorfuPayloadMsg<OrchestratorRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        AddNodeRequest req = (AddNodeRequest) msg.getPayload().getRequest();
-        if (findUUID(req.getEndpoint()) != null) {
-            // An add node workflow is already executing for this endpoint, return
+    /**
+     *
+     * Dispatch a workflow create request.
+     *
+     * Create and start a workflow on this orchestrator, if there is
+     * an existing workflow that is executing on the same endpoint,
+     * then just return the corresponding workflow id. Dispatch is the only
+     * place where workflows are created based on reading activeWorkflows
+     * and therefore needs to be synchronized to prevent launching multiple
+     * workflows for the same endpoint concurrently.
+     *
+     * @param msg corfu message containing the create workflow request
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
+     */
+    synchronized void dispatch(CorfuPayloadMsg<OrchestratorMsg> msg,
+                               ChannelHandlerContext ctx, IServerRouter r) {
+        CreateRequest req = (CreateRequest) msg.getPayload().getRequest();
+
+        UUID id = activeWorkflows.inverse().get(req.getEndpoint());
+        if (id != null) {
+            // A workflow is already executing for this endpoint, return
             // existing workflow id.
             OrchestratorResponse resp = new OrchestratorResponse(
-                    new CreateWorkflowResponse(findUUID(req.getEndpoint())));
+                    new CreateWorkflowResponse(id));
             r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
                     .payloadMsg(resp));
-            log.trace("addNode: ignoring req for {}", findUUID(req.getEndpoint()));
             return;
         } else {
             // Create a new workflow for this endpoint and return a new workflow id
-            Workflow workflow = getWorkflow(msg.getPayload());
+            IWorkflow workflow = req.getWorkflow();
             activeWorkflows.put(workflow.getId(), req.getEndpoint());
-            log.trace("addNode: putting id  {}", workflow.getId());
-            OrchestratorResponse resp = new OrchestratorResponse(new CreateWorkflowResponse(workflow.getId()));
-            r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
-                    .payloadMsg(resp));
+
             CompletableFuture.runAsync(() -> {
                 run(workflow);
             });
-        }
-    }
 
-    /**
-     * Create a workflow instance from an orchestrator request
-     *
-     * @param req Orchestrator request
-     * @return Workflow instance
-     */
-    @Nonnull
-    private Workflow getWorkflow(@Nonnull OrchestratorRequest req) {
-        Request payload = req.getRequest();
-        if (payload.getType().equals(Types.OrchestratorRequestType.ADD_NODE)) {
-            return new AddNodeWorkflow(payload);
+            OrchestratorResponse resp = new OrchestratorResponse(new CreateWorkflowResponse(workflow.getId()));
+            r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
+                    .payloadMsg(resp));
         }
-
-        throw new IllegalArgumentException("Unknown request");
     }
 
     /**
@@ -122,16 +150,26 @@ public class Orchestrator {
      *
      * @param workflow instance to run
      */
-    void run(@Nonnull Workflow workflow) {
+    void run(@Nonnull IWorkflow workflow) {
         CorfuRuntime rt = null;
-
         try {
-            Layout currLayout = getRuntime.call().layout.get();
-            String servers = String.join(",", currLayout.getLayoutServers());
-            rt = new CorfuRuntime(servers)
-                    .setCacheDisabled(true)
-                    .setLoadSmrMapsAtConnect(false)
-                    .connect();
+            getRuntime.call().invalidateLayout();
+            Layout currLayout = getRuntime.call().getLayoutView().getLayout();
+
+            List<NodeLocator> servers = currLayout.getAllServers().stream()
+                    .map(NodeLocator::parseString)
+                    .collect(Collectors.toList());
+
+            // Create a new runtime for this workflow. Since this runtime will
+            // only be used to execute this workflow, it doesn't need a cache and has
+            // the default authentication config parameters as the ManagementServer's
+            // runtime
+            CorfuRuntimeParameters params = serverContext.getDefaultRuntimeParameters();
+            params.setCacheDisabled(true);
+            params.setUseFastLoader(false);
+            params.setLayoutServers(servers);
+
+            rt = CorfuRuntime.fromParameters(params).connect();
 
             log.info("run: Started workflow {} id {}", workflow.getName(), workflow.getId());
             long workflowStart = System.currentTimeMillis();
@@ -159,19 +197,10 @@ public class Orchestrator {
             return;
         } finally {
             activeWorkflows.remove(workflow.getId());
-            log.debug("run: removed {} from {}",workflow.getId(), activeWorkflows);
+            log.debug("run: removed {} from {}", workflow.getId(), activeWorkflows);
             if (rt != null) {
                 rt.shutdown();
             }
         }
-    }
-
-    UUID findUUID(String endpoint) {
-        for (Map.Entry<UUID, String> entry : activeWorkflows.entrySet()) {
-            if (entry.getValue().equals(endpoint)) {
-                return entry.getKey();
-            }
-        }
-        return null;
     }
 }

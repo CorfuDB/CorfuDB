@@ -30,6 +30,8 @@ public class ServerContextBuilder {
     String truststore = "";
     String truststorePasswordFile = "";
 
+    String implementation = "nio";
+
     String cacheSizeHeapRatio = "0.5";
     String address = "test";
     int port = 9000;
@@ -37,6 +39,9 @@ public class ServerContextBuilder {
     String managementBootstrapEndpoint = null;
     IServerRouter serverRouter;
     String numThreads = "0";
+    String handshakeTimeout = "10";
+
+    String clusterId = "auto";
 
     public ServerContextBuilder() {
 
@@ -49,6 +54,7 @@ public class ServerContextBuilder {
                 .put("--single", single)
                 .put("--memory", memory)
                 .put("--Threads", numThreads)
+                .put("--HandshakeTimeout", handshakeTimeout)
                 .put("--sequencer-cache-size", seqCache);
         if (logPath != null) {
          builder.put("--log-path", logPath);
@@ -69,6 +75,8 @@ public class ServerContextBuilder {
                  .put("--truststore", truststore)
                  .put("--truststore-password-file", truststorePasswordFile)
                  .put("--enable-sasl-plain-text-auth", saslPlainTextAuth)
+                 .put("--cluster-id", clusterId)
+                 .put("--implementation", implementation)
                  .put("<port>", port);
         ServerContext sc = new ServerContext(builder.build());
         sc.setServerRouter(serverRouter);

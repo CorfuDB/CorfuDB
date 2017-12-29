@@ -3,18 +3,24 @@ package org.corfudb.infrastructure;
 import com.codahale.metrics.MetricRegistry;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.Map;
 
 import java.util.UUID;
-import javax.annotation.Nonnull;
+
 import lombok.Getter;
 import lombok.Setter;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.IFailureDetectorPolicy;
 import org.corfudb.infrastructure.management.PeriodicPollPolicy;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IFailureHandlerPolicy;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.UuidUtils;
 
@@ -38,6 +44,8 @@ import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 public class ServerContext {
     private static final String PREFIX_EPOCH = "SERVER_EPOCH";
     private static final String KEY_EPOCH = "CURRENT";
+    private static final String PREFIX_LAYOUT = "LAYOUT";
+    private static final String KEY_LAYOUT = "CURRENT";
     private static final String PREFIX_TAIL_SEGMENT = "TAIL_SEGMENT";
     private static final String KEY_TAIL_SEGMENT = "CURRENT";
     private static final String PREFIX_STARTING_ADDRESS = "STARTING_ADDRESS";
@@ -96,6 +104,18 @@ public class ServerContext {
         }
     }
 
+    public CorfuRuntimeParameters getDefaultRuntimeParameters() {
+        return CorfuRuntime.CorfuRuntimeParameters.builder()
+                .tlsEnabled((Boolean) serverConfig.get("--enable-tls"))
+                .keyStore((String) serverConfig.get("--keystore"))
+                .ksPasswordFile((String) serverConfig.get("--keystore-password-file"))
+                .trustStore((String) serverConfig.get("--truststore"))
+                .tsPasswordFile((String) serverConfig.get("--truststore-password-file"))
+                .saslPlainTextEnabled((Boolean) serverConfig.get("--enable-sasl-plain-text-auth"))
+                .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
+                .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
+                .build();
+    }
 
     /** Generate a Node Id if not present.
      *
@@ -139,10 +159,81 @@ public class ServerContext {
         return (T) getServerConfig().get(optionName);
     }
 
+
+    /** Install a single node layout if and only if no layout is currently installed.
+     *  Synchronized, so this method is thread-safe.
+     *
+     *  @return True, if a new layout was installed, false otherwise.
+     */
+    public synchronized boolean installSingleNodeLayoutIfAbsent() {
+        if ((Boolean) getServerConfig().get("--single") && getCurrentLayout() == null) {
+            setCurrentLayout(getNewSingleNodeLayout());
+            return true;
+        }
+        return false;
+    }
+
+    /** Get a new single node layout used for self-bootstrapping a server started with
+     *  the -s flag.
+     *
+     *  @returns A new single node layout with a unique cluster Id
+     *  @throws IllegalArgumentException    If the cluster id was not auto, base64 or a UUID string
+     */
+    public Layout getNewSingleNodeLayout() {
+        final String clusterIdString = (String) getServerConfig().get("--cluster-id");
+        UUID clusterId;
+        if (clusterIdString.equals("auto")) {
+            clusterId = UUID.randomUUID();
+        } else {
+            // Is it a UUID?
+            try {
+                clusterId = UUID.fromString(clusterIdString);
+            } catch (IllegalArgumentException ignore) {
+                // Must be a base64 id, otherwise we will throw InvalidArgumentException again
+                clusterId = UuidUtils.fromBase64(clusterIdString);
+            }
+        }
+        log.info("getNewSingleNodeLayout: Bootstrapping with cluster Id {} [{}]",
+            clusterId, UuidUtils.asBase64(clusterId));
+        String localAddress = getServerConfig().get("--address") + ":"
+            + getServerConfig().get("<port>");
+        return new Layout(
+            Collections.singletonList(localAddress),
+            Collections.singletonList(localAddress),
+            Collections.singletonList(new LayoutSegment(
+                Layout.ReplicationMode.CHAIN_REPLICATION,
+                0L,
+                -1L,
+                Collections.singletonList(
+                    new Layout.LayoutStripe(
+                        Collections.singletonList(localAddress)
+                    )
+                )
+            )),
+            0L,
+            clusterId
+        );
+    }
+
+    /** Get the current {@link Layout} stored in the {@link DataStore}.
+     *  @return The current stored {@link Layout}
+     */
+    public Layout getCurrentLayout() {
+        return getDataStore().get(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT);
+    }
+
+    /** Set the current {@link Layout} stored in the {@link DataStore}.
+     *
+     * @param layout The {@link Layout} to set in the {@link DataStore}.
+     */
+    public void setCurrentLayout(Layout layout) {
+        getDataStore().put(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT, layout);
+    }
+
     /**
      * The epoch of this router. This is managed by the base server implementation.
      */
-    public long getServerEpoch() {
+    public synchronized long getServerEpoch() {
         Long epoch = dataStore.get(Long.class, PREFIX_EPOCH, KEY_EPOCH);
         return epoch == null ? 0 : epoch;
     }
@@ -151,9 +242,17 @@ public class ServerContext {
      * Set the serverRouter epoch.
      * @param serverEpoch the epoch to set
      */
-    public void setServerEpoch(long serverEpoch, IServerRouter r) {
-        dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
-        r.setServerEpoch(serverEpoch);
+    public synchronized void setServerEpoch(long serverEpoch, IServerRouter r) {
+        Long lastEpoch = dataStore.get(Long.class, PREFIX_EPOCH, KEY_EPOCH);
+        if (lastEpoch == null || lastEpoch < serverEpoch) {
+            dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
+            r.setServerEpoch(serverEpoch);
+        } else if (serverEpoch == lastEpoch) {
+            // Setting to the same epoch, don't need to do anything.
+        } else {
+            // Regressing, throw an exception.
+            throw new WrongEpochException(lastEpoch);
+        }
     }
 
     public long getTailSegment() {

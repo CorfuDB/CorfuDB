@@ -34,7 +34,6 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.recovery.RecoveryUtils;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 
 /**
@@ -413,21 +412,6 @@ public class Utils {
      * Might not be defined on non Hotspot VM implementations.
      */
     public static final String SUN_JAVA_COMMAND = "sun.java.command";
-
-    /**
-     * Sleep without being interrupted.
-     * @param millis Time in milliseconds to sleep
-     */
-    public static void sleepUninterruptibly(long millis) {
-        while (true) {
-            try {
-                Thread.sleep(millis);
-                return;
-            } catch (InterruptedException ie) {
-                throw new UnrecoverableCorfuInterruptedError("Uninterruptible sleep interrupted", ie);
-            }
-        }
-    }
 
     /** Generates a human readable UUID string (4 hex chars) using time_mid.
      * @param id    The UUID to parse

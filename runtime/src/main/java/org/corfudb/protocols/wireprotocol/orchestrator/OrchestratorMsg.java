@@ -3,10 +3,8 @@ package org.corfudb.protocols.wireprotocol.orchestrator;
 import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 
-import org.corfudb.format.Types.OrchestratorRequestType;
 import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 
-import static org.corfudb.format.Types.OrchestratorRequestType.ADD_NODE;
 
 /**
  * A message container that encapsulates all the orchestrator's
@@ -15,17 +13,17 @@ import static org.corfudb.format.Types.OrchestratorRequestType.ADD_NODE;
  * Created by Maithem on 10/25/17.
  */
 
-public class OrchestratorRequest implements ICorfuPayload<OrchestratorRequest> {
+public class OrchestratorMsg implements ICorfuPayload<OrchestratorMsg> {
 
     @Getter
     public final Request request;
 
-    public OrchestratorRequest(Request request) {
+    public OrchestratorMsg(Request request) {
         this.request = request;
     }
 
-    public OrchestratorRequest(ByteBuf buf) {
-        OrchestratorRequestType requestType = OrchestratorRequestType.forNumber(buf.readInt());
+    public OrchestratorMsg(ByteBuf buf) {
+        OrchestratorRequestType requestType = OrchestratorRequestType.typeMap.get(buf.readInt());
         byte[] bytes = new byte[buf.readInt()];
         buf.readBytes(bytes);
         request = mapRequest(requestType, bytes);
@@ -33,7 +31,7 @@ public class OrchestratorRequest implements ICorfuPayload<OrchestratorRequest> {
 
     @Override
     public void doSerialize(ByteBuf buf) {
-        buf.writeInt(request.getType().getNumber());
+        buf.writeInt(request.getType().getType());
         byte[] bytes = request.getSerialized();
         buf.writeInt(bytes.length);
         buf.writeBytes(bytes);
@@ -46,7 +44,7 @@ public class OrchestratorRequest implements ICorfuPayload<OrchestratorRequest> {
             case QUERY:
                 return new QueryRequest(payload);
             default:
-                throw new IllegalStateException("mapRequest: Unknown Type");
+                throw new IllegalArgumentException("mapRequest: Unknown Type");
         }
     }
 }

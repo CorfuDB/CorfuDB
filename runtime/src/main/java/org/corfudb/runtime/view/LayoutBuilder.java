@@ -7,6 +7,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.exceptions.LayoutModificationException;
@@ -35,8 +36,8 @@ public class LayoutBuilder {
      *
      * @param layout Base layout to be modified.
      */
-    public LayoutBuilder(Layout layout) throws CloneNotSupportedException {
-        this.layout = (Layout) layout.clone();
+    public LayoutBuilder(Layout layout) {
+        this.layout = new Layout(layout);
         this.epoch = layout.getEpoch();
     }
 
@@ -78,10 +79,8 @@ public class LayoutBuilder {
      *
      * @param endpoint Endpoint to be removed
      * @return Workflow manager
-     * @throws LayoutModificationException If attempt to remove all layout servers.
      */
-    public LayoutBuilder removeLayoutServer(String endpoint)
-            throws LayoutModificationException {
+    public LayoutBuilder removeLayoutServer(String endpoint) {
 
         List<String> layoutServers = layout.getLayoutServers();
         for (int i = 0; i < layoutServers.size(); i++) {
@@ -102,10 +101,8 @@ public class LayoutBuilder {
      *
      * @param endpoints Layout server endpoints to be removed from the layout.
      * @return Workflow manager
-     * @throws LayoutModificationException If attempt to remove all layout servers.
      */
-    public LayoutBuilder removeLayoutServers(Set<String> endpoints)
-            throws LayoutModificationException {
+    public LayoutBuilder removeLayoutServers(Set<String> endpoints) {
 
         // Not making changes in the original list in case of exceptions.
         // Copy the list so that we can have an atomic result and no partial removals
@@ -201,10 +198,8 @@ public class LayoutBuilder {
      *
      * @param segmentIndex Segment to merge.
      * @return this.
-     * @throws LayoutModificationException
      */
-    public LayoutBuilder mergePreviousSegment(int segmentIndex)
-            throws LayoutModificationException {
+    public LayoutBuilder mergePreviousSegment(int segmentIndex) {
         if (segmentIndex < 1) {
             throw new LayoutModificationException("No segments to merge.");
         }
@@ -254,10 +249,8 @@ public class LayoutBuilder {
      *
      * @param endpoints Failed endpoints.
      * @return LayoutBuilder
-     * @throws LayoutModificationException throws if no working sequencer left.
      */
-    public LayoutBuilder assignResponsiveSequencerAsPrimary(Set<String> endpoints)
-            throws LayoutModificationException {
+    public LayoutBuilder assignResponsiveSequencerAsPrimary(Set<String> endpoints) {
 
         List<String> modifiedSequencerServers = new ArrayList<>(layout.getSequencers());
         for (int i = 0; i < modifiedSequencerServers.size(); i++) {
@@ -277,10 +270,8 @@ public class LayoutBuilder {
      *
      * @param endpoint Sequencer server to be removed
      * @return Workflow manager
-     * @throws LayoutModificationException Cannot remove the only sequencer server.
      */
-    public LayoutBuilder removeSequencerServer(String endpoint)
-            throws LayoutModificationException {
+    public LayoutBuilder removeSequencerServer(String endpoint) {
 
         List<String> sequencerServers = layout.getSequencers();
         for (int i = 0; i < sequencerServers.size(); i++) {
@@ -300,10 +291,8 @@ public class LayoutBuilder {
      *
      * @param endpoints Set of sequencer servers to be removed
      * @return Workflow manager
-     * @throws LayoutModificationException Cannot remove the only sequencer server.
      */
-    public LayoutBuilder removeSequencerServers(Set<String> endpoints)
-            throws LayoutModificationException {
+    public LayoutBuilder removeSequencerServers(Set<String> endpoints) {
 
         // Not making changes in the original list in case of exceptions.
         // Copy the list so that we can have an atomic result and no partial removals
@@ -324,14 +313,36 @@ public class LayoutBuilder {
     }
 
     /**
+     * Remove an endpoint from a segment.
+     *
+     * @param endpoint             The endpoint to remove
+     * @param layoutStripe         the stripe to remove the endpoint from
+     * @param minReplicationFactor The least number of nodes needed to
+     *                             maintain redundancy
+     */
+    public void removeFromStripe(String endpoint, LayoutStripe layoutStripe,
+                                 int minReplicationFactor) {
+        if (layoutStripe.getLogServers().remove(endpoint)) {
+            if (layoutStripe.getLogServers().isEmpty()) {
+                throw new LayoutModificationException(
+                        "Attempting to remove all logunit in stripe. "
+                                + "No replicas available.");
+            }
+
+            if (layoutStripe.getLogServers().size() < minReplicationFactor) {
+                throw new LayoutModificationException(
+                        "Change will cause redundancy loss!");
+            }
+        }
+    }
+
+    /**
      * Removes the logunit endpoint from the layout.
      *
      * @param endpoint Log unit server to be removed
      * @return Workflow manager
-     * @throws LayoutModificationException Cannot remove non-replicated logunit
      */
-    public LayoutBuilder removeLogunitServer(String endpoint)
-            throws LayoutModificationException {
+    public LayoutBuilder removeLogunitServer(String endpoint) {
 
         List<LayoutSegment> layoutSegments = layout.getSegments();
         for (LayoutSegment layoutSegment : layoutSegments) {
@@ -361,10 +372,8 @@ public class LayoutBuilder {
      *
      * @param endpoints Log unit servers to be removed
      * @return Workflow manager
-     * @throws LayoutModificationException Cannot remove non-replicated logunit
      */
-    public LayoutBuilder removeLogunitServers(Set<String> endpoints)
-            throws LayoutModificationException {
+    public LayoutBuilder removeLogunitServers(Set<String> endpoints){
 
         // Not making changes in the original list in case of exceptions.
         // Copy the list so that we can have an atomic result and no partial removals
@@ -405,7 +414,8 @@ public class LayoutBuilder {
                 layout.getSequencers(),
                 layout.getSegments(),
                 layout.getUnresponsiveServers(),
-                this.epoch);
+                this.epoch,
+                layout.getClusterId());
     }
 
 }

@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Created by Maithem on 12/1/17.
  */
 @Slf4j
-public class AddNodeIT extends AbstractIT {
+public class WorkflowIT extends AbstractIT {
 
     final String host = "localhost";
 
@@ -38,7 +38,7 @@ public class AddNodeIT extends AbstractIT {
     }
 
     @Test
-    public void AddNodeTest() throws Exception {
+    public void AddNodeIT() throws Exception {
         final String host = "localhost";
         final String streamName = "s1";
         final int n1Port = 9000;
@@ -97,7 +97,7 @@ public class AddNodeIT extends AbstractIT {
         n1Rt.getAddressSpaceView().invalidateServerCaches();
         n1Rt.getAddressSpaceView().gc();
 
-        // Add a 3rd node after compaction
+        // Add a third node after compaction
 
         final int n3Port = 9002;
         new CorfuServerRunner()
@@ -112,10 +112,12 @@ public class AddNodeIT extends AbstractIT {
 
         // Verify that the third node has been added and data can be read back
         n1Rt.invalidateLayout();
+
         final int clusterSizeN3 = 3;
         assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
         // Verify that the workflow ID for node 3 is no longer active
         assertThat(mgmt.queryRequest(resp2.getWorkflowId()).isActive()).isFalse();
+
         for (int x = 0; x < numEntries; x++) {
             String v = (String) table.get(String.valueOf(x));
             assertThat(v).isEqualTo(String.valueOf(x));

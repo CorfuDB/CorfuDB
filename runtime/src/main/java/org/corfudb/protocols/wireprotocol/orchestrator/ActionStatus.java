@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.orchestrator;
+package org.corfudb.protocols.wireprotocol.orchestrator;
 
 /**
  * The possible states in which an action can be in.

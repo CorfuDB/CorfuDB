@@ -1,16 +1,25 @@
 package org.corfudb.runtime.clients;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+
 import java.io.File;
+import java.io.IOException;
+import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.Collections;
+import java.util.UUID;
+
 import javax.annotation.Nonnull;
+
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.CorfuServer;
@@ -21,13 +30,7 @@ import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.util.NodeLocator;
 import org.junit.Rule;
 import org.junit.Test;
-
-import java.io.IOException;
-import java.net.ServerSocket;
-
 import org.junit.rules.TemporaryFolder;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 3/28/16.
@@ -290,6 +293,71 @@ public class NettyCommTest extends AbstractCorfuTest {
     }
 
     @Test
+    public void nettyServerClientHandshakeDefaultId() throws Exception {
+        runWithBaseServer(
+                (port) -> {
+                    return new NettyServerData(ServerContextBuilder.defaultTestContext(port));
+                },
+                (port) -> {
+                    NodeLocator nl = NodeLocator.builder()
+                            .host("localhost")
+                            .port(port)
+                            .nodeId(UUID.fromString("00000000-0000-0000-0000-000000000000"))
+                            .build();
+                    return new NettyClientRouter(nl, CorfuRuntimeParameters.builder().build());
+                },
+                (r, d) -> {
+                    assertThat(r.getClient(BaseClient.class).pingSync())
+                            .isTrue();
+                });
+    }
+
+    UUID nodeId;
+
+    @Test
+    public void nettyServerClientHandshakeMatchIds() throws Exception {
+        runWithBaseServer(
+                (port) -> {
+                    ServerContext sc = ServerContextBuilder
+                            .defaultTestContext(port);
+                    nodeId = sc.getNodeId();
+                    return new NettyServerData(sc);
+                },
+                (port) -> {
+                    NodeLocator nl = NodeLocator.builder()
+                            .host("localhost")
+                            .port(port)
+                            .nodeId(nodeId)
+                            .build();
+                    return new NettyClientRouter(nl, CorfuRuntimeParameters.builder().build());
+                },
+                (r, d) -> {
+                    assertThat(r.getClient(BaseClient.class).pingSync())
+                            .isTrue();
+                });
+    }
+
+    @Test
+    public void nettyServerClientHandshakeMismatchId() throws Exception {
+        runWithBaseServer(
+                (port) -> {
+                    return new NettyServerData(ServerContextBuilder.defaultTestContext(port));
+                },
+                (port) -> {
+                    NodeLocator nl = NodeLocator.builder()
+                            .host("localhost")
+                            .port(port)
+                            .nodeId(UUID.nameUUIDFromBytes("test".getBytes()))
+                            .build();
+                    return new NettyClientRouter(nl, CorfuRuntimeParameters.builder().build());
+                },
+                (r, d) -> {
+                    assertThat(r.getClient(BaseClient.class).pingSync())
+                            .isFalse();
+                });
+    }
+
+    @Test
     public void nettySaslWrongPassword() throws Exception {
         runWithBaseServer(
             (port) -> {
@@ -476,7 +544,7 @@ public class NettyCommTest extends AbstractCorfuTest {
             workerGroup = CorfuServer.getWorkerGroup(serverContext);
             f = CorfuServer.startAndListen(bossGroup,
                                             workerGroup,
-                                            NioServerSocketChannel.class,
+                                            CorfuServer.getServerChannelType(serverContext),
                                             b -> CorfuServer.configureBootstrapOptions(
                                                 serverContext, b),
                                             serverContext,
