@@ -920,6 +920,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             sh.getWriteChannel().write(allRecordsBuf);
             channelsToSync.add(sh.getWriteChannel());
             syncTailSegment(entries.get(entries.size() - 1).getGlobalAddress());
+            log.info("writeRecords: entries {}", entries);
         }
 
         return recordsMap;
@@ -1062,6 +1063,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 segTwoEntries.add(curr);
             }
         }
+
+        log.debug("append: segment entries one {} two {}", segOneEntries, segTwoEntries);
 
         try {
             if (!segOneEntries.isEmpty()) {

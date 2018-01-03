@@ -1,13 +1,18 @@
 package org.corfudb.integration;
 
+import com.google.common.collect.Range;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.util.CFUtils;
 import org.junit.Test;
 
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,6 +40,92 @@ public class WorkflowIT extends AbstractIT {
 
     String getConnectionString(int port) {
         return host + ":" + port;
+    }
+
+    @Test
+    public void MergeTwoSingleNodeClustersIT() throws Exception {
+        final String host = "localhost";
+        final String streamName = "s1";
+        final int n1Port = 9000;
+        final int n2Port = 9001;
+
+        // Start node one and populate it with data
+        new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n1Port)
+                .setLogPath(getCorfuServerLogPath(host, n1Port))
+                .setSingle(true)
+                .runServer();
+
+        CorfuRuntime n1Rt = new CorfuRuntime(getConnectionString(n1Port)).connect();
+
+        CorfuTable table = n1Rt.getObjectsView()
+                .build()
+                .setType(CorfuTable.class)
+                .setStreamName(streamName)
+                .open();
+
+        final long numEntries = 100;
+        for (int x = 0; x < numEntries; x++) {
+            table.put(String.valueOf(x), String.valueOf(x));
+        }
+
+        // Start node two and populate it with data
+        new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n2Port)
+                .setLogPath(getCorfuServerLogPath(host, n2Port))
+                .setSingle(true)
+                .runServer();
+
+        CorfuRuntime n2Rt = new CorfuRuntime(getConnectionString(n2Port)).connect();
+
+        CorfuTable table2 = n2Rt.getObjectsView()
+                .build()
+                .setType(CorfuTable.class)
+                .setStreamName(streamName)
+                .open();
+
+        for (int x = 0; x < numEntries; x++) {
+            table2.put(String.valueOf(x + n2Port), String.valueOf(x));
+        }
+
+        // Add node two to the node one's cluster
+        ManagementClient mgmt = n1Rt.getRouter(getConnectionString(n1Port))
+                .getClient(ManagementClient.class);
+
+        CreateWorkflowResponse resp = mgmt.addNodeRequest(getConnectionString(n2Port));
+
+        waitForWorkflow(resp.getWorkflowId(), n1Rt, n1Port);
+
+        n1Rt.invalidateLayout();
+        final int clusterSizeN2 = 2;
+        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+
+        // Verify that the workflow ID for node 2 is no longer active
+        assertThat(mgmt.queryRequest(resp.getWorkflowId()).isActive()).isFalse();
+
+
+        n1Rt.getAddressSpaceView().invalidateClientCache();
+        n1Rt.getAddressSpaceView().invalidateServerCaches();
+
+        // Verify that node two's data was cleared and has the same data as node one after
+        // the add node workflow completes
+        Range<Long> range = Range.closed(0L, numEntries);
+
+        Map<Long, LogData> readRes1 = CFUtils.getUninterruptibly(n1Rt
+                .getRouter(getConnectionString(n1Port))
+                .getClient(LogUnitClient.class).read(range))
+                .getAddresses();
+
+        Map<Long, LogData> readRes2 = CFUtils.getUninterruptibly(n1Rt
+                .getRouter(getConnectionString(n2Port))
+                .getClient(LogUnitClient.class).read(range))
+                .getAddresses();
+
+        for (long x = 0; x < numEntries; x++) {
+            assertThat(readRes1.get(x).getData()).isEqualTo(readRes2.get(x).getData());
+        }
     }
 
     @Test

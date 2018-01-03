@@ -99,7 +99,7 @@ public class LogUnitServer extends AbstractServer {
 
     private final StreamLog streamLog;
 
-    private final BatchWriter<Long, ILogData> batchWriter;
+    private volatile BatchWriter<Long, ILogData> batchWriter;
 
     /**
      * Returns a new LogUnitServer.
@@ -271,6 +271,7 @@ public class LogUnitServer extends AbstractServer {
     private void flushCache(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         try {
             dataCache.invalidateAll();
+            log.info("flushCache: flushed cache");
         } catch (RuntimeException e) {
             log.error("Encountered error while flushing cache {}", e);
         }
@@ -294,9 +295,15 @@ public class LogUnitServer extends AbstractServer {
      * Warning: Clears all data.
      */
     @ServerHandler(type = CorfuMsgType.RESET_LOGUNIT)
-    private void resetLogUnit(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private synchronized void resetLogUnit(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        // Waits for all current writes to get flushed
+        // This method is called after a seal and before consensus
+        // therefore writes wouldn't interleave with the reset
+        log.info("resetLogUnit: reset server msg1 {}", msg);
         streamLog.reset();
         dataCache.invalidateAll();
+        batchWriter = new BatchWriter(streamLog);
+        log.info("resetLogUnit: reset server msg {}", msg);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
