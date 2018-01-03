@@ -14,6 +14,8 @@ import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
 
+import javax.annotation.Nonnull;
+
 /**
  * Allows us to make modifications to a layout.
  *
@@ -39,6 +41,33 @@ public class LayoutBuilder {
     public LayoutBuilder(Layout layout) {
         this.layout = new Layout(layout);
         this.epoch = layout.getEpoch();
+    }
+
+    /**
+     * Default Constructor, creates an empty layout
+     */
+    public LayoutBuilder() {
+        this.layout = new Layout();
+    }
+
+    /**
+     * Set the epoch.
+     * @param epoch The epoch to set
+     * @return a layout builder that has this epoch
+     */
+    public LayoutBuilder setEpoch(long epoch) {
+        this.epoch = epoch;
+        return this;
+    }
+
+    /**
+     * Sets the cluster ID.
+     * @param id the cluster id to set in this layout.
+     * @return A layout that has id as the cluster id. 
+     */
+    public LayoutBuilder setClusterId(@Nonnull UUID id) {
+        this.layout.setClusterId(id);
+        return this;
     }
 
     /**
@@ -141,6 +170,16 @@ public class LayoutBuilder {
      */
     public LayoutBuilder addSequencerServer(String endpoint) {
         layout.getSequencers().add(endpoint);
+        return this;
+    }
+
+    /**
+     * Adds a segment to the current layout
+     * @param segment the segment to be added
+     * @return a layout builder that contains segment
+     */
+    public LayoutBuilder addSegment(LayoutSegment segment) {
+        layout.getSegments().add(segment);
         return this;
     }
 

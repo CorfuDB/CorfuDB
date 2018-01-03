@@ -8,9 +8,11 @@ import org.corfudb.runtime.view.LayoutBuilder;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,6 +24,37 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
 
     final int SERVER_ENTRY_3 = 3;
     final int SERVER_ENTRY_4 = 4;
+
+    @Test
+    public void emptyLayoutBuilderWithSingleNode() {
+        final long epoch = 2;
+        UUID clusterId = new UUID(0, 0);
+        final long startingAddress = 0;
+        final int segment = 0;
+        final int stripeIndex = 0;
+        final long tail = 100;
+        Layout.LayoutStripe stripe = new Layout
+                .LayoutStripe(Collections.singletonList(SERVERS.ENDPOINT_0));
+
+        Layout layout = new LayoutBuilder()
+                .setEpoch(epoch)
+                .setClusterId(clusterId)
+                .addLayoutServer(SERVERS.ENDPOINT_0)
+                .addSequencerServer(SERVERS.ENDPOINT_0)
+                .addSegment(new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION,
+                        startingAddress, tail, Collections.singletonList(stripe)))
+                .build();
+
+        assertThat(layout.getEpoch()).isEqualTo(epoch);
+        assertThat(layout.getClusterId()).isEqualTo(clusterId);
+        assertThat(layout.getSequencers()).containsExactly(SERVERS.ENDPOINT_0);
+        assertThat(layout.getLayoutServers()).containsExactly(SERVERS.ENDPOINT_0);
+        assertThat(layout.getSegments()).hasSize(1);
+        assertThat(layout.getSegments().get(segment).getReplicationMode())
+                .isEqualTo(Layout.ReplicationMode.CHAIN_REPLICATION);
+        assertThat(layout.getSegments().get(segment).getStripes()
+                .get(stripeIndex).getLogServers()).containsExactly(SERVERS.ENDPOINT_0);
+    }
 
     /**
      * Tests the Layout Workflow manager by removing nodes.

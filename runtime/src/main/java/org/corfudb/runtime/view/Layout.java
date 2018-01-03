@@ -98,6 +98,18 @@ public class Layout {
     UUID clusterId;
 
     /**
+     * Default Constructor, creates an empty layout
+     */
+    public Layout() {
+        this.layoutServers = new ArrayList<>();
+        this.sequencers = new ArrayList<>();
+        this.segments = new ArrayList<>();
+        this.unresponsiveServers = new ArrayList<>();
+        this.epoch = -1;
+        this.clusterId = null;
+    }
+
+    /**
      * Defensive constructor since we can create a Layout from a JSON file.
      * JSON deserialize is forced through this constructor.
      */
