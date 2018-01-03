@@ -9,23 +9,27 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Created by box on 1/2/18.
+ * The type of responses that can be sent from the Orchestrator Service.
+ *
+ * Created by Maithem on 1/2/18.
  */
 @AllArgsConstructor
 public enum OrchestratorResponseType {
     /**
-     * The status of a workflow
+     * The result of a workflow that executed
      */
-    WORKFLOW_STATUS(0, QueryResponse::new),
+    WORKFLOW_STATUS(0, WorkflowStatus::new);
 
     /**
-     * Id of a created workflow
+     * Id of the response type
      */
-    WORKFLOW_CREATED(1, CreateWorkflowResponse::new);
-
     @Getter
     public final int type;
 
+    /**
+     * A function that map a serialized response into a
+     * response object.
+     */
     @Getter
     final Function<byte[], Response> responseGenerator;
 

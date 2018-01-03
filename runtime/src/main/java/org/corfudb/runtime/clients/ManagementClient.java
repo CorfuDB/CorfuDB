@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.time.Duration;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -14,15 +15,16 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
-import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
-import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.WorkflowStatus;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
+
+import javax.annotation.Nonnull;
 
 /**
  * A client to the Management Server.
@@ -116,19 +118,31 @@ public class ManagementClient implements IClient {
         return router.sendMessageAndGetCompletable(CorfuMsgType.HEARTBEAT_REQUEST.msg());
     }
 
-    public CreateWorkflowResponse addNodeRequest(String endpoint) {
+    /**
+     * Request to add a node to the cluster that this clients belong to.
+     *
+     * @param endpoint the node to add
+     * @param timeout time before this request expires
+     * @return a future which will return WorkflowStatus on completion.
+     */
+    public WorkflowStatus addNodeRequest(@Nonnull String endpoint, @Nonnull Duration timeout) {
         OrchestratorMsg req = new OrchestratorMsg(new AddNodeRequest(endpoint));
         CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
-                .payloadMsg(req));
-        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp).getResponse();
+                .payloadMsg(req), timeout);
+        return (WorkflowStatus) CFUtils.getUninterruptibly(resp).getResponse();
     }
 
-    public QueryResponse queryRequest(UUID workflowId) {
-        OrchestratorMsg req = new OrchestratorMsg(new QueryRequest(workflowId));
+    /**
+     * Query an orchestrator node and check if its running a workflow.
+     * @param address the address to query about
+     * @return a future which will return WorkflowStatus on completion.
+     */
+    public WorkflowStatus queryRequest(@Nonnull String address) {
+        OrchestratorMsg req = new OrchestratorMsg(new QueryRequest(address));
         CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));
-        return (QueryResponse) CFUtils.getUninterruptibly(resp).getResponse();
+        return (WorkflowStatus) CFUtils.getUninterruptibly(resp).getResponse();
     }
 }

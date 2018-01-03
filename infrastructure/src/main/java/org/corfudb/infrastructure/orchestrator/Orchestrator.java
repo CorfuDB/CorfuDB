@@ -1,8 +1,5 @@
 package org.corfudb.infrastructure.orchestrator;
 
-import com.google.common.collect.BiMap;
-import com.google.common.collect.HashBiMap;
-import com.google.common.collect.Maps;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.IServerRouter;
@@ -12,24 +9,30 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.Action;
 import org.corfudb.protocols.wireprotocol.orchestrator.ActionStatus;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateRequest;
-import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.IWorkflow;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
-import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.Response;
+import org.corfudb.protocols.wireprotocol.orchestrator.WorkflowResult;
+import org.corfudb.protocols.wireprotocol.orchestrator.WorkflowStatus;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.NodeLocator;
 
 import javax.annotation.Nonnull;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
-import java.util.UUID;
+import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+
+import static org.corfudb.protocols.wireprotocol.orchestrator.WorkflowResult.BUSY;
+import static org.corfudb.protocols.wireprotocol.orchestrator.WorkflowResult.COMPLETED;
+import static org.corfudb.protocols.wireprotocol.orchestrator.WorkflowResult.ERROR;
+import static org.corfudb.protocols.wireprotocol.orchestrator.WorkflowResult.UNKNOWN;
 
 /**
  * The orchestrator is a stateless service that runs on all management servers and its purpose
@@ -48,7 +51,7 @@ public class Orchestrator {
 
     final Callable<CorfuRuntime> getRuntime;
 
-    final BiMap<UUID, String> activeWorkflows = Maps.synchronizedBiMap(HashBiMap.create());
+    final Set<String> activeEndpoints = Collections.synchronizedSet(new HashSet<>());
 
     public Orchestrator(@Nonnull Callable<CorfuRuntime> runtime,
                         @Nonnull ServerContext serverContext) {
@@ -89,12 +92,12 @@ public class Orchestrator {
         QueryRequest req = (QueryRequest) msg.getPayload().getRequest();
 
         Response resp;
-        if (activeWorkflows.containsKey(req.getId())) {
-            resp = new QueryResponse(true);
-            log.trace("handleQuery: returning active for id {}", req.getId());
+        if (activeEndpoints.contains(req.getEndpoint())) {
+            resp = new WorkflowStatus(BUSY);
+            log.trace("handleQuery: returning active for id {}", req.getEndpoint());
         } else {
-            resp = new QueryResponse(false);
-            log.trace("handleQuery: returning not active for id {}", req.getId());
+            resp = new WorkflowStatus(UNKNOWN);
+            log.trace("handleQuery: returning not active for id {}", req.getEndpoint());
         }
 
         r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
@@ -107,41 +110,52 @@ public class Orchestrator {
      *
      * Create and start a workflow on this orchestrator, if there is
      * an existing workflow that is executing on the same endpoint,
-     * then just return the corresponding workflow id. Dispatch is the only
-     * place where workflows are created based on reading activeWorkflows
-     * and therefore needs to be synchronized to prevent launching multiple
-     * workflows for the same endpoint concurrently.
+     * the orchestrator will notify the client that endpoint is busy.
+     * Dispatch is the only place where workflows are created based on
+     * reading activeWorkflows and therefore access needs to be synchronized
+     * to prevent launching multiple workflows for the same endpoint concurrently.
      *
      * @param msg corfu message containing the create workflow request
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    synchronized void dispatch(CorfuPayloadMsg<OrchestratorMsg> msg,
-                               ChannelHandlerContext ctx, IServerRouter r) {
+    void dispatch(CorfuPayloadMsg<OrchestratorMsg> msg,
+                  ChannelHandlerContext ctx, IServerRouter r) {
         CreateRequest req = (CreateRequest) msg.getPayload().getRequest();
 
-        UUID id = activeWorkflows.inverse().get(req.getEndpoint());
-        if (id != null) {
-            // A workflow is already executing for this endpoint, return
-            // existing workflow id.
-            OrchestratorResponse resp = new OrchestratorResponse(
-                    new CreateWorkflowResponse(id));
-            r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
-                    .payloadMsg(resp));
-            return;
-        } else {
-            // Create a new workflow for this endpoint and return a new workflow id
-            IWorkflow workflow = req.getWorkflow();
-            activeWorkflows.put(workflow.getId(), req.getEndpoint());
-
-            CompletableFuture.runAsync(() -> {
-                run(workflow);
-            });
-
-            OrchestratorResponse resp = new OrchestratorResponse(new CreateWorkflowResponse(workflow.getId()));
-            r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
-                    .payloadMsg(resp));
+        synchronized (activeEndpoints) {
+            if (activeEndpoints.contains(req.getEndpoint())) {
+                // A workflow is already executing for this endpoint, return
+                // BUSY status
+                OrchestratorResponse resp = new OrchestratorResponse(
+                        new WorkflowStatus(WorkflowResult.BUSY));
+                r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
+                        .payloadMsg(resp));
+                return;
+            } else {
+                activeEndpoints.add(req.getEndpoint());
+            }
         }
+
+        WorkflowStatus res;
+        // Create a new workflow for this endpoint and return a new workflow id
+        IWorkflow workflow = req.getWorkflow();
+        log.debug("dispatch: running workflow for request {}", req);
+        run(workflow);
+        if (workflow.completed()) {
+            res = new WorkflowStatus(COMPLETED);
+            log.debug("dispatch: workflow completed");
+        } else {
+            log.debug("dispatch: workflow error");
+            res = new WorkflowStatus(ERROR);
+        }
+
+        activeEndpoints.remove(req.getEndpoint());
+
+        OrchestratorResponse resp = new OrchestratorResponse(res);
+        r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
+                .payloadMsg(resp));
+        log.debug("dispatch: sent response {}", res);
     }
 
     /**
@@ -155,7 +169,6 @@ public class Orchestrator {
         try {
             getRuntime.call().invalidateLayout();
             Layout currLayout = getRuntime.call().getLayoutView().getLayout();
-
             List<NodeLocator> servers = currLayout.getAllServers().stream()
                     .map(NodeLocator::parseString)
                     .collect(Collectors.toList());
@@ -171,7 +184,8 @@ public class Orchestrator {
 
             rt = CorfuRuntime.fromParameters(params).connect();
 
-            log.info("run: Started workflow {} id {}", workflow.getName(), workflow.getId());
+            log.info("run: Started workflow {} id {} for request {}", workflow.getName(),
+                    workflow.getId(), workflow);
             long workflowStart = System.currentTimeMillis();
             for (Action action : workflow.getActions()) {
 
@@ -196,8 +210,6 @@ public class Orchestrator {
             log.error("run: Encountered an error while running workflow {}", workflow.getId(), e);
             return;
         } finally {
-            activeWorkflows.remove(workflow.getId());
-            log.debug("run: removed {} from {}", workflow.getId(), activeWorkflows);
             if (rt != null) {
                 rt.shutdown();
             }

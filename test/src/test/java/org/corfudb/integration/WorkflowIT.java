@@ -1,14 +1,10 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.junit.Test;
-
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -28,10 +24,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class WorkflowIT extends AbstractIT {
 
     final String host = "localhost";
-
-    final int maxTries = 10;
-
-    final int sleepTime = 5_000;
 
     String getConnectionString(int port) {
         return host + ":" + port;
@@ -58,8 +50,7 @@ public class WorkflowIT extends AbstractIT {
                 .setStreamName(streamName)
                 .open();
 
-        final int numEntries = 12_000;
-        for (int x = 0; x < numEntries; x++) {
+        for (int x = 0; x < PARAMETERS.NUM_ITERATIONS_MODERATE; x++) {
             table.put(String.valueOf(x), String.valueOf(x));
         }
 
@@ -68,23 +59,11 @@ public class WorkflowIT extends AbstractIT {
         new CorfuServerRunner()
                 .setHost(host)
                 .setPort(n2Port)
+                .setSingle(false)
                 .runServer();
 
-        ManagementClient mgmt = n1Rt.getRouter(getConnectionString(n1Port))
-                .getClient(ManagementClient.class);
-
-        CreateWorkflowResponse resp = mgmt.addNodeRequest(getConnectionString(n2Port));
-
-        assertThat(resp.getWorkflowId()).isNotNull();
-
-        waitForWorkflow(resp.getWorkflowId(), n1Rt, n1Port);
-
-        n1Rt.invalidateLayout();
-        final int clusterSizeN2 = 2;
-        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
-
-        // Verify that the workflow ID for node 2 is no longer active
-        assertThat(mgmt.queryRequest(resp.getWorkflowId()).isActive()).isFalse();
+        boolean added = n1Rt.getManagementView().addNode(getConnectionString(n2Port));
+        assertThat(added).isTrue();
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
@@ -97,47 +76,30 @@ public class WorkflowIT extends AbstractIT {
         n1Rt.getAddressSpaceView().invalidateServerCaches();
         n1Rt.getAddressSpaceView().gc();
 
-        // Add a third node after compaction
+        log.info("added second node and ran compaction");
 
+        // Add a third node after compaction
         final int n3Port = 9002;
         new CorfuServerRunner()
                 .setHost(host)
                 .setPort(n3Port)
+                .setSingle(false)
                 .runServer();
 
-        CreateWorkflowResponse resp2 = mgmt.addNodeRequest(getConnectionString(n3Port));
-        assertThat(resp2.getWorkflowId()).isNotNull();
-
-        waitForWorkflow(resp2.getWorkflowId(), n1Rt, n1Port);
-
-        // Verify that the third node has been added and data can be read back
         n1Rt.invalidateLayout();
+        added = n1Rt.getManagementView().addNode(getConnectionString(n3Port));
+        assertThat(added).isTrue();
 
+        log.info("addeding n3");
+
+        n1Rt.invalidateLayout();
+        log.info("invalidated layout");
         final int clusterSizeN3 = 3;
         assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
-        // Verify that the workflow ID for node 3 is no longer active
-        assertThat(mgmt.queryRequest(resp2.getWorkflowId()).isActive()).isFalse();
 
-        for (int x = 0; x < numEntries; x++) {
+        for (int x = 0; x < PARAMETERS.NUM_ITERATIONS_MODERATE; x++) {
             String v = (String) table.get(String.valueOf(x));
             assertThat(v).isEqualTo(String.valueOf(x));
-        }
-    }
-
-    void waitForWorkflow(UUID id, CorfuRuntime rt, int port) throws Exception {
-        ManagementClient mgmt = rt.getRouter(getConnectionString(port))
-                .getClient(ManagementClient.class);
-        for (int x = 0; x < maxTries; x++) {
-            try {
-                if (mgmt.queryRequest(id).isActive()) {
-                    Thread.sleep(sleepTime);
-                } else {
-                    break;
-                }
-            } catch (Exception e) {
-                rt.invalidateLayout();
-                Thread.sleep(sleepTime);
-            }
         }
     }
 }

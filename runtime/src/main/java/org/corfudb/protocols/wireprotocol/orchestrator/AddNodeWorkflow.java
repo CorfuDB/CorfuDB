@@ -38,6 +38,9 @@ public class AddNodeWorkflow implements IWorkflow {
 
     private Layout newLayout;
 
+    @Getter
+    final List<Action> actions;
+
     /**
      * The chunk size (i.e. number of address space entries) that
      * the state transfer operation uses.
@@ -55,19 +58,15 @@ public class AddNodeWorkflow implements IWorkflow {
     public AddNodeWorkflow(Request request) {
         this.id = UUID.randomUUID();
         this.request = (AddNodeRequest) request;
+        actions = Arrays.asList(new BootstrapNode(),
+                new AddNodeToLayout(),
+                new StateTransfer(),
+                new MergeSegments());
     }
 
     @Override
     public String getName() {
         return ADD_NODE.toString();
-    }
-
-    @Override
-    public List<Action> getActions() {
-        return Arrays.asList(new BootstrapNode(),
-                new AddNodeToLayout(),
-                new StateTransfer(),
-                new MergeSegments());
     }
 
     /**
@@ -82,8 +81,6 @@ public class AddNodeWorkflow implements IWorkflow {
 
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
-            changeStatus(ActionStatus.STARTED);
-
             try {
                 runtime.getLayoutManagementView().bootstrapNewNode(request.getEndpoint());
             } catch (Exception e) {
@@ -91,11 +88,9 @@ public class AddNodeWorkflow implements IWorkflow {
                     log.info("BootstrapNode: Node {} already bootstrapped, skipping.", request.getEndpoint());
                 } else {
                     log.error("execute: Error during bootstrap", e);
-                    changeStatus(ActionStatus.ERROR);
+                    throw e;
                 }
             }
-
-            changeStatus(ActionStatus.COMPLETED);
         }
     }
 
@@ -114,7 +109,6 @@ public class AddNodeWorkflow implements IWorkflow {
 
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
-            changeStatus(ActionStatus.STARTED);
             Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());
 
             if (currentLayout.getAllServers().contains(request.getEndpoint())) {

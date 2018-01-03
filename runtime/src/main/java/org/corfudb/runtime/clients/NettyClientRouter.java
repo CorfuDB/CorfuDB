@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 
 import lombok.Getter;
@@ -499,12 +500,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      *
      * @param ctx     The channel handler context to send the message under.
      * @param message The message to send.
-     * @param <T>     The type of completable to return.
+     * @param duration Timeout for this request
      * @return A completable future which will be fulfilled by the reply,
      *     or a timeout in the case there is no response.
      */
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx,
-                                                                 CorfuMsg message) {
+                                                                 CorfuMsg message, @Nullable Duration duration) {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         if (!connected) {
             log.trace("Disconnected endpoint {}", node);
@@ -536,8 +537,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             });
             // Generate a timeout future, which will complete exceptionally
             // if the main future is not completed.
-            final CompletableFuture<T> cfTimeout =
-                    CFUtils.within(cfElapsed, Duration.ofMillis(timeoutResponse));
+            Duration timeout = duration == null ? Duration.ofMillis(timeoutResponse) : duration;
+            final CompletableFuture<T> cfTimeout = CFUtils.within(cfElapsed, timeout);
+
             cfTimeout.exceptionally(e -> {
 //                MetricsUtils.incConditionalCounter(isEnabled, counterSendTimeout, 1);
                 outstandingRequests.remove(thisRequest);
