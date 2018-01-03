@@ -36,7 +36,7 @@ wait_for_condition () {
     done
 }
 
-ensure_files () {
+signal_tls () {
     touch $TLS_SIGNAL_FILE
 }
 
@@ -48,6 +48,9 @@ ensure_dirs () {
     if [ ! -d $LOGDIR ]; then
         mkdir -p $LOGDIR
     fi
+}
+
+change_ownership () {
     if [ "$corfu_user_exist" = 0 ]; then
         chown -R $CORFU_USER:$CORFU_USER $PIDDIR
         chown -R $CORFU_USER:$CORFU_USER $LOGDIR
@@ -72,9 +75,10 @@ case "$1" in
     start|profile)
         log_daemon_msg "Starting $ROLENAME on port $PORT"
         ensure_dirs
-        ensure_files
+        signal_tls
         ensure_profile_port $1
         wait_for_condition
+        change_ownership
         /usr/tanuki/bin/corfu-server-wrapper $1
         ;;
     stop)
