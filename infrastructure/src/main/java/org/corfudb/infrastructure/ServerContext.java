@@ -2,13 +2,18 @@ package org.corfudb.infrastructure;
 
 import com.codahale.metrics.MetricRegistry;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.netty.channel.EventLoopGroup;
 import java.time.Duration;
 import java.util.*;
 
+import java.util.concurrent.ThreadFactory;
+import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.Setter;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.management.IFailureDetectorPolicy;
 import org.corfudb.infrastructure.management.PeriodicPollPolicy;
 import org.corfudb.runtime.CorfuRuntime;
@@ -38,7 +43,7 @@ import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
  * <p>Created by mdhawan on 8/5/16.
  */
 @Slf4j
-public class ServerContext {
+public class ServerContext implements AutoCloseable {
     // Layout Server
     private static final String PREFIX_EPOCH = "SERVER_EPOCH";
     private static final String KEY_EPOCH = "CURRENT";
@@ -89,6 +94,15 @@ public class ServerContext {
     private IFailureHandlerPolicy failureHandlerPolicy;
 
     @Getter
+    private final EventLoopGroup clientGroup;
+
+    @Getter
+    private final EventLoopGroup bossGroup;
+
+    @Getter
+    private final EventLoopGroup workerGroup;
+
+    @Getter
     public static final MetricRegistry metrics = new MetricRegistry();
 
     /**
@@ -102,6 +116,21 @@ public class ServerContext {
         this.failureDetectorPolicy = new PeriodicPollPolicy();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
 
+        // Setup the netty event loops. In tests, these loops may be provided by
+        // a test framework to save resources.
+        final boolean providedEventLoops =
+                 getChannelImplementation().equals(ChannelImplementation.LOCAL);
+
+        clientGroup = providedEventLoops
+            ? getServerConfig(EventLoopGroup.class, "client") :
+            getNewClientGroup();
+        workerGroup = providedEventLoops
+            ? getServerConfig(EventLoopGroup.class, "worker") :
+            getNewWorkerGroup();
+        bossGroup = providedEventLoops
+            ? getServerConfig(EventLoopGroup.class, "boss") :
+            getNewBossGroup();
+
         // Metrics setup & reporting configuration
         String mp = "corfu.server.";
         synchronized (metrics) {
@@ -113,8 +142,20 @@ public class ServerContext {
         }
     }
 
+    /** Get the {@link ChannelImplementation}to use.
+     *
+     * @return              The server channel type.
+     */
+    public ChannelImplementation getChannelImplementation() {
+        final String type = getServerConfig(String.class, "--implementation");
+        return ChannelImplementation.valueOf(type.toUpperCase());
+    }
+
+
     public CorfuRuntimeParameters getDefaultRuntimeParameters() {
         return CorfuRuntime.CorfuRuntimeParameters.builder()
+                .nettyEventLoop(clientGroup)
+                .shutdownNettyEventLoop(false)
                 .tlsEnabled((Boolean) serverConfig.get("--enable-tls"))
                 .keyStore((String) serverConfig.get("--keystore"))
                 .ksPasswordFile((String) serverConfig.get("--keystore-password-file"))
@@ -338,5 +379,92 @@ public class ServerContext {
      */
     public Layout getManagementLayout() {
         return dataStore.get(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT);
+    }
+
+    /** Get a new "boss" group, which services (accepts) incoming connections.
+     *
+     * @return              A boss group.
+     */
+    private EventLoopGroup getNewBossGroup() {
+        final ThreadFactory threadFactory = new ThreadFactoryBuilder()
+                .setNameFormat(getThreadPrefix() + "accept-%d")
+                .build();
+        EventLoopGroup group = getChannelImplementation().getGenerator()
+                .generate(1, threadFactory);
+        log.info("getBossGroup: Type {}", group.getClass().getSimpleName());
+        return group;
+    }
+
+    /** Get a new "worker" group, which services incoming requests.
+     *
+     * @return          A worker group.
+     */
+    private @Nonnull EventLoopGroup getNewWorkerGroup() {
+        final ThreadFactory threadFactory = new ThreadFactoryBuilder()
+                .setNameFormat(getThreadPrefix() + "worker-%d")
+                .build();
+
+        final int requestedThreads =
+                Integer.parseInt(getServerConfig(String.class, "--Threads"));
+        final int numThreads = requestedThreads == 0
+                ? Runtime.getRuntime().availableProcessors() * 2
+                : requestedThreads;
+        EventLoopGroup group = getChannelImplementation().getGenerator()
+            .generate(numThreads, threadFactory);
+
+        log.info("getWorkerGroup: Type {} with {} threads",
+                group.getClass().getSimpleName(), numThreads);
+        return group;
+    }
+
+    /** Get a new "client" group, which services incoming client requests.
+     *
+     * @return          A worker group.
+     */
+    private @Nonnull EventLoopGroup getNewClientGroup() {
+        final ThreadFactory threadFactory = new ThreadFactoryBuilder()
+                .setNameFormat(getThreadPrefix() + "client-%d")
+                .build();
+
+        final int requestedThreads =
+            Integer.parseInt(getServerConfig(String.class, "--Threads"));
+        final int numThreads = requestedThreads == 0
+            ? Runtime.getRuntime().availableProcessors() * 2
+            : requestedThreads;
+        EventLoopGroup group = getChannelImplementation().getGenerator()
+            .generate(numThreads, threadFactory);
+
+        log.info("getClientGroup: Type {} with {} threads",
+            group.getClass().getSimpleName(), numThreads);
+        return group;
+    }
+
+    /** Get the prefix for threads this server creates.
+     *
+     * @return  A string that should be prepended to threads this server creates.
+     */
+    public @Nonnull String getThreadPrefix() {
+        final String prefix = getServerConfig(String.class, "--Prefix");
+        if (prefix.equals("")) {
+            return "";
+        } else {
+            return prefix + "-";
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Cleans up and releases all resources (such as thread pools and files) opened
+     * by this {@link ServerContext}.
+     */
+    @Override
+    public void close() {
+        // Shutdown the active event loops unless they were provided to us
+        if (!getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
+            clientGroup.shutdownGracefully();
+            bossGroup.shutdownGracefully();
+            workerGroup.shutdownGracefully();
+        }
     }
 }

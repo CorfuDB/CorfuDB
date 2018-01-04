@@ -4,10 +4,14 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 
+import io.netty.channel.ChannelPromise;
+import java.util.ArrayDeque;
+import java.util.Queue;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslClient;
 import javax.security.sasl.SaslException;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
 /**
  * Created by sneginhal on 01/31/2017.
@@ -46,11 +50,12 @@ public class PlainTextSaslNettyClient extends ChannelDuplexHandler {
         }
 
         if (saslClient.isComplete()) {
-            super.channelActive(ctx);
             ByteBuf buf = ctx.alloc().heapBuffer(response.length);
             ByteBuf encoded = buf.writeBytes(response);
             ctx.writeAndFlush(encoded);
             ctx.pipeline().remove(this);
+            super.channelActive(ctx);
         }
     }
+
 }

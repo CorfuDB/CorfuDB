@@ -22,6 +22,7 @@ import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.Sleep;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -86,7 +87,6 @@ public class ClusterReconfigIT extends AbstractIT {
      */
     @Test
     public void addNodesTest() throws Exception {
-
         final int PORT_0 = 9000;
         final int PORT_1 = 9001;
         final int PORT_2 = 9002;

@@ -1,11 +1,15 @@
 package org.corfudb.integration;
 
+import java.net.ConnectException;
+import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.util.Sleep;
 import org.junit.Test;
 
 import java.util.UUID;
@@ -66,12 +70,14 @@ public class WorkflowIT extends AbstractIT {
         // Add a second node
         final int n2Port = 9001;
         new CorfuServerRunner()
+                .setSingle(false)
                 .setHost(host)
                 .setPort(n2Port)
                 .runServer();
 
         ManagementClient mgmt = n1Rt.getRouter(getConnectionString(n1Port))
                 .getClient(ManagementClient.class);
+       bootstrapServer(n2Port, n1Rt);
 
         CreateWorkflowResponse resp = mgmt.addNodeRequest(getConnectionString(n2Port));
 
@@ -101,9 +107,12 @@ public class WorkflowIT extends AbstractIT {
 
         final int n3Port = 9002;
         new CorfuServerRunner()
+                .setSingle(false)
                 .setHost(host)
                 .setPort(n3Port)
                 .runServer();
+
+        bootstrapServer(n3Port, n1Rt);
 
         CreateWorkflowResponse resp2 = mgmt.addNodeRequest(getConnectionString(n3Port));
         assertThat(resp2.getWorkflowId()).isNotNull();
@@ -139,5 +148,32 @@ public class WorkflowIT extends AbstractIT {
                 Thread.sleep(sleepTime);
             }
         }
+    }
+
+    /** Bootstraps the given endpoint using the given runtime. At the end of the call
+     *  either the endpoint will be bootstrapped or an assertion will be thrown.
+     *
+     * @param endpoint  The endpoint port to bootstrap.
+     * @param runtime   The runtime
+     */
+    void bootstrapServer(int endpoint, @Nonnull CorfuRuntime runtime) {
+        boolean success = false;
+        int tries = 0;
+        do {
+            try {
+                ManagementClient mgmt = runtime.getRouter(getConnectionString(endpoint))
+                    .getClient(ManagementClient.class);
+                mgmt.bootstrapManagement(runtime.getLayoutView().getLayout());
+                success = true;
+            } catch (NetworkException ignored) {
+                // Retry again
+                if (tries++ > PARAMETERS.NUM_ITERATIONS_LOW) {
+                    assertThat(false)
+                        .as("Failed to bootstrap after " + tries + " tries")
+                        .isTrue();
+                }
+                Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            }
+        } while (!success);
     }
 }

@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.log.StreamLogFiles;
 
 import static org.junit.Assert.*;
 
+import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.util.serializer.Serializers;
@@ -31,11 +32,10 @@ public class logReaderTest {
     public static String LOG_PATH = LOG_BASE_PATH + "/log";
 
     private ServerContext getContext() {
-        Map<String,Object> configs = new HashMap();
-        configs.put("--log-path", LOG_BASE_PATH);
-        configs.put("--no-verify", false);
-        configs .put("--cache-heap-ratio", "0.5");
-        return new ServerContext(configs);
+        return new ServerContextBuilder()
+            .setLogPath(LOG_BASE_PATH)
+            .setNoVerify(false)
+            .build();
     }
 
     @Before

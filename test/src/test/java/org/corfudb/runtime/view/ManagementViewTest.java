@@ -608,8 +608,6 @@ public class ManagementViewTest extends AbstractViewTest {
             assertThat(commit)
                     .isTrue();
         });
-
-
     }
 
     /**
@@ -880,7 +878,8 @@ public class ManagementViewTest extends AbstractViewTest {
                 .build();
         addServer(SERVERS.PORT_1, sc1);
 
-        CorfuRuntime rt = new CorfuRuntime(SERVERS.ENDPOINT_0).connect();
+        CorfuRuntime rt = getNewRuntime(getDefaultNode())
+                                    .connect();
 
         // Write to address space 0
         rt.getStreamsView().get(CorfuRuntime.getStreamID("test"))

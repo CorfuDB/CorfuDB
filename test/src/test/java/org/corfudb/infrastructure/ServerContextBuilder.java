@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.experimental.Accessors;
+import org.corfudb.AbstractCorfuTest;
 
 /**
  * Created by mwei on 6/29/16.
@@ -30,7 +31,7 @@ public class ServerContextBuilder {
     String truststore = "";
     String truststorePasswordFile = "";
 
-    String implementation = "nio";
+    String implementation = "local";
 
     String cacheSizeHeapRatio = "0.5";
     String address = "test";
@@ -40,8 +41,10 @@ public class ServerContextBuilder {
     IServerRouter serverRouter;
     String numThreads = "0";
     String handshakeTimeout = "10";
+    String prefix = "";
 
     String clusterId = "auto";
+    boolean isTest = true;
 
     public ServerContextBuilder() {
 
@@ -78,6 +81,28 @@ public class ServerContextBuilder {
                  .put("--cluster-id", clusterId)
                  .put("--implementation", implementation)
                  .put("<port>", port);
+
+        // Set the prefix to the port number
+        if (prefix.equals("")) {
+            prefix = "test:" + port;
+        }
+        builder.put("--Prefix", prefix);
+
+        // Provide the server with event loop groups
+        if (implementation.equals("local")) {
+            if (AbstractCorfuTest.NETTY_CLIENT_GROUP != null) {
+                builder
+                    .put("client", AbstractCorfuTest.NETTY_CLIENT_GROUP);
+            }
+            if (AbstractCorfuTest.NETTY_BOSS_GROUP != null) {
+                builder
+                .put("boss", AbstractCorfuTest.NETTY_BOSS_GROUP);
+            }
+            if (AbstractCorfuTest.NETTY_WORKER_GROUP != null) {
+                builder
+                .put("worker", AbstractCorfuTest.NETTY_WORKER_GROUP);
+            }
+        }
         ServerContext sc = new ServerContext(builder.build());
         sc.setServerRouter(serverRouter);
         return sc;
@@ -91,6 +116,18 @@ public class ServerContextBuilder {
     public static ServerContext defaultTestContext(int port) {
         ServerContext sc = new ServerContextBuilder().setPort(port).build();
         sc.setServerRouter(new TestServerRouter());
+        return sc;
+    }
+
+    /** Create a non-test (socket-based) context at a given port with the default settings.
+     *
+     * @param port  The port to use
+     * @return      A non-test {@link ServerContext}
+     */
+    public static ServerContext defaultContext(int port) {
+        ServerContext sc = new ServerContextBuilder().setPort(port)
+            .setImplementation("auto")
+            .build();
         return sc;
     }
 
