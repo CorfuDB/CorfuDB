@@ -50,6 +50,13 @@
             <version>1.16.10</version>
             <scope>provided</scope>
         </dependency>
+      <dependency>
+        <groupId>org.corfudb</groupId>
+        <artifactId>test</artifactId>
+        <version>${project.version}</version>
+        <type>test-jar</type>
+        <scope>test</scope>
+      </dependency>
     </dependencies>
 
     <build>

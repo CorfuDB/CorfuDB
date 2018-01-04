@@ -444,15 +444,11 @@ public class ServerRestartIT extends AbstractIT {
         corfuServerProcess = runCorfuServer();
         corfuRuntime = createDefaultRuntime();
         TokenResponse tokenResponseA = corfuRuntime
-                .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
-                .getClient(SequencerClient.class)
-                .nextToken(Collections.singleton(streamNameA), 1)
-                .get();
+                .getSequencerView()
+                .nextToken(Collections.singleton(streamNameA), 1);
         TokenResponse tokenResponseB = corfuRuntime
-                .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
-                .getClient(SequencerClient.class)
-                .nextToken(Collections.singleton(streamNameB), 1)
-                .get();
+                .getSequencerView()
+                .nextToken(Collections.singleton(streamNameB), 1);
 
         assertThat(tokenResponseA.getToken().getTokenValue()).isEqualTo(newGlobalTail + 1);
         assertThat(tokenResponseA.getBackpointerMap().get(streamNameA))

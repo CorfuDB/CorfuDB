@@ -148,7 +148,7 @@ public class ManagementServer extends AbstractServer {
                 2,
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
-                        .setNameFormat("FaultDetector-%d-" + getLocalEndpoint())
+                        .setNameFormat(serverContext.getThreadPrefix() + "FaultDetector-%d")
                         .build());
 
         // Initiating periodic task to poll for failures.

@@ -1,10 +1,10 @@
 package org.corfudb.runtime.clients;
 
 import com.codahale.metrics.Counter;
-import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -23,6 +23,9 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
 
+import java.net.ConnectException;
+import java.net.NoRouteToHostException;
+import java.net.SocketException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -76,18 +79,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     /**
      * Metrics: meter (counter), histogram.
      */
-    private Gauge<Integer> gaugeConnected;
     private Timer timerConnect;
     private Timer timerSyncOp;
-    private Counter counterConnectFailed;
     private Counter counterSendDisconnected;
-    private Counter counterSendTimeout;
-    private Counter counterAsyncOpSent;
 
-    /**
-     * A random instance.
-     */
-    public static final Random random = new Random();
     /**
      * The epoch this router is in.
      */
@@ -153,38 +148,38 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * The currently registered channel context.
      */
     public ChannelHandlerContext context;
+
     /**
      * The currently registered channel.
      */
     public Channel channel = null;
+
     /**
-     * The worker group for this router.
+     * The {@link EventLoopGroup} for this router which services requests.
      */
-    public EventLoopGroup workerGroup;
-    /**
-     * The event executor group for this router.
+    public final EventLoopGroup eventLoopGroup;
+
+    /** Whether to shutdown the {@code eventLoopGroup} or not. Only applies when
+     *  a deprecated constructor (which generates its own {@link EventLoopGroup} is used.
      */
-    public EventExecutorGroup ee;
+    private boolean shutdownEventLoop = false;
+
     /**
      * Whether or not this router is shutdown.
      */
     public volatile boolean shutdown;
 
+    /** The {@link NodeLocator} which represents the remote node this
+     *  {@link NettyClientRouter} connects to.
+     */
     @Getter
-    final NodeLocator node;
+    private final NodeLocator node;
 
+    /** The {@link CorfuRuntimeParameters} used to configure the
+     *  router.
+     */
     private final CorfuRuntimeParameters parameters;
 
-    @Deprecated
-    @Override
-    public Integer getPort() {
-        return node.getPort();
-    }
-
-    @Deprecated
-    public String getHost() {
-        return node.getHost();
-    }
 
     /**
      * Flag, if we are connected.
@@ -193,63 +188,21 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     volatile Boolean connected;
 
     private SslContext sslContext;
-    /**
-     * Creates a new NettyClientRouter connected to the specified endpoint.
-     *
-     * @param endpoint Endpoint to connect to.
-     */
-    @Deprecated
-    public NettyClientRouter(String endpoint) {
-        this(endpoint.split(":")[0], Integer.parseInt(endpoint.split(":")[1]));
-    }
-
-    /**
-     * Creates a new NettyClientRouter connected to the specified host and port.
-     *
-     * @param host Host to connect to.
-     * @param port Port to connect to.
-     */
-    @Deprecated
-    public NettyClientRouter(String host, Integer port) {
-        this(NodeLocator.builder().host(host).port(port).build(),
-             CorfuRuntimeParameters.builder().build());
-    }
-
-    /**
-     * Creates a new NettyClientRouter connected to the specified host and port.
-     *
-     * @param host Host to connect to.
-     * @param port Port to connect to.
-     */
-    @Deprecated
-    public NettyClientRouter(String host, Integer port, Boolean tls,
-        String keyStore, String ksPasswordFile, String trustStore,
-        String tsPasswordFile, Boolean saslPlainText, String usernameFile,
-        String passwordFile) {
-        this(NodeLocator.builder().host(host).port(port).build(),
-            CorfuRuntimeParameters.builder()
-                .tlsEnabled(tls)
-                .keyStore(keyStore)
-                .ksPasswordFile(ksPasswordFile)
-                .trustStore(trustStore)
-                .tsPasswordFile(tsPasswordFile)
-                .saslPlainTextEnabled(saslPlainText)
-                .usernameFile(usernameFile)
-                .passwordFile(passwordFile)
-                .build());
-    }
 
     /**
      * Creates a new NettyClientRouter connected to the specified host and port with the
      * specified tls and sasl options.
      *
      * @param node           The node to connect to.
+     * @param eventLoopGroup The {@link EventLoopGroup} for servicing I/O.
      * @param parameters     A {@link CorfuRuntimeParameters} with the desired configuration.
      */
     public NettyClientRouter(@Nonnull NodeLocator node,
+                             @Nonnull EventLoopGroup eventLoopGroup,
                              @Nonnull CorfuRuntimeParameters parameters) {
         this.node = node;
         this.parameters = parameters;
+        this.eventLoopGroup = eventLoopGroup;
 
         connected = false;
         timeoutConnect = parameters.getConnectionTimeout().toMillis();
@@ -265,17 +218,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
 
         String pfx = CorfuRuntime.getMpCR() + node + ".";
-        synchronized (metrics) {
-            if (!metrics.getNames().contains(pfx + "connected")) {
-                gaugeConnected = metrics.register(pfx + "connected", () -> connected ? 1 : 0);
-            }
-        }
         timerConnect = metrics.timer(pfx + "connect");
         timerSyncOp = metrics.timer(pfx + "sync-op");
-        counterConnectFailed = metrics.counter(pfx + "connect-failed");
         counterSendDisconnected = metrics.counter(pfx + "send-disconnected");
-        counterSendTimeout = metrics.counter(pfx + "send-timeout");
-        counterAsyncOpSent = metrics.counter(pfx + "async-op-sent");
 
         if (parameters.isTlsEnabled()) {
             try {
@@ -330,86 +275,22 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 .findFirst().get();
     }
 
+    @Override
     public void start() {
-        start(-1);
-    }
-
-    /**
-     * Initiates the connection and starts the netty client router.
-     *
-     * @param c Server startup code.
-     */
-    public void start(long c) {
         shutdown = false;
-        if (workerGroup == null
-                || workerGroup.isShutdown()
-                || !channel.isOpen()) {
-            workerGroup = new NioEventLoopGroup(Runtime.getRuntime()
-                    .availableProcessors() * 2, new ThreadFactory() {
-                        final AtomicInteger threadNum = new AtomicInteger(0);
-
-                        @Override
-                        public Thread newThread(Runnable r) {
-                            Thread t = new Thread(r);
-                            t.setName("worker-" + threadNum.getAndIncrement());
-                            t.setDaemon(true);
-                            return t;
-                        }
-                    });
-
-            ee = new DefaultEventExecutorGroup(Runtime.getRuntime()
-                    .availableProcessors() * 2, new ThreadFactory() {
-
-                        final AtomicInteger threadNum = new AtomicInteger(0);
-
-                        @Override
-                        public Thread newThread(Runnable r) {
-                            Thread t = new Thread(r);
-                            t.setName(this.getClass().getName() + "event-"
-                                    + threadNum.getAndIncrement());
-                            t.setDaemon(true);
-                            return t;
-                        }
-                    });
-
+        if (channel == null || !channel.isOpen()) {
             Bootstrap b = new Bootstrap();
-            b.group(workerGroup);
-            b.channel(NioSocketChannel.class);
-            b.option(ChannelOption.SO_KEEPALIVE, true);
-            b.option(ChannelOption.SO_REUSEADDR, true);
-            b.option(ChannelOption.TCP_NODELAY, true);
-            NettyClientRouter router = this;
-            b.handler(new ChannelInitializer<SocketChannel>() {
-                @Override
-                public void initChannel(SocketChannel ch) throws Exception {
-                    if (parameters.isTlsEnabled()) {
-                        ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
-                    }
-                    ch.pipeline().addLast(new LengthFieldPrepender(4));
-                    ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
-                            0, 4, 0,
-                            4));
-                    if (parameters.isSaslPlainTextEnabled()) {
-                        PlainTextSaslNettyClient saslNettyClient =
-                                SaslUtils.enableSaslPlainText(parameters.getUsernameFile(),
-                                        parameters.getPasswordFile());
-                        ch.pipeline().addLast("sasl/plain-text", saslNettyClient);
-                    }
-                    ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
-                    ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
-                    ch.pipeline().addLast(ee, new ClientHandshakeHandler(parameters.getClientId(),
-                            node.getNodeId(), parameters.getHandshakeTimeout()));
-                    ch.pipeline().addLast(ee, router);
-                }
-            });
-
+            b.group(eventLoopGroup);
+            b.channel(parameters.getSocketType().getChannelClass());
+            parameters.getNettyChannelOptions().forEach(b::option);
+            b.handler(getChannelInitializer());
             try {
-                connectChannel(b, c);
-            } catch (Exception e) {
-
+                connectChannel(b);
+            } catch (SocketException e) {
                 try {
-                    // shutdown EventLoopGroup
-                    workerGroup.shutdownGracefully().sync();
+                    if (shutdownEventLoop) {
+                        eventLoopGroup.shutdownGracefully().sync();
+                    }
                 } catch (InterruptedException ie) {
                     throw new UnrecoverableCorfuInterruptedError(
                         "Interrupted while shutting down", ie);
@@ -420,22 +301,52 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         }
     }
 
-    synchronized void connectChannel(Bootstrap b, long c) {
+    /** Get the {@link ChannelInitializer} used for initializing the Netty channel pipeline.
+     *
+     * @return A {@link ChannelInitializer} which initializes the pipeline.
+     */
+    private ChannelInitializer getChannelInitializer() {
+        return new ChannelInitializer() {
+            @Override
+            protected void initChannel(@Nonnull Channel ch) throws Exception {
+                if (parameters.isTlsEnabled()) {
+                    ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
+                }
+                ch.pipeline().addLast(new LengthFieldPrepender(4));
+                ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
+                        0, 4, 0,
+                        4));
+                if (parameters.isSaslPlainTextEnabled()) {
+                    PlainTextSaslNettyClient saslNettyClient =
+                        SaslUtils.enableSaslPlainText(parameters.getUsernameFile(),
+                            parameters.getPasswordFile());
+                    ch.pipeline().addLast("sasl/plain-text", saslNettyClient);
+                }
+                ch.pipeline().addLast(new NettyCorfuMessageDecoder());
+                ch.pipeline().addLast(new NettyCorfuMessageEncoder());
+                ch.pipeline().addLast(new ClientHandshakeHandler(parameters.getClientId(),
+                        node.getNodeId(), parameters.getHandshakeTimeout()));
+                ch.pipeline().addLast(NettyClientRouter.this);
+            }
+        };
+    }
+
+    private synchronized void connectChannel(Bootstrap b)
+            throws ConnectException, NoRouteToHostException, SocketException
+    {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         try (Timer.Context context = MetricsUtils.getConditionalContext(isEnabled, timerConnect)) {
             ChannelFuture cf = b.connect(node.getHost(), node.getPort());
             cf.syncUninterruptibly();
             if (!cf.awaitUninterruptibly(timeoutConnect)) {
                 cf.channel().close();   // close port
-//                MetricsUtils.incConditionalCounter(isEnabled, counterConnectFailed, 1);
-                throw new NetworkException(c + " Timeout connecting to endpoint", node);
+                throw new NetworkException("Timeout connecting to endpoint", node);
             }
             channel = cf.channel();
         }
         channel.closeFuture().addListener((r) -> {
             connected = false;
             outstandingRequests.forEach((reqId, reqCompletableFuture) -> {
-//                MetricsUtils.incConditionalCounter(isEnabled, counterSendDisconnected, 1);
                 reqCompletableFuture.completeExceptionally(new NetworkException("Disconnected",
                     node));
                 outstandingRequests.remove(reqId);
@@ -444,12 +355,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 log.trace("Disconnected, reconnecting...");
                 while (!shutdown) {
                     try {
-                        connectChannel(b, c);
+                        connectChannel(b);
                         return;
-                    } catch (Exception ex) {
-//                        MetricsUtils.incConditionalCounter(isEnabled,
-//                                counterConnectFailed, 1);
-                        log.warn("Exception while reconnecting, retry in {} ms", timeoutRetry);
+                    } catch (SocketException e) {
+                        log.warn("Exception while reconnecting, retry in {} ms", timeoutRetry, e);
                         Sleep.MILLISECONDS.sleepUninterruptibly(timeoutRetry);
                     }
                 }
@@ -474,16 +383,17 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         connected = false;
 
         if (shutdown) {
+            log.debug("stop: Shutting down router for {}", node);
             try {
-                ChannelFuture cf = channel.close();
-                cf.syncUninterruptibly();
-                cf.awaitUninterruptibly(1000);
+                channel.disconnect();
+                channel.close().syncUninterruptibly();
             } catch (Exception e) {
                 log.error("Error in closing channel");
             }
             try {
-                ee.shutdownGracefully().sync();
-                workerGroup.shutdownGracefully().sync();
+                if (shutdownEventLoop) {
+                    eventLoopGroup.shutdownGracefully().sync();
+                }
             } catch (InterruptedException e) {
                 throw new UnrecoverableCorfuInterruptedError("Interrupted while stopping", e);
             }
@@ -509,7 +419,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         if (!connected) {
             log.trace("Disconnected endpoint {}", node);
             MetricsUtils.incConditionalCounter(isEnabled, counterSendDisconnected, 1);
-            throw new NetworkException("Disconnected endpoint", node);
+            throw new NetworkException("Disconnected endpoint (call connect())", node);
         } else {
             final Timer.Context context = MetricsUtils
                     .getConditionalContext(isEnabled, timerSyncOp);
@@ -539,7 +449,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             final CompletableFuture<T> cfTimeout =
                     CFUtils.within(cfElapsed, Duration.ofMillis(timeoutResponse));
             cfTimeout.exceptionally(e -> {
-//                MetricsUtils.incConditionalCounter(isEnabled, counterSendTimeout, 1);
                 outstandingRequests.remove(thisRequest);
                 log.debug("Remove request {} due to timeout!", thisRequest);
                 return null;
@@ -572,8 +481,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         message.setEpoch(epoch);
         // Write this message out on the channel.
         outContext.writeAndFlush(message, outContext.voidPromise());
-//        MetricsUtils.incConditionalCounter(MetricsUtils
-//                .isMetricsCollectionEnabled(), counterAsyncOpSent, 1);
         log.trace("Sent one-way message: {}", message);
     }
 
@@ -595,19 +502,17 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     /**
      * Complete a given outstanding request with a completion value.
      *
-     * @param requestID  The request to complete.
+     * @param requestId  The request to complete.
      * @param completion The value to complete the request with
      * @param <T>        The type of the completion.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-    public <T> void completeRequest(long requestID, T completion) {
+    public <T> void completeRequest(long requestId, T completion) {
         CompletableFuture<T> cf;
-        if ((cf = (CompletableFuture<T>) outstandingRequests.get(requestID)) != null) {
+        if ((cf = (CompletableFuture<T>) outstandingRequests.get(requestId)) != null) {
             cf.complete(completion);
-            outstandingRequests.remove(requestID);
+            outstandingRequests.remove(requestId);
         } else {
-            log.warn("Attempted to complete request {}, but request not outstanding!", requestID);
+            log.warn("Attempted to complete request {}, but request not outstanding!", requestId);
         }
     }
 
@@ -637,9 +542,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * @param ctx The context of the channel handler.
      * @return True, if the epoch is correct, but false otherwise.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-    private boolean validateEpochAndClientID(CorfuMsg msg, ChannelHandlerContext ctx) {
+    private boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx) {
         // Check if the message is intended for us. If not, drop the message.
         if (!msg.getClientID().equals(parameters.getClientId())) {
             log.warn("Incoming message intended for client {}, our id is {}, dropping!",
@@ -666,7 +569,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 // The message was unregistered, we are dropping it.
                 log.warn("Received unregistered message {}, dropping", m);
             } else {
-                if (validateEpochAndClientID(m, ctx)) {
+                if (validateEpoch(m, ctx)) {
                     // Route the message to the handler.
                     if (log.isTraceEnabled()) {
                         log.trace("Message routed to {}: {}",
@@ -698,4 +601,78 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         context = null;
         log.debug("Unregistered channel {}", ctx);
     }
+
+    // region Deprecated Methods
+    // The methods below are deprecated and may be removed in a future release.
+    /**
+     * Creates a new NettyClientRouter connected to the specified endpoint.
+     *
+     * @param endpoint Endpoint to connect to.
+     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, CorfuRuntimeParameters)}
+     */
+    @Deprecated
+    public NettyClientRouter(String endpoint) {
+        this(endpoint.split(":")[0], Integer.parseInt(endpoint.split(":")[1]));
+    }
+
+    /**
+     * Creates a new NettyClientRouter connected to the specified host and port.
+     *
+     * @param host Host to connect to.
+     * @param port Port to connect to.
+     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, CorfuRuntimeParameters)}
+     */
+    @Deprecated
+    public NettyClientRouter(String host, Integer port) {
+        this(NodeLocator.builder().host(host).port(port).build(),
+            CorfuRuntimeParameters.builder().build());
+    }
+
+    /**
+     * Creates a new NettyClientRouter connected to the specified host and port.
+     *
+     * @param host Host to connect to.
+     * @param port Port to connect to.
+     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, CorfuRuntimeParameters)}
+     */
+    @Deprecated
+    public NettyClientRouter(String host, Integer port, Boolean tls,
+        String keyStore, String ksPasswordFile, String trustStore,
+        String tsPasswordFile, Boolean saslPlainText, String usernameFile,
+        String passwordFile) {
+        this(NodeLocator.builder().host(host).port(port).build(),
+            CorfuRuntimeParameters.builder()
+                .tlsEnabled(tls)
+                .keyStore(keyStore)
+                .ksPasswordFile(ksPasswordFile)
+                .trustStore(trustStore)
+                .tsPasswordFile(tsPasswordFile)
+                .saslPlainTextEnabled(saslPlainText)
+                .usernameFile(usernameFile)
+                .passwordFile(passwordFile)
+                .build());
+    }
+
+    public NettyClientRouter(@Nonnull NodeLocator node,
+        @Nonnull CorfuRuntimeParameters parameters) {
+        this(node, parameters.getSocketType()
+            .getGenerator().generate(Runtime.getRuntime().availableProcessors() * 2,
+                new ThreadFactoryBuilder()
+                    .setDaemon(true)
+                    .setNameFormat(parameters.getNettyEventLoopThreadFormat())
+                .build()), parameters);
+        shutdownEventLoop = true;
+    }
+
+    @Deprecated
+    @Override
+    public Integer getPort() {
+        return node.getPort();
+    }
+
+    @Deprecated
+    public String getHost() {
+        return node.getHost();
+    }
+    // endregion
 }

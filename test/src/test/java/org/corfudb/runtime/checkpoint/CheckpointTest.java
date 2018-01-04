@@ -33,7 +33,10 @@ public class CheckpointTest extends AbstractObjectTest {
     CorfuRuntime myRuntime = null;
 
     void setRuntime() {
-        myRuntime = new CorfuRuntime(getDefaultConfigurationString()).connect();
+        if (myRuntime != null) {
+            myRuntime.shutdown();
+        }
+        myRuntime = getNewRuntime(getDefaultNode()).connect();
     }
 
     Map<String, Long> instantiateMap(String mapName) {

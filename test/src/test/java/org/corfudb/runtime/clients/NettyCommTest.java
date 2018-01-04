@@ -54,7 +54,7 @@ public class NettyCommTest extends AbstractCorfuTest {
     public void nettyServerClientPingable() throws Exception {
         runWithBaseServer(
             (port) -> {
-                return new NettyServerData(ServerContextBuilder.defaultTestContext(port));
+                return new NettyServerData(ServerContextBuilder.defaultContext(port));
             },
             (port) -> {
                 return new NettyClientRouter("localhost", port);
@@ -69,7 +69,7 @@ public class NettyCommTest extends AbstractCorfuTest {
     public void nettyServerClientPingableAfterFailure() throws Exception {
         runWithBaseServer(
             (port) -> {
-                return new NettyServerData(ServerContextBuilder.defaultTestContext(port));
+                return new NettyServerData(ServerContextBuilder.defaultContext(port));
             },
             (port) -> {
                 return new NettyClientRouter("localhost", port);
@@ -91,6 +91,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 NettyServerData d = new NettyServerData(
                     new ServerContextBuilder()
                         .setTlsEnabled(true)
+                        .setImplementation("auto")
                         .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                         .setTlsProtocols("TLSv1.2")
                         .setKeystore("src/test/resources/security/s1.jks")
@@ -123,6 +124,7 @@ public class NettyCommTest extends AbstractCorfuTest {
         runWithBaseServer(
             (port) -> {
             NettyServerData d = new NettyServerData(new ServerContextBuilder()
+                    .setImplementation("auto")
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                     .setTlsProtocols("TLSv1.2")
@@ -157,6 +159,7 @@ public class NettyCommTest extends AbstractCorfuTest {
         runWithBaseServer(
             (port) -> {
                 NettyServerData d = new NettyServerData(new ServerContextBuilder()
+                    .setImplementation("auto")
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                     .setTlsProtocols("TLSv1.2")
@@ -191,6 +194,7 @@ public class NettyCommTest extends AbstractCorfuTest {
         runWithBaseServer(
             (port) -> {
                 NettyServerData d = new NettyServerData(new ServerContextBuilder()
+                    .setImplementation("auto")
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                     .setTlsProtocols("TLSv1.2")
@@ -225,6 +229,7 @@ public class NettyCommTest extends AbstractCorfuTest {
         runWithBaseServer(
             (port) -> {
                 NettyServerData d = new NettyServerData(new ServerContextBuilder()
+                    .setImplementation("auto")
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                     .setTlsProtocols("TLSv1.2")
@@ -260,6 +265,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 System.setProperty("java.security.auth.login.config",
                     "src/test/resources/security/corfudb_jaas.config");
                 NettyServerData d = new NettyServerData(new ServerContextBuilder()
+                    .setImplementation("auto")
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                     .setTlsProtocols("TLSv1.2")
@@ -296,7 +302,7 @@ public class NettyCommTest extends AbstractCorfuTest {
     public void nettyServerClientHandshakeDefaultId() throws Exception {
         runWithBaseServer(
                 (port) -> {
-                    return new NettyServerData(ServerContextBuilder.defaultTestContext(port));
+                    return new NettyServerData(ServerContextBuilder.defaultContext(port));
                 },
                 (port) -> {
                     NodeLocator nl = NodeLocator.builder()
@@ -319,7 +325,7 @@ public class NettyCommTest extends AbstractCorfuTest {
         runWithBaseServer(
                 (port) -> {
                     ServerContext sc = ServerContextBuilder
-                            .defaultTestContext(port);
+                            .defaultContext(port);
                     nodeId = sc.getNodeId();
                     return new NettyServerData(sc);
                 },
@@ -341,7 +347,7 @@ public class NettyCommTest extends AbstractCorfuTest {
     public void nettyServerClientHandshakeMismatchId() throws Exception {
         runWithBaseServer(
                 (port) -> {
-                    return new NettyServerData(ServerContextBuilder.defaultTestContext(port));
+                    return new NettyServerData(ServerContextBuilder.defaultContext(port));
                 },
                 (port) -> {
                     NodeLocator nl = NodeLocator.builder()
@@ -364,6 +370,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 System.setProperty("java.security.auth.login.config",
                     "src/test/resources/security/corfudb_jaas.config");
                 NettyServerData d = new NettyServerData(new ServerContextBuilder()
+                    .setImplementation("auto")
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                     .setTlsProtocols("TLSv1.2")
@@ -436,6 +443,7 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         NettyServerData serverData = new NettyServerData(
             new ServerContextBuilder()
+                .setImplementation("auto")
                 .setTlsEnabled(true)
                 .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
                 .setTlsProtocols("TLSv1.2")
@@ -499,7 +507,7 @@ public class NettyCommTest extends AbstractCorfuTest {
             throw ex;
         } finally {
             try {
-                if (ncr != null) {ncr.stop();}
+                if (ncr != null) {ncr.stop(true);}
             } catch (Exception ex) {
                 log.warn("Error shutting down client...", ex);
             }
@@ -527,8 +535,6 @@ public class NettyCommTest extends AbstractCorfuTest {
     public class NettyServerData {
         ServerBootstrap b;
         volatile ChannelFuture f;
-        EventLoopGroup bossGroup;
-        EventLoopGroup workerGroup;
 
         final ServerContext serverContext;
 
@@ -539,12 +545,8 @@ public class NettyCommTest extends AbstractCorfuTest {
         void bootstrapServer() throws Exception {
             NettyServerRouter nsr =
                 new NettyServerRouter(Collections.singletonList(new BaseServer(serverContext)));
-
-            bossGroup = CorfuServer.getBossGroup(serverContext);
-            workerGroup = CorfuServer.getWorkerGroup(serverContext);
-            f = CorfuServer.startAndListen(bossGroup,
-                                            workerGroup,
-                                            CorfuServer.getServerChannelType(serverContext),
+            f = CorfuServer.startAndListen(serverContext.getBossGroup(),
+                                            serverContext.getWorkerGroup(),
                                             b -> CorfuServer.configureBootstrapOptions(
                                                 serverContext, b),
                                             serverContext,
@@ -555,8 +557,6 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         public void shutdownServer() {
             f.channel().close().awaitUninterruptibly();
-            bossGroup.shutdownGracefully();
-            workerGroup.shutdownGracefully();
         }
 
     }
