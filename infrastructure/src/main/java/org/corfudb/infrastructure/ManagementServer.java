@@ -220,7 +220,7 @@ public class ManagementServer extends AbstractServer {
             // Persisting this new updated layout
             setCurrentLayout(latestLayout);
         } else {
-            log.warn("safeUpdateLayout: Ignoring layout because new epoch {} <= old epoch {}",
+            log.debug("safeUpdateLayout: Ignoring layout because new epoch {} <= old epoch {}",
                     layout.getEpoch(), latestLayout.getEpoch());
         }
     }
