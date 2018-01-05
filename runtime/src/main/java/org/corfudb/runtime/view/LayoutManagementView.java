@@ -137,6 +137,9 @@ public class LayoutManagementView extends AbstractView {
         if (isLogUnitServer) {
             layoutBuilder.addLogunitServer(logUnitStripeIndex, getMaxGlobalTail(currentLayout),
                     endpoint);
+            // Clear the state of the logging on the endpoint to be added
+            CFUtils.getUninterruptibly(runtime.getRouter(endpoint)
+                    .getClient(LogUnitClient.class).resetLogUnit());
         }
         if (isUnresponsiveServer) {
             layoutBuilder.addUnresponsiveServers(Collections.singleton(endpoint));
@@ -146,9 +149,9 @@ public class LayoutManagementView extends AbstractView {
 
         attemptConsensus(newLayout);
 
-            // Add node is successful even if reconfigure sequencer fails.
-            // TODO: Optimize this by retrying or submitting a workflow to retry.
-            reconfigureSequencerServers(currentLayout, newLayout, false);
+        // Add node is successful even if reconfigure sequencer fails.
+        // TODO: Optimize this by retrying or submitting a workflow to retry.
+        reconfigureSequencerServers(currentLayout, newLayout, false);
 
     }
     
