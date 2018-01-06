@@ -33,9 +33,6 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 public class NettyServerRouter extends ChannelInboundHandlerAdapter
         implements IServerRouter {
 
-    public static final String PREFIX_EPOCH = "SERVER_EPOCH";
-    public static final String KEY_EPOCH = "CURRENT";
-
     public static class ServerThreadFactory
             implements ForkJoinPool.ForkJoinWorkerThreadFactory {
 

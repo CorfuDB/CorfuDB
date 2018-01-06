@@ -47,9 +47,25 @@ else
       byteman=""
 fi
 
+LOG_PATH=""
+# These are the possible options/flags which can be passed to the CorfuServer. The trailing ":" signifies that the flag
+# accepts a variable (eg. filename or log directory path, etc)
+while getopts "l:ma:nsd:t:c:p:M:eu:f:r:w:bgo:j:k:T:i:H:I:x:z:" opt; do
+  case ${opt} in
+    l ) LOG_PATH=${OPTARG};;
+    ? ) ;;
+  esac
+done
+
 while true; do
-"$JAVA" -cp "$CLASSPATH" $JVMFLAGS $byteman org.corfudb.infrastructure.CorfuServer $*
-if [ $? -ne 100 ]; then
-break
-fi
+    "$JAVA" -cp "$CLASSPATH" $JVMFLAGS $byteman org.corfudb.infrastructure.CorfuServer $*
+    RETURN_CODE=$?
+
+    if [ $RETURN_CODE -ne 100 ] && [ $RETURN_CODE -ne 200 ]; then
+        break
+    fi
+
+    if [ "$LOG_PATH" != "" ] && [ $RETURN_CODE -eq 100 ]; then
+        rm -r $LOG_PATH/*
+    fi
 done

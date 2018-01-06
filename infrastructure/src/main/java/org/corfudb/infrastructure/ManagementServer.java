@@ -66,8 +66,8 @@ public class ManagementServer extends AbstractServer {
     private final Map<String, Object> opts;
     private final ServerContext serverContext;
 
-    private static final String PREFIX_MANAGEMENT = "MANAGEMENT";
-    private static final String KEY_LAYOUT = "LAYOUT";
+//    private static final String PREFIX_MANAGEMENT = "MANAGEMENT";
+//    private static final String KEY_LAYOUT = "LAYOUT";
 
     private CorfuRuntime corfuRuntime;
     /**
@@ -132,7 +132,7 @@ public class ManagementServer extends AbstractServer {
         sequencerBootstrappedFuture = new CompletableFuture<>();
 
 
-        safeUpdateLayout(getCurrentLayout());
+        safeUpdateLayout(serverContext.getManagementLayout());
         // If no state was preserved, there is no layout to recover.
         if (latestLayout == null) {
             recovered = true;
@@ -218,29 +218,11 @@ public class ManagementServer extends AbstractServer {
             log.info("safeUpdateLayout: Updating to new layout at epoch {}",
                     latestLayout.getEpoch());
             // Persisting this new updated layout
-            setCurrentLayout(latestLayout);
+            serverContext.setManagementLayout(latestLayout);
         } else {
             log.debug("safeUpdateLayout: Ignoring layout because new epoch {} <= old epoch {}",
                     layout.getEpoch(), latestLayout.getEpoch());
         }
-    }
-
-    /**
-     * Sets the latest layout in the persistent datastore.
-     *
-     * @param layout Layout to be persisted
-     */
-    private void setCurrentLayout(Layout layout) {
-        serverContext.getDataStore().put(Layout.class, PREFIX_MANAGEMENT, KEY_LAYOUT, layout);
-    }
-
-    /**
-     * Fetches the latest layout from the persistent datastore.
-     *
-     * @return The last persisted layout
-     */
-    private Layout getCurrentLayout() {
-        return serverContext.getDataStore().get(Layout.class, PREFIX_MANAGEMENT, KEY_LAYOUT);
     }
 
     private boolean checkBootstrap(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {

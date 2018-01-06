@@ -3,10 +3,7 @@ package org.corfudb.infrastructure;
 import com.codahale.metrics.MetricRegistry;
 
 import java.time.Duration;
-import java.util.Collections;
-import java.util.Map;
-
-import java.util.UUID;
+import java.util.*;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -42,14 +39,26 @@ import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
  */
 @Slf4j
 public class ServerContext {
+    // Layout Server
     private static final String PREFIX_EPOCH = "SERVER_EPOCH";
     private static final String KEY_EPOCH = "CURRENT";
     private static final String PREFIX_LAYOUT = "LAYOUT";
     private static final String KEY_LAYOUT = "CURRENT";
+    private static final String PREFIX_PHASE_1 = "PHASE_1";
+    private static final String KEY_SUFFIX_PHASE_1 = "RANK";
+    private static final String PREFIX_PHASE_2 = "PHASE_2";
+    private static final String KEY_SUFFIX_PHASE_2 = "DATA";
+    private static final String PREFIX_LAYOUTS = "LAYOUTS";
+
+    // Sequencer Server
     private static final String PREFIX_TAIL_SEGMENT = "TAIL_SEGMENT";
     private static final String KEY_TAIL_SEGMENT = "CURRENT";
     private static final String PREFIX_STARTING_ADDRESS = "STARTING_ADDRESS";
     private static final String KEY_STARTING_ADDRESS = "CURRENT";
+
+    // Management Server
+    private static final String PREFIX_MANAGEMENT = "MANAGEMENT";
+    private static final String MANAGEMENT_LAYOUT = "LAYOUT";
 
     /** The node Id, stored as a base64 string. */
     public static final String NODE_ID = "NODE_ID";
@@ -231,6 +240,17 @@ public class ServerContext {
     }
 
     /**
+     * Returns the layout history.
+     *
+     * @return list of layouts in the history
+     */
+    public List<Layout> getLayoutHistory() {
+        List<Layout> layouts = dataStore.getAll(Layout.class, PREFIX_LAYOUTS);
+        layouts.sort(Comparator.comparingLong(Layout::getEpoch));
+        return layouts;
+    }
+
+    /**
      * The epoch of this router. This is managed by the base server implementation.
      */
     public synchronized long getServerEpoch() {
@@ -255,6 +275,30 @@ public class ServerContext {
         }
     }
 
+    public Rank getPhase1Rank() {
+        return dataStore.get(Rank.class, PREFIX_PHASE_1,
+                getServerEpoch() + KEY_SUFFIX_PHASE_1);
+    }
+
+    public void setPhase1Rank(Rank rank) {
+        dataStore.put(Rank.class, PREFIX_PHASE_1,
+                getServerEpoch() + KEY_SUFFIX_PHASE_1, rank);
+    }
+
+    public Phase2Data getPhase2Data() {
+        return dataStore.get(Phase2Data.class, PREFIX_PHASE_2,
+                getServerEpoch() + KEY_SUFFIX_PHASE_2);
+    }
+
+    public void setPhase2Data(Phase2Data phase2Data) {
+        dataStore.put(Phase2Data.class, PREFIX_PHASE_2,
+                getServerEpoch() + KEY_SUFFIX_PHASE_2, phase2Data);
+    }
+
+    public void setLayoutInHistory(Layout layout) {
+        dataStore.put(Layout.class, PREFIX_LAYOUTS, String.valueOf(layout.getEpoch()), layout);
+    }
+
     public long getTailSegment() {
         Long tailSegment = dataStore.get(Long.class, PREFIX_TAIL_SEGMENT, KEY_TAIL_SEGMENT);
         return tailSegment == null ? 0 : tailSegment;
@@ -276,5 +320,23 @@ public class ServerContext {
 
     public void setStartingAddress(long startingAddress) {
         dataStore.put(Long.class, PREFIX_STARTING_ADDRESS, KEY_STARTING_ADDRESS, startingAddress);
+    }
+
+    /**
+     * Sets the management layout in the persistent datastore.
+     *
+     * @param layout Layout to be persisted
+     */
+    public void setManagementLayout(Layout layout) {
+        dataStore.put(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, layout);
+    }
+
+    /**
+     * Fetches the management layout from the persistent datastore.
+     *
+     * @return The last persisted layout
+     */
+    public Layout getManagementLayout() {
+        return dataStore.get(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT);
     }
 }
