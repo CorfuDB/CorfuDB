@@ -58,6 +58,17 @@ change_ownership () {
     fi
 }
 
+# By default corfu server can use up to 20% of total memory
+# If manager + policy mixed deployment is used, use 18% of total memory instead
+adjust_memory () {
+    has_manager_role=$(grep "nsx-manager" /etc/nsx_issue > /dev/null 2>&1; echo $?)
+    has_policy_role=$(grep "nsx-policy-manager" /etc/nsx_issue > /dev/null 2>&1; echo $?)
+    if [ "$has_manager_role" = 0  ] && [ "$has_policy_role" = 0  ]; then
+        sed -i -e "s/wrapper.java.maxmemory.percent=20/wrapper.java.maxmemory.percent=18/" /usr/tanuki/conf/corfu-server-wrapper.conf
+        sed -i -e "s/wrapper.java.maxmemory.percent=20/wrapper.java.maxmemory.percent=18/" /usr/tanuki/conf/corfu-server-wrapper_profile.conf
+    fi
+}
+
 ensure_profile_port () {
     op=$1
     set +e
@@ -79,6 +90,7 @@ case "$1" in
         ensure_profile_port $1
         wait_for_condition
         change_ownership
+        adjust_memory
         /usr/tanuki/bin/corfu-server-wrapper $1
         ;;
     stop)
