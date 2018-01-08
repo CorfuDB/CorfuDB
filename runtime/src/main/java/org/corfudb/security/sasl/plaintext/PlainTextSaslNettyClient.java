@@ -34,7 +34,7 @@ public class PlainTextSaslNettyClient extends ChannelDuplexHandler {
     }
 
     @Override
-    public void channelActive(ChannelHandlerContext ctx) {
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
         byte[] response = new byte[0];
         while (!saslClient.isComplete()) {
             try {
@@ -46,6 +46,7 @@ public class PlainTextSaslNettyClient extends ChannelDuplexHandler {
         }
 
         if (saslClient.isComplete()) {
+            super.channelActive(ctx);
             ByteBuf buf = ctx.alloc().heapBuffer(response.length);
             ByteBuf encoded = buf.writeBytes(response);
             ctx.writeAndFlush(encoded);

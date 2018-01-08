@@ -28,6 +28,7 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
 
 import java.util.Comparator;
@@ -46,9 +47,9 @@ public class AddressSpaceView extends AbstractView {
      * A cache for read results.
      */
     final LoadingCache<Long, ILogData> readCache = Caffeine.<Long, ILogData>newBuilder()
-            .maximumSize(runtime.getNumCacheEntries())
-            .expireAfterAccess(runtime.getCacheExpiryTime(), TimeUnit.SECONDS)
-            .expireAfterWrite(runtime.getCacheExpiryTime(), TimeUnit.SECONDS)
+            .maximumSize(runtime.getParameters().getNumCacheEntries())
+            .expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
+            .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .recordStats()
             .build(new CacheLoader<Long, ILogData>() {
                 @Override
@@ -84,6 +85,33 @@ public class AddressSpaceView extends AbstractView {
         readCache.invalidateAll();
     }
 
+
+    /**
+     * Validates the state of a write after an exception occured during the process
+     *
+     * There are [currently] three different scenarios:
+     *   1. The data was persisted to some log units and we were able to recover it.
+     *   2. The data was not persisted and another client (or ourself) hole filled.
+     *      In that case, we return an OverwriteException and let the nex layer handle it.
+     *   3. The address we tried to write to was trimmed. In this case, there is no way to
+     *      know if the write went through or not. For sanity, we throw an OverwriteException
+     *      and let the above layer retry.
+     *
+     * @param address
+     */
+    private void validateStateOfWrittenEntry(long address) {
+        ILogData logData;
+        try {
+            logData = read(address);
+        } catch (TrimmedException te) {
+            // We cannot know if the write went through or not
+            throw new UnrecoverableCorfuError("We cannot determine state of an update because of a trim.");
+        }
+        if (logData.isHole()) {
+            throw new OverwriteException();
+        }
+    }
+
     /** Write the given log data using a token, returning
      * either when the write has been completed successfully,
      * or throwing an OverwriteException if another value
@@ -111,15 +139,26 @@ public class AddressSpaceView extends AbstractView {
             // Set the data to use the token
             ld.useToken(token);
 
+
             // Do the write
-            l.getReplicationMode(token.getTokenValue())
+            try {
+                l.getReplicationMode(token.getTokenValue())
                         .getReplicationProtocol(runtime)
                         .write(l, ld);
+            } catch (RuntimeException re) {
+                // If we have an Overwrite exception, it is already too late for trying
+                // to validate the state of the write, we know that it didn't went through.
+                if (re instanceof OverwriteException) {
+                    throw re;
+                }
+
+                validateStateOfWrittenEntry(token.getTokenValue());
+            }
             return null;
-        });
+        }, true);
 
         // Cache the successful write
-        if (!runtime.isCacheDisabled()) {
+        if (!runtime.getParameters().isCacheDisabled()) {
             readCache.put(token.getTokenValue(), ld);
         }
     }
@@ -146,7 +185,7 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which be cached.
      */
     public @Nonnull ILogData read(long address) {
-        if (!runtime.isCacheDisabled()) {
+        if (!runtime.getParameters().isCacheDisabled()) {
             ILogData data = readCache.get(address);
             if (data == null || data.getType() == DataType.EMPTY) {
                 throw new RuntimeException("Unexpected return of empty data at address "
@@ -167,7 +206,7 @@ public class AddressSpaceView extends AbstractView {
      */
     public Map<Long, ILogData> read(Iterable<Long> addresses) {
         Map<Long, ILogData> addressesMap;
-        if (!runtime.isCacheDisabled()) {
+        if (!runtime.getParameters().isCacheDisabled()) {
             addressesMap = readCache.getAll(addresses);
         } else {
             addressesMap = this.cacheFetch(addresses);
@@ -229,7 +268,7 @@ public class AddressSpaceView extends AbstractView {
 
         } catch (Exception e) {
             log.error("prefixTrim: Error while calling prefix trimming {}", address, e);
-            return;
+            throw new UnrecoverableCorfuError("Unexpected error while prefix trimming", e);
         }
     }
 
@@ -301,7 +340,8 @@ public class AddressSpaceView extends AbstractView {
     Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
         Map<Long, ILogData> allAddresses = new HashMap<>();
 
-        Iterable<List<Long>> batches = Iterables.partition(addresses, runtime.getBulkReadSize());
+        Iterable<List<Long>> batches = Iterables.partition(addresses,
+            runtime.getParameters().getBulkReadSize());
 
         for (List<Long> batch : batches) {
             try {
@@ -311,6 +351,8 @@ public class AddressSpaceView extends AbstractView {
                         .readAll(l, batch)));
             } catch (Exception e) {
                 log.error("cacheFetch: Couldn't read addresses {}", batch, e);
+                throw new UnrecoverableCorfuError(
+                    "Unexpected error during cacheFetch", e);
             }
         }
 

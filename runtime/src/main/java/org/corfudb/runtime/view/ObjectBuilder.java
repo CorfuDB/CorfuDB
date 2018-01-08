@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
@@ -60,7 +61,7 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
 
     @SuppressWarnings("unchecked")
     public <R> ObjectBuilder<R> setTypeToken(TypeToken<R> typeToken) {
-        this.type = (Class<T>)typeToken.getRawType();
+        this.type = (Class<T>) typeToken.getRawType();
         return (ObjectBuilder<R>) this;
     }
 
@@ -103,50 +104,35 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
                         arguments, serializer);
             } else {
                 ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
-                T result = (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
+                return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
                             try {
-                                return CorfuCompileWrapperBuilder.getWrapper(type, runtime,
+                                T result = CorfuCompileWrapperBuilder.getWrapper(type, runtime,
                                         streamID, arguments, serializer);
+
+                                // Get object serializer to check if we didn't attempt to set another serializer
+                                // to an already existing map
+                                ISerializer objectSerializer = ((CorfuCompileProxy) ((ICorfuSMR) result).
+                                        getCorfuSMRProxy())
+                                        .getSerializer();
+
+                                if (serializer != objectSerializer) {
+                                    log.warn("open: Attempt to open an existing object with a different serializer {}. " +
+                                                    "Object {} opened with original serializer {}.",
+                                            serializer.getClass().getSimpleName(),
+                                            oid,
+                                            objectSerializer.getClass().getSimpleName());
+                                }
+                                return result;
                             } catch (Exception ex) {
-                                throw new RuntimeException(ex);
+                                throw new UnrecoverableCorfuError(ex);
                             }
                         }
                 );
-                // Get object serializer to check if we didn't attempt to set another serializer
-                // to an already existing map
-                ISerializer objectSerializer = ((CorfuCompileProxy) ((ICorfuSMR) runtime.getObjectsView().
-                        getObjectCache().
-                        get(oid)).
-                        getCorfuSMRProxy())
-                        .getSerializer();
-
-                // FIXME: temporary hack until we have a registry
-                // If current map in cache has no indexer, or there is currently an other one,
-                // this will create and compute the indices.
-                if (result instanceof CorfuTable) {
-                    CorfuTable currentCorfuTable = ((CorfuTable) result);
-                    if (arguments.length > 0) {
-                        // If current map in cache has no indexer, or there is currently an other index
-                        if (!(currentCorfuTable.hasSecondaryIndices()) ||
-                            currentCorfuTable.getIndexerClass() != arguments[0].getClass()){
-                            ((CorfuTable) result).registerIndex((Class) arguments[0]);
-                        }
-                    }
-                }
-
-                if (serializer != objectSerializer) {
-                    log.warn("open: Attempt to open an existing object with a different serializer {}. " +
-                            "Object {} opened with original serializer {}.",
-                            serializer.getClass().getSimpleName(),
-                            oid,
-                            objectSerializer.getClass().getSimpleName());
-                }
-                return result;
             }
         } catch (Exception ex) {
             log.error("Runtime instrumentation no longer supported and no compiled class found"
                     + " for {}", type);
-            throw new RuntimeException(ex);
+            throw new UnrecoverableCorfuError(ex);
         }
     }
 

@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.CFUtils;
 
 /**
@@ -80,15 +81,27 @@ public class SealServersHelper {
         for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {
             CompletableFuture<Boolean>[] completableFutures =
                     completableFutureMap.entrySet().stream()
-                    .filter(pair -> layoutStripe.getLogServers().contains(pair.getKey()))
-                    .map(pair -> pair.getValue())
-                    .toArray(CompletableFuture[]::new);
+                            .filter(pair -> layoutStripe.getLogServers().contains(pair.getKey()))
+                            .map(pair -> pair.getValue())
+                            .toArray(CompletableFuture[]::new);
+            QuorumFuturesFactory.CompositeFuture<Boolean> quorumFuture =
+                    QuorumFuturesFactory.getFirstWinsFuture(Boolean::compareTo, completableFutures);
+
+            boolean success = false;
             try {
-                for (CompletableFuture<Boolean> cf : completableFutures) {
-                    CFUtils.getUninterruptibly(cf, TimeoutException.class, NetworkException.class);
-                }
-            } catch (TimeoutException | NetworkException e) {
-                throw new QuorumUnreachableException(0, layoutStripe.getLogServers().size());
+                success = CFUtils.getUninterruptibly(quorumFuture,
+                        TimeoutException.class, QuorumUnreachableException.class);
+            } catch (TimeoutException e) {
+                log.error("waitForChainSegmentSeal: timeout", e);
+            }
+
+            int reachableServers = (int) Arrays.stream(completableFutures)
+                    .filter(booleanCompletableFuture ->
+                            !booleanCompletableFuture.isCompletedExceptionally()).count();
+
+            if (!success) {
+                throw new QuorumUnreachableException(reachableServers,
+                        completableFutures.length);
             }
         }
     }
@@ -127,7 +140,9 @@ public class SealServersHelper {
                 QuorumFuturesFactory.getQuorumFuture(Boolean::compareTo, completableFutures);
         try {
             success = quorumFuture.get();
-        } catch (ExecutionException | InterruptedException e) {
+        } catch (InterruptedException ie) {
+            throw new UnrecoverableCorfuInterruptedError("Sealing interrupted", ie);
+        } catch (ExecutionException e) {
             if (e.getCause() instanceof QuorumUnreachableException) {
                 throw (QuorumUnreachableException) e.getCause();
             }

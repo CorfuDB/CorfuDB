@@ -159,11 +159,12 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         indexerClass = indexFunctionEnumClass;
         indexFunctions.addAll(EnumSet.allOf(indexFunctionEnumClass));
         indexFunctions.forEach(f -> indexMap.put(f, new HashMap<>()));
+        log.info("CorfuTable: creating CorfuTable with {} as indexer class", indexFunctionEnumClass);
     }
 
     /** Default constructor. Generates a table without any secondary indexes. */
     public CorfuTable() {
-        log.error("CorfuTable: Creating a table without secondary indexes! Secondary index lookup"
+        log.info("CorfuTable: Creating a table without secondary indexes! Secondary index lookup"
             + " will DEGRADE to a full scan");
     }
 
@@ -263,7 +264,7 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         if (indexFunctions.isEmpty()) {
             // If there are no index functions, use the entire map
             entryStream = mainMap.entrySet().parallelStream();
-            log.warn("getByIndexAndFilter: Attempted getByIndexAndFilter without indexing");
+            log.debug("getByIndexAndFilter: Attempted getByIndexAndFilter without indexing");
         } else {
             Map<I, Map<K, V>> secondaryMap = indexMap.get(indexFunction);
             if (secondaryMap != null) {
@@ -284,23 +285,6 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
 
         return projectionFunction.generateProjection(index, entryStream.filter(entryPredicate))
                 .collect(Collectors.toCollection(ArrayList::new));
-    }
-
-
-    /**
-     * Register new index class
-     *
-     * This replaces the current index.
-     *
-     * @param indexFunctionEnumClass
-     */
-    public void registerIndex(Class<F> indexFunctionEnumClass) {
-        indexerClass = indexFunctionEnumClass;
-        indexMap.clear();
-        indexFunctions.clear();
-        indexFunctions.addAll(EnumSet.allOf(indexFunctionEnumClass));
-        indexFunctions.forEach(f -> indexMap.put(f, new HashMap<>()));
-        mainMap.forEach(this::mapSecondaryIndexes);
     }
 
     /** {@inheritDoc} */

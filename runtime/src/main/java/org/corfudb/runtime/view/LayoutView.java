@@ -18,6 +18,7 @@ import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
 
@@ -75,6 +76,12 @@ public class LayoutView extends AbstractView {
             log.error("Runtime layout has epoch {} but expected {} to move to epoch {}",
                     currentLayout.getEpoch(), epoch - 1, epoch);
             throw new WrongEpochException(epoch - 1);
+        }
+        if (currentLayout.getClusterId() != null
+            && !currentLayout.getClusterId().equals(layout.getClusterId())) {
+            log.error("updateLayout: Requested layout has cluster Id {} but expected {}",
+                    layout.getClusterId(), currentLayout.getClusterId());
+            throw new WrongClusterException(currentLayout.getClusterId(), layout.getClusterId());
         }
         //phase 1: prepare with a given rank.
         Layout alreadyProposedLayout = prepare(epoch, rank);
@@ -146,7 +153,13 @@ public class LayoutView extends AbstractView {
                     .toArray(CompletableFuture[]::new);
             // count successes.
             acceptList = stream(prepareList)
-                    .map(x -> x.getNow(null))
+                    .map(x -> {
+                        try {
+                            return x.getNow(null);
+                        } catch (Exception e) {
+                            return null;
+                        }
+                    })
                     .filter(x -> x != null)
                     .toArray(LayoutPrepareResponse[]::new);
 
@@ -161,9 +174,22 @@ public class LayoutView extends AbstractView {
         // Return any layouts that have been proposed before.
         List<LayoutPrepareResponse> list = Arrays.stream(acceptList)
                 .filter(x -> x.getLayout() != null)
-                .limit(1)
                 .collect(Collectors.toList());
-        return !list.isEmpty() ? list.get(0).getLayout() : null;
+        if (list.isEmpty()) {
+            return null;
+        } else {
+            // Choose the layout with the highest rank proposed before.
+            long highestReturnedRank = Long.MIN_VALUE;
+            Layout layoutWithHighestRank = null;
+
+            for (LayoutPrepareResponse layoutPrepareResponse : list) {
+                if (layoutPrepareResponse.getRank() > highestReturnedRank) {
+                    highestReturnedRank = layoutPrepareResponse.getRank();
+                    layoutWithHighestRank = layoutPrepareResponse.getLayout();
+                }
+            }
+            return layoutWithHighestRank;
+        }
     }
 
     /**
@@ -219,7 +245,13 @@ public class LayoutView extends AbstractView {
 
             // count successes.
             long count = stream(proposeList)
-                    .map(x -> x.getNow(false))
+                    .map(x -> {
+                        try {
+                            return x.getNow(false);
+                        } catch (Exception e) {
+                            return false;
+                        }
+                    })
                     .filter(x -> x)
                     .count();
 
@@ -273,6 +305,10 @@ public class LayoutView extends AbstractView {
                 timeouts++;
             }
             responses++;
+            commitList = Arrays.stream(commitList)
+                    .filter(x -> !x.isCompletedExceptionally())
+                    .toArray(CompletableFuture[]::new);
+
             log.debug("committed: Successful responses={}, timeouts={}", responses, timeouts);
         }
     }

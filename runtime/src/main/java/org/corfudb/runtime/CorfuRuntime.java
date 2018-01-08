@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -14,10 +15,14 @@ import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import javax.annotation.Nonnull;
+import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import lombok.Singular;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,14 +36,24 @@ import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.WrongClusterException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutManagementView;
 import org.corfudb.runtime.view.LayoutView;
+import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
+
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
+
+import org.corfudb.util.Sleep;
+import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
 
 /**
@@ -48,25 +63,132 @@ import org.corfudb.util.Version;
 @Accessors(chain = true)
 public class CorfuRuntime {
 
-    static final int DEFAULT_TIMEOUT_MINUTES_FAST_LOADING = 30;
-
-    public static final int BULK_READ_SIZE = 10;
-
+    /** A class which holds parameters and settings for the {@link CorfuRuntime}.
+     *
+     */
+    @Builder
     @Data
     public static class CorfuRuntimeParameters {
 
+        // region Object Layer Parameters
         /** True, if undo logging is disabled. */
-        boolean undoDisabled = false;
+        @Default boolean undoDisabled = false;
 
         /** True, if optimistic undo logging is disabled. */
-        boolean optimisticUndoDisabled = false;
+        @Default boolean optimisticUndoDisabled = false;
 
+        /**
+         * Use fast loader to restore objects on connection.
+         *
+         * <p>If using this utility, you need to be sure that no one
+         * is accessing objects until the tables are loaded
+         * (i.e. when connect returns)
+         */
+        @Default boolean useFastLoader = false;
+
+        /** Set the bulk read size. */
+        @Default int bulkReadSize = 10;
+
+        /**
+         * How much time the Fast Loader has to get the maps up to date.
+         *
+         * <p>Once the timeout is reached, the Fast Loader gives up. Every map that is
+         * not up to date will be loaded through normal path.
+         *
+         */
+        @Default Duration fastLoaderTimeout = Duration.ofMinutes(30);
+        // endregion
+
+        // region Address Space Parameters
         /** Number of times to attempt to read before hole filling. */
-        int holeFillRetry = 10;
+        @Default int holeFillRetry = 10;
+
+        /** Whether or not to disable the cache. */
+        @Default boolean cacheDisabled = false;
+
+        /** The maximum size of the cache, in bytes. */
+        @Default long numCacheEntries = 5000;
+
+        /** Sets expireAfterAccess and expireAfterWrite in seconds. */
+        @Default long cacheExpiryTime = Long.MAX_VALUE;
+        // endregion
+
+        // region Handshake Parameters
+        /** Sets handshake timeout in seconds. */
+        @Default int handshakeTimeout = 10;
+        // endregion
+
+        // region Stream Parameters
+        /** Whether or not to disable backpointers. */
+        @Default boolean backpointersDisabled = false;
+
+        /** Whether or not hole filling should be disabled. */
+        @Default boolean holeFillingDisabled = false;
+
+        /** Number of times to retry on an
+         * {@link org.corfudb.runtime.exceptions.OverwriteException} before giving up. */
+        @Default int writeRetry = 3;
+
+        /** The number of times to retry on a retriable
+         * {@link org.corfudb.runtime.exceptions.TrimmedException} during a transaction.*/
+        @Default int trimRetry = 2;
+        // endregion
+
+        //region        Security parameters
+        /** True, if TLS is enabled. */
+        @Default boolean tlsEnabled = false;
+
+        /** A path to the key store. */
+        String keyStore;
+
+        /** A file containing the password for the key store. */
+        String ksPasswordFile;
+
+        /** A path to the trust store. */
+        String trustStore;
+
+        /** A path containing the password for the trust store. */
+        String tsPasswordFile;
+
+        /** True, if SASL plain text authentication is enabled. */
+        @Default boolean saslPlainTextEnabled = false;
+
+        /** A path containing the username file for SASL. */
+        String usernameFile;
+
+        /** A path containing the password file for SASL. */
+        String passwordFile;
+        //endregion
+
+        //region Connection parameters
+        /** {@link Duration} before requests timeout. */
+        @Default Duration requestTimeout = Duration.ofSeconds(5);
+
+        /** {@link Duration} before connections timeout. */
+        @Default Duration connectionTimeout = Duration.ofMillis(500);
+
+        /** {@link Duration} before reconnecting to a disconnected node. */
+        @Default Duration connectionRetryRate = Duration.ofSeconds(1);
+
+        /** The {@link UUID} for this client. Randomly generated by default. */
+        @Default UUID clientId = UUID.randomUUID();
+
+        /** The {@link UUID} for the cluster this client is connecting to, or
+         * {@code null} if the client should adopt the {@link UUID} of the first
+         * server it connects to.
+         */
+        @Default UUID clusterId = null;
+
+        /** The initial list of layout servers. */
+        @Singular List<NodeLocator> layoutServers;
+        //endregion
+
     }
 
+    /** The parameters used to configure this {@link CorfuRuntime}. */
     @Getter
-    private final CorfuRuntimeParameters parameters = new CorfuRuntimeParameters();
+    private final CorfuRuntimeParameters parameters;
+
     /**
      * A view of the layout service in the Corfu server instance.
      */
@@ -95,6 +217,16 @@ public class CorfuRuntime {
     @Getter(lazy = true)
     private final ObjectsView objectsView = new ObjectsView(this);
     /**
+     * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
+     */
+    @Getter(lazy = true)
+    private final LayoutManagementView layoutManagementView = new LayoutManagementView(this);
+    /**
+     * A view of the Management Service.
+     */
+    @Getter(lazy = true)
+    private final ManagementView managementView = new ManagementView(this);
+    /**
      * A list of known layout servers.
      */
     private List<String> layoutServers;
@@ -104,59 +236,17 @@ public class CorfuRuntime {
      * A map of routers, representing nodes.
      */
     public Map<String, IClientRouter> nodeRouters;
+
     /**
      * A completable future containing a layout, when completed.
      */
     public volatile CompletableFuture<Layout> layout;
-    /**
-     * The rate in seconds to retry accessing a layout, in case of a failure.
-     */
-    public int retryRate;
-    /**
-     * Whether or not to disable the cache.
-     */
-    @Getter
-    public boolean cacheDisabled = false;
-    /**
-     * The maximum size of the cache, in bytes.
-     */
-    @Getter
-    @Setter
-    public long numCacheEntries = 5000;
 
-    /**
-     * The number of times to retry on a retriable TrimException within during a transaction
+    /** The {@link UUID} of the cluster we are currently connected to, or null, if
+     *  there is no cluster yet.
      */
     @Getter
-    @Setter
-    public int trimRetry = 2;
-
-    /**
-     * Number of times to retry on an OverwriteException before giving up.
-     */
-    @Getter
-    @Setter
-    public int writeRetry = 3;
-
-    /**
-     * Sets expireAfterAccess and expireAfterWrite in seconds.
-     */
-    @Getter
-    @Setter
-    public long cacheExpiryTime = Long.MAX_VALUE;
-
-    /**
-     * Whether or not to disable backpointers.
-     */
-    @Getter
-    public boolean backpointersDisabled = false;
-
-    /**
-     * If hole filling is disabled.
-     */
-    @Getter
-    @Setter
-    public boolean holeFillingDisabled = false;
+    public volatile UUID clusterId;
 
     /**
      * Notifies that the runtime is no longer used
@@ -164,48 +254,6 @@ public class CorfuRuntime {
      */
     @Getter
     private volatile boolean isShutdown = false;
-
-    private boolean tlsEnabled = false;
-    private String keyStore;
-    private String ksPasswordFile;
-    private String trustStore;
-    private String tsPasswordFile;
-
-    private boolean saslPlainTextEnabled = false;
-    private String usernameFile;
-    private String passwordFile;
-
-
-    /**
-     * Trigger the loading of all the SmrMaps upon connect.
-     *
-     * <p>If using this utility, you need to be sure that no one
-     * is acessing objects until the tables are loaded
-     * (i.e. when connect return)</p>
-     */
-    @Setter
-    @Getter
-    private boolean loadSmrMapsAtConnect = false;
-
-
-    /**
-     * Set the bulk read size.
-     */
-    @Setter
-    @Getter
-    public int bulkReadSize = BULK_READ_SIZE;
-
-
-    /**
-     * How much time the Fast Loader has to get the maps up to date.
-     *
-     * <p>Once the timeout is reached, the Fast Loader give up. Every maps that are
-     * not up to date will be loaded through normal path.</p>
-     *
-     */
-    @Getter
-    @Setter
-    private int timeoutInMinutesForFastLoading = DEFAULT_TIMEOUT_MINUTES_FAST_LOADING;
 
     /**
      * Metrics: meter (counter), histogram.
@@ -230,6 +278,31 @@ public class CorfuRuntime {
     }
 
     /**
+     * These two handlers are provided to give some control on what happen when system is down.
+     *
+     * For applications that want to have specific behaviour when a the system appears unavailable, they can
+     * register their own handler for both before the rpc request and upon network exception.
+     *
+     * An example of how to use these handlers implementing timeout is given in
+     * test/src/test/java/org/corfudb/runtime/CorfuRuntimeTest.java
+     *
+     */
+    public Runnable beforeRpcHandler = () -> {};
+    public Runnable systemDownHandler = () -> {};
+
+
+    public CorfuRuntime registerSystemDownHandler(Runnable handler) {
+        systemDownHandler = handler;
+        return this;
+    }
+
+    public CorfuRuntime registerBeforeRpcHandler(Runnable handler) {
+        beforeRpcHandler = handler;
+        return this;
+    }
+
+
+    /**
      * When set, overrides the default getRouterFunction. Used by the testing
      * framework to ensure the default routers used are for testing.
      */
@@ -249,14 +322,11 @@ public class CorfuRuntime {
                 if (nodeRouters.containsKey(address)) {
                     return nodeRouters.get(address);
                 }
-                // Parse the string in host:port format.
-                String host = address.split(":")[0];
-                Integer port = Integer.parseInt(address.split(":")[1]);
+
+                NodeLocator node = NodeLocator.parseString(address);
                 // Generate a new router, start it and add it to the table.
-                NettyClientRouter router = new NettyClientRouter(host, port,
-                        tlsEnabled, keyStore, ksPasswordFile, trustStore, tsPasswordFile,
-                        saslPlainTextEnabled, usernameFile, passwordFile);
-                log.debug("Connecting to new router {}:{}", host, port);
+                NettyClientRouter router = new NettyClientRouter(node, getParameters());
+                log.debug("Connecting to new router {}", node);
                 try {
                     router.addClient(new LayoutClient())
                             .addClient(new SequencerClient())
@@ -271,54 +341,28 @@ public class CorfuRuntime {
                 return router;
             };
 
-    /**
-     * Constructor for CorfuRuntime.
-     **/
-    public CorfuRuntime() {
-        layoutServers = new ArrayList<>();
-        nodeRouters = new ConcurrentHashMap<>();
-        retryRate = 5;
+    public static CorfuRuntime fromParameters(@Nonnull CorfuRuntimeParameters parameters) {
+        return new CorfuRuntime(parameters);
+    }
 
+    /** Construct a new {@link CorfuRuntime} given a {@link CorfuRuntimeParameters} instance.
+     *
+     * @param parameters    {@link CorfuRuntimeParameters} to configure the runtime with.
+     */
+    private CorfuRuntime(@Nonnull CorfuRuntimeParameters parameters) {
+        this.parameters = parameters;
+        layoutServers = new ArrayList<>();
+        layoutServers.addAll(this.parameters.getLayoutServers().stream()
+                                .map(NodeLocator::toString)
+                                .collect(Collectors.toList()));
+        nodeRouters = new ConcurrentHashMap<>();
+        clusterId = parameters.getClusterId();
         synchronized (metrics) {
             if (metrics.getNames().isEmpty()) {
-//                MetricsUtils.addJvmMetrics(metrics, mp);
                 MetricsUtils.metricsReportingSetup(metrics);
             }
         }
         log.info("Corfu runtime version {} initialized.", getVersionString());
-    }
-
-    /**
-     * Parse a configuration string and get a CorfuRuntime.
-     *
-     * @param configurationString The configuration string to parse.
-     */
-    public CorfuRuntime(String configurationString) {
-        this();
-        this.parseConfigurationString(configurationString);
-    }
-
-    /**
-     * Enable TLS.
-     **/
-    public CorfuRuntime enableTls(String keyStore, String ksPasswordFile, String trustStore,
-                                  String tsPasswordFile) {
-        this.keyStore = keyStore;
-        this.ksPasswordFile = ksPasswordFile;
-        this.trustStore = trustStore;
-        this.tsPasswordFile = tsPasswordFile;
-        this.tlsEnabled = true;
-        return this;
-    }
-
-    /**
-     * Enable SASL Plain Text.
-     **/
-    public CorfuRuntime enableSaslPlainText(String usernameFile, String passwordFile) {
-        this.usernameFile = usernameFile;
-        this.passwordFile = passwordFile;
-        this.saslPlainTextEnabled = true;
-        return this;
     }
 
     /**
@@ -351,7 +395,7 @@ public class CorfuRuntime {
      * Stop all routers associated with this Corfu Runtime.
      **/
     public void stop(boolean shutdown) {
-        for (IClientRouter r: nodeRouters.values()) {
+        for (IClientRouter r : nodeRouters.values()) {
             r.stop(shutdown);
         }
         if (!shutdown) {
@@ -381,7 +425,7 @@ public class CorfuRuntime {
     }
 
     /**
-     * Get corfy runtime version.
+     * Get corfu runtime version.
      **/
     public static String getVersionString() {
         if (Version.getVersionString().contains("SNAPSHOT")
@@ -393,30 +437,9 @@ public class CorfuRuntime {
     }
 
     /**
-     * Whether or not to disable backpointers
-     *
-     * @param disable True, if the cache should be disabled, false otherwise.
-     * @return A CorfuRuntime to support chaining.
-     */
-    public CorfuRuntime setBackpointersDisabled(boolean disable) {
-        this.backpointersDisabled = disable;
-        return this;
-    }
-
-    /**
-     * Whether or not to disable the cache
-     *
-     * @param disable True, if the cache should be disabled, false otherwise.
-     * @return A CorfuRuntime to support chaining.
-     */
-    public CorfuRuntime setCacheDisabled(boolean disable) {
-        this.cacheDisabled = disable;
-        return this;
-    }
-
-    /**
      * If enabled, successful transactions will be written to a special transaction stream
      * (i.e. TRANSACTION_STREAM_ID)
+     *
      * @param enable indicates if transaction logging is enabled
      * @return corfu runtime object
      */
@@ -475,6 +498,26 @@ public class CorfuRuntime {
         layout = fetchLayout();
     }
 
+    /** Check if the cluster Id of the layout matches the client cluster Id.
+     *  If the client cluster Id is null, we update the client cluster Id.
+     *
+     *  If both the layout cluster Id and the client cluster Id is null, the check is skipped.
+     *  This can only occur in the case of legacy cluster without a cluster Id.
+     *
+     *  @param  layout  The layout to check.
+     *  @throws WrongClusterException If the layout belongs to the wrong cluster.
+     */
+    private void checkClusterId(@Nonnull Layout layout) {
+        // We haven't adopted a clusterId yet.
+        if (clusterId == null) {
+            clusterId = layout.getClusterId();
+            log.info("Connected to new cluster {}", clusterId == null ? "(legacy)" :
+                    UuidUtils.asBase64(clusterId));
+        } else if (!clusterId.equals(layout.getClusterId())) {
+            // We connected but got a cluster id we didn't expect.
+            throw new WrongClusterException(clusterId, layout.getClusterId());
+        }
+    }
 
     /**
      * Return a completable future which is guaranteed to contain a layout.
@@ -486,9 +529,11 @@ public class CorfuRuntime {
     private CompletableFuture<Layout> fetchLayout() {
         return CompletableFuture.<Layout>supplyAsync(() -> {
 
+            List<String> layoutServersCopy = new ArrayList<>(layoutServers);
+            beforeRpcHandler.run();
+
             while (true) {
-                List<String> layoutServersCopy =  layoutServers.stream().collect(
-                        Collectors.toList());
+
                 Collections.shuffle(layoutServersCopy);
                 // Iterate through the layout servers, attempting to connect to one
                 for (String s : layoutServersCopy) {
@@ -511,6 +556,8 @@ public class CorfuRuntime {
                             continue;
                         }
 
+                        checkClusterId(l);
+
                         l.setRuntime(this);
                         // this.layout should only be assigned to the new layout future
                         // once it has been completely constructed and initialized.
@@ -524,14 +571,17 @@ public class CorfuRuntime {
                         // it is acceptable (at least the code on 10/13/2016 does not have issues)
                         // but setEpoch of routers needs to be synchronized as those variables are
                         // not local.
-                        try {
-                            l.getAllServers().stream().map(getRouterFunction).forEach(x ->
-                                    x.setEpoch(l.getEpoch()));
-                        } catch (NetworkException ne) {
-                            // We have already received the layout and there is no need to keep client waiting.
-                            // NOTE: This is true assuming this happens only at router creation.
-                            // If not we also have to take care of setting the latest epoch on Client Router.
-                            log.warn("fetchLayout: Error getting router : {}", ne);
+                        for (String server : l.getAllServers()) {
+                            try {
+                                getRouter(server).setEpoch(l.getEpoch());
+                            } catch (NetworkException ne) {
+                                // We have already received the layout and there is no need to keep
+                                // client waiting.
+                                // NOTE: This is true assuming this happens only at router creation.
+                                // If not we also have to take care of setting the latest epoch on
+                                // Client Router.
+                                log.warn("fetchLayout: Error getting router : {}", ne);
+                            }
                         }
                         layoutServers = l.getLayoutServers();
                         layout = layoutFuture;
@@ -539,17 +589,20 @@ public class CorfuRuntime {
 
                         log.debug("Layout server {} responded with layout {}", s, l);
                         return l;
+                    } catch (InterruptedException ie) {
+                        throw new UnrecoverableCorfuInterruptedError(
+                            "Interrupted during layout fetch", ie);
                     } catch (Exception e) {
                         log.warn("Tried to get layout from {} but failed with exception:", s, e);
                     }
                 }
-                log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}s.",
-                        retryRate);
-                try {
-                    Thread.sleep(retryRate * 1000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+
+                log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}",
+                    parameters.connectionRetryRate);
+
+                systemDownHandler.run();
+
+                Sleep.sleepUninterruptibly(parameters.connectionRetryRate);
                 if (isShutdown) {
                     return null;
                 }
@@ -582,6 +635,7 @@ public class CorfuRuntime {
             }
         } catch (Exception e) {
             log.error("connect: failed to get version", e);
+            throw new UnrecoverableCorfuError("Failed to get version", e);
         }
     }
 
@@ -599,18 +653,205 @@ public class CorfuRuntime {
             } catch (Exception e) {
                 // A serious error occurred trying to connect to the Corfu instance.
                 log.error("Fatal error connecting to Corfu server instance.", e);
-                throw new RuntimeException(e);
+                throw new UnrecoverableCorfuError(e);
             }
         }
 
         checkVersion();
 
-        if (loadSmrMapsAtConnect) {
+        if (parameters.isUseFastLoader()) {
             FastObjectLoader fastLoader = new FastObjectLoader(this)
-                    .setBatchReadSize(getBulkReadSize())
-                    .setTimeoutInMinutesForLoading(timeoutInMinutesForFastLoading);
+                    .setBatchReadSize(parameters.getBulkReadSize())
+                    .setTimeoutInMinutesForLoading((int) parameters.fastLoaderTimeout.toMinutes());
             fastLoader.loadMaps();
         }
         return this;
     }
+
+    // Below are deprecated methods which should no longer be
+    // used and may be deprecated in the future.
+
+    // region Deprecated Constructors
+    /**
+     * Constructor for CorfuRuntime.
+     * @deprecated Use {@link CorfuRuntime#fromParameters(CorfuRuntimeParameters)}
+     **/
+    @Deprecated
+    public CorfuRuntime() {
+        this(CorfuRuntimeParameters.builder().build());
+    }
+
+    /**
+     * Parse a configuration string and get a CorfuRuntime.
+     *
+     * @param configurationString The configuration string to parse.
+     * @deprecated Use {@link CorfuRuntime#fromParameters(CorfuRuntimeParameters)}
+     */
+    @Deprecated
+    public CorfuRuntime(String configurationString) {
+        this(CorfuRuntimeParameters.builder().build());
+        this.parseConfigurationString(configurationString);
+    }
+    // endregion
+
+    // region Deprecated Setters
+
+    /**
+     * Enable TLS.
+     * @deprecated  Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     **/
+    @Deprecated
+    public CorfuRuntime enableTls(String keyStore, String ksPasswordFile, String trustStore,
+        String tsPasswordFile) {
+        log.warn("enableTls: Deprecated, please set parameters instead");
+        parameters.keyStore = keyStore;
+        parameters.ksPasswordFile = ksPasswordFile;
+        parameters.trustStore = trustStore;
+        parameters.tsPasswordFile = tsPasswordFile;
+        parameters.tlsEnabled = true;
+        return this;
+    }
+
+    /**
+     * Enable SASL Plain Text.
+     * @deprecated  Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     **/
+    @Deprecated
+    public CorfuRuntime enableSaslPlainText(String usernameFile, String passwordFile) {
+        log.warn("enableSaslPlainText: Deprecated, please set parameters instead");
+        parameters.usernameFile = usernameFile;
+        parameters.passwordFile = passwordFile;
+        parameters.saslPlainTextEnabled = true;
+        return this;
+    }
+
+    /**
+     * Whether or not to disable backpointers
+     *
+     * @param disable True, if the cache should be disabled, false otherwise.
+     * @return A CorfuRuntime to support chaining.
+     * @deprecated  Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setBackpointersDisabled(boolean disable) {
+        log.warn("setBackpointersDisabled: Deprecated, please set parameters instead");
+        parameters.setBackpointersDisabled(disable);
+        return this;
+    }
+
+    /**
+     * Whether or not to disable the cache
+     *
+     * @param disable True, if the cache should be disabled, false otherwise.
+     * @return A CorfuRuntime to support chaining.
+     * @deprecated  Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setCacheDisabled(boolean disable) {
+        log.warn("setCacheDisabled: Deprecated, please set parameters instead");
+        parameters.setCacheDisabled(disable);
+        return this;
+    }
+
+    /**
+     * Whether or not to use the fast loader.
+     *
+     * @param enable True, if the fast loader should be used, false otherwise.
+     * @return A CorfuRuntime to support chaining.
+     * @deprecated  Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setLoadSmrMapsAtConnect(boolean enable) {
+        log.warn("setLoadSmrMapsAtConnect: Deprecated, please set parameters instead");
+        parameters.setUseFastLoader(enable);
+        return this;
+    }
+
+    /**
+     * Whether or not hole filling is disabled
+     *
+     * @param disable True, if hole filling should be disabled
+     * @return A CorfuRuntime to support chaining.
+     * @deprecated  Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setHoleFillingDisabled(boolean disable) {
+        log.warn("setHoleFillingDisabled: Deprecated, please set parameters instead");
+        parameters.setHoleFillingDisabled(disable);
+        return this;
+    }
+
+    /** Set the number of cache entries.
+     *
+     * @param numCacheEntries   The number of cache entries.
+     * @deprecated  Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setNumCacheEntries(long numCacheEntries) {
+        log.warn("setNumCacheEntries: Deprecated, please set parameters instead");
+        parameters.setNumCacheEntries(numCacheEntries);
+        return this;
+    }
+
+    /** Set the cache expiration time.
+     *
+     * @param expiryTime   The time before cache expiration, in seconds.
+     * @deprecated  Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setCacheExpiryTime(int expiryTime) {
+        log.warn("setCacheExpiryTime: Deprecated, please set parameters instead");
+        parameters.setCacheExpiryTime(expiryTime);
+        return this;
+    }
+
+    /** Set the bulk read size.
+     *
+     * @param size  The bulk read size.
+     * @deprecated  Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setBulkReadSize(int size) {
+        log.warn("setBulkReadSize: Deprecated, please set parameters instead");
+        parameters.setBulkReadSize(size);
+        return this;
+    }
+
+
+    /** Set the write retry time.
+     *
+     * @param writeRetry   The number of times to retry writes.
+     * @deprecated  Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setWriteRetry(int writeRetry) {
+        log.warn("setWriteRetry: Deprecated, please set parameters instead");
+        parameters.setWriteRetry(writeRetry);
+        return this;
+    }
+
+    /** Set the trim retry time.
+     *
+     * @param trimRetry   The number of times to retry on trims.
+     * @deprecated  Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setTrimRetry(int trimRetry) {
+        log.warn("setTrimRetry: Deprecated, please set parameters instead");
+        parameters.setWriteRetry(trimRetry);
+        return this;
+    }
+
+    /** Set the timeout of the fast loader, in minutes.
+     *
+     * @param timeout   The number of minutes to wait.
+     * @deprecated  Deprecated, set using {@link CorfuRuntimeParameters} instead.
+     */
+    @Deprecated
+    public CorfuRuntime setTimeoutInMinutesForFastLoading(int timeout) {
+        log.warn("setTrimRetry: Deprecated, please set parameters instead");
+        parameters.setFastLoaderTimeout(Duration.ofMinutes(timeout));
+        return this;
+    }
+    // endregion
 }

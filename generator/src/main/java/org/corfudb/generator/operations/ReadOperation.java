@@ -35,5 +35,9 @@ public class ReadOperation extends Operation {
         ((CorfuTable)state.getMap((CorfuRuntime.getStreamID(streamId)))).
                 getByIndex(State.StringIndexer.BY_VALUE, val);
 
+        if (!TransactionalContext.isInTransaction()) {
+            state.setLastSuccessfulReadOperationTimestamp(System.currentTimeMillis());
+        }
+
     }
 }

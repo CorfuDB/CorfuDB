@@ -17,7 +17,6 @@ import java.util.function.Consumer;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.tools.ant.filters.TokenFilter;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -29,6 +28,7 @@ import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
@@ -71,20 +71,14 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
         log.trace("Peek[{}]: quorum {}/{}", address, numUnits, numUnits);
         try {
             ReadResponse readResponse = null;
-            try {
-                CompletableFuture<ReadResponse>[] futures = new CompletableFuture[numUnits];
-                for (int i = 0; i < numUnits; i++) {
-                    futures[i] = layout.getLogUnitClient(address, i).read(address);
-                }
-                QuorumFuturesFactory.CompositeFuture<ReadResponse> future =
-                        QuorumFuturesFactory.getQuorumFuture(new ReadResponseComparator(address),
-                                futures);
-                readResponse = CFUtils.getUninterruptibly(future, QuorumUnreachableException.class);
-            } catch (QuorumUnreachableException e) {
-                e.printStackTrace();
-                log.debug(e.getMessage(), e);
-                return null;
+            CompletableFuture<ReadResponse>[] futures = new CompletableFuture[numUnits];
+            for (int i = 0; i < numUnits; i++) {
+                futures[i] = layout.getLogUnitClient(address, i).read(address);
             }
+            QuorumFuturesFactory.CompositeFuture<ReadResponse> future =
+                    QuorumFuturesFactory.getQuorumFuture(new ReadResponseComparator(address),
+                            futures);
+            readResponse = CFUtils.getUninterruptibly(future, QuorumUnreachableException.class);
             if (readResponse != null) {
                 LogData result = readResponse.getAddresses().get(address);
                 if (result != null && !isEmptyType(result.getType())) {
@@ -195,7 +189,6 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
                         CFUtils.getUninterruptibly(future, QuorumUnreachableException.class,
                                 OverwriteException.class, DataOutrankedException.class);
                     } catch (LogUnitException | QuorumUnreachableException e) {
-                        e.printStackTrace();
                         ReadResponse rr = getAdoptedValueWithHighestRankIfPresent(
                                 address, future.getThrowables());
                         if (rr != null) { // check
@@ -216,17 +209,14 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
                     log.trace("Write done[{}]: {}", address);
                     return dh.getRef();
                 } catch (QuorumUnreachableException | DataOutrankedException e) {
-                    e.printStackTrace();
                     throw new RetryNeededException();
                 } catch (RuntimeException e) {
-                    e.printStackTrace();
                     throw e;
                 }
             }).setOptions(WRITE_RETRY_SETTINGS).run();
             return otherValueAdopted.get();
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("interrupted", e);
+            throw new UnrecoverableCorfuInterruptedError("Recovery interrupted", e);
         } catch (RuntimeException e) {
             throw e;
         }

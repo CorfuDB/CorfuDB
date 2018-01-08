@@ -67,6 +67,31 @@ public class SMRMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    public void canReadWriteToSinglePrimitive()
+            throws Exception {
+        getRuntime().setCacheDisabled(true);
+        Map<Long, Double> testMap = getRuntime()
+                .getObjectsView()
+                .build()
+                .setStreamName("test")
+                .setSerializer(Serializers.PRIMITIVE)
+                .setTypeToken(new TypeToken<SMRMap<Long, Double>>() {})
+                .open();
+
+        final double PRIMITIVE_1 = 2.4;
+        final double PRIMITIVE_2 = 4.5;
+
+        testMap.clear();
+        assertThat(testMap.put(1L, PRIMITIVE_1))
+                .isNull();
+        assertThat(testMap.put(1L, PRIMITIVE_2))
+                .isEqualTo(PRIMITIVE_1);
+        assertThat(testMap.get(1L))
+                .isEqualTo(PRIMITIVE_2);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     public void canWriteScanAndFilterToSingle()
             throws Exception {
         Map<String, String> corfuInstancesMap = getRuntime()
@@ -251,6 +276,9 @@ public class SMRMapTest extends AbstractViewTest {
     public void loadsFollowedByGetsConcurrentMultiView()
             throws Exception {
         r.setBackpointersDisabled(true);
+        // Increasing hole fill delay to avoid intermittent AppendExceptions.
+        final int longHoleFillRetryLimit = 50;
+        r.getParameters().setHoleFillRetry(longHoleFillRetryLimit);
 
         final int num_threads = 5;
         final int num_records = 1000;

@@ -10,6 +10,7 @@ import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
 
@@ -22,6 +23,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import org.corfudb.util.NodeLocator;
 
 import static org.corfudb.AbstractCorfuTest.PARAMETERS;
 
@@ -79,6 +81,12 @@ public class TestClientRouter implements IClientRouter {
     @Getter
     @Setter
     public UUID clientID;
+
+    private volatile boolean connected = true;
+
+    public void simulateDisconnectedEndpoint() {
+        connected = false;
+    }
 
     /**
      * New connection timeout (milliseconds)
@@ -194,6 +202,14 @@ public class TestClientRouter implements IClientRouter {
      */
     @Override
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message) {
+        // Simulate a "disconnected endpoint"
+        if (!connected) {
+            log.trace("Disconnected endpoint " + host + ":" + port);
+            throw new NetworkException("Disconnected endpoint", NodeLocator.builder()
+                                                                    .host(host)
+                                                                    .port(port).build());
+        }
+
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
         // Set the message fields.

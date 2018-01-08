@@ -24,9 +24,12 @@ import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.TrimmedUpcallException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 import org.slf4j.Logger;
@@ -390,11 +393,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 MetricsUtils.incConditionalCounter(isMetricsEnabled, counterTxnRetryN, 1);
                 log.debug("Transactional function aborted due to {}, retrying after {} msec",
                         e, sleepTime);
-                try {
-                    Thread.sleep(sleepTime);
-                } catch (InterruptedException ie) {
-                    log.warn("TxExecuteInner retry sleep interrupted {}", ie);
-                }
+                Sleep.MILLISECONDS.sleepUninterruptibly(sleepTime);
                 sleepTime = min(sleepTime * 2L, maxSleepTime);
                 retries++;
             } catch (Exception e) {

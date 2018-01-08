@@ -755,6 +755,12 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     }
 
+    /**
+     * Here we providing and indexer to the FastLoader. After reconstruction, we open the map
+     * without specifying the indexer, but we are still able to use the indexer.
+     *
+     * @throws Exception
+     */
     @Test
     public void canRecreateCorfuTableWithIndex() throws Exception {
         CorfuRuntime originalRuntime = getDefaultRuntime();
@@ -773,20 +779,23 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
                 .connect();
 
-        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-        ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
-                .setArguments(CorfuTableTest.StringIndexers.class)
-                .setStreamID(CorfuRuntime.getStreamID("test"));
-        fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test"), ob);
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap(originalTable);
+        long cpAddress = mcw.appendCheckpoints(originalRuntime, "author");
+        Helpers.trim(originalRuntime, cpAddress);
 
+
+        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
+        fsmr.addIndexerToCorfuTableStream("test",
+                CorfuTableTest.StringIndexers.class);
+        fsmr.setDefaultObjectsType(CorfuTable.class);
         fsmr.loadMaps();
 
         Helpers.assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test", originalTable, CorfuTable.class);
 
-
+        // Recreating the table without explicitly providing the indexer
         CorfuTable recreatedTable = recreatedRuntime.getObjectsView().build()
                 .setType(CorfuTable.class)
-                .setArguments(CorfuTableTest.StringIndexers.class)
                 .setStreamName("test")
                 .open();
 

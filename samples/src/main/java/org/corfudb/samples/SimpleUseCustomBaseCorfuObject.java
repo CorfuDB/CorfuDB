@@ -12,6 +12,7 @@ public class SimpleUseCustomBaseCorfuObject extends BaseCorfuAppUtils {
     static BaseCorfuAppUtils selfFactory() { return new SimpleUseCustomBaseCorfuObject(); }
     public static void main(String[] args) { selfFactory().start(args); }
 
+    @SuppressWarnings("checkstyle:printLine") // Sample code
     public void action() {
         CorfuSharedCounter cntr = instantiateCorfuObject(
                 CorfuSharedCounter.class, "CNTR"

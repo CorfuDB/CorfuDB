@@ -3,11 +3,13 @@ package org.corfudb.runtime.clients;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.format.Types.NodeMetrics;
 import org.corfudb.infrastructure.*;
+import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.junit.After;
 import org.junit.Test;
 
-import java.util.HashSet;
+import java.util.Collections;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,8 +22,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class ManagementClientTest extends AbstractClientTest {
 
-    ManagementClient client;
-    ManagementServer server;
+    private ManagementClient client;
+    private ManagementServer server;
 
     @Override
     Set<AbstractServer> getServersForTest() {
@@ -30,6 +32,7 @@ public class ManagementClientTest extends AbstractClientTest {
                 .setMemory(true)
                 .setSingle(true)
                 .setServerRouter(serverRouter)
+                .setPort(SERVERS.PORT_0)
                 .build();
         server = new ManagementServer(serverContext);
         return new ImmutableSet.Builder<AbstractServer>()
@@ -38,6 +41,8 @@ public class ManagementClientTest extends AbstractClientTest {
                 .add(new LayoutServer(serverContext))
                 // Required for management server to be able to bootstrap the sequencer.
                 .add(new SequencerServer(serverContext))
+                .add(new LogUnitServer(serverContext))
+                .add(new BaseServer(serverContext))
                 .build();
     }
 
@@ -72,6 +77,13 @@ public class ManagementClientTest extends AbstractClientTest {
                 .isInstanceOf(ExecutionException.class);
     }
 
+    @Test
+    public void queryWorkflowRPCTest() throws Exception {
+        // verify that non-active workflows return false when queried.
+        QueryResponse resp = client.queryRequest(UUID.randomUUID());
+        assertThat(resp.isActive()).isFalse();
+    }
+
     /**
      * Tests the msg handler for failure detection.
      *
@@ -80,11 +92,10 @@ public class ManagementClientTest extends AbstractClientTest {
     @Test
     public void handleFailure()
             throws Exception {
-
         // Since the servers are started as single nodes thus already bootstrapped.
-        Set<String> set = new HashSet<>();
-        set.add("Key");
-        assertThat(client.handleFailure(set).get()).isEqualTo(true);
+        assertThat(
+                client.handleFailure(Collections.singleton("key"), Collections.emptySet()).get())
+                .isEqualTo(true);
     }
 
     /**
@@ -95,6 +106,7 @@ public class ManagementClientTest extends AbstractClientTest {
     @Test
     public void initiateFailureHandler()
             throws Exception {
+        client.bootstrapManagement(TestLayoutBuilder.single(0));
         assertThat(client.initiateFailureHandler().get()).isEqualTo(true);
     }
 

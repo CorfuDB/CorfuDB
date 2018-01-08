@@ -25,13 +25,13 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -41,8 +41,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nullable;
 
-import lombok.Data;
-import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.FileUtils;
@@ -344,7 +342,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
             entry.writeDelimitedTo(outputStream);
             outputStream.flush();
-            handle.pendingTrims.add(address);
+            handle.getPendingTrims().add(address);
             channelsToSync.add(handle.getPendingTrimChannel());
         } catch (IOException e) {
             log.warn("Exception while writing a trim entry {} : {}", address, e.toString());
@@ -378,48 +376,19 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
 
         // Close segments before deleting their corresponding log files
-        int numFiles = 0;
-        long freedBytes = 0;
-        for (SegmentHandle sh : writeChannels.values()) {
-            if (sh.getSegment() <= endSegment) {
-                if (sh.getRefCount() != 0) {
-                    log.warn("trimPrefix: Segment {} is trimmed, but refCount is {},"
-                                    + " attempting to trim anyways", sh.getSegment(),
-                            sh.getRefCount());
-                }
-                sh.close();
-                writeChannels.remove(sh.getFileName());
+        closeSegmentHandlers(endSegment);
+
+        deleteFilesMatchingFilter(file -> {
+            try {
+                String segmentStr = file.getName().split("\\.")[0];
+                return Long.parseLong(segmentStr) < endSegment;
+            } catch (Exception e) {
+                log.warn("trimPrefix: ignoring file {}", file.getName());
+                return false;
             }
-        }
+        });
 
-        File dir = new File(logDir);
-        FileFilter fileFilter = new FileFilter() {
-            public boolean accept(File file) {
-                try {
-                    String segmentStr = file.getName().split("\\.")[0];
-                    return Long.parseLong(segmentStr) < endSegment;
-                } catch (Exception e) {
-                    log.warn("trimPrefix: ignoring file {}", file.getName());
-                    return false;
-                }
-            }
-        };
-
-        File[] files = dir.listFiles(fileFilter);
-
-        for (File file : files) {
-            long delta = file.length();
-
-            if (!file.delete()) {
-                log.error("trimPrefix: Couldn't delete file {}", file.getName());
-            } else {
-                freedBytes += delta;
-                numFiles++;
-            }
-        }
-
-        log.info("trimPrefix: completed, deleted {} files, freed {} bytes, end segment {}",
-                numFiles, freedBytes, endSegment);
+        log.info("trimPrefix: completed, end segment {}", endSegment);
     }
 
     private void spaseCompact() {
@@ -611,7 +580,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         try (MultiReadWriteLock.AutoCloseableLock ignored =
                      segmentLocks.acquireReadLock(sh.getSegment())) {
-            logFileSize = sh.logChannel.size();
+            logFileSize = sh.getWriteChannel().size();
         }
 
         FileChannel fc = getChannel(sh.fileName, true);
@@ -667,7 +636,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                     }
                 }
 
-                sh.knownAddresses.put(entry.getGlobalAddress(),
+                sh.getKnownAddresses().put(entry.getGlobalAddress(),
                         new AddressMetaData(metadata.getChecksum(),
                                 metadata.getLength(), channelOffset));
 
@@ -688,27 +657,19 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      */
     private LogData  readRecord(SegmentHandle sh, long address)
             throws IOException {
-        FileChannel fc = null;
+        FileChannel fc = sh.getReadChannel();
+
+        AddressMetaData metaData = sh.getKnownAddresses().get(address);
+        if (metaData == null) {
+            return null;
+        }
+
         try {
-            fc = getChannel(sh.fileName, true);
-            AddressMetaData metaData = sh.getKnownAddresses().get(address);
-            if (metaData == null) {
-                return null;
-            }
-
-            fc.position(metaData.offset);
-
-            try {
-                ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
-                fc.read(entryBuf);
-                return getLogData(LogEntry.parseFrom(entryBuf.array()));
-            } catch (InvalidProtocolBufferException e) {
-                throw new DataCorruptionException();
-            }
-        } finally {
-            if (fc != null) {
-                fc.close();
-            }
+            ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
+            fc.read(entryBuf, metaData.offset);
+            return getLogData(LogEntry.parseFrom(entryBuf.array()));
+        } catch (InvalidProtocolBufferException e) {
+            throw new DataCorruptionException();
         }
     }
 
@@ -755,16 +716,17 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                     verify = false;
                 }
 
-                FileChannel fc1 = getChannel(a, false);
-                FileChannel fc2 = getChannel(getTrimmedFilePath(a), false);
-                FileChannel fc3 = getChannel(getPendingTrimsFilePath(a), false);
+                FileChannel writeCh = getChannel(a, false);
+                FileChannel readCh = getChannel(a, true);
+                FileChannel trimmedCh = getChannel(getTrimmedFilePath(a), false);
+                FileChannel pendingTrimmedCh = getChannel(getPendingTrimsFilePath(a), false);
 
-                if (fc1.size() == 0) {
-                    writeHeader(fc1, VERSION, verify);
+                if (writeCh.size() == 0) {
+                    writeHeader(writeCh, VERSION, verify);
                     log.trace("Opened new segment file, writing header for {}", a);
                 }
                 log.trace("Opened new log file at {}", a);
-                SegmentHandle sh = new SegmentHandle(segment, fc1, fc2, fc3, a);
+                SegmentHandle sh = new SegmentHandle(segment, writeCh, readCh, trimmedCh, pendingTrimmedCh, a);
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
                 readAddressSpace(sh);
@@ -912,6 +874,58 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     /**
+     * Write a list of LogData entries to the log file.
+     * @param sh segment handle to the logfile
+     * @param entries list of LogData entries to write.
+     * @return A map of AddressMetaData for the written records
+     * @throws IOException
+     */
+    private Map<Long, AddressMetaData> writeRecords(SegmentHandle sh,
+                                             List<LogData> entries) throws IOException {
+        Map<Long, AddressMetaData> recordsMap = new HashMap<>();
+
+        List<ByteBuffer> entryBuffs = new ArrayList<>();
+        int totalBytes = 0;
+
+        List<Metadata> metadataList = new ArrayList<>();
+
+        for (int ind = 0; ind < entries.size(); ind++) {
+            LogData curr = entries.get(ind);
+            LogEntry logEntry = getLogEntry(curr.getGlobalAddress(), curr);
+            Metadata metadata = getMetadata(logEntry);
+            metadataList.add(metadata);
+            ByteBuffer record = getByteBuffer(metadata, logEntry);
+            totalBytes += record.limit();
+            entryBuffs.add(record);
+        }
+
+        // Account for the delimiters
+        totalBytes += (Short.BYTES * entryBuffs.size());
+        ByteBuffer allRecordsBuf = ByteBuffer.allocate(totalBytes);
+
+        try (MultiReadWriteLock.AutoCloseableLock ignored =
+                     segmentLocks.acquireWriteLock(sh.getSegment())) {
+            for (int ind = 0; ind < entryBuffs.size(); ind++) {
+                long channelOffset = sh.getWriteChannel().position()
+                        + allRecordsBuf.position() + Short.BYTES + METADATA_SIZE;
+                allRecordsBuf.putShort(RECORD_DELIMITER);
+                allRecordsBuf.put(entryBuffs.get(ind));
+                Metadata metadata = metadataList.get(ind);
+                recordsMap.put(entries.get(ind).getGlobalAddress(),
+                        new AddressMetaData(metadata.getChecksum(),
+                                metadata.getLength(), channelOffset));
+            }
+
+            allRecordsBuf.flip();
+            sh.getWriteChannel().write(allRecordsBuf);
+            channelsToSync.add(sh.getWriteChannel());
+            syncTailSegment(entries.get(entries.size() - 1).getGlobalAddress());
+        }
+
+        return recordsMap;
+    }
+
+    /**
      * Write a log entry record to a file.
      *
      * @param fh      The file handle to use.
@@ -937,13 +951,136 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         try (MultiReadWriteLock.AutoCloseableLock ignored =
                      segmentLocks.acquireWriteLock(fh.getSegment())) {
-            channelOffset = fh.logChannel.position() + Short.BYTES + METADATA_SIZE;
-            fh.logChannel.write(recordBuf);
-            channelsToSync.add(fh.logChannel);
+            channelOffset = fh.getWriteChannel().position() + Short.BYTES + METADATA_SIZE;
+            fh.getWriteChannel().write(recordBuf);
+            channelsToSync.add(fh.getWriteChannel());
             syncTailSegment(address);
         }
 
         return new AddressMetaData(metadata.getChecksum(), metadata.getLength(), channelOffset);
+    }
+
+    long getSegment(LogData entry) {
+        return entry.getGlobalAddress() / RECORDS_PER_LOG_FILE;
+    }
+
+    /**
+     * Pre-process a range of entries to be written. This includes
+     * removing trimmed entries and advancing the trim mark appropriately.
+     * @param range range of entries
+     * @return A subset of range; entries to be written
+     */
+    List<LogData> preprocess(List<LogData> range) {
+        List<LogData> processed  = new ArrayList<>();
+        for (int x = 0; x < range.size(); x++) {
+            // TODO(Maithem) Add an extra check to make
+            // sure that trimmed entres don't alternate
+            // with non-trimmed entries
+            LogData curr = range.get(x);
+            if (curr.isTrimmed()) {
+                // We don't need to write trimmed entries
+                // because we already track the trim mark
+                prefixTrim(curr.getGlobalAddress());
+                continue;
+            } else if (isTrimmed(curr.getGlobalAddress())) {
+                // This is the case where the client tries to
+                // write a range of addresses, but before the
+                // request starts, a prefix trim request executes
+                // on this logging unit, as a consequence trimming
+                // all of, or part of the range.
+                continue;
+            }
+            else {
+                processed.add(curr);
+            }
+        }
+        return processed;
+    }
+
+    /**
+     * This method verifies that a range of entries doesn't
+     * span more than two segments and that the log addresses
+     * are ordered sequentially.
+     * @param range entries to verify
+     * @return return true if the range is valid.
+     */
+    boolean verify(List<LogData> range) {
+
+        // Make sure that entries are ordered sequentially
+        long firstAddress = range.get(0).getGlobalAddress();
+        for (int x = 1; x < range.size(); x++) {
+            if (range.get(x).getGlobalAddress() !=
+                    firstAddress + x) {
+                return false;
+            }
+        }
+
+        // Check if the range spans more than two segments
+        long lastAddress = range.get(range.size() - 1).getGlobalAddress();
+        long firstSegment = firstAddress / RECORDS_PER_LOG_FILE;
+        long endSegment = lastAddress / RECORDS_PER_LOG_FILE;
+
+        if (endSegment - firstSegment > 1) {
+            return false;
+        }
+
+        return true;
+    }
+
+    @Override
+    public void append(List<LogData> range) {
+        // Remove trimmed entries
+        List<LogData> entries = preprocess(range);
+
+        if (entries.isEmpty()) {
+            log.info("No entries to write.");
+            return;
+        }
+
+        if (!verify(entries)) {
+            // Range overlaps more than two segments
+            throw new IllegalArgumentException("Write range too large!");
+        }
+
+        // check if the entries range cross a segment
+        LogData first = entries.get(0);
+        LogData last = entries.get(entries.size() - 1);
+        SegmentHandle firstSh = getSegmentHandleForAddress(first.getGlobalAddress());
+        SegmentHandle lastSh = getSegmentHandleForAddress(last.getGlobalAddress());
+
+        List<LogData> segOneEntries = new ArrayList<>();
+        List<LogData> segTwoEntries = new ArrayList<>();
+
+        for (int ind = 0; ind < entries.size(); ind++) {
+            LogData curr = entries.get(ind);
+
+            if (getSegment(curr) == firstSh.getSegment() &&
+                    !firstSh.getKnownAddresses().containsKey(curr.getGlobalAddress())) {
+                segOneEntries.add(curr);
+            } else if (getSegment(curr) == lastSh.getSegment() &&
+                    !lastSh.getKnownAddresses().containsKey(curr.getGlobalAddress())) {
+                segTwoEntries.add(curr);
+            }
+        }
+
+        try {
+            if (!segOneEntries.isEmpty()) {
+                Map<Long, AddressMetaData> firstSegAddresses = writeRecords(firstSh, segOneEntries);
+                firstSh.getKnownAddresses().putAll(firstSegAddresses);
+            }
+
+            if (!segTwoEntries.isEmpty()) {
+                Map<Long, AddressMetaData> lastSegAddresses = writeRecords(lastSh, segTwoEntries);
+                lastSh.getKnownAddresses().putAll(lastSegAddresses);
+            }
+        } catch (IOException e) {
+            log.error("Disk_write[{}-{}]: Exception", first.getGlobalAddress(),
+                    last.getGlobalAddress(), e);
+            throw new RuntimeException(e);
+        } finally {
+            firstSh.release();
+            lastSh.release();
+        }
     }
 
     @Override
@@ -983,13 +1120,13 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public LogData read(long address) {
         if (isTrimmed(address)) {
-            return LogData.TRIMMED;
+            return LogData.getTrimmed(address);
         }
         SegmentHandle sh = getSegmentHandleForAddress(address);
 
         try {
             if (sh.getPendingTrims().contains(address)) {
-                return LogData.TRIMMED;
+                return LogData.getTrimmed(address);
             }
             return readRecord(sh, address);
         } catch (IOException e) {
@@ -1010,6 +1147,82 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     @Override
     public void release(long address, LogData entry) {
+    }
+
+    /**
+     * Closes all segment handlers up to and including the handler for the endSegment.
+     *
+     * @param endSegment The segment index of the last segment up to (including) the end segment.
+     */
+    private void closeSegmentHandlers(long endSegment) {
+        for (SegmentHandle sh : writeChannels.values()) {
+            if (sh.getSegment() <= endSegment) {
+                if (sh.getRefCount() != 0) {
+                    log.warn("closeSegmentHandlers: Segment {} is trimmed, but refCount is {},"
+                                    + " attempting to trim anyways", sh.getSegment(),
+                            sh.getRefCount());
+                }
+                sh.close();
+                writeChannels.remove(sh.getFileName());
+            }
+        }
+    }
+
+    /**
+     * Deletes all files matching the given filter.
+     *
+     * @param fileFilter File filter to delete files.
+     */
+    private void deleteFilesMatchingFilter(FileFilter fileFilter) {
+        int numFiles = 0;
+        long freedBytes = 0;
+        File dir = new File(logDir);
+        File[] files = dir.listFiles(fileFilter);
+        for (File file : files) {
+            long delta = file.length();
+
+            if (!file.delete()) {
+                log.error("deleteFilesMatchingFilter: Couldn't delete file {}", file.getName());
+            } else {
+                freedBytes += delta;
+                numFiles++;
+            }
+        }
+        log.info("deleteFilesMatchingFilter: completed, deleted {} files, freed {} bytes",
+                numFiles, freedBytes);
+    }
+
+    /**
+     * Resets the Stream log.
+     * Clears all data and resets the handlers.
+     * Usage: To heal a recovering node, we require to wipe off existing data.
+     */
+    @Override
+    public void reset() {
+        // Trim all segments
+        long endSegment = (globalTail.get() / RECORDS_PER_LOG_FILE);
+        log.warn("Global Tail:{}, endSegment={}", globalTail.get(), endSegment);
+
+        // Close segments before deleting their corresponding log files
+        closeSegmentHandlers(endSegment);
+
+        deleteFilesMatchingFilter(file -> {
+            try {
+                String segmentStr = file.getName().split("\\.")[0];
+                return Long.parseLong(segmentStr) <= endSegment;
+            } catch (Exception e) {
+                log.warn("reset: ignoring file {}", file.getName());
+                return false;
+            }
+        });
+
+        serverContext.setStartingAddress(0L);
+        serverContext.setTailSegment(0L);
+        globalTail.set(0L);
+        initializeStartingAddress();
+        initializeMaxGlobalAddress();
+
+        log.info("reset: Completed, end segment {}", endSegment);
     }
 
     @VisibleForTesting
@@ -1037,59 +1250,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         public Collection<LogEntry> getEntries() {
             return entries;
-        }
-    }
-
-    /**
-     * A SegmentHandle is a range view of consecutive addresses in the log. It contains
-     * the address space along with metadata like addresses that are trimmed and pending trims.
-     */
-
-    @Data
-    class SegmentHandle {
-        private final long segment;
-        @NonNull
-        private final FileChannel logChannel;
-        @NonNull
-        private final FileChannel trimmedChannel;
-        @NonNull
-        private final FileChannel pendingTrimChannel;
-        @NonNull
-        private String fileName;
-
-        private Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap();
-        private Set<Long> trimmedAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
-        private Set<Long> pendingTrims = Collections.newSetFromMap(new ConcurrentHashMap<>());
-        private volatile int refCount = 0;
-
-
-        public synchronized void retain() {
-            refCount++;
-        }
-
-        public synchronized void release() {
-            if (refCount == 0) {
-                throw new IllegalStateException("refCount cannot be less than 0, segment " + segment);
-            }
-            refCount--;
-        }
-
-        public void close() {
-            Set<FileChannel> channels =
-                    new HashSet(Arrays.asList(logChannel, trimmedChannel, pendingTrimChannel));
-            for (FileChannel channel : channels) {
-                try {
-                    channel.force(true);
-                    channel.close();
-                    channel = null;
-                } catch (Exception e) {
-                    log.warn("Error closing channel {}: {}", channel.toString(), e.toString());
-                }
-            }
-
-            knownAddresses = null;
-            trimmedAddresses = null;
-            pendingTrims = null;
         }
     }
 }

@@ -82,13 +82,18 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtime.getParameters().setHoleFillRetry(0);
     }
 
+    public void simulateEndpointDisconnected(CorfuRuntime runtime) {
+        ((TestClientRouter) runtime.getRouter(getDefaultEndpoint()))
+                .simulateDisconnectedEndpoint();
+    }
+
     /** Function for obtaining a router, given a runtime and an endpoint.
      *
      * @param runtime       The CorfuRuntime to obtain a router for.
      * @param endpoint      An endpoint string for the router.
      * @return
      */
-    private IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
+    protected IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
         runtimeRouterMap.putIfAbsent(runtime, new ConcurrentHashMap<>());
         if (!endpoint.startsWith("test:")) {
             throw new RuntimeException("Unsupported endpoint in test: " + endpoint);
@@ -136,7 +141,9 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param config    The configuration to use for the server.
      */
     public void addServer(int port, Map<String, Object> config) {
-        addServer(port, new ServerContext(config, new TestServerRouter(port)));
+        ServerContext sc = new ServerContext(config);
+        sc.setServerRouter(new TestServerRouter(port));
+        addServer(port, sc);
     }
 
     /**
@@ -350,6 +357,15 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return "test:" + port;
     }
 
+    /**
+     * Get the port from the endpoint.
+     *
+     * @param endpoint The endpoint string.
+     * @return The port in the endpoint.
+     */
+    public Integer getPort(String endpoint) {
+        return Integer.parseInt(endpoint.split(":")[1]);
+    }
 
     // Private
 
@@ -369,13 +385,17 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
         TestServer(Map<String, Object> optsMap)
         {
-            this(new ServerContext(optsMap, new TestServerRouter()));
+            this(new ServerContext(optsMap));
+            serverContext.setServerRouter(new TestServerRouter());
         }
 
         TestServer(ServerContext serverContext) {
             this.serverContext = serverContext;
             this.serverRouter = serverContext.getServerRouter();
-            this.baseServer = new BaseServer();
+            if (serverRouter == null) {
+                serverRouter = new TestServerRouter();
+            }
+            this.baseServer = new BaseServer(serverContext);
             this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);
@@ -390,7 +410,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
         TestServer(int port)
         {
-            this(ServerContextBuilder.defaultContext(port).getServerConfig());
+            this(ServerContextBuilder.defaultTestContext(port).getServerConfig());
         }
 
         void addToTest(int port, AbstractViewTest test) {

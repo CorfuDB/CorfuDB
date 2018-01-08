@@ -1,138 +1,91 @@
 package org.corfudb.security.tls;
 
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-
+import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.KeyStore;
-import java.util.Map;
-import java.util.function.Consumer;
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.TrustManagerFactory;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
+import javax.net.ssl.SSLException;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
 
 /**
  * Utilities for common options parsing and session configuration for
  * encrypted & authenticated TLS sessions.
  */
-
+@Slf4j
 public class TlsUtils {
-    public enum SslContextType { SERVER_CONTEXT, CLIENT_CONTEXT }
-
     /**
-     * Create SslContext object based on Getopt-style parameter spec.
+     * Open up a key store. Wraps all the exceptions.
      *
-     * @param desiredType Server or client context
-     * @param opts Getopt-style parameters
-     * @param keyStoreException Consumer for key store error
-     * @param ksPasswordFileException Consumer for ks password file error
-     * @param trustStoreException Consumer for trust store error
-     * @param tsPasswordFileException Consumer for ts password file error
+     * @param keyStorePath Key store path string
+     * @param password Key store password
      * @return SslContext object or null on error
+     * @throws SSLException
+     *          Thrown when there's an issue with loading the trust store.
      */
-    public static SslContext enableTls(SslContextType desiredType,
-                                       Map<String, Object> opts,
-                                       Consumer<Exception> keyStoreException,
-                                       Consumer<Exception> ksPasswordFileException,
-                                       Consumer<Exception> trustStoreException,
-                                       Consumer<Exception> tsPasswordFileException) {
-        return enableTls(desiredType,
-                (String) opts.get("--keystore"), keyStoreException,
-                (String) opts.get("--keystore-password-file"), ksPasswordFileException,
-                (String) opts.get("--truststore"), trustStoreException,
-                (String) opts.get("--truststore-password-file"), tsPasswordFileException);
-    }
-
-    /**
-     * Create SslContext object based on a spec of individual configuration strings.
-     *
-     * @param desiredType Server or client context
-     * @param keyStore Key store path string
-     * @param keyStoreException Consumer for key store error
-     * @param ksPasswordFile Key store password file string
-     * @param ksPasswordFileException Consumer for ks password file error
-     * @param trustStore Trust store path string
-     * @param trustStoreException Consumer for trust store error
-     * @param tsPasswordFile Trust store password file path string
-     * @param tsPasswordFileException Consumer for ts password file error
-     * @return SslContext object or null on error
-     */
-    public static SslContext enableTls(SslContextType desiredType,
-                                       String keyStore,
-                                       Consumer<Exception> keyStoreException,
-                                       String ksPasswordFile,
-                                       Consumer<Exception> ksPasswordFileException,
-                                       String trustStore,
-                                       Consumer<Exception> trustStoreException,
-                                       String tsPasswordFile,
-                                       Consumer<Exception> tsPasswordFileException) {
-        // Get the key store password
-        String ksp = "";
-        if (ksPasswordFile != null) {
-            try {
-                ksp = (new String(Files.readAllBytes(Paths.get(ksPasswordFile))))
-                        .trim();
-            } catch (Exception e) {
-                keyStoreException.accept(e);
-                return null;
-            }
-        }
-        // Get the key store
-        KeyStore ks = null;
-        if (keyStore != null) {
-            try (FileInputStream fis = new FileInputStream(keyStore)) {
-                ks = KeyStore.getInstance(KeyStore.getDefaultType());
-                ks.load(fis, ksp.toCharArray());
-            } catch (Exception e) {
-                ksPasswordFileException.accept(e);
-                return null;
-            }
+    public static KeyStore openKeyStore(String keyStorePath,
+                                        String password) throws SSLException {
+        File keyStoreFile = new File(keyStorePath);
+        if (!keyStoreFile.exists()) {
+            String errorMessage = "Key store file {" + keyStorePath + "} doesn't exist.";
+            log.error(errorMessage);
+            throw new SSLException(errorMessage);
         }
 
-        // Get the trust store password
-        String tsp = "";
-        if (tsPasswordFile != null) {
-            try {
-                tsp = (new String(Files.readAllBytes(Paths.get(tsPasswordFile))))
-                        .trim();
-            } catch (Exception e) {
-                trustStoreException.accept(e);
-                return null;
-            }
-        }
-        // Get the trust store
-        KeyStore ts = null;
-        if (trustStore != null) {
-            try (FileInputStream fis = new FileInputStream(trustStore)) {
-                ts = KeyStore.getInstance(KeyStore.getDefaultType());
-                ts.load(fis, tsp.toCharArray());
-            } catch (Exception e) {
-                tsPasswordFileException.accept(e);
-                return null;
-            }
-        }
-
+        FileInputStream inputStream = null;
         try {
-            KeyManagerFactory kmf =
-                    KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(ks, ksp.toCharArray());
-            TrustManagerFactory tmf =
-                    TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            tmf.init(ts);
-            switch (desiredType) {
-                case CLIENT_CONTEXT:
-                    return SslContextBuilder.forClient().keyManager(kmf).trustManager(tmf).build();
-                case SERVER_CONTEXT:
-                    return SslContextBuilder.forServer(kmf).trustManager(tmf).build();
-                default:
-                    throw new RuntimeException("Bad SSL context type: " + desiredType);
-            }
-        } catch (Exception e) {
-            throw new RuntimeException("Could not build SslContext type "
-                    + desiredType.toString() + ": "
-                    + e.getClass().getSimpleName(), e);
+            inputStream = new FileInputStream(keyStorePath);
+            KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+            keyStore.load(inputStream, password.toCharArray());
+            return keyStore;
+        } catch (IOException e) {
+            String errorMessage = "Unable to read key store file " + keyStorePath + ".";
+            log.error(errorMessage, e);
+            throw new SSLException(errorMessage, e);
+        } catch (CertificateException e) {
+            String errorMessage = "Unable to read certificates in key store file " + keyStorePath + ".";
+            log.error(errorMessage, e);
+            throw new SSLException(errorMessage, e);
+        } catch (NoSuchAlgorithmException e) {
+            String errorMessage = "No support for algorithm [" + KeyStore.getDefaultType() +
+                    "] in key store " + keyStorePath + ".";
+            log.error(errorMessage, e);
+            throw new SSLException(errorMessage, e);
+        } catch (KeyStoreException e) {
+            String errorMessage = "Error creating a key store object of algorithm ["
+                    + KeyStore.getDefaultType() + "].";
+            log.error(errorMessage, e);
+            throw new SSLException(errorMessage, e);
+        } finally {
+            IOUtils.closeQuietly(inputStream);
         }
     }
 
+    /**
+     * Get the password from file. Wrap any exception with SSLException.
+     *
+     * @param passwordFilePath
+     *      Path to password file.
+     * @return If file path is provided, returns the content, otherwise
+     *      an empty string.
+     * @throws SSLException
+     *      Wraps the IOException.
+     */
+    public static String getKeyStorePassword(String passwordFilePath) throws SSLException {
+        if (passwordFilePath == null || passwordFilePath.isEmpty()) {
+            return "";
+        }
+        try {
+            return (new String(Files.readAllBytes(Paths.get(passwordFilePath)))).trim();
+        } catch (IOException e) {
+            String errorMessage = "Unable to read password file " + passwordFilePath + ".";
+            log.error(errorMessage, e);
+            throw new SSLException(errorMessage, e);
+        }
+    }
 }

@@ -12,6 +12,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.runtime.view.Layout;
 
 /**
@@ -64,6 +66,7 @@ public enum CorfuMsgType {
     FLUSH_CACHE(44, TypeToken.of(CorfuMsg.class), true),
     TRIM_MARK_REQUEST(45, TypeToken.of(CorfuMsg.class), true),
     TRIM_MARK_RESPONSE(46, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
+    RESET_LOGUNIT(47, TypeToken.of(CorfuMsg.class)),
 
     WRITE_OK(50, TypeToken.of(CorfuMsg.class)),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),
@@ -71,6 +74,7 @@ public enum CorfuMsgType {
     ERROR_OOS(53, TypeToken.of(CorfuMsg.class)),
     ERROR_RANK(54, TypeToken.of(CorfuMsg.class)),
     ERROR_NOENTRY(55, TypeToken.of(CorfuMsg.class)),
+    RANGE_WRITE(56, new TypeToken<CorfuPayloadMsg<RangeWriteMsg>>(){}),
     ERROR_DATA_CORRUPTION(57, TypeToken.of(CorfuMsg.class)),
     ERROR_DATA_OUTRANKED(58, TypeToken.of(CorfuMsg.class)),
     ERROR_VALUE_ADOPTED(59,new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
@@ -88,8 +92,15 @@ public enum CorfuMsgType {
     MANAGEMENT_FAILURE_DETECTED(74, new TypeToken<CorfuPayloadMsg<FailureDetectorMsg>>(){}, true),
     HEARTBEAT_REQUEST(75, TypeToken.of(CorfuMsg.class), true),
     HEARTBEAT_RESPONSE(76, new TypeToken<CorfuPayloadMsg<byte[]>>(){}, true),
+    ORCHESTRATOR_REQUEST(77, new TypeToken<CorfuPayloadMsg<OrchestratorMsg>>() {}),
+    ORCHESTRATOR_RESPONSE(78, new TypeToken<CorfuPayloadMsg<OrchestratorResponse>>() {}),
 
-    ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true)
+    ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true),
+    ERROR_SHUTDOWN_EXCEPTION(201, TypeToken.of(CorfuMsg.class), true),
+
+    // Handshake Messages
+    HANDSHAKE_INITIATE(80, new TypeToken<CorfuPayloadMsg<HandshakeMsg>>() {}, true),
+    HANDSHAKE_RESPONSE(81, new TypeToken<CorfuPayloadMsg<HandshakeResponse>>() {}, true)
     ;
 
 

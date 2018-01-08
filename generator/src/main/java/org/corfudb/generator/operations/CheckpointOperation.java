@@ -18,6 +18,7 @@ public class CheckpointOperation extends Operation {
     }
 
     @Override
+    @SuppressWarnings("checkstyle:ThreadSleep")
     public void execute() {
         try {
 

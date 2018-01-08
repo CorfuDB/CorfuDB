@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.BaseServer;
+import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.util.CFUtils;
 import org.junit.Test;
 
@@ -18,7 +19,7 @@ public class BaseClientTest extends AbstractClientTest {
     @Override
     Set<AbstractServer> getServersForTest() {
         return new ImmutableSet.Builder<AbstractServer>()
-                .add(new BaseServer())
+                .add(new BaseServer(ServerContextBuilder.defaultTestContext(0)))
                 .build();
     }
 

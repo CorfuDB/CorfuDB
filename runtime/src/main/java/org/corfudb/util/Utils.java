@@ -413,21 +413,6 @@ public class Utils {
      */
     public static final String SUN_JAVA_COMMAND = "sun.java.command";
 
-    /**
-     * Sleep without being interrupted.
-     * @param millis Time in milliseconds to sleep
-     */
-    public static void sleepUninterruptibly(long millis) {
-        while (true) {
-            try {
-                Thread.sleep(millis);
-                return;
-            } catch (InterruptedException ie) {
-                log.trace("Interrupted");
-            }
-        }
-    }
-
     /** Generates a human readable UUID string (4 hex chars) using time_mid.
      * @param id    The UUID to parse
      * @return      A human readable UUID string

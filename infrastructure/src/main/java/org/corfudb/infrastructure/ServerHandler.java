@@ -20,10 +20,4 @@ public @interface ServerHandler {
      * @return the type of corfu message
      */
     CorfuMsgType type();
-
-    /**
-     * Returns registry's name of timer to be used for this operation.
-     * @return the timer name
-     */
-    String opTimer() default ""; //
 }

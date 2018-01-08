@@ -54,6 +54,13 @@ else
     PROFILER_AGENT=""
 fi
 
+if [[ $* == *--agent* ]]
+then
+      byteman="-javaagent:"${BYTEMAN_HOME}"/lib/byteman.jar=listener:true"
+else
+      byteman=""
+fi
+
 while true; do
     "$JAVA" ${PROFILER_AGENT} -cp "$CLASSPATH" $JVMFLAGS org.corfudb.infrastructure.CorfuServer $*
     JAVA_RET_CODE=$?

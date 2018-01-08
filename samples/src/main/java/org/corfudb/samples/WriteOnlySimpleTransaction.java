@@ -31,6 +31,7 @@ public class WriteOnlySimpleTransaction extends BaseCorfuAppUtils {
      * This is where activity is started
      */
     @Override
+    @SuppressWarnings("checkstyle:printLine") // Sample code
     void action() {
         /**
          * Instantiate a Corfu Stream named "A" dedicated to an SMRmap object.

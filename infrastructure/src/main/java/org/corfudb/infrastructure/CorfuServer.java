@@ -1,25 +1,35 @@
 package org.corfudb.infrastructure;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
+import static org.fusesource.jansi.Ansi.Color.BLUE;
+import static org.fusesource.jansi.Ansi.Color.MAGENTA;
+import static org.fusesource.jansi.Ansi.Color.RED;
+import static org.fusesource.jansi.Ansi.Color.WHITE;
+import static org.fusesource.jansi.Ansi.ansi;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.ServerChannel;
+import io.netty.channel.epoll.Epoll;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerSocketChannel;
+import io.netty.channel.kqueue.KQueue;
+import io.netty.channel.kqueue.KQueueEventLoopGroup;
+import io.netty.channel.kqueue.KQueueServerSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
-import io.netty.util.concurrent.DefaultEventExecutorGroup;
-import io.netty.util.concurrent.EventExecutorGroup;
 
 import java.io.File;
 import java.util.List;
@@ -28,30 +38,30 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
 
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
-import org.corfudb.security.tls.TlsUtils;
+import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
 
-import static org.fusesource.jansi.Ansi.Color.BLUE;
-import static org.fusesource.jansi.Ansi.Color.MAGENTA;
-import static org.fusesource.jansi.Ansi.Color.RED;
-import static org.fusesource.jansi.Ansi.Color.WHITE;
-import static org.fusesource.jansi.Ansi.ansi;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+
 
 /**
  * This is the new Corfu server single-process executable.
@@ -82,19 +92,28 @@ public class CorfuServer {
                     + "<ratio>] [-d <level>] [-p <seconds>] [-M <address>:<port>] [-e [-u "
                     + "<keystore> -f <keystore_password_file>] [-r <truststore> -w "
                     + "<truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] "
-                    + "[-k <seqcache>]"
-                    + "[-x <ciphers>] [-z <tls-protocols>]] <port>\n"
+                    + "[-k <seqcache>] [-T <threads>] [-i <channel-implementation>] [-H <seconds>] "
+                    + "[-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] [--agent] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
                     + "              Set the path to the storage file for the log unit.\n"
                     + " -s, --single                                                             "
                     + "              Deploy a single-node configuration.\n"
+                    + " -I <cluster-id>, --cluster-id=<cluster-id>"
+                    + "              For a single node configuration the cluster id to use in UUID,"
+                    + "              base64 format, or auto to randomly generate [default: auto].\n"
+                    + " -T <threads>, --Threads=<threads>                                        "
+                    + "              Number of corfu server worker threads, or 0 to use 2x the "
+                    + "              number of available processors [default: 0].\n"
                     + "                                                                          "
                     + "              The server will be bootstrapped with a simple one-unit layout."
                     + "\n -a <address>, --address=<address>                                      "
                     + "                IP address to advertise to external clients [default: "
                     + "localhost].\n"
+                    + " -i <channel-implementation>, --implementation <channel-implementation>   "
+                    + "              The type of channel to use (auto, nio, epoll, kqueue)"
+                    + "[default: nio].\n"
                     + " -m, --memory                                                             "
                     + "              Run the unit in-memory (non-persistent).\n"
                     + "                                                                          "
@@ -109,6 +128,8 @@ public class CorfuServer {
                     + "              If there is no log, then this will be the size of the log unit"
                     + "\n                                                                        "
                     + "                evicted entries will be auto-trimmed. [default: 0.5].\n"
+                    + " -H <seconds>, --HandshakeTimeout=<sceonds>                               "
+                    + "              Handshake timeout in seconds [default: 10].\n               "
                     + " -t <token>, --initial-token=<token>                                      "
                     + "              The first token the sequencer will issue, or -1 to recover\n"
                     + "                                                                          "
@@ -123,7 +144,7 @@ public class CorfuServer {
                     + " -d <level>, --log-level=<level>                                          "
                     + "              Set the logging level, valid levels are: \n"
                     + "                                                                          "
-                    + "              ERROR,WARN,INFO,DEBUG,TRACE [default: INFO].\n"
+                    + "              ALL,ERROR,WARN,INFO,DEBUG,TRACE,OFF [default: INFO].\n"
                     + " -M <address>:<port>, --management-server=<address>:<port>                "
                     + "              Layout endpoint to seed Management Server\n"
                     + " -n, --no-verify                                                          "
@@ -158,55 +179,17 @@ public class CorfuServer {
                     + "              Comma separated list of TLS protocols to use.\n"
                     + "                                                                          "
                     + "              [default: TLSv1.1,TLSv1.2].\n"
+                    + " --agent      Run with byteman agent to enable runtime code injection.\n  "
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
                     + "              Show version\n";
-    public static boolean serverRunning = false;
-    @Getter
-    private static SequencerServer sequencerServer;
-    @Getter
-    private static LayoutServer layoutServer;
-    @Getter
-    private static LogUnitServer logUnitServer;
-    @Getter
-    private static ManagementServer managementServer;
-    private static NettyServerRouter router;
-    private static ServerContext serverContext;
-    private static SslContext sslContext;
-    private static String[] enabledTlsProtocols;
-    private static String[] enabledTlsCipherSuites;
-
-    /**
-     * Print the corfu logo.
-     */
-    public static void printLogo() {
-        System.out.println(ansi().fg(WHITE).a("▄████████  ▄██████▄     ▄████████    ▄████████ ███"
-                + "    █▄").reset());
-        System.out.println(ansi().fg(WHITE).a("███    ███ ███    ███   ███    ███   ███    ███ "
-                + "███    ███").reset());
-        System.out.println(ansi().fg(WHITE).a("███    █▀  ███    ███   ███    ███   ███    █▀  "
-                + "███    ███").reset());
-        System.out.println(ansi().fg(WHITE).a("███        ███    ███  ▄███▄▄▄▄██▀  ▄███▄▄▄     "
-                + "███    ███").reset());
-        System.out.println(ansi().fg(WHITE).a("███        ███    ███ ▀▀███▀▀▀▀▀   ▀▀███▀▀▀     "
-                + "███    ███").reset());
-        System.out.println(ansi().fg(WHITE).a("███    █▄  ███    ███ ▀███████████   ███        "
-                + "███    ███").reset());
-        System.out.println(ansi().fg(WHITE).a("███    ███ ███    ███   ███    ███   ███        "
-                + "███    ███").reset());
-        System.out.println(ansi().fg(WHITE).a("████████▀   ▀██████▀    ███    ███   ███        "
-                + "████████▀").reset());
-        System.out.println(ansi().fg(WHITE).a("                        ███    ███").reset());
-    }
 
     /**
      * Main program entry point.
      * @param args  command line argument strings
      */
     public static void main(String[] args) {
-        serverRunning = true;
-
         // Parse the options given, using docopt.
         Map<String, Object> opts =
                 new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe)
@@ -216,38 +199,20 @@ public class CorfuServer {
         AnsiConsole.systemInstall();
         printLogo();
         int port = Integer.parseInt((String) opts.get("<port>"));
-        System.out.println(ansi().a("Welcome to ").fg(RED).a("CORFU ").fg(MAGENTA).a("SERVER")
+        println(ansi().a("Welcome to ").fg(RED).a("CORFU ").fg(MAGENTA).a("SERVER")
                 .reset());
-        System.out.println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
+        println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
                 .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));
-        System.out.println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
-        System.out.println(ansi().a("Service directory: ").fg(WHITE).a(
+        println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
+        println(ansi().a("Service directory: ").fg(WHITE).a(
                 (Boolean) opts.get("--memory") ? "MEMORY mode" :
                         opts.get("--log-path")).reset());
 
+
         // Pick the correct logging level before outputting error messages.
-        Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-        switch ((String) opts.get("--log-level")) {
-            case "ERROR":
-                root.setLevel(Level.ERROR);
-                break;
-            case "WARN":
-                root.setLevel(Level.WARN);
-                break;
-            case "INFO":
-                root.setLevel(Level.INFO);
-                break;
-            case "DEBUG":
-                root.setLevel(Level.DEBUG);
-                break;
-            case "TRACE":
-                root.setLevel(Level.TRACE);
-                break;
-            default:
-                root.setLevel(Level.INFO);
-                log.warn("Level {} not recognized, defaulting to level INFO",
-                        opts.get("--log-level"));
-        }
+        final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        final Level level = Level.toLevel(((String)opts.get("--log-level")).toUpperCase());
+        root.setLevel(level);
 
         log.debug("Started with arguments: " + opts);
 
@@ -266,184 +231,303 @@ public class CorfuServer {
             }
         }
 
-        // Now, we start the Netty router, and have it route to the correct port.
-        router = new NettyServerRouter(opts);
-
         // Create a common Server Context for all servers to access.
-        serverContext = new ServerContext(opts, router);
+        ServerContext serverContext = new ServerContext(opts);
 
-        // Add each role to the router.
-        addSequencer();
-        addLayoutServer();
-        addLogUnit();
-        addManagementServer();
-        router.baseServer.setOptionsMap(opts);
+        List<AbstractServer> servers = ImmutableList.<AbstractServer>builder()
+                .add(new BaseServer(serverContext))
+                .add(new SequencerServer(serverContext))
+                .add(new LayoutServer(serverContext))
+                .add(new LogUnitServer(serverContext))
+                .add(new ManagementServer(serverContext))
+                .build();
 
-        // Setup SSL if needed
-        Boolean tlsEnabled = (Boolean) opts.get("--enable-tls");
-        Boolean tlsMutualAuthEnabled = (Boolean) opts.get("--enable-tls-mutual-auth");
+        NettyServerRouter router = new NettyServerRouter(servers);
+
+        // Register shutdown handler
+        Thread shutdownThread = new Thread(() -> cleanShutdown(router));
+        shutdownThread.setName("ShutdownThread");
+        Runtime.getRuntime().addShutdownHook(shutdownThread);
+
+        // Create the event loops responsible for servicing inbound messages.
+        final EventLoopGroup bossGroup = getBossGroup(serverContext);
+        final EventLoopGroup workerGroup = getWorkerGroup(serverContext);
+
+        try {
+            startAndListen(bossGroup,
+                workerGroup,
+                getServerChannelType(serverContext),
+                b -> configureBootstrapOptions(serverContext, b),
+                serverContext,
+                router,
+                port).channel().closeFuture().syncUninterruptibly();
+
+        } finally {
+            bossGroup.shutdownGracefully();
+            workerGroup.shutdownGracefully();
+            cleanShutdown(router);
+        }
+    }
+
+    /** A functional interface for receiving and configuring a {@link ServerBootstrap}.
+     */
+    @FunctionalInterface
+    public interface BootstrapConfigurer {
+
+        /** Configure a {@link ServerBootstrap}.
+         *
+         * @param serverBootstrap   The {@link ServerBootstrap} to configure.
+         */
+        void configure(ServerBootstrap serverBootstrap);
+    }
+
+    /** Start the Corfu server and bind it to the given {@code port} using the provided
+     * {@code channelType}. It is the callers' responsibility to shutdown the
+     * {@link EventLoopGroup}s. For implementations which listen on multiple ports,
+     * {@link EventLoopGroup}s may be reused.
+     *
+     * @param bossGroup             The "boss" {@link EventLoopGroup} which services incoming
+     *                              connections.
+     * @param workerGroup           The "worker" {@link EventLoopGroup} which services incoming
+     *                              requests.
+     * @param channelType           The type of {@link ServerChannel} to use.
+     * @param bootstrapConfigurer   A {@link BootstrapConfigurer} which will receive the
+     *                              {@link ServerBootstrap} to set options.
+     * @param context               A {@link ServerContext} which will be used to configure the
+     *                              server.
+     * @param router                A {@link NettyServerRouter} which will process incoming
+     *                              messages.
+     * @param port                  The port the {@link ServerChannel} will be created on.
+     * @param <T>                   The type of the {@link ServerChannel}.
+     * @return                      A {@link ChannelFuture} which can be used to wait for the server
+     *                              to be shutdown.
+     */
+    public static <T extends ServerChannel>
+            ChannelFuture startAndListen(@Nonnull EventLoopGroup bossGroup,
+                          @Nonnull EventLoopGroup workerGroup,
+                          @Nonnull Class<T> channelType,
+                          @Nonnull BootstrapConfigurer bootstrapConfigurer,
+                          @Nonnull ServerContext context,
+                          @Nonnull NettyServerRouter router,
+                          int port) {
+        try {
+            ServerBootstrap bootstrap = new ServerBootstrap();
+            bootstrap.group(bossGroup, workerGroup)
+                .channel(channelType);
+            bootstrapConfigurer.configure(bootstrap);
+
+            bootstrap.childHandler(getServerChannelInitializer(context, router));
+            return bootstrap.bind(port).sync();
+        } catch (InterruptedException ie) {
+            throw new UnrecoverableCorfuInterruptedError(ie);
+        }
+    }
+
+    /** Configure server bootstrap per-channel options, such as TCP options, etc.
+     *
+     * @param context       The {@link ServerContext} to use.
+     * @param bootstrap     The {@link ServerBootstrap} to be configured.
+     */
+    public static void configureBootstrapOptions(@Nonnull ServerContext context,
+            @Nonnull ServerBootstrap bootstrap) {
+        bootstrap.option(ChannelOption.SO_BACKLOG, 100)
+            .childOption(ChannelOption.SO_KEEPALIVE, true)
+            .childOption(ChannelOption.SO_REUSEADDR, true)
+            .childOption(ChannelOption.TCP_NODELAY, true)
+            .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
+    }
+
+    /** Get the type of {@link ServerChannel} to use.
+     *
+     * @param context       The {@link ServerContext} to use.
+     * @return              The server channel type.
+     */
+    public static Class<? extends ServerSocketChannel> getServerChannelType(
+            @Nonnull ServerContext context) {
+        final String type = context.getServerConfig(String.class, "--implementation");
+        switch (type) {
+            case "auto":
+                return Epoll.isAvailable() ? EpollServerSocketChannel.class :
+                    KQueue.isAvailable() ? KQueueServerSocketChannel.class :
+                    NioServerSocketChannel.class;
+            case "epoll":
+                return EpollServerSocketChannel.class;
+            case "kqueue":
+                return KQueueServerSocketChannel.class;
+            case "nio":
+                return NioServerSocketChannel.class;
+            default:
+                throw new UnrecoverableCorfuError("Invalid server channel " + type);
+        }
+    }
+
+    /** Get a "boss" group, which services (accepts) incoming connections.
+     *
+     * @param context       The {@link ServerContext} to use.
+     * @return              A boss group.
+     */
+    public static EventLoopGroup getBossGroup(@Nonnull ServerContext context) {
+        final ThreadFactory threadFactory = new ThreadFactoryBuilder()
+                                                    .setNameFormat("accept-%d")
+                                                    .build();
+        EventLoopGroup group = getEventLoop(context, threadFactory, 1);
+        log.info("getBossGroup: Type {}", group.getClass().getSimpleName());
+        return group;
+    }
+
+    /** Get a "worker" group, which services incoming requests.
+     *
+     * @param context   The {@link ServerContext} to use.
+     * @return          A worker group.
+     */
+    public static @Nonnull EventLoopGroup getWorkerGroup(@Nonnull ServerContext context) {
+        final ThreadFactory threadFactory = new ThreadFactoryBuilder()
+                .setNameFormat("worker-%d")
+                .build();
+
+        final int requestedThreads =
+                Integer.parseInt(context.getServerConfig(String.class, "--Threads"));
+        final int numThreads = requestedThreads == 0
+                                ? Runtime.getRuntime().availableProcessors() * 2
+                                    : requestedThreads;
+        EventLoopGroup group = getEventLoop(context, threadFactory, numThreads);
+
+        log.info("getWorkerGroup: Type {} with {} threads",
+                        group.getClass().getSimpleName(), numThreads);
+        return group;
+    }
+
+    /** Get a event loop, based on the settings in the {@link ServerContext}.
+     *
+     * @param context       The {@link ServerContext} to use.
+     * @param factory       A {@link ThreadFactory} for creating new threads.
+     * @param numThreads    The number of threads in the group.
+     * @return              A new {@link EventLoopGroup}.
+     */
+    private static EventLoopGroup getEventLoop(@Nonnull ServerContext context,
+            @Nonnull ThreadFactory factory,
+            int numThreads) {
+        final Class<? extends ServerSocketChannel> type = getServerChannelType(context);
+
+        if (type.equals(NioServerSocketChannel.class)) {
+            return new NioEventLoopGroup(numThreads, factory);
+        } else if (type.equals(EpollServerSocketChannel.class)) {
+            return new EpollEventLoopGroup(numThreads, factory);
+        } else if (type.equals(KQueueServerSocketChannel.class)) {
+            return new KQueueEventLoopGroup(numThreads, factory);
+        } else {
+            throw new UnrecoverableCorfuError("Invalid server channel " + type);
+        }
+    }
+
+    /** Obtain a {@link ChannelInitializer} which initializes the channel pipeline
+     *  for a new {@link ServerChannel}.
+     *
+     * @param context   The {@link ServerContext} to use.
+     * @param router    The {@link NettyServerRouter} to initialize the channel with.
+     * @return          A {@link ChannelInitializer} to intialize the channel.
+     */
+    private static ChannelInitializer getServerChannelInitializer(@Nonnull ServerContext context,
+            @Nonnull NettyServerRouter router) {
+        // Security variables
+        final SslContext sslContext;
+        final String[] enabledTlsProtocols;
+        final String[] enabledTlsCipherSuites;
+
+        // Security Initialization
+        Boolean tlsEnabled = context.getServerConfig(Boolean.class, "--enable-tls");
+        Boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class,
+                "--enable-tls-mutual-auth");
         if (tlsEnabled) {
             // Get the TLS cipher suites to enable
-            String ciphs = (String) opts.get("--tls-ciphers");
+            String ciphs = context.getServerConfig(String.class, "--tls-ciphers");
             if (ciphs != null) {
                 List<String> ciphers = Pattern.compile(",")
                         .splitAsStream(ciphs)
                         .map(String::trim)
                         .collect(Collectors.toList());
                 enabledTlsCipherSuites = ciphers.toArray(new String[ciphers.size()]);
+            } else {
+                enabledTlsCipherSuites = new String[]{};
             }
 
             // Get the TLS protocols to enable
-            String protos = (String) opts.get("--tls-protocols");
+            String protos = context.getServerConfig(String.class, "--tls-protocols");
             if (protos != null) {
                 List<String> protocols = Pattern.compile(",")
                         .splitAsStream(protos)
                         .map(String::trim)
                         .collect(Collectors.toList());
                 enabledTlsProtocols = protocols.toArray(new String[protocols.size()]);
+            } else {
+                enabledTlsProtocols = new String[]{};
             }
+
 
             try {
-                sslContext =
-                        TlsUtils.enableTls(TlsUtils.SslContextType.SERVER_CONTEXT,
-                                (String) opts.get("--keystore"), e -> {
-                                    log.error("Could not load keys from the key store.");
-                                    System.exit(1);
-                                },
-                                (String) opts.get("--keystore-password-file"), e -> {
-                                    log.error("Could not read the key store password file.");
-                                    System.exit(1);
-                                },
-                                (String) opts.get("--truststore"), e -> {
-                                    log.error("Could not load keys from the trust store.");
-                                    System.exit(1);
-                                },
-                                (String) opts.get("--truststore-password-file"), e -> {
-                                    log.error("Could not read the trust store password file.");
-                                    System.exit(1);
-                                });
-            } catch (Exception ex) {
-                log.error("Could not build the SSL context");
-                System.exit(1);
+                sslContext = SslContextConstructor.constructSslContext(true,
+                    context.getServerConfig(String.class, "--keystore"),
+                    context.getServerConfig(String.class, "--keystore-password-file"),
+                    context.getServerConfig(String.class, "--truststore"),
+                    context.getServerConfig(String.class,
+                        "--truststore-password-file"));
+            } catch (SSLException e) {
+                log.error("Could not build the SSL context", e);
+                throw new UnrecoverableCorfuError("Couldn't build the SSL context", e);
             }
+        } else {
+            enabledTlsCipherSuites = new String[]{};
+            enabledTlsProtocols = new String[]{};
+            sslContext = null;
         }
 
-        Boolean saslPlainTextAuth = (Boolean) opts.get("--enable-sasl-plain-text-auth");
+        Boolean saslPlainTextAuth = context.getServerConfig(Boolean.class,
+                "--enable-sasl-plain-text-auth");
 
-        // Create the event loops responsible for servicing inbound messages.
-        EventLoopGroup bossGroup;
-        EventLoopGroup workerGroup;
-        EventExecutorGroup ee;
-
-        bossGroup = new NioEventLoopGroup(1, new ThreadFactory() {
-            final AtomicInteger threadNum = new AtomicInteger(0);
-
+        // Generate the initializer.
+        return new ChannelInitializer() {
             @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setName("accept-" + threadNum.getAndIncrement());
-                return t;
-            }
-        });
-
-        workerGroup = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2, new
-                ThreadFactory() {
-                    final AtomicInteger threadNum = new AtomicInteger(0);
-
-                    @Override
-                    public Thread newThread(Runnable r) {
-                        Thread t = new Thread(r);
-                        t.setName("io-" + threadNum.getAndIncrement());
-                        return t;
+            protected void initChannel(@Nonnull Channel ch) throws Exception {
+                // If TLS is enabled, setup the encryption pipeline.
+                if (tlsEnabled) {
+                    SSLEngine engine = sslContext.newEngine(ch.alloc());
+                    engine.setEnabledCipherSuites(enabledTlsCipherSuites);
+                    engine.setEnabledProtocols(enabledTlsProtocols);
+                    if (tlsMutualAuthEnabled) {
+                        engine.setNeedClientAuth(true);
                     }
-                });
-
-        ee = new DefaultEventExecutorGroup(Runtime.getRuntime().availableProcessors() * 2, new
-                ThreadFactory() {
-
-                    final AtomicInteger threadNum = new AtomicInteger(0);
-
-                    @Override
-                    public Thread newThread(Runnable r) {
-                        Thread t = new Thread(r);
-                        t.setName("event-" + threadNum.getAndIncrement());
-                        return t;
-                    }
-                });
-
-
-        // Register shutdown handler
-        Thread shutdownThread = new Thread(CorfuServer::cleanShutdown);
-        shutdownThread.setName("ShutdownThread");
-        Runtime.getRuntime().addShutdownHook(
-                shutdownThread);
-
-        try {
-            ServerBootstrap b = new ServerBootstrap();
-            b.group(bossGroup, workerGroup)
-                    .channel(NioServerSocketChannel.class)
-                    .option(ChannelOption.SO_BACKLOG, 100)
-                    .childOption(ChannelOption.SO_KEEPALIVE, true)
-                    .childOption(ChannelOption.SO_REUSEADDR, true)
-                    .childOption(ChannelOption.TCP_NODELAY, true)
-                    .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
-                    .childHandler(new ChannelInitializer<SocketChannel>() {
-                        @Override
-                        public void initChannel(io.netty.channel.socket.SocketChannel ch) throws
-                                Exception {
-                            if (tlsEnabled) {
-                                SSLEngine engine = sslContext.newEngine(ch.alloc());
-                                engine.setEnabledCipherSuites(enabledTlsCipherSuites);
-                                engine.setEnabledProtocols(enabledTlsProtocols);
-                                if (tlsMutualAuthEnabled) {
-                                    engine.setNeedClientAuth(true);
-                                }
-                                ch.pipeline().addLast("ssl", new SslHandler(engine));
-                            }
-                            ch.pipeline().addLast(new LengthFieldPrepender(4));
-                            ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer
-                                    .MAX_VALUE, 0, 4, 0, 4));
-                            if (saslPlainTextAuth) {
-                                ch.pipeline().addLast("sasl/plain-text", new
-                                        PlainTextSaslNettyServer());
-                            }
-                            ch.pipeline().addLast(ee, new NettyCorfuMessageDecoder());
-                            ch.pipeline().addLast(ee, new NettyCorfuMessageEncoder());
-                            ch.pipeline().addLast(ee, router);
-                        }
-                    });
-            ChannelFuture f = b.bind(port).sync();
-            while (true) {
-                try {
-                    f.channel().closeFuture().sync();
-                } catch (InterruptedException ie) {
-                    System.out.println(ie.getStackTrace());
+                    ch.pipeline().addLast("ssl", new SslHandler(engine));
                 }
+                // Add/parse a length field
+                ch.pipeline().addLast(new LengthFieldPrepender(4));
+                ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer
+                        .MAX_VALUE, 0, 4,
+                        0, 4));
+                // If SASL authentication is requested, perform a SASL plain-text auth.
+                if (saslPlainTextAuth) {
+                    ch.pipeline().addLast("sasl/plain-text", new
+                            PlainTextSaslNettyServer());
+                }
+                // Transform the framed message into a Corfu message.
+                ch.pipeline().addLast(new NettyCorfuMessageDecoder());
+                ch.pipeline().addLast(new NettyCorfuMessageEncoder());
+                ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
+                        Version.getVersionString() + "("
+                                + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")",
+                        context.getServerConfig(String.class, "--HandshakeTimeout")));
+                // Route the message to the server class.
+                ch.pipeline().addLast(router);
             }
-
-        } catch (InterruptedException ie) {
-            System.out.println(ie.getStackTrace());
-        } catch (Exception ex) {
-            log.error("Corfu server shut down unexpectedly due to exception", ex);
-        } finally {
-            bossGroup.shutdownGracefully();
-            workerGroup.shutdownGracefully();
-            cleanShutdown();
-        }
-
+        };
     }
 
     /**
      * Attempt to cleanly shutdown all the servers.
      */
-    public static void cleanShutdown() {
+    public static void cleanShutdown(@Nonnull NettyServerRouter router) {
         log.info("CleanShutdown: Starting Cleanup.");
         // Create a list of servers
-        final List<AbstractServer> servers =
-                ImmutableList.of(sequencerServer,
-                        managementServer,
-                        layoutServer,
-                        logUnitServer);
+        final List<AbstractServer> servers = router.getServers();
 
         // A executor service to create the shutdown threads
         // plus name the threads correctly.
@@ -452,7 +536,7 @@ public class CorfuServer {
 
         // Turn into a list of futures on the shutdown, returning
         // generating a log message to inform of the result.
-        CompletableFuture<Void>[] shutdownFutures = servers.stream()
+        CompletableFuture[] shutdownFutures = servers.stream()
                 .map(s -> CompletableFuture.runAsync(() -> {
                     try {
                         Thread.currentThread().setName(s.getClass().getSimpleName()
@@ -473,23 +557,30 @@ public class CorfuServer {
         log.info("CleanShutdown: Shutdown Complete.");
     }
 
-    public static void addSequencer() {
-        sequencerServer = new SequencerServer(serverContext);
-        router.addServer(sequencerServer);
+    /**
+     * Print the corfu logo.
+     */
+    private static void printLogo() {
+        println(ansi().fg(WHITE).toString());
+        println("▄████████  ▄██████▄     ▄████████    ▄████████ ███    █▄");
+        println("███    ███ ███    ███   ███    ███   ███    ██████    ███");
+        println("███    █▀  ███    ███   ███    ███   ███    █▀ ███    ███");
+        println("███        ███    ███  ▄███▄▄▄▄██▀  ▄███▄▄▄    ███    ███");
+        println("███        ███    ███ ▀▀███▀▀▀▀▀   ▀▀███▀▀▀    ███    ███");
+        println("███    █▄  ███    ███ ▀███████████   ███       ███    ███");
+        println("███    ███ ███    ███   ███    ███   ███       ███    ███");
+        println("████████▀   ▀██████▀    ███    ███   ███       ████████▀ ");
+        println("                        ███    ███");
+        println(ansi().reset().toString());
     }
 
-    public static void addLayoutServer() {
-        layoutServer = new LayoutServer(serverContext);
-        router.addServer(layoutServer);
-    }
-
-    public static void addLogUnit() {
-        logUnitServer = new LogUnitServer(serverContext);
-        router.addServer(logUnitServer);
-    }
-
-    public static void addManagementServer() {
-        managementServer = new ManagementServer(serverContext);
-        router.addServer(managementServer);
+    /** Print an object to the console, followed by a newline.
+     *  Call this method instead of calling System.out.println().
+     *
+     * @param line  The object to print.
+     */
+    @SuppressWarnings("checkstyle:printLine")
+    private static void println(Object line) {
+        System.out.println(line);
     }
 }

@@ -5,7 +5,7 @@ import lombok.Getter;
 /**
  * Created by mwei on 12/15/15.
  */
-public class QuorumUnreachableException extends Exception {
+public class QuorumUnreachableException extends RuntimeException {
 
     @Getter
     public int reachable;

@@ -1,16 +1,16 @@
-package org.corfudb.infrastructure;
+package org.corfudb.runtime.view;
 
 import java.util.Set;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.LayoutModificationException;
-import org.corfudb.runtime.view.Layout;
 
 /**
  * Handles the failures.
  *
  * <p>Created by zlokhandwala on 11/21/16.
  */
+@Slf4j
 public class PurgeFailurePolicy implements IFailureHandlerPolicy {
 
     /**
@@ -19,22 +19,23 @@ public class PurgeFailurePolicy implements IFailureHandlerPolicy {
      * @param originalLayout Original Layout which needs to be modified.
      * @param corfuRuntime   Connected runtime to attach to the new layout.
      * @param failedNodes    Set of all failed/defected servers.
+     * @param healedNodes    Set of all healed/responsive servers.
      * @return The new and modified layout.
-     * @throws LayoutModificationException Thrown if attempt to create an invalid layout.
-     * @throws CloneNotSupportedException  Clone not supported for layout.
      */
     @Override
-    public Layout generateLayout(Layout originalLayout, CorfuRuntime corfuRuntime, Set<String>
-            failedNodes)
-            throws LayoutModificationException, CloneNotSupportedException {
-        LayoutWorkflowManager layoutManager = new LayoutWorkflowManager(originalLayout);
-        Layout newLayout = layoutManager
+    public Layout generateLayout(Layout originalLayout,
+                                 CorfuRuntime corfuRuntime,
+                                 Set<String> failedNodes,
+                                 Set<String> healedNodes) {
+        LayoutBuilder layoutBuilder = new LayoutBuilder(originalLayout);
+        Layout newLayout = layoutBuilder
                 .removeLayoutServers(failedNodes)
                 .removeSequencerServers(failedNodes)
                 .removeLogunitServers(failedNodes)
                 .build();
         newLayout.setRuntime(corfuRuntime);
         newLayout.setEpoch(newLayout.getEpoch() + 1);
+        log.info("generateLayout: new Layout {}", newLayout);
         return newLayout;
     }
 }

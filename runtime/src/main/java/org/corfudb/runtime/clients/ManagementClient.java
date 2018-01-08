@@ -4,6 +4,7 @@ import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import lombok.Getter;
@@ -12,9 +13,16 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
+import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 
 /**
  * A client to the Management Server.
@@ -30,7 +38,6 @@ public class ManagementClient implements IClient {
     @Getter
     IClientRouter router;
 
-
     /**
      * The handler and handlers which implement this client.
      */
@@ -38,6 +45,12 @@ public class ManagementClient implements IClient {
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
             .generateHandlers(MethodHandles.lookup(), this);
 
+
+    @ClientHandler(type = CorfuMsgType.ORCHESTRATOR_RESPONSE)
+    private static Object handleOrchestratorResponse(CorfuPayloadMsg<OrchestratorResponse> msg,
+                                                  ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
 
     @ClientHandler(type = CorfuMsgType.HEARTBEAT_RESPONSE)
     private static Object handleHeartbeatResponse(CorfuPayloadMsg<byte[]> msg,
@@ -74,12 +87,13 @@ public class ManagementClient implements IClient {
     /**
      * Sends the failure detected to the relevant management server.
      *
-     * @param nodes The failed nodes map to be handled.
+     * @param failedNodes The failed nodes set to be handled.
+     * @param healedNodes The healed nodes set to be handled.
      * @return A future which will be return TRUE if completed successfully else returns FALSE.
      */
-    public CompletableFuture<Boolean> handleFailure(Set nodes) {
+    public CompletableFuture<Boolean> handleFailure(Set failedNodes, Set healedNodes) {
         return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED
-                .payloadMsg(new FailureDetectorMsg(nodes)));
+                .payloadMsg(new FailureDetectorMsg(failedNodes, healedNodes)));
     }
 
     /**
@@ -100,5 +114,21 @@ public class ManagementClient implements IClient {
      */
     public CompletableFuture<byte[]> sendHeartbeatRequest() {
         return router.sendMessageAndGetCompletable(CorfuMsgType.HEARTBEAT_REQUEST.msg());
+    }
+
+    public CreateWorkflowResponse addNodeRequest(String endpoint) {
+        OrchestratorMsg req = new OrchestratorMsg(new AddNodeRequest(endpoint));
+        CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
+                .ORCHESTRATOR_REQUEST
+                .payloadMsg(req));
+        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp).getResponse();
+    }
+
+    public QueryResponse queryRequest(UUID workflowId) {
+        OrchestratorMsg req = new OrchestratorMsg(new QueryRequest(workflowId));
+        CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
+                .ORCHESTRATOR_REQUEST
+                .payloadMsg(req));
+        return (QueryResponse) CFUtils.getUninterruptibly(resp).getResponse();
     }
 }
