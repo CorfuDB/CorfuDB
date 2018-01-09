@@ -1,17 +1,15 @@
 package org.corfudb.runtime.view;
 
+import java.time.Duration;
 import java.util.List;
-import java.util.UUID;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
-import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.WorkflowResult;
+import org.corfudb.protocols.wireprotocol.orchestrator.WorkflowStatus;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.util.Sleep;
-import org.corfudb.util.Utils;
 
 /**
  * A view of the Management Service to manage reconfigurations of the Corfu Cluster.
@@ -21,30 +19,11 @@ import org.corfudb.util.Utils;
 @Slf4j
 public class ManagementView extends AbstractView {
 
-    private final long layoutRefreshTimeout = 500;
+    static final Duration WORKFLOW_TIMEOUT = Duration.ofMinutes(10);
+    static final int WORKFLOW_RETRY = 3;
 
     public ManagementView(@NonNull CorfuRuntime runtime) {
         super(runtime);
-    }
-
-    /**
-     * Checks if a given workflow with the given workflow ID is active or not.
-     * If returns True - the workflow is active
-     * If returns False - the workflow is either completed successfully or failed.
-     *
-     * @param server     Node endpoint on which the workflow is running.
-     * @param workflowId Workflow UUID
-     * @return True if active. Else False
-     */
-    public boolean isWorkflowActive(String server, UUID workflowId) {
-        return layoutHelper(l -> {
-            QueryResponse response = runtime.getRouter(server)
-                    .getClient(ManagementClient.class)
-                    .queryRequest(workflowId);
-            log.info("isWorkflowActive: {} on server:{} = {}",
-                workflowId, server, response.isActive());
-            return response.isActive();
-        });
     }
 
     /**
@@ -58,27 +37,21 @@ public class ManagementView extends AbstractView {
 
             // Choosing the tail log server to run the workflow to optimize bulk reads on the
             // same node.
+            log.debug("addNode: trying with layout {}", l);
             List<String> logServers = l.getSegments().get(0).getStripes().get(0).getLogServers();
             String server = logServers.get(logServers.size() - 1);
+            log.debug("addNode: trying with tail {} {}", server, Thread.currentThread().getId());
             ManagementClient client = runtime.getRouter(server).getClient(ManagementClient.class);
 
-            // Dispatch add node request.
-            CreateWorkflowResponse addNodeResponse = client.addNodeRequest(endpoint);
-
-            UUID workflowId = addNodeResponse.getWorkflowId();
-
-            while (isWorkflowActive(server, workflowId)) {
-                Sleep.MILLISECONDS.sleepUninterruptibly(layoutRefreshTimeout);
+            for (int x = 0; x < WORKFLOW_RETRY; x++) {
+                WorkflowStatus status = client.addNodeRequest(endpoint, WORKFLOW_TIMEOUT);
+                log.debug("addNode: status {} {}", status.getResult().toString(), Thread.currentThread().getId());
+                if (status.getResult() == WorkflowResult.COMPLETED) {
+                    return true;
+                }
+                log.debug("addNode: failed, retrying {}", Thread.currentThread().getId());
             }
-
-            runtime.invalidateLayout();
-
-            if (!runtime.getLayoutView().getLayout().getAllServers().contains(endpoint)
-                    || runtime.getLayoutView().getLayout().getSegments().size() != 1) {
-                throw new RuntimeException("Adding node:" + endpoint + " failed.");
-            }
-
-            return true;
+            return false;
         });
     }
 }

@@ -3,7 +3,8 @@ package org.corfudb.runtime.clients;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.format.Types.NodeMetrics;
 import org.corfudb.infrastructure.*;
-import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.WorkflowResult;
+import org.corfudb.protocols.wireprotocol.orchestrator.WorkflowStatus;
 import org.junit.After;
 import org.junit.Test;
 
@@ -80,8 +81,8 @@ public class ManagementClientTest extends AbstractClientTest {
     @Test
     public void queryWorkflowRPCTest() throws Exception {
         // verify that non-active workflows return false when queried.
-        QueryResponse resp = client.queryRequest(UUID.randomUUID());
-        assertThat(resp.isActive()).isFalse();
+        WorkflowStatus status = client.queryRequest("localhost:9000");
+        assertThat(status.getResult()).isEqualTo(WorkflowResult.UNKNOWN);
     }
 
     /**

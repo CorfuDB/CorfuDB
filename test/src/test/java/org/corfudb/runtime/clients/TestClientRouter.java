@@ -201,7 +201,8 @@ public class TestClientRouter implements IClientRouter {
      * or a timeout in the case there is no response.
      */
     @Override
-    public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message) {
+    public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message,
+                                                                 Duration duration) {
         // Simulate a "disconnected endpoint"
         if (!connected) {
             log.trace("Disconnected endpoint " + host + ":" + port);
@@ -228,7 +229,8 @@ public class TestClientRouter implements IClientRouter {
                 routeMessage(message);
         }
         // Generate a timeout future, which will complete exceptionally if the main future is not completed.
-        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
+        Duration timeout = duration == null ? Duration.ofMillis(timeoutResponse) : duration;
+        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, timeout);
         cfTimeout.exceptionally(e -> {
             outstandingRequests.remove(thisRequest);
             log.debug("Remove request {} due to timeout!", thisRequest);

@@ -100,7 +100,7 @@ public abstract class AbstractView {
                 } else if (re instanceof WrongEpochException) {
                     WrongEpochException we = (WrongEpochException) re;
                     log.warn("Got a wrong epoch exception, updating epoch to {} and "
-                            + "invalidate view", we.getCorrectEpoch());
+                            + "invalidate view {}", we.getCorrectEpoch());
                     runtime.invalidateLayout();
                 } else if (re instanceof NetworkException) {
                     log.warn("layoutHelper: System seems unavailable", re);

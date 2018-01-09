@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 
 /**
  * The type of requests that can be made to the Orchestrator Service.
- * 
+ *
  * @author Maithem
  */
 @AllArgsConstructor
@@ -19,18 +19,30 @@ public enum OrchestratorRequestType {
     /**
      * Query a workflow id
      */
-    QUERY(0, null),
+    QUERY(0, null, QueryRequest::new),
 
     /**
      * Add a new node to the cluster
      */
-    ADD_NODE(1, AddNodeWorkflow::new);
+    ADD_NODE(1, AddNodeWorkflow::new, AddNodeRequest::new);
 
+    /**
+     * Id of this request
+     */
     @Getter
     public final int type;
 
+    /**
+     * A function that maps a request to a workflow.
+     */
     @Getter
     final Function<Request, IWorkflow> workflowGenerator;
+
+    /**
+     * A function that maps a serialized request into a request object.
+     */
+    @Getter
+    final Function<byte[], Request> requestGenerator;
 
     /**
      * Map an int to an enum.

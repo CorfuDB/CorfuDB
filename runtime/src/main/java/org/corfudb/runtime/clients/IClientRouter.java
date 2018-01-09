@@ -2,10 +2,13 @@ package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
 
+import java.time.Duration;
 import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+
+import javax.annotation.Nullable;
 
 /**
  * This is an interface in which all client routers must implement.
@@ -41,12 +44,13 @@ public interface IClientRouter {
      *
      * @param ctx     The channel handler context to send the message under.
      * @param message The message to send.
-     * @param <T>     The type of completable to return.
+     * @param timeout The timeout for this request.
      * @return A completable future which will be fulfilled by the reply,
      * or a timeout in the case there is no response.
      */
     <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx,
-                                                          CorfuMsg message);
+                                                          CorfuMsg message,
+                                                          @Nullable Duration timeout);
 
     /**
      * Send a message using the router channel handler and
@@ -58,7 +62,22 @@ public interface IClientRouter {
      *      or a timeout in the case there is no response.
      */
     default <T> CompletableFuture<T> sendMessageAndGetCompletable(CorfuMsg message) {
-        return sendMessageAndGetCompletable(null, message);
+        return sendMessageAndGetCompletable(null, message, null);
+    }
+
+    /**
+     * Send a message using the router channel handler and
+     * get a completable future to be fulfilled by the reply.
+     *
+     * @param message The message to send.
+     * @param <T>     The type of completable to return.
+     * @param timeout The timeout for this request
+     * @return A completable future which will be fulfilled by the reply,
+     *      or a timeout in the case there is no response.
+     */
+    default <T> CompletableFuture<T> sendMessageAndGetCompletable(CorfuMsg message,
+                                                                  @Nullable Duration timeout) {
+        return sendMessageAndGetCompletable(null, message, timeout);
     }
 
     /**

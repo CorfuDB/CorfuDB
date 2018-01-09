@@ -79,9 +79,9 @@ public class ClusterReconfigIT extends AbstractIT {
                 .setType(SMRMap.class)
                 .open();
 
-        final String data = createStringOfSize(1_000);
+        final String data = createStringOfSize(500);
 
-        final int num = 15_000;
+        final int num = 5000;
 
         Random r = getRandomNumberGenerator();
         for (int i = 0; i < num; i++) {
