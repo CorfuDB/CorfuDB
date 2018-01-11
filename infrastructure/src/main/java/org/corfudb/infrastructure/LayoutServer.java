@@ -3,11 +3,8 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 
-import java.util.UUID;
 import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.NonNull;
@@ -24,7 +21,6 @@ import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.protocols.wireprotocol.LayoutProposeResponse;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.Layout.LayoutSegment;
 
 /**
  * The layout server serves layouts, which are used by clients to find the
@@ -60,12 +56,6 @@ import org.corfudb.runtime.view.Layout.LayoutSegment;
 //TODO Need a janitor to cleanup old phases data and to fill up holes in layout history.
 @Slf4j
 public class LayoutServer extends AbstractServer {
-
-    private static final String PREFIX_PHASE_1 = "PHASE_1";
-    private static final String KEY_SUFFIX_PHASE_1 = "RANK";
-    private static final String PREFIX_PHASE_2 = "PHASE_2";
-    private static final String KEY_SUFFIX_PHASE_2 = "DATA";
-    private static final String PREFIX_LAYOUTS = "LAYOUTS";
 
     /**
      * The options map.
@@ -332,51 +322,27 @@ public class LayoutServer extends AbstractServer {
     }
 
     public Rank getPhase1Rank() {
-        return serverContext.getDataStore().get(Rank.class, PREFIX_PHASE_1, serverContext
-                .getServerEpoch() + KEY_SUFFIX_PHASE_1);
+        return serverContext.getPhase1Rank();
     }
 
     public void setPhase1Rank(Rank rank) {
-        serverContext.getDataStore().put(Rank.class, PREFIX_PHASE_1, serverContext
-                .getServerEpoch() + KEY_SUFFIX_PHASE_1, rank);
+        serverContext.setPhase1Rank(rank);
     }
 
     public Phase2Data getPhase2Data() {
-        return serverContext.getDataStore().get(Phase2Data.class, PREFIX_PHASE_2, serverContext
-                .getServerEpoch() + KEY_SUFFIX_PHASE_2);
+        return serverContext.getPhase2Data();
     }
 
     public void setPhase2Data(Phase2Data phase2Data) {
-        serverContext.getDataStore().put(Phase2Data.class, PREFIX_PHASE_2, serverContext
-                .getServerEpoch() + KEY_SUFFIX_PHASE_2, phase2Data);
+        serverContext.setPhase2Data(phase2Data);
     }
 
     public void setLayoutInHistory(Layout layout) {
-        serverContext.getDataStore().put(Layout.class, PREFIX_LAYOUTS, String.valueOf(layout
-                .getEpoch()), layout);
+        serverContext.setLayoutInHistory(layout);
     }
 
     private long getServerEpoch() {
         return serverContext.getServerEpoch();
-    }
-
-    /**
-     * Returns the layout history.
-     *
-     * @return list of layouts in the history
-     */
-    public List<Layout> getLayoutHistory() {
-        List<Layout> layouts = serverContext.getDataStore().getAll(Layout.class, PREFIX_LAYOUTS);
-        Collections.sort(layouts, (a, b) -> {
-            if (a.getEpoch() > b.getEpoch()) {
-                return 1;
-            } else if (a.getEpoch() < b.getEpoch()) {
-                return -1;
-            } else {
-                return 0;
-            }
-        });
-        return layouts;
     }
 
     /**

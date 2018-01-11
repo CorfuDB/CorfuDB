@@ -220,14 +220,20 @@ public class CorfuServer {
         if (!(Boolean) opts.get("--memory")) {
             File serviceDir = new File((String) opts.get("--log-path"));
 
-            if (!serviceDir.exists()) {
-                if (serviceDir.mkdirs()) {
-                    log.info("Created new service directory at {}.", serviceDir);
-                }
-            } else if (!serviceDir.isDirectory()) {
+            if (!serviceDir.isDirectory()) {
                 log.error("Service directory {} does not point to a directory. Aborting.",
                         serviceDir);
                 throw new RuntimeException("Service directory must be a directory!");
+            } else {
+                String corfuServiceDirPath = serviceDir.getAbsolutePath()
+                        + File.separator
+                        + "corfu";
+                File corfuServiceDir = new File(corfuServiceDirPath);
+                // Update the new path with the dedicated child service directory.
+                opts.put("--log-path", corfuServiceDirPath);
+                if (!corfuServiceDir.exists() && corfuServiceDir.mkdirs()) {
+                    log.info("Created new service directory at {}.", corfuServiceDir);
+                }
             }
         }
 
