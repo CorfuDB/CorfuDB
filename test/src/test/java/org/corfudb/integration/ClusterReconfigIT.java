@@ -6,9 +6,13 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import com.google.common.collect.Range;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -16,10 +20,8 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
-import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.SequencerClient;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
@@ -39,8 +41,25 @@ public class ClusterReconfigIT extends AbstractIT {
         final Random randomSeed = new Random();
         final long SEED = randomSeed.nextLong();
         // Keep this print at all times to reproduce any failed test.
-        System.out.println("SEED = " + Long.toHexString(SEED));
+        testStatus += "SEED=" + Long.toHexString(SEED);
         return new Random(SEED);
+    }
+
+    private Layout get3NodeLayout() throws Exception {
+        return new Layout(
+                new ArrayList<>(
+                        Arrays.asList("localhost:9000", "localhost:9001", "localhost:9002")),
+                new ArrayList<>(
+                        Arrays.asList("localhost:9000", "localhost:9001", "localhost:9002")),
+                Collections.singletonList(new Layout.LayoutSegment(
+                        Layout.ReplicationMode.CHAIN_REPLICATION,
+                        0L,
+                        -1L,
+                        Collections.singletonList(new Layout.LayoutStripe(
+                                Arrays.asList("localhost:9000", "localhost:9001", "localhost:9002")
+                        )))),
+                0L,
+                UUID.randomUUID());
     }
 
     /**
@@ -75,6 +94,27 @@ public class ClusterReconfigIT extends AbstractIT {
                 .runServer();
     }
 
+    private Thread startDaemonWriter(CorfuRuntime runtime, Random r, CorfuTable table,
+                                     String data, AtomicBoolean stopFlag) {
+        Thread t = new Thread(() -> {
+            while (stopFlag.get()) {
+                assertThatCode(() -> {
+                    try {
+                        runtime.getObjectsView().TXBegin();
+                        table.put(Integer.toString(r.nextInt()), data);
+                        runtime.getObjectsView().TXEnd();
+                    } catch (TransactionAbortedException e) {
+                        // A transaction aborted exception is expected during
+                        // some reconfiguration cases.
+                    }
+                }).doesNotThrowAnyException();
+            }
+        });
+        t.setDaemon(true);
+        t.start();
+        return t;
+    }
+
     /**
      * A cluster of one node is started - 9000.
      * Then a block of data of 15,000 entries is written to the node.
@@ -97,10 +137,10 @@ public class ClusterReconfigIT extends AbstractIT {
 
         CorfuRuntime runtime = createDefaultRuntime();
 
-        Map<String, String> map = runtime.getObjectsView()
+        CorfuTable table = runtime.getObjectsView()
                 .build()
+                .setType(CorfuTable.class)
                 .setStreamName("test")
-                .setType(SMRMap.class)
                 .open();
 
         final String data = createStringOfSize(1_000);
@@ -110,26 +150,11 @@ public class ClusterReconfigIT extends AbstractIT {
         Random r = getRandomNumberGenerator();
         for (int i = 0; i < num; i++) {
             String key = Long.toString(r.nextLong());
-            map.put(key, data);
+            table.put(key, data);
         }
 
         final AtomicBoolean moreDataToBeWritten = new AtomicBoolean(true);
-        Thread t = new Thread(() -> {
-            while (moreDataToBeWritten.get()) {
-                assertThatCode(() -> {
-                    try {
-                        runtime.getObjectsView().TXBegin();
-                        map.put(Integer.toString(r.nextInt()), data);
-                        runtime.getObjectsView().TXEnd();
-                    } catch (TransactionAbortedException e) {
-                        // A transaction aborted exception is expected during
-                        // some reconfiguration cases.
-                    }
-                }).doesNotThrowAnyException();
-            }
-        });
-        t.setDaemon(true);
-        t.start();
+        Thread t = startDaemonWriter(runtime, r, table, data, moreDataToBeWritten);
 
         runtime.getManagementView().addNode("localhost:9001");
         runtime.getManagementView().addNode("localhost:9002");
@@ -265,5 +290,117 @@ public class ClusterReconfigIT extends AbstractIT {
         }
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(l.getEpoch() + 1);
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * Creates 3 corfu server processes.
+     * Connects a runtime and creates a corfu table to write data.
+     * One of the node is then shutdown/killed. The cluster then stabilizes to the new
+     * epoch by removing the failure from the logunit chain and bootstrapping a backup
+     * sequencer (only if required). After the stabilization is complete, another write is
+     * attempted. The test passes only if this write goes through.
+     *
+     * @param killNode Index of the node to be killed.
+     * @throws Exception
+     */
+    private void killNodeAndVerifyDataPath(int killNode)
+            throws Exception {
+
+        // Set up cluster of 3 nodes.
+        // Set up cluster of 3 nodes.
+        final int PORT_0 = 9000;
+        final int PORT_1 = 9001;
+        final int PORT_2 = 9002;
+        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
+        Process corfuServer_2 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_1);
+        Process corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
+        List<Process> corfuServers = Arrays.asList(corfuServer_1, corfuServer_2, corfuServer_3);
+        Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+        final Layout layout = get3NodeLayout();
+        bootstrapCluster(layout);
+
+        // Create map and set up daemon writer thread.
+        CorfuRuntime runtime = createDefaultRuntime();
+        CorfuTable table = runtime.getObjectsView()
+                .build()
+                .setType(CorfuTable.class)
+                .setStreamName("test")
+                .open();
+        final String data = createStringOfSize(1_000);
+        Random r = getRandomNumberGenerator();
+        final AtomicBoolean moreDataToBeWritten = new AtomicBoolean(true);
+        Thread t = startDaemonWriter(runtime, r, table, data, moreDataToBeWritten);
+
+        // Some preliminary writes into the corfu table.
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+            runtime.getObjectsView().TXBegin();
+            table.put(Integer.toString(r.nextInt()), data);
+            runtime.getObjectsView().TXEnd();
+        }
+
+        // Killing killNode.
+        assertThat(shutdownCorfuServer(corfuServers.get(killNode))).isTrue();
+
+        // We wait for failure to be detected and the cluster to stabilize by waiting for the epoch
+        // to increment.
+        runtime.invalidateLayout();
+        Layout refreshedLayout = runtime.getLayoutView().getLayout();
+        while (refreshedLayout.getEpoch() == layout.getEpoch()) {
+            runtime.invalidateLayout();
+            refreshedLayout = runtime.getLayoutView().getLayout();
+            Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+        }
+
+        // Stop the daemon thread.
+        moreDataToBeWritten.set(false);
+        t.join();
+
+        // Ensure writes still going through.
+        // Fail test if write fails.
+        boolean writeAfterKillNode = false;
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            try {
+                runtime.getObjectsView().TXBegin();
+                table.put(Integer.toString(r.nextInt()), data);
+                runtime.getObjectsView().TXEnd();
+                writeAfterKillNode = true;
+                break;
+            } catch (TransactionAbortedException tae) {
+                // A transaction aborted exception is expected during
+                // some reconfiguration cases.
+                tae.printStackTrace();
+            }
+            Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+        }
+        assertThat(writeAfterKillNode).isTrue();
+
+        for (int i = 0; i < corfuServers.size(); i++) {
+            if (i == killNode) {
+                continue;
+            }
+            assertThat(shutdownCorfuServer(corfuServers.get(i))).isTrue();
+        }
+    }
+
+    /**
+     * Kill a node containing the head of the log unit chain and the primary sequencer.
+     * Ensures writes go through after kill node and cluster re-stabilization.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void killLogUnitAndPrimarySequencer() throws Exception {
+        killNodeAndVerifyDataPath(0);
+    }
+
+    /**
+     * Kill a node containing one of the log unit chain and the non-primary sequencer.
+     * Ensures writes go through after kill node and cluster re-stabilization.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void killLogUnitAndBackupSequencer() throws Exception {
+        killNodeAndVerifyDataPath(1);
     }
 }

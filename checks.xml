@@ -48,6 +48,7 @@
 
         <module name="RegexpSinglelineJava">
             <!-- Check for e.printStackTrace().-->
+            <property name="id" value="printStackTrace"/>
             <property name="severity" value="error"/>
             <property name="format" value="\.printStackTrace\(\)"/>
             <property name="message" value="Using printStackTrace() is forbidden. Rethrow or handle the exception."/>

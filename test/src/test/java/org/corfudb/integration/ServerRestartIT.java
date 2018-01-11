@@ -79,7 +79,7 @@ public class ServerRestartIT extends AbstractIT {
         final Random randomSeed = new Random();
         final long SEED = randomSeed.nextLong();
         // Keep this print at all times to reproduce any failed test.
-        System.out.println("SEED = " + Long.toHexString(SEED));
+        testStatus += "SEED=" + Long.toHexString(SEED);
         return new Random(SEED);
     }
 
@@ -140,7 +140,6 @@ public class ServerRestartIT extends AbstractIT {
 
             for (int i = 0; i < ITERATIONS; i++) {
 
-                System.out.println("Iteration #" + i);
                 boolean serverRestart = rand.nextInt(TOTAL_PERCENTAGE) < SERVER_RESTART_PERCENTAGE;
                 boolean clientRestart = rand.nextInt(TOTAL_PERCENTAGE) < CLIENT_RESTART_PERCENTAGE;
 
