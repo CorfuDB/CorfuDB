@@ -4,7 +4,7 @@
 
     <groupId>org.corfudb</groupId>
     <artifactId>corfu</artifactId>
-    <version>0.1.1</version>
+    <version>${org.corfudb.corfu.version}</version>
 
     <modules>
         <module>infrastructure</module>
@@ -42,6 +42,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <org.corfudb.corfu.version>0.1.1</org.corfudb.corfu.version>
     </properties>
 
     <scm>
