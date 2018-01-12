@@ -1,4 +1,5 @@
 org.corfudb.annotations
+org.corfudb.comm
 org.corfudb.generator
 org.corfudb.generator.distributions
 org.corfudb.generator.operations
