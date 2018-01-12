@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableSet;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -44,6 +45,16 @@ public class SequencerClientTest extends AbstractClientTest {
     public void canGetAToken()
             throws Exception {
         client.nextToken(Collections.<UUID>emptySet(), 1).get();
+    }
+
+    @Test
+    public void sequencerReadyStatusTest() throws Exception {
+        Boolean isReady = client.isReady().get();
+        assertThat(isReady).isTrue();
+        client.bootstrap(0L, Collections.EMPTY_MAP, 1L);
+        isReady = client.isReady().get();
+        assertThat(isReady).isFalse();
+
     }
 
     @Test

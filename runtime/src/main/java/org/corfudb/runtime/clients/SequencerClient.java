@@ -47,6 +47,32 @@ public class SequencerClient implements IClient {
         return msg.getPayload();
     }
 
+    /**
+     * Handle an ACK response from the server.
+     *
+     * @param msg The ping request message
+     * @param ctx The context the message was sent under
+     * @param r   A reference to the router
+     * @return Always True, since the ACK message was successful.
+     */
+    @ClientHandler(type = CorfuMsgType.ACK)
+    private static Object handleAck(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+        return true;
+    }
+
+    /**
+     * Handle a NACK response from the server.
+     *
+     * @param msg The ping request message
+     * @param ctx The context the message was sent under
+     * @param r   A reference to the router
+     * @return Always True, since the ACK message was successful.
+     */
+    @ClientHandler(type = CorfuMsgType.NACK)
+    private static Object handleNack(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+        return false;
+    }
+
     public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens) {
         return router.sendMessageAndGetCompletable(
                 CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs)));
@@ -83,5 +109,9 @@ public class SequencerClient implements IClient {
         return router.sendMessageAndGetCompletable(CorfuMsgType.BOOTSTRAP_SEQUENCER
                 .payloadMsg(new SequencerTailsRecoveryMsg(initialToken, sequencerTails,
                         readyStateEpoch)));
+    }
+
+    public CompletableFuture<Boolean> isReady() {
+        return router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.SEQUENCER_STATUS_REQ));
     }
 }

@@ -16,6 +16,7 @@ import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
@@ -307,8 +308,9 @@ public class LayoutManagementView extends AbstractView {
 
         // Reconfigure Primary Sequencer if required
         if (forceReconfigure
-                || !originalLayout.getSequencers().get(0).equals(newLayout.getSequencers()
-                .get(0))) {
+                || !originalLayout.getSequencers().get(0).equals(newLayout.getSequencers().get(0))
+                || !CFUtils.getUninterruptibly(runtime.getRouter(originalLayout
+                .getSequencers().get(0)).getClient(SequencerClient.class).isReady())) {
             maxTokenRequested = getMaxGlobalTail(originalLayout);
 
             FastObjectLoader fastObjectLoader = new FastObjectLoader(runtime);

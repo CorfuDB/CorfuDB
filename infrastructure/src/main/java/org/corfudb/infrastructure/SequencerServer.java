@@ -31,6 +31,8 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
+import javax.annotation.Nonnull;
+
 /**
  * This server implements the sequencer functionality of Corfu.
  *
@@ -130,7 +132,8 @@ public class SequencerServer extends AbstractServer {
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
         if ((readyStateEpoch != serverContext.getServerEpoch())
-                && (!msg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER))) {
+                && (!msg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER))
+                && (!msg.getMsgType().equals(CorfuMsgType.SEQUENCER_STATUS_REQ))) {
             log.warn("Rejecting msg at sequencer : sequencerStateEpoch:{}, serverEpoch:{}, "
                     + "msg:{}", readyStateEpoch, serverContext.getServerEpoch(), msg);
             return false;
@@ -320,6 +323,34 @@ public class SequencerServer extends AbstractServer {
         }
         log.info("trimCache: Evicted {} entries", entries);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+    /**
+     *
+     * Returns the status of this sequencer
+     *
+     * This returns whether the sequencer is ready or not.
+     * The sequencer maintains its own epoch, when that epoch
+     * matches the server's epoch then this method will return
+     * true, otherwise it will return false.
+     *
+     * @param msg corfu message containing the status request
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
+     */
+    @ServerHandler(type = CorfuMsgType.SEQUENCER_STATUS_REQ)
+    public synchronized void isReady(@Nonnull CorfuMsg msg,
+                                     @Nonnull ChannelHandlerContext ctx,
+                                     @Nonnull IServerRouter r) {
+        long serverEpoch = serverContext.getServerEpoch();
+        if(readyStateEpoch == serverEpoch) {
+            log.info("isReady: Sequencer is ready current epoch {}", readyStateEpoch);
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        } else {
+            log.warn("isReady: Sequencer is ready current epoch {}, but the server's epoch is {}",
+                    readyStateEpoch, serverEpoch);
+            r.sendResponse(ctx, msg, CorfuMsgType.NACK.msg());
+        }
     }
 
     /**
