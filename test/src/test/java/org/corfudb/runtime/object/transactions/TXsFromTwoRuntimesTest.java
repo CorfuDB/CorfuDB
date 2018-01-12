@@ -31,7 +31,7 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
         //
 
         final Thread thread1 = new Thread( () -> {
-            CorfuRuntime myruntime = new CorfuRuntime(getDefaultEndpoint());
+            CorfuRuntime myruntime = getNewRuntime(getDefaultNode());
             myruntime.connect();
 
             ISMRMap<Integer, Integer> mymap =
@@ -69,7 +69,7 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
         } );
 
         final Thread thread0 = new Thread( () -> {
-            CorfuRuntime myruntime = new CorfuRuntime(getDefaultEndpoint());
+            CorfuRuntime myruntime = getNewRuntime(getDefaultNode());
             myruntime.connect();
 
             SMRMap<Integer, Integer> mymap =
@@ -176,7 +176,7 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
         } );
 
         final Thread thread0 = new Thread( () -> {
-            CorfuRuntime myruntime = new CorfuRuntime(getDefaultEndpoint()) ;
+            CorfuRuntime myruntime = getNewRuntime(getDefaultNode());
             myruntime.connect();
 
             ISMRMap<Integer, Integer> mymap =

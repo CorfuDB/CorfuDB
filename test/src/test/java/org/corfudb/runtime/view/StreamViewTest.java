@@ -79,7 +79,8 @@ public class StreamViewTest extends AbstractViewTest {
         assertThat(entries.size()).isEqualTo((firstIter / 2));
 
         // Open the stream with a new client
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultEndpoint()).connect();
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
+                                        .connect();
         txStream = rt2.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID, options);
         entries = txStream.remainingUpTo(Long.MAX_VALUE);
         assertThat(entries.size()).isEqualTo((firstIter / 2));

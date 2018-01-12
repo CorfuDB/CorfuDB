@@ -1,6 +1,7 @@
 package org.corfudb.protocols.wireprotocol;
 
 import java.lang.management.ManagementFactory;
+import java.util.HashMap;
 import java.util.Map;
 import javax.annotation.Nonnull;
 import lombok.Getter;
@@ -34,7 +35,13 @@ public class VersionInfo {
      * @param nodeId        The current node id.
      */
     public VersionInfo(Map<String,Object> optionsMap, @Nonnull String nodeId) {
-        this.optionsMap = optionsMap;
+        this.optionsMap = new HashMap<>(optionsMap);
+        // Remove any non-serializable objects
+        this.optionsMap.entrySet()
+                .removeIf(e -> {
+                    Object v = e.getValue();
+                    return !(v instanceof Integer || v instanceof Long || v instanceof String);
+                });
         this.nodeId = nodeId;
         this.version = CorfuRuntime.getVersionString();
     }

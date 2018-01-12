@@ -50,6 +50,7 @@ public class PlainTextSaslNettyServer extends SimpleChannelInboundHandler<ByteBu
         }
 
         if (saslServer.isComplete()) {
+            log.debug("channelRead0: Sasl handshake successful, uninstalling handler");
             ctx.pipeline().remove(this);
         }
     }

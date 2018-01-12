@@ -157,7 +157,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canReadWithCacheDisable() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2);
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
                 .setCacheDisabled(true)
                 .connect();
 
@@ -237,7 +237,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, MORE);
 
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
                 .connect();
         FastObjectLoader fsm = new FastObjectLoader(rt2)
                 .setBatchReadSize(2)
@@ -507,7 +507,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
                 .connect();
 
         FastObjectLoader fsm = new FastObjectLoader(rt2);
@@ -524,8 +524,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .connect();
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
 
         FastObjectLoader fsm = new FastObjectLoader(rt2);
         fsm.addStreamToIgnore("Map1");
@@ -545,7 +544,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 2);
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
                 .connect();
         FastObjectLoader fsm = new FastObjectLoader(rt2);
         fsm.addStreamToIgnore("Map1");
@@ -562,7 +561,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
                 .connect();
 
         long firstMileStone = 2;
@@ -590,7 +589,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         long snapShotAddress = checkPointAll(getDefaultRuntime());
         Helpers.trim(getDefaultRuntime(), snapShotAddress);
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
                 .connect();
 
         // Force a read from 0
@@ -607,7 +606,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     @Test
     public void doNotReconstructTransactionStreams() throws Exception {
         addSingleServer(SERVERS.PORT_0);
-        CorfuRuntime rt1 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt1 = getNewRuntime(getDefaultNode())
                 .setTransactionLogging(true)
                 .connect();
         populateMaps(SOME, rt1, CorfuTable.class, true, 2);
@@ -632,7 +631,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     @Test
     public void doReconstructTransactionStreamTail() throws Exception {
         addSingleServer(SERVERS.PORT_0);
-        CorfuRuntime rt1 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt1 = getNewRuntime(getDefaultNode())
                 .setTransactionLogging(true)
                 .connect();
 
@@ -698,7 +697,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         originalMap.put("a", "b");
 
-        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime recreatedRuntime = getNewRuntime(getDefaultNode())
                 .connect();
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
@@ -728,7 +727,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         originalTable.put("a", "b");
 
-        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime recreatedRuntime = getNewRuntime(getDefaultNode())
                 .connect();
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
@@ -776,7 +775,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         originalTable.put("k2", "ab");
         originalTable.put("k3", "ba");
 
-        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime recreatedRuntime = getNewRuntime(getDefaultNode())
                 .connect();
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
@@ -836,7 +835,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         smrMap.put("i", "j");
         corfuTable.put("k", "l");
 
-        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime recreatedRuntime = getNewRuntime(getDefaultNode())
                 .connect();
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
@@ -865,7 +864,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         originalTable.put("a", "b");
 
-        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime recreatedRuntime = getNewRuntime(getDefaultNode())
                 .connect();
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
@@ -908,7 +907,8 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         streamsToLoad.add("Map1");
         streamsToLoad.add("Map3");
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString()).connect();
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
+                                .connect();
         FastObjectLoader loader = new FastObjectLoader(rt2)
                 .setDefaultObjectsType(CorfuTable.class)
                 .addStreamsToLoad(streamsToLoad);
@@ -939,7 +939,8 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         streamsToLoad.add("Map1");
         streamsToLoad.add("Map3");
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString()).connect();
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
+                                .connect();
         FastObjectLoader loader = new FastObjectLoader(rt2)
                 .setDefaultObjectsType(CorfuTable.class)
                 .addStreamsToLoad(streamsToLoad);

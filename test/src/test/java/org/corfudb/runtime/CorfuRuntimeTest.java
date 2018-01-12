@@ -78,7 +78,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
         addSingleServer(SERVERS.PORT_0);
 
-        CorfuRuntime rt = new CorfuRuntime(SERVERS.ENDPOINT_0);
+        CorfuRuntime rt = getNewRuntime(getDefaultNode());
         rt.connect();
 
     }

@@ -179,7 +179,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx,
                                 java.lang.Throwable cause) throws Exception {
-        log.error("exceptionCaught: Exception caught.");
+        log.error("exceptionCaught: Exception {} caught.", cause.getClass().getSimpleName(), cause);
         if (cause instanceof ReadTimeoutException) {
             // Handshake has failed or completed. If none is True, handshake timed out.
             if (this.handshakeState.failed()) {
