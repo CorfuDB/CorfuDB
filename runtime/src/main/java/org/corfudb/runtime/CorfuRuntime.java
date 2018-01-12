@@ -129,7 +129,7 @@ public class CorfuRuntime {
 
         /** Number of times to retry on an
          * {@link org.corfudb.runtime.exceptions.OverwriteException} before giving up. */
-        @Default int writeRetry = 3;
+        @Default int writeRetry = 5;
 
         /** The number of times to retry on a retriable
          * {@link org.corfudb.runtime.exceptions.TrimmedException} during a transaction.*/
