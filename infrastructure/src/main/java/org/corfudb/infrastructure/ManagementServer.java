@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -21,6 +22,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import java.util.stream.Collectors;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -45,6 +47,7 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
 
 import javax.annotation.Nonnull;
+import org.corfudb.util.NodeLocator;
 
 /**
  * Instantiates and performs failure detection and handling asynchronously.
@@ -168,6 +171,7 @@ public class ManagementServer extends AbstractServer {
     private void bootstrapPrimarySequencerServer() {
         try {
             String primarySequencer = latestLayout.getSequencers().get(0);
+            log.info("bootstrapPrimarySequencerServer[{}]: started", primarySequencer);
             boolean bootstrapResult = getCorfuRuntime().getRouter(primarySequencer)
                     .getClient(SequencerClient.class)
                     .bootstrap(0L, Collections.emptyMap(), latestLayout.getEpoch())

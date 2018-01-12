@@ -32,20 +32,23 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
     static final int BATCH_SIZE = 50;
     private StreamLog streamLog;
     private BlockingQueue<BatchWriterOperation> operationsQueue;
-    final ExecutorService writerService = Executors
-            .newSingleThreadExecutor(new ThreadFactoryBuilder()
-                    .setDaemon(false)
-                    .setNameFormat("LogUnit-Write-Processor-%d")
-                    .build());
+    private final ExecutorService writerService;
 
     /**
      * Returns a new BatchWriter for a stream log.
      *
+     * @param context   A server context
      * @param streamLog stream log for writes (can be in memory or file)
      */
-    public BatchWriter(StreamLog streamLog) {
+    public BatchWriter(@Nonnull ServerContext context,
+                       @Nonnull StreamLog streamLog) {
         this.streamLog = streamLog;
         operationsQueue = new LinkedBlockingQueue<>();
+        writerService = Executors
+            .newSingleThreadExecutor(new ThreadFactoryBuilder()
+                .setDaemon(false)
+                .setNameFormat(context.getThreadPrefix() + "Write-Processor-%d")
+                .build());
         writerService.submit(this::batchWriteProcessor);
     }
 

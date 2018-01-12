@@ -33,6 +33,7 @@ import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.clients.TestClientRouter;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -135,13 +136,17 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         }
         return runtimeRouterMap.get(runtime).computeIfAbsent(endpoint,
                 x -> {
+                    TestServer server = testServerMap.computeIfAbsent(endpoint,
+                        s -> new TestServer(Integer.valueOf(endpoint.split(":")[1])
+                        ));
                     TestClientRouter tcn =
-                            new TestClientRouter(testServerMap.get(endpoint).getServerRouter());
+                            new TestClientRouter(server.getServerRouter());
                     tcn.addClient(new BaseClient())
                             .addClient(new SequencerClient())
                             .addClient(new LayoutClient())
                             .addClient(new LogUnitClient())
                             .addClient(new ManagementClient());
+                    runtime.nodeRouters.put(endpoint, tcn);
                     return tcn;
                 }
         );
@@ -296,9 +301,9 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @return  A default CorfuRuntime
      */
     public CorfuRuntime getDefaultRuntime() {
-        if (!testServerMap.containsKey(getEndpoint(SERVERS.PORT_0))) {
-            addSingleServer(SERVERS.PORT_0);
-        }
+        testServerMap.computeIfAbsent(getEndpoint(SERVERS.PORT_0),
+            s -> new TestServer(SERVERS.PORT_0)
+            );
         return getRuntime().connect();
     }
 

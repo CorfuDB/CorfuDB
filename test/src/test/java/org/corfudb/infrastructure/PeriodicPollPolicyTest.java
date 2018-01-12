@@ -34,7 +34,7 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
         addServer(SERVERS.PORT_2);
 
         layout = new TestLayoutBuilder()
-                .setEpoch(1L)
+                .setEpoch(0L)
                 .addLayoutServer(SERVERS.PORT_0)
                 .addLayoutServer(SERVERS.PORT_1)
                 .addLayoutServer(SERVERS.PORT_2)

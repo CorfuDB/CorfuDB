@@ -12,6 +12,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.RecoveryException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 
@@ -45,7 +46,8 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                 CFUtils.getUninterruptibly(
                         layout.getLogUnitClient(globalAddress, 0)
                                 .write(sh.getSerialized()),
-                        OverwriteException.class);
+                        OverwriteException.class,
+                        WrongEpochException.class);
                 propagate(layout, globalAddress, sh.getSerialized());
             } catch (OverwriteException oe) {
                 // Some other wrote here (usually due to hole fill)

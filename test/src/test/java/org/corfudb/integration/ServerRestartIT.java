@@ -151,6 +151,7 @@ public class ServerRestartIT extends AbstractIT {
                 if (clientRestart) {
                     smrMapList.clear();
                     runtimeList.parallelStream().forEach(CorfuRuntime::shutdown);
+                    runtimeList.clear();
                     for (int j = 0; j < MAPS; j++) {
                         final int jj = j;
                         Future<Boolean> future = executorService.submit(() -> {

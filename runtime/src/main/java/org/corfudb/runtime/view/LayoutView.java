@@ -36,9 +36,7 @@ public class LayoutView extends AbstractView {
      * Retrieves current layout.
      **/
     public Layout getLayout() {
-        return layoutHelper(l -> {
-            return l;
-        });
+        return getCurrentLayout();
     }
 
     /**

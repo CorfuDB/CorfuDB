@@ -33,9 +33,6 @@ public class CheckpointTest extends AbstractObjectTest {
     CorfuRuntime myRuntime = null;
 
     void setRuntime() {
-        if (myRuntime != null) {
-            myRuntime.shutdown();
-        }
         myRuntime = getNewRuntime(getDefaultNode()).connect();
     }
 

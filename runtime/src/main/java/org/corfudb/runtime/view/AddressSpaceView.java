@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import java.util.concurrent.TimeoutException;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -24,6 +25,7 @@ import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -99,7 +101,7 @@ public class AddressSpaceView extends AbstractView {
      *
      * @param address
      */
-    private void validateStateOfWrittenEntry(long address) {
+    private void validateStateOfWrittenEntry(long address, Throwable t) {
         ILogData logData;
         try {
             logData = read(address);
@@ -133,6 +135,8 @@ public class AddressSpaceView extends AbstractView {
             // epoch as the layout we are about to write
             // to.
             if (token.getEpoch() != l.getEpoch()) {
+                log.warn("write: Aborted due to stale token {} != {}",
+                        token.getEpoch(), l.getEpoch());
                 throw new StaleTokenException(l.getEpoch());
             }
 
@@ -145,17 +149,17 @@ public class AddressSpaceView extends AbstractView {
                 l.getReplicationMode(token.getTokenValue())
                         .getReplicationProtocol(runtime)
                         .write(l, ld);
-            } catch (RuntimeException re) {
-                // If we have an Overwrite exception, it is already too late for trying
-                // to validate the state of the write, we know that it didn't went through.
-                if (re instanceof OverwriteException) {
-                    throw re;
-                }
-
-                validateStateOfWrittenEntry(token.getTokenValue());
+            } catch (OverwriteException oe) {
+                // Not possible to recover, terminate now.
+                throw oe;
+            } catch (WrongEpochException e) {
+                // Write was rejected, retry with new layout.
+            } catch (NetworkException e) {
+                // Unknown result, validate the write by reading it.
+                validateStateOfWrittenEntry(token.getTokenValue(), e);
             }
             return null;
-        }, true);
+        });
 
         // Cache the successful write
         if (!runtime.getParameters().isCacheDisabled()) {
