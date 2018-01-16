@@ -39,7 +39,10 @@ import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.ServerNotReadyException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.IFailureHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
@@ -186,11 +189,24 @@ public class ManagementServer extends AbstractServer {
     }
 
     private boolean recover() {
-            boolean recoveryResult = reconfigurationEventHandler
+        boolean recoveryResult = reconfigurationEventHandler
                     .recoverCluster(new Layout(latestLayout), getCorfuRuntime());
-            safeUpdateLayout(corfuRuntime.getLayoutView().getLayout());
-            return recoveryResult;
-
+        safeUpdateLayout(corfuRuntime.getLayoutView().getLayout());
+        latestLayout.setRuntime(corfuRuntime);
+        if (!recoveryResult && !latestLayout.getSequencers().isEmpty()) {
+            try {
+                latestLayout.getSequencer(0)
+                    .nextToken(Collections.emptySet(), 0);
+                // Sequencer is active
+                log.info("recover: sequencer is online, stopping recovery.");
+                recoveryResult = true;
+            } catch (NetworkException
+                | ServerNotReadyException
+                | WrongEpochException ignored) {
+                // Sequencer still is not active, continue retrying.
+            }
+        }
+        return recoveryResult;
     }
 
     /**
