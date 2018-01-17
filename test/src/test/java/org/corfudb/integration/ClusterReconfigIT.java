@@ -105,10 +105,8 @@ public class ClusterReconfigIT extends AbstractIT {
 
         final String data = createStringOfSize(1_000);
 
-        final int num = 15_000;
-
         Random r = getRandomNumberGenerator();
-        for (int i = 0; i < num; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             String key = Long.toString(r.nextLong());
             map.put(key, data);
         }

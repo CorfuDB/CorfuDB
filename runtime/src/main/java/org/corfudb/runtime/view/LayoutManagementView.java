@@ -23,7 +23,7 @@ import org.corfudb.util.CFUtils;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
- *
+ * <p>
  * <p>Created by zlokhandwala on 11/1/17.</p>
  */
 @Slf4j
@@ -123,56 +123,71 @@ public class LayoutManagementView extends AbstractView {
                         boolean isUnresponsiveServer,
                         int logUnitStripeIndex)
             throws QuorumUnreachableException, OutrankedException {
+        Layout newLayout;
+        if (!currentLayout.getAllServers().contains(endpoint)) {
 
-        currentLayout.setRuntime(runtime);
-        sealEpoch(currentLayout);
+            currentLayout.setRuntime(runtime);
+            sealEpoch(currentLayout);
 
-        LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
-        if (isLayoutServer) {
-            layoutBuilder.addLayoutServer(endpoint);
-        }
-        if (isSequencerServer) {
-            layoutBuilder.addSequencerServer(endpoint);
-        }
-        if (isLogUnitServer) {
-            layoutBuilder.addLogunitServer(logUnitStripeIndex, getMaxGlobalTail(currentLayout),
-                    endpoint);
-        }
-        if (isUnresponsiveServer) {
-            layoutBuilder.addUnresponsiveServers(Collections.singleton(endpoint));
-        }
-        Layout newLayout = layoutBuilder.build();
-        newLayout.setRuntime(runtime);
+            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
+            if (isLayoutServer) {
+                layoutBuilder.addLayoutServer(endpoint);
+            }
+            if (isSequencerServer) {
+                layoutBuilder.addSequencerServer(endpoint);
+            }
+            if (isLogUnitServer) {
+                layoutBuilder.addLogunitServer(logUnitStripeIndex, getMaxGlobalTail(currentLayout),
+                        endpoint);
+            }
+            if (isUnresponsiveServer) {
+                layoutBuilder.addUnresponsiveServers(Collections.singleton(endpoint));
+            }
+            newLayout = layoutBuilder.build();
+            newLayout.setRuntime(runtime);
 
-        attemptConsensus(newLayout);
+            attemptConsensus(newLayout);
 
-            // Add node is successful even if reconfigure sequencer fails.
-            // TODO: Optimize this by retrying or submitting a workflow to retry.
-            reconfigureSequencerServers(currentLayout, newLayout, false);
+        } else {
+            log.info("Node {} already exists in the layout, skipping.", endpoint);
+            newLayout = currentLayout;
+        }
+
+        // Add node is successful even if reconfigure sequencer fails.
+        // TODO: Optimize this by retrying or submitting a workflow to retry.
+        reconfigureSequencerServers(currentLayout, newLayout, false);
 
     }
-    
+
     /**
      * Attempts to merge the last 2 segments.
      *
      * @param currentLayout Current layout
      * @return True if merge successful, else False.
-     * @throws QuorumUnreachableException  if seal or consensus could not be achieved.
-     * @throws OutrankedException          if consensus is outranked.
+     * @throws QuorumUnreachableException if seal or consensus could not be achieved.
+     * @throws OutrankedException         if consensus is outranked.
      */
     public boolean mergeSegments(Layout currentLayout)
             throws QuorumUnreachableException, OutrankedException {
 
-        currentLayout.setRuntime(runtime);
-        sealEpoch(currentLayout);
+        Layout newLayout;
+        if (currentLayout.getSegments().size() > 1) {
 
-        LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
-        Layout newLayout = layoutBuilder
-                .mergePreviousSegment(currentLayout.getSegments().size() - 1)
-                .build();
-        newLayout.setRuntime(runtime);
+            log.info("mergeSegments: layout is {}", currentLayout);
 
-        attemptConsensus(newLayout);
+            currentLayout.setRuntime(runtime);
+            sealEpoch(currentLayout);
+
+            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
+            newLayout = layoutBuilder
+                    .mergePreviousSegment(currentLayout.getSegments().size() - 1)
+                    .build();
+            newLayout.setRuntime(runtime);
+            attemptConsensus(newLayout);
+        } else {
+            log.info("mergeSegments: skipping, no segments to merge {}", currentLayout);
+            newLayout = currentLayout;
+        }
         reconfigureSequencerServers(currentLayout, newLayout, false);
         return true;
     }
@@ -240,12 +255,16 @@ public class LayoutManagementView extends AbstractView {
         }
 
         // Check if our proposed layout got selected and committed.
-        runtime.invalidateLayout();
-        if (runtime.getLayoutView().getLayout().equals(layout)) {
-            log.info("New Layout Committed = {}", layout);
-        } else {
-            log.warn("Runtime recovered with a different layout = {}",
-                    runtime.getLayoutView().getLayout());
+        for (int x = 0; x < 3; x++) {
+            runtime.invalidateLayout();
+            if (runtime.getLayoutView().getLayout().equals(layout)) {
+                log.info("New Layout Committed = {}", layout);
+                return;
+            } else {
+                log.warn("Runtime recovered with a different layout = {}",
+                        runtime.getLayoutView().getLayout());
+            }
+            log.warn("attemptConsensus: Checking if {} has been accepted, retry {}", layout, x);
         }
     }
 

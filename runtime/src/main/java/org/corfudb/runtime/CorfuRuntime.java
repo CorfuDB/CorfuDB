@@ -259,6 +259,15 @@ public class CorfuRuntime {
          */
         UncaughtExceptionHandler uncaughtExceptionHandler;
         //endregion
+
+        /** {@link Duration} before a workflow times out. */
+        @Default Duration workflowTimeout = Duration.ofMinutes(10);
+
+        /** {@link Duration} before querying the status of a workflow. */
+        @Default Duration workflowRetryRate = Duration.ofSeconds(4);
+
+        /** Number of times to retry a workflow that failed*/
+        @Default int workflowRetry = 3;
     }
 
     /**
