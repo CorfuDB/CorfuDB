@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +20,7 @@ import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.CFUtils;
 
 /**
@@ -40,10 +42,9 @@ public class LayoutManagementView extends AbstractView {
      * the Management Server attempts to recover the cluster from that layout.
      *
      * @param recoveryLayout Layout to use to recover
-     * @return True if the cluster was recovered, False otherwise
      */
     public void recoverCluster(Layout recoveryLayout)
-            throws QuorumUnreachableException, OutrankedException {
+            throws QuorumUnreachableException, OutrankedException, ExecutionException {
 
         Layout newLayout = new Layout(recoveryLayout);
         newLayout.setEpoch(recoveryLayout.getEpoch() + 1);
@@ -65,7 +66,7 @@ public class LayoutManagementView extends AbstractView {
                               Layout currentLayout,
                               Set<String> failedServers,
                               Set<String> healedServers)
-            throws QuorumUnreachableException, OutrankedException {
+            throws QuorumUnreachableException, OutrankedException, ExecutionException {
 
         // Generates a new layout by removing the failed nodes from the existing layout
         Layout newLayout = failureHandlerPolicy
@@ -75,7 +76,6 @@ public class LayoutManagementView extends AbstractView {
                         healedServers);
         runLayoutReconfiguration(currentLayout, newLayout, false);
     }
-
 
     /**
      * Bootstraps the new node with the current layout.
@@ -114,6 +114,7 @@ public class LayoutManagementView extends AbstractView {
      * @param logUnitStripeIndex   stripe index to be added into if its a log unit.
      * @throws QuorumUnreachableException if seal or consensus cannot be achieved.
      * @throws OutrankedException         if consensus outranked.
+     * @throws ExecutionException         if fetching global tail failed.
      */
     public void addNode(Layout currentLayout,
                         String endpoint,
@@ -122,7 +123,7 @@ public class LayoutManagementView extends AbstractView {
                         boolean isLogUnitServer,
                         boolean isUnresponsiveServer,
                         int logUnitStripeIndex)
-            throws QuorumUnreachableException, OutrankedException {
+            throws QuorumUnreachableException, OutrankedException, ExecutionException {
 
         currentLayout.setRuntime(runtime);
         sealEpoch(currentLayout);
@@ -135,7 +136,10 @@ public class LayoutManagementView extends AbstractView {
             layoutBuilder.addSequencerServer(endpoint);
         }
         if (isLogUnitServer) {
-            layoutBuilder.addLogunitServer(logUnitStripeIndex, getMaxGlobalTail(currentLayout),
+            Layout.LayoutSegment latestSegment =
+                    currentLayout.getSegments().get(currentLayout.getSegments().size() - 1);
+            layoutBuilder.addLogunitServer(logUnitStripeIndex,
+                    getMaxGlobalTail(latestSegment),
                     endpoint);
         }
         if (isUnresponsiveServer) {
@@ -146,22 +150,22 @@ public class LayoutManagementView extends AbstractView {
 
         attemptConsensus(newLayout);
 
-            // Add node is successful even if reconfigure sequencer fails.
-            // TODO: Optimize this by retrying or submitting a workflow to retry.
-            reconfigureSequencerServers(currentLayout, newLayout, false);
-
+        // Add node is successful even if reconfigure sequencer fails.
+        // TODO: Optimize this by retrying or submitting a workflow to retry.
+        reconfigureSequencerServers(currentLayout, newLayout, false);
     }
-    
+
     /**
      * Attempts to merge the last 2 segments.
      *
      * @param currentLayout Current layout
      * @return True if merge successful, else False.
-     * @throws QuorumUnreachableException  if seal or consensus could not be achieved.
-     * @throws OutrankedException          if consensus is outranked.
+     * @throws QuorumUnreachableException if seal or consensus could not be achieved.
+     * @throws OutrankedException         if consensus is outranked.
+     * @throws ExecutionException         if fetching global tail failed.
      */
     public boolean mergeSegments(Layout currentLayout)
-            throws QuorumUnreachableException, OutrankedException {
+            throws QuorumUnreachableException, OutrankedException, ExecutionException {
 
         currentLayout.setRuntime(runtime);
         sealEpoch(currentLayout);
@@ -189,10 +193,14 @@ public class LayoutManagementView extends AbstractView {
      * @param currentLayout          Layout which needs to be sealed.
      * @param newLayout              New layout to be committed.
      * @param forceSequencerRecovery Flag. True if want to force sequencer recovery.
+     * @throws QuorumUnreachableException if seal or consensus could not be achieved.
+     * @throws OutrankedException         if consensus is outranked.
+     * @throws ExecutionException         if fetching global tail failed.
      */
+    @SuppressWarnings("checkstyle:printStackTrace")
     private void runLayoutReconfiguration(Layout currentLayout, Layout newLayout,
                                           final boolean forceSequencerRecovery)
-            throws QuorumUnreachableException, OutrankedException {
+            throws QuorumUnreachableException, OutrankedException, ExecutionException {
 
         // Seals the incremented epoch (Assumes newLayout epoch = currentLayout epoch + 1).
         currentLayout.setRuntime(runtime);
@@ -255,34 +263,41 @@ public class LayoutManagementView extends AbstractView {
      * CHAIN: Block on fetch of global log tail from the head log unitin every stripe.
      * QUORUM: Block on fetch of global log tail from a majority in every stripe.
      *
-     * @param layout Current layout.
+     * @param segment Latest layout segment.
      * @return The max global log tail obtained from the log unit servers.
      */
-    private long getMaxGlobalTail(Layout layout) {
+    private long getMaxGlobalTail(Layout.LayoutSegment segment)
+            throws ExecutionException {
         long maxTokenRequested = 0;
-        for (Layout.LayoutSegment segment : layout.getSegments()) {
 
-            // Query the tail of every log unit in every stripe.
-            if (segment.getReplicationMode().equals(Layout.ReplicationMode.CHAIN_REPLICATION)) {
-                for (Layout.LayoutStripe stripe : segment.getStripes()) {
-                    long tail = CFUtils.getUninterruptibly(runtime.getRouter(stripe
+        // Query the tail of the head log unit in every stripe.
+        if (segment.getReplicationMode().equals(Layout.ReplicationMode.CHAIN_REPLICATION)) {
+            for (Layout.LayoutStripe stripe : segment.getStripes()) {
+                try {
+                    maxTokenRequested = Math.max(maxTokenRequested, runtime.getRouter(stripe
                             .getLogServers().get(0))
-                            .getClient(LogUnitClient.class).getTail());
-                    maxTokenRequested = Math.max(maxTokenRequested, tail);
+                            .getClient(LogUnitClient.class).getTail().get());
+                } catch (InterruptedException ie) {
+                    log.error("getMaxGlobalTail: maxGlobalTail fetch interrupted.");
+                    throw new UnrecoverableCorfuInterruptedError(ie);
                 }
-            } else if (segment.getReplicationMode()
-                    .equals(Layout.ReplicationMode.QUORUM_REPLICATION)) {
-                for (Layout.LayoutStripe stripe : segment.getStripes()) {
-                    CompletableFuture<Long>[] completableFutures = stripe.getLogServers()
-                            .stream()
-                            .map(s -> runtime.getRouter(s).getClient(LogUnitClient.class)
-                                    .getTail())
-                            .toArray(CompletableFuture[]::new);
-                    QuorumFuturesFactory.CompositeFuture<Long> quorumFuture =
-                            QuorumFuturesFactory.getQuorumFuture(Comparator.naturalOrder(),
-                                    completableFutures);
-                    maxTokenRequested = Math.max(maxTokenRequested,
-                            CFUtils.getUninterruptibly(quorumFuture));
+            }
+
+        } else if (segment.getReplicationMode()
+                .equals(Layout.ReplicationMode.QUORUM_REPLICATION)) {
+            for (Layout.LayoutStripe stripe : segment.getStripes()) {
+                CompletableFuture<Long>[] completableFutures = stripe.getLogServers()
+                        .stream()
+                        .map(s -> runtime.getRouter(s).getClient(LogUnitClient.class).getTail())
+                        .toArray(CompletableFuture[]::new);
+                QuorumFuturesFactory.CompositeFuture<Long> quorumFuture =
+                        QuorumFuturesFactory.getQuorumFuture(Comparator.naturalOrder(),
+                                completableFutures);
+                try {
+                    maxTokenRequested = Math.max(maxTokenRequested, quorumFuture.get());
+                } catch (InterruptedException ie) {
+                    log.error("getMaxGlobalTail: maxGlobalTail fetch interrupted.");
+                    throw new UnrecoverableCorfuInterruptedError(ie);
                 }
             }
         }
@@ -299,8 +314,9 @@ public class LayoutManagementView extends AbstractView {
      * @param newLayout        New Layout to be reconfigured.
      * @param forceReconfigure Flag to force reconfiguration.
      */
-    private void reconfigureSequencerServers(Layout originalLayout, Layout
-            newLayout, boolean forceReconfigure) {
+    private void reconfigureSequencerServers(Layout originalLayout, Layout newLayout,
+                                             boolean forceReconfigure)
+            throws ExecutionException {
 
         long maxTokenRequested = 0L;
         Map<UUID, Long> streamTails = Collections.emptyMap();
@@ -309,7 +325,9 @@ public class LayoutManagementView extends AbstractView {
         if (forceReconfigure
                 || !originalLayout.getSequencers().get(0).equals(newLayout.getSequencers()
                 .get(0))) {
-            maxTokenRequested = getMaxGlobalTail(originalLayout);
+            Layout.LayoutSegment latestSegment = newLayout.getSegments()
+                    .get(newLayout.getSegments().size() - 1);
+            maxTokenRequested = getMaxGlobalTail(latestSegment);
 
             FastObjectLoader fastObjectLoader = new FastObjectLoader(runtime);
             fastObjectLoader.setRecoverSequencerMode(true);
@@ -326,12 +344,17 @@ public class LayoutManagementView extends AbstractView {
         }
 
         // Configuring the new sequencer.
-        boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(newLayout.getSequencer(0)
-                .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch()));
-        if (sequencerBootstrapResult) {
-            log.info("Sequencer bootstrap successful.");
-        } else {
-            log.warn("Sequencer bootstrap failed. Already bootstrapped.");
+        try {
+            boolean sequencerBootstrapResult = newLayout.getSequencer(0)
+                    .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch()).get();
+            if (sequencerBootstrapResult) {
+                log.info("Sequencer bootstrap successful.");
+            } else {
+                log.warn("Sequencer bootstrap failed. Already bootstrapped.");
+            }
+        } catch (InterruptedException ie) {
+            log.error("reconfigureSequencerServers: Sequencer bootstrap interrupted.");
+            throw new UnrecoverableCorfuInterruptedError(ie);
         }
 
     }

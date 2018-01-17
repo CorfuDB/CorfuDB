@@ -6,7 +6,11 @@ import lombok.experimental.Accessors;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.view.Layout;
 import org.junit.After;
 import org.junit.Before;
 
@@ -19,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 
 /**
@@ -126,6 +131,16 @@ public class AbstractIT extends AbstractCorfuTest {
              } else {
                  return true;
              }
+        }
+    }
+
+    public void bootstrapCluster(Layout layout) throws ExecutionException, InterruptedException {
+        for (String s : layout.getLayoutServers()) {
+            NettyClientRouter router = new NettyClientRouter(s);
+            router.addClient(new LayoutClient()).addClient(new ManagementClient());
+            router.getClient(LayoutClient.class).bootstrapLayout(layout).get();
+            router.getClient(ManagementClient.class).bootstrapManagement(layout).get();
+            router.getClient(ManagementClient.class).initiateFailureHandler().get();
         }
     }
 

@@ -48,7 +48,7 @@ public class WorkflowIT extends AbstractIT {
         final int n1Port = 9000;
 
         // Start node one and populate it with data
-        new CorfuServerRunner()
+        Process server_1 = new CorfuServerRunner()
                 .setHost(host)
                 .setPort(n1Port)
                 .setSingle(true)
@@ -69,7 +69,7 @@ public class WorkflowIT extends AbstractIT {
 
         // Add a second node
         final int n2Port = 9001;
-        new CorfuServerRunner()
+        Process server_2 = new CorfuServerRunner()
                 .setSingle(false)
                 .setHost(host)
                 .setPort(n2Port)
@@ -106,7 +106,7 @@ public class WorkflowIT extends AbstractIT {
         // Add a third node after compaction
 
         final int n3Port = 9002;
-        new CorfuServerRunner()
+        Process server_3 = new CorfuServerRunner()
                 .setSingle(false)
                 .setHost(host)
                 .setPort(n3Port)
@@ -131,6 +131,10 @@ public class WorkflowIT extends AbstractIT {
             String v = (String) table.get(String.valueOf(x));
             assertThat(v).isEqualTo(String.valueOf(x));
         }
+
+        shutdownCorfuServer(server_1);
+        shutdownCorfuServer(server_2);
+        shutdownCorfuServer(server_3);
     }
 
     void waitForWorkflow(UUID id, CorfuRuntime rt, int port) throws Exception {
