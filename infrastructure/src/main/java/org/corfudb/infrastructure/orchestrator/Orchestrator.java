@@ -9,11 +9,8 @@ import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.orchestrator.Action;
-import org.corfudb.protocols.wireprotocol.orchestrator.ActionStatus;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
-import org.corfudb.protocols.wireprotocol.orchestrator.IWorkflow;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
@@ -67,7 +64,8 @@ public class Orchestrator {
                 query(msg, ctx, r);
                 break;
             case ADD_NODE:
-                dispatch(msg, ctx, r);
+                IWorkflow workflow = new AddNodeWorkflow(orchReq.getRequest());
+                dispatch(workflow, msg, ctx, r);
                 break;
             default:
                 log.error("handle: Unknown request type {}", orchReq.getRequest().getType());
@@ -116,7 +114,8 @@ public class Orchestrator {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    synchronized void dispatch(CorfuPayloadMsg<OrchestratorMsg> msg,
+    synchronized void dispatch(IWorkflow workflow,
+                               CorfuPayloadMsg<OrchestratorMsg> msg,
                                ChannelHandlerContext ctx, IServerRouter r) {
         CreateRequest req = (CreateRequest) msg.getPayload().getRequest();
 
@@ -131,7 +130,6 @@ public class Orchestrator {
             return;
         } else {
             // Create a new workflow for this endpoint and return a new workflow id
-            IWorkflow workflow = req.getWorkflow();
             activeWorkflows.put(workflow.getId(), req.getEndpoint());
 
             CompletableFuture.runAsync(() -> {

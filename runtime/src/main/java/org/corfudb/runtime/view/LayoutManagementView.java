@@ -255,12 +255,16 @@ public class LayoutManagementView extends AbstractView {
         }
 
         // Check if our proposed layout got selected and committed.
-        runtime.invalidateLayout();
-        if (runtime.getLayoutView().getLayout().equals(layout)) {
-            log.info("New Layout Committed = {}", layout);
-        } else {
-            log.warn("Runtime recovered with a different layout = {}",
-                    runtime.getLayoutView().getLayout());
+        for (int x = 0; x < 3; x++) {
+            runtime.invalidateLayout();
+            if (runtime.getLayoutView().getLayout().equals(layout)) {
+                log.info("New Layout Committed = {}", layout);
+                return;
+            } else {
+                log.warn("Runtime recovered with a different layout = {}",
+                        runtime.getLayoutView().getLayout());
+            }
+            log.warn("attemptConsensus: Checking if {} has been accepted, retry {}", layout, x);
         }
     }
 

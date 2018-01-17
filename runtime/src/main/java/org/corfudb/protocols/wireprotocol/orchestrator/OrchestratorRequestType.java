@@ -19,18 +19,15 @@ public enum OrchestratorRequestType {
     /**
      * Query a workflow id
      */
-    QUERY(0, null, QueryRequest::new),
+    QUERY(0, QueryRequest::new),
 
     /**
      * Add a new node to the cluster
      */
-    ADD_NODE(1, AddNodeWorkflow::new, AddNodeRequest::new);
+    ADD_NODE(1, AddNodeRequest::new);
 
     @Getter
     public final int type;
-
-    @Getter
-    final Function<Request, IWorkflow> workflowGenerator;
 
     @Getter
     final Function<byte[], Request> requestGenerator;
