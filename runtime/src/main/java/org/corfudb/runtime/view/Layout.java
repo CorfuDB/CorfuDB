@@ -145,6 +145,25 @@ public class Layout {
     }
 
     /**
+     * Return all the segments that an endpoint participates in.
+     * @param endpoint the endpoint to return all the segments for
+     * @return a set of segments that contain the endpoint
+     */
+    Set<LayoutSegment> getSegmentsForEndpoint(@Nonnull String endpoint) {
+        Set<LayoutSegment> res = new HashSet<>();
+
+        for (LayoutSegment segment : getSegments()) {
+            for (LayoutStripe stripe : segment.getStripes()) {
+                if (stripe.getLogServers().contains(endpoint)) {
+                    res.add(segment);
+                }
+            }
+        }
+
+        return res;
+    }
+
+    /**
      * Move each server in the system to the epoch of this layout.
      *
      * @throws WrongEpochException If any server is in a higher epoch.

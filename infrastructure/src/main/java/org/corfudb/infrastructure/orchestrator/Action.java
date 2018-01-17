@@ -1,4 +1,4 @@
-package org.corfudb.protocols.wireprotocol.orchestrator;
+package org.corfudb.infrastructure.orchestrator;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
@@ -41,7 +41,7 @@ public abstract class Action {
             impl(runtime);
             changeStatus(ActionStatus.COMPLETED);
         } catch (Exception e) {
-            log.error("execute: error executing action", e);
+            log.error("execute: error executing action {}", getName(), e);
             changeStatus(ActionStatus.ERROR);
         }
     }

@@ -259,6 +259,11 @@ public class CorfuRuntime {
          */
         UncaughtExceptionHandler uncaughtExceptionHandler;
         //endregion
+
+        /**
+         * The number of times to retry invalidate when a layout change is expected.
+         */
+        @Default int invalidateRetry = 3;
     }
 
     /**

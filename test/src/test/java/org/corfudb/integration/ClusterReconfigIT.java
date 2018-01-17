@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import com.google.common.collect.Range;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -130,6 +131,9 @@ public class ClusterReconfigIT extends AbstractIT {
         final int PORT_0 = 9000;
         final int PORT_1 = 9001;
         final int PORT_2 = 9002;
+        final Duration timeout = Duration.ofMinutes(5);
+        final Duration pollPeriod = Duration.ofSeconds(5);
+        final int workflowNumRetry = 3;
 
         Process corfuServer_1 = runSinglePersistentServer(corfuSingleNodeHost, PORT_0);
         Process corfuServer_2 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_1);
@@ -145,10 +149,8 @@ public class ClusterReconfigIT extends AbstractIT {
 
         final String data = createStringOfSize(1_000);
 
-        final int num = 15_000;
-
         Random r = getRandomNumberGenerator();
-        for (int i = 0; i < num; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             String key = Long.toString(r.nextLong());
             table.put(key, data);
         }
@@ -156,8 +158,10 @@ public class ClusterReconfigIT extends AbstractIT {
         final AtomicBoolean moreDataToBeWritten = new AtomicBoolean(true);
         Thread t = startDaemonWriter(runtime, r, table, data, moreDataToBeWritten);
 
-        runtime.getManagementView().addNode("localhost:9001");
-        runtime.getManagementView().addNode("localhost:9002");
+        runtime.getManagementView().addNode("localhost:9001", workflowNumRetry,
+                timeout, pollPeriod);
+        runtime.getManagementView().addNode("localhost:9002", workflowNumRetry,
+                timeout, pollPeriod);
 
         final long epochAfter2Adds = 4L;
         runtime.invalidateLayout();

@@ -9,11 +9,8 @@ import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.orchestrator.Action;
-import org.corfudb.protocols.wireprotocol.orchestrator.ActionStatus;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
-import org.corfudb.protocols.wireprotocol.orchestrator.IWorkflow;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
@@ -67,7 +64,8 @@ public class Orchestrator {
                 query(msg, ctx, r);
                 break;
             case ADD_NODE:
-                dispatch(msg, ctx, r);
+                IWorkflow workflow = new AddNodeWorkflow(orchReq.getRequest());
+                dispatch(workflow, msg, ctx, r);
                 break;
             default:
                 log.error("handle: Unknown request type {}", orchReq.getRequest().getType());
@@ -103,21 +101,21 @@ public class Orchestrator {
 
     /**
      *
-     * Dispatch a workflow create request.
+     * Run a workflow on this orchestrator, if there is an existing workflow
+     * that is executing on the same endpoint, then just return the corresponding
+     * workflow id. Dispatch is the only place where workflows are executed based
+     * on reading activeWorkflows and therefore needs to be synchronized to prevent
+     * launching multiple workflows for the same endpoint concurrently.
      *
-     * Create and start a workflow on this orchestrator, if there is
-     * an existing workflow that is executing on the same endpoint,
-     * then just return the corresponding workflow id. Dispatch is the only
-     * place where workflows are created based on reading activeWorkflows
-     * and therefore needs to be synchronized to prevent launching multiple
-     * workflows for the same endpoint concurrently.
-     *
+     * @param workflow the workflow to execute
      * @param msg corfu message containing the create workflow request
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    synchronized void dispatch(CorfuPayloadMsg<OrchestratorMsg> msg,
-                               ChannelHandlerContext ctx, IServerRouter r) {
+    synchronized void dispatch(@Nonnull IWorkflow workflow,
+                               @Nonnull CorfuPayloadMsg<OrchestratorMsg> msg,
+                               @Nonnull ChannelHandlerContext ctx,
+                               @Nonnull IServerRouter r) {
         CreateRequest req = (CreateRequest) msg.getPayload().getRequest();
 
         UUID id = activeWorkflows.inverse().get(req.getEndpoint());
@@ -131,7 +129,6 @@ public class Orchestrator {
             return;
         } else {
             // Create a new workflow for this endpoint and return a new workflow id
-            IWorkflow workflow = req.getWorkflow();
             activeWorkflows.put(workflow.getId(), req.getEndpoint());
 
             CompletableFuture.runAsync(() -> {
@@ -194,7 +191,6 @@ public class Orchestrator {
             log.info("run: Completed workflow {} in {} ms", workflow.getId(), workflowEnd - workflowStart);
         } catch (Exception e) {
             log.error("run: Encountered an error while running workflow {}", workflow.getId(), e);
-            return;
         } finally {
             activeWorkflows.remove(workflow.getId());
             log.debug("run: removed {} from {}", workflow.getId(), activeWorkflows);

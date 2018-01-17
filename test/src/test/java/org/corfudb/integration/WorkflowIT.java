@@ -3,6 +3,7 @@ package org.corfudb.integration;
 import java.net.ConnectException;
 import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.CorfuTestParameters;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -12,6 +13,7 @@ import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.util.Sleep;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,10 +35,6 @@ public class WorkflowIT extends AbstractIT {
 
     final String host = "localhost";
 
-    final int maxTries = 10;
-
-    final int sleepTime = 5_000;
-
     String getConnectionString(int port) {
         return host + ":" + port;
     }
@@ -46,6 +44,10 @@ public class WorkflowIT extends AbstractIT {
         final String host = "localhost";
         final String streamName = "s1";
         final int n1Port = 9000;
+        final int numIter = 11_000;
+        final Duration timeout = Duration.ofMinutes(5);
+        final Duration pollPeriod = Duration.ofSeconds(5);
+        final int workflowNumRetry = 3;
 
         // Start node one and populate it with data
         Process server_1 = new CorfuServerRunner()
@@ -54,7 +56,24 @@ public class WorkflowIT extends AbstractIT {
                 .setSingle(true)
                 .runServer();
 
-        CorfuRuntime n1Rt = new CorfuRuntime(getConnectionString(n1Port)).connect();
+        // start a second node
+        final int n2Port = 9001;
+        Process server_2 = new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n2Port)
+                .setSingle(false)
+                .runServer();
+
+        // start a third node
+        final int n3Port = 9002;
+        Process server_3 = new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n3Port)
+                .setSingle(false)
+                .runServer();
+
+        CorfuRuntime n1Rt = new CorfuRuntime(getConnectionString(n1Port))
+                .setCacheDisabled(true).connect();
 
         CorfuTable table = n1Rt.getObjectsView()
                 .build()
@@ -62,35 +81,16 @@ public class WorkflowIT extends AbstractIT {
                 .setStreamName(streamName)
                 .open();
 
-        final int numEntries = 12_000;
-        for (int x = 0; x < numEntries; x++) {
+        for (int x = 0; x < numIter; x++) {
             table.put(String.valueOf(x), String.valueOf(x));
         }
 
-        // Add a second node
-        final int n2Port = 9001;
-        Process server_2 = new CorfuServerRunner()
-                .setSingle(false)
-                .setHost(host)
-                .setPort(n2Port)
-                .runServer();
-
-        ManagementClient mgmt = n1Rt.getRouter(getConnectionString(n1Port))
-                .getClient(ManagementClient.class);
-       bootstrapServer(n2Port, n1Rt);
-
-        CreateWorkflowResponse resp = mgmt.addNodeRequest(getConnectionString(n2Port));
-
-        assertThat(resp.getWorkflowId()).isNotNull();
-
-        waitForWorkflow(resp.getWorkflowId(), n1Rt, n1Port);
+        n1Rt.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
+                timeout, pollPeriod);
 
         n1Rt.invalidateLayout();
         final int clusterSizeN2 = 2;
         assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
-
-        // Verify that the workflow ID for node 2 is no longer active
-        assertThat(mgmt.queryRequest(resp.getWorkflowId()).isActive()).isFalse();
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
@@ -104,30 +104,15 @@ public class WorkflowIT extends AbstractIT {
         n1Rt.getAddressSpaceView().gc();
 
         // Add a third node after compaction
-
-        final int n3Port = 9002;
-        Process server_3 = new CorfuServerRunner()
-                .setSingle(false)
-                .setHost(host)
-                .setPort(n3Port)
-                .runServer();
-
-        bootstrapServer(n3Port, n1Rt);
-
-        CreateWorkflowResponse resp2 = mgmt.addNodeRequest(getConnectionString(n3Port));
-        assertThat(resp2.getWorkflowId()).isNotNull();
-
-        waitForWorkflow(resp2.getWorkflowId(), n1Rt, n1Port);
+        n1Rt.getManagementView().addNode(getConnectionString(n3Port), workflowNumRetry,
+                timeout, pollPeriod);
 
         // Verify that the third node has been added and data can be read back
         n1Rt.invalidateLayout();
-
         final int clusterSizeN3 = 3;
         assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
-        // Verify that the workflow ID for node 3 is no longer active
-        assertThat(mgmt.queryRequest(resp2.getWorkflowId()).isActive()).isFalse();
 
-        for (int x = 0; x < numEntries; x++) {
+        for (int x = 0; x < numIter; x++) {
             String v = (String) table.get(String.valueOf(x));
             assertThat(v).isEqualTo(String.valueOf(x));
         }
@@ -135,49 +120,5 @@ public class WorkflowIT extends AbstractIT {
         shutdownCorfuServer(server_1);
         shutdownCorfuServer(server_2);
         shutdownCorfuServer(server_3);
-    }
-
-    void waitForWorkflow(UUID id, CorfuRuntime rt, int port) throws Exception {
-        ManagementClient mgmt = rt.getRouter(getConnectionString(port))
-                .getClient(ManagementClient.class);
-        for (int x = 0; x < maxTries; x++) {
-            try {
-                if (mgmt.queryRequest(id).isActive()) {
-                    Thread.sleep(sleepTime);
-                } else {
-                    break;
-                }
-            } catch (Exception e) {
-                rt.invalidateLayout();
-                Thread.sleep(sleepTime);
-            }
-        }
-    }
-
-    /** Bootstraps the given endpoint using the given runtime. At the end of the call
-     *  either the endpoint will be bootstrapped or an assertion will be thrown.
-     *
-     * @param endpoint  The endpoint port to bootstrap.
-     * @param runtime   The runtime
-     */
-    void bootstrapServer(int endpoint, @Nonnull CorfuRuntime runtime) {
-        boolean success = false;
-        int tries = 0;
-        do {
-            try {
-                ManagementClient mgmt = runtime.getRouter(getConnectionString(endpoint))
-                    .getClient(ManagementClient.class);
-                mgmt.bootstrapManagement(runtime.getLayoutView().getLayout());
-                success = true;
-            } catch (NetworkException ignored) {
-                // Retry again
-                if (tries++ > PARAMETERS.NUM_ITERATIONS_LOW) {
-                    assertThat(false)
-                        .as("Failed to bootstrap after " + tries + " tries")
-                        .isTrue();
-                }
-                Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
-            }
-        } while (!success);
     }
 }

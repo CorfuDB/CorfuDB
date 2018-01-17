@@ -201,7 +201,8 @@ public class LayoutBuilder {
      */
     public LayoutBuilder mergePreviousSegment(int segmentIndex) {
         if (segmentIndex < 1) {
-            throw new LayoutModificationException("No segments to merge.");
+            log.warn("mergePreviousSegment: No segments to merge.");
+            return this;
         }
 
         List<LayoutSegment> layoutSegmentList = layout.getSegments();

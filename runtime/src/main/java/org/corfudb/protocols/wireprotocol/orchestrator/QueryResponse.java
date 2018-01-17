@@ -1,9 +1,8 @@
 package org.corfudb.protocols.wireprotocol.orchestrator;
 
 import lombok.Getter;
-import org.corfudb.format.Types;
 
-import static org.corfudb.format.Types.OrchestratorResponseType.WORKFLOW_STATUS;
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponseType.WORKFLOW_STATUS;
 
 /**
  * Return a boolean that indicates whether a particular workflow is being executed by
@@ -28,7 +27,7 @@ public class QueryResponse implements Response {
     }
 
     @Override
-    public Types.OrchestratorResponseType getType() {
+    public OrchestratorResponseType getType() {
         return WORKFLOW_STATUS;
     }
 
