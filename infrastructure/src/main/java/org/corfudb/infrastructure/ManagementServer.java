@@ -505,7 +505,7 @@ public class ManagementServer extends AbstractServer {
 
         // We check for 2 conditions here: If the node is a part of the current layout or has it
         // been marked as unresponsive. If either is true, it should not attempt to change layout.
-        if (!latestLayout.getAllServers().contains(getLocalEndpoint())
+        if (!latestLayout.getAllActiveServers().contains(getLocalEndpoint())
                 || latestLayout.getUnresponsiveServers().contains(getLocalEndpoint())) {
             log.warn("This Server is not a part of the active layout. Aborting failure handling.");
             return;
@@ -556,7 +556,7 @@ public class ManagementServer extends AbstractServer {
         }
 
         // If node has been removed. Then it should not attempt to change layout.
-        if (!latestLayout.getAllServers().contains(getLocalEndpoint())
+        if (!latestLayout.getAllActiveServers().contains(getLocalEndpoint())
                 || latestLayout.getUnresponsiveServers().contains(getLocalEndpoint())) {
             log.warn("This Server is not a part of the active layout. Aborting failure handling.");
             return;

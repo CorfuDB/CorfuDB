@@ -20,8 +20,9 @@ import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.CFUtils;
+
+import javax.annotation.Nonnull;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
@@ -123,7 +124,7 @@ public class LayoutManagementView extends AbstractView {
                         boolean isLogUnitServer,
                         boolean isUnresponsiveServer,
                         int logUnitStripeIndex)
-            throws QuorumUnreachableException, OutrankedException {
+            throws OutrankedException {
         Layout newLayout;
         if (!currentLayout.getAllServers().contains(endpoint)) {
 
@@ -170,7 +171,7 @@ public class LayoutManagementView extends AbstractView {
      * @throws OutrankedException         if consensus is outranked.
      */
     public boolean mergeSegments(Layout currentLayout)
-            throws QuorumUnreachableException, OutrankedException, ExecutionException {
+            throws QuorumUnreachableException, OutrankedException {
 
         Layout newLayout;
         if (currentLayout.getSegments().size() > 1) {
@@ -192,6 +193,41 @@ public class LayoutManagementView extends AbstractView {
         }
         reconfigureSequencerServers(currentLayout, newLayout, false);
         return true;
+    }
+
+    /**
+     * Best effort attempt to removes a node from the layout.
+     *
+     * @param currentLayout the layout to remove the node from
+     * @param endpoint the node to remove
+     */
+    public void removeNode(@Nonnull Layout currentLayout,
+                           @Nonnull String endpoint) throws OutrankedException {
+
+        Layout newLayout;
+        if (currentLayout.getAllServers().contains(endpoint)) {
+            LayoutBuilder builder = new LayoutBuilder(currentLayout);
+            newLayout = builder.removeLayoutServer(endpoint)
+                    .removeSequencerServer(endpoint)
+                    .removeLogunitServer(endpoint)
+                    .removeUnresponsiveServer(endpoint)
+                    .setEpoch(currentLayout.getEpoch() + 1)
+                    .build();
+
+            // Seal after constructing the layout, so that the system
+            // isn't blocked if the builder throws an exception
+            currentLayout.setRuntime(runtime);
+            sealEpoch(currentLayout);
+
+            newLayout.setRuntime(runtime);
+            attemptConsensus(newLayout);
+        } else {
+            newLayout = currentLayout;
+            log.info("removeNode: Ignoring remove node on {} because it doesn't exist in {}",
+                    endpoint, currentLayout);
+        }
+
+        reconfigureSequencerServers(currentLayout, newLayout, false);
     }
 
     /**
