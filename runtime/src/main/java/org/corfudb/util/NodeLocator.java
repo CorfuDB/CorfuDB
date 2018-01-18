@@ -142,9 +142,9 @@ public class NodeLocator implements Serializable {
         if (otherNode.getNodeId() != null && otherNode.getNodeId().equals(getNodeId())) {
             return true;
         } else {
-            // Otherwise, the other node must not have a node ID set
+            // Otherwise, the both node IDs must not be set
             // and must match by host and port.
-            return otherNode.getNodeId() == null
+            return !(otherNode.getNodeId() == null && getNodeId() != null)
                 && otherNode.getHost().equals(getHost())
                 && otherNode.getPort() == getPort();
         }
