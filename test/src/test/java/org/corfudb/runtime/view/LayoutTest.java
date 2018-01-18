@@ -33,7 +33,7 @@ public class LayoutTest {
         Layout shouldYieldException = Layout.fromJSONString(JSONEmptyLayout);
     }
 
-    @Test(expected = NullPointerException.class)
+    @Test(expected = IllegalArgumentException.class)
     public void shouldNotDeserializeMissingRequiredFieldLayout()
             throws Exception{
 
