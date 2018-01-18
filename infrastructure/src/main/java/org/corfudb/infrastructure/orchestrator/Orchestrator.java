@@ -41,6 +41,11 @@ import java.util.stream.Collectors;
 @Slf4j
 public class Orchestrator {
 
+    /**
+     * The number of times to retry an action before failing the workflow.
+     */
+    private static final int ACTION_RETRY = 3;
+
     final ServerContext serverContext;
 
     final Callable<CorfuRuntime> getRuntime;
@@ -132,7 +137,7 @@ public class Orchestrator {
             activeWorkflows.put(workflow.getId(), req.getEndpoint());
 
             CompletableFuture.runAsync(() -> {
-                run(workflow);
+                run(workflow, ACTION_RETRY);
             });
 
             OrchestratorResponse resp = new OrchestratorResponse(new CreateWorkflowResponse(workflow.getId()));
@@ -146,8 +151,9 @@ public class Orchestrator {
      * actions
      *
      * @param workflow instance to run
+     * @param actionRetry the number of times to retry an action before failing the workflow.
      */
-    void run(@Nonnull IWorkflow workflow) {
+    void run(@Nonnull IWorkflow workflow, int actionRetry) {
         CorfuRuntime rt = null;
         try {
             getRuntime.call().invalidateLayout();
@@ -174,7 +180,7 @@ public class Orchestrator {
 
                 log.debug("run: Started action {} for workflow {}", action.getName(), workflow.getId());
                 long actionStart = System.currentTimeMillis();
-                action.execute(rt);
+                action.execute(rt, actionRetry);
                 long actionEnd = System.currentTimeMillis();
                 log.info("run: finished action {} for workflow {} in {} ms",
                         action.getName(), workflow.getId(), actionEnd - actionStart);
