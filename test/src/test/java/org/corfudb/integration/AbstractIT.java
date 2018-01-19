@@ -140,7 +140,6 @@ public class AbstractIT extends AbstractCorfuTest {
             router.addClient(new LayoutClient()).addClient(new ManagementClient());
             router.getClient(LayoutClient.class).bootstrapLayout(layout).get();
             router.getClient(ManagementClient.class).bootstrapManagement(layout).get();
-            router.getClient(ManagementClient.class).initiateFailureHandler().get();
         }
     }
 
