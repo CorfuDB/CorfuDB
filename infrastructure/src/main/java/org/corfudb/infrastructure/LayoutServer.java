@@ -302,7 +302,6 @@ public class LayoutServer extends AbstractServer {
 
         setCurrentLayout(commitLayout);
         serverContext.setServerEpoch(msg.getPayload().getEpoch(), r);
-        log.info("New layout committed: {}", commitLayout);
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
 

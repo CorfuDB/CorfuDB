@@ -444,7 +444,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         // sending the message.
         try {
             connectionFuture
-                .get(parameters.getConnectionTimeout().toMillis(), TimeUnit.MILLISECONDS);
+                .get(parameters.getRequestTimeout().toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new UnrecoverableCorfuInterruptedError(e);

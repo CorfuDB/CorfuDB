@@ -1,8 +1,7 @@
 package org.corfudb.infrastructure;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.DetectorMsg;
-import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
+import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.runtime.view.Layout;
 import org.junit.After;
 import org.junit.Test;
@@ -38,7 +37,11 @@ public class ManagementServerTest extends AbstractServerTest {
         router.addServer(new LogUnitServer(serverContext));
         // Required for management server to bootstrap during initialization.
         router.addServer(new SequencerServer(serverContext));
-        managementServer = new ManagementServer(serverContext);
+        managementServer = new ManagementServer(new ServerContextBuilder()
+                .setSingle(false)
+                .setPort(SERVERS.PORT_0)
+                .setServerRouter(getRouter())
+                .build());
         return managementServer;
     }
 
@@ -52,11 +55,9 @@ public class ManagementServerTest extends AbstractServerTest {
      */
     @Test
     public void checkFailureDetectorStatus() {
-        assertThat(managementServer.getManagementAgent().getDetectionTaskWorkers().isShutdown())
-                .isFalse();
+        assertThat(!managementServer.getFailureDetectorService().isShutdown());
         managementServer.shutdown();
-        assertThat(managementServer.getManagementAgent().getDetectionTaskWorkers().isShutdown())
-                .isTrue();
+        assertThat(managementServer.getFailureDetectorService().isShutdown());
     }
 
     /**
@@ -65,29 +66,10 @@ public class ManagementServerTest extends AbstractServerTest {
     @Test
     public void bootstrapManagementServer() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
-        sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
         sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
         sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP_ERROR);
     }
 
-    /**
-     * Triggering the failure handler with and without bootstrapping the server.
-     */
-    @Test
-    public void triggerFailureHandler() {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
-        Set<String> set = new HashSet<>();
-        set.add("key");
-        sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
-        sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
-                new DetectorMsg(0L, Collections.singleton("key"), Collections.emptySet())));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR);
-        sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
-        sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
-                new DetectorMsg(0L, Collections.singleton("key"), Collections.emptySet())));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
-    }
 }

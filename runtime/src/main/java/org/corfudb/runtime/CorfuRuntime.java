@@ -657,9 +657,8 @@ public class CorfuRuntime {
         // We haven't adopted a clusterId yet.
         if (clusterId == null) {
             clusterId = layout.getClusterId();
-            if (clusterId != null) {
-                log.info("Connected to new cluster {}", UuidUtils.asBase64(clusterId));
-            }
+            log.info("Connected to new cluster {}", clusterId == null ? "(legacy)" :
+                    UuidUtils.asBase64(clusterId));
         } else if (!clusterId.equals(layout.getClusterId())) {
             // We connected but got a cluster id we didn't expect.
             throw new WrongClusterException(clusterId, layout.getClusterId());
@@ -727,9 +726,7 @@ public class CorfuRuntime {
                                 // NOTE: This is true assuming this happens only at router creation.
                                 // If not we also have to take care of setting the latest epoch on
                                 // Client Router.
-                                if (!l.getUnresponsiveServers().contains(server)) {
-                                    log.warn("fetchLayout: Error getting router : {}", server, ne);
-                                }
+                                log.warn("fetchLayout: Error getting router : {}", server,  ne);
                             }
                         }
                         layoutServers = l.getLayoutServers();
