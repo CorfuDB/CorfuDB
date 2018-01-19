@@ -34,6 +34,14 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     private final Queue<CorfuMsg> messages = new ArrayDeque();
     private static final String READ_TIMEOUT_HANDLER = "readTimeoutHandler";
 
+    /** Events that the handshaker sends to downstream handlers.
+     *
+     */
+    public enum ClientHandshakeEvent {
+        CONNECTED,  /* Connection succeeded. */
+        FAILED      /* Handshake failed. */
+    }
+
 
     /**
      * Creates a new ClientHandshakeHandler which will handle the handshake between the
@@ -64,7 +72,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object m)
-            throws Exception {
+        throws Exception {
 
         if (this.handshakeState.failed()) {
             // if handshake has already failed, return
@@ -81,13 +89,13 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         CorfuPayloadMsg<HandshakeResponse> handshakeResponse;
 
         try {
-           handshakeResponse = (CorfuPayloadMsg<HandshakeResponse>) m;
+            handshakeResponse = (CorfuPayloadMsg<HandshakeResponse>) m;
             log.info("channelRead: Handshake Response received. Removing " + READ_TIMEOUT_HANDLER +
-                    " from pipeline.");
+                " from pipeline.");
             ctx.pipeline().remove(READ_TIMEOUT_HANDLER);
         } catch (ClassCastException e) {
             log.warn("channelRead: Non-handshake message received by handshake handler. Send upstream only " +
-                    "if handshake succeeded.");
+                "if handshake succeeded.");
             if (this.handshakeState.completed()) {
                 // Only send upstream if handshake is complete.
                 super.channelRead(ctx, m);
@@ -115,7 +123,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             // 'nodeId', instead server's id is 'serverId'
             log.error("channelRead: Handshake validation failed. Server node id mismatch.");
             log.debug("channelRead: Client opened socket to server {" + this.nodeId
-                    + "} instead, connected to: {" + serverId + "}");
+                + "} instead, connected to: {" + serverId + "}");
             this.fireHandshakeFailed(ctx);
             return;
         }
@@ -123,7 +131,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         log.info("channelRead: Handshake succeeded. Server Corfu Version: {" + corfuVersion + "}");
         // Flush messages in queue
         log.debug("channelRead: There are {" + this.messages.size() + "} messages in queue to " +
-                "be flushed.");
+            "be flushed.");
         for (CorfuMsg message : this.messages) {
             ctx.writeAndFlush(message);
         }
@@ -131,7 +139,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         // Remove this handler from the pipeline; handshake is completed.
         log.info("channelRead: Removing handshake handler from pipeline.");
         ctx.pipeline().remove(this);
-        this.fireHandshakeSucceeded();
+        this.fireHandshakeSucceeded(ctx);
     }
 
     /**
@@ -142,12 +150,12 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      */
     @Override
     public void channelActive(ChannelHandlerContext ctx)
-            throws Exception {
+        throws Exception {
         log.info("channelActive: Outgoing connection established to: " + ctx.channel().remoteAddress());
 
         // Write the handshake & add a timeout listener.
         CorfuMsg handshake = CorfuMsgType.HANDSHAKE_INITIATE
-                .payloadMsg(new HandshakeMsg(this.clientId, this.nodeId));
+            .payloadMsg(new HandshakeMsg(this.clientId, this.nodeId));
 
         log.info("channelActive: Initiate handshake. Send handshake message.");
         ctx.writeAndFlush(handshake);
@@ -178,7 +186,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      */
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx,
-                                java.lang.Throwable cause) throws Exception {
+        java.lang.Throwable cause) throws Exception {
         log.error("exceptionCaught: Exception {} caught.", cause.getClass().getSimpleName(), cause);
         if (cause instanceof ReadTimeoutException) {
             // Handshake has failed or completed. If none is True, handshake timed out.
@@ -191,13 +199,13 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
                 // If handshake did not complete nor failed, it timed out.
                 // Force failure.
                 log.error("exceptionCaught: Handshake timeout checker: timed out." +
-                        " Close Connection.");
+                    " Close Connection.");
                 this.handshakeState.set(true, false);
                 ctx.channel().close();
             } else {
                 // Handshake completed successfully,
                 log.debug("exceptionCaught: Handshake timeout checker: discarded " +
-                        "(handshake OK)");
+                    "(handshake OK)");
             }
         }
         if (ctx.channel().isOpen()) {
@@ -217,7 +225,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      */
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
-            throws Exception {
+        throws Exception {
         if (this.handshakeState.failed()) {
             return;
         }
@@ -242,14 +250,18 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     private void fireHandshakeFailed(ChannelHandlerContext ctx) {
         this.handshakeState.set(true, true);
         log.error("fireHandshakeFailed: Handshake Failed. Close Channel.");
+        // Let downstream handlers know the handshake failed
+        ctx.fireUserEventTriggered(ClientHandshakeEvent.FAILED);
         ctx.channel().close();
     }
 
     /**
      * Signal handshake as succeeded.
      */
-    private void fireHandshakeSucceeded() {
+    private void fireHandshakeSucceeded(ChannelHandlerContext ctx) {
         this.handshakeState.set(false, true);
+        // Let downstream handlers know the handshake succeeded.
+        ctx.fireUserEventTriggered(ClientHandshakeEvent.CONNECTED);
     }
 }
 

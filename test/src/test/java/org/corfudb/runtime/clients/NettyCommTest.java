@@ -468,12 +468,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 .tsPasswordFile("src/test/resources/security/reload/password")
                 .build());
 
-        clientRouter.addClient(new BaseClient());
-        clientRouter.start();
-
         assertThat(clientRouter.getClient(BaseClient.class).pingSync()).isFalse();
-
-        clientRouter.stop();
 
 
         if (replaceClientTrust) {
@@ -482,7 +477,7 @@ public class NettyCommTest extends AbstractCorfuTest {
             Files.copy(serverTrustWithClient.toPath(), serverTrustFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
         }
 
-        clientRouter.start();
+        clientRouter.getConnectionFuture().join();
         assertThat(clientRouter.getClient(BaseClient.class).pingSync()).isTrue();
         clientRouter.stop();
 
