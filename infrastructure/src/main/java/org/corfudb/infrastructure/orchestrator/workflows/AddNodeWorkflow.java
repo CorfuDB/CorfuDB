@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.orchestrator;
+package org.corfudb.infrastructure.orchestrator.workflows;
 
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
@@ -6,6 +6,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Range;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.orchestrator.Action;
+import org.corfudb.infrastructure.orchestrator.IWorkflow;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
@@ -36,7 +38,7 @@ import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorReques
 @Slf4j
 public class AddNodeWorkflow implements IWorkflow {
 
-    final AddNodeRequest request;
+    private final AddNodeRequest request;
 
     private Layout newLayout;
 
@@ -57,9 +59,9 @@ public class AddNodeWorkflow implements IWorkflow {
      *
      * @param request request to add a node
      */
-    public AddNodeWorkflow(Request request) {
+    public AddNodeWorkflow(AddNodeRequest request) {
         this.id = UUID.randomUUID();
-        this.request = (AddNodeRequest) request;
+        this.request = request;
         actions = ImmutableList.of(new BootstrapNode(),
                 new AddNodeToLayout(),
                 new StateTransfer(),

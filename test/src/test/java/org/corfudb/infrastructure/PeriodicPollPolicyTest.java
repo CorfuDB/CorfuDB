@@ -58,7 +58,7 @@ public class PeriodicPollPolicyTest extends AbstractViewTest {
         layout.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
         corfuRuntime.connect();
 
-        layout.getAllServers().forEach(serverEndpoint -> {
+        layout.getAllActiveServers().forEach(serverEndpoint -> {
             corfuRuntime.getRouter(serverEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             corfuRuntime.getRouter(serverEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             corfuRuntime.getRouter(serverEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());

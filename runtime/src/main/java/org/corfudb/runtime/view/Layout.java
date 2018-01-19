@@ -172,7 +172,7 @@ public class Layout {
     public void moveServersToEpoch()
             throws WrongEpochException, QuorumUnreachableException {
         log.debug("Requested move of servers to new epoch {} servers are {}", epoch,
-                getAllServers());
+                getAllActiveServers());
 
         // Set remote epoch on all servers in layout.
         Map<String, CompletableFuture<Boolean>> resultMap =
@@ -189,17 +189,24 @@ public class Layout {
     }
 
     /**
-     * This function returns a set of all the servers in the layout.
+     * This function returns a set of all active servers in the layout.
      *
      * @return A set containing all servers in the layout.
      */
-    public Set<String> getAllServers() {
-        Set<String> allServers = new HashSet<>();
-        layoutServers.forEach(allServers::add);
-        sequencers.forEach(allServers::add);
+    public Set<String> getAllActiveServers() {
+        Set<String> activeServers = new HashSet<>();
+        layoutServers.forEach(activeServers::add);
+        sequencers.forEach(activeServers::add);
         segments.forEach(x ->
                 x.getStripes().forEach(y ->
-                        y.getLogServers().forEach(allServers::add)));
+                        y.getLogServers().forEach(activeServers::add)));
+        return activeServers;
+    }
+
+    public Set<String> getAllServers() {
+        Set<String> allServers = new HashSet<>();
+        allServers.addAll(getAllActiveServers());
+        allServers.addAll(unresponsiveServers);
         return allServers;
     }
 
@@ -399,6 +406,11 @@ public class Layout {
             }
 
             @Override
+            public int getMinReplicationFactor(Layout layout) {
+                return 2;
+            }
+
+            @Override
             public IStreamView  getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
                 return new BackpointerStreamView(r, streamId, options);
             }
@@ -423,6 +435,10 @@ public class Layout {
                 SealServersHelper.waitForQuorumSegmentSeal(layoutSegment, completableFutureMap);
             }
 
+            @Override
+            public int getMinReplicationFactor(Layout layout) {
+                return (layout.getLayoutServers().size() / 2) + 1;
+            }
 
             @Override
             public IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
@@ -449,6 +465,11 @@ public class Layout {
             }
 
             @Override
+            public int getMinReplicationFactor(Layout layout) {
+                return 1;
+            }
+
+            @Override
             public IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
                 throw new UnsupportedOperationException("Stream view used without a"
                         + " replication mode");
@@ -462,6 +483,14 @@ public class Layout {
                                                  Map<String, CompletableFuture<Boolean>>
                                                          completableFutureMap)
                 throws QuorumUnreachableException;
+
+        /**
+         * Compute the min replication factor for replication protocol
+         *
+         * @param layout the layout to compute the min replication factor for
+         * @return the minimum amount of nodes required to maintain replication
+         */
+        public abstract int getMinReplicationFactor(Layout layout);
 
         public abstract IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options);
 

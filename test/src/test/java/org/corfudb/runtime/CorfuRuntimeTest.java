@@ -314,8 +314,8 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
         Layout l = get3NodeLayout();
         CorfuRuntime runtime = getRuntime(l).connect();
-        String[] serverArray = runtime.getLayoutView().getLayout().getAllServers()
-                .toArray(new String[l.getAllServers().size()]);
+        String[] serverArray = runtime.getLayoutView().getLayout().getAllActiveServers()
+                .toArray(new String[l.getAllActiveServers().size()]);
 
         l.setRuntime(runtime);
         l.setEpoch(l.getEpoch() + 1);
@@ -327,7 +327,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         assertThat(routerMap.get(serverArray[2]).getEpoch()).isEqualTo(1L);
 
         // Simulate router creation failure for the first endpoint in the list.
-        failedNode.set((String) l.getAllServers().toArray()[0]);
+        failedNode.set((String) l.getAllActiveServers().toArray()[0]);
 
         runtime.invalidateLayout();
         runtime.getLayoutView().getLayout();
