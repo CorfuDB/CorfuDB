@@ -377,6 +377,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                     log.info("connectAsync[{}]: Channel connection failed, reconnecting...", node);
                     Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
                     // Call connect, which will retry the call again.
+                    // Note that this is not recursive, because it is called in the
+                    // context of the handler future.
                     connectAsync(b);
                 }
             }
