@@ -3,7 +3,6 @@ package org.corfudb.runtime.clients;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
@@ -15,11 +14,9 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultChannelPromise;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.channel.VoidChannelPromise;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
-
 import io.netty.util.concurrent.GlobalEventExecutor;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -27,21 +24,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
-
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLException;
-
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler;
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler.ClientHandshakeEvent;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -52,17 +44,15 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ShutdownException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-
-import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.security.sasl.SaslUtils;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
-import org.corfudb.util.NodeLocator.Protocol;
 import org.corfudb.util.Sleep;
 
 
@@ -74,7 +64,7 @@ import org.corfudb.util.Sleep;
 @Slf4j
 @ChannelHandler.Sharable
 public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
-    implements IClientRouter {
+        implements IClientRouter {
 
     /**
      * Metrics: meter (counter), histogram.
@@ -90,7 +80,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     public long epoch;
 
     /**
-     * We should never set epoch backwards
+     * We should never set epoch backwards.
      *
      * @param epoch
      */
@@ -292,12 +282,14 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             .findFirst().get();
     }
 
-    @Override
-    @Deprecated
     /**
+     * {@inheritDoc}.
+     *
      * @deprecated The router automatically starts now, so this function call is no
      *             longer necessary
      */
+    @Override
+    @Deprecated
     public synchronized void start() {
         // Do nothing, legacy call
     }
