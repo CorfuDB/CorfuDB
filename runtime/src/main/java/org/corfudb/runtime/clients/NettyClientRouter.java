@@ -326,10 +326,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
     /** Add a future which reconnects the server.
      *
-     * @param channel   The channel to use
-     * @param b         The channel bootstrap to use
+     * @param channel       The channel to use
+     * @param bootstrap     The channel bootstrap to use
      */
-    private void addReconnectionOnCloseFuture(@Nonnull Channel channel, @Nonnull Bootstrap b) {
+    private void addReconnectionOnCloseFuture(@Nonnull Channel channel,
+        @Nonnull Bootstrap bootstrap) {
         channel.closeFuture().addListener((r) -> {
             log.info("addReconnectionOnCloseFuture[{}]: disconnected", node);
             // Remove the current completion future, forcing clients to wait for reconnection.
@@ -345,30 +346,30 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             if (!shutdown) {
                 log.info("addReconnectionOnCloseFuture[{}]: reconnecting", node);
                 // Asynchronously connect again.
-                connectAsync(b);
+                connectAsync(bootstrap);
             }
         });
     }
 
     /** Connect to a remote server asynchronously.
      *
-     * @param b         The channel boostrap to use
-     * @return          A {@link ChannelFuture} which is c
+     * @param bootstrap         The channel boostrap to use
+     * @return                  A {@link ChannelFuture} which is c
      */
-    private ChannelFuture connectAsync(@Nonnull Bootstrap b) {
+    private ChannelFuture connectAsync(@Nonnull Bootstrap bootstrap) {
         // If shutdown, return a ChannelFuture that is exceptionally completed.
         if (shutdown) {
             return new DefaultChannelPromise(channel, GlobalEventExecutor.INSTANCE)
                 .setFailure(new ShutdownException("Runtime already shutdown!"));
         }
         // Use the bootstrap to create a new channel.
-        ChannelFuture f = b.connect(node.getHost(), node.getPort());
+        ChannelFuture f = bootstrap.connect(node.getHost(), node.getPort());
         f.addListener((ChannelFuture future) -> {
             if (future.isSuccess()) {
                 // When the channel connection succeeds, set this channel as active
                 channel = future.channel();
                 // And register a future to reconnect in case we get disconnected
-                addReconnectionOnCloseFuture(channel, b);
+                addReconnectionOnCloseFuture(channel, bootstrap);
                 log.info("connectAsync[{}]: Channel connected.", node);
             } else {
                 // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
@@ -379,7 +380,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                     // Call connect, which will retry the call again.
                     // Note that this is not recursive, because it is called in the
                     // context of the handler future.
-                    connectAsync(b);
+                    connectAsync(bootstrap);
                 }
             }
         });
