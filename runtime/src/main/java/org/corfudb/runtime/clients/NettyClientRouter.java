@@ -641,13 +641,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             // Handshake successful. Complete the connection future to allow
             // clients to proceed.
             connectionFuture.complete(null);
-        } else if (evt.equals(ClientHandshakeEvent.FAILED)) {
+        } else if (evt.equals(ClientHandshakeEvent.FAILED) && connectionFuture.isDone()) {
             // Handshake failed. If the current completion future is complete,
             // create a new one to unset it, causing future requests
             // to wait.
-            if (connectionFuture.isDone()) {
-                connectionFuture = new CompletableFuture<>();
-            }
+            connectionFuture = new CompletableFuture<>();
         }
     }
 
