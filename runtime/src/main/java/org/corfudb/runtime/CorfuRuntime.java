@@ -407,7 +407,7 @@ public class CorfuRuntime {
             ? (address) -> overrideGetRouterFunction.apply(this, address) : (address) ->
                 nodeRouters.compute(address, (k, r) -> {
                     final NettyClientRouter router = (NettyClientRouter) r;
-                    if (router != null && router.getConnected()) {
+                    if (router != null) {
                         // Return an existing router if we already have one and it is connected.
                         return router;
                     } else {
@@ -422,8 +422,7 @@ public class CorfuRuntime {
                                 .addClient(new SequencerClient())
                                 .addClient(new LogUnitClient().setMetricRegistry(metrics != null
                                     ? metrics : CorfuRuntime.getDefaultMetrics()))
-                                .addClient(new ManagementClient())
-                                .start();
+                                .addClient(new ManagementClient());
                         } catch (Exception e) {
                             log.warn("Error connecting to router", e);
                             throw e;
