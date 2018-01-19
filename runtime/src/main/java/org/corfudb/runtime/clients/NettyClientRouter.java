@@ -330,7 +330,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * @param bootstrap     The channel bootstrap to use
      */
     private void addReconnectionOnCloseFuture(@Nonnull Channel channel,
-        @Nonnull Bootstrap bootstrap) {
+            @Nonnull Bootstrap bootstrap) {
         channel.closeFuture().addListener((r) -> {
             log.info("addReconnectionOnCloseFuture[{}]: disconnected", node);
             // Remove the current completion future, forcing clients to wait for reconnection.
