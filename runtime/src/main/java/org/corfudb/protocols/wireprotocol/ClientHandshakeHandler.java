@@ -34,9 +34,12 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     private final Queue<CorfuMsg> messages = new ArrayDeque();
     private static final String READ_TIMEOUT_HANDLER = "readTimeoutHandler";
 
+    /** Events that the handshaker sends to downstream handlers.
+     *
+     */
     public enum ClientHandshakeEvent {
-        CONNECTED,
-        FAILED
+        CONNECTED,  /* Connection succeeded. */
+        FAILED      /* Handshake failed. */
     }
 
 
