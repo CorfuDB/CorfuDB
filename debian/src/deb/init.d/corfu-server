@@ -19,7 +19,6 @@ ROLENAME="Corfu Infrastructure Server"
 RUNDIR=/var/run/corfu
 LOGDIR=/var/log/corfu
 DATADIR=/config/corfu
-CBM_BARRIER=/config/cbm/corfu/START
 CORFU_USER=corfu
 PORT=9000
 . /lib/lsb/init-functions
@@ -27,17 +26,6 @@ PORT=9000
 export PATH="${PATH:+$PATH:}/usr/sbin/:usr/bin"
 
 corfu_user_exist=$(id -u $CORFU_USER > /dev/null 2>&1; echo $?)
-
-wait_for_condition () {
-    until [ -f $CBM_BARRIER ]
-    do
-        sleep 5
-    done
-}
-
-signal_tls () {
-    touch $RUNDIR/TLS_ENABLED
-}
 
 ensure_dirs () {
     if [ ! -d $RUNDIR ]; then
@@ -70,13 +58,108 @@ ensure_profile_port () {
     fi
 }
 
+
+#### TRUST GENERATION BEGINS ####
+#   copy pasted from cbm init   #
+#################################
+# modify for entity
+CBM_USER=nsx-cbm
+ENTITY_NAME=corfu
+ENTITY_USER=$CORFU_USER
+PASSWORD_LENGTH=32
+CBM_BASE_DIR=/config/cluster-manager
+
+
+# this is the directory structure
+# /config/cluster-manager, nsx-cbm, 755
+# /config/cluster-manager/entity, nsx-cbm, 755
+# /config/cluster-manager/entity/public, nsx-cbm, 750
+# /config/cluster-manager/entity/private, entity, 700
+generate_key_trust_artifacts () {
+    CBM_ENTITY_DIR=$CBM_BASE_DIR/$ENTITY_NAME
+
+    CBM_ENTITY_PUBLIC_DIR=$CBM_ENTITY_DIR/public
+    CERT_CER=$CBM_ENTITY_PUBLIC_DIR/certificate.cer
+    CERT_PEM=$CBM_ENTITY_PUBLIC_DIR/certificate.pem
+    TRUSTSTORE_PASS=$CBM_ENTITY_PUBLIC_DIR/truststore.password
+    TRUSTSTORE=$CBM_ENTITY_PUBLIC_DIR/truststore.jks
+
+    CBM_ENTITY_PRIVATE_DIR=$CBM_ENTITY_DIR/private
+    KEYSTORE_PASS=$CBM_ENTITY_PRIVATE_DIR/keystore.password
+    KEYSTORE=$CBM_ENTITY_PRIVATE_DIR/keystore.jks
+
+
+
+    log_daemon_msg "Generating keystore/truststore for ENTITY_NAME=$ENTITY_NAME, ENTITY_USER=$ENTITY_USER."
+
+    if [ -e $CERT_PEM ]; then
+        log_daemon_msg "Certificate already exists."
+        return
+    fi
+
+    # create directories
+    mkdir -p $CBM_ENTITY_PUBLIC_DIR
+    mkdir -p $CBM_ENTITY_PRIVATE_DIR
+
+    # generate certificate, keystore, truststore
+    generate_artifacts
+
+    # modify user and permission
+    modify_user_and_permission
+}
+
+modify_user_and_permission () {
+    chmod 755 $CBM_BASE_DIR
+    chown $CBM_USER:$CBM_USER $CBM_BASE_DIR
+
+    chmod 755 $CBM_ENTITY_DIR
+    chown $CBM_USER:$CBM_USER $CBM_ENTITY_DIR
+
+    chmod -R 750 $CBM_ENTITY_PUBLIC_DIR
+    chmod 640 $CERT_CER
+    chmod 640 $CERT_PEM
+    chmod 640 $TRUSTSTORE_PASS
+    chmod 640 $TRUSTSTORE
+    chown -R $CBM_USER:$CBM_USER $CBM_ENTITY_PUBLIC_DIR
+
+    chmod -R 700 $CBM_ENTITY_PRIVATE_DIR
+    chmod 600 $KEYSTORE_PASS
+    chmod 600 $KEYSTORE
+    chown -R $ENTITY_USER:$ENTITY_USER $CBM_ENTITY_PRIVATE_DIR
+}
+
+generate_artifacts () {
+    #generate keystore password
+    KEYSTORE_PASSWORD=`head /dev/urandom | tr -dc A-Za-z0-9 | head -c $PASSWORD_LENGTH ; echo ''`
+    printf $KEYSTORE_PASSWORD > $KEYSTORE_PASS
+
+    #generate keystore
+    keytool -genkey -noprompt -keyalg RSA -alias self -keysize 2048 -validity 36500 -dname "CN=$ENTITY_NAME" \
+    -keystore $KEYSTORE -storepass $KEYSTORE_PASSWORD -keypass $KEYSTORE_PASSWORD
+
+    #export certificate
+    keytool -noprompt -export -alias self -file $CERT_CER \
+    -keystore $KEYSTORE -storepass $KEYSTORE_PASSWORD -keypass $KEYSTORE_PASSWORD
+    openssl x509 -inform der -in $CERT_CER -out $CERT_PEM
+
+    #generate trust store password
+    TRUSTSTORE_PASSWORD=`head /dev/urandom | tr -dc A-Za-z0-9 | head -c $PASSWORD_LENGTH ; echo ''`
+    printf $TRUSTSTORE_PASSWORD > $TRUSTSTORE_PASS
+
+    #generate trust store
+    keytool -noprompt -import -v -alias self -file $CERT_CER \
+    -keystore $TRUSTSTORE -storepass $TRUSTSTORE_PASSWORD
+}
+#### TRUST GENERATION ENDS ####
+
+
+
 case "$1" in
     start|profile)
         log_daemon_msg "Starting $ROLENAME on port $PORT"
         ensure_dirs
-        signal_tls
         ensure_profile_port $1
-        wait_for_condition
+        generate_key_trust_artifacts
         change_ownership
         /usr/tanuki/bin/corfu-server-wrapper $1
         ;;
