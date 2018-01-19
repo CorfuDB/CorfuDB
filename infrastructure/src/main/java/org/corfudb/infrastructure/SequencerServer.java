@@ -153,6 +153,11 @@ public class SequencerServer extends AbstractServer {
             globalLogTail.set(initialToken);
         }
 
+        if ((Boolean) opts.get("--single")) {
+            serverContext.installSingleNodeLayoutIfAbsent();
+            readyStateEpoch = serverContext.getNewSingleNodeLayout().getEpoch();
+        }
+
         long cacheSize = 250_000;
         if (opts.get("--sequencer-cache-size") != null) {
             cacheSize = Long.parseLong((String) opts.get("--sequencer-cache-size"));
