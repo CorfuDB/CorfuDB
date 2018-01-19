@@ -145,6 +145,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .addLogUnit(SERVERS.PORT_2)
                 .addToSegment()
                 .buildStripe()
+                .addLogUnit(SERVERS.PORT_1)
                 .addLogUnit(SERVERS.PORT_3)
                 .addToSegment()
                 .addToLayout()
@@ -167,11 +168,11 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
         assertThatThrownBy(() ->
                 layoutBuilder.removeSequencerServer(allNodes.get(2))
         ).isInstanceOf(LayoutModificationException.class);
-        // Remove SERVERS.PORT_1 from logunits
-        layoutBuilder.removeLogunitServer(allNodes.get(1));
-        // No effect on removing removed node
-        layoutBuilder.removeLogunitServer(allNodes.get(1));
-        // Remove SERVERS.PORT_2 from logunit server should throw error.
+        // Reject remove if redundancy is lost
+        assertThatThrownBy(() ->
+                layoutBuilder.removeLogunitServer(allNodes.get(1))
+        ).isInstanceOf(LayoutModificationException.class);
+        // Reject remove if stripe size is one
         assertThatThrownBy(() ->
                 layoutBuilder.removeLogunitServer(allNodes.get(2))
         ).isInstanceOf(LayoutModificationException.class);
