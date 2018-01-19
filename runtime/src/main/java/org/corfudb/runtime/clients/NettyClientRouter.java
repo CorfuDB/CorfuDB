@@ -340,14 +340,19 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     private void addReconnectionOnCloseFuture(@Nonnull Channel channel, @Nonnull Bootstrap b) {
         channel.closeFuture().addListener((r) -> {
             log.info("addReconnectionOnCloseFuture[{}]: disconnected", node);
+            // Remove the current completion future, forcing clients to wait for reconnection.
             connectionFuture = new CompletableFuture<>();
+            // Exceptionally complete all requests that were waiting for a completion.
             outstandingRequests.forEach((reqId, reqCompletableFuture) -> {
                 reqCompletableFuture.completeExceptionally(
                         new NetworkException("Disconnected", node));
-                outstandingRequests.remove(reqId);
+            // And also remove them.
+            outstandingRequests.remove(reqId);
             });
+            // If we aren't shutdown, reconnect.
             if (!shutdown) {
                 log.info("addReconnectionOnCloseFuture[{}]: reconnecting", node);
+                // Asynchronously connect again.
                 connectAsync(b);
             }
         });
@@ -359,20 +364,27 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * @return          A {@link ChannelFuture} which is c
      */
     private ChannelFuture connectAsync(@Nonnull Bootstrap b) {
+        // If shutdown, return a ChannelFuture that is exceptionally completed.
         if (shutdown) {
             return new DefaultChannelPromise(channel, GlobalEventExecutor.INSTANCE)
                 .setFailure(new ShutdownException("Runtime already shutdown!"));
         }
+        // Use the bootstrap to create a new channel.
         ChannelFuture f = b.connect(node.getHost(), node.getPort());
         f.addListener((ChannelFuture future) -> {
             if (future.isSuccess()) {
+                // When the channel connection succeeds, set this channel as active
                 channel = future.channel();
+                // And register a future to reconnect in case we get disconnected
                 addReconnectionOnCloseFuture(channel, b);
                 log.info("connectAsync[{}]: Channel connected.", node);
             } else {
+                // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
+                // a sleep period.
                 if (!shutdown) {
                     log.info("connectAsync[{}]: Channel connection failed, reconnecting...", node);
                     Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
+                    // Call connect, which will retry the call again.
                     connectAsync(b);
                 }
             }
@@ -425,6 +437,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx,
         CorfuMsg message) {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
+        // Check the connection future, and wait for it to be successful before
+        // sending the message.
         try {
             connectionFuture
                 .get(parameters.getRequestTimeout().toMillis(), TimeUnit.MILLISECONDS);
@@ -432,6 +446,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             Thread.currentThread().interrupt();
             throw new UnrecoverableCorfuInterruptedError(e);
         } catch (TimeoutException | ExecutionException e) {
+            // If we timed out, return a CompletableFuture exceptionally completed
+            // with the timeout.
             CompletableFuture<T> f = new CompletableFuture<>();
             f.completeExceptionally(e);
             return f;
@@ -619,8 +635,13 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt.equals(ClientHandshakeEvent.CONNECTED)) {
+            // Handshake successful. Complete the connection future to allow
+            // clients to proceed.
             connectionFuture.complete(null);
         } else if (evt.equals(ClientHandshakeEvent.FAILED)) {
+            // Handshake failed. If the current completion future is complete,
+            // create a new one to unset it, causing future requests
+            // to wait.
             if (connectionFuture.isDone()) {
                 connectionFuture = new CompletableFuture<>();
             }
