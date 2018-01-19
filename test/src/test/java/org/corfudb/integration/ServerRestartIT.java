@@ -282,7 +282,7 @@ public class ServerRestartIT extends AbstractIT {
             }
 
             return true;
-        },CLIENT_DELAY_POST_SHUTDOWN, TimeUnit.MILLISECONDS);
+        }, CLIENT_DELAY_POST_SHUTDOWN, TimeUnit.MILLISECONDS);
         offline.shutdown();
 
         Thread.sleep(CORFU_SERVER_DOWN_TIME);
@@ -438,10 +438,8 @@ public class ServerRestartIT extends AbstractIT {
         final int newMapBStreamTail = 19;
         final int newGlobalTail = 19;
 
-        assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
+        restartServer(corfuRuntime, DEFAULT_ENDPOINT);
 
-        corfuServerProcess = runCorfuServer();
-        corfuRuntime = createDefaultRuntime();
         TokenResponse tokenResponseA = corfuRuntime
                 .getSequencerView()
                 .nextToken(Collections.singleton(streamNameA), 1);

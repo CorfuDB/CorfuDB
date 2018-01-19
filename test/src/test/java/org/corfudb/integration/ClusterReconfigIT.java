@@ -284,14 +284,8 @@ public class ClusterReconfigIT extends AbstractIT {
         corfuRuntime.getRouter("localhost:9000").getClient(BaseClient.class).restart()
                 .get();
 
-        corfuRuntime = createDefaultRuntime();
-        // The shutdown and restart can take an unknown amount of time and there is a chance that
-        // the newer runtime may also connect to the older corfu server (before restart).
-        // Hence the while loop.
-        while (corfuRuntime.getLayoutView().getLayout().getEpoch() != (l.getEpoch() + 1)) {
-            Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
-            corfuRuntime = createDefaultRuntime();
-        }
+        restartServer(corfuRuntime, DEFAULT_ENDPOINT);
+
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(l.getEpoch() + 1);
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }

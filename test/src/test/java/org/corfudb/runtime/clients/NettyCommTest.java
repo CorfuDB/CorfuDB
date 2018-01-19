@@ -420,9 +420,6 @@ public class NettyCommTest extends AbstractCorfuTest {
      * @throws Exception
      */
     private void reloadedTrustManagerTestHelper(boolean replaceClientTrust) throws Exception {
-        NettyServerRouter serverRouter =
-            new NettyServerRouter(Collections.singletonList(
-                new BaseServer(ServerContextBuilder.emptyContext())));
         int port = findRandomOpenPort();
 
         File clientTrustNoServer = new File("src/test/resources/security/reload/client_trust_no_server.jks");
@@ -469,6 +466,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 .build());
 
         assertThat(clientRouter.getClient(BaseClient.class).pingSync()).isFalse();
+        clientRouter.stop();
 
 
         if (replaceClientTrust) {
@@ -476,7 +474,15 @@ public class NettyCommTest extends AbstractCorfuTest {
         } else {
             Files.copy(serverTrustWithClient.toPath(), serverTrustFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
         }
-
+        clientRouter = new NettyClientRouter(
+                NodeLocator.builder().host("localhost").port(port).build(),
+                CorfuRuntimeParameters.builder()
+                        .tlsEnabled(true)
+                        .keyStore("src/test/resources/security/reload/client_key.jks")
+                        .ksPasswordFile("src/test/resources/security/reload/password")
+                        .trustStore(clientTrustFile.getAbsolutePath())
+                        .tsPasswordFile("src/test/resources/security/reload/password")
+                        .build());
         clientRouter.getConnectionFuture().join();
         assertThat(clientRouter.getClient(BaseClient.class).pingSync()).isTrue();
         clientRouter.stop();
