@@ -364,27 +364,35 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         }
         // Use the bootstrap to create a new channel.
         ChannelFuture f = bootstrap.connect(node.getHost(), node.getPort());
-        f.addListener((ChannelFuture future) -> {
-            if (future.isSuccess()) {
-                // When the channel connection succeeds, set this channel as active
-                channel = future.channel();
-                // And register a future to reconnect in case we get disconnected
-                addReconnectionOnCloseFuture(channel, bootstrap);
-                log.info("connectAsync[{}]: Channel connected.", node);
-            } else {
-                // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
-                // a sleep period.
-                if (!shutdown) {
-                    log.info("connectAsync[{}]: Channel connection failed, reconnecting...", node);
-                    Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
-                    // Call connect, which will retry the call again.
-                    // Note that this is not recursive, because it is called in the
-                    // context of the handler future.
-                    connectAsync(bootstrap);
-                }
-            }
-        });
+        f.addListener((ChannelFuture cf) -> channelConnectionFutureHandler(cf, bootstrap));
         return f;
+    }
+
+    /** Handle when a channel is connected.
+     *
+     * @param future        The future that is completed when the channel is connected/
+     * @param bootstrap     The bootstrap to connect a new channel (used on reconnect).
+     */
+    private void channelConnectionFutureHandler(@Nonnull ChannelFuture future,
+                                                @Nonnull Bootstrap bootstrap) {
+        if (future.isSuccess()) {
+            // When the channel connection succeeds, set this channel as active
+            channel = future.channel();
+            // And register a future to reconnect in case we get disconnected
+            addReconnectionOnCloseFuture(channel, bootstrap);
+            log.info("connectAsync[{}]: Channel connected.", node);
+        } else {
+            // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
+            // a sleep period.
+            if (!shutdown) {
+                log.info("connectAsync[{}]: Channel connection failed, reconnecting...", node);
+                Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
+                // Call connect, which will retry the call again.
+                // Note that this is not recursive, because it is called in the
+                // context of the handler future.
+                connectAsync(bootstrap);
+            }
+        }
     }
 
     /**
