@@ -2,6 +2,8 @@ package org.corfudb.runtime.view;
 
 import java.util.Set;
 
+import javax.annotation.Nonnull;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 
@@ -31,14 +33,14 @@ public class SequencerHealingPolicy implements IReconfigurationHandlerPolicy {
      * @throws LayoutModificationException Thrown if attempt to create an invalid layout.
      */
     @Override
-    public Layout generateLayout(Layout originalLayout,
-                                 CorfuRuntime corfuRuntime,
-                                 Set<String> failedNodes,
-                                 Set<String> healedNodes)
+    public Layout generateLayout(@Nonnull Layout originalLayout,
+                                 @Nonnull CorfuRuntime corfuRuntime,
+                                 @Nonnull Set<String> failedNodes,
+                                 @Nonnull Set<String> healedNodes)
             throws LayoutModificationException {
         LayoutBuilder layoutBuilder = new LayoutBuilder(originalLayout);
         Layout newLayout = layoutBuilder
-                .removeUnResponsiveServers(healedNodes)
+                .removeUnresponsiveServers(healedNodes)
                 .build();
         newLayout.setRuntime(corfuRuntime);
         newLayout.setEpoch(newLayout.getEpoch() + 1);

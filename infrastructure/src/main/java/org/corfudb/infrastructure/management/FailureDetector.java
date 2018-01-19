@@ -1,7 +1,16 @@
 package org.corfudb.infrastructure.management;
 
-import java.util.*;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+
+import javax.annotation.Nonnull;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -12,10 +21,9 @@ import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
-import org.corfudb.util.Utils;
 
 /**
  * FailureDetector polls all the "responsive members" in the layout.
@@ -32,16 +40,6 @@ import org.corfudb.util.Utils;
 @Slf4j
 public class FailureDetector implements IDetector {
 
-    /**
-     * Members to poll in every round
-     */
-    private String[] members;
-
-    /**
-     * Response timeout for every router.
-     */
-    @Getter
-    private long period;
 
     /**
      * Number of iterations to execute to detect a failure in a round.
@@ -68,6 +66,12 @@ public class FailureDetector implements IDetector {
     private long initPeriodDuration = 5_000L;
 
     /**
+     * Response timeout for every router.
+     */
+    @Getter
+    private long period = initPeriodDuration;
+
+    /**
      * Interval between iterations in a pollRound.
      */
     @Getter
@@ -82,15 +86,6 @@ public class FailureDetector implements IDetector {
     @Setter
     private long periodDelta = 1_000L;
 
-    private int[] responses;
-    private IClientRouter[] membersRouters;
-    private CompletableFuture<Boolean>[] pollCompletableFutures = null;
-    private long[] expectedEpoch;
-
-    private final long INVALID_EPOCH = -1L;
-    private final int INVALID_RESPONSE = -1;
-    private long currentEpoch = INVALID_EPOCH;
-
     /**
      * Executes the policy once.
      * Checks for changes in the layout.
@@ -98,54 +93,32 @@ public class FailureDetector implements IDetector {
      *
      * @param layout Current Layout
      */
-    public PollReport poll(Layout layout, CorfuRuntime corfuRuntime) {
+    public PollReport poll(@Nonnull Layout layout,
+                           @Nonnull CorfuRuntime corfuRuntime) {
 
-        // Performs setup and checks for changes in the layout to update failure count
-        setup(layout, corfuRuntime);
-
-        // Perform polling of all responsive servers.
-        return pollRound();
-
-    }
-
-    /**
-     * Triggered on every poll.
-     * Sets up the responsive servers array. (All servers excluding unresponsive servers)
-     * Resets the currentEpoch to the layout epoch.
-     *
-     * @param layout       Latest known layout
-     * @param corfuRuntime Connected CorfuRuntime instance.
-     */
-    private void setup(Layout layout, CorfuRuntime corfuRuntime) {
-
-        // Reset local copy of the epoch.
-        currentEpoch = layout.getEpoch();
+        Map<String, IClientRouter> routerMap;
 
         // Collect and set all responsive servers in the members array.
         Set<String> allResponsiveServersSet = layout.getAllServers();
         allResponsiveServersSet.removeAll(layout.getUnresponsiveServers());
-        members = allResponsiveServersSet.toArray(new String[allResponsiveServersSet.size()]);
-        Arrays.sort(members);
+        List<String> members = new ArrayList<>(allResponsiveServersSet);
 
-        log.debug("Responsive members to poll, {}", new ArrayList<>(Arrays.asList(members)));
+        log.debug("Responsive members to poll, {}", members);
 
         // Set up arrays for routers to the endpoints.
-        membersRouters = new IClientRouter[members.length];
-        responses = new int[members.length];
-        expectedEpoch = new long[members.length];
-        period = initPeriodDuration;
-
-        for (int i = 0; i < members.length; i++) {
+        routerMap = new HashMap<>();
+        members.forEach(s -> {
             try {
-                membersRouters[i] = corfuRuntime.getRouter(members[i]);
-                membersRouters[i].setTimeoutResponse(period);
+                IClientRouter router = corfuRuntime.getRouter(s);
+                router.setTimeoutResponse(period);
+                routerMap.put(s, router);
             } catch (NetworkException ne) {
-                log.error("Error creating router for {}", members[i]);
+                log.error("Error creating router for {}", s);
             }
-            expectedEpoch[i] = INVALID_EPOCH;
-        }
+        });
+        // Perform polling of all responsive servers.
+        return pollRound(layout.getEpoch(), members, routerMap);
 
-        pollCompletableFutures = new CompletableFuture[members.length];
     }
 
     /**
@@ -159,92 +132,93 @@ public class FailureDetector implements IDetector {
      *
      * @return Poll Report with detected failed nodes and out of phase epoch nodes.
      */
-    private PollReport pollRound() {
+    private PollReport pollRound(long epoch,
+                                 List<String> members,
+                                 Map<String, IClientRouter> routerMap) {
 
-        Set<String> membersSet = new HashSet<>(Arrays.asList(members));
-        // At the start of the round reset all response counters.
-        resetResponses();
+        Map<String, Integer> responsesMap = new HashMap<>();
+        // The out of phase epoch nodes are all those nodes which responded to the pings with a
+        // wrong epoch exception. This is due to the pinged node being at a different epoch and
+        // either this runtime needs to be updated or the node needs to catchup.
+        Map<String, Long> expectedEpoch = new HashMap<>();
         boolean failuresDetected = false;
 
         // In each iteration we poll all the servers in the members list.
         for (int iteration = 0; iteration < failureThreshold; iteration++) {
 
             // Ping all nodes and await their responses.
-            pollOnceAsync();
+            Map<String, CompletableFuture<Boolean>> pollCompletableFutures =
+                    pollOnceAsync(members, routerMap);
 
             // Collect responses and increment response counters for successful pings.
-            collectResponsesAndVerifyEpochs(iteration);
+            Set<String> responses =
+                    collectResponsesAndVerifyEpochs(members, pollCompletableFutures, expectedEpoch);
 
-            failuresDetected = isFailurePresent(iteration);
-            if (!failuresDetected) {
+            // Aggregate the responses.
+            // Return false if we received responses from all the members - failure NOT present.
+            failuresDetected = !responses.equals(new HashSet<>(members));
+            if (!failuresDetected && expectedEpoch.isEmpty()) {
                 break;
             } else {
                 // Timeout is increased anytime a failure is encountered.
                 // Failure includes both, unresponsive and outOfPhaseEpoch nodes.
-                period = getIncreasedPeriod();
-                tuneRoutersResponseTimeout(membersSet, period);
+                if (failuresDetected) {
+                    period = getIncreasedPeriod();
+                    tuneRoutersResponseTimeout(members, routerMap, new HashSet<>(members), period);
+                }
+                final int pollIteration = iteration;
+                responses.forEach(s -> responsesMap.put(s, pollIteration));
             }
-
             Sleep.MILLISECONDS.sleepUninterruptibly(interIterationInterval);
         }
 
         // End round and generate report.
-        Map<String, Long> outOfPhaseEpochNodes = new HashMap<>();
+
         Set<String> failed = new HashSet<>();
 
         // We can try to scale back the network latency time after every poll round.
         // If there are no failures, after a few rounds our polling period converges back to
         // initPeriodDuration.
         period = Math.max(initPeriodDuration, (period - periodDelta));
-        tuneRoutersResponseTimeout(membersSet, period);
+        tuneRoutersResponseTimeout(members, routerMap, new HashSet<>(members), period);
 
         // Check all responses and collect all failures.
         if (failuresDetected) {
-            for (int i = 0; i < members.length; i++) {
-                if (responses[i] != (failureThreshold - 1)) {
-                    failed.add(members[i]);
-                }
-                if (expectedEpoch[i] != INVALID_EPOCH) {
-                    outOfPhaseEpochNodes.put(members[i], expectedEpoch[i]);
-                    expectedEpoch[i] = INVALID_EPOCH;
-                }
-            }
+            failed = members.stream()
+                    .filter(s -> responsesMap.get(s) == null
+                            || responsesMap.get(s) != (failureThreshold - 1))
+                    .collect(Collectors.toSet());
         }
         // Reset the timeout of all the failed nodes to the max value to set a longer
         // timeout period to detect their response.
-        tuneRoutersResponseTimeout(failed, maxPeriodDuration);
+        tuneRoutersResponseTimeout(members, routerMap, failed, maxPeriodDuration);
 
         return new PollReport.PollReportBuilder()
-                .pollEpoch(currentEpoch)
+                .pollEpoch(epoch)
                 .failingNodes(failed)
-                .outOfPhaseEpochNodes(outOfPhaseEpochNodes)
+                .outOfPhaseEpochNodes(expectedEpoch)
                 .build();
-    }
-
-    /**
-     * Reset all responses to an invalid iteration number, -1.
-     */
-    private void resetResponses() {
-        for (int i = 0; i < responses.length; i++) {
-            responses[i] = INVALID_RESPONSE;
-        }
     }
 
     /**
      * Poll all members servers once asynchronously and store their futures in
      * pollCompletableFutures.
      */
-    private void pollOnceAsync() {
+    private Map<String, CompletableFuture<Boolean>> pollOnceAsync(List<String> members,
+                                                                  Map<String, IClientRouter>
+                                                                          routerMap) {
         // Poll servers for health.  All ping activity will happen in the background.
-        for (int i = 0; i < members.length; i++) {
+        Map<String, CompletableFuture<Boolean>> pollCompletableFutures = new HashMap<>();
+        members.forEach(s -> {
             try {
-                pollCompletableFutures[i] = membersRouters[i].getClient(BaseClient.class).ping();
+                pollCompletableFutures.put(s, routerMap.get(s).getClient(BaseClient.class).ping());
             } catch (Exception e) {
                 CompletableFuture<Boolean> cf = new CompletableFuture<>();
                 cf.completeExceptionally(e);
-                pollCompletableFutures[i] = cf;
+                pollCompletableFutures.put(s, cf);
             }
-        }
+        });
+        return pollCompletableFutures;
     }
 
     /**
@@ -253,58 +227,26 @@ public class FailureDetector implements IDetector {
      * 2. WrongEpochException is thrown. We mark as a successful response but also record the
      * expected epoch.
      * 3. Other Exception is thrown. We do nothing. (The response[i] in this case is left behind.)
-     *
-     * @param pollIteration poll iteration in the ongoing polling round.
      */
-    private void collectResponsesAndVerifyEpochs(int pollIteration) {
+    private Set<String> collectResponsesAndVerifyEpochs(List<String> members,
+                                                        Map<String, CompletableFuture<Boolean>>
+                                                                pollCompletableFutures,
+                                                        Map<String, Long> expectedEpoch) {
         // Collect responses and increment response counters for successful pings.
-        for (int i = 0; i < members.length; i++) {
+        Set<String> responses = new HashSet<>();
+        members.forEach(s -> {
             try {
-                pollCompletableFutures[i].get();
-                responses[i] = pollIteration;
-                expectedEpoch[i] = INVALID_EPOCH;
+                CFUtils.within(pollCompletableFutures.get(s), Duration.ofMillis(period)).get();
+                responses.add(s);
+                expectedEpoch.remove(s);
             } catch (Exception e) {
                 if (e.getCause() instanceof WrongEpochException) {
-                    responses[i] = pollIteration;
-                    expectedEpoch[i] = ((WrongEpochException) e.getCause()).getCorrectEpoch();
+                    responses.add(s);
+                    expectedEpoch.put(s, ((WrongEpochException) e.getCause()).getCorrectEpoch());
                 }
             }
-        }
-    }
-
-    /**
-     * This method performs 2 tasks:
-     * 1. Aggregates the successful responses in the responsiveNodes Set.
-     * If the response was unsuccessful we increment the timeout period.
-     * 2. Checks if there were no failures and no wrongEpochExceptions in which case the ongoing
-     * polling round is completed. However, if failures were present (not epoch errors), then all
-     * the routers' response timeouts are updated with the increased new period and the round
-     * continues.
-     *
-     * @param pollIteration Iteration of the ongoing polling round.
-     * @return True if failures were present. False otherwise.
-     */
-    private boolean isFailurePresent(int pollIteration) {
-
-        // Aggregate the responses.
-        Set<String> membersSet = new HashSet<>(Arrays.asList(members));
-        Set<String> responsiveNodes = new HashSet<>();
-
-        if (Arrays.stream(expectedEpoch).filter(l -> l != INVALID_EPOCH).count() == 0) {
-
-            for (int i = 0; i < members.length; i++) {
-                // If this counter is left behind and this node is not in members
-                if (responses[i] == pollIteration) {
-                    responsiveNodes.add(members[i]);
-                }
-            }
-
-            // Return false if we received responses from all the members - failure NOT present.
-            return !responsiveNodes.equals(membersSet);
-        }
-
-        // There are out of phase epochs present.
-        return true;
+        });
+        return responses;
     }
 
     /**
@@ -323,13 +265,16 @@ public class FailureDetector implements IDetector {
      * @param endpoints Router endpoints.
      * @param timeout   New timeout value.
      */
-    private void tuneRoutersResponseTimeout(Set<String> endpoints, long timeout) {
+    private void tuneRoutersResponseTimeout(List<String> members,
+                                            Map<String, IClientRouter> routerMap,
+                                            Set<String> endpoints,
+                                            long timeout) {
         log.trace("Tuning router timeout responses for endpoints:{} to {}ms", endpoints, timeout);
-        for (int i = 0; i < members.length; i++) {
+        members.forEach(s -> {
             // Change timeout delay of routers of members list.
-            if (endpoints.contains(members[i]) && membersRouters[i] != null) {
-                membersRouters[i].setTimeoutResponse(timeout);
+            if (endpoints.contains(s) && routerMap.get(s) != null) {
+                routerMap.get(s).setTimeoutResponse(timeout);
             }
-        }
+        });
     }
 }

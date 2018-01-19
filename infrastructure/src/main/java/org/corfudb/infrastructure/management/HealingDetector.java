@@ -1,10 +1,15 @@
 package org.corfudb.infrastructure.management;
 
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+
+import javax.annotation.Nonnull;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -15,10 +20,8 @@ import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
-import org.corfudb.util.Utils;
 
 /**
  * HealingDetector polls all the "unresponsive members" in the layout.
@@ -34,11 +37,6 @@ import org.corfudb.util.Utils;
  */
 @Slf4j
 public class HealingDetector implements IDetector {
-
-    /**
-     * Members to poll in every round
-     */
-    private String[] members;
 
     /**
      * Number of iterations to execute to detect a healed node in a round.
@@ -62,61 +60,40 @@ public class HealingDetector implements IDetector {
     @Setter
     private long interIterationInterval = 1_000;
 
-    private int[] responses;
-    private IClientRouter[] membersRouters;
-    private CompletableFuture<Boolean>[] pollCompletableFutures = null;
-
-    private final long INVALID_EPOCH = -1L;
-    private final int INVALID_RESPONSE = -1;
-    private long currentEpoch = INVALID_EPOCH;
-
     /**
+     * Triggered on every poll.
+     * Sets up the unresponsive servers list. (All servers in the unresponsiveServers list in
+     * the layout)
      * Executes the policy once.
      * Checks for changes in the layout.
      * Then polls all the servers and generates the report.
      *
      * @param layout Current Layout
      */
-    public PollReport poll(Layout layout, CorfuRuntime corfuRuntime) {
-
-        // Performs setup and checks for changes in the layout to update unresponsive servers list.
-        setup(layout, corfuRuntime);
-
-        // Perform polling of all unresponsive servers.
-        return pollRound();
-
-    }
-
-    /**
-     * Triggered on every poll.
-     * Sets up the unresponsive servers array. (All servers in the unresponsiveServers list in
-     * the layout)
-     * Resets the currentEpoch to the layout epoch.
-     *
-     * @param layout       Latest known layout
-     * @param corfuRuntime Connected CorfuRuntime instance.
-     */
-    private void setup(Layout layout, CorfuRuntime corfuRuntime) {
-
-        currentEpoch = layout.getEpoch();
+    public PollReport poll(@Nonnull Layout layout,
+                           @Nonnull CorfuRuntime corfuRuntime) {
 
         // Get all unresponsive servers.
-        members = layout.getUnresponsiveServers().stream().toArray(String[]::new);
-        Arrays.sort(members);
+        final List<String> members = new ArrayList<>(layout.getUnresponsiveServers());
 
-        log.debug("Unresponsive members to poll, {}", new ArrayList<>(Arrays.asList(members)));
-        membersRouters = new IClientRouter[members.length];
-        responses = new int[members.length];
+        log.debug("Unresponsive members to poll, {}", members);
+        Map<String, IClientRouter> routerMap = new HashMap<>();
 
-        for (int i = 0; i < members.length; i++) {
+        members.forEach(member -> {
             try {
-                membersRouters[i] = corfuRuntime.getRouter(members[i]);
-                membersRouters[i].setTimeoutResponse(detectionPeriodDuration);
+                IClientRouter router = corfuRuntime.getRouter(member);
+                router.setTimeoutResponse(detectionPeriodDuration);
+                routerMap.put(member, router);
             } catch (NetworkException ne) {
-                log.debug("Error creating router for {}", members[i]);
+                log.debug("Error creating router for {}", member);
             }
-        }
-        pollCompletableFutures = new CompletableFuture[members.length];
+        });
+
+        // Perform polling of all unresponsive servers.
+        return new PollReport.PollReportBuilder()
+                .pollEpoch(layout.getEpoch())
+                .healingNodes(pollRound(members, routerMap))
+                .build();
     }
 
     /**
@@ -125,66 +102,65 @@ public class HealingDetector implements IDetector {
      *
      * @return Poll Report with detected healed nodes.
      */
-    private PollReport pollRound() {
+    private Set<String> pollRound(List<String> members,
+                                  Map<String, IClientRouter> routerMap) {
 
-        Set<String> membersSet = new HashSet<>(Arrays.asList(members));
-        Set<String> healed = new HashSet<>();
-        resetResponses();
+        Map<String, Integer> pollResultMap = new HashMap<>();
 
         // In each iteration we poll all the servers in the members list.
         for (int iteration = 0; iteration < detectionThreshold; iteration++) {
 
             // Ping all nodes and await their responses.
-            pollOnceAsync();
+            Map<String, CompletableFuture<Boolean>> pollCompletableFutures =
+                    pollOnceAsync(members, routerMap);
 
             // Collect all poll responses.
-            collectResponsesAndVerifyEpochs(iteration);
+            Set<String> responses = collectResponsesAndVerifyEpochs(members,
+                    pollCompletableFutures);
 
-            if (!isHealedNodesPresent(membersSet)) {
+            // Count unsuccessful ping responses.
+            // If we receive no responses and there are no nodes to heal,
+            // we can end the current poll round and exit.
+            if (responses.isEmpty()) {
                 break;
             }
+
+            final int pollIteration = iteration;
+            responses.forEach(s -> pollResultMap.put(s, pollIteration));
 
             Sleep.MILLISECONDS.sleepUninterruptibly(interIterationInterval);
         }
 
-        // Check all responses and  report all healed nodes.
-        for (int i = 0; i < members.length; i++) {
-            if (responses[i] == (detectionThreshold - 1)) {
-                healed.add(members[i]);
-            }
-        }
-
-        return new PollReport.PollReportBuilder()
-                .pollEpoch(currentEpoch)
-                .healingNodes(healed)
-                .build();
+        // Check all responses and report all healed nodes.
+        return members.stream()
+                .filter(s -> pollResultMap.get(s) != null
+                        && pollResultMap.get(s) == (detectionThreshold - 1))
+                .collect(Collectors.toSet());
     }
 
     /**
-     * Reset all responses to an invalid iteration number, -1.
+     * Poll all members servers once asynchronously and return their futures.
+     *
+     * @param members   All unresponsive members.
+     * @param routerMap Map of members corresponding to their client routers.
+     * @return Map of completable futures generated on their respective pings.
      */
-    private void resetResponses() {
-        for (int i = 0; i < responses.length; i++) {
-            responses[i] = INVALID_RESPONSE;
-        }
-    }
-
-    /**
-     * Poll all members servers once asynchronously and store their futures in
-     * pollCompletableFutures.
-     */
-    private void pollOnceAsync() {
+    private Map<String, CompletableFuture<Boolean>> pollOnceAsync(List<String> members,
+                                                                  Map<String, IClientRouter>
+                                                                          routerMap) {
 
         // Poll servers for health.  All ping activity will happen in the background.
-        for (int i = 0; i < members.length; i++) {
+        final Map<String, CompletableFuture<Boolean>> pollCompletableFutures = new HashMap<>();
+        members.forEach(s -> {
             try {
-                pollCompletableFutures[i] = membersRouters[i].getClient(BaseClient.class).ping();
+                pollCompletableFutures.put(s, routerMap.get(s).getClient(BaseClient.class).ping());
             } catch (Exception e) {
                 CompletableFuture<Boolean> cf = new CompletableFuture<>();
                 cf.completeExceptionally(e);
-                pollCompletableFutures[i] = cf;
+                pollCompletableFutures.put(s, cf);
             }
-        }
+        });
+        return pollCompletableFutures;
     }
 
     /**
@@ -193,43 +169,30 @@ public class HealingDetector implements IDetector {
      * 2. WrongEpochException is thrown. We mark as a successful response.
      * 3. Other Exception is thrown. We do nothing. (The response[i] in this case is left behind.)
      *
-     * @param pollIteration poll iteration in the ongoing polling round.
+     * @param members                All unresponsive members.
+     * @param pollCompletableFutures Map of all members corresponding to their ping completable
+     *                               futures.
+     * @return Set of all responsive nodes.
      */
-    private void collectResponsesAndVerifyEpochs(int pollIteration) {
+    private Set<String> collectResponsesAndVerifyEpochs(List<String> members,
+                                                        Map<String, CompletableFuture<Boolean>>
+                                                                pollCompletableFutures) {
         // Collect responses and increment response counters for successful pings.
-        for (int i = 0; i < members.length; i++) {
+        Set<String> responses = new HashSet<>();
+        members.forEach(s -> {
             try {
-                pollCompletableFutures[i].get();
-                responses[i] = pollIteration;
+                pollCompletableFutures.get(s).get();
+                responses.add(s);
             } catch (Exception e) {
                 // WrongEpochException signifies liveness of node.
                 if (e.getCause() instanceof WrongEpochException) {
                     log.debug("collectResponsesAndVerifyEpochs: WrongEpochException for "
                                     + "endpoint:{}, expected epoch:{}",
-                            members[i], ((WrongEpochException) e.getCause()).getCorrectEpoch());
-                    responses[i] = pollIteration;
+                            s, ((WrongEpochException) e.getCause()).getCorrectEpoch());
+                    responses.add(s);
                 }
             }
-        }
-    }
-
-    /**
-     * Aggregates all responses and checks if any node healed to rejoin the cluster.
-     *
-     * @param membersSet Set of unresponsive member servers
-     * @return True if nodes to heal present. Else False.
-     */
-    private boolean isHealedNodesPresent(Set<String> membersSet) {
-        // Count unsuccessful ping responses.
-        Set<String> unresponsiveNodes = new HashSet<>();
-        for (int i = 0; i < members.length; i++) {
-            if (responses[i] == INVALID_RESPONSE) {
-                unresponsiveNodes.add(members[i]);
-            }
-        }
-
-        // If we receive all responses and there are no nodes to heal,
-        // we can end the current poll round and exit.
-        return !unresponsiveNodes.equals(membersSet);
+        });
+        return responses;
     }
 }

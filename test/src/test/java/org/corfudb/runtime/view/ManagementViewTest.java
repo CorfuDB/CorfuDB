@@ -92,6 +92,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
         bootstrapAllServers(l);
+        getManagementServer(SERVERS.PORT_0).shutdown();
 
         CorfuRuntime corfuRuntime = new CorfuRuntime();
         l.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
@@ -107,7 +108,6 @@ public class ManagementViewTest extends AbstractViewTest {
 
         // Adding a rule on SERVERS.PORT_0 to drop all packets
         addServerRule(SERVERS.PORT_0, new TestRule().always().drop());
-        getManagementServer(SERVERS.PORT_0).shutdown();
 
         // Adding a rule on SERVERS.PORT_1 to toggle the flag when it sends the
         // MANAGEMENT_FAILURE_DETECTED message.
@@ -120,8 +120,7 @@ public class ManagementViewTest extends AbstractViewTest {
                     return true;
                 }));
 
-        assertThat(failureDetected.tryAcquire(PARAMETERS.TIMEOUT_NORMAL
-                        .toNanos(),
+        assertThat(failureDetected.tryAcquire(PARAMETERS.TIMEOUT_LONG.toNanos(),
                 TimeUnit.NANOSECONDS)).isEqualTo(true);
     }
 
@@ -179,7 +178,7 @@ public class ManagementViewTest extends AbstractViewTest {
         addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
         getManagementServer(SERVERS.PORT_1).shutdown();
 
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             corfuRuntime.invalidateLayout();
             if (corfuRuntime.getLayoutView().getLayout().getEpoch() == 2L) {
                 break;

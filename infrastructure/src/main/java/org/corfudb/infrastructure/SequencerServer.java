@@ -154,6 +154,7 @@ public class SequencerServer extends AbstractServer {
         }
 
         if ((Boolean) opts.get("--single")) {
+            serverContext.installSingleNodeLayoutIfAbsent();
             readyStateEpoch = serverContext.getNewSingleNodeLayout().getEpoch();
         }
 

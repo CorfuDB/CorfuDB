@@ -33,6 +33,7 @@ import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
+import org.corfudb.util.Sleep;
 
 /**
  * Instantiates and performs failure detection and handling asynchronously.
@@ -73,7 +74,7 @@ public class ManagementAgent {
      * To dispatch initialization tasks for recovery and sequencer bootstrap.
      */
     @Getter
-    private ExecutorService initializationTaskExecutor;
+    private Thread initializationTaskThread;
     /**
      * Detection Task Scheduler Service
      * This service schedules the following tasks every policyExecuteInterval (1 sec):
@@ -96,6 +97,8 @@ public class ManagementAgent {
 
     private final Callable<CorfuRuntime> getRuntime;
     private final String bootstrapEndpoint;
+
+    private volatile boolean shutdown = false;
 
     /**
      * Future which is marked completed if:
@@ -168,11 +171,14 @@ public class ManagementAgent {
                         .setNameFormat(serverContext.getThreadPrefix() + "DetectionWorker-%d")
                         .build());
 
-        // Creating the initialization task executor worker thread pool.
+        // Creating the initialization task thread.
         // This thread pool is utilized to dispatch one time recovery and sequencer bootstrap tasks.
         // One these tasks finish successfully, they initiate the detection tasks.
-        this.initializationTaskExecutor = Executors.newSingleThreadExecutor();
-        this.initializationTaskExecutor.submit(this::initializationTask);
+        this.initializationTaskThread = new Thread(this::initializationTask);
+        this.initializationTaskThread.setUncaughtExceptionHandler((thread, throwable) -> {
+            log.error("Error in initialization task: {}", throwable);
+        });
+        this.initializationTaskThread.start();
     }
 
     /**
@@ -183,40 +189,46 @@ public class ManagementAgent {
      */
     private void initializationTask() {
 
-        while (true) {
-            if (serverContext.getManagementLayout() == null && bootstrapEndpoint == null) {
-                log.warn("Management Server waiting to be bootstrapped");
-                continue;
-            }
-
-            // Recover if flag is false
-            while (!recovered) {
-                recovered = runRecoveryReconfiguration();
-                if (!recovered) {
-                    log.error("detectorTaskScheduler: Recovery failed. Retrying.");
+        try {
+            while (!shutdown) {
+                if (serverContext.getManagementLayout() == null && bootstrapEndpoint == null) {
+                    log.warn("Management Server waiting to be bootstrapped");
+                    Sleep.MILLISECONDS.sleepRecoverably(policyExecuteInterval);
                     continue;
                 }
-                // If recovery succeeds, reconfiguration was successful.
-                sequencerBootstrappedFuture.complete(true);
-                log.info("Recovery completed");
+
+                // Recover if flag is false
+                while (!recovered) {
+                    recovered = runRecoveryReconfiguration();
+                    if (!recovered) {
+                        log.error("detectorTaskScheduler: Recovery failed. Retrying.");
+                        continue;
+                    }
+                    // If recovery succeeds, reconfiguration was successful.
+                    sequencerBootstrappedFuture.complete(true);
+                    log.info("Recovery completed");
+                }
+                break;
             }
-            break;
-        }
 
-        // Sequencer bootstrap required if this is fresh startup (not recovery).
-        if (!sequencerBootstrappedFuture.isDone()) {
-            bootstrapPrimarySequencerServer();
-        }
+            // Sequencer bootstrap required if this is fresh startup (not recovery).
+            if (!sequencerBootstrappedFuture.isDone()) {
+                bootstrapPrimarySequencerServer();
+            }
 
-        // Initiating periodic task to poll for failures.
-        try {
-            detectionTasksScheduler.scheduleAtFixedRate(
-                    this::detectorTaskScheduler,
-                    0,
-                    policyExecuteInterval,
-                    TimeUnit.MILLISECONDS);
-        } catch (RejectedExecutionException err) {
-            log.error("Error scheduling failure detection task, {}", err);
+            // Initiating periodic task to poll for failures.
+            try {
+                detectionTasksScheduler.scheduleAtFixedRate(
+                        this::detectorTaskScheduler,
+                        0,
+                        policyExecuteInterval,
+                        TimeUnit.MILLISECONDS);
+            } catch (RejectedExecutionException err) {
+                log.error("Error scheduling failure detection task, {}", err);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
         }
     }
 
@@ -632,13 +644,13 @@ public class ManagementAgent {
 
     public void shutdown() {
         // Shutting the fault detector.
-        initializationTaskExecutor.shutdownNow();
+        shutdown = true;
         detectionTasksScheduler.shutdownNow();
         detectionTaskWorkers.shutdownNow();
 
         try {
-            initializationTaskExecutor.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(),
-                    TimeUnit.SECONDS);
+            initializationTaskThread.interrupt();
+            initializationTaskThread.join(ServerContext.SHUTDOWN_TIMER.toMillis());
             detectionTasksScheduler.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(),
                     TimeUnit.SECONDS);
             detectionTaskWorkers.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(),
