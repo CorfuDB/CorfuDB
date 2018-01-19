@@ -3,7 +3,6 @@ package org.corfudb.integration;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuTableTest;
@@ -439,11 +438,9 @@ public class ServerRestartIT extends AbstractIT {
         final int newMapBStreamTail = 19;
         final int newGlobalTail = 19;
 
-        corfuRuntime
-                .getRouter("localhost:9000")
-                .getClient(BaseClient.class)
-                .restart();
+        assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
 
+        corfuServerProcess = runCorfuServer();
         corfuRuntime = createDefaultRuntime();
         TokenResponse tokenResponseA = corfuRuntime
                 .getSequencerView()

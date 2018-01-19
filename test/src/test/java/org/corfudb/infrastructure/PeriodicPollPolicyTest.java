@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
-import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.infrastructure.management.IFailureDetectorPolicy;
+import org.corfudb.infrastructure.management.PeriodicPollPolicy;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
@@ -15,15 +16,15 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Tests the FailureDetector.
+ * Tests the Periodic Polling Policy.
  * <p>
  * Created by zlokhandwala on 10/26/16.
  */
-public class FailureDetectorTest extends AbstractViewTest {
+public class PeriodicPollPolicyTest extends AbstractViewTest {
 
+    private IFailureDetectorPolicy failureDetectorPolicy = null;
     private Layout layout = null;
     private CorfuRuntime corfuRuntime = null;
-    private FailureDetector failureDetector = null;
 
     @Before
     public void pollingEnvironmentSetup() {
@@ -38,9 +39,13 @@ public class FailureDetectorTest extends AbstractViewTest {
                 .addLayoutServer(SERVERS.PORT_1)
                 .addLayoutServer(SERVERS.PORT_2)
                 .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_2)
                 .buildSegment()
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.PORT_2)
                 .addToSegment()
                 .addToLayout()
                 .build();
@@ -49,7 +54,9 @@ public class FailureDetectorTest extends AbstractViewTest {
         getManagementServer(SERVERS.PORT_1).shutdown();
         getManagementServer(SERVERS.PORT_2).shutdown();
 
-        corfuRuntime = getRuntime(layout).connect();
+        corfuRuntime = new CorfuRuntime();
+        layout.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
+        corfuRuntime.connect();
 
         layout.getAllActiveServers().forEach(serverEndpoint -> {
             corfuRuntime.getRouter(serverEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
@@ -57,10 +64,7 @@ public class FailureDetectorTest extends AbstractViewTest {
             corfuRuntime.getRouter(serverEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         });
 
-        failureDetector = new FailureDetector();
-        failureDetector.setInitPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-        failureDetector.setPeriodDelta(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-        failureDetector.setMaxPeriodDuration(PARAMETERS.TIMEOUT_SHORT.toMillis());
+        failureDetectorPolicy = new PeriodicPollPolicy();
     }
 
     /**
@@ -69,12 +73,17 @@ public class FailureDetectorTest extends AbstractViewTest {
      * @throws InterruptedException Sleep interrupted
      */
     @Test
-    public void pollNoFailures() throws InterruptedException {
+    public void successfulPolling() throws InterruptedException {
+
+        for (int i = 0; i < PARAMETERS.CONCURRENCY_SOME; i++) {
+            failureDetectorPolicy.executePolicy(layout, corfuRuntime);
+            Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        }
 
         // A little more than responseTimeout for periodicPolling
-        PollReport result = failureDetector.poll(layout, corfuRuntime);
-        assertThat(result.getFailingNodes()).isEmpty();
-        assertThat(result.getOutOfPhaseEpochNodes()).isEmpty();
+        Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+        PollReport result = failureDetectorPolicy.getServerStatus();
+        assertThat(result.getIsFailurePresent()).isFalse();
 
     }
 
@@ -87,7 +96,7 @@ public class FailureDetectorTest extends AbstractViewTest {
      * @throws InterruptedException
      */
     @Test
-    public void pollFailures() throws InterruptedException {
+    public void failedPolling() throws InterruptedException {
 
         addServerRule(SERVERS.PORT_0, new TestRule().always().drop());
         addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
@@ -98,8 +107,7 @@ public class FailureDetectorTest extends AbstractViewTest {
         expectedResult.add(getEndpoint(SERVERS.PORT_1));
         expectedResult.add(getEndpoint(SERVERS.PORT_2));
 
-        assertThat(failureDetector.poll(layout, corfuRuntime).getFailingNodes())
-                .isEqualTo(expectedResult);
+        pollAndMatchExpectedResult(expectedResult);
 
         /*
          * Restarting the server SERVERS.PORT_0. Pings should work normally now.
@@ -111,8 +119,28 @@ public class FailureDetectorTest extends AbstractViewTest {
         // Has only SERVERS.PORT_1 & SERVERS.PORT_2
         expectedResult.remove(getEndpoint(SERVERS.PORT_0));
 
-        assertThat(failureDetector.poll(layout, corfuRuntime).getFailingNodes())
-                .isEqualTo(expectedResult);
+        pollAndMatchExpectedResult(expectedResult);
 
+    }
+
+    private void pollAndMatchExpectedResult(Set<String> expectedResult)
+            throws InterruptedException {
+
+        final int pollsToDeclareFailure = 10;
+        for (int i = 0; i < pollsToDeclareFailure; i++) {
+            failureDetectorPolicy.executePolicy(layout, corfuRuntime);
+            Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        }
+
+        Set<String> actualResult = new HashSet<>();
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LARGE; i++) {
+            Set<String> tempResult = failureDetectorPolicy.getServerStatus().getFailingNodes();
+            if (tempResult != null) {
+                tempResult.forEach(actualResult::add);
+            }
+            Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+            if (actualResult.equals(expectedResult)) break;
+        }
+        assertThat(actualResult).isEqualTo(expectedResult);
     }
 }

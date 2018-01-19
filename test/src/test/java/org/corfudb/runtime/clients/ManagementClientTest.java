@@ -1,7 +1,6 @@
 package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableSet;
-
 import org.corfudb.format.Types.NodeMetrics;
 import org.corfudb.infrastructure.*;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
@@ -94,7 +93,21 @@ public class ManagementClientTest extends AbstractClientTest {
     public void handleFailure()
             throws Exception {
         // Since the servers are started as single nodes thus already bootstrapped.
-        assertThat(client.handleFailure(0L, Collections.singleton("key")).get()).isEqualTo(true);
+        assertThat(
+                client.handleFailure(Collections.singleton("key"), Collections.emptySet()).get())
+                .isEqualTo(true);
+    }
+
+    /**
+     * Tests the failure handler start trigger.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void initiateFailureHandler()
+            throws Exception {
+        client.bootstrapManagement(TestLayoutBuilder.single(0));
+        assertThat(client.initiateFailureHandler().get()).isEqualTo(true);
     }
 
     /**

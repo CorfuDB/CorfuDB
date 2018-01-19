@@ -3,7 +3,6 @@ package org.corfudb.runtime.clients;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
-import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -13,6 +12,7 @@ import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
@@ -20,7 +20,6 @@ import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
-import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
@@ -92,22 +91,22 @@ public class ManagementClient implements IClient {
      * Sends the failure detected to the relevant management server.
      *
      * @param failedNodes The failed nodes set to be handled.
-     * @return A future which will be return TRUE if completed successfully else returns FALSE.
-     */
-    public CompletableFuture<Boolean> handleFailure(long detectorEpoch, Set<String> failedNodes) {
-        return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED
-                .payloadMsg(new DetectorMsg(detectorEpoch, failedNodes, Collections.emptySet())));
-    }
-
-    /**
-     * Sends the healed nodes detected to the relevant management server.
-     *
      * @param healedNodes The healed nodes set to be handled.
      * @return A future which will be return TRUE if completed successfully else returns FALSE.
      */
-    public CompletableFuture<Boolean> handleHealing(long detectorEpoch, Set<String> healedNodes) {
-        return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_HEALING_DETECTED
-                .payloadMsg(new DetectorMsg(detectorEpoch, Collections.emptySet(), healedNodes)));
+    public CompletableFuture<Boolean> handleFailure(Set failedNodes, Set healedNodes) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED
+                .payloadMsg(new FailureDetectorMsg(failedNodes, healedNodes)));
+    }
+
+    /**
+     * Initiates failure handling in the Management Server.
+     *
+     * @return A future which returns TRUE if failure handler triggered successfully.
+     */
+    public CompletableFuture<Boolean> initiateFailureHandler() {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_START_FAILURE_HANDLER
+                .msg());
     }
 
     /**

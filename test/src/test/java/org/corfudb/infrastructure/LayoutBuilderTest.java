@@ -30,7 +30,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
      *                                     logunit nodes removed. Invalid removal.
      */
     @Test
-    public void checkRemovalOfNodes() throws LayoutModificationException {
+    public void checkRemovalOfNodes() throws LayoutModificationException, CloneNotSupportedException {
         Layout originalLayout = new TestLayoutBuilder()
                 .setEpoch(1L)
                 .addLayoutServer(SERVERS.PORT_0)
