@@ -16,6 +16,7 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
@@ -183,6 +184,21 @@ public class ManagementClient implements IClient {
      */
     public CreateWorkflowResponse removeNode(@Nonnull String endpoint) {
         OrchestratorMsg req = new OrchestratorMsg(new RemoveNodeRequest(endpoint));
+        CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
+                .ORCHESTRATOR_REQUEST
+                .payloadMsg(req));
+        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp).getResponse();
+    }
+
+    /**
+     *
+     * Send a force remove node request to an orchestrator service node.
+     *
+     * @param endpoint the endpoint to force remove
+     * @return CreateWorkflowResponse
+     */
+    public CreateWorkflowResponse forceRemoveNode(@Nonnull String endpoint) {
+        OrchestratorMsg req = new OrchestratorMsg(new ForceRemoveNodeRequest(endpoint));
         CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));

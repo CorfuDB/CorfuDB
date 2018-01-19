@@ -3,12 +3,10 @@ package org.corfudb.runtime.view.workflows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
-import java.util.List;
 import java.util.UUID;
 
 /**

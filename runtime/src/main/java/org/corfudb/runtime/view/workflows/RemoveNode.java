@@ -3,28 +3,23 @@ package org.corfudb.runtime.view.workflows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.view.Layout;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 /**
- *
  * A workflow request that makes an orchestrator call to remove a node from
  * the cluster.
- *
+ * <p>
  * Created by Maithem on 1/19/18.
  */
 @Slf4j
 public class RemoveNode extends WorkflowRequest {
 
     public RemoveNode(@Nonnull String endpointToRemove, @Nonnull CorfuRuntime runtime,
-                      @Nonnull int retry, @Nonnull Duration timeout,
+                      int retry, @Nonnull Duration timeout,
                       @Nonnull Duration pollPeriod) {
         this.nodeForWorkflow = endpointToRemove;
         this.runtime = runtime;

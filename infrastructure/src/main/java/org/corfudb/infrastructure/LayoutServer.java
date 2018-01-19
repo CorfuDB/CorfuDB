@@ -99,7 +99,6 @@ public class LayoutServer extends AbstractServer {
 
     // Helper Methods
 
-
     /**
      * Handle a layout request message.
      *
@@ -272,6 +271,35 @@ public class LayoutServer extends AbstractServer {
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
 
+
+    /**
+     * Force layout enables the server to bypass consensus
+     * and accept a new layout.
+     *
+     * @param msg              corfu message containing LAYOUT_FORCE
+     * @param ctx              netty ChannelHandlerContext
+     * @param r                server router
+     */
+    private synchronized void forceLayout(@Nonnull CorfuPayloadMsg<LayoutCommittedRequest> msg,
+                                               @Nonnull ChannelHandlerContext ctx,
+                                               @Nonnull IServerRouter r) {
+        LayoutCommittedRequest req = msg.getPayload();
+
+        if (req.getEpoch() != getServerEpoch()) {
+            // return can't force old epochs
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
+            log.warn("forceLayout: Trying to force a layout with an old epoch. Layout {}, " +
+                    "current epoch {}", req.getLayout(), getServerEpoch());
+            return;
+        }
+
+        setCurrentLayout(req.getLayout());
+        serverContext.setServerEpoch(req.getLayout().getEpoch(), r);
+        log.warn("forceLayout: Forcing new layout {}", req.getLayout());
+        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+    }
+
+
     /**
      * Accepts any committed layouts for the current epoch or newer epochs.
      * As part of the accept, the server changes it's current layout and epoch.
@@ -289,6 +317,11 @@ public class LayoutServer extends AbstractServer {
             @NonNull CorfuPayloadMsg<LayoutCommittedRequest> msg,
             ChannelHandlerContext ctx,
             @NonNull IServerRouter r) {
+
+        if (msg.getPayload().getForce()) {
+            forceLayout(msg, ctx, r);
+            return;
+        }
 
         Layout commitLayout = msg.getPayload().getLayout();
         if (!checkBootstrap(msg, ctx, r)) {

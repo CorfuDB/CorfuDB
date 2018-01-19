@@ -81,13 +81,12 @@ public abstract class WorkflowRequest {
      *                   running the workflow
      * @param timeout    the total time to wait for the workflow to complete
      * @param pollPeriod the poll period to query the completion of the workflow
-     * @throws NetworkException if the client disconnects
      * @throws TimeoutException if the workflow doesn't complete withint the timout
      *                          period
      */
     private void waitForWorkflow(@Nonnull UUID workflow, @Nonnull ManagementClient client,
                                  @Nonnull Duration timeout, @Nonnull Duration pollPeriod)
-            throws NetworkException, TimeoutException {
+            throws TimeoutException {
         long tries = timeout.getSeconds() / pollPeriod.getSeconds();
         for (long x = 0; x < tries; x++) {
             if (!client.queryRequest(workflow).isActive()) {
