@@ -51,7 +51,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * @param corfuRuntimes All runtimes whose routers' timeouts are to be set.
      */
     public void setAggressiveTimeouts(Layout layout, CorfuRuntime... corfuRuntimes) {
-        layout.getAllServers().forEach(routerEndpoint -> {
+        layout.getAllActiveServers().forEach(routerEndpoint -> {
             for (CorfuRuntime runtime : corfuRuntimes) {
                 runtime.getRouter(routerEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
                 runtime.getRouter(routerEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
@@ -167,7 +167,7 @@ public class ManagementViewTest extends AbstractViewTest {
         l.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
         corfuRuntime.connect();
         // Initiating all failure handlers.
-        for (String server : l.getAllServers()) {
+        for (String server : l.getAllActiveServers()) {
             corfuRuntime.getRouter(server).getClient(ManagementClient.class).initiateFailureHandler().get();
         }
 
@@ -221,7 +221,7 @@ public class ManagementViewTest extends AbstractViewTest {
         l.setRuntime(corfuRuntime);
 
         // Initiating all failure handlers.
-        for (String server : corfuRuntime.getLayoutView().getLayout().getAllServers()) {
+        for (String server : corfuRuntime.getLayoutView().getLayout().getAllActiveServers()) {
             corfuRuntime.getRouter(server).getClient(ManagementClient.class).initiateFailureHandler().get();
         }
 
@@ -735,7 +735,7 @@ public class ManagementViewTest extends AbstractViewTest {
         currentLayout.setEpoch(currentLayout.getEpoch() + 1);
         currentLayout.moveServersToEpoch();
 
-        for (String router : l.getAllServers()) {
+        for (String router : l.getAllActiveServers()) {
             assertThat(corfuRuntime.getRouter(router).getEpoch()).isEqualTo(1L);
         }
 

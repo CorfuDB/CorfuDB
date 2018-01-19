@@ -263,7 +263,7 @@ public class CorfuRuntime {
         /**
          * The number of times to retry invalidate when a layout change is expected.
          */
-        @Default int invalidateRetry = 3;
+        @Default int invalidateRetry = 5;
     }
 
     /**
@@ -684,7 +684,7 @@ public class CorfuRuntime {
                 Collections.shuffle(layoutServersCopy);
                 // Iterate through the layout servers, attempting to connect to one
                 for (String s : layoutServersCopy) {
-                    log.debug("Trying connection to layout server {}", s);
+                    log.info("Trying connection to layout server {}", s);
                     try {
                         IClientRouter router = getRouter(s);
                         // Try to get a layout.
@@ -718,7 +718,7 @@ public class CorfuRuntime {
                         // it is acceptable (at least the code on 10/13/2016 does not have issues)
                         // but setEpoch of routers needs to be synchronized as those variables are
                         // not local.
-                        for (String server : l.getAllServers()) {
+                        for (String server : l.getAllActiveServers()) {
                             try {
                                 getRouter(server).setEpoch(l.getEpoch());
                             } catch (NetworkException ne) {

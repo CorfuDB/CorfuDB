@@ -24,7 +24,12 @@ public enum OrchestratorRequestType {
     /**
      * Add a new node to the cluster
      */
-    ADD_NODE(1, AddNodeRequest::new);
+    ADD_NODE(1, AddNodeRequest::new),
+
+    /**
+     * Remove a node from the cluster
+     */
+    REMOVE_NODE(2, RemoveNodeRequest::new);
 
     @Getter
     public final int type;

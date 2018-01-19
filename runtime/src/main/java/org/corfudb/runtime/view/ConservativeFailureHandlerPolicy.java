@@ -33,7 +33,7 @@ public class ConservativeFailureHandlerPolicy implements IFailureHandlerPolicy {
         Layout newLayout = layoutBuilder
                 .assignResponsiveSequencerAsPrimary(failedNodes)
                 .removeLogunitServers(failedNodes)
-                .removeUnResponsiveServers(healedNodes)
+                .removeUnresponsiveServers(healedNodes)
                 .addUnresponsiveServers(failedNodes)
                 .build();
         newLayout.setRuntime(corfuRuntime);

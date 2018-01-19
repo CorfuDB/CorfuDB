@@ -19,10 +19,13 @@ import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
+
+import javax.annotation.Nonnull;
 
 /**
  * A client to the Management Server.
@@ -116,7 +119,12 @@ public class ManagementClient implements IClient {
         return router.sendMessageAndGetCompletable(CorfuMsgType.HEARTBEAT_REQUEST.msg());
     }
 
-    public CreateWorkflowResponse addNodeRequest(String endpoint) {
+    /**
+     * Send a add node request to an orchestrator
+     * @param endpoint the endpoint to add to the cluster
+     * @return create workflow response that contains the uuid of the workflow
+     */
+    public CreateWorkflowResponse addNodeRequest(@Nonnull String endpoint) {
         OrchestratorMsg req = new OrchestratorMsg(new AddNodeRequest(endpoint));
         CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
@@ -124,11 +132,29 @@ public class ManagementClient implements IClient {
         return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp).getResponse();
     }
 
-    public QueryResponse queryRequest(UUID workflowId) {
+    /**
+     * Query the state of a workflow on a particular orchestrator.
+     * @param workflowId the workflow to query
+     * @return Query response that contains whether the workflow is running or not
+     */
+    public QueryResponse queryRequest(@Nonnull UUID workflowId) {
         OrchestratorMsg req = new OrchestratorMsg(new QueryRequest(workflowId));
         CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));
         return (QueryResponse) CFUtils.getUninterruptibly(resp).getResponse();
+    }
+
+    /**
+     * Return a workflow id for this remove operation request.
+     * @param endpoint the endpoint to remove
+     * @return uuid of the remove workflow
+     */
+    public CreateWorkflowResponse removeNode(@Nonnull String endpoint) {
+        OrchestratorMsg req = new OrchestratorMsg(new RemoveNodeRequest(endpoint));
+        CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
+                .ORCHESTRATOR_REQUEST
+                .payloadMsg(req));
+        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp).getResponse();
     }
 }

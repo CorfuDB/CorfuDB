@@ -1,20 +1,14 @@
 package org.corfudb.integration;
 
-import java.net.ConnectException;
-import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.CorfuTestParameters;
-import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.util.Sleep;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutBuilder;
 import org.junit.Test;
 
 import java.time.Duration;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -40,7 +34,7 @@ public class WorkflowIT extends AbstractIT {
     }
 
     @Test
-    public void AddNodeIT() throws Exception {
+    public void AddAndRemoveNodeIT() throws Exception {
         final String host = "localhost";
         final String streamName = "s1";
         final int n1Port = 9000;
@@ -90,7 +84,7 @@ public class WorkflowIT extends AbstractIT {
 
         n1Rt.invalidateLayout();
         final int clusterSizeN2 = 2;
-        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+        assertThat(n1Rt.getLayoutView().getLayout().getAllActiveServers().size()).isEqualTo(clusterSizeN2);
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
@@ -110,7 +104,33 @@ public class WorkflowIT extends AbstractIT {
         // Verify that the third node has been added and data can be read back
         n1Rt.invalidateLayout();
         final int clusterSizeN3 = 3;
-        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
+        assertThat(n1Rt.getLayoutView().getLayout().getAllActiveServers().size()).isEqualTo(clusterSizeN3);
+
+        Layout n3Layout = new Layout(n1Rt.getLayoutView().getLayout());
+
+        Layout expectedLayout = new LayoutBuilder(n3Layout)
+                .removeLayoutServer(getConnectionString(n2Port))
+                .removeSequencerServer(getConnectionString(n2Port))
+                .removeLogunitServer(getConnectionString(n2Port))
+                .removeUnresponsiveServer(getConnectionString(n2Port))
+                .setEpoch(n3Layout.getEpoch() + 1)
+                .build();
+
+        // Remove node 2
+        n1Rt.getManagementView().removeNode(getConnectionString(n2Port), workflowNumRetry,
+                timeout, pollPeriod);
+        n1Rt.invalidateLayout();
+        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+
+
+        // Remove node 2 again and verify that the epoch doesn't change
+        n1Rt.getManagementView().removeNode(getConnectionString(n2Port), workflowNumRetry,
+                timeout, pollPeriod);
+
+        n1Rt.invalidateLayout();
+        // Verify that the layout epoch hasn't changed after the second remove and that
+        // the sequencers/layouts/segments nodes include the first and third node
+        assertThat(n1Rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
 
         for (int x = 0; x < numIter; x++) {
             String v = (String) table.get(String.valueOf(x));

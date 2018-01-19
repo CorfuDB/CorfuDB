@@ -65,7 +65,7 @@ public class PeriodicPollPolicy implements IFailureDetectorPolicy {
     @Override
     public void executePolicy(Layout layout, CorfuRuntime corfuRuntime) {
 
-        String[] allServers = layout.getAllServers().stream().toArray(String[]::new);
+        String[] allServers = layout.getAllActiveServers().stream().toArray(String[]::new);
         // Performs setup and checks for changes in the layout to update failure count
         checkForChanges(allServers, corfuRuntime);
         // Perform polling of all servers in historyServers

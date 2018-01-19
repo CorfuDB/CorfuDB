@@ -35,14 +35,18 @@ public abstract class Action {
      * Execute the action.
      */
     @Nonnull
-    public void execute(@Nonnull CorfuRuntime runtime) {
-        try {
-            changeStatus(ActionStatus.STARTED);
-            impl(runtime);
-            changeStatus(ActionStatus.COMPLETED);
-        } catch (Exception e) {
-            log.error("execute: error executing action {}", getName(), e);
-            changeStatus(ActionStatus.ERROR);
+    public void execute(@Nonnull CorfuRuntime runtime, int numRetry) {
+        for (int x = 0; x < numRetry; x++) {
+            try {
+                changeStatus(ActionStatus.STARTED);
+                impl(runtime);
+                changeStatus(ActionStatus.COMPLETED);
+                return;
+            } catch (Exception e) {
+                log.error("execute: error executing action {} on retry {}",
+                        getName(), x, e);
+                changeStatus(ActionStatus.ERROR);
+            }
         }
     }
 
