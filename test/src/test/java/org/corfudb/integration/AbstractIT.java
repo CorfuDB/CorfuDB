@@ -3,14 +3,18 @@ package org.corfudb.integration;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
 
@@ -30,6 +34,7 @@ import java.util.concurrent.Executors;
  * Integration tests.
  * Created by zlokhandwala on 4/28/17.
  */
+@Slf4j
 public class AbstractIT extends AbstractCorfuTest {
     static final String DEFAULT_HOST = "localhost";
     static final int DEFAULT_PORT = 9000;
@@ -141,6 +146,32 @@ public class AbstractIT extends AbstractCorfuTest {
             router.getClient(LayoutClient.class).bootstrapLayout(layout).get();
             router.getClient(ManagementClient.class).bootstrapManagement(layout).get();
             router.getClient(ManagementClient.class).initiateFailureHandler().get();
+        }
+    }
+
+    public void restartServer(CorfuRuntime corfuRuntime, String endpoint) {
+        corfuRuntime.invalidateLayout();
+        long oldEpoch = corfuRuntime.getLayoutView().getLayout().getEpoch();
+        try {
+            corfuRuntime.getRouter(endpoint).getClient(BaseClient.class).restart().get();
+        } catch (ExecutionException | InterruptedException e) {
+            log.error("Error: {}", e);
+        }
+
+        // The shutdown and restart can take an unknown amount of time and there is a chance that
+        // the newer runtime may also connect to the older corfu server (before restart).
+        // Hence the while loop.
+        while (true) {
+            try {
+                if (corfuRuntime.getLayoutView().getLayout().getEpoch() == (oldEpoch + 1)) {
+                    break;
+                }
+                Sleep.MILLISECONDS.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+                corfuRuntime.invalidateLayout();
+            } catch (ShutdownException se) {
+                log.error("Shutdown Exception thrown connecting to server:{} ignored, {}",
+                        endpoint, se);
+            }
         }
     }
 
