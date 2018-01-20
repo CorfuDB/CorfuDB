@@ -14,15 +14,17 @@ import lombok.Setter;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
-import org.corfudb.infrastructure.management.IFailureDetectorPolicy;
-import org.corfudb.infrastructure.management.PeriodicPollPolicy;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
-import org.corfudb.runtime.view.IFailureHandlerPolicy;
+import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
+import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.infrastructure.management.HealingDetector;
+import org.corfudb.infrastructure.management.IDetector;
+import org.corfudb.runtime.view.SequencerHealingPolicy;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.UuidUtils;
 
@@ -87,11 +89,19 @@ public class ServerContext implements AutoCloseable {
 
     @Getter
     @Setter
-    private IFailureDetectorPolicy failureDetectorPolicy;
+    private IDetector failureDetector;
 
     @Getter
     @Setter
-    private IFailureHandlerPolicy failureHandlerPolicy;
+    private IDetector healingDetector;
+
+    @Getter
+    @Setter
+    private IReconfigurationHandlerPolicy failureHandlerPolicy;
+
+    @Getter
+    @Setter
+    private IReconfigurationHandlerPolicy healingHandlerPolicy;
 
     @Getter
     private final EventLoopGroup clientGroup;
@@ -107,14 +117,18 @@ public class ServerContext implements AutoCloseable {
 
     /**
      * Returns a new ServerContext.
+     *
      * @param serverConfig map of configuration strings to objects
      */
     public ServerContext(Map<String, Object> serverConfig) {
         this.serverConfig = serverConfig;
         this.dataStore = new DataStore(serverConfig);
         generateNodeId();
-        this.failureDetectorPolicy = new PeriodicPollPolicy();
+        this.serverRouter = serverRouter;
+        this.failureDetector = new FailureDetector();
+        this.healingDetector = new HealingDetector();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
+        this.healingHandlerPolicy = new SequencerHealingPolicy();
 
         // Setup the netty event loops. In tests, these loops may be provided by
         // a test framework to save resources.
@@ -301,6 +315,7 @@ public class ServerContext implements AutoCloseable {
 
     /**
      * Set the serverRouter epoch.
+     *
      * @param serverEpoch the epoch to set
      */
     public synchronized void setServerEpoch(long serverEpoch, IServerRouter r) {
@@ -351,6 +366,7 @@ public class ServerContext implements AutoCloseable {
 
     /**
      * Returns the dataStore starting address.
+     *
      * @return the starting address
      */
     public long getStartingAddress() {
@@ -368,8 +384,24 @@ public class ServerContext implements AutoCloseable {
      *
      * @param layout Layout to be persisted
      */
-    public void setManagementLayout(Layout layout) {
-        dataStore.put(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, layout);
+    public synchronized void saveManagementLayout(Layout layout) {
+        // Cannot update with a null layout.
+        if (layout == null) {
+            log.warn("saveManagementLayout: Attempted to update with null layout");
+            return;
+        }
+        Layout currentLayout = getManagementLayout();
+        // Update only if new layout has a higher epoch than the existing layout.
+        if (currentLayout == null || layout.getEpoch() > currentLayout.getEpoch()) {
+            // Persisting this new updated layout
+            dataStore.put(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, layout);
+            log.info("saveManagementLayout: Updated to new layout at epoch {}",
+                    getManagementLayout().getEpoch());
+        } else {
+            log.debug("saveManagementLayout: "
+                            + "Ignoring layout because new epoch {} <= old epoch {}",
+                    layout.getEpoch(), currentLayout.getEpoch());
+        }
     }
 
     /**
@@ -377,7 +409,7 @@ public class ServerContext implements AutoCloseable {
      *
      * @return The last persisted layout
      */
-    public Layout getManagementLayout() {
+    public synchronized Layout getManagementLayout() {
         return dataStore.get(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT);
     }
 

@@ -11,7 +11,7 @@ import org.corfudb.runtime.CorfuRuntime;
  * <p>Created by zlokhandwala on 11/21/16.
  */
 @Slf4j
-public class PurgeFailurePolicy implements IFailureHandlerPolicy {
+public class PurgeFailurePolicy implements IReconfigurationHandlerPolicy {
 
     /**
      * Modifies the layout by removing/purging the set failed nodes.
