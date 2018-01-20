@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.LogUnitClient;
@@ -399,5 +400,33 @@ public class ClusterReconfigIT extends AbstractIT {
     @Test
     public void killLogUnitAndBackupSequencer() throws Exception {
         killNodeAndVerifyDataPath(1);
+    }
+
+    /**
+     * Bootstrap cluster of 3 nodes using the BootstrapUtil.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void test3NodeBootstrapUtility() throws Exception {
+
+        // Set up cluster of 3 nodes.
+        final int PORT_0 = 9000;
+        final int PORT_1 = 9001;
+        final int PORT_2 = 9002;
+        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
+        Process corfuServer_2 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_1);
+        Process corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
+        final Layout layout = get3NodeLayout();
+
+        final int retries = 3;
+        BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
+
+        CorfuRuntime corfuRuntime = createDefaultRuntime();
+        assertThat(corfuRuntime.getLayoutView().getLayout().equals(layout)).isTrue();
+
+        shutdownCorfuServer(corfuServer_1);
+        shutdownCorfuServer(corfuServer_2);
+        shutdownCorfuServer(corfuServer_3);
     }
 }
