@@ -4,17 +4,13 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
 import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.Appender;
-import ch.qos.logback.core.encoder.Encoder;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.netty.channel.DefaultEventLoopGroup;
-import io.netty.channel.EventLoopGroup;
 import java.io.IOException;
 import javax.annotation.Nonnull;
 import org.assertj.core.api.AbstractObjectAssert;
 import org.assertj.core.api.AbstractThrowableAssert;
 import org.corfudb.test.DisabledOnTravis;
 import org.corfudb.test.MemoryAppender;
+import org.corfudb.test.concurrent.TestThreadGroups;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
 import org.fusesource.jansi.Ansi;
@@ -26,7 +22,6 @@ import org.junit.Rule;
 import org.junit.rules.TestRule;
 import org.junit.runners.model.Statement;
 import org.junit.runner.Description;
-import org.junit.runners.model.MultipleFailureException;
 
 import java.io.File;
 import java.util.*;
@@ -62,10 +57,6 @@ public class AbstractCorfuTest {
     public static final CorfuTestServers SERVERS =
             new CorfuTestServers();
 
-    public static EventLoopGroup NETTY_BOSS_GROUP;
-    public static EventLoopGroup NETTY_WORKER_GROUP;
-    public static EventLoopGroup NETTY_CLIENT_GROUP;
-
     public static MemoryAppender<ILoggingEvent> LOG_APPENDER;
     public static PatternLayoutEncoder LOG_ENCODER;
     public static final int LOG_ELEMENTS = 25;
@@ -91,33 +82,9 @@ public class AbstractCorfuTest {
         LOG_APPENDER.reset();
     }
 
-    @BeforeClass
-    public static void initNettyGroups() {
-        NETTY_BOSS_GROUP = new DefaultEventLoopGroup(1,
-                            new ThreadFactoryBuilder()
-                                .setNameFormat("boss-%d")
-                                .setDaemon(true)
-                            .build());
-        int numThreads = Runtime.getRuntime().availableProcessors() * 2;
-
-        NETTY_WORKER_GROUP = new DefaultEventLoopGroup(numThreads,
-            new ThreadFactoryBuilder()
-                .setNameFormat("worker-%d")
-                .setDaemon(true)
-                .build());
-
-        NETTY_CLIENT_GROUP = new DefaultEventLoopGroup(numThreads,
-            new ThreadFactoryBuilder()
-                .setNameFormat("client-%d")
-                .setDaemon(true)
-                .build());
-    }
-
     @AfterClass
     public static void shutdownNettyGroups() {
-        NETTY_BOSS_GROUP.shutdownGracefully();
-        NETTY_CLIENT_GROUP.shutdownGracefully();
-        NETTY_WORKER_GROUP.shutdownGracefully();
+        TestThreadGroups.shutdownThreadGroups();
     }
 
     /** A watcher which prints whether tests have failed or not, for a useful
