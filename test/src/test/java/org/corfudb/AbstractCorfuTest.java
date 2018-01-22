@@ -1,23 +1,19 @@
 package org.corfudb;
 
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.LoggerContext;
-import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
-import ch.qos.logback.classic.spi.ILoggingEvent;
 import java.io.IOException;
 import javax.annotation.Nonnull;
 import org.assertj.core.api.AbstractObjectAssert;
 import org.assertj.core.api.AbstractThrowableAssert;
 import org.corfudb.test.DisabledOnTravis;
-import org.corfudb.test.MemoryAppender;
 import org.corfudb.test.concurrent.TestThreadGroups;
+import org.corfudb.test.logging.TestLogger;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.concurrent.SingletonResource;
 import org.fusesource.jansi.Ansi;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.rules.TestRule;
 import org.junit.runners.model.Statement;
@@ -31,7 +27,6 @@ import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.IntConsumer;
-import org.slf4j.LoggerFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -57,34 +52,20 @@ public class AbstractCorfuTest {
     public static final CorfuTestServers SERVERS =
             new CorfuTestServers();
 
-    public static MemoryAppender<ILoggingEvent> LOG_APPENDER;
-    public static PatternLayoutEncoder LOG_ENCODER;
     public static final int LOG_ELEMENTS = 25;
-    @BeforeClass
-    public static void initLogging() {
-        LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
 
-        LOG_ENCODER = new PatternLayoutEncoder();
-        LOG_ENCODER.setContext(lc);
-        LOG_ENCODER.setPattern("%d{HH:mm:ss.SSS} %highlight(%-5level) "
-            + "[%thread] %cyan(%logger{15}) - %msg%n %ex{3}");
-        LOG_ENCODER.start();
-
-        LOG_APPENDER = new MemoryAppender<>(LOG_ELEMENTS, LOG_ENCODER);
-        Logger logger = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-        LOG_APPENDER.setContext(lc);
-        LOG_APPENDER.start();
-        logger.addAppender(LOG_APPENDER);
-    }
+    public static final SingletonResource<TestLogger> LOGGER =
+        SingletonResource.withInitial(() -> new TestLogger(LOG_ELEMENTS));
 
     @Before
-    public void reinitLogging() {
-        LOG_APPENDER.reset();
+    public void initLogging() {
+        LOGGER.get().reset(); // Get a logger instance and reset it
     }
 
     @AfterClass
     public static void shutdownNettyGroups() {
         TestThreadGroups.shutdownThreadGroups();
+        LOGGER.cleanup(TestLogger::reset);
     }
 
     /** A watcher which prints whether tests have failed or not, for a useful
@@ -227,7 +208,7 @@ public class AbstractCorfuTest {
             System.out.println(ansi().fgCyan().bold().a("Last ").a(LOG_ELEMENTS)
                 .a(" Logs Until Failure")
                 .reset());
-            Iterable<byte[]> logEvents = LOG_APPENDER.getEventsAndReset();
+            Iterable<byte[]> logEvents = LOGGER.get().getEventsAndReset();
             logEvents.forEach(e -> {
                 try {
                     System.out.write(e);

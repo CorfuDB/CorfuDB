@@ -1,4 +1,4 @@
-package org.corfudb.test;
+package org.corfudb.test.logging;
 
 import ch.qos.logback.core.UnsynchronizedAppenderBase;
 import ch.qos.logback.core.encoder.Encoder;
