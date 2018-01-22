@@ -3,7 +3,7 @@ package org.corfudb.infrastructure;
 import com.google.common.collect.ImmutableMap;
 import lombok.Data;
 import lombok.experimental.Accessors;
-import org.corfudb.AbstractCorfuTest;
+import org.corfudb.test.concurrent.TestThreadGroups;
 
 /**
  * Created by mwei on 6/29/16.
@@ -90,18 +90,9 @@ public class ServerContextBuilder {
 
         // Provide the server with event loop groups
         if (implementation.equals("local")) {
-            if (AbstractCorfuTest.NETTY_CLIENT_GROUP != null) {
-                builder
-                    .put("client", AbstractCorfuTest.NETTY_CLIENT_GROUP);
-            }
-            if (AbstractCorfuTest.NETTY_BOSS_GROUP != null) {
-                builder
-                .put("boss", AbstractCorfuTest.NETTY_BOSS_GROUP);
-            }
-            if (AbstractCorfuTest.NETTY_WORKER_GROUP != null) {
-                builder
-                .put("worker", AbstractCorfuTest.NETTY_WORKER_GROUP);
-            }
+            builder.put("client", TestThreadGroups.NETTY_CLIENT_GROUP.get());
+            builder.put("boss", TestThreadGroups.NETTY_BOSS_GROUP.get());
+            builder.put("worker", TestThreadGroups.NETTY_CLIENT_GROUP.get());
         }
         ServerContext sc = new ServerContext(builder.build());
         sc.setServerRouter(serverRouter);
