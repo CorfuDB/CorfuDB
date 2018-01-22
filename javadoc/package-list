@@ -29,5 +29,6 @@ org.corfudb.security.sasl.plaintext
 org.corfudb.security.tls
 org.corfudb.shell
 org.corfudb.util
+org.corfudb.util.concurrent
 org.corfudb.util.retry
 org.corfudb.util.serializer
