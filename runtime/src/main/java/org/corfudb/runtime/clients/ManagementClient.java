@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -12,17 +13,20 @@ import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
+import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
+
+import javax.annotation.Nonnull;
 
 /**
  * A client to the Management Server.
@@ -48,7 +52,7 @@ public class ManagementClient implements IClient {
 
     @ClientHandler(type = CorfuMsgType.ORCHESTRATOR_RESPONSE)
     private static Object handleOrchestratorResponse(CorfuPayloadMsg<OrchestratorResponse> msg,
-                                                  ChannelHandlerContext ctx, IClientRouter r) {
+                                                     ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }
 
@@ -77,7 +81,7 @@ public class ManagementClient implements IClient {
      *
      * @param l The layout to bootstrap with.
      * @return A completable future which will return TRUE if the
-     *     bootstrap was successful, false otherwise.
+     * bootstrap was successful, false otherwise.
      */
     public CompletableFuture<Boolean> bootstrapManagement(Layout l) {
         return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST
@@ -88,35 +92,40 @@ public class ManagementClient implements IClient {
      * Sends the failure detected to the relevant management server.
      *
      * @param failedNodes The failed nodes set to be handled.
-     * @param healedNodes The healed nodes set to be handled.
      * @return A future which will be return TRUE if completed successfully else returns FALSE.
      */
-    public CompletableFuture<Boolean> handleFailure(Set failedNodes, Set healedNodes) {
+    public CompletableFuture<Boolean> handleFailure(long detectorEpoch, Set<String> failedNodes) {
         return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED
-                .payloadMsg(new FailureDetectorMsg(failedNodes, healedNodes)));
+                .payloadMsg(new DetectorMsg(detectorEpoch, failedNodes, Collections.emptySet())));
     }
 
     /**
-     * Initiates failure handling in the Management Server.
+     * Sends the healed nodes detected to the relevant management server.
      *
-     * @return A future which returns TRUE if failure handler triggered successfully.
+     * @param healedNodes The healed nodes set to be handled.
+     * @return A future which will be return TRUE if completed successfully else returns FALSE.
      */
-    public CompletableFuture<Boolean> initiateFailureHandler() {
-        return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_START_FAILURE_HANDLER
-                .msg());
+    public CompletableFuture<Boolean> handleHealing(long detectorEpoch, Set<String> healedNodes) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_HEALING_DETECTED
+                .payloadMsg(new DetectorMsg(detectorEpoch, Collections.emptySet(), healedNodes)));
     }
 
     /**
      * Requests for a heartbeat message containing the node status.
      *
      * @return A future which will return the node health metrics of
-     *     the node which was requested for the heartbeat.
+     * the node which was requested for the heartbeat.
      */
     public CompletableFuture<byte[]> sendHeartbeatRequest() {
         return router.sendMessageAndGetCompletable(CorfuMsgType.HEARTBEAT_REQUEST.msg());
     }
 
-    public CreateWorkflowResponse addNodeRequest(String endpoint) {
+    /**
+     * Send a add node request to an orchestrator
+     * @param endpoint the endpoint to add to the cluster
+     * @return create workflow response that contains the uuid of the workflow
+     */
+    public CreateWorkflowResponse addNodeRequest(@Nonnull String endpoint) {
         OrchestratorMsg req = new OrchestratorMsg(new AddNodeRequest(endpoint));
         CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
@@ -124,11 +133,29 @@ public class ManagementClient implements IClient {
         return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp).getResponse();
     }
 
-    public QueryResponse queryRequest(UUID workflowId) {
+    /**
+     * Query the state of a workflow on a particular orchestrator.
+     * @param workflowId the workflow to query
+     * @return Query response that contains whether the workflow is running or not
+     */
+    public QueryResponse queryRequest(@Nonnull UUID workflowId) {
         OrchestratorMsg req = new OrchestratorMsg(new QueryRequest(workflowId));
         CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));
         return (QueryResponse) CFUtils.getUninterruptibly(resp).getResponse();
+    }
+
+    /**
+     * Return a workflow id for this remove operation request.
+     * @param endpoint the endpoint to remove
+     * @return uuid of the remove workflow
+     */
+    public CreateWorkflowResponse removeNode(@Nonnull String endpoint) {
+        OrchestratorMsg req = new OrchestratorMsg(new RemoveNodeRequest(endpoint));
+        CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
+                .ORCHESTRATOR_REQUEST
+                .payloadMsg(req));
+        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp).getResponse();
     }
 }

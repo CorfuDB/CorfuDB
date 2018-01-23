@@ -55,7 +55,7 @@ public class CorfuSMRObjectProxyTest extends AbstractObjectTest {
         assertThat(testClass.get())
                 .isEqualTo(TEST_VALUE);
 
-        CorfuRuntime runtime2 = new CorfuRuntime(getDefaultEndpoint());
+        CorfuRuntime runtime2 = getNewRuntime(getDefaultNode());
         runtime2.connect();
 
         TestClass testClass2 = (TestClass)

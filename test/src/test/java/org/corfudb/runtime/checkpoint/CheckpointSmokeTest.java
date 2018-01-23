@@ -40,7 +40,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     public void setRuntime() throws Exception {
         // This module *really* needs separate & independent runtimes.
         r = getDefaultRuntime().connect(); // side-effect of using AbstractViewTest::getRouterFunction
-        r = new CorfuRuntime(getDefaultEndpoint()).connect();
+        r = getNewRuntime(getDefaultNode()).connect();
     }
 
     @Test
@@ -554,7 +554,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         r.getAddressSpaceView().invalidateServerCaches();
         r.getAddressSpaceView().invalidateClientCache();
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultEndpoint()).connect();
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
 
         Map<String, Long> mA2 = rt2.getObjectsView()
                 .build()

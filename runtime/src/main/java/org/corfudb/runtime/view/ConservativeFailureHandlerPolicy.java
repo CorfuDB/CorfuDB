@@ -11,7 +11,7 @@ import org.corfudb.runtime.CorfuRuntime;
  * <p>Created by zlokhandwala on 11/21/16.
  */
 @Slf4j
-public class ConservativeFailureHandlerPolicy implements IFailureHandlerPolicy {
+public class ConservativeFailureHandlerPolicy implements IReconfigurationHandlerPolicy {
 
     /**
      * Modifies the layout by marking the failed nodes as unresponsive but still keeping them in
@@ -33,7 +33,7 @@ public class ConservativeFailureHandlerPolicy implements IFailureHandlerPolicy {
         Layout newLayout = layoutBuilder
                 .assignResponsiveSequencerAsPrimary(failedNodes)
                 .removeLogunitServers(failedNodes)
-                .removeUnResponsiveServers(healedNodes)
+                .removeUnresponsiveServers(healedNodes)
                 .addUnresponsiveServers(failedNodes)
                 .build();
         newLayout.setRuntime(corfuRuntime);

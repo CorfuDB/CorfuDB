@@ -79,7 +79,7 @@ public class ServerRestartIT extends AbstractIT {
         final Random randomSeed = new Random();
         final long SEED = randomSeed.nextLong();
         // Keep this print at all times to reproduce any failed test.
-        System.out.println("SEED = " + Long.toHexString(SEED));
+        testStatus += "SEED=" + Long.toHexString(SEED);
         return new Random(SEED);
     }
 
@@ -140,7 +140,6 @@ public class ServerRestartIT extends AbstractIT {
 
             for (int i = 0; i < ITERATIONS; i++) {
 
-                System.out.println("Iteration #" + i);
                 boolean serverRestart = rand.nextInt(TOTAL_PERCENTAGE) < SERVER_RESTART_PERCENTAGE;
                 boolean clientRestart = rand.nextInt(TOTAL_PERCENTAGE) < CLIENT_RESTART_PERCENTAGE;
 
@@ -283,7 +282,7 @@ public class ServerRestartIT extends AbstractIT {
             }
 
             return true;
-        },CLIENT_DELAY_POST_SHUTDOWN, TimeUnit.MILLISECONDS);
+        }, CLIENT_DELAY_POST_SHUTDOWN, TimeUnit.MILLISECONDS);
         offline.shutdown();
 
         Thread.sleep(CORFU_SERVER_DOWN_TIME);
@@ -439,20 +438,14 @@ public class ServerRestartIT extends AbstractIT {
         final int newMapBStreamTail = 19;
         final int newGlobalTail = 19;
 
-        assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
+        restartServer(corfuRuntime, DEFAULT_ENDPOINT);
 
-        corfuServerProcess = runCorfuServer();
-        corfuRuntime = createDefaultRuntime();
         TokenResponse tokenResponseA = corfuRuntime
-                .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
-                .getClient(SequencerClient.class)
-                .nextToken(Collections.singleton(streamNameA), 1)
-                .get();
+                .getSequencerView()
+                .nextToken(Collections.singleton(streamNameA), 1);
         TokenResponse tokenResponseB = corfuRuntime
-                .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
-                .getClient(SequencerClient.class)
-                .nextToken(Collections.singleton(streamNameB), 1)
-                .get();
+                .getSequencerView()
+                .nextToken(Collections.singleton(streamNameB), 1);
 
         assertThat(tokenResponseA.getToken().getTokenValue()).isEqualTo(newGlobalTail + 1);
         assertThat(tokenResponseA.getBackpointerMap().get(streamNameA))

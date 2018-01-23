@@ -26,7 +26,7 @@ public class OrchestratorMsg implements ICorfuPayload<OrchestratorMsg> {
         OrchestratorRequestType requestType = OrchestratorRequestType.typeMap.get(buf.readInt());
         byte[] bytes = new byte[buf.readInt()];
         buf.readBytes(bytes);
-        request = mapRequest(requestType, bytes);
+        request = requestType.getRequestGenerator().apply(bytes);
     }
 
     @Override
@@ -35,16 +35,5 @@ public class OrchestratorMsg implements ICorfuPayload<OrchestratorMsg> {
         byte[] bytes = request.getSerialized();
         buf.writeInt(bytes.length);
         buf.writeBytes(bytes);
-    }
-
-    static Request mapRequest(OrchestratorRequestType type, byte[] payload) {
-        switch (type) {
-            case ADD_NODE:
-                return new AddNodeRequest(payload);
-            case QUERY:
-                return new QueryRequest(payload);
-            default:
-                throw new IllegalArgumentException("mapRequest: Unknown Type");
-        }
     }
 }

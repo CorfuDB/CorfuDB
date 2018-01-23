@@ -83,17 +83,19 @@ public enum CorfuMsgType {
     // EXTRA CODES
     LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), true),
     LAYOUT_PREPARE_ACK(61, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}, true),
+    RESTART(62, TypeToken.of(CorfuMsg.class), true),
 
     // Management Messages
     MANAGEMENT_BOOTSTRAP_REQUEST(70, new TypeToken<CorfuPayloadMsg<Layout>>(){}, true),
     MANAGEMENT_NOBOOTSTRAP_ERROR(71, TypeToken.of(CorfuMsg.class), true),
     MANAGEMENT_ALREADY_BOOTSTRAP_ERROR(72, TypeToken.of(CorfuMsg.class), true),
     MANAGEMENT_START_FAILURE_HANDLER(73, TypeToken.of(CorfuMsg.class), true),
-    MANAGEMENT_FAILURE_DETECTED(74, new TypeToken<CorfuPayloadMsg<FailureDetectorMsg>>(){}, true),
-    HEARTBEAT_REQUEST(75, TypeToken.of(CorfuMsg.class), true),
-    HEARTBEAT_RESPONSE(76, new TypeToken<CorfuPayloadMsg<byte[]>>(){}, true),
-    ORCHESTRATOR_REQUEST(77, new TypeToken<CorfuPayloadMsg<OrchestratorMsg>>() {}),
-    ORCHESTRATOR_RESPONSE(78, new TypeToken<CorfuPayloadMsg<OrchestratorResponse>>() {}),
+    MANAGEMENT_HEALING_DETECTED(74, new TypeToken<CorfuPayloadMsg<DetectorMsg>>(){}, true),
+    MANAGEMENT_FAILURE_DETECTED(75, new TypeToken<CorfuPayloadMsg<DetectorMsg>>(){}, true),
+    HEARTBEAT_REQUEST(76, TypeToken.of(CorfuMsg.class), true),
+    HEARTBEAT_RESPONSE(77, new TypeToken<CorfuPayloadMsg<byte[]>>(){}, true),
+    ORCHESTRATOR_REQUEST(78, new TypeToken<CorfuPayloadMsg<OrchestratorMsg>>() {}, true),
+    ORCHESTRATOR_RESPONSE(79, new TypeToken<CorfuPayloadMsg<OrchestratorResponse>>() {}, true),
 
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true),
     ERROR_SHUTDOWN_EXCEPTION(201, TypeToken.of(CorfuMsg.class), true),

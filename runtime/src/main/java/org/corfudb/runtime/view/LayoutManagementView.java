@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -16,14 +17,17 @@ import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.util.CFUtils;
 
+import javax.annotation.Nonnull;
+
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
- *
+ * <p>
  * <p>Created by zlokhandwala on 11/1/17.</p>
  */
 @Slf4j
@@ -40,7 +44,6 @@ public class LayoutManagementView extends AbstractView {
      * the Management Server attempts to recover the cluster from that layout.
      *
      * @param recoveryLayout Layout to use to recover
-     * @return True if the cluster was recovered, False otherwise
      */
     public void recoverCluster(Layout recoveryLayout)
             throws QuorumUnreachableException, OutrankedException {
@@ -59,23 +62,47 @@ public class LayoutManagementView extends AbstractView {
      *
      * @param currentLayout The current layout
      * @param failedServers Set of failed server addresses
-     * @param healedServers Set of healed server addresses
      */
-    public void handleFailure(IFailureHandlerPolicy failureHandlerPolicy,
+    public void handleFailure(IReconfigurationHandlerPolicy failureHandlerPolicy,
                               Layout currentLayout,
-                              Set<String> failedServers,
-                              Set<String> healedServers)
-            throws QuorumUnreachableException, OutrankedException {
+                              Set<String> failedServers)
+            throws QuorumUnreachableException, OutrankedException, LayoutModificationException {
 
         // Generates a new layout by removing the failed nodes from the existing layout
         Layout newLayout = failureHandlerPolicy
                 .generateLayout(currentLayout,
                         runtime,
                         failedServers,
-                        healedServers);
+                        Collections.emptySet());
         runLayoutReconfiguration(currentLayout, newLayout, false);
     }
 
+    /**
+     * Takes in the existing layout and a set of failed nodes.
+     * It first generates a new layout by removing the failed nodes from the existing layout.
+     * It then seals the epoch to prevent any client from accessing the stale layout.
+     * Finally we run paxos to update all servers with the new layout.
+     *
+     * @param healingHandlerPolicy Policy dictating healing of the reviving node.
+     * @param currentLayout        The current layout
+     * @param healedServers        Set of healed server addresses
+     * @throws QuorumUnreachableException  if reconfiguration not accepted by quorum.
+     * @throws OutrankedException          if reconfiguration consensus attempt outranked.
+     * @throws LayoutModificationException if attempting to reconfigure with invalid layout.
+     */
+    public void handleHealing(IReconfigurationHandlerPolicy healingHandlerPolicy,
+                              Layout currentLayout,
+                              Set<String> healedServers)
+            throws QuorumUnreachableException, OutrankedException, LayoutModificationException {
+
+        // Generates a new layout by adding the healed nodes from the existing layout
+        Layout newLayout = healingHandlerPolicy
+                .generateLayout(currentLayout,
+                        runtime,
+                        Collections.emptySet(),
+                        healedServers);
+        runLayoutReconfiguration(currentLayout, newLayout, false);
+    }
 
     /**
      * Bootstraps the new node with the current layout.
@@ -96,8 +123,6 @@ public class LayoutManagementView extends AbstractView {
                 .bootstrapLayout(layout));
         CFUtils.getUninterruptibly(newEndpointRouter.getClient(ManagementClient.class)
                 .bootstrapManagement(layout));
-        CFUtils.getUninterruptibly(newEndpointRouter.getClient(ManagementClient.class)
-                .initiateFailureHandler());
 
         log.info("bootstrapNewNode: New node {} bootstrapped.", endpoint);
     }
@@ -122,59 +147,110 @@ public class LayoutManagementView extends AbstractView {
                         boolean isLogUnitServer,
                         boolean isUnresponsiveServer,
                         int logUnitStripeIndex)
-            throws QuorumUnreachableException, OutrankedException {
+            throws OutrankedException {
+        Layout newLayout;
+        if (!currentLayout.getAllServers().contains(endpoint)) {
 
-        currentLayout.setRuntime(runtime);
-        sealEpoch(currentLayout);
+            currentLayout.setRuntime(runtime);
+            sealEpoch(currentLayout);
 
-        LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
-        if (isLayoutServer) {
-            layoutBuilder.addLayoutServer(endpoint);
+            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
+            if (isLayoutServer) {
+                layoutBuilder.addLayoutServer(endpoint);
+            }
+            if (isSequencerServer) {
+                layoutBuilder.addSequencerServer(endpoint);
+            }
+            if (isLogUnitServer) {
+                Layout.LayoutSegment latestSegment =
+                        currentLayout.getSegments().get(currentLayout.getSegments().size() - 1);
+                layoutBuilder.addLogunitServer(logUnitStripeIndex,
+                        getMaxGlobalTail(latestSegment),
+                        endpoint);
+            }
+            if (isUnresponsiveServer) {
+                layoutBuilder.addUnresponsiveServers(Collections.singleton(endpoint));
+            }
+            newLayout = layoutBuilder.build();
+            newLayout.setRuntime(runtime);
+
+            attemptConsensus(newLayout);
+        } else {
+            log.info("Node {} already exists in the layout, skipping.", endpoint);
+            newLayout = currentLayout;
         }
-        if (isSequencerServer) {
-            layoutBuilder.addSequencerServer(endpoint);
-        }
-        if (isLogUnitServer) {
-            layoutBuilder.addLogunitServer(logUnitStripeIndex, getMaxGlobalTail(currentLayout),
-                    endpoint);
-        }
-        if (isUnresponsiveServer) {
-            layoutBuilder.addUnresponsiveServers(Collections.singleton(endpoint));
-        }
-        Layout newLayout = layoutBuilder.build();
-        newLayout.setRuntime(runtime);
 
-        attemptConsensus(newLayout);
-
-            // Add node is successful even if reconfigure sequencer fails.
-            // TODO: Optimize this by retrying or submitting a workflow to retry.
-            reconfigureSequencerServers(currentLayout, newLayout, false);
-
+        // Add node is successful even if reconfigure sequencer fails.
+        // TODO: Optimize this by retrying or submitting a workflow to retry.
+        reconfigureSequencerServers(currentLayout, newLayout, false);
     }
-    
+
     /**
      * Attempts to merge the last 2 segments.
      *
      * @param currentLayout Current layout
      * @return True if merge successful, else False.
-     * @throws QuorumUnreachableException  if seal or consensus could not be achieved.
-     * @throws OutrankedException          if consensus is outranked.
+     * @throws QuorumUnreachableException if seal or consensus could not be achieved.
+     * @throws OutrankedException         if consensus is outranked.
      */
     public boolean mergeSegments(Layout currentLayout)
             throws QuorumUnreachableException, OutrankedException {
 
-        currentLayout.setRuntime(runtime);
-        sealEpoch(currentLayout);
+        Layout newLayout;
+        if (currentLayout.getSegments().size() > 1) {
 
-        LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
-        Layout newLayout = layoutBuilder
-                .mergePreviousSegment(currentLayout.getSegments().size() - 1)
-                .build();
-        newLayout.setRuntime(runtime);
+            log.info("mergeSegments: layout is {}", currentLayout);
 
-        attemptConsensus(newLayout);
+            currentLayout.setRuntime(runtime);
+            sealEpoch(currentLayout);
+
+            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
+            newLayout = layoutBuilder
+                    .mergePreviousSegment(currentLayout.getSegments().size() - 1)
+                    .build();
+            newLayout.setRuntime(runtime);
+            attemptConsensus(newLayout);
+        } else {
+            log.info("mergeSegments: skipping, no segments to merge {}", currentLayout);
+            newLayout = currentLayout;
+        }
         reconfigureSequencerServers(currentLayout, newLayout, false);
         return true;
+    }
+
+    /**
+     * Best effort attempt to removes a node from the layout.
+     *
+     * @param currentLayout the layout to remove the node from
+     * @param endpoint the node to remove
+     */
+    public void removeNode(@Nonnull Layout currentLayout,
+                           @Nonnull String endpoint) throws OutrankedException {
+
+        Layout newLayout;
+        if (currentLayout.getAllServers().contains(endpoint)) {
+            LayoutBuilder builder = new LayoutBuilder(currentLayout);
+            newLayout = builder.removeLayoutServer(endpoint)
+                    .removeSequencerServer(endpoint)
+                    .removeLogunitServer(endpoint)
+                    .removeUnresponsiveServer(endpoint)
+                    .setEpoch(currentLayout.getEpoch() + 1)
+                    .build();
+
+            // Seal after constructing the layout, so that the system
+            // isn't blocked if the builder throws an exception
+            currentLayout.setRuntime(runtime);
+            sealEpoch(currentLayout);
+
+            newLayout.setRuntime(runtime);
+            attemptConsensus(newLayout);
+        } else {
+            newLayout = currentLayout;
+            log.info("removeNode: Ignoring remove node on {} because it doesn't exist in {}",
+                    endpoint, currentLayout);
+        }
+
+        reconfigureSequencerServers(currentLayout, newLayout, false);
     }
 
     /**
@@ -189,6 +265,8 @@ public class LayoutManagementView extends AbstractView {
      * @param currentLayout          Layout which needs to be sealed.
      * @param newLayout              New layout to be committed.
      * @param forceSequencerRecovery Flag. True if want to force sequencer recovery.
+     * @throws QuorumUnreachableException if seal or consensus could not be achieved.
+     * @throws OutrankedException         if consensus is outranked.
      */
     private void runLayoutReconfiguration(Layout currentLayout, Layout newLayout,
                                           final boolean forceSequencerRecovery)
@@ -240,12 +318,16 @@ public class LayoutManagementView extends AbstractView {
         }
 
         // Check if our proposed layout got selected and committed.
-        runtime.invalidateLayout();
-        if (runtime.getLayoutView().getLayout().equals(layout)) {
-            log.info("New Layout Committed = {}", layout);
-        } else {
-            log.warn("Runtime recovered with a different layout = {}",
-                    runtime.getLayoutView().getLayout());
+        for (int x = 0; x < runtime.getParameters().getInvalidateRetry(); x++) {
+            runtime.invalidateLayout();
+            if (runtime.getLayoutView().getLayout().equals(layout)) {
+                log.info("New Layout Committed = {}", layout);
+                return;
+            } else {
+                log.warn("Runtime recovered with a different layout = {}",
+                        runtime.getLayoutView().getLayout());
+            }
+            log.warn("attemptConsensus: Checking if {} has been accepted, retry {}", layout, x);
         }
     }
 
@@ -255,35 +337,34 @@ public class LayoutManagementView extends AbstractView {
      * CHAIN: Block on fetch of global log tail from the head log unitin every stripe.
      * QUORUM: Block on fetch of global log tail from a majority in every stripe.
      *
-     * @param layout Current layout.
+     * @param segment Latest layout segment.
      * @return The max global log tail obtained from the log unit servers.
      */
-    private long getMaxGlobalTail(Layout layout) {
+    private long getMaxGlobalTail(Layout.LayoutSegment segment) {
         long maxTokenRequested = 0;
-        for (Layout.LayoutSegment segment : layout.getSegments()) {
 
-            // Query the tail of every log unit in every stripe.
-            if (segment.getReplicationMode().equals(Layout.ReplicationMode.CHAIN_REPLICATION)) {
-                for (Layout.LayoutStripe stripe : segment.getStripes()) {
-                    long tail = CFUtils.getUninterruptibly(runtime.getRouter(stripe
-                            .getLogServers().get(0))
-                            .getClient(LogUnitClient.class).getTail());
-                    maxTokenRequested = Math.max(maxTokenRequested, tail);
-                }
-            } else if (segment.getReplicationMode()
-                    .equals(Layout.ReplicationMode.QUORUM_REPLICATION)) {
-                for (Layout.LayoutStripe stripe : segment.getStripes()) {
-                    CompletableFuture<Long>[] completableFutures = stripe.getLogServers()
-                            .stream()
-                            .map(s -> runtime.getRouter(s).getClient(LogUnitClient.class)
-                                    .getTail())
-                            .toArray(CompletableFuture[]::new);
-                    QuorumFuturesFactory.CompositeFuture<Long> quorumFuture =
-                            QuorumFuturesFactory.getQuorumFuture(Comparator.naturalOrder(),
-                                    completableFutures);
-                    maxTokenRequested = Math.max(maxTokenRequested,
-                            CFUtils.getUninterruptibly(quorumFuture));
-                }
+        // Query the tail of the head log unit in every stripe.
+        if (segment.getReplicationMode().equals(Layout.ReplicationMode.CHAIN_REPLICATION)) {
+            for (Layout.LayoutStripe stripe : segment.getStripes()) {
+                maxTokenRequested = Math.max(maxTokenRequested,
+                        CFUtils.getUninterruptibly(runtime.getRouter(stripe
+                                .getLogServers().get(0))
+                                .getClient(LogUnitClient.class).getTail()));
+
+            }
+        } else if (segment.getReplicationMode()
+                .equals(Layout.ReplicationMode.QUORUM_REPLICATION)) {
+            for (Layout.LayoutStripe stripe : segment.getStripes()) {
+                CompletableFuture<Long>[] completableFutures = stripe.getLogServers()
+                        .stream()
+                        .map(s -> runtime.getRouter(s).getClient(LogUnitClient.class).getTail())
+                        .toArray(CompletableFuture[]::new);
+                QuorumFuturesFactory.CompositeFuture<Long> quorumFuture =
+                        QuorumFuturesFactory.getQuorumFuture(Comparator.naturalOrder(),
+                                completableFutures);
+                maxTokenRequested = Math.max(maxTokenRequested,
+                        CFUtils.getUninterruptibly(quorumFuture));
+
             }
         }
         return maxTokenRequested;
@@ -299,8 +380,8 @@ public class LayoutManagementView extends AbstractView {
      * @param newLayout        New Layout to be reconfigured.
      * @param forceReconfigure Flag to force reconfiguration.
      */
-    private void reconfigureSequencerServers(Layout originalLayout, Layout
-            newLayout, boolean forceReconfigure) {
+    private void reconfigureSequencerServers(Layout originalLayout, Layout newLayout,
+                                             boolean forceReconfigure) {
 
         long maxTokenRequested = 0L;
         Map<UUID, Long> streamTails = Collections.emptyMap();
@@ -309,7 +390,9 @@ public class LayoutManagementView extends AbstractView {
         if (forceReconfigure
                 || !originalLayout.getSequencers().get(0).equals(newLayout.getSequencers()
                 .get(0))) {
-            maxTokenRequested = getMaxGlobalTail(originalLayout);
+            Layout.LayoutSegment latestSegment = newLayout.getSegments()
+                    .get(newLayout.getSegments().size() - 1);
+            maxTokenRequested = getMaxGlobalTail(latestSegment);
 
             FastObjectLoader fastObjectLoader = new FastObjectLoader(runtime);
             fastObjectLoader.setRecoverSequencerMode(true);
@@ -326,14 +409,15 @@ public class LayoutManagementView extends AbstractView {
         }
 
         // Configuring the new sequencer.
-        boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(newLayout.getSequencer(0)
-                .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch()));
+        boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(
+                newLayout
+                        .getSequencer(0)
+                        .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch()));
         if (sequencerBootstrapResult) {
             log.info("Sequencer bootstrap successful.");
         } else {
             log.warn("Sequencer bootstrap failed. Already bootstrapped.");
         }
-
     }
 
     /**

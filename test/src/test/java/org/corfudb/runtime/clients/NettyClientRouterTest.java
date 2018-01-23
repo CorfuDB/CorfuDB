@@ -14,7 +14,7 @@ public class NettyClientRouterTest extends NettyCommTest {
 
         runWithBaseServer(
                 (port) -> {
-                    return new NettyServerData(ServerContextBuilder.defaultTestContext(port));
+                    return new NettyServerData(ServerContextBuilder.defaultContext(port));
                 },
                 (port) -> {
                     return new NettyClientRouter("localhost", port);

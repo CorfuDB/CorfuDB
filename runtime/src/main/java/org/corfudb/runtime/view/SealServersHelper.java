@@ -33,7 +33,7 @@ public class SealServersHelper {
     public static Map<String, CompletableFuture<Boolean>> asyncSetRemoteEpoch(Layout layout) {
         Map<String, CompletableFuture<Boolean>> resultMap = new HashMap<>();
         // Seal layout servers
-        layout.getAllServers().forEach(server -> {
+        layout.getAllActiveServers().forEach(server -> {
             CompletableFuture<Boolean> cf = new CompletableFuture<>();
             try {
                 // Creating router can cause NetworkException which should be handled.

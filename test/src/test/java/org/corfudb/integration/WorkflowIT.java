@@ -1,14 +1,14 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutBuilder;
 import org.junit.Test;
 
-import java.util.UUID;
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -29,28 +29,45 @@ public class WorkflowIT extends AbstractIT {
 
     final String host = "localhost";
 
-    final int maxTries = 10;
-
-    final int sleepTime = 5_000;
-
     String getConnectionString(int port) {
         return host + ":" + port;
     }
 
     @Test
-    public void AddNodeIT() throws Exception {
+    public void AddAndRemoveNodeIT() throws Exception {
         final String host = "localhost";
         final String streamName = "s1";
         final int n1Port = 9000;
+        final int numIter = 11_000;
+        final Duration timeout = Duration.ofMinutes(5);
+        final Duration pollPeriod = Duration.ofSeconds(5);
+        final int workflowNumRetry = 3;
 
         // Start node one and populate it with data
-        new CorfuServerRunner()
+        Process server_1 = new CorfuServerRunner()
                 .setHost(host)
                 .setPort(n1Port)
                 .setSingle(true)
                 .runServer();
 
-        CorfuRuntime n1Rt = new CorfuRuntime(getConnectionString(n1Port)).connect();
+        // start a second node
+        final int n2Port = 9001;
+        Process server_2 = new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n2Port)
+                .setSingle(false)
+                .runServer();
+
+        // start a third node
+        final int n3Port = 9002;
+        Process server_3 = new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n3Port)
+                .setSingle(false)
+                .runServer();
+
+        CorfuRuntime n1Rt = new CorfuRuntime(getConnectionString(n1Port))
+                .setCacheDisabled(true).connect();
 
         CorfuTable table = n1Rt.getObjectsView()
                 .build()
@@ -58,33 +75,16 @@ public class WorkflowIT extends AbstractIT {
                 .setStreamName(streamName)
                 .open();
 
-        final int numEntries = 12_000;
-        for (int x = 0; x < numEntries; x++) {
+        for (int x = 0; x < numIter; x++) {
             table.put(String.valueOf(x), String.valueOf(x));
         }
 
-        // Add a second node
-        final int n2Port = 9001;
-        new CorfuServerRunner()
-                .setHost(host)
-                .setPort(n2Port)
-                .runServer();
-
-        ManagementClient mgmt = n1Rt.getRouter(getConnectionString(n1Port))
-                .getClient(ManagementClient.class);
-
-        CreateWorkflowResponse resp = mgmt.addNodeRequest(getConnectionString(n2Port));
-
-        assertThat(resp.getWorkflowId()).isNotNull();
-
-        waitForWorkflow(resp.getWorkflowId(), n1Rt, n1Port);
+        n1Rt.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
+                timeout, pollPeriod);
 
         n1Rt.invalidateLayout();
         final int clusterSizeN2 = 2;
-        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
-
-        // Verify that the workflow ID for node 2 is no longer active
-        assertThat(mgmt.queryRequest(resp.getWorkflowId()).isActive()).isFalse();
+        assertThat(n1Rt.getLayoutView().getLayout().getAllActiveServers().size()).isEqualTo(clusterSizeN2);
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
@@ -98,46 +98,47 @@ public class WorkflowIT extends AbstractIT {
         n1Rt.getAddressSpaceView().gc();
 
         // Add a third node after compaction
-
-        final int n3Port = 9002;
-        new CorfuServerRunner()
-                .setHost(host)
-                .setPort(n3Port)
-                .runServer();
-
-        CreateWorkflowResponse resp2 = mgmt.addNodeRequest(getConnectionString(n3Port));
-        assertThat(resp2.getWorkflowId()).isNotNull();
-
-        waitForWorkflow(resp2.getWorkflowId(), n1Rt, n1Port);
+        n1Rt.getManagementView().addNode(getConnectionString(n3Port), workflowNumRetry,
+                timeout, pollPeriod);
 
         // Verify that the third node has been added and data can be read back
         n1Rt.invalidateLayout();
-
         final int clusterSizeN3 = 3;
-        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
-        // Verify that the workflow ID for node 3 is no longer active
-        assertThat(mgmt.queryRequest(resp2.getWorkflowId()).isActive()).isFalse();
+        assertThat(n1Rt.getLayoutView().getLayout().getAllActiveServers().size()).isEqualTo(clusterSizeN3);
 
-        for (int x = 0; x < numEntries; x++) {
+        Layout n3Layout = new Layout(n1Rt.getLayoutView().getLayout());
+
+        Layout expectedLayout = new LayoutBuilder(n3Layout)
+                .removeLayoutServer(getConnectionString(n2Port))
+                .removeSequencerServer(getConnectionString(n2Port))
+                .removeLogunitServer(getConnectionString(n2Port))
+                .removeUnresponsiveServer(getConnectionString(n2Port))
+                .setEpoch(n3Layout.getEpoch() + 1)
+                .build();
+
+        // Remove node 2
+        n1Rt.getManagementView().removeNode(getConnectionString(n2Port), workflowNumRetry,
+                timeout, pollPeriod);
+        n1Rt.invalidateLayout();
+        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+
+
+        // Remove node 2 again and verify that the epoch doesn't change
+        n1Rt.getManagementView().removeNode(getConnectionString(n2Port), workflowNumRetry,
+                timeout, pollPeriod);
+
+        n1Rt.invalidateLayout();
+        // Verify that the layout epoch hasn't changed after the second remove and that
+        // the sequencers/layouts/segments nodes include the first and third node
+        assertThat(n1Rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
+
+        for (int x = 0; x < numIter; x++) {
             String v = (String) table.get(String.valueOf(x));
             assertThat(v).isEqualTo(String.valueOf(x));
         }
-    }
 
-    void waitForWorkflow(UUID id, CorfuRuntime rt, int port) throws Exception {
-        ManagementClient mgmt = rt.getRouter(getConnectionString(port))
-                .getClient(ManagementClient.class);
-        for (int x = 0; x < maxTries; x++) {
-            try {
-                if (mgmt.queryRequest(id).isActive()) {
-                    Thread.sleep(sleepTime);
-                } else {
-                    break;
-                }
-            } catch (Exception e) {
-                rt.invalidateLayout();
-                Thread.sleep(sleepTime);
-            }
-        }
+        shutdownCorfuServer(server_1);
+        shutdownCorfuServer(server_2);
+        shutdownCorfuServer(server_3);
     }
 }

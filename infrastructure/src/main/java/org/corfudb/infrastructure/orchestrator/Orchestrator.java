@@ -7,17 +7,18 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.orchestrator.workflows.AddNodeWorkflow;
+import org.corfudb.infrastructure.orchestrator.workflows.RemoveNodeWorkflow;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.orchestrator.Action;
-import org.corfudb.protocols.wireprotocol.orchestrator.ActionStatus;
+import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
-import org.corfudb.protocols.wireprotocol.orchestrator.IWorkflow;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.Response;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -28,7 +29,10 @@ import javax.annotation.Nonnull;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -37,12 +41,17 @@ import java.util.stream.Collectors;
  * that is specified by Workflow.getActions() to achieve a bigger goal. For example, growing the
  * cluster. Initiated through RPC, the orchestrator will create a workflow instance and attempt
  * to execute all its actions.
- *
+ * <p>
  * Created by Maithem on 10/25/17.
  */
 
 @Slf4j
 public class Orchestrator {
+
+    /**
+     * The number of times to retry an action before failing the workflow.
+     */
+    private static final int ACTION_RETRY = 3;
 
     final ServerContext serverContext;
 
@@ -50,10 +59,37 @@ public class Orchestrator {
 
     final BiMap<UUID, String> activeWorkflows = Maps.synchronizedBiMap(HashBiMap.create());
 
+    final ExecutorService executor;
+
     public Orchestrator(@Nonnull Callable<CorfuRuntime> runtime,
                         @Nonnull ServerContext serverContext) {
         this.serverContext = serverContext;
         this.getRuntime = runtime;
+
+        executor = Executors.newFixedThreadPool(Runtime.getRuntime()
+                .availableProcessors(), new ThreadFactory() {
+
+            final AtomicInteger threadNumber = new AtomicInteger(0);
+
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread thread = new Thread(r);
+                thread.setDaemon(true);
+                String threadName = serverContext.getThreadPrefix() + "orchestrator-"
+                        + threadNumber.getAndIncrement();
+                thread.setName(threadName);
+                thread.setUncaughtExceptionHandler(this::handleUncaughtException);
+                return new Thread(r);
+            }
+
+            void handleUncaughtException(Thread t, @Nonnull Throwable e) {
+                log.error("handleUncaughtException[{}]: Uncaught {}:{}",
+                        t.getName(),
+                        e.getClass().getSimpleName(),
+                        e.getMessage(),
+                        e);
+            }
+        });
     }
 
     public void handle(@Nonnull CorfuPayloadMsg<OrchestratorMsg> msg,
@@ -61,13 +97,18 @@ public class Orchestrator {
                        @Nonnull IServerRouter r) {
 
         OrchestratorMsg orchReq = msg.getPayload();
-
+        IWorkflow workflow;
         switch (orchReq.getRequest().getType()) {
             case QUERY:
                 query(msg, ctx, r);
                 break;
             case ADD_NODE:
-                dispatch(msg, ctx, r);
+                workflow = new AddNodeWorkflow((AddNodeRequest) orchReq.getRequest());
+                dispatch(workflow, msg, ctx, r);
+                break;
+            case REMOVE_NODE:
+                workflow = new RemoveNodeWorkflow((RemoveNodeRequest) orchReq.getRequest());
+                dispatch(workflow, msg, ctx, r);
                 break;
             default:
                 log.error("handle: Unknown request type {}", orchReq.getRequest().getType());
@@ -75,9 +116,8 @@ public class Orchestrator {
     }
 
     /**
-     *
      * Query a workflow id.
-     *
+     * <p>
      * Queries a workflow id and returns true if this orchestrator is still
      * executing the workflow, otherwise return false.
      *
@@ -102,22 +142,21 @@ public class Orchestrator {
     }
 
     /**
+     * Run a workflow on this orchestrator, if there is an existing workflow
+     * that is executing on the same endpoint, then just return the corresponding
+     * workflow id. Dispatch is the only place where workflows are executed based
+     * on reading activeWorkflows and therefore needs to be synchronized to prevent
+     * launching multiple workflows for the same endpoint concurrently.
      *
-     * Dispatch a workflow create request.
-     *
-     * Create and start a workflow on this orchestrator, if there is
-     * an existing workflow that is executing on the same endpoint,
-     * then just return the corresponding workflow id. Dispatch is the only
-     * place where workflows are created based on reading activeWorkflows
-     * and therefore needs to be synchronized to prevent launching multiple
-     * workflows for the same endpoint concurrently.
-     *
-     * @param msg corfu message containing the create workflow request
-     * @param ctx netty ChannelHandlerContext
-     * @param r   server router
+     * @param workflow the workflow to execute
+     * @param msg      corfu message containing the create workflow request
+     * @param ctx      netty ChannelHandlerContext
+     * @param r        server router
      */
-    synchronized void dispatch(CorfuPayloadMsg<OrchestratorMsg> msg,
-                               ChannelHandlerContext ctx, IServerRouter r) {
+    synchronized void dispatch(@Nonnull IWorkflow workflow,
+                               @Nonnull CorfuPayloadMsg<OrchestratorMsg> msg,
+                               @Nonnull ChannelHandlerContext ctx,
+                               @Nonnull IServerRouter r) {
         CreateRequest req = (CreateRequest) msg.getPayload().getRequest();
 
         UUID id = activeWorkflows.inverse().get(req.getEndpoint());
@@ -131,12 +170,9 @@ public class Orchestrator {
             return;
         } else {
             // Create a new workflow for this endpoint and return a new workflow id
-            IWorkflow workflow = req.getWorkflow();
             activeWorkflows.put(workflow.getId(), req.getEndpoint());
 
-            CompletableFuture.runAsync(() -> {
-                run(workflow);
-            });
+            executor.execute(() -> run(workflow, ACTION_RETRY));
 
             OrchestratorResponse resp = new OrchestratorResponse(new CreateWorkflowResponse(workflow.getId()));
             r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
@@ -148,15 +184,16 @@ public class Orchestrator {
      * Run a particular workflow, which entails executing all its defined
      * actions
      *
-     * @param workflow instance to run
+     * @param workflow    instance to run
+     * @param actionRetry the number of times to retry an action before failing the workflow.
      */
-    void run(@Nonnull IWorkflow workflow) {
+    void run(@Nonnull IWorkflow workflow, int actionRetry) {
         CorfuRuntime rt = null;
         try {
             getRuntime.call().invalidateLayout();
             Layout currLayout = getRuntime.call().getLayoutView().getLayout();
 
-            List<NodeLocator> servers = currLayout.getAllServers().stream()
+            List<NodeLocator> servers = currLayout.getAllActiveServers().stream()
                     .map(NodeLocator::parseString)
                     .collect(Collectors.toList());
 
@@ -177,7 +214,7 @@ public class Orchestrator {
 
                 log.debug("run: Started action {} for workflow {}", action.getName(), workflow.getId());
                 long actionStart = System.currentTimeMillis();
-                action.execute(rt);
+                action.execute(rt, actionRetry);
                 long actionEnd = System.currentTimeMillis();
                 log.info("run: finished action {} for workflow {} in {} ms",
                         action.getName(), workflow.getId(), actionEnd - actionStart);
@@ -194,7 +231,6 @@ public class Orchestrator {
             log.info("run: Completed workflow {} in {} ms", workflow.getId(), workflowEnd - workflowStart);
         } catch (Exception e) {
             log.error("run: Encountered an error while running workflow {}", workflow.getId(), e);
-            return;
         } finally {
             activeWorkflows.remove(workflow.getId());
             log.debug("run: removed {} from {}", workflow.getId(), activeWorkflows);

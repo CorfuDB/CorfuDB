@@ -3,12 +3,11 @@ package org.corfudb.infrastructure;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.IFailureHandlerPolicy;
+import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.PurgeFailurePolicy;
 import org.junit.Test;
 
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -59,12 +58,11 @@ public class ReconfigurationEventHandlerTest extends AbstractViewTest {
         failedServers.add(getEndpoint(SERVERS.PORT_2));
 
         ReconfigurationEventHandler reconfigurationEventHandler = new ReconfigurationEventHandler();
-        IFailureHandlerPolicy failureHandlerPolicy = new PurgeFailurePolicy();
+        IReconfigurationHandlerPolicy failureHandlerPolicy = new PurgeFailurePolicy();
         reconfigurationEventHandler.handleFailure(failureHandlerPolicy,
                         originalLayout,
                         corfuRuntime,
-                        failedServers,
-                        Collections.emptySet());
+                        failedServers);
 
         Layout expectedLayout = new TestLayoutBuilder()
                 .setEpoch(2L)

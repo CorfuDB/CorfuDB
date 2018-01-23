@@ -14,7 +14,7 @@ public abstract class AbstractServer {
 
     @Getter
     @Setter
-    boolean shutdown;
+    volatile boolean shutdown;
 
     public AbstractServer() {
         shutdown = false;

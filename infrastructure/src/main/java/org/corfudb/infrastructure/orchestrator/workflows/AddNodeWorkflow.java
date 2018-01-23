@@ -1,12 +1,17 @@
-package org.corfudb.protocols.wireprotocol.orchestrator;
+package org.corfudb.infrastructure.orchestrator.workflows;
 
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Range;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.orchestrator.Action;
+import org.corfudb.infrastructure.orchestrator.IWorkflow;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.Request;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
@@ -14,7 +19,6 @@ import org.corfudb.runtime.view.Layout;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -34,7 +38,7 @@ import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorReques
 @Slf4j
 public class AddNodeWorkflow implements IWorkflow {
 
-    final AddNodeRequest request;
+    private final AddNodeRequest request;
 
     private Layout newLayout;
 
@@ -47,27 +51,26 @@ public class AddNodeWorkflow implements IWorkflow {
     @Getter
     final UUID id;
 
+    @Getter
+    final List<Action> actions;
+
     /**
      * Creates a new add node workflow from a request.
      *
      * @param request request to add a node
      */
-    public AddNodeWorkflow(Request request) {
+    public AddNodeWorkflow(AddNodeRequest request) {
         this.id = UUID.randomUUID();
-        this.request = (AddNodeRequest) request;
+        this.request = request;
+        actions = ImmutableList.of(new BootstrapNode(),
+                new AddNodeToLayout(),
+                new StateTransfer(),
+                new MergeSegments());
     }
 
     @Override
     public String getName() {
         return ADD_NODE.toString();
-    }
-
-    @Override
-    public List<Action> getActions() {
-        return Arrays.asList(new BootstrapNode(),
-                new AddNodeToLayout(),
-                new StateTransfer(),
-                new MergeSegments());
     }
 
     /**
@@ -82,8 +85,6 @@ public class AddNodeWorkflow implements IWorkflow {
 
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
-            changeStatus(ActionStatus.STARTED);
-
             try {
                 runtime.getLayoutManagementView().bootstrapNewNode(request.getEndpoint());
             } catch (Exception e) {
@@ -91,11 +92,9 @@ public class AddNodeWorkflow implements IWorkflow {
                     log.info("BootstrapNode: Node {} already bootstrapped, skipping.", request.getEndpoint());
                 } else {
                     log.error("execute: Error during bootstrap", e);
-                    changeStatus(ActionStatus.ERROR);
+                    throw e;
                 }
             }
-
-            changeStatus(ActionStatus.COMPLETED);
         }
     }
 
@@ -114,16 +113,7 @@ public class AddNodeWorkflow implements IWorkflow {
 
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
-            changeStatus(ActionStatus.STARTED);
             Layout currentLayout = new Layout(runtime.getLayoutView().getLayout());
-
-            if (currentLayout.getAllServers().contains(request.getEndpoint())) {
-                log.info("Node {} already exists in the layout, skipping.", request.getEndpoint());
-                newLayout = currentLayout;
-                changeStatus(ActionStatus.COMPLETED);
-                return;
-            }
-
             runtime.getLayoutManagementView().addNode(currentLayout, request.getEndpoint(),
                     true, true,
                     true, false,
@@ -131,7 +121,6 @@ public class AddNodeWorkflow implements IWorkflow {
 
             runtime.invalidateLayout();
             newLayout = new Layout(runtime.getLayoutView().getLayout());
-            changeStatus(ActionStatus.COMPLETED);
             return;
 
         }
