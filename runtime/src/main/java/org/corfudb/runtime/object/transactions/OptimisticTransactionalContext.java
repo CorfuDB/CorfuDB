@@ -68,12 +68,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * Access within optimistic transactional context is implemented
      * in via proxy.access() as follows:
      *
-     * <p>1. First, we try to grab a read-lock on the proxy, and hope to "catch" the proxy in the
-     * snapshot version. If this succeeds, we invoke the corfu-object access method, and
-     * un-grab the read-lock.
-     *
-     * <p>2. Otherwise, we grab a write-lock on the proxy and bring it to the correct
-     * version
      * - Inside proxy.setAsOptimisticStream, if there are currently optimistic
      * updates on the proxy, we roll them back.  Then, we set this
      * transactional context as the proxy's new optimistic context.
@@ -96,22 +90,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         return proxy
                 .getUnderlyingObject()
                 .access(o -> {
-                            WriteSetSMRStream stream = o.getOptimisticStreamUnsafe();
-
-                            // Obtain the stream position as when transaction context last
-                            // remembered it.
-                            long streamReadPosition = getKnownStreamPosition()
-                                    .getOrDefault(proxy.getStreamID(), getSnapshotTimestamp());
-
-                            return (
-                                    (stream == null || stream.isStreamCurrentContextThreadCurrentContext())
-                                    && (stream != null && getWriteSetEntrySize(proxy.getStreamID()) == stream.pos() + 1
-                                       || (getWriteSetEntrySize(proxy.getStreamID()) == 0 /* No updates. */
-                                          && o.getVersionUnsafe() == streamReadPosition) /* Match timestamp. */
-                                    )
-                            );
-                        },
-                        o -> {
                             // inside syncObjectUnsafe, depending on the object
                             // version, we may need to undo or redo
                             // committed changes, or apply forward committed changes.

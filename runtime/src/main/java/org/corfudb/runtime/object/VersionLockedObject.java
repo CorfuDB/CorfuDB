@@ -7,7 +7,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -26,19 +25,19 @@ import org.corfudb.util.Utils;
  * The VersionLockedObject maintains a versioned object which is
  * backed by an ISMRStream, and is optionally backed by an additional
  * optimistic update stream.
- *
+ * <p>
  * <p>Users of the VersionLockedObject cannot access the versioned object
  * directly, rather they use the access() and update() methods to
  * read and manipulate the object.
- *
+ * <p>
  * <p>access() and update() allow the user to provide functions to execute
  * under locks. These functions execute various "unsafe" methods provided
  * by this object which inspect and manipulate the object state.
- *
+ * <p>
  * <p>syncObjectUnsafe() enables the user to bring the object to a given version,
  * and the VersionLockedObject manages any sync or rollback of updates
  * necessary.
- *
+ * <p>
  * <p>Created by mwei on 11/13/16.
  */
 @Slf4j
@@ -66,14 +65,6 @@ public class VersionLockedObject<T> {
      * requested.
      */
     final Map<Long, Object> upcallResults;
-
-
-    /**
-     * A lock, which controls access to modifications to
-     * the object. Any access to unsafe methods should
-     * obtain the lock.
-     */
-    private final StampedLock lock;
 
     /**
      * The stream view this object is backed by.
@@ -138,92 +129,30 @@ public class VersionLockedObject<T> {
         this.object = newObjectFn.get();
         this.pendingUpcalls = ConcurrentHashMap.newKeySet();
         this.upcallResults = new ConcurrentHashMap<>();
-
-        lock = new StampedLock();
     }
 
     /**
-     * Access the internal state of the object, trying first to optimistically access
-     * the object, then obtaining a write lock the optimistic access fails.
-     *
-     * <p>If the directAccessCheckFunction returns true, then we execute the accessFunction
-     * without running updateFunction. If false, we execute the updateFunction to
-     * allow the user to modify the state of the object before calling accessFunction.
-     *
-     * <p>directAccessCheckFunction is executed under an optimistic read lock. Read-only
-     * unsafe operations are permitted.
-     *
+     * Access the internal state of the object.
+     * <p>
      * <p>updateFunction is executed under a write lock. Both read and write unsafe operations
      * are permitted.
-     *
+     * <p>
      * <p>accessFunction is accessed either under a read lock or write lock depending on
      * whether an update was necessary or not.
      *
-     * @param directAccessCheckFunction A function which returns True if the object can be
-     *                                  accessed without being updated.
-     * @param updateFunction            A function which is executed when direct access
-     *                                  is not allowed and the object must be updated.
-     * @param accessFunction            A function which allows the user to directly access
-     *                                  the object while locked in the state enforced by
-     *                                  either the directAccessCheckFunction or updateFunction.
-     * @param <R>                       The type of the access function return.
+     * @param updateFunction A function which is executed when direct access
+     *                       is not allowed and the object must be updated.
+     * @param accessFunction A function which allows the user to directly access
+     *                       the object while locked in the state enforced by
+     *                       either the directAccessCheckFunction or updateFunction.
+     * @param <R>            The type of the access function return.
      * @return Returns the access function.
      */
-    public <R> R access(Function<VersionLockedObject<T>, Boolean> directAccessCheckFunction,
-                        Consumer<VersionLockedObject<T>> updateFunction,
-                        Function<T, R> accessFunction) {
-        // First, we try to do an optimistic read on the object, in case it
-        // meets the conditions for direct access.
-        long ts = lock.tryOptimisticRead();
-        if (ts != 0) {
-            try {
-            if (directAccessCheckFunction.apply(this)) {
-                log.trace("Access [{}] Direct (optimistic-read) access at {}",
-                        this, getVersionUnsafe());
-                    R ret = accessFunction.apply(object);
-                    if (lock.validate(ts)) {
-                        return ret;
-                    }
-                }
-            } catch (Exception e) {
-                // If we have an exception, we didn't get a chance to validate the the lock.
-                // If it's still valid, then we should re-throw the exception since it was
-                // on a correct view of the object.
-                if (lock.validate(ts)) {
-                    throw e;
-                }
-                // Otherwise, it is not on a correct view of the object (the object was
-                // modified) and we should try again by upgrading the lock.
-                log.warn("Access [{}] Direct (optimistic-read) exception, upgrading lock",
-                        this);
-            }
-        }
-        // Next, we just upgrade to a full write lock if the optimistic
-        // read fails, since it means that the state of the object was
-        // updated.
-        try {
-            // Attempt an upgrade
-            ts = lock.tryConvertToWriteLock(ts);
-            // Upgrade failed, try conversion again
-            if (ts == 0) {
-                ts = lock.writeLock();
-            }
-            // Check if direct access is possible (unlikely).
-            if (directAccessCheckFunction.apply(this)) {
-                log.trace("Access [{}] Direct (writelock) access at {}", this, getVersionUnsafe());
-                R ret = accessFunction.apply(object);
-                if (lock.validate(ts)) {
-                    return ret;
-                }
-            }
-            // If not, perform the update operations
-            updateFunction.accept(this);
-            log.trace("Access [{}] Updated (writelock) access at {}", this, getVersionUnsafe());
-            return accessFunction.apply(object);
-            // And perform the access
-        } finally {
-            lock.unlock(ts);
-        }
+    public synchronized <R> R access(Consumer<VersionLockedObject<T>> updateFunction,
+                                     Function<T, R> accessFunction) {
+        updateFunction.accept(this);
+        log.trace("Access [{}] Updated (writelock) access at {}", this, getVersionUnsafe());
+        return accessFunction.apply(object);
     }
 
     /**
@@ -233,22 +162,15 @@ public class VersionLockedObject<T> {
      * @param <R>            The type of the return of the updateFunction.
      * @return The return value of the update function.
      */
-    public <R> R update(Function<VersionLockedObject<T>, R> updateFunction) {
-        long ts = 0;
-        try {
-            ts = lock.writeLock();
-            log.trace("Update[{}] (writelock)", this);
-            return updateFunction.apply(this);
-        } finally {
-            lock.unlock(ts);
-        }
+    public synchronized <R> R update(Function<VersionLockedObject<T>, R> updateFunction) {
+        return updateFunction.apply(this);
     }
 
     /**
      * Roll the object back to the supplied version if possible.
      * This function may roll back to a point prior to the requested version.
      * Otherwise, throws a NoRollbackException.
-     *
+     * <p>
      * <p>Unsafe, requires that the caller has acquired a write lock.
      *
      * @param rollbackVersion The version to rollback to.
@@ -432,7 +354,7 @@ public class VersionLockedObject<T> {
 
     /**
      * Generate the summary string for this version locked object.
-     *
+     * <p>
      * <p>The format of this string is [type]@[version][+]
      * (where + is the optimistic flag)
      *
@@ -578,7 +500,7 @@ public class VersionLockedObject<T> {
      * applied until the current tail of the stream. If Address.OPTIMISTIC
      * is given, updates will be applied to the end of the stream, and
      * upcall results will be stored in the resulting entries.
-     *
+     * <p>
      * <p>When the stream is trimmed, this exception is passed up to the caller,
      * unless the timestamp was Address.MAX, in which the entire object is
      * reset and re-try the sync, which should pick up any checkpoint that
@@ -628,7 +550,8 @@ public class VersionLockedObject<T> {
         }
     }
 
-    /** Apply an SMREntry to the version object, while
+    /**
+     * Apply an SMREntry to the version object, while
      * doing bookkeeping for the underlying stream.
      *
      * @param entry
