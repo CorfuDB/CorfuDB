@@ -122,21 +122,25 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 .simulateDisconnectedEndpoint();
     }
 
-    /** Function for obtaining a router, given a runtime and an endpoint.
+    /**
+     * Function for obtaining a router, given a runtime and an endpoint.
      *
-     * @param runtime       The CorfuRuntime to obtain a router for.
-     * @param endpoint      An endpoint string for the router.
+     * @param runtime  The CorfuRuntime to obtain a router for.
+     * @param endpoint An endpoint string for the router.
      * @return
      */
     protected IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
         runtimeRouterMap.putIfAbsent(runtime, new ConcurrentHashMap<>());
-        if (!endpoint.startsWith("test:")) {
+        if (!endpoint.startsWith("test:") && !endpoint.startsWith("tcp://test")) {
             throw new RuntimeException("Unsupported endpoint in test: " + endpoint);
         }
         return runtimeRouterMap.get(runtime).computeIfAbsent(endpoint,
                 x -> {
+                    String serverName = endpoint.startsWith("tcp://test") ?
+                            endpoint.substring(endpoint.indexOf("test"), endpoint.length() - 1)
+                            : endpoint;
                     TestClientRouter tcn =
-                            new TestClientRouter(testServerMap.get(endpoint).getServerRouter());
+                            new TestClientRouter(testServerMap.get(serverName).getServerRouter());
                     tcn.addClient(new BaseClient())
                             .addClient(new SequencerClient())
                             .addClient(new LayoutClient())

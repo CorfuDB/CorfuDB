@@ -8,12 +8,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.orchestrator.workflows.AddNodeWorkflow;
+import org.corfudb.infrastructure.orchestrator.workflows.HealNodeWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.RemoveNodeWorkflow;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
@@ -28,10 +30,7 @@ import org.corfudb.util.NodeLocator;
 import javax.annotation.Nonnull;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -108,6 +107,10 @@ public class Orchestrator {
                 break;
             case REMOVE_NODE:
                 workflow = new RemoveNodeWorkflow((RemoveNodeRequest) orchReq.getRequest());
+                dispatch(workflow, msg, ctx, r);
+                break;
+            case HEAL_NODE:
+                workflow = new HealNodeWorkflow((HealNodeRequest) orchReq.getRequest());
                 dispatch(workflow, msg, ctx, r);
                 break;
             default:
@@ -238,5 +241,18 @@ public class Orchestrator {
                 rt.shutdown();
             }
         }
+    }
+
+    /**
+     * Shuts down the orchestrator executor.
+     */
+    public void shutdown() {
+        executor.shutdownNow();
+        try {
+            executor.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(), TimeUnit.SECONDS);
+        } catch (InterruptedException ie) {
+            log.debug("Orchestrator executor awaitTermination interrupted : {}", ie);
+        }
+        log.info("Orchestrator shutting down.");
     }
 }

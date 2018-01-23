@@ -64,9 +64,11 @@ public class ReconfigurationEventHandler {
 
     /**
      * Takes in the existing layout and a set of healed nodes.
-     * It first generates a new layout by adding the healed nodes to the existing layout.
-     * It then seals the epoch to prevent any client from accessing the stale layout.
-     * Finally we run paxos to update all servers with the new layout.
+     * The LayoutManagementView launches a workflow to heal the specified node. This call is
+     * blocked until the workflow is completed or aborted.
+     * The node is healed and added back to the layout with all components enabled i.e., with its
+     * layout, sequencer and log unit server enabled and as an active participant in the
+     * data replication view.
      *
      * @param currentLayout The current layout
      * @param corfuRuntime  Connected corfu runtime instance
@@ -77,8 +79,9 @@ public class ReconfigurationEventHandler {
                                  CorfuRuntime corfuRuntime,
                                  Set<String> healedServers) {
         try {
-            corfuRuntime.getLayoutManagementView().handleHealing(failureHandlerPolicy,
-                    currentLayout, healedServers);
+            healedServers.forEach(healedServer ->
+                    corfuRuntime.getLayoutManagementView()
+                            .handleHealing(failureHandlerPolicy, currentLayout, healedServer));
             return true;
         } catch (Exception e) {
             log.error("Error: handleHealing: {}", e);
