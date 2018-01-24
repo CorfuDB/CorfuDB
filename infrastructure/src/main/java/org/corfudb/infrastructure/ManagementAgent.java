@@ -10,7 +10,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -34,6 +33,7 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.concurrent.SingletonResource;
 
 /**
  * Instantiates and performs failure detection and handling asynchronously.
@@ -95,7 +95,7 @@ public class ManagementAgent {
     private Future healingDetectorFuture = null;
     private boolean recovered = false;
 
-    private final Callable<CorfuRuntime> getRuntime;
+    private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
     private final String bootstrapEndpoint;
 
     private volatile boolean shutdown = false;
@@ -113,11 +113,12 @@ public class ManagementAgent {
      * Spawns the initialization task which recovers if required, bootstraps sequencer and
      * schedules detector tasks.
      *
-     * @param getRuntime    Callable to fetch runtime.
-     * @param serverContext Server Context.
+     * @param runtimeSingletonResource Singleton resource to fetch runtime.
+     * @param serverContext            Server Context.
      */
-    ManagementAgent(Callable<CorfuRuntime> getRuntime, ServerContext serverContext) {
-        this.getRuntime = getRuntime;
+    ManagementAgent(SingletonResource<CorfuRuntime> runtimeSingletonResource,
+                    ServerContext serverContext) {
+        this.runtimeSingletonResource = runtimeSingletonResource;
         this.serverContext = serverContext;
         this.opts = serverContext.getServerConfig();
 
@@ -175,9 +176,8 @@ public class ManagementAgent {
         // This thread pool is utilized to dispatch one time recovery and sequencer bootstrap tasks.
         // One these tasks finish successfully, they initiate the detection tasks.
         this.initializationTaskThread = new Thread(this::initializationTask);
-        this.initializationTaskThread.setUncaughtExceptionHandler((thread, throwable) -> {
-            log.error("Error in initialization task: {}", throwable);
-        });
+        this.initializationTaskThread.setUncaughtExceptionHandler(
+                (thread, throwable) -> log.error("Error in initialization task: {}", throwable));
         this.initializationTaskThread.start();
     }
 
@@ -228,7 +228,6 @@ public class ManagementAgent {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return;
         }
     }
 
@@ -242,15 +241,11 @@ public class ManagementAgent {
      * @return A connected instance of runtime.
      */
     public CorfuRuntime getCorfuRuntime() {
-        try {
-            return getRuntime.call();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        return runtimeSingletonResource.get();
     }
 
     /**
-     * Bootstraps the primary sequencer on a fresh startup (not recovery)
+     * Bootstraps the primary sequencer on a fresh startup (not recovery).
      */
     private void bootstrapPrimarySequencerServer() {
         try {
@@ -642,6 +637,9 @@ public class ManagementAgent {
         });
     }
 
+    /**
+     * Shutdown the detectorTaskScheduler, workers and initializationTaskThread.
+     */
     public void shutdown() {
         // Shutting the fault detector.
         shutdown = true;
@@ -657,6 +655,7 @@ public class ManagementAgent {
                     TimeUnit.SECONDS);
         } catch (InterruptedException ie) {
             log.debug("detectionTaskWorkers awaitTermination interrupted : {}", ie);
+            Thread.currentThread().interrupt();
         }
         log.info("Management Agent shutting down.");
     }

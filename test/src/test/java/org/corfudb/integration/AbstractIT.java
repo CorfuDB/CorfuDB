@@ -139,15 +139,6 @@ public class AbstractIT extends AbstractCorfuTest {
         }
     }
 
-    public void bootstrapCluster(Layout layout) throws ExecutionException, InterruptedException {
-        for (String s : layout.getLayoutServers()) {
-            NettyClientRouter router = new NettyClientRouter(s);
-            router.addClient(new LayoutClient()).addClient(new ManagementClient());
-            router.getClient(LayoutClient.class).bootstrapLayout(layout).get();
-            router.getClient(ManagementClient.class).bootstrapManagement(layout).get();
-        }
-    }
-
     public void restartServer(CorfuRuntime corfuRuntime, String endpoint) {
         corfuRuntime.invalidateLayout();
         long oldEpoch = corfuRuntime.getLayoutView().getLayout().getEpoch();
@@ -275,7 +266,7 @@ public class AbstractIT extends AbstractCorfuTest {
                                     Files.write(Paths.get(logfile), "\n".getBytes(),
                                             StandardOpenOption.APPEND);
                                 } catch (Exception e) {
-                                    e.printStackTrace();
+                                    log.error("StreamGobbler: Error, {}", e);
                                 }
                             }
                     );

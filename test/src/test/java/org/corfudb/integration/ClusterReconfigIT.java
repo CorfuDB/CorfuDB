@@ -508,13 +508,12 @@ public class ClusterReconfigIT extends AbstractIT {
         corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
         runtime.invalidateLayout();
         refreshedLayout = runtime.getLayoutView().getLayout();
-        final long epochAfterKillNode = 1L;
-        while (refreshedLayout.getEpoch() == epochAfterKillNode) {
+        final long epochAfterHealingNode = 3L;
+        while (refreshedLayout.getEpoch() != epochAfterHealingNode) {
             runtime.invalidateLayout();
             refreshedLayout = runtime.getLayoutView().getLayout();
             Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
         }
-
 
         // Stop the daemon thread.
         moreDataToBeWritten.set(false);

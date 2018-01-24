@@ -2,10 +2,13 @@ package org.corfudb.protocols.wireprotocol.orchestrator;
 
 import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.HEAL_NODE;
 
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 
 import lombok.Getter;
+
+import org.corfudb.util.JsonUtils;
 
 /**
  * An orchestrator request to heal an existing node to the cluster.
@@ -42,15 +45,13 @@ public class HealNodeRequest implements CreateRequest {
     }
 
     public HealNodeRequest(byte[] buf) {
-        ByteBuffer byteBuffer = ByteBuffer.wrap(buf);
-        int el = byteBuffer.getInt();
-        byte[] eb = new byte[el];
-        byteBuffer.get(eb);
-        endpoint = new String(eb, StandardCharsets.UTF_8);
-        layoutServer = byteBuffer.get() != 0;
-        sequencerServer = byteBuffer.get() != 0;
-        logUnitServer = byteBuffer.get() != 0;
-        stripeIndex = byteBuffer.getInt();
+        String str = new String(buf, StandardCharsets.UTF_8);
+        Map<String, String> params = JsonUtils.parser.fromJson(str, HashMap.class);
+        endpoint = params.get("endpoint");
+        layoutServer = Boolean.parseBoolean(params.get("layoutServer"));
+        sequencerServer = Boolean.parseBoolean(params.get("sequencerServer"));
+        logUnitServer = Boolean.parseBoolean(params.get("logUnitServer"));
+        stripeIndex = Integer.parseInt(params.get("stripeIndex"));
     }
 
     @Override
@@ -60,15 +61,13 @@ public class HealNodeRequest implements CreateRequest {
 
     @Override
     public byte[] getSerialized() {
-        byte[] eb = endpoint.getBytes(StandardCharsets.UTF_8);
-
-        ByteBuffer byteBuffer = ByteBuffer.allocate(4 + eb.length + 3 + 4);
-        byteBuffer.putInt(eb.length);
-        byteBuffer.put(eb);
-        byteBuffer.put((byte) (isLayoutServer() ? 1 : 0));
-        byteBuffer.put((byte) (isSequencerServer() ? 1 : 0));
-        byteBuffer.put((byte) (isLogUnitServer() ? 1 : 0));
-        byteBuffer.putInt(stripeIndex);
-        return byteBuffer.array();
+        Map<String, String> params = new HashMap<>();
+        params.put("endpoint", endpoint);
+        params.put("layoutServer", String.valueOf(layoutServer));
+        params.put("sequencerServer", String.valueOf(sequencerServer));
+        params.put("logUnitServer", String.valueOf(logUnitServer));
+        params.put("stripeIndex", String.valueOf(stripeIndex));
+        String jsonString = JsonUtils.parser.toJson(params);
+        return jsonString.getBytes();
     }
 }

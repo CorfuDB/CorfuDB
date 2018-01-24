@@ -6,6 +6,7 @@ import java.lang.invoke.MethodHandles;
 import java.util.Map;
 
 import javax.annotation.Nonnull;
+
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -22,6 +23,7 @@ import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.concurrent.SingletonResource;
 
 
 /**
@@ -41,8 +43,11 @@ public class ManagementServer extends AbstractServer {
     private final Map<String, Object> opts;
     private final ServerContext serverContext;
 
-    private final Object corfuRuntimeLock = new Object();
-    private volatile CorfuRuntime corfuRuntime;
+    /**
+     * A {@link SingletonResource} which provides a {@link CorfuRuntime}.
+     */
+    private final SingletonResource<CorfuRuntime> corfuRuntime =
+            SingletonResource.withInitial(this::getNewCorfuRuntime);
     /**
      * Policy to be used to handle failures/healing.
      */
@@ -80,8 +85,8 @@ public class ManagementServer extends AbstractServer {
         this.healingPolicy = serverContext.getHealingHandlerPolicy();
 
         // Creating a management agent.
-        this.managementAgent = new ManagementAgent(this::getCorfuRuntime, serverContext);
-        this.orchestrator = new Orchestrator(this::getCorfuRuntime, serverContext);
+        this.managementAgent = new ManagementAgent(corfuRuntime, serverContext);
+        this.orchestrator = new Orchestrator(corfuRuntime, serverContext);
     }
 
     /**
@@ -89,27 +94,22 @@ public class ManagementServer extends AbstractServer {
      *
      * @return A connected instance of runtime.
      */
-    public CorfuRuntime getCorfuRuntime() {
-
-        synchronized (corfuRuntimeLock) {
-            if (corfuRuntime == null) {
-                CorfuRuntime.CorfuRuntimeParameters params =
-                        serverContext.getDefaultRuntimeParameters();
-                corfuRuntime = CorfuRuntime.fromParameters(params);
-                // Runtime can be set up either using the layout or the bootstrapEndpoint address.
-                if (serverContext.getManagementLayout() != null) {
-                    serverContext
-                            .getManagementLayout()
-                            .getLayoutServers()
-                            .forEach(ls -> corfuRuntime.addLayoutServer(ls));
-                } else {
-                    corfuRuntime.addLayoutServer(getBootstrapEndpoint());
-                }
-                corfuRuntime.connect();
-                log.info("getCorfuRuntime: Corfu Runtime connected successfully");
-            }
+    private CorfuRuntime getNewCorfuRuntime() {
+        final CorfuRuntime.CorfuRuntimeParameters params =
+                serverContext.getDefaultRuntimeParameters();
+        final CorfuRuntime runtime = CorfuRuntime.fromParameters(params);
+        // Runtime can be set up either using the layout or the bootstrapEndpoint address.
+        if (serverContext.getManagementLayout() != null) {
+            serverContext
+                    .getManagementLayout()
+                    .getLayoutServers()
+                    .forEach(ls -> runtime.addLayoutServer(ls));
+        } else {
+            runtime.addLayoutServer(getBootstrapEndpoint());
         }
-        return corfuRuntime;
+        runtime.connect();
+        log.info("getCorfuRuntime: Corfu Runtime connected successfully");
+        return runtime;
     }
 
     /**
@@ -248,11 +248,13 @@ public class ManagementServer extends AbstractServer {
             return;
         }
 
+        final long retryWorkflowQueryTimeout = 500L;
         boolean result = managementAgent.getReconfigurationEventHandler().handleHealing(
                 healingPolicy,
                 layout,
                 managementAgent.getCorfuRuntime(),
-                detectorMsg.getHealedNodes());
+                detectorMsg.getHealedNodes(),
+                retryWorkflowQueryTimeout);
 
         if (result) {
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
@@ -290,8 +292,6 @@ public class ManagementServer extends AbstractServer {
         managementAgent.shutdown();
 
         // Shut down the Corfu Runtime.
-        if (corfuRuntime != null) {
-            corfuRuntime.shutdown();
-        }
+        corfuRuntime.cleanup(CorfuRuntime::shutdown);
     }
 }

@@ -1,12 +1,21 @@
 package org.corfudb.infrastructure.management;
 
+import java.util.List;
 import java.util.Set;
+import java.util.UUID;
+
+import javax.annotation.Nonnull;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.Sleep;
 
 /**
  * The ReconfigurationEventHandler handles the trigger provided by any source
@@ -27,7 +36,8 @@ public class ReconfigurationEventHandler {
      * @param corfuRuntime   Connected runtime
      * @return True if the cluster was recovered, False otherwise
      */
-    public boolean recoverCluster(Layout recoveryLayout, CorfuRuntime corfuRuntime) {
+    public boolean recoverCluster(@Nonnull Layout recoveryLayout,
+                                  @Nonnull CorfuRuntime corfuRuntime) {
 
         try {
             corfuRuntime.getLayoutManagementView().recoverCluster(recoveryLayout);
@@ -48,10 +58,10 @@ public class ReconfigurationEventHandler {
      * @param corfuRuntime  Connected corfu runtime instance
      * @param failedServers Set of failed server addresses
      */
-    public boolean handleFailure(IReconfigurationHandlerPolicy failureHandlerPolicy,
-                                 Layout currentLayout,
-                                 CorfuRuntime corfuRuntime,
-                                 Set<String> failedServers) {
+    public boolean handleFailure(@Nonnull IReconfigurationHandlerPolicy failureHandlerPolicy,
+                                 @Nonnull Layout currentLayout,
+                                 @Nonnull CorfuRuntime corfuRuntime,
+                                 @Nonnull Set<String> failedServers) {
         try {
             corfuRuntime.getLayoutManagementView().handleFailure(failureHandlerPolicy,
                     currentLayout, failedServers);
@@ -71,17 +81,46 @@ public class ReconfigurationEventHandler {
      * data replication view.
      *
      * @param currentLayout The current layout
-     * @param corfuRuntime  Connected corfu runtime instance
+     * @param runtime       Connected corfu runtime instance
      * @param healedServers Set of healed server addresses
      */
-    public boolean handleHealing(IReconfigurationHandlerPolicy failureHandlerPolicy,
-                                 Layout currentLayout,
-                                 CorfuRuntime corfuRuntime,
-                                 Set<String> healedServers) {
+    public boolean handleHealing(@Nonnull IReconfigurationHandlerPolicy failureHandlerPolicy,
+                                 @Nonnull Layout currentLayout,
+                                 @Nonnull CorfuRuntime runtime,
+                                 @Nonnull Set<String> healedServers,
+                                 final long retryQueryTimeout) {
         try {
-            healedServers.forEach(healedServer ->
-                    corfuRuntime.getLayoutManagementView()
-                            .handleHealing(failureHandlerPolicy, currentLayout, healedServer));
+            for (String healedServer : healedServers) {
+                // The healNodeWorkflow request is sent to the tail of the log unit chain to
+                // optimize the time taken to read and replicate the data.
+                List<String> logServers = currentLayout.getSegments().get(0).getStripes().get(0)
+                        .getLogServers();
+                String server = logServers.get(logServers.size() - 1);
+
+                CreateWorkflowResponse resp = runtime.getRouter(server)
+                        .getClient(ManagementClient.class)
+                        .healNodeRequest(healedServer, true, true, true, 0);
+                UUID workflowId = resp.getWorkflowId();
+
+                // Wait until workflow completed or aborted.
+                while (true) {
+                    runtime.invalidateLayout();
+                    Layout layout = runtime.getLayoutView().getLayout();
+
+                    QueryResponse queryResponse = runtime.getRouter(server)
+                            .getClient(ManagementClient.class)
+                            .queryRequest(workflowId);
+
+                    if (!queryResponse.isActive()) {
+                        if (!layout.getUnresponsiveServers().contains(healedServer)
+                                && layout.getSegments().size() == 1) {
+                            break;
+                        }
+                        throw new WorkflowException("Heal node workflow failed");
+                    }
+                    Sleep.MILLISECONDS.sleepUninterruptibly(retryQueryTimeout);
+                }
+            }
             return true;
         } catch (Exception e) {
             log.error("Error: handleHealing: {}", e);

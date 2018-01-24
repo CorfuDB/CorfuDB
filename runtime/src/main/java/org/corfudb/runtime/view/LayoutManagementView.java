@@ -81,51 +81,6 @@ public class LayoutManagementView extends AbstractView {
     }
 
     /**
-     * Takes in the existing layout and a set of failed nodes.
-     * Dispatches a workflow request to heal the node.
-     *
-     * @param healingHandlerPolicy Policy dictating healing of the reviving node.
-     * @param currentLayout        The current layout
-     * @param healedServer         Healed server address
-     * @throws QuorumUnreachableException  if reconfiguration not accepted by quorum.
-     * @throws LayoutModificationException if attempting to reconfigure with invalid layout.
-     */
-    public void handleHealing(IReconfigurationHandlerPolicy healingHandlerPolicy,
-                              Layout currentLayout,
-                              String healedServer) {
-        // The healNodeWorkflow request is sent to the tail of the log unit chain to optimize the
-        // time taken to read and replicate the data.
-        List<String> logServers = currentLayout.getSegments().get(0).getStripes().get(0)
-                .getLogServers();
-        String server = logServers.get(logServers.size() - 1);
-
-        CreateWorkflowResponse resp = runtime.getRouter(server).getClient(ManagementClient.class)
-                .healNodeRequest(healedServer, true, true, true, 0);
-        UUID workflowId = resp.getWorkflowId();
-
-        final long retryQueryTimeout = 500;
-        // Wait until workflow completed or aborted.
-        while (true) {
-            runtime.invalidateLayout();
-            Layout layout = runtime.getLayoutView().getLayout();
-
-            QueryResponse queryResponse = runtime.getRouter(server)
-                    .getClient(ManagementClient.class)
-                    .queryRequest(workflowId);
-
-            if (!queryResponse.isActive()) {
-                if (!layout.getUnresponsiveServers().contains(healedServer)
-                        && layout.getSegments().size() == 1) {
-                    break;
-                }
-                throw new RuntimeException("Heal node workflow failed");
-            }
-
-            Sleep.MILLISECONDS.sleepUninterruptibly(retryQueryTimeout);
-        }
-    }
-
-    /**
      * Bootstraps the new node with the current layout.
      * This action is invoked as a part of the add node workflow which requires the new node
      * to be added to the cluster to be bootstrapped with the existing layout of this cluster.

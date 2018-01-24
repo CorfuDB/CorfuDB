@@ -26,6 +26,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.NodeLocator;
+import org.corfudb.util.concurrent.SingletonResource;
 
 import javax.annotation.Nonnull;
 import java.util.List;
@@ -54,13 +55,13 @@ public class Orchestrator {
 
     final ServerContext serverContext;
 
-    final Callable<CorfuRuntime> getRuntime;
+    final SingletonResource<CorfuRuntime> getRuntime;
 
     final BiMap<UUID, String> activeWorkflows = Maps.synchronizedBiMap(HashBiMap.create());
 
     final ExecutorService executor;
 
-    public Orchestrator(@Nonnull Callable<CorfuRuntime> runtime,
+    public Orchestrator(@Nonnull SingletonResource<CorfuRuntime> runtime,
                         @Nonnull ServerContext serverContext) {
         this.serverContext = serverContext;
         this.getRuntime = runtime;
@@ -193,8 +194,8 @@ public class Orchestrator {
     void run(@Nonnull IWorkflow workflow, int actionRetry) {
         CorfuRuntime rt = null;
         try {
-            getRuntime.call().invalidateLayout();
-            Layout currLayout = getRuntime.call().getLayoutView().getLayout();
+            getRuntime.get().invalidateLayout();
+            Layout currLayout = getRuntime.get().getLayoutView().getLayout();
 
             List<NodeLocator> servers = currLayout.getAllActiveServers().stream()
                     .map(NodeLocator::parseString)
@@ -252,6 +253,7 @@ public class Orchestrator {
             executor.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(), TimeUnit.SECONDS);
         } catch (InterruptedException ie) {
             log.debug("Orchestrator executor awaitTermination interrupted : {}", ie);
+            Thread.currentThread().interrupt();
         }
         log.info("Orchestrator shutting down.");
     }
