@@ -374,7 +374,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                                                 @Nonnull Bootstrap bootstrap) {
         if (future.isSuccess()) {
             // Register a future to reconnect in case we get disconnected
-            addReconnectionOnCloseFuture(channel, bootstrap);
+            addReconnectionOnCloseFuture(future.channel(), bootstrap);
             log.info("connectAsync[{}]: Channel connected.", node);
         } else {
             // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
