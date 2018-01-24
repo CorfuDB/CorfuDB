@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -31,6 +32,7 @@ import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
 import org.corfudb.util.Sleep;
@@ -93,6 +95,12 @@ public class ManagementAgent {
      */
     private Future failureDetectorFuture = null;
     private Future healingDetectorFuture = null;
+
+    /**
+     * Recovery attempts.
+     */
+    private static final int RECOVERY_RETRIES = 3;
+    private final Duration recoveryRetryTimeout = Duration.ofSeconds(1L);
     private boolean recovered = false;
 
     private final Callable<CorfuRuntime> getRuntime;
@@ -198,10 +206,17 @@ public class ManagementAgent {
                 }
 
                 // Recover if flag is false
+                int recoveryRetry = RECOVERY_RETRIES;
                 while (!recovered) {
                     recovered = runRecoveryReconfiguration();
                     if (!recovered) {
-                        log.error("detectorTaskScheduler: Recovery failed. Retrying.");
+                        if (--recoveryRetry <= 0) {
+                            throw new RecoveryException("Recovery failed. Retries exhausted.");
+                        }
+                        log.error("detectorTaskScheduler: Recovery failed. Retries left {}. "
+                                        + "Retrying in {}ms",
+                                recoveryRetry, recoveryRetryTimeout.toMillis());
+                        Sleep.sleepUninterruptibly(recoveryRetryTimeout);
                         continue;
                     }
                     // If recovery succeeds, reconfiguration was successful.
