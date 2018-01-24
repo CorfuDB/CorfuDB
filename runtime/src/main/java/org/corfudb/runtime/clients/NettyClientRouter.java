@@ -130,14 +130,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * The clients registered to this router.
      */
     public List<IClient> clientList;
+
     /**
      * The outstanding requests on this router.
      */
     public Map<Long, CompletableFuture> outstandingRequests;
-    /**
-     * The currently registered channel context.
-     */
-    public ChannelHandlerContext context;
 
     /**
      * The currently registered channel.
