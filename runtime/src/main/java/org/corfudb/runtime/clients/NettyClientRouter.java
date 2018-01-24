@@ -139,7 +139,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     /**
      * The currently registered channel.
      */
-    public volatile Channel channel = null;
+    private volatile Channel channel = null;
 
     /**
      * The {@link EventLoopGroup} for this router which services requests.
