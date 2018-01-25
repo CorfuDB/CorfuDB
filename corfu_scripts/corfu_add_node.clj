@@ -28,11 +28,13 @@ Options:
 (def localcmd (.. (new Docopt usage) (parse *args)))
 
 (defn add-node [endpoint]
-      (println (.. (get-management-view)
-                   (addNode endpoint
-                            (. Integer (parseInt (.. localcmd (get "--retry"))))
-                            (. Duration (ofSeconds (. Integer (parseInt (.. localcmd (get "--timeout"))))))
-                            (. Duration (ofSeconds (. Integer (parseInt (.. localcmd (get "--poll-interval"))))))))))
+  (.. (get-management-view)
+      (addNode endpoint
+               (. Integer (parseInt (.. localcmd (get "--retry"))))
+               (. Duration (ofSeconds (. Integer (parseInt (.. localcmd (get "--timeout"))))))
+               (. Duration
+                 (ofSeconds (. Integer (parseInt (.. localcmd (get "--poll-interval"))))))))
+  (println endpoint, "added successfully."))
 
 (get-runtime (.. localcmd (get "--config")) localcmd)
 (connect-runtime)

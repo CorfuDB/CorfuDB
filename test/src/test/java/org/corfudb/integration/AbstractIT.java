@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
+
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
@@ -23,12 +24,13 @@ import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.util.NodeLocator;
 
 /**
  * Integration tests.
@@ -49,9 +51,13 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
 
-    static public Properties PROPERTIES;
+    public static Properties PROPERTIES;
 
     public static final String TEST_SEQUENCE_LOG_PATH = CORFU_LOG_PATH + File.separator + "testSequenceLog";
+
+    private static final String INFRASTRUCTURE_SHADED_JAR = CORFU_PROJECT_DIR
+            + "infrastructure/target/infrastructure-*-shaded.jar";
+    private static final String CORFU_SERVER_CLASS = "org.corfudb.infrastructure.CorfuServer";
 
     public AbstractIT() {
         CorfuRuntime.overrideGetRouterFunction = null;
@@ -67,8 +73,6 @@ public class AbstractIT extends AbstractCorfuTest {
 
     /**
      * Cleans up the corfu log directory before running any test.
-     *
-     * @throws Exception
      */
     @Before
     public void setUp() throws Exception {
@@ -78,8 +82,6 @@ public class AbstractIT extends AbstractCorfuTest {
 
     /**
      * Cleans up all Corfu instances after the tests.
-     *
-     * @throws Exception
      */
     @After
     public void cleanUp() throws Exception {
@@ -92,9 +94,6 @@ public class AbstractIT extends AbstractCorfuTest {
 
     /**
      * Shuts down all corfu instances running on the node.
-     *
-     * @throws IOException
-     * @throws InterruptedException
      */
     public static void forceShutdownAllCorfuServers() throws IOException, InterruptedException {
         ProcessBuilder builder = new ProcessBuilder();
@@ -106,36 +105,29 @@ public class AbstractIT extends AbstractCorfuTest {
     /**
      * Shuts down all corfu instances.
      *
-     * @param corfuServerProcess
-     * @return
-     * @throws IOException
-     * @throws InterruptedException
+     * @param corfuServerProcess Process to shutdown.
+     * @return True if shutdown successful. Else false.
      */
-    public static boolean shutdownCorfuServer(Process corfuServerProcess) throws IOException, InterruptedException {
+    public static boolean shutdownCorfuServer(Process corfuServerProcess)
+            throws IOException, InterruptedException {
         int retries = SHUTDOWN_RETRIES;
         while (true) {
-            long parentPid = getPid(corfuServerProcess);
-            // Get Children PIDs
-            List<Long> pidList = getChildPIDs(parentPid);
-            pidList.add(parentPid);
-
+            long pid = getPid(corfuServerProcess);
             ProcessBuilder builder = new ProcessBuilder();
-            for (Long pid : pidList) {
-                builder.command("sh", "-c", KILL_COMMAND + pid.longValue());
-                Process p = builder.start();
-                p.waitFor();
-             }
+            builder.command("sh", "-c", KILL_COMMAND + pid);
+            Process p = builder.start();
+            p.waitFor();
 
-             if (retries == 0) {
-                 return false;
-             }
+            if (retries == 0) {
+                return false;
+            }
 
-             if (corfuServerProcess.isAlive()) {
-                 retries--;
-                 Thread.sleep(SHUTDOWN_RETRY_WAIT);
-             } else {
-                 return true;
-             }
+            if (corfuServerProcess.isAlive()) {
+                retries--;
+                Thread.sleep(SHUTDOWN_RETRY_WAIT);
+            } else {
+                return true;
+            }
         }
     }
 
@@ -157,7 +149,7 @@ public class AbstractIT extends AbstractCorfuTest {
                         == (runtimeLayout.getLayout().getEpoch() + 1)) {
                     break;
                 }
-                Sleep.MILLISECONDS.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+                Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
                 corfuRuntime.invalidateLayout();
             } catch (ShutdownException se) {
                 log.error("Shutdown Exception thrown connecting to server:{} ignored, {}",
@@ -166,50 +158,7 @@ public class AbstractIT extends AbstractCorfuTest {
         }
     }
 
-    /**
-     * Get list of children (descendant) process identifiers (recursive)
-     *
-     * @param pid parent process identifier
-     * @return list of children process identifiers
-     *
-     * @throws IOException
-     */
-    private static List<Long> getChildPIDs (long pid) {
-        List<Long> childPIDs = new ArrayList<>();
-        try {
-            // Get child pid(s)
-            ProcessBuilder builder = new ProcessBuilder();
-            builder.command("sh", "-c", "pgrep -P " + pid);
-            Process p = builder.start();
-            p.waitFor();
-
-            // Read output
-            BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
-            String line = null;
-            String previous = null;
-            while ((line = br.readLine()) != null) {
-                if (!line.equals(previous)) {
-                    previous = line;
-                    long childPID = Long.parseLong(line);
-                    childPIDs.add(childPID);
-                }
-            }
-
-            // Recursive lookup of children pids
-            for (Long childPID : childPIDs) {
-                List<Long> pidRecursive = getChildPIDs(childPID.longValue());
-                childPIDs.addAll(pidRecursive);
-            }
-
-        } catch (IOException e) {
-            throw e;
-        } finally {
-            return childPIDs;
-        }
-    }
-
-
-    public static long getPid(Process p) {
+    private static long getPid(Process p) {
         long pid = -1;
 
         try {
@@ -230,26 +179,25 @@ public class AbstractIT extends AbstractCorfuTest {
     }
 
     public static CorfuRuntime createRuntime(String endpoint) {
-        CorfuRuntime rt = new CorfuRuntime(endpoint)
-                .setCacheDisabled(true)
-                .connect();
-        return rt;
+        return CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
+                .layoutServer(NodeLocator.parseString(endpoint))
+                .cacheDisabled(true)
+                .build()).connect();
     }
 
     public static Map<String, Integer> createMap(CorfuRuntime rt, String streamName) {
-        Map<String, Integer> map = rt.getObjectsView()
+        return (Map<String, Integer>) rt.getObjectsView()
                 .build()
                 .setStreamName(streamName)
                 .setType(SMRMap.class)
                 .open();
-        return map;
     }
 
     public static class StreamGobbler implements Runnable {
         private InputStream inputStream;
         private String logfile;
 
-        public StreamGobbler(InputStream inputStream, String logfile) throws IOException {
+        StreamGobbler(InputStream inputStream, String logfile) throws IOException {
             this.inputStream = inputStream;
             this.logfile = logfile;
             if (Files.notExists(Paths.get(logfile))) {
@@ -285,10 +233,11 @@ public class AbstractIT extends AbstractCorfuTest {
         private int port = DEFAULT_PORT;
         private String managementBootstrap = null;
         private String logPath = null;
+        private String clusterId = null;
 
         public String getOptionsString() {
             StringBuilder command = new StringBuilder();
-            command.append("-a ").append(host);
+            command.append(" -a ").append(host);
             if (logPath != null) {
                 command.append(" -l ").append(logPath);
             } else {
@@ -296,6 +245,9 @@ public class AbstractIT extends AbstractCorfuTest {
             }
             if (single) {
                 command.append(" -s");
+            }
+            if (clusterId != null) {
+                command.append(" -I ").append(clusterId);
             }
             if (managementBootstrap != null) {
                 command.append(" -M ").append(managementBootstrap);
@@ -305,18 +257,29 @@ public class AbstractIT extends AbstractCorfuTest {
             return command.toString();
         }
 
+        private String getVmOptions() {
+            // JVM Memory
+            return " -Xmx2000m ";
+        }
+
         public Process runServer() throws IOException {
-            final String serverConsoleLogPath = CORFU_LOG_PATH + File.separator + host + "_" + port + "_consolelog";
+            final String serverConsoleLogPath = CORFU_LOG_PATH
+                    + File.separator + host + "_" + port + "_consolelog";
 
             File logPath = new File(getCorfuServerLogPath(host, port));
             if (!logPath.exists()) {
                 logPath.mkdir();
             }
             ProcessBuilder builder = new ProcessBuilder();
-            builder.command("sh", "-c", "bin/corfu_server " + getOptionsString());
+            builder.command("sh", "-c", "java -cp "
+                    + INFRASTRUCTURE_SHADED_JAR
+                    + getVmOptions()
+                    + CORFU_SERVER_CLASS
+                    + getOptionsString());
             builder.directory(new File(CORFU_PROJECT_DIR));
             Process corfuServerProcess = builder.start();
-            StreamGobbler streamGobbler = new StreamGobbler(corfuServerProcess.getInputStream(), serverConsoleLogPath);
+            StreamGobbler streamGobbler =
+                    new StreamGobbler(corfuServerProcess.getInputStream(), serverConsoleLogPath);
             Executors.newSingleThreadExecutor().submit(streamGobbler);
             return corfuServerProcess;
         }

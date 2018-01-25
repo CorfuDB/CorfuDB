@@ -29,20 +29,23 @@ Options:
 (def localcmd (.. (new Docopt usage) (parse *args)))
 
 
-
 (defn rm-node [endpoint]
-      (println (.. (get-management-view)
-                   (removeNode endpoint
-                               (. Integer (parseInt (.. localcmd (get "--retry"))))
-                               (. Duration (ofSeconds (. Integer (parseInt (.. localcmd (get "--timeout"))))))
-                               (. Duration (ofSeconds (. Integer (parseInt (.. localcmd (get "--poll-interval"))))))))))
+  (.. (get-management-view)
+      (removeNode endpoint
+                  (. Integer (parseInt (.. localcmd (get "--retry"))))
+                  (. Duration (ofSeconds (. Integer (parseInt (.. localcmd (get "--timeout"))))))
+                  (. Duration
+                    (ofSeconds (. Integer (parseInt (.. localcmd (get "--poll-interval"))))))))
+  (println endpoint, "removed successfully."))
 
 (defn rm-node-force [endpoint]
-  (println (.. (get-management-view)
-               (forceRemoveNode endpoint
-                           (. Integer (parseInt (.. localcmd (get "--retry"))))
-                           (. Duration (ofSeconds (. Integer (parseInt (.. localcmd (get "--timeout"))))))
-                           (. Duration (ofSeconds (. Integer (parseInt (.. localcmd (get "--poll-interval"))))))))))
+  (.. (get-management-view)
+      (forceRemoveNode endpoint
+                       (. Integer (parseInt (.. localcmd (get "--retry"))))
+                       (. Duration (ofSeconds (. Integer (parseInt (.. localcmd (get "--timeout"))))))
+                       (. Duration
+                         (ofSeconds (. Integer (parseInt (.. localcmd (get "--poll-interval"))))))))
+  (println endpoint, "removed successfully."))
 
 
 (get-runtime (.. localcmd (get "--config")) localcmd)
