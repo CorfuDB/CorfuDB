@@ -101,6 +101,25 @@ public interface IMetadata {
         getMetadataMap().put(LogUnitMetadataType.GLOBAL_ADDRESS, address);
     }
 
+    default void setClientId(UUID clientId) {getMetadataMap().put(LogUnitMetadataType.CLIENT_ID, clientId); }
+
+    @SuppressWarnings("unchecked")
+    @Nullable
+    default UUID getClientId() {
+            return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CLIENT_ID,
+                    null);
+    }
+
+    default void setThreadId(Long threadId) {getMetadataMap().put(LogUnitMetadataType.THREAD_ID, threadId); }
+
+    @SuppressWarnings("unchecked")
+    @Nullable
+    default Long getThreadId() {
+        return (Long) getMetadataMap().getOrDefault(LogUnitMetadataType.THREAD_ID,
+                null);
+    }
+
+
     /**
      * Get Log's global address (global tail).
      * @return global address
@@ -184,7 +203,9 @@ public interface IMetadata {
         CHECKPOINT_TYPE(6, TypeToken.of(CheckpointEntry.CheckpointEntryType.class)),
         CHECKPOINT_ID(7, TypeToken.of(UUID.class)),
         CHECKPOINTED_STREAM_ID(8, TypeToken.of(UUID.class)),
-        CHECKPOINTED_STREAM_START_LOG_ADDRESS(9, TypeToken.of(Long.class))
+        CHECKPOINTED_STREAM_START_LOG_ADDRESS(9, TypeToken.of(Long.class)),
+        CLIENT_ID(10, TypeToken.of(UUID.class)),
+        THREAD_ID(11, TypeToken.of(Long.class))
         ;
         final int type;
         @Getter

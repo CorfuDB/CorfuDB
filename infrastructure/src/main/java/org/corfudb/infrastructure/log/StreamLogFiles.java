@@ -541,6 +541,17 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         logData.setGlobalAddress(entry.getGlobalAddress());
         logData.setRank(createDataRank(entry));
 
+        if (entry.hasThreadId()) {
+            logData.setThreadId(entry.getThreadId());
+        }
+        if (entry.hasClientIdLeastSignificant() && entry.hasClientIdMostSignificant()){
+            long lsd = entry.getClientIdLeastSignificant();
+            long msd = entry.getClientIdMostSignificant();
+            logData.setClientId(new UUID(msd, lsd));
+        }
+
+
+
         if (entry.hasCheckpointEntryType()) {
             logData.setCheckpointType(CheckpointEntry.CheckpointEntryType
                     .typeMap.get((byte) entry.getCheckpointEntryType().ordinal()));
@@ -832,6 +843,15 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         if (rank.isPresent()) {
             logEntryBuilder.setRank(rank.get());
         }
+
+        if (entry.getClientId() != null && entry.getThreadId() != null) {
+            logEntryBuilder.setClientIdMostSignificant(
+                    entry.getClientId().getMostSignificantBits());
+            logEntryBuilder.setClientIdLeastSignificant(
+                    entry.getClientId().getLeastSignificantBits());
+            logEntryBuilder.setThreadId(entry.getThreadId());
+        }
+
         if (entry.hasCheckpointMetadata()) {
             logEntryBuilder.setCheckpointEntryType(
                     Types.CheckpointEntryType.forNumber(

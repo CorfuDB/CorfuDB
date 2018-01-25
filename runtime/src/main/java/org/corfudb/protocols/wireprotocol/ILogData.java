@@ -151,4 +151,9 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
             setBackpointerMap(token.getBackpointerMap());
         }
     }
+
+    default void setId(UUID clientId) {
+        setClientId(clientId);
+        setThreadId(Thread.currentThread().getId());
+    }
 }
