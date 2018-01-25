@@ -50,7 +50,7 @@ fi
 LOG_PATH=""
 # These are the possible options/flags which can be passed to the CorfuServer. The trailing ":" signifies that the flag
 # accepts a variable (eg. filename or log directory path, etc)
-while getopts "l:ma:nsd:t:c:p:M:eu:f:r:w:bgo:j:k:T:i:H:I:x:z:" opt; do
+while getopts "l:ma:nsd:t:c:p:M:R:eu:f:r:w:bgo:j:k:T:i:H:I:x:z:" opt; do
   case ${opt} in
     l ) LOG_PATH=${OPTARG};;
     ? ) ;;

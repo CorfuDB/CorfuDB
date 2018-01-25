@@ -99,7 +99,7 @@ public class ManagementAgent {
     /**
      * Recovery attempts.
      */
-    private static final int RECOVERY_RETRIES = 3;
+    private final int recoveryRetries;
     private final Duration recoveryRetryTimeout = Duration.ofSeconds(1L);
     private boolean recovered = false;
 
@@ -138,6 +138,8 @@ public class ManagementAgent {
         if (serverContext.getManagementLayout() == null) {
             recovered = true;
         }
+        recoveryRetries = opts.get("--recovery-attempts") != null
+                ? Integer.parseInt(opts.get("--recovery-attempts").toString()) : 3;
 
         // The management server needs to check both the Layout Server's persisted layout as well
         // as the Management Server's previously persisted layout. We try to recover from both of
@@ -198,32 +200,33 @@ public class ManagementAgent {
     private void initializationTask() {
 
         try {
-            while (!shutdown) {
-                if (serverContext.getManagementLayout() == null && bootstrapEndpoint == null) {
-                    log.warn("Management Server waiting to be bootstrapped");
-                    Sleep.MILLISECONDS.sleepRecoverably(policyExecuteInterval);
-                    continue;
-                }
+            while (!shutdown
+                    && serverContext.getManagementLayout() == null
+                    && bootstrapEndpoint == null) {
+                log.warn("Management Server waiting to be bootstrapped");
+                Sleep.MILLISECONDS.sleepRecoverably(policyExecuteInterval);
+            }
 
-                // Recover if flag is false
-                int recoveryRetry = RECOVERY_RETRIES;
-                while (!recovered) {
+            // Recover if flag is false
+            if (!recovered) {
+                for (int recoveryRetry = 0; recoveryRetry < recoveryRetries; recoveryRetry++) {
+                    // Attempt recovery
                     recovered = runRecoveryReconfiguration();
-                    if (!recovered) {
-                        if (--recoveryRetry <= 0) {
-                            throw new RecoveryException("Recovery failed. Retries exhausted.");
-                        }
-                        log.error("detectorTaskScheduler: Recovery failed. Retries left {}. "
-                                        + "Retrying in {}ms",
-                                recoveryRetry, recoveryRetryTimeout.toMillis());
-                        Sleep.sleepUninterruptibly(recoveryRetryTimeout);
-                        continue;
+                    if (recovered) {
+                        // If recovery succeeds, reconfiguration was successful.
+                        sequencerBootstrappedFuture.complete(true);
+                        log.info("Recovery completed");
+                        break;
                     }
-                    // If recovery succeeds, reconfiguration was successful.
-                    sequencerBootstrappedFuture.complete(true);
-                    log.info("Recovery completed");
+                    // If recovery fails, sleep and retry.
+                    log.error("detectorTaskScheduler: Recovery failed. Retries left {}. "
+                                    + "Retrying in {}ms",
+                            recoveryRetry, recoveryRetryTimeout.toMillis());
+                    Sleep.sleepUninterruptibly(recoveryRetryTimeout);
                 }
-                break;
+                if (!recovered) {
+                    throw new RecoveryException("Recovery failed. Retries exhausted.");
+                }
             }
 
             // Sequencer bootstrap required if this is fresh startup (not recovery).
@@ -243,7 +246,6 @@ public class ManagementAgent {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return;
         }
     }
 
