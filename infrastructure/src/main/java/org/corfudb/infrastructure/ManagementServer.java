@@ -100,10 +100,8 @@ public class ManagementServer extends AbstractServer {
         final CorfuRuntime runtime = CorfuRuntime.fromParameters(params);
         // Runtime can be set up either using the layout or the bootstrapEndpoint address.
         if (serverContext.getManagementLayout() != null) {
-            serverContext
-                    .getManagementLayout()
-                    .getLayoutServers()
-                    .forEach(ls -> runtime.addLayoutServer(ls));
+            serverContext.getManagementLayout().getLayoutServers()
+                    .forEach(runtime::addLayoutServer);
         } else {
             runtime.addLayoutServer(getBootstrapEndpoint());
         }

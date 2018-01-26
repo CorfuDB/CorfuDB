@@ -2,7 +2,6 @@ package org.corfudb.runtime.view;
 
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -11,8 +10,6 @@ import java.util.concurrent.CompletableFuture;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
-import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -24,7 +21,6 @@ import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.Sleep;
 
 import javax.annotation.Nonnull;
 
@@ -166,29 +162,32 @@ public class LayoutManagementView extends AbstractView {
      *
      * @param currentLayout Current layout.
      * @param endpoint      New endpoint to be added.
-     * @throws QuorumUnreachableException if seal or consensus cannot be achieved.
      * @throws OutrankedException         if consensus outranked.
      */
-    public void healNode(Layout currentLayout,
-                         String endpoint)
-            throws QuorumUnreachableException, OutrankedException {
+    public void healNode(Layout currentLayout, String endpoint) throws OutrankedException {
 
-        currentLayout.setRuntime(runtime);
-        sealEpoch(currentLayout);
+        Layout newLayout;
+        if (currentLayout.getUnresponsiveServers().contains(endpoint)) {
+            currentLayout.setRuntime(runtime);
+            sealEpoch(currentLayout);
 
-        LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
-        Layout.LayoutSegment latestSegment =
-                currentLayout.getSegments().get(currentLayout.getSegments().size() - 1);
-        layoutBuilder.addLogunitServer(0,
-                getMaxGlobalTail(latestSegment),
-                endpoint);
-        layoutBuilder.removeUnresponsiveServers(Collections.singleton(endpoint));
-        Layout newLayout = layoutBuilder.build();
-        newLayout.setRuntime(runtime);
+            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
+            Layout.LayoutSegment latestSegment =
+                    currentLayout.getSegments().get(currentLayout.getSegments().size() - 1);
+            layoutBuilder.addLogunitServer(0,
+                    getMaxGlobalTail(latestSegment),
+                    endpoint);
+            layoutBuilder.removeUnresponsiveServers(Collections.singleton(endpoint));
+            newLayout = layoutBuilder.build();
+            newLayout.setRuntime(runtime);
 
-        attemptConsensus(newLayout);
+            attemptConsensus(newLayout);
+        } else {
+            log.info("Node {} already exists in the layout, skipping.", endpoint);
+            newLayout = currentLayout;
+        }
 
-        // Add node is successful even if reconfigure sequencer fails.
+        // Heal node is successful even if reconfigure sequencer fails.
         // TODO: Optimize this by retrying or submitting a workflow to retry.
         reconfigureSequencerServers(currentLayout, newLayout, false);
     }

@@ -718,7 +718,7 @@ public class CorfuRuntime {
                         // it is acceptable (at least the code on 10/13/2016 does not have issues)
                         // but setEpoch of routers needs to be synchronized as those variables are
                         // not local.
-                        for (String server : l.getAllActiveServers()) {
+                        for (String server : l.getAllServers()) {
                             try {
                                 getRouter(server).setEpoch(l.getEpoch());
                             } catch (NetworkException ne) {

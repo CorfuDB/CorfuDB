@@ -138,9 +138,8 @@ public class ManagementView extends AbstractView {
 
                 for (int y = 0; y < runtime.getParameters().getInvalidateRetry(); y++) {
                     runtime.invalidateLayout();
-                    if (runtime.getLayoutView().getLayout()
-                            .getAllActiveServers().contains(endpointToAdd) &&
-                            layout.getSegmentsForEndpoint(endpointToAdd).size() == 1) {
+                    if (runtime.getLayoutView().getLayout().getAllServers().contains(endpointToAdd)
+                            && layout.getSegmentsForEndpoint(endpointToAdd).size() == 1) {
                         log.info("addNode: Successfully added {}", endpointToAdd);
                         return;
                     }

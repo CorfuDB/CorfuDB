@@ -26,6 +26,7 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.Sleep;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -483,7 +484,7 @@ public class ClusterReconfigIT extends AbstractIT {
         while (refreshedLayout.getEpoch() == layout.getEpoch()) {
             runtime.invalidateLayout();
             refreshedLayout = runtime.getLayoutView().getLayout();
-            Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
         }
 
         // Ensure writes still going through.
@@ -499,9 +500,8 @@ public class ClusterReconfigIT extends AbstractIT {
             } catch (TransactionAbortedException tae) {
                 // A transaction aborted exception is expected during
                 // some reconfiguration cases.
-                tae.printStackTrace();
             }
-            Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
         }
         assertThat(writeAfterKillNode).isTrue();
 
@@ -512,7 +512,7 @@ public class ClusterReconfigIT extends AbstractIT {
         while (refreshedLayout.getEpoch() != epochAfterHealingNode) {
             runtime.invalidateLayout();
             refreshedLayout = runtime.getLayoutView().getLayout();
-            Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
         }
 
         // Stop the daemon thread.

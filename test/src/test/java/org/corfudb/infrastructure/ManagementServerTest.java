@@ -78,16 +78,14 @@ public class ManagementServerTest extends AbstractServerTest {
     @Test
     public void triggerFailureHandler() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
-        Set<String> set = new HashSet<>();
-        set.add("key");
         sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
         sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
-                new DetectorMsg(0L, Collections.singleton("key"), Collections.emptySet())));
+                new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR);
         sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
         sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
-                new DetectorMsg(0L, Collections.singleton("key"), Collections.emptySet())));
+                new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
     }
 }
