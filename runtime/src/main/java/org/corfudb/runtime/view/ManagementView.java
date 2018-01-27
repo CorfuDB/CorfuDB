@@ -154,4 +154,54 @@ public class ManagementView extends AbstractView {
 
         throw new WorkflowResultUnknownException();
     }
+
+    /**
+     * Heal an unresponsive node.
+     *
+     * @param endpointToHeal Endpoint of the new node to be healed in the cluster.
+     * @param retry          the number of times to retry a workflow if it fails
+     * @param timeout        total time to wait before the workflow times out
+     * @param pollPeriod     the poll interval to check whether a workflow completed or not
+     * @throws WorkflowResultUnknownException when the side affect of the operation
+     *                                        can't be determined
+     */
+    public void healNode(@Nonnull String endpointToHeal, int retry, @Nonnull Duration timeout,
+                         @Nonnull Duration pollPeriod) {
+
+        for (int retryAttempt = 0; retryAttempt < retry; retryAttempt++) {
+            try {
+                runtime.invalidateLayout();
+                Layout layout = runtime.getLayoutView().getLayout();
+                // Select the current tail node and send an add node request to the orchestrator
+                List<String> logServers = layout.getSegments().get(0).getStripes().get(0)
+                        .getLogServers();
+                String orchestratorEndpoint = logServers.get(logServers.size() - 1);
+                ManagementClient client = runtime.getRouter(orchestratorEndpoint)
+                        .getClient(ManagementClient.class);
+
+                CreateWorkflowResponse resp = client
+                        .healNodeRequest(endpointToHeal, true, true, true, 0);
+                log.info("healNode: requested to add {} on orchestrator {}, layout {}",
+                        endpointToHeal, orchestratorEndpoint, layout);
+
+                waitForWorkflow(resp.getWorkflowId(), client, timeout, pollPeriod);
+
+                for (int y = 0; y < runtime.getParameters().getInvalidateRetry(); y++) {
+                    runtime.invalidateLayout();
+                    if (runtime.getLayoutView().getLayout().getAllServers().contains(endpointToHeal)
+                            && layout.getSegmentsForEndpoint(endpointToHeal).size() == 1) {
+                        log.info("healNode: Successfully added {}", endpointToHeal);
+                        return;
+                    }
+                }
+            } catch (NetworkException | TimeoutException e) {
+                log.warn("healNode: Exception while trying to add node {} on try ",
+                        endpointToHeal, retryAttempt, e);
+                continue;
+            }
+            log.warn("healNode: Attempting to add {} on try {}", endpointToHeal, retryAttempt);
+        }
+
+        throw new WorkflowResultUnknownException();
+    }
 }

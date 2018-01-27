@@ -1,21 +1,17 @@
 package org.corfudb.infrastructure.management;
 
-import java.util.List;
+import java.time.Duration;
 import java.util.Set;
-import java.util.UUID;
 
 import javax.annotation.Nonnull;
 
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
-import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.Sleep;
 
 /**
  * The ReconfigurationEventHandler handles the trigger provided by any source
@@ -28,6 +24,14 @@ import org.corfudb.util.Sleep;
  */
 @Slf4j
 public class ReconfigurationEventHandler {
+
+    @Getter
+    @Setter
+    private static int workflowRetries = 3;
+
+    @Getter
+    @Setter
+    private static Duration workflowTimeout = Duration.ofMinutes(1L);
 
     /**
      * Recover cluster from layout.
@@ -80,46 +84,21 @@ public class ReconfigurationEventHandler {
      * layout, sequencer and log unit server enabled and as an active participant in the
      * data replication view.
      *
-     * @param currentLayout The current layout
-     * @param runtime       Connected corfu runtime instance
-     * @param healedServers Set of healed server addresses
+     * @param runtime           Connected corfu runtime instance
+     * @param healedServers     Set of healed server addresses
+     * @param retryQueryTimeout Timeout to poll for workflow status.
      */
     public boolean handleHealing(@Nonnull IReconfigurationHandlerPolicy failureHandlerPolicy,
-                                 @Nonnull Layout currentLayout,
                                  @Nonnull CorfuRuntime runtime,
                                  @Nonnull Set<String> healedServers,
                                  final long retryQueryTimeout) {
         try {
             for (String healedServer : healedServers) {
-                // The healNodeWorkflow request is sent to the tail of the log unit chain to
-                // optimize the time taken to read and replicate the data.
-                List<String> logServers = currentLayout.getSegments().get(0).getStripes().get(0)
-                        .getLogServers();
-                String server = logServers.get(logServers.size() - 1);
-
-                CreateWorkflowResponse resp = runtime.getRouter(server)
-                        .getClient(ManagementClient.class)
-                        .healNodeRequest(healedServer, true, true, true, 0);
-                UUID workflowId = resp.getWorkflowId();
-
-                // Wait until workflow completed or aborted.
-                while (true) {
-                    runtime.invalidateLayout();
-                    Layout layout = runtime.getLayoutView().getLayout();
-
-                    QueryResponse queryResponse = runtime.getRouter(server)
-                            .getClient(ManagementClient.class)
-                            .queryRequest(workflowId);
-
-                    if (!queryResponse.isActive()) {
-                        if (!layout.getUnresponsiveServers().contains(healedServer)
-                                && layout.getSegments().size() == 1) {
-                            break;
-                        }
-                        throw new WorkflowException("Heal node workflow failed");
-                    }
-                    Sleep.MILLISECONDS.sleepUninterruptibly(retryQueryTimeout);
-                }
+                runtime.getManagementView().healNode(
+                        healedServer,
+                        workflowRetries,
+                        workflowTimeout,
+                        Duration.ofMillis(retryQueryTimeout));
             }
             return true;
         } catch (Exception e) {

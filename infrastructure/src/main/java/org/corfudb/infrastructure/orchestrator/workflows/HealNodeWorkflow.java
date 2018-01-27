@@ -46,6 +46,9 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
                 new MergeSegments());
     }
 
+    /**
+     * Resets the node's data.
+     */
     class ResetNode extends Action {
         @Override
         public String getName() {
@@ -54,10 +57,14 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
 
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
-            runtime.getRouter(request.getEndpoint())
-                    .getClient(LogUnitClient.class)
-                    .resetLogUnit()
-                    .get();
+            runtime.invalidateLayout();
+            if (runtime.getLayoutView().getLayout().getUnresponsiveServers()
+                    .contains(request.getEndpoint())) {
+                runtime.getRouter(request.getEndpoint())
+                        .getClient(LogUnitClient.class)
+                        .resetLogUnit()
+                        .get();
+            }
         }
     }
 

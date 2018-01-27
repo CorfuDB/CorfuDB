@@ -249,7 +249,6 @@ public class ManagementServer extends AbstractServer {
         final long retryWorkflowQueryTimeout = 500L;
         boolean result = managementAgent.getReconfigurationEventHandler().handleHealing(
                 healingPolicy,
-                layout,
                 managementAgent.getCorfuRuntime(),
                 detectorMsg.getHealedNodes(),
                 retryWorkflowQueryTimeout);
