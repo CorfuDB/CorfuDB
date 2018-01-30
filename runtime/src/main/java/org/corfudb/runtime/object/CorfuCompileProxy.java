@@ -194,7 +194,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                         .nextToken(Collections.singleton(streamID), 0).getToken()
                         .getTokenValue();
         log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
-        correctnessLogger.trace("Version, {}", timestamp);
 
         // Perform underlying access
         try {
