@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.time.Duration;
 import java.util.Map;
 
 import javax.annotation.Nonnull;
@@ -246,7 +247,7 @@ public class ManagementServer extends AbstractServer {
             return;
         }
 
-        final long retryWorkflowQueryTimeout = 500L;
+        final Duration retryWorkflowQueryTimeout = Duration.ofSeconds(1L);
         boolean result = managementAgent.getReconfigurationEventHandler().handleHealing(
                 healingPolicy,
                 managementAgent.getCorfuRuntime(),

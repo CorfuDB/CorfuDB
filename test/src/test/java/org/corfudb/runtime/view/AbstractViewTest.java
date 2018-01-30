@@ -3,10 +3,10 @@ package org.corfudb.runtime.view;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.netty.channel.DefaultEventLoop;
+
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
+
 import javax.annotation.Nonnull;
 import lombok.Data;
 import lombok.Getter;
@@ -84,6 +84,9 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     final Map<CorfuRuntime, Map<String, TestClientRouter>>
             runtimeRouterMap = new ConcurrentHashMap<>();
 
+    /** Test Endpoint hostname. */
+    private final static String testHostname = "tcp://test";
+
     /** Initialize the AbstractViewTest. */
     public AbstractViewTest() {
         // Force all new CorfuRuntimes to override the getRouterFn
@@ -131,12 +134,12 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      */
     protected IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
         runtimeRouterMap.putIfAbsent(runtime, new ConcurrentHashMap<>());
-        if (!endpoint.startsWith("test:") && !endpoint.startsWith("tcp://test")) {
+        if (!endpoint.startsWith("test:") && !endpoint.startsWith(testHostname)) {
             throw new RuntimeException("Unsupported endpoint in test: " + endpoint);
         }
         return runtimeRouterMap.get(runtime).computeIfAbsent(endpoint,
                 x -> {
-                    String serverName = endpoint.startsWith("tcp://test") ?
+                    String serverName = endpoint.startsWith(testHostname) ?
                             endpoint.substring(endpoint.indexOf("test"), endpoint.length() - 1)
                             : endpoint;
                     TestClientRouter tcn =

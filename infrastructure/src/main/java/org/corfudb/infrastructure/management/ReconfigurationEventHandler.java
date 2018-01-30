@@ -91,14 +91,14 @@ public class ReconfigurationEventHandler {
     public boolean handleHealing(@Nonnull IReconfigurationHandlerPolicy failureHandlerPolicy,
                                  @Nonnull CorfuRuntime runtime,
                                  @Nonnull Set<String> healedServers,
-                                 final long retryQueryTimeout) {
+                                 @Nonnull Duration retryQueryTimeout) {
         try {
             for (String healedServer : healedServers) {
                 runtime.getManagementView().healNode(
                         healedServer,
                         workflowRetries,
                         workflowTimeout,
-                        Duration.ofMillis(retryQueryTimeout));
+                        retryQueryTimeout);
             }
             return true;
         } catch (Exception e) {

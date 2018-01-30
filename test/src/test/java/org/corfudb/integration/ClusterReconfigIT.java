@@ -433,8 +433,10 @@ public class ClusterReconfigIT extends AbstractIT {
     /**
      * Starts with 3 nodes on ports 0, 1 and 2.
      * A daemon thread is started for random writes in the background.
+     * PART 1. Kill node.
      * First the node on port 0 is killed. The test then waits for the cluster to stabilize and
      * assert that data operations still go through.
+     * Part 2. Revive node.
      * Now, the same node is revived and waits for the node to be healed and merged back into the
      * cluster.
      * Finally the data on all the 3 nodes is verified.
@@ -474,6 +476,7 @@ public class ClusterReconfigIT extends AbstractIT {
             runtime.getObjectsView().TXEnd();
         }
 
+        // PART 1.
         // Killing killNode.
         assertThat(shutdownCorfuServer(corfuServer_1)).isTrue();
 
@@ -487,7 +490,7 @@ public class ClusterReconfigIT extends AbstractIT {
             Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
         }
 
-        // Ensure writes still going through.
+        // Ensure writes still going through. Daemon writer thread does not ensure this.
         // Fail test if write fails.
         boolean writeAfterKillNode = false;
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
@@ -505,10 +508,13 @@ public class ClusterReconfigIT extends AbstractIT {
         }
         assertThat(writeAfterKillNode).isTrue();
 
+        // PART 2.
+        // Reviving same node.
         corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
         runtime.invalidateLayout();
         refreshedLayout = runtime.getLayoutView().getLayout();
         final long epochAfterHealingNode = 3L;
+        // Waiting node to be healed and added back to the layout.
         while (refreshedLayout.getEpoch() != epochAfterHealingNode) {
             runtime.invalidateLayout();
             refreshedLayout = runtime.getLayoutView().getLayout();

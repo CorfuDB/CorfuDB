@@ -4,7 +4,11 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +33,19 @@ public class ManagementView extends AbstractView {
 
     public ManagementView(@NonNull CorfuRuntime runtime) {
         super(runtime);
+    }
+
+    /**
+     * Determines the orchestrator endpoint from the provided layout.
+     *
+     * @param layout Latest layout.
+     * @return Returns the orchestrator endpoint.
+     */
+    private String getOrchestratorEndpoint(Layout layout) {
+        List<String> activeLayoutServers = layout.getLayoutServers().stream()
+                .filter(s -> !layout.getUnresponsiveServers().contains(s))
+                .collect(Collectors.toList());
+        return activeLayoutServers.get(0);
     }
 
     /**
@@ -64,7 +81,7 @@ public class ManagementView extends AbstractView {
      * @param pollPeriod       the poll interval to check whether a workflow completed or not
      * @throws WorkflowResultUnknownException when the side affect of the operation
      *                                        can't be determined
-     * @throws WorkflowException when the remove operation fails
+     * @throws WorkflowException              when the remove operation fails
      */
     public void removeNode(@Nonnull String endpointToRemove, int retry,
                            @Nonnull Duration timeout, @Nonnull Duration pollPeriod) {
@@ -78,7 +95,7 @@ public class ManagementView extends AbstractView {
                 if (layoutServers.isEmpty()) {
                     throw new WorkflowException("Can't remove node from a single node cluster");
                 }
-                String orchestratorEndpoint = layoutServers.get(layoutServers.size() - 1);
+                String orchestratorEndpoint = getOrchestratorEndpoint(layout);
                 ManagementClient client = runtime.getRouter(orchestratorEndpoint)
                         .getClient(ManagementClient.class);
                 CreateWorkflowResponse resp = client.removeNode(endpointToRemove);
@@ -124,9 +141,7 @@ public class ManagementView extends AbstractView {
             try {
                 runtime.invalidateLayout();
                 Layout layout = runtime.getLayoutView().getLayout();
-                // Select the current tail node and send an add node request to the orchestrator
-                List<String> logServers = layout.getSegments().get(0).getStripes().get(0).getLogServers();
-                String orchestratorEndpoint = logServers.get(logServers.size() - 1);
+                String orchestratorEndpoint = getOrchestratorEndpoint(layout);
                 ManagementClient client = runtime.getRouter(orchestratorEndpoint)
                         .getClient(ManagementClient.class);
 
@@ -172,10 +187,7 @@ public class ManagementView extends AbstractView {
             try {
                 runtime.invalidateLayout();
                 Layout layout = runtime.getLayoutView().getLayout();
-                // Select the current tail node and send an add node request to the orchestrator
-                List<String> logServers = layout.getSegments().get(0).getStripes().get(0)
-                        .getLogServers();
-                String orchestratorEndpoint = logServers.get(logServers.size() - 1);
+                String orchestratorEndpoint = getOrchestratorEndpoint(layout);
                 ManagementClient client = runtime.getRouter(orchestratorEndpoint)
                         .getClient(ManagementClient.class);
 
