@@ -54,6 +54,7 @@ public class HealingDetectorTest extends AbstractViewTest {
 
         healingDetector = new HealingDetector();
         healingDetector.setDetectionPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        healingDetector.setInterIterationInterval(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
     }
 
     /**

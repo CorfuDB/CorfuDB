@@ -287,7 +287,8 @@ public class ClusterReconfigIT extends AbstractIT {
 
         restartServer(corfuRuntime, DEFAULT_ENDPOINT);
 
-        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(l.getEpoch() + 1);
+        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch())
+                .isGreaterThanOrEqualTo(l.getEpoch() + 1);
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
@@ -466,8 +467,6 @@ public class ClusterReconfigIT extends AbstractIT {
                 .open();
         final String data = createStringOfSize(1_000);
         Random r = getRandomNumberGenerator();
-        final AtomicBoolean moreDataToBeWritten = new AtomicBoolean(true);
-        Thread t = startDaemonWriter(runtime, r, table, data, moreDataToBeWritten);
 
         // Some preliminary writes into the corfu table.
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
@@ -515,15 +514,11 @@ public class ClusterReconfigIT extends AbstractIT {
         refreshedLayout = runtime.getLayoutView().getLayout();
         final long epochAfterHealingNode = 3L;
         // Waiting node to be healed and added back to the layout.
-        while (refreshedLayout.getEpoch() != epochAfterHealingNode) {
+        while (refreshedLayout.getEpoch() < epochAfterHealingNode) {
             runtime.invalidateLayout();
             refreshedLayout = runtime.getLayoutView().getLayout();
             Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
         }
-
-        // Stop the daemon thread.
-        moreDataToBeWritten.set(false);
-        t.join();
 
         verifyData(runtime);
 
