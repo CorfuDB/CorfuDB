@@ -130,19 +130,16 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * The clients registered to this router.
      */
     public List<IClient> clientList;
+
     /**
      * The outstanding requests on this router.
      */
     public Map<Long, CompletableFuture> outstandingRequests;
-    /**
-     * The currently registered channel context.
-     */
-    public ChannelHandlerContext context;
 
     /**
      * The currently registered channel.
      */
-    public volatile Channel channel = null;
+    private volatile Channel channel = null;
 
     /**
      * The {@link EventLoopGroup} for this router which services requests.
@@ -376,10 +373,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     private void channelConnectionFutureHandler(@Nonnull ChannelFuture future,
                                                 @Nonnull Bootstrap bootstrap) {
         if (future.isSuccess()) {
-            // When the channel connection succeeds, set this channel as active
-            channel = future.channel();
-            // And register a future to reconnect in case we get disconnected
-            addReconnectionOnCloseFuture(channel, bootstrap);
+            // Register a future to reconnect in case we get disconnected
+            addReconnectionOnCloseFuture(future.channel(), bootstrap);
             log.info("connectAsync[{}]: Channel connected.", node);
         } else {
             // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
@@ -497,15 +492,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * @param message The message to send.
      */
     public void sendMessage(ChannelHandlerContext ctx, CorfuMsg message) {
-        ChannelHandlerContext outContext = context;
-        if (ctx == null) {
-            if (context == null) {
-                // if the router's context is not set, return a failure
-                log.warn("Attempting to send on a channel that is not ready.");
-                return;
-            }
-            outContext = context;
-        }
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
         // Set the base fields for this message.
@@ -513,7 +499,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         message.setRequestID(thisRequest);
         message.setEpoch(epoch);
         // Write this message out on the channel.
-        outContext.writeAndFlush(message, outContext.voidPromise());
+        channel.writeAndFlush(message, channel.voidPromise());
         log.trace("Sent one-way message: {}", message);
     }
 
@@ -623,23 +609,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     }
 
     @Override
-    public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
-        context = ctx;
-        log.debug("Registered new channel {}", ctx);
-    }
-
-    @Override
-    public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
-        super.channelUnregistered(ctx);
-        context = null;
-        log.debug("Unregistered channel {}", ctx);
-    }
-
-    @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt.equals(ClientHandshakeEvent.CONNECTED)) {
             // Handshake successful. Complete the connection future to allow
             // clients to proceed.
+            channel = ctx.channel();
             connectionFuture.complete(null);
         } else if (evt.equals(ClientHandshakeEvent.FAILED) && connectionFuture.isDone()) {
             // Handshake failed. If the current completion future is complete,
