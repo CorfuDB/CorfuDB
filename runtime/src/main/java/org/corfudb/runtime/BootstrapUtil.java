@@ -6,6 +6,7 @@ import javax.annotation.Nonnull;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -35,13 +36,30 @@ public class BootstrapUtil {
     public static void bootstrap(@Nonnull Layout layout,
                                  int retries,
                                  @Nonnull Duration retryTimeout) {
+        bootstrap(layout, CorfuRuntimeParameters.builder().build(), retries, retryTimeout);
+    }
+
+    /**
+     * Bootstraps the given layout.
+     * Attempts to bootstrap each node finite number of times.
+     * If the retries are exhausted, the utility throws the responsible exception.
+     *
+     * @param layout                 Layout to bootstrap the cluster.
+     * @param corfuRuntimeParameters CorfuRuntimeParameters can specify security parameters.
+     * @param retries                Number of retries to bootstrap each node before giving up.
+     * @param retryTimeout           Duration between retries.
+     */
+    public static void bootstrap(@Nonnull Layout layout,
+                                 @Nonnull CorfuRuntimeParameters corfuRuntimeParameters,
+                                 int retries,
+                                 @Nonnull Duration retryTimeout) {
         for (String server : layout.getAllServers()) {
             int retry = retries;
             while (retry-- > 0) {
                 try {
                     log.info("Attempting to bootstrap node:{} with layout:{}", server, layout);
                     IClientRouter router = new NettyClientRouter(NodeLocator.parseString(server),
-                            CorfuRuntime.CorfuRuntimeParameters.builder().build());
+                            corfuRuntimeParameters);
                     router.addClient(new LayoutClient())
                             .addClient(new ManagementClient())
                             .addClient(new BaseClient());

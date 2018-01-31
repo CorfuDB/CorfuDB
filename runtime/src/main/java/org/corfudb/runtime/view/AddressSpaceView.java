@@ -7,6 +7,8 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.Iterables;
 
+
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,9 +32,6 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
-
-import java.util.Comparator;
-
 
 
 /**
@@ -99,7 +98,7 @@ public class AddressSpaceView extends AbstractView {
      *
      * @param address
      */
-    private void validateStateOfWrittenEntry(long address) {
+    private void validateStateOfWrittenEntry(long address, @Nonnull ILogData ld) {
         ILogData logData;
         try {
             logData = read(address);
@@ -107,7 +106,8 @@ public class AddressSpaceView extends AbstractView {
             // We cannot know if the write went through or not
             throw new UnrecoverableCorfuError("We cannot determine state of an update because of a trim.");
         }
-        if (logData.isHole()) {
+
+        if (!logData.equals(ld)){
             throw new OverwriteException();
         }
     }
@@ -138,6 +138,7 @@ public class AddressSpaceView extends AbstractView {
 
             // Set the data to use the token
             ld.useToken(token);
+            ld.setId(runtime.getParameters().getClientId());
 
 
             // Do the write
@@ -152,7 +153,7 @@ public class AddressSpaceView extends AbstractView {
                     throw re;
                 }
 
-                validateStateOfWrittenEntry(token.getTokenValue());
+                validateStateOfWrittenEntry(token.getTokenValue(), ld);
             }
             return null;
         }, true);
