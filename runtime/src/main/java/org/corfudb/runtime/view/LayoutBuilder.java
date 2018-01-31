@@ -213,6 +213,24 @@ public class LayoutBuilder {
     }
 
     /**
+     * Add a log unit server to a specific stripe in a specific segment.
+     *
+     * @param endpoint     Endpoint to add to the log unit list.
+     * @param segmentIndex Segment to which the log unit is to be added.
+     * @param stripeIndex  Stripe to which the log unit is to be added.
+     * @return this.
+     */
+    public LayoutBuilder addLogunitServerToSegment(String endpoint,
+                                                   int segmentIndex,
+                                                   int stripeIndex) {
+        LayoutStripe stripe = layout.getSegments().get(segmentIndex).getStripes().get(stripeIndex);
+        if (!stripe.getLogServers().contains(endpoint)) {
+            stripe.getLogServers().add(endpoint);
+        }
+        return this;
+    }
+
+    /**
      * Merges the specified segment and the segment before this.
      * No addition or removal of stripes are allowed.
      * Only 1 log unit server addition/removal allowed between segments.

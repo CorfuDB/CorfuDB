@@ -2,8 +2,12 @@ package org.corfudb.infrastructure.orchestrator.workflows;
 
 import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.HEAL_NODE;
 
+import com.google.common.collect.Sets;
+
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
@@ -42,8 +46,7 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
     public List<Action> getActions() {
         return Arrays.asList(new ResetNode(),
                 new HealNodeToLayout(),
-                new StateTransfer(),
-                new MergeSegments());
+                new RestoreRedundancyAndMergeSegments());
     }
 
     /**
@@ -87,6 +90,41 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
             runtime.getLayoutManagementView().healNode(currentLayout, request.getEndpoint());
             runtime.invalidateLayout();
             newLayout = new Layout(runtime.getLayoutView().getLayout());
+        }
+    }
+
+    /**
+     * This action attempts to restore redundancy for all servers across all segments
+     * starting from the oldest segment. It then collapses the segments once the set of
+     * servers in the 2 oldest subsequent segments are equal.
+     */
+    class RestoreRedundancyAndMergeSegments extends Action {
+        @Nonnull
+        @Override
+        public String getName() {
+            return "RestoreRedundancyAndMergeSegments";
+        }
+
+        @Override
+        public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
+            while (newLayout.getSegments().size() > 1) {
+
+                // Catchup all servers.
+                Set<String> lowRedundancyServers = Sets.difference(
+                        newLayout.getSegments().get(1)
+                                .getStripes().stream()
+                                .flatMap(layoutStripe -> layoutStripe.getLogServers().stream())
+                                .collect(Collectors.toSet()),
+                        newLayout.getSegments().get(0)
+                                .getStripes().stream()
+                                .flatMap(layoutStripe -> layoutStripe.getLogServers().stream())
+                                .collect(Collectors.toSet()));
+                // Transfer the replicated segment to any new nodes node
+                stateTransfer(lowRedundancyServers, runtime, newLayout.getSegments().get(0));
+                runtime.getLayoutManagementView().mergeSegments(new Layout(newLayout));
+                runtime.invalidateLayout();
+                newLayout = runtime.getLayoutView().getLayout();
+            }
         }
     }
 }
