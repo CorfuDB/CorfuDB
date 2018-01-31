@@ -57,6 +57,12 @@ public class LayoutSealTest extends AbstractViewTest {
         CorfuRuntime corfuRuntime = getRuntime(l).connect();
         l.setRuntime(corfuRuntime);
         setAggressiveTimeouts(l);
+
+        getManagementServer(SERVERS.PORT_0).shutdown();
+        getManagementServer(SERVERS.PORT_1).shutdown();
+        getManagementServer(SERVERS.PORT_2).shutdown();
+        getManagementServer(SERVERS.PORT_3).shutdown();
+        getManagementServer(SERVERS.PORT_4).shutdown();
         return l;
     }
 

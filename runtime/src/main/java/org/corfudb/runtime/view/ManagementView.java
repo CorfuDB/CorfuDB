@@ -4,7 +4,11 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +33,19 @@ public class ManagementView extends AbstractView {
 
     public ManagementView(@NonNull CorfuRuntime runtime) {
         super(runtime);
+    }
+
+    /**
+     * Determines the orchestrator endpoint from the provided layout.
+     *
+     * @param layout Latest layout.
+     * @return Returns the orchestrator endpoint.
+     */
+    private String getOrchestratorEndpoint(Layout layout) {
+        List<String> activeLayoutServers = layout.getLayoutServers().stream()
+                .filter(s -> !layout.getUnresponsiveServers().contains(s))
+                .collect(Collectors.toList());
+        return activeLayoutServers.get(0);
     }
 
     /**
@@ -64,7 +81,7 @@ public class ManagementView extends AbstractView {
      * @param pollPeriod       the poll interval to check whether a workflow completed or not
      * @throws WorkflowResultUnknownException when the side affect of the operation
      *                                        can't be determined
-     * @throws WorkflowException when the remove operation fails
+     * @throws WorkflowException              when the remove operation fails
      */
     public void removeNode(@Nonnull String endpointToRemove, int retry,
                            @Nonnull Duration timeout, @Nonnull Duration pollPeriod) {
@@ -78,7 +95,7 @@ public class ManagementView extends AbstractView {
                 if (layoutServers.isEmpty()) {
                     throw new WorkflowException("Can't remove node from a single node cluster");
                 }
-                String orchestratorEndpoint = layoutServers.get(layoutServers.size() - 1);
+                String orchestratorEndpoint = getOrchestratorEndpoint(layout);
                 ManagementClient client = runtime.getRouter(orchestratorEndpoint)
                         .getClient(ManagementClient.class);
                 CreateWorkflowResponse resp = client.removeNode(endpointToRemove);
@@ -124,9 +141,7 @@ public class ManagementView extends AbstractView {
             try {
                 runtime.invalidateLayout();
                 Layout layout = runtime.getLayoutView().getLayout();
-                // Select the current tail node and send an add node request to the orchestrator
-                List<String> logServers = layout.getSegments().get(0).getStripes().get(0).getLogServers();
-                String orchestratorEndpoint = logServers.get(logServers.size() - 1);
+                String orchestratorEndpoint = getOrchestratorEndpoint(layout);
                 ManagementClient client = runtime.getRouter(orchestratorEndpoint)
                         .getClient(ManagementClient.class);
 
@@ -138,9 +153,8 @@ public class ManagementView extends AbstractView {
 
                 for (int y = 0; y < runtime.getParameters().getInvalidateRetry(); y++) {
                     runtime.invalidateLayout();
-                    if (runtime.getLayoutView().getLayout()
-                            .getAllActiveServers().contains(endpointToAdd) &&
-                            layout.getSegmentsForEndpoint(endpointToAdd).size() == 1) {
+                    if (runtime.getLayoutView().getLayout().getAllServers().contains(endpointToAdd)
+                            && layout.getSegmentsForEndpoint(endpointToAdd).size() == 1) {
                         log.info("addNode: Successfully added {}", endpointToAdd);
                         return;
                     }
@@ -151,6 +165,53 @@ public class ManagementView extends AbstractView {
                 continue;
             }
             log.warn("addNode: Attempting to add {} on try {}", endpointToAdd, x);
+        }
+
+        throw new WorkflowResultUnknownException();
+    }
+
+    /**
+     * Heal an unresponsive node.
+     *
+     * @param endpointToHeal Endpoint of the new node to be healed in the cluster.
+     * @param retry          the number of times to retry a workflow if it fails
+     * @param timeout        total time to wait before the workflow times out
+     * @param pollPeriod     the poll interval to check whether a workflow completed or not
+     * @throws WorkflowResultUnknownException when the side affect of the operation
+     *                                        can't be determined
+     */
+    public void healNode(@Nonnull String endpointToHeal, int retry, @Nonnull Duration timeout,
+                         @Nonnull Duration pollPeriod) {
+
+        for (int retryAttempt = 0; retryAttempt < retry; retryAttempt++) {
+            try {
+                runtime.invalidateLayout();
+                Layout layout = runtime.getLayoutView().getLayout();
+                String orchestratorEndpoint = getOrchestratorEndpoint(layout);
+                ManagementClient client = runtime.getRouter(orchestratorEndpoint)
+                        .getClient(ManagementClient.class);
+
+                CreateWorkflowResponse resp = client
+                        .healNodeRequest(endpointToHeal, true, true, true, 0);
+                log.info("healNode: requested to add {} on orchestrator {}, layout {}",
+                        endpointToHeal, orchestratorEndpoint, layout);
+
+                waitForWorkflow(resp.getWorkflowId(), client, timeout, pollPeriod);
+
+                for (int y = 0; y < runtime.getParameters().getInvalidateRetry(); y++) {
+                    runtime.invalidateLayout();
+                    if (runtime.getLayoutView().getLayout().getAllServers().contains(endpointToHeal)
+                            && layout.getSegmentsForEndpoint(endpointToHeal).size() == 1) {
+                        log.info("healNode: Successfully added {}", endpointToHeal);
+                        return;
+                    }
+                }
+            } catch (NetworkException | TimeoutException e) {
+                log.warn("healNode: Exception while trying to add node {} on try ",
+                        endpointToHeal, retryAttempt, e);
+                continue;
+            }
+            log.warn("healNode: Attempting to add {} on try {}", endpointToHeal, retryAttempt);
         }
 
         throw new WorkflowResultUnknownException();

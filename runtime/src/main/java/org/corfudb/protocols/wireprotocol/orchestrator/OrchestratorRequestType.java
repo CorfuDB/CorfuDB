@@ -29,7 +29,12 @@ public enum OrchestratorRequestType {
     /**
      * Remove a node from the cluster
      */
-    REMOVE_NODE(2, RemoveNodeRequest::new);
+    REMOVE_NODE(2, RemoveNodeRequest::new),
+
+    /**
+     * Heal an existing node in the cluster
+     */
+    HEAL_NODE(3, HealNodeRequest::new);
 
     @Getter
     public final int type;

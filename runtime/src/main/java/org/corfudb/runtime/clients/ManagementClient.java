@@ -13,14 +13,16 @@ import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
-import org.corfudb.protocols.wireprotocol.DetectorMsg;
+
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
@@ -130,6 +132,34 @@ public class ManagementClient implements IClient {
         CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));
+        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp).getResponse();
+    }
+
+    /**
+     * Creates a workflow request to heal a node.
+     *
+     * @param endpoint          Endpoint of the node to be healed.
+     * @param isLayoutServer    True if the node to be healed is a layout server.
+     * @param isSequencerServer True if the node to be healed is a sequencer server.
+     * @param isLogUnitServer   True if the node to be healed is a logunit server.
+     * @param stripeIndex       Stripe index of the node if it is a logunit server.
+     * @return CreateWorkflowResponse which gives the workflowId.
+     */
+    public CreateWorkflowResponse healNodeRequest(@Nonnull String endpoint,
+                                                  boolean isLayoutServer,
+                                                  boolean isSequencerServer,
+                                                  boolean isLogUnitServer,
+                                                  int stripeIndex) {
+        OrchestratorMsg req = new OrchestratorMsg(
+                new HealNodeRequest(endpoint,
+                        isLayoutServer,
+                        isSequencerServer,
+                        isLogUnitServer,
+                        stripeIndex));
+        CompletableFuture<OrchestratorResponse> resp =
+                router.sendMessageAndGetCompletable(CorfuMsgType
+                        .ORCHESTRATOR_REQUEST
+                        .payloadMsg(req));
         return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp).getResponse();
     }
 

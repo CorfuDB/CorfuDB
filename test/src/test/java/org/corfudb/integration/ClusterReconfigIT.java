@@ -26,6 +26,7 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.Sleep;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -305,7 +306,6 @@ public class ClusterReconfigIT extends AbstractIT {
             throws Exception {
 
         // Set up cluster of 3 nodes.
-        // Set up cluster of 3 nodes.
         final int PORT_0 = 9000;
         final int PORT_1 = 9001;
         final int PORT_2 = 9002;
@@ -313,9 +313,9 @@ public class ClusterReconfigIT extends AbstractIT {
         Process corfuServer_2 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_1);
         Process corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
         List<Process> corfuServers = Arrays.asList(corfuServer_1, corfuServer_2, corfuServer_3);
-        Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
         final Layout layout = get3NodeLayout();
-        bootstrapCluster(layout);
+        final int retries = 3;
+        BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
         // Create map and set up daemon writer thread.
         CorfuRuntime runtime = createDefaultRuntime();
@@ -424,6 +424,108 @@ public class ClusterReconfigIT extends AbstractIT {
 
         CorfuRuntime corfuRuntime = createDefaultRuntime();
         assertThat(corfuRuntime.getLayoutView().getLayout().equals(layout)).isTrue();
+
+        shutdownCorfuServer(corfuServer_1);
+        shutdownCorfuServer(corfuServer_2);
+        shutdownCorfuServer(corfuServer_3);
+    }
+
+    /**
+     * Starts with 3 nodes on ports 0, 1 and 2.
+     * A daemon thread is started for random writes in the background.
+     * PART 1. Kill node.
+     * First the node on port 0 is killed. The test then waits for the cluster to stabilize and
+     * assert that data operations still go through.
+     * Part 2. Revive node.
+     * Now, the same node is revived and waits for the node to be healed and merged back into the
+     * cluster.
+     * Finally the data on all the 3 nodes is verified.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void killAndHealNode() throws Exception {
+
+        // Set up cluster of 3 nodes.
+        final int PORT_0 = 9000;
+        final int PORT_1 = 9001;
+        final int PORT_2 = 9002;
+        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
+        Process corfuServer_2 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_1);
+        Process corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
+        final Layout layout = get3NodeLayout();
+        final int retries = 3;
+        BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
+
+        // Create map and set up daemon writer thread.
+        CorfuRuntime runtime = createDefaultRuntime();
+        CorfuTable table = runtime.getObjectsView()
+                .build()
+                .setType(CorfuTable.class)
+                .setStreamName("test")
+                .open();
+        final String data = createStringOfSize(1_000);
+        Random r = getRandomNumberGenerator();
+        final AtomicBoolean moreDataToBeWritten = new AtomicBoolean(true);
+        Thread t = startDaemonWriter(runtime, r, table, data, moreDataToBeWritten);
+
+        // Some preliminary writes into the corfu table.
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
+            runtime.getObjectsView().TXBegin();
+            table.put(Integer.toString(r.nextInt()), data);
+            runtime.getObjectsView().TXEnd();
+        }
+
+        // PART 1.
+        // Killing killNode.
+        assertThat(shutdownCorfuServer(corfuServer_1)).isTrue();
+
+        // We wait for failure to be detected and the cluster to stabilize by waiting for the epoch
+        // to increment.
+        runtime.invalidateLayout();
+        Layout refreshedLayout = runtime.getLayoutView().getLayout();
+        while (refreshedLayout.getEpoch() == layout.getEpoch()) {
+            runtime.invalidateLayout();
+            refreshedLayout = runtime.getLayoutView().getLayout();
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+        }
+
+        // Ensure writes still going through. Daemon writer thread does not ensure this.
+        // Fail test if write fails.
+        boolean writeAfterKillNode = false;
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            try {
+                runtime.getObjectsView().TXBegin();
+                table.put(Integer.toString(r.nextInt()), data);
+                runtime.getObjectsView().TXEnd();
+                writeAfterKillNode = true;
+                break;
+            } catch (TransactionAbortedException tae) {
+                // A transaction aborted exception is expected during
+                // some reconfiguration cases.
+            }
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+        }
+        assertThat(writeAfterKillNode).isTrue();
+
+        // PART 2.
+        // Reviving same node.
+        corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
+        runtime.invalidateLayout();
+        refreshedLayout = runtime.getLayoutView().getLayout();
+        final long epochAfterHealingNode = 3L;
+        // Waiting node to be healed and added back to the layout.
+        while (refreshedLayout.getEpoch() != epochAfterHealingNode) {
+            runtime.invalidateLayout();
+            refreshedLayout = runtime.getLayoutView().getLayout();
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+        }
+
+        // Stop the daemon thread.
+        moreDataToBeWritten.set(false);
+        t.join();
+
+        verifyData(runtime);
 
         shutdownCorfuServer(corfuServer_1);
         shutdownCorfuServer(corfuServer_2);
