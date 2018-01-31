@@ -3,6 +3,7 @@ package org.corfudb.generator.operations;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
 import org.corfudb.generator.State;
+import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Address;
 
@@ -50,6 +51,11 @@ public class OptimisticTxOperation extends Operation {
             }
 
         } catch (TransactionAbortedException tae) {
+            // TX aborted because of conflict is a successful operation regarding
+            // Liveness status.
+            if (tae.getAbortCause() == AbortCause.CONFLICT) {
+                state.setLastSuccessfulWriteOperationTimestamp(System.currentTimeMillis());
+            }
             Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_ABORTED);
         }
 
