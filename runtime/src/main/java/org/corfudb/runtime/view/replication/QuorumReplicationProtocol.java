@@ -71,14 +71,19 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
         log.trace("Peek[{}]: quorum {}/{}", address, numUnits, numUnits);
         try {
             ReadResponse readResponse = null;
-            CompletableFuture<ReadResponse>[] futures = new CompletableFuture[numUnits];
-            for (int i = 0; i < numUnits; i++) {
-                futures[i] = layout.getLogUnitClient(address, i).read(address);
+            try {
+                CompletableFuture<ReadResponse>[] futures = new CompletableFuture[numUnits];
+                for (int i = 0; i < numUnits; i++) {
+                    futures[i] = layout.getLogUnitClient(address, i).read(address);
+                }
+                QuorumFuturesFactory.CompositeFuture<ReadResponse> future =
+                        QuorumFuturesFactory.getQuorumFuture(new ReadResponseComparator(address),
+                                futures);
+                readResponse = CFUtils.getUninterruptibly(future, QuorumUnreachableException.class);
+            } catch (QuorumUnreachableException e) {
+                log.debug("peek: Quorum unreachable: {}", e);
+                return null;
             }
-            QuorumFuturesFactory.CompositeFuture<ReadResponse> future =
-                    QuorumFuturesFactory.getQuorumFuture(new ReadResponseComparator(address),
-                            futures);
-            readResponse = CFUtils.getUninterruptibly(future, QuorumUnreachableException.class);
             if (readResponse != null) {
                 LogData result = readResponse.getAddresses().get(address);
                 if (result != null && !isEmptyType(result.getType())) {
