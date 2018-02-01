@@ -5,10 +5,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
 
+import java.util.AbstractMap;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
@@ -22,6 +25,7 @@ import lombok.Getter;
 import lombok.ToString;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -63,6 +67,28 @@ public class CorfuMapTest extends AbstractViewTest {
                 .isEqualTo("a");
         assertThat(testMap.get("a"))
                 .isEqualTo("b");
+    }
+
+    @Test
+    public void checkpointCorfuMap() throws Exception {
+        Map<String, String> testMap = getRuntime()
+                .getObjectsView()
+                .build()
+                .setStreamName("test")
+                .setTypeToken(CorfuTable.<String,String>getMapType())
+                .open();
+
+        testMap.put("k1", "v1");
+
+        Set<Map.Entry<String, String>> entrySet = new HashSet<>();
+
+        entrySet.addAll(testMap.entrySet());
+        testMap.put("k1", "v2");
+
+        assertThat(entrySet).hasSize(testMap.size());
+        Map.Entry<String, String> entry = entrySet.iterator().next();
+
+        assertThat(entry).isEqualTo(new AbstractMap.SimpleImmutableEntry("k1", "v1"));
     }
 
     @Test
