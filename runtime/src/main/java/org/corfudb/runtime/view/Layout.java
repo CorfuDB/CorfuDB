@@ -164,15 +164,18 @@ public class Layout {
     }
 
     /**
-     * Move each server in the system to the epoch of this layout.
+     * Attempts to move all servers in the system to the epoch of this layout.
+     * The seal however waits only for a response from a quorum of layout servers (n/2 + 1),
+     * a quorum of log unit servers in every stripe in case of QUORUM_REPLICATION or
+     * at least one log unit server in every stripe in case of CHAIN_REPLICATION.
      *
-     * @throws WrongEpochException If any server is in a higher epoch.
+     * @throws WrongEpochException        If any server is in a higher epoch.
      * @throws QuorumUnreachableException If enough number of servers cannot be sealed.
      */
     public void moveServersToEpoch()
             throws WrongEpochException, QuorumUnreachableException {
         log.debug("Requested move of servers to new epoch {} servers are {}", epoch,
-                getAllActiveServers());
+                getAllServers());
 
         // Set remote epoch on all servers in layout.
         Map<String, CompletableFuture<Boolean>> resultMap =
@@ -195,14 +198,20 @@ public class Layout {
      */
     public Set<String> getAllActiveServers() {
         Set<String> activeServers = new HashSet<>();
-        layoutServers.forEach(activeServers::add);
-        sequencers.forEach(activeServers::add);
+        activeServers.addAll(layoutServers);
+        activeServers.addAll(sequencers);
         segments.forEach(x ->
                 x.getStripes().forEach(y ->
-                        y.getLogServers().forEach(activeServers::add)));
+                        activeServers.addAll(y.getLogServers())));
+        activeServers.removeAll(unresponsiveServers);
         return activeServers;
     }
 
+    /**
+     * This function returns a set of all servers in the layout.
+     *
+     * @return A set of all servers in the layout.
+     */
     public Set<String> getAllServers() {
         Set<String> allServers = new HashSet<>();
         allServers.addAll(getAllActiveServers());

@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -74,33 +73,6 @@ public class LayoutManagementView extends AbstractView {
                         runtime,
                         failedServers,
                         Collections.emptySet());
-        runLayoutReconfiguration(currentLayout, newLayout, false);
-    }
-
-    /**
-     * Takes in the existing layout and a set of failed nodes.
-     * It first generates a new layout by removing the failed nodes from the existing layout.
-     * It then seals the epoch to prevent any client from accessing the stale layout.
-     * Finally we run paxos to update all servers with the new layout.
-     *
-     * @param healingHandlerPolicy Policy dictating healing of the reviving node.
-     * @param currentLayout        The current layout
-     * @param healedServers        Set of healed server addresses
-     * @throws QuorumUnreachableException  if reconfiguration not accepted by quorum.
-     * @throws OutrankedException          if reconfiguration consensus attempt outranked.
-     * @throws LayoutModificationException if attempting to reconfigure with invalid layout.
-     */
-    public void handleHealing(IReconfigurationHandlerPolicy healingHandlerPolicy,
-                              Layout currentLayout,
-                              Set<String> healedServers)
-            throws QuorumUnreachableException, OutrankedException, LayoutModificationException {
-
-        // Generates a new layout by adding the healed nodes from the existing layout
-        Layout newLayout = healingHandlerPolicy
-                .generateLayout(currentLayout,
-                        runtime,
-                        Collections.emptySet(),
-                        healedServers);
         runLayoutReconfiguration(currentLayout, newLayout, false);
     }
 
@@ -181,6 +153,41 @@ public class LayoutManagementView extends AbstractView {
         }
 
         // Add node is successful even if reconfigure sequencer fails.
+        // TODO: Optimize this by retrying or submitting a workflow to retry.
+        reconfigureSequencerServers(currentLayout, newLayout, false);
+    }
+
+    /**
+     * Heals an existing node in the layout.
+     *
+     * @param currentLayout Current layout.
+     * @param endpoint      New endpoint to be added.
+     * @throws OutrankedException         if consensus outranked.
+     */
+    public void healNode(Layout currentLayout, String endpoint) throws OutrankedException {
+
+        Layout newLayout;
+        if (currentLayout.getUnresponsiveServers().contains(endpoint)) {
+            currentLayout.setRuntime(runtime);
+            sealEpoch(currentLayout);
+
+            LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
+            Layout.LayoutSegment latestSegment =
+                    currentLayout.getSegments().get(currentLayout.getSegments().size() - 1);
+            layoutBuilder.addLogunitServer(0,
+                    getMaxGlobalTail(latestSegment),
+                    endpoint);
+            layoutBuilder.removeUnresponsiveServers(Collections.singleton(endpoint));
+            newLayout = layoutBuilder.build();
+            newLayout.setRuntime(runtime);
+
+            attemptConsensus(newLayout);
+        } else {
+            log.info("Node {} already exists in the layout, skipping.", endpoint);
+            newLayout = currentLayout;
+        }
+
+        // Heal node is successful even if reconfigure sequencer fails.
         // TODO: Optimize this by retrying or submitting a workflow to retry.
         reconfigureSequencerServers(currentLayout, newLayout, false);
     }

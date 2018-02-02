@@ -40,7 +40,7 @@ public class AddNodeWorkflow implements IWorkflow {
 
     private final AddNodeRequest request;
 
-    private Layout newLayout;
+    protected Layout newLayout;
 
     /**
      * The chunk size (i.e. number of address space entries) that
@@ -77,7 +77,7 @@ public class AddNodeWorkflow implements IWorkflow {
      * Bootstrap the new node to be added to the cluster, or ignore
      * bootstrap if it's already bootstrapped.
      */
-    private class BootstrapNode extends Action {
+    protected class BootstrapNode extends Action {
         @Override
         public String getName() {
             return "BootstrapNode";
@@ -184,7 +184,7 @@ public class AddNodeWorkflow implements IWorkflow {
      * Copies the split segment to the new node, if it
      * is the new node also participates as a logging unit.
      */
-    private class StateTransfer extends Action {
+    protected class StateTransfer extends Action {
         @Override
         public String getName() {
             return "StateTransfer";
@@ -201,7 +201,7 @@ public class AddNodeWorkflow implements IWorkflow {
      * Merges the fragmented segment if the AddNodeToLayout action caused any
      * segments to split
      */
-    private class MergeSegments extends Action {
+    protected class MergeSegments extends Action {
         @Override
         public String getName() {
             return "MergeSegments";

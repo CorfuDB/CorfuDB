@@ -33,7 +33,7 @@ public class SealServersHelper {
     public static Map<String, CompletableFuture<Boolean>> asyncSetRemoteEpoch(Layout layout) {
         Map<String, CompletableFuture<Boolean>> resultMap = new HashMap<>();
         // Seal layout servers
-        layout.getAllActiveServers().forEach(server -> {
+        layout.getAllServers().forEach(server -> {
             CompletableFuture<Boolean> cf = new CompletableFuture<>();
             try {
                 // Creating router can cause NetworkException which should be handled.
@@ -68,7 +68,7 @@ public class SealServersHelper {
     }
 
     /**
-     * Wait for all log unit servers in every stripe to be sealed.
+     * Wait for at least one log unit servers in every stripe to be sealed.
      *
      * @param layoutSegment        Layout segment to be sealed.
      * @param completableFutureMap A map of completableFutures for every remoteSetEpoch call.

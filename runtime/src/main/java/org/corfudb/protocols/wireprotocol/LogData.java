@@ -226,6 +226,12 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         }
     }
 
+    /**
+     * LogData are considered equals if clientId and threadId are equal.
+     * Here, it means or both of them are null or both of them are the same.
+     * @param o
+     * @return
+     */
     @Override
     public boolean equals(Object o) {
         if (o == this) {
@@ -233,7 +239,17 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         } else if (!(o instanceof LogData)) {
             return false;
         } else {
-            return compareTo((LogData) o) == 0;
+            LogData other = (LogData) o;
+            if (compareTo(other) == 0) {
+                boolean sameClientId = getClientId() == null ? other.getClientId() == null :
+                        getClientId().equals(other.getClientId());
+                boolean sameThreadId = getThreadId() == null ? other.getThreadId() == null :
+                        getThreadId().equals(other.getThreadId());
+
+                return sameClientId && sameThreadId;
+            }
+
+            return false;
         }
     }
 

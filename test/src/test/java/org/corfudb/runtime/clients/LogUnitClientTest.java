@@ -50,6 +50,19 @@ public class LogUnitClientTest extends AbstractClientTest {
     String dirPath;
     LogUnitServer server;
 
+    final UUID clientId1 = UUID.fromString("7903ba37-e3e7-407b-b9e9-f8eacaa94d5e");
+    final UUID clientId2 = UUID.fromString("a15bbffc-91cb-4a96-bb30-e1ecc5f522da");
+
+    private LogData getLogDataWithoutId(long address) {
+        ByteBuf b = Unpooled.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        LogData ld = new LogData(DataType.DATA, b);
+        ld.setGlobalAddress(address);
+
+        return ld;
+    }
+
     @Override
     Set<AbstractServer> getServersForTest() {
         dirPath = PARAMETERS.TEST_TEMP_DIR;
@@ -399,5 +412,71 @@ public class LogUnitClientTest extends AbstractClientTest {
         assertThatThrownBy(() -> client.read(0).get())
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(DataCorruptionException.class);
+    }
+
+    /**
+     * Testing that the clientId/ThreadId is persisted and that two
+     * LogData entries are equal if they have the same runtime and are coming
+     * from the same thread.
+     * @throws Exception
+     */
+    @Test
+    public void logDataWrittenIsEqualToLogDataRead() throws Exception {
+        long address = 0L;
+        LogData ld = getLogDataWithoutId(address);
+
+        ld.setId(clientId1);
+        client.write(ld);
+
+        LogData ldPrime = client.read(address).get().getAddresses().get(address);
+
+        assertThat(ld).isEqualTo(ldPrime);
+        assertThat(ldPrime.getMetadataMap().get(IMetadata.LogUnitMetadataType.CLIENT_ID))
+                .isEqualTo(clientId1);
+        assertThat(ldPrime.getMetadataMap().get(IMetadata.LogUnitMetadataType.THREAD_ID))
+                .isEqualTo(Thread.currentThread().getId());
+    }
+
+    /**
+     * Ensure that same LogData payload written by two different thread
+     * are not equals
+     * @throws Exception
+     */
+    @Test
+    public void logDataWrittenFromOtherThreadIsNotEqual() throws Exception {
+        long address = 0L;
+        LogData ldThisThread = getLogDataWithoutId(address);
+        ldThisThread.setId(clientId1);
+        LogData ldOtherThread = getLogDataWithoutId(address);
+
+        // Set clientId from another thread
+        t1(() -> ldOtherThread.setId(clientId1));
+        client.write(ldOtherThread);
+
+        LogData ldPrime = client.read(address).get().getAddresses().get(address);
+        assertThat(ldThisThread).isNotEqualTo(ldPrime);
+        assertThat(ldOtherThread).isEqualTo(ldPrime);
+    }
+
+    /**
+     * Ensure that same LogData payload written by two different client
+     * are not equals
+     * @throws Exception
+     */
+    @Test
+    public void logDataWrittenWithOtherClientIdIsNotEqual() throws Exception {
+        long address = 0L;
+
+        LogData ldOne = getLogDataWithoutId(address);
+        LogData ldTwo = getLogDataWithoutId(address);
+
+        ldOne.setId(clientId1);
+        ldTwo.setId(clientId2);
+
+        client.write(ldOne);
+
+        LogData ldRead = client.read(address).get().getAddresses().get(address);
+        assertThat(ldRead).isEqualTo(ldOne);
+        assertThat(ldRead).isNotEqualTo(ldTwo);
     }
 }

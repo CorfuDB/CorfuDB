@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.reflect.TypeToken;
 
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.ConcurrentModificationException;
@@ -34,6 +35,7 @@ import org.corfudb.annotations.DontInstrument;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
 import org.corfudb.annotations.TransactionalMethod;
+import org.corfudb.util.ImmuableListSetWrapper;
 
 /** The CorfuTable implements a simple key-value store.
  *
@@ -480,11 +482,19 @@ public class CorfuTable<K ,V, F extends Enum<F> & CorfuTable.IndexSpecification,
         return ImmutableList.copyOf(mainMap.values());
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Makes a shallow copy of the map (i.e. all map entries), but not the
+     * key/values (i.e only the mappings are copied).
+     **/
     @Override
     @Accessor
     public @Nonnull Set<Entry<K, V>> entrySet() {
-        return ImmutableSet.copyOf(mainMap.entrySet());
+        List<Entry<K, V>> copy = new ArrayList<>(mainMap.size());
+        for (Map.Entry<K, V> entry : mainMap.entrySet()) {
+            copy.add(new AbstractMap.SimpleImmutableEntry<>(entry.getKey(),
+                    entry.getValue()));
+        }
+        return new ImmuableListSetWrapper<>(copy);
     }
 
     /** {@inheritDoc} */

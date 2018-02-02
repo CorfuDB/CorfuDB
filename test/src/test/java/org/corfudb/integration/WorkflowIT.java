@@ -84,7 +84,7 @@ public class WorkflowIT extends AbstractIT {
 
         n1Rt.invalidateLayout();
         final int clusterSizeN2 = 2;
-        assertThat(n1Rt.getLayoutView().getLayout().getAllActiveServers().size()).isEqualTo(clusterSizeN2);
+        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
@@ -104,7 +104,7 @@ public class WorkflowIT extends AbstractIT {
         // Verify that the third node has been added and data can be read back
         n1Rt.invalidateLayout();
         final int clusterSizeN3 = 3;
-        assertThat(n1Rt.getLayoutView().getLayout().getAllActiveServers().size()).isEqualTo(clusterSizeN3);
+        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
 
         Layout n3Layout = new Layout(n1Rt.getLayoutView().getLayout());
 

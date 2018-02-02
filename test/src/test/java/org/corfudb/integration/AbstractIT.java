@@ -8,12 +8,8 @@ import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.ShutdownException;
-import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
@@ -136,15 +132,6 @@ public class AbstractIT extends AbstractCorfuTest {
              } else {
                  return true;
              }
-        }
-    }
-
-    public void bootstrapCluster(Layout layout) throws ExecutionException, InterruptedException {
-        for (String s : layout.getLayoutServers()) {
-            NettyClientRouter router = new NettyClientRouter(s);
-            router.addClient(new LayoutClient()).addClient(new ManagementClient());
-            router.getClient(LayoutClient.class).bootstrapLayout(layout).get();
-            router.getClient(ManagementClient.class).bootstrapManagement(layout).get();
         }
     }
 
@@ -275,7 +262,7 @@ public class AbstractIT extends AbstractCorfuTest {
                                     Files.write(Paths.get(logfile), "\n".getBytes(),
                                             StandardOpenOption.APPEND);
                                 } catch (Exception e) {
-                                    e.printStackTrace();
+                                    log.error("StreamGobbler: Error, {}", e);
                                 }
                             }
                     );

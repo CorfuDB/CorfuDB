@@ -7,8 +7,10 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.runtime.CorfuRuntime;
+import org.junit.After;
 import org.junit.Before;
 
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,6 +40,11 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
         router = new TestClientRouter(serverRouter);
         getServersForTest().stream().forEach(serverRouter::addServer);
         getClientsForTest().stream().forEach(router::addClient);
+    }
+
+    @After
+    public void shutdownServers() {
+        new HashSet<>(serverRouter.handlerMap.values()).forEach(AbstractServer::shutdown);
     }
 
     /**
