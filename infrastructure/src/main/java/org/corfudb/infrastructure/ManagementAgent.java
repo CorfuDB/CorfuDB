@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -30,6 +31,7 @@ import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
 import org.corfudb.util.Sleep;
@@ -93,6 +95,12 @@ public class ManagementAgent {
      */
     private Future failureDetectorFuture = null;
     private Future healingDetectorFuture = null;
+
+    /**
+     * Recovery attempts.
+     */
+    private final int recoveryRetries;
+    private final Duration recoveryRetryTimeout = Duration.ofSeconds(1L);
     private boolean recovered = false;
 
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
@@ -131,6 +139,8 @@ public class ManagementAgent {
         if (serverContext.getManagementLayout() == null) {
             recovered = true;
         }
+        recoveryRetries = opts.get("--recovery-attempts") != null
+                ? Integer.parseInt(opts.get("--recovery-attempts").toString()) : 3;
 
         // The management server needs to check both the Layout Server's persisted layout as well
         // as the Management Server's previously persisted layout. We try to recover from both of
@@ -190,25 +200,33 @@ public class ManagementAgent {
     private void initializationTask() {
 
         try {
-            while (!shutdown) {
-                if (serverContext.getManagementLayout() == null && bootstrapEndpoint == null) {
-                    log.warn("Management Server waiting to be bootstrapped");
-                    Sleep.MILLISECONDS.sleepRecoverably(policyExecuteInterval);
-                    continue;
-                }
+            while (!shutdown
+                    && serverContext.getManagementLayout() == null
+                    && bootstrapEndpoint == null) {
+                log.warn("Management Server waiting to be bootstrapped");
+                Sleep.MILLISECONDS.sleepRecoverably(policyExecuteInterval);
+            }
 
-                // Recover if flag is false
-                while (!recovered) {
+            // Recover if flag is false
+            if (!recovered) {
+                for (int recoveryRetry = 0; recoveryRetry < recoveryRetries; recoveryRetry++) {
+                    // Attempt recovery
                     recovered = runRecoveryReconfiguration();
-                    if (!recovered) {
-                        log.error("detectorTaskScheduler: Recovery failed. Retrying.");
-                        continue;
+                    if (recovered) {
+                        // If recovery succeeds, reconfiguration was successful.
+                        sequencerBootstrappedFuture.complete(true);
+                        log.info("Recovery completed");
+                        break;
                     }
-                    // If recovery succeeds, reconfiguration was successful.
-                    sequencerBootstrappedFuture.complete(true);
-                    log.info("Recovery completed");
+                    // If recovery fails, sleep and retry.
+                    log.error("detectorTaskScheduler: Recovery failed. Retries left {}. "
+                                    + "Retrying in {}ms",
+                            recoveryRetry, recoveryRetryTimeout.toMillis());
+                    Sleep.sleepUninterruptibly(recoveryRetryTimeout);
                 }
-                break;
+                if (!recovered) {
+                    throw new RecoveryException("Recovery failed. Retries exhausted.");
+                }
             }
 
             // Sequencer bootstrap required if this is fresh startup (not recovery).
