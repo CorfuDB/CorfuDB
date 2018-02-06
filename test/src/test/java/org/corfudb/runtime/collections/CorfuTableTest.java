@@ -132,6 +132,28 @@ public class CorfuTableTest extends AbstractViewTest {
                                  MapEntry.entry("k3", "b"));
     }
 
+    /** Make sure we can still read on the index even if it was
+     *  never present.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canReadWithFailedIndex() {
+        CorfuTable<String, String, StringIndexers, String>
+            corfuTable = getDefaultRuntime().getObjectsView().build()
+            .setTypeToken(
+                new TypeToken<CorfuTable<String, String,
+                    StringIndexers, String>>() {})
+            .setStreamName("test")
+            .open();
+
+        corfuTable.put("k1", "a");
+        corfuTable.put("k2", "ab");
+        corfuTable.put("k3", "b");
+
+        assertThat(corfuTable.getByIndex(StringIndexers.BY_FIRST_LETTER, "a"))
+            .containsExactly("a", "ab");
+    }
+
     /**
      * Remove an entry also update indices
      */
