@@ -2,7 +2,7 @@
 # This script will install and setup bullseye for code coverage purpose
 
 rm -f bullseye*.tar
-curl -O http://apt-cache.nicira.eng.vmware.com/apt/crosshairs/trusty/all/BullseyeCoverage-8.9.73-Linux-x64.tar
+curl -O http://apt-cache.nsbu.eng.vmware.com/apt/crosshairs/trusty/all/BullseyeCoverage-8.9.73-Linux-x64.tar
 tar xf Bullseye*.tar
 cd Bullseye*
 if [ ! -e install ]; then
