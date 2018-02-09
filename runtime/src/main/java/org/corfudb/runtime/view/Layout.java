@@ -556,6 +556,17 @@ public class Layout {
         public int getNumberOfStripes() {
             return stripes.size();
         }
+
+        /**
+         * Get all servers from all stripes present in this segment.
+         *
+         * @return Set of log unit servers.
+         */
+        public Set<String> getAllLogServers() {
+            return this.getStripes().stream()
+                    .flatMap(layoutStripe -> layoutStripe.getLogServers().stream())
+                    .collect(Collectors.toSet());
+        }
     }
 
     @Data

@@ -115,14 +115,8 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
                 // Get the set of servers present in the second segment but not in the first
                 // segment.
                 Set<String> lowRedundancyServers = Sets.difference(
-                        newLayout.getSegments().get(1)
-                                .getStripes().stream()
-                                .flatMap(layoutStripe -> layoutStripe.getLogServers().stream())
-                                .collect(Collectors.toSet()),
-                        newLayout.getSegments().get(0)
-                                .getStripes().stream()
-                                .flatMap(layoutStripe -> layoutStripe.getLogServers().stream())
-                                .collect(Collectors.toSet()));
+                        newLayout.getSegments().get(1).getAllLogServers(),
+                        newLayout.getSegments().get(0).getAllLogServers());
                 // Transfer the replicated segment to the difference set calculated above.
                 stateTransfer(lowRedundancyServers, runtime, newLayout.getSegments().get(0));
                 runtime.getLayoutManagementView().mergeSegments(new Layout(newLayout));

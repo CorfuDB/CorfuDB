@@ -225,7 +225,8 @@ public class AddNodeWorkflow implements IWorkflow {
                 runtime.invalidateLayout();
                 newLayout = runtime.getLayoutView().getLayout();
             } else {
-                throw new RuntimeException("Node to be added marked unresponsive.");
+                throw new RuntimeException("RestoreRedundancy: "
+                        + "Node to be added marked unresponsive.");
             }
         }
     }
