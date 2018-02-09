@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
 
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -62,6 +63,27 @@ public class ClusterReconfigIT extends AbstractIT {
                         )))),
                 0L,
                 UUID.randomUUID());
+    }
+
+    /**
+     * Refreshes the layout and waits for a limited time for the refreshed layout to satisfy the
+     * expected epoch verifier.
+     *
+     * @param epochVerifier Predicate to test the refreshed epoch value.
+     * @param corfuRuntime  Runtime.
+     */
+    private void waitForEpochChange(Predicate<Long> epochVerifier, CorfuRuntime corfuRuntime) {
+        corfuRuntime.invalidateLayout();
+        Layout refreshedLayout = corfuRuntime.getLayoutView().getLayout();
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            if (epochVerifier.test(refreshedLayout.getEpoch())) {
+                break;
+            }
+            corfuRuntime.invalidateLayout();
+            refreshedLayout = corfuRuntime.getLayoutView().getLayout();
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+        }
+        assertThat(epochVerifier.test(refreshedLayout.getEpoch())).isTrue();
     }
 
     /**
@@ -257,7 +279,10 @@ public class ClusterReconfigIT extends AbstractIT {
         // The shutdown and reset can take an unknown amount of time and there is a chance that the
         // newer runtime may also connect to the older corfu server (before reset).
         // Hence the while loop.
-        while (corfuRuntime.getLayoutView().getLayout().getEpoch() != 0L) {
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            if (corfuRuntime.getLayoutView().getLayout().getEpoch() == 0L) {
+                break;
+            }
             Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
             corfuRuntime = createDefaultRuntime();
         }
@@ -268,8 +293,8 @@ public class ClusterReconfigIT extends AbstractIT {
     /**
      * Starts a corfu server and increments the epoch from 0 to 1.
      * The server is then restarted and the new layout fetch is expected to return a layout with
-     * epoch 2 as the state is not cleared and the restart forces a recovery to increment the
-     * epoch.
+     * epoch 2 or greater (recovery can fail and epoch can increase) as the state is not cleared
+     * and the restart forces a recovery to increment the epoch.
      *
      * @throws Exception
      */
@@ -342,13 +367,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // We wait for failure to be detected and the cluster to stabilize by waiting for the epoch
         // to increment.
-        runtime.invalidateLayout();
-        Layout refreshedLayout = runtime.getLayoutView().getLayout();
-        while (refreshedLayout.getEpoch() == layout.getEpoch()) {
-            runtime.invalidateLayout();
-            refreshedLayout = runtime.getLayoutView().getLayout();
-            Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
-        }
+        waitForEpochChange(refreshedEpoch -> refreshedEpoch > layout.getEpoch(), runtime);
 
         // Stop the daemon thread.
         moreDataToBeWritten.set(false);
@@ -481,13 +500,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // We wait for failure to be detected and the cluster to stabilize by waiting for the epoch
         // to increment.
-        runtime.invalidateLayout();
-        Layout refreshedLayout = runtime.getLayoutView().getLayout();
-        while (refreshedLayout.getEpoch() == layout.getEpoch()) {
-            runtime.invalidateLayout();
-            refreshedLayout = runtime.getLayoutView().getLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
-        }
+        waitForEpochChange(refreshedEpoch -> refreshedEpoch > layout.getEpoch(), runtime);
 
         // Ensure writes still going through. Daemon writer thread does not ensure this.
         // Fail test if write fails.
@@ -510,16 +523,10 @@ public class ClusterReconfigIT extends AbstractIT {
         // PART 2.
         // Reviving same node.
         corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
-        runtime.invalidateLayout();
-        refreshedLayout = runtime.getLayoutView().getLayout();
         final long epochAfterHealingNode = 3L;
-        // Waiting node to be healed and added back to the layout.
-        while (refreshedLayout.getEpoch() < epochAfterHealingNode) {
-            runtime.invalidateLayout();
-            refreshedLayout = runtime.getLayoutView().getLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
-        }
 
+        // Waiting node to be healed and added back to the layout.
+        waitForEpochChange(refreshedEpoch -> refreshedEpoch >= epochAfterHealingNode, runtime);
         verifyData(runtime);
 
         shutdownCorfuServer(corfuServer_1);
