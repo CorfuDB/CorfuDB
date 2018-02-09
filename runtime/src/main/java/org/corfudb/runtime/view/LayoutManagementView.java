@@ -222,6 +222,9 @@ public class LayoutManagementView extends AbstractView {
 
     /**
      * Add the log unit to the segment to increase redundancy. This is preceded by state transfer.
+     * Adds the specified log unit to the stripe in all segments, increments the epoch and
+     * proposes the new layout. This method is idempotent - adds the new log unit to each segment
+     * only once.
      *
      * @param currentLayout Current layout.
      * @param endpoint      Endpoint to be added to the segment.

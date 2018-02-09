@@ -128,8 +128,8 @@ public class AddNodeWorkflow implements IWorkflow {
     }
 
     /**
-     * Transfer an address segment from a cluster to a set of specified nodes. The epoch shouldn't
-     * change during the segment transfer.
+     * Transfer an address segment from a cluster to a set of specified nodes.
+     * There are no cluster reconfigurations, hence no epoch change side effects.
      *
      * @param endpoints destination nodes
      * @param runtime   The runtime to read the segment from

@@ -107,9 +107,13 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
 
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
+            // Catchup all servers across all segments.
             while (newLayout.getSegments().size() > 1) {
 
-                // Catchup all servers.
+                // Currently the state is transferred for the complete segment.
+                // TODO: Add stripe specific transfer granularity for optimization.
+                // Get the set of servers present in the second segment but not in the first
+                // segment.
                 Set<String> lowRedundancyServers = Sets.difference(
                         newLayout.getSegments().get(1)
                                 .getStripes().stream()
@@ -119,7 +123,7 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
                                 .getStripes().stream()
                                 .flatMap(layoutStripe -> layoutStripe.getLogServers().stream())
                                 .collect(Collectors.toSet()));
-                // Transfer the replicated segment to any new nodes node
+                // Transfer the replicated segment to the difference set calculated above.
                 stateTransfer(lowRedundancyServers, runtime, newLayout.getSegments().get(0));
                 runtime.getLayoutManagementView().mergeSegments(new Layout(newLayout));
                 runtime.invalidateLayout();
