@@ -261,6 +261,29 @@ public class LayoutManagementView extends AbstractView {
     }
 
     /**
+     * Attempts to force commit a new layout to the cluster.
+     *
+     * @param currentLayout the current layout
+     * @param forceLayout the new layout to force
+     * @throws QuorumUnreachableException
+     */
+    public void forceLayout(@Nonnull Layout currentLayout, @Nonnull Layout forceLayout) {
+        currentLayout.setRuntime(runtime);
+
+        try {
+            sealEpoch(currentLayout);
+        } catch (QuorumUnreachableException e) {
+            log.warn("forceLayout: error while sealing ", e);
+        }
+
+        runtime.getLayoutView().committed(forceLayout.getEpoch(), forceLayout, true);
+        forceLayout.setRuntime(runtime);
+
+        reconfigureSequencerServers(currentLayout, forceLayout, true);
+    }
+
+
+    /**
      * Runs the layout reconfiguration process.
      * Seals the layout.
      * Runs paxos.
@@ -387,7 +410,7 @@ public class LayoutManagementView extends AbstractView {
      * @param newLayout        New Layout to be reconfigured.
      * @param forceReconfigure Flag to force reconfiguration.
      */
-    private void reconfigureSequencerServers(Layout originalLayout, Layout newLayout,
+    public void reconfigureSequencerServers(Layout originalLayout, Layout newLayout,
                                              boolean forceReconfigure) {
 
         long maxTokenRequested = 0L;
