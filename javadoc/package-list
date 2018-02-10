@@ -23,6 +23,7 @@ org.corfudb.runtime.object.transactions
 org.corfudb.runtime.view
 org.corfudb.runtime.view.replication
 org.corfudb.runtime.view.stream
+org.corfudb.runtime.view.workflows
 org.corfudb.samples
 org.corfudb.security.sasl
 org.corfudb.security.sasl.plaintext
