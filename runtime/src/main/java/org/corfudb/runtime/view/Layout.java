@@ -149,7 +149,7 @@ public class Layout {
      * @param endpoint the endpoint to return all the segments for
      * @return a set of segments that contain the endpoint
      */
-    Set<LayoutSegment> getSegmentsForEndpoint(@Nonnull String endpoint) {
+    public Set<LayoutSegment> getSegmentsForEndpoint(@Nonnull String endpoint) {
         Set<LayoutSegment> res = new HashSet<>();
 
         for (LayoutSegment segment : getSegments()) {
