@@ -22,9 +22,6 @@ public class BaseServer extends AbstractServer {
 
     final ServerContext serverContext;
 
-    private static final int RESET_ERROR_CODE = 100;
-    private static final int RESTART_ERROR_CODE = 200;
-
     public BaseServer(@Nonnull ServerContext context) {
         this.serverContext = context;
     }
@@ -92,10 +89,10 @@ public class BaseServer extends AbstractServer {
      * @param r     The server router.
      */
     @ServerHandler(type = CorfuMsgType.RESET)
-    private static void doReset(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private void doReset(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.warn("Remote reset requested from client " + msg.getClientID());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-        System.exit(RESET_ERROR_CODE);
+        CorfuServer.restartServer(serverContext, true);
     }
 
     /** Restart the JVM. This mechanism leverages that corfu_server runs in a bash script
@@ -107,9 +104,9 @@ public class BaseServer extends AbstractServer {
      * @param r     The server router.
      */
     @ServerHandler(type = CorfuMsgType.RESTART)
-    private static void doRestart(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private void doRestart(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.warn("Remote restart requested from client " + msg.getClientID());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-        System.exit(RESTART_ERROR_CODE);
+        CorfuServer.restartServer(serverContext, false);
     }
 }
