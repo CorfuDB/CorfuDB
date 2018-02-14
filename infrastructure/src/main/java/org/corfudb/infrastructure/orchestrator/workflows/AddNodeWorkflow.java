@@ -1,30 +1,34 @@
 package org.corfudb.infrastructure.orchestrator.workflows;
 
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.ADD_NODE;
+
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Range;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+import javax.annotation.Nonnull;
+import javax.annotation.concurrent.NotThreadSafe;
+
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.orchestrator.IWorkflow;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
-import org.corfudb.protocols.wireprotocol.orchestrator.Request;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.view.Layout;
-
-import javax.annotation.Nonnull;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import javax.annotation.concurrent.NotThreadSafe;
-
-import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.ADD_NODE;
 
 /**
  * A definition of a workflow that adds a new node to the cluster. This workflow
@@ -64,8 +68,7 @@ public class AddNodeWorkflow implements IWorkflow {
         this.request = request;
         actions = ImmutableList.of(new BootstrapNode(),
                 new AddNodeToLayout(),
-                new StateTransfer(),
-                new MergeSegments());
+                new RestoreRedundancy());
     }
 
     @Override
@@ -121,21 +124,19 @@ public class AddNodeWorkflow implements IWorkflow {
 
             runtime.invalidateLayout();
             newLayout = new Layout(runtime.getLayoutView().getLayout());
-            return;
-
         }
     }
 
     /**
-     * Transfer an address segment from a cluster to a new node. The epoch shouldn't change
-     * during the segment transfer.
+     * Transfer an address segment from a cluster to a set of specified nodes.
+     * There are no cluster reconfigurations, hence no epoch change side effects.
      *
-     * @param endpoint destination node
-     * @param runtime  The runtime to read the segment from
-     * @param segment  segment to transfer
+     * @param endpoints destination nodes
+     * @param runtime   The runtime to read the segment from
+     * @param segment   segment to transfer
      */
-    private void stateTransfer(String endpoint, CorfuRuntime runtime,
-                       Layout.LayoutSegment segment) throws Exception {
+    protected void stateTransfer(Set<String> endpoints, CorfuRuntime runtime,
+                                 Layout.LayoutSegment segment) throws Exception {
 
         long trimMark = runtime.getAddressSpaceView().getTrimMark();
         if (trimMark > segment.getEnd()) {
@@ -162,54 +163,71 @@ public class AddNodeWorkflow implements IWorkflow {
                 entries.add((LogData) dataMap.get(x));
             }
 
-            // Write segment chunk to the new logunit
-            boolean transferSuccess = runtime
-                    .getRouter(endpoint)
-                    .getClient(LogUnitClient.class)
-                    .writeRange(entries).get();
+            for (String endpoint : endpoints) {
+                // Write segment chunk to the new logunit
+                boolean transferSuccess = runtime
+                        .getRouter(endpoint)
+                        .getClient(LogUnitClient.class)
+                        .writeRange(entries).get();
 
-            if (!transferSuccess) {
-                log.error("stateTransfer: Failed to transfer {}-{} to {}", CHUNK_SIZE,
-                        chunkEnd, endpoint);
-                throw new IllegalStateException("Failed to transfer!");
+                if (!transferSuccess) {
+                    log.error("stateTransfer: Failed to transfer {}-{} to {}", CHUNK_SIZE,
+                            chunkEnd, endpoint);
+                    throw new IllegalStateException("Failed to transfer!");
+                }
+
+                log.info("stateTransfer: Transferred address chunk [{}, {}] to {}",
+                        chunkStart, chunkEnd, endpoint);
             }
-
-            log.info("stateTransfer: Transferred address chunk [{}, {}]",
-                    chunkStart, chunkEnd);
         }
     }
 
 
     /**
-     * Copies the split segment to the new node, if it
-     * is the new node also participates as a logging unit.
+     * The new server is caught up with all data.
+     * This server is then added to all the segments to mark it open to all reads and writes.
      */
-    protected class StateTransfer extends Action {
+    protected class RestoreRedundancy extends Action {
+        @Nonnull
         @Override
         public String getName() {
-            return "StateTransfer";
+            return "RestoreRedundancy";
         }
 
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
-            // Transfer the replicated segment to the new node
-            stateTransfer(request.getEndpoint(), runtime, newLayout.getSegment(0));
-        }
-    }
+            runtime.invalidateLayout();
+            newLayout = runtime.getLayoutView().getLayout();
 
-    /**
-     * Merges the fragmented segment if the AddNodeToLayout action caused any
-     * segments to split
-     */
-    protected class MergeSegments extends Action {
-        @Override
-        public String getName() {
-            return "MergeSegments";
-        }
+            // A newly added node can be marked as unresponsive by the fault detector by the
+            // time this action is executed. There are 2 cases following this:
 
-        @Override
-        public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
-            runtime.getLayoutManagementView().mergeSegments(newLayout);
+            // Case 1. The node remains unresponsive.
+            //      State transfer fails.
+            // Case 2. The node is marked responsive again.
+            //      In this case, the node was removed from all segments and was wiped clean.
+            //      So either the healing workflow or the add node workflow will attempt
+            //      to catchup the new node.
+            if (newLayout.getAllActiveServers().contains(request.endpoint)) {
+                // Transfer only till the second last segment as the last segment is unbounded.
+                // The new server is already a part of the last segment. This is based on an
+                // assumption that the newly added node is not removed from the layout.
+                for (int i = 0; i < newLayout.getSegments().size() - 1; i++) {
+                    stateTransfer(Collections.singleton(request.getEndpoint()),
+                            runtime,
+                            newLayout.getSegments().get(i));
+                }
+
+                final int stripeIndex = 0;
+                runtime.getLayoutManagementView()
+                        .addLogUnitReplica(
+                                new Layout(newLayout), request.getEndpoint(), stripeIndex);
+                runtime.invalidateLayout();
+                newLayout = runtime.getLayoutView().getLayout();
+            } else {
+                throw new RuntimeException("RestoreRedundancy: "
+                        + "Node to be added marked unresponsive.");
+            }
         }
     }
 }
