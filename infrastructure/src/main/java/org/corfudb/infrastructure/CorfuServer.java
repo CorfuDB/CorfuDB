@@ -28,7 +28,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
@@ -175,102 +174,92 @@ public class CorfuServer {
                     + " --version                                                                "
                     + "              Show version\n";
 
-    private static volatile AtomicBoolean restart = new AtomicBoolean(false);
-    private static volatile Thread restartThread;
+    private static volatile Thread corfuServerThread;
+    private static volatile Thread shutdownThread;
 
     /**
      * Main program entry point.
-     * @param args  command line argument strings
+     *
+     * @param args command line argument strings
      */
     public static void main(String[] args) {
 
-        do {
-            restart.set(false);
-            // Parse the options given, using docopt.
-            Map<String, Object> opts =
-                    new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe)
-                            .parse(args);
+        // Parse the options given, using docopt.
+        Map<String, Object> opts = new Docopt(USAGE)
+                .withVersion(GitRepositoryState.getRepositoryState().describe)
+                .parse(args);
+        // Print a nice welcome message.
+        AnsiConsole.systemInstall();
+        printStartupMsg(opts);
 
-            // Print a nice welcome message.
-            AnsiConsole.systemInstall();
-            printLogo();
-            int port = Integer.parseInt((String) opts.get("<port>"));
-            println(ansi().a("Welcome to ").fg(RED).a("CORFU ").fg(MAGENTA).a("SERVER")
-                    .reset());
-            println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
-                    .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));
-            println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
-            println(ansi().a("Service directory: ").fg(WHITE).a(
-                    (Boolean) opts.get("--memory") ? "MEMORY mode" :
-                            opts.get("--log-path")).reset());
+        // Pick the correct logging level before outputting error messages.
+        final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
+        root.setLevel(level);
 
+        log.debug("Started with arguments: " + opts);
 
-            // Pick the correct logging level before outputting error messages.
-            final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-            final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
-            root.setLevel(level);
+        // Create the service directory if it does not exist.
+        if (!(Boolean) opts.get("--memory")) {
+            File serviceDir = new File((String) opts.get("--log-path"));
 
-            log.debug("Started with arguments: " + opts);
-
-            // Create the service directory if it does not exist.
-            if (!(Boolean) opts.get("--memory")) {
-                File serviceDir = new File((String) opts.get("--log-path"));
-
-                if (!serviceDir.isDirectory()) {
-                    log.error("Service directory {} does not point to a directory. Aborting.",
-                            serviceDir);
-                    throw new RuntimeException("Service directory must be a directory!");
-                } else {
-                    String corfuServiceDirPath = serviceDir.getAbsolutePath()
-                            + File.separator
-                            + "corfu";
-                    File corfuServiceDir = new File(corfuServiceDirPath);
-                    // Update the new path with the dedicated child service directory.
-                    opts.put("--log-path", corfuServiceDirPath);
-                    if (!corfuServiceDir.exists() && corfuServiceDir.mkdirs()) {
-                        log.info("Created new service directory at {}.", corfuServiceDir);
-                    }
+            if (!serviceDir.isDirectory()) {
+                log.error("Service directory {} does not point to a directory. Aborting.",
+                        serviceDir);
+                throw new UnrecoverableCorfuError("Service directory must be a directory!");
+            } else {
+                String corfuServiceDirPath = serviceDir.getAbsolutePath()
+                        + File.separator
+                        + "corfu";
+                File corfuServiceDir = new File(corfuServiceDirPath);
+                // Update the new path with the dedicated child service directory.
+                opts.put("--log-path", corfuServiceDirPath);
+                if (!corfuServiceDir.exists() && corfuServiceDir.mkdirs()) {
+                    log.info("Created new service directory at {}.", corfuServiceDir);
                 }
             }
+        }
 
-            Thread shutdownThread;
+        corfuServerThread = new Thread(() -> startServer(opts));
+        corfuServerThread.setName("CorfuServer");
+        corfuServerThread.start();
+    }
 
-            // Create a common Server Context for all servers to access.
-            try (ServerContext serverContext = new ServerContext(opts)) {
-                List<AbstractServer> servers = ImmutableList.<AbstractServer>builder()
-                        .add(new BaseServer(serverContext))
-                        .add(new SequencerServer(serverContext))
-                        .add(new LayoutServer(serverContext))
-                        .add(new LogUnitServer(serverContext))
-                        .add(new ManagementServer(serverContext))
-                        .build();
+    /**
+     * Creates all the components of the Corfu Server.
+     * Starts the Server Router.
+     *
+     * @param opts Options passed by the user.
+     */
+    public static void startServer(Map<String, Object> opts) {
 
-                NettyServerRouter router = new NettyServerRouter(servers);
-                serverContext.setServerRouter(router);
+        int port = Integer.parseInt((String) opts.get("<port>"));
 
-                // Register shutdown handler
-                shutdownThread = new Thread(() -> cleanShutdown(router));
-                shutdownThread.setName("ShutdownThread");
-                Runtime.getRuntime().addShutdownHook(shutdownThread);
+        // Create a common Server Context for all servers to access.
+        try (ServerContext serverContext = new ServerContext(opts)) {
+            List<AbstractServer> servers = ImmutableList.<AbstractServer>builder()
+                    .add(new BaseServer(serverContext))
+                    .add(new SequencerServer(serverContext))
+                    .add(new LayoutServer(serverContext))
+                    .add(new LogUnitServer(serverContext))
+                    .add(new ManagementServer(serverContext))
+                    .build();
 
-                startAndListen(serverContext.getBossGroup(),
-                        serverContext.getWorkerGroup(),
-                        b -> configureBootstrapOptions(serverContext, b),
-                        serverContext,
-                        router,
-                        port).channel().closeFuture().syncUninterruptibly();
-            }
+            NettyServerRouter router = new NettyServerRouter(servers);
+            serverContext.setServerRouter(router);
 
-            if (restart.get()) {
-                log.info("Restarting corfu server");
-                try {
-                    restartThread.join();
-                    Runtime.getRuntime().removeShutdownHook(shutdownThread);
-                } catch (InterruptedException ie) {
-                    throw new UnrecoverableCorfuInterruptedError(ie);
-                }
-            }
-        } while (restart.get());
+            // Register shutdown handler
+            shutdownThread = new Thread(() -> cleanShutdown(router));
+            shutdownThread.setName("ShutdownThread");
+            Runtime.getRuntime().addShutdownHook(shutdownThread);
+
+            startAndListen(serverContext.getBossGroup(),
+                    serverContext.getWorkerGroup(),
+                    b -> configureBootstrapOptions(serverContext, b),
+                    serverContext,
+                    router,
+                    port).channel().closeFuture().syncUninterruptibly();
+        }
     }
 
     /** A functional interface for receiving and configuring a {@link ServerBootstrap}.
@@ -447,21 +436,40 @@ public class CorfuServer {
      * @param resetData     Resets and clears all data if True.
      */
     public static void restartServer(ServerContext serverContext, boolean resetData) {
-        restartThread = new Thread(() -> {
-            restart.set(true);
+
+        final Thread previousServerThread = corfuServerThread;
+        final Map<String, Object> opts = serverContext.getServerConfig();
+
+        corfuServerThread = new Thread(() -> {
             cleanShutdown((NettyServerRouter) serverContext.getServerRouter());
             if (resetData && !(Boolean) serverContext.getServerConfig().get("--memory")) {
                 File serviceDir = new File((String) serverContext.getServerConfig()
                         .get("--log-path"));
                 try {
-                    FileUtils.deleteDirectory(serviceDir);
+                    FileUtils.cleanDirectory(serviceDir);
                 } catch (IOException ioe) {
                     throw new UnrecoverableCorfuError(ioe);
                 }
             }
             serverContext.close();
+
+            // Wait for previous server thread to join.
+            try {
+                previousServerThread.join();
+                Runtime.getRuntime().removeShutdownHook(shutdownThread);
+            } catch (InterruptedException ie) {
+                throw new UnrecoverableCorfuInterruptedError(ie);
+            }
+
+            Runtime.getRuntime().removeShutdownHook(shutdownThread);
+
+            // Restart the server.
+            log.info("RestartServer: Restarting corfu server");
+            printStartupMsg(opts);
+            startServer(opts);
         });
-        restartThread.start();
+        corfuServerThread.setName("CorfuServer");
+        corfuServerThread.start();
     }
 
     /**
@@ -525,5 +533,22 @@ public class CorfuServer {
     @SuppressWarnings("checkstyle:printLine")
     private static void println(Object line) {
         System.out.println(line);
+    }
+
+    /**
+     * Print the welcome message, logo and the arguments.
+     *
+     * @param opts Arguments.
+     */
+    private static void printStartupMsg(Map<String, Object> opts) {
+        printLogo();
+        int port = Integer.parseInt((String) opts.get("<port>"));
+        println(ansi().a("Welcome to ").fg(RED).a("CORFU ").fg(MAGENTA).a("SERVER").reset());
+        println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
+                .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));
+        println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
+        println(ansi().a("Service directory: ").fg(WHITE).a(
+                (Boolean) opts.get("--memory") ? "MEMORY mode" :
+                        opts.get("--log-path")).reset());
     }
 }
