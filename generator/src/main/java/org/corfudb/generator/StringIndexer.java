@@ -1,23 +1,26 @@
-package org.corfudb.runtime.collections;
+package org.corfudb.generator;
 
 import java.util.Iterator;
 import java.util.Optional;
 import java.util.stream.Stream;
 
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.CorfuTable.Index;
+
 public class StringIndexer implements CorfuTable.IndexRegistry<String, String> {
 
     public static CorfuTable.IndexName BY_VALUE = () -> "BY_VALUE";
-    public static CorfuTable.IndexName BY_FIRST_LETTER = () -> "BY_FIRST_LETTER";
+    public static CorfuTable.IndexName BY_FIRST_CHAR = () -> "BY_FIRST_LETTER";
 
     private static CorfuTable.Index<String, String, ? extends Comparable<?>> BY_VALUE_INDEX =
             new CorfuTable.Index<>(BY_VALUE, (key, val) -> val);
 
-    private static CorfuTable.Index<String, String, ? extends Comparable<?>> BY_FIRST_LETTER_INDEX =
-            new CorfuTable.Index<>(BY_FIRST_LETTER, (key, val) -> Character.toString(val.charAt(0)));
+    private CorfuTable.Index<String, String, ? extends Comparable<?>> BY_FIRST_CHAR_INDEX =
+            new CorfuTable.Index<>(BY_FIRST_CHAR, (key, val) -> Character.toString(val.charAt(0)));
 
     @Override
-    public Iterator<CorfuTable.Index<String, String, ? extends Comparable<?>>> iterator() {
-        return Stream.of(BY_VALUE_INDEX, BY_FIRST_LETTER_INDEX).iterator();
+    public Iterator<Index<String, String, ? extends Comparable<?>>> iterator() {
+        return Stream.of(BY_VALUE_INDEX, BY_FIRST_CHAR_INDEX).iterator();
     }
 
     @Override
@@ -32,11 +35,11 @@ public class StringIndexer implements CorfuTable.IndexRegistry<String, String> {
                             BY_VALUE_INDEX.getIndexFunction();
             return Optional.of(function);
 
-        } else if (BY_FIRST_LETTER.get().equals(indexName)) {
+        } else if (BY_FIRST_CHAR.get().equals(indexName)) {
             @SuppressWarnings("unchecked")
             CorfuTable.IndexFunction<String, String, I> function =
                     (CorfuTable.IndexFunction<String, String, I>)
-                            BY_FIRST_LETTER_INDEX.getIndexFunction();
+                            BY_FIRST_CHAR_INDEX.getIndexFunction();
             return Optional.of(function);
         } else {
             return Optional.empty();

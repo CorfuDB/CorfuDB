@@ -3,13 +3,11 @@ package org.corfudb.generator;
 import com.google.common.reflect.TypeToken;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
-import lombok.RequiredArgsConstructor;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.OperationCount;
 import org.corfudb.generator.distributions.Operations;
@@ -27,21 +25,6 @@ import lombok.Setter;
  * Created by maithem on 7/14/17.
  */
 public class State {
-
-    @RequiredArgsConstructor
-    public enum StringIndexer implements
-            CorfuTable.IndexSpecification<String, String, String, String> {
-        BY_VALUE((k,v) -> Collections.singleton(v)),
-        BY_FIRST_CHAR((k, v) -> Collections.singleton(Character.toString(v.charAt(0))))
-        ;
-
-        @Getter
-        final CorfuTable.IndexFunction<String, String, String> indexFunction;
-
-        @Getter
-        final CorfuTable.ProjectionFunction<String, String, String, String> projectionFunction
-                = (i, s) -> s.map(entry -> entry.getValue());
-    }
 
     @Getter
     final Streams streams;
@@ -97,12 +80,11 @@ public class State {
     private void openObjects() {
         for (String id: streams.getDataSet()) {
             UUID uuid = CorfuRuntime.getStreamID(id);
-            CorfuTable<String, String, StringIndexer, String> map = runtime.getObjectsView()
+            CorfuTable<String, String> map = runtime.getObjectsView()
                     .build()
                     .setStreamID(uuid)
-                    .setTypeToken(new TypeToken<CorfuTable<String, String,
-                            StringIndexer, String>>() {})
-                    .setArguments(StringIndexer.class)
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                    .setArguments(new StringIndexer())
                     .open();
 
             maps.put(uuid, map);
