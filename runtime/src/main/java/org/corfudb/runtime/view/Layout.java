@@ -149,8 +149,8 @@ public class Layout {
      * @param endpoint the endpoint to return all the segments for
      * @return a set of segments that contain the endpoint
      */
-    public Set<LayoutSegment> getSegmentsForEndpoint(@Nonnull String endpoint) {
-        Set<LayoutSegment> res = new HashSet<>();
+    public List<LayoutSegment> getSegmentsForEndpoint(@Nonnull String endpoint) {
+        List<LayoutSegment> res = new ArrayList<>();
 
         for (LayoutSegment segment : getSegments()) {
             for (LayoutStripe stripe : segment.getStripes()) {
@@ -555,6 +555,17 @@ public class Layout {
 
         public int getNumberOfStripes() {
             return stripes.size();
+        }
+
+        /**
+         * Get all servers from all stripes present in this segment.
+         *
+         * @return Set of log unit servers.
+         */
+        public Set<String> getAllLogServers() {
+            return this.getStripes().stream()
+                    .flatMap(layoutStripe -> layoutStripe.getLogServers().stream())
+                    .collect(Collectors.toSet());
         }
     }
 

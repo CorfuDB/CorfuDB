@@ -44,8 +44,9 @@ public class AddNode extends WorkflowRequest {
         // Verify that the node has been added and that the address space isn't
         // segmented
         return runtime.getLayoutView().getLayout()
-                .getAllServers().contains(nodeForWorkflow) &&
-                layout.getSegmentsForEndpoint(nodeForWorkflow).size() == 1;
+                .getAllServers().contains(nodeForWorkflow)
+                && layout.getSegmentsForEndpoint(nodeForWorkflow).size()
+                == layout.getSegments().size();
     }
 
     @Override

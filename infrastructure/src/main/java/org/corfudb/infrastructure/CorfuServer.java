@@ -22,6 +22,7 @@ import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import java.io.File;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -33,6 +34,7 @@ import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.FileUtils;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -172,33 +174,27 @@ public class CorfuServer {
                     + " --version                                                                "
                     + "              Show version\n";
 
+    private static volatile Thread corfuServerThread;
+    private static volatile Thread shutdownThread;
+
     /**
      * Main program entry point.
-     * @param args  command line argument strings
+     *
+     * @param args command line argument strings
      */
     public static void main(String[] args) {
-        // Parse the options given, using docopt.
-        Map<String, Object> opts =
-                new Docopt(USAGE).withVersion(GitRepositoryState.getRepositoryState().describe)
-                        .parse(args);
 
+        // Parse the options given, using docopt.
+        Map<String, Object> opts = new Docopt(USAGE)
+                .withVersion(GitRepositoryState.getRepositoryState().describe)
+                .parse(args);
         // Print a nice welcome message.
         AnsiConsole.systemInstall();
-        printLogo();
-        int port = Integer.parseInt((String) opts.get("<port>"));
-        println(ansi().a("Welcome to ").fg(RED).a("CORFU ").fg(MAGENTA).a("SERVER")
-                .reset());
-        println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
-                .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));
-        println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
-        println(ansi().a("Service directory: ").fg(WHITE).a(
-                (Boolean) opts.get("--memory") ? "MEMORY mode" :
-                        opts.get("--log-path")).reset());
-
+        printStartupMsg(opts);
 
         // Pick the correct logging level before outputting error messages.
         final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-        final Level level = Level.toLevel(((String)opts.get("--log-level")).toUpperCase());
+        final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
         root.setLevel(level);
 
         log.debug("Started with arguments: " + opts);
@@ -210,7 +206,7 @@ public class CorfuServer {
             if (!serviceDir.isDirectory()) {
                 log.error("Service directory {} does not point to a directory. Aborting.",
                         serviceDir);
-                throw new RuntimeException("Service directory must be a directory!");
+                throw new UnrecoverableCorfuError("Service directory must be a directory!");
             } else {
                 String corfuServiceDirPath = serviceDir.getAbsolutePath()
                         + File.separator
@@ -224,6 +220,21 @@ public class CorfuServer {
             }
         }
 
+        corfuServerThread = new Thread(() -> startServer(opts));
+        corfuServerThread.setName("CorfuServer");
+        corfuServerThread.start();
+    }
+
+    /**
+     * Creates all the components of the Corfu Server.
+     * Starts the Server Router.
+     *
+     * @param opts Options passed by the user.
+     */
+    public static void startServer(Map<String, Object> opts) {
+
+        int port = Integer.parseInt((String) opts.get("<port>"));
+
         // Create a common Server Context for all servers to access.
         try (ServerContext serverContext = new ServerContext(opts)) {
             List<AbstractServer> servers = ImmutableList.<AbstractServer>builder()
@@ -235,18 +246,19 @@ public class CorfuServer {
                     .build();
 
             NettyServerRouter router = new NettyServerRouter(servers);
+            serverContext.setServerRouter(router);
 
             // Register shutdown handler
-            Thread shutdownThread = new Thread(() -> cleanShutdown(router));
+            shutdownThread = new Thread(() -> cleanShutdown(router));
             shutdownThread.setName("ShutdownThread");
             Runtime.getRuntime().addShutdownHook(shutdownThread);
 
             startAndListen(serverContext.getBossGroup(),
-                serverContext.getWorkerGroup(),
-                b -> configureBootstrapOptions(serverContext, b),
-                serverContext,
-                router,
-                port).channel().closeFuture().syncUninterruptibly();
+                    serverContext.getWorkerGroup(),
+                    b -> configureBootstrapOptions(serverContext, b),
+                    serverContext,
+                    router,
+                    port).channel().closeFuture().syncUninterruptibly();
         }
     }
 
@@ -418,6 +430,49 @@ public class CorfuServer {
     }
 
     /**
+     * Cleanly shuts down the server and restarts.
+     *
+     * @param serverContext Server Context.
+     * @param resetData     Resets and clears all data if True.
+     */
+    public static void restartServer(ServerContext serverContext, boolean resetData) {
+
+        final Thread previousServerThread = corfuServerThread;
+        final Map<String, Object> opts = serverContext.getServerConfig();
+
+        corfuServerThread = new Thread(() -> {
+            cleanShutdown((NettyServerRouter) serverContext.getServerRouter());
+            if (resetData && !(Boolean) serverContext.getServerConfig().get("--memory")) {
+                File serviceDir = new File((String) serverContext.getServerConfig()
+                        .get("--log-path"));
+                try {
+                    FileUtils.cleanDirectory(serviceDir);
+                } catch (IOException ioe) {
+                    throw new UnrecoverableCorfuError(ioe);
+                }
+            }
+            serverContext.close();
+
+            // Wait for previous server thread to join.
+            try {
+                previousServerThread.join();
+                Runtime.getRuntime().removeShutdownHook(shutdownThread);
+            } catch (InterruptedException ie) {
+                throw new UnrecoverableCorfuInterruptedError(ie);
+            }
+
+            Runtime.getRuntime().removeShutdownHook(shutdownThread);
+
+            // Restart the server.
+            log.info("RestartServer: Restarting corfu server");
+            printStartupMsg(opts);
+            startServer(opts);
+        });
+        corfuServerThread.setName("CorfuServer");
+        corfuServerThread.start();
+    }
+
+    /**
      * Attempt to cleanly shutdown all the servers.
      */
     public static void cleanShutdown(@Nonnull NettyServerRouter router) {
@@ -478,5 +533,22 @@ public class CorfuServer {
     @SuppressWarnings("checkstyle:printLine")
     private static void println(Object line) {
         System.out.println(line);
+    }
+
+    /**
+     * Print the welcome message, logo and the arguments.
+     *
+     * @param opts Arguments.
+     */
+    private static void printStartupMsg(Map<String, Object> opts) {
+        printLogo();
+        int port = Integer.parseInt((String) opts.get("<port>"));
+        println(ansi().a("Welcome to ").fg(RED).a("CORFU ").fg(MAGENTA).a("SERVER").reset());
+        println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
+                .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));
+        println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
+        println(ansi().a("Service directory: ").fg(WHITE).a(
+                (Boolean) opts.get("--memory") ? "MEMORY mode" :
+                        opts.get("--log-path")).reset());
     }
 }

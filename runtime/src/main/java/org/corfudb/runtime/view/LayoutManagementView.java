@@ -7,6 +7,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import javax.annotation.Nonnull;
+
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -21,8 +23,6 @@ import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.util.CFUtils;
-
-import javax.annotation.Nonnull;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
@@ -65,7 +65,7 @@ public class LayoutManagementView extends AbstractView {
     public void handleFailure(IReconfigurationHandlerPolicy failureHandlerPolicy,
                               Layout currentLayout,
                               Set<String> failedServers)
-            throws QuorumUnreachableException, OutrankedException, LayoutModificationException {
+            throws OutrankedException, LayoutModificationException {
 
         // Generates a new layout by removing the failed nodes from the existing layout
         Layout newLayout = failureHandlerPolicy
@@ -109,11 +109,10 @@ public class LayoutManagementView extends AbstractView {
      * @param isLogUnitServer      is a log unit server
      * @param isUnresponsiveServer is an unresponsive server
      * @param logUnitStripeIndex   stripe index to be added into if its a log unit.
-     * @throws QuorumUnreachableException if seal or consensus cannot be achieved.
-     * @throws OutrankedException         if consensus outranked.
+     * @throws OutrankedException if consensus outranked.
      */
-    public void addNode(Layout currentLayout,
-                        String endpoint,
+    public void addNode(@Nonnull Layout currentLayout,
+                        @Nonnull String endpoint,
                         boolean isLayoutServer,
                         boolean isSequencerServer,
                         boolean isLogUnitServer,
@@ -162,7 +161,7 @@ public class LayoutManagementView extends AbstractView {
      *
      * @param currentLayout Current layout.
      * @param endpoint      New endpoint to be added.
-     * @throws OutrankedException         if consensus outranked.
+     * @throws OutrankedException if consensus outranked.
      */
     public void healNode(Layout currentLayout, String endpoint) throws OutrankedException {
 
@@ -196,12 +195,9 @@ public class LayoutManagementView extends AbstractView {
      * Attempts to merge the last 2 segments.
      *
      * @param currentLayout Current layout
-     * @return True if merge successful, else False.
-     * @throws QuorumUnreachableException if seal or consensus could not be achieved.
-     * @throws OutrankedException         if consensus is outranked.
+     * @throws OutrankedException if consensus is outranked.
      */
-    public boolean mergeSegments(Layout currentLayout)
-            throws QuorumUnreachableException, OutrankedException {
+    public void mergeSegments(Layout currentLayout) throws OutrankedException {
 
         Layout newLayout;
         if (currentLayout.getSegments().size() > 1) {
@@ -213,7 +209,7 @@ public class LayoutManagementView extends AbstractView {
 
             LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
             newLayout = layoutBuilder
-                    .mergePreviousSegment(currentLayout.getSegments().size() - 1)
+                    .mergePreviousSegment(1)
                     .build();
             newLayout.setRuntime(runtime);
             attemptConsensus(newLayout);
@@ -222,14 +218,45 @@ public class LayoutManagementView extends AbstractView {
             newLayout = currentLayout;
         }
         reconfigureSequencerServers(currentLayout, newLayout, false);
-        return true;
+    }
+
+    /**
+     * Add the log unit to the segment to increase redundancy. This is preceded by state transfer.
+     * Adds the specified log unit to the stripe in all segments, increments the epoch and
+     * proposes the new layout. This method is idempotent - adds the new log unit to each segment
+     * only once.
+     *
+     * @param currentLayout Current layout.
+     * @param endpoint      Endpoint to be added to the segment.
+     * @param stripeIndex   Stripe index.
+     * @throws OutrankedException if consensus is outranked.
+     */
+    public void addLogUnitReplica(@Nonnull Layout currentLayout,
+                                  @Nonnull String endpoint,
+                                  int stripeIndex) throws OutrankedException {
+        boolean isTaskDone = currentLayout.getSegments().stream()
+                .map(layoutSegment -> layoutSegment.getStripes().get(stripeIndex))
+                .allMatch(layoutStripe -> layoutStripe.getLogServers().contains(endpoint));
+
+        if (!isTaskDone) {
+            LayoutBuilder builder = new LayoutBuilder(currentLayout);
+            for (int i = 0; i < currentLayout.getSegments().size(); i++) {
+                builder.addLogunitServerToSegment(endpoint, i, stripeIndex);
+            }
+            Layout newLayout = builder.setEpoch(currentLayout.getEpoch() + 1).build();
+            newLayout.setRuntime(runtime);
+            runLayoutReconfiguration(currentLayout, newLayout, false);
+        } else {
+            log.info("addLogUnitReplica: Ignoring task because {} present in all segments in {}",
+                    endpoint, currentLayout);
+        }
     }
 
     /**
      * Best effort attempt to removes a node from the layout.
      *
      * @param currentLayout the layout to remove the node from
-     * @param endpoint the node to remove
+     * @param endpoint      the node to remove
      */
     public void removeNode(@Nonnull Layout currentLayout,
                            @Nonnull String endpoint) throws OutrankedException {
@@ -295,12 +322,11 @@ public class LayoutManagementView extends AbstractView {
      * @param currentLayout          Layout which needs to be sealed.
      * @param newLayout              New layout to be committed.
      * @param forceSequencerRecovery Flag. True if want to force sequencer recovery.
-     * @throws QuorumUnreachableException if seal or consensus could not be achieved.
-     * @throws OutrankedException         if consensus is outranked.
+     * @throws OutrankedException if consensus is outranked.
      */
     private void runLayoutReconfiguration(Layout currentLayout, Layout newLayout,
                                           final boolean forceSequencerRecovery)
-            throws QuorumUnreachableException, OutrankedException {
+            throws OutrankedException {
 
         // Seals the incremented epoch (Assumes newLayout epoch = currentLayout epoch + 1).
         currentLayout.setRuntime(runtime);
@@ -330,11 +356,10 @@ public class LayoutManagementView extends AbstractView {
      * Attempt consensus.
      *
      * @param layout Layout to propose.
-     * @throws OutrankedException         if consensus is outranked.
-     * @throws QuorumUnreachableException if consensus could not be achieved.
+     * @throws OutrankedException if consensus is outranked.
      */
     private void attemptConsensus(Layout layout)
-            throws OutrankedException, QuorumUnreachableException {
+            throws OutrankedException {
         // Attempts to update all the layout servers with the modified layout.
         try {
             runtime.getLayoutView().updateLayout(layout, prepareRank);
