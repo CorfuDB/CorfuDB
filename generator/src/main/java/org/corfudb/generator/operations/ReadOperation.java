@@ -3,6 +3,7 @@ package org.corfudb.generator.operations;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
 import org.corfudb.generator.State;
+import org.corfudb.generator.StringIndexer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -31,9 +32,9 @@ public class ReadOperation extends Operation {
 
         // Accessing secondary objects
         ((CorfuTable)state.getMap((CorfuRuntime.getStreamID(streamId)))).
-                getByIndex(State.StringIndexer.BY_FIRST_CHAR, "a");
+                getByIndex(StringIndexer.BY_FIRST_CHAR, "a");
         ((CorfuTable)state.getMap((CorfuRuntime.getStreamID(streamId)))).
-                getByIndex(State.StringIndexer.BY_VALUE, val);
+                getByIndex(StringIndexer.BY_VALUE, val);
 
         if (!TransactionalContext.isInTransaction()) {
             state.setLastSuccessfulReadOperationTimestamp(System.currentTimeMillis());

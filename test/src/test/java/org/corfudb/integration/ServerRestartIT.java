@@ -6,6 +6,7 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuTableTest;
+import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
@@ -668,11 +669,8 @@ public class ServerRestartIT extends AbstractIT {
 
     private CorfuTable createTable(CorfuRuntime corfuRuntime) {
         return corfuRuntime.getObjectsView().build()
-                .setTypeToken(
-                        new TypeToken<CorfuTable<String, String,
-                                CorfuTableTest.StringIndexers, String>>() {
-                        })
-                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
     }
@@ -694,8 +692,7 @@ public class ServerRestartIT extends AbstractIT {
 
         // Write 1000 entries.
         CorfuRuntime rt1 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
-        CorfuTable<String, String, CorfuTableTest.StringIndexers, String> corfuTable1 =
-                createTable(rt1);
+        CorfuTable<String, String> corfuTable1 = createTable(rt1);
         final int num = 1000;
         for (int i = 0; i < num; i++) {
             corfuTable1.put(Integer.toString(i), Integer.toString(i));
@@ -705,10 +702,10 @@ public class ServerRestartIT extends AbstractIT {
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(corfuTable1);
         long trimMark = mcw.appendCheckpoints(rt1, "author");
-        Collection<String> c1a =
-                corfuTable1.getByIndex(CorfuTableTest.StringIndexers.BY_FIRST_LETTER, "9");
-        Collection<String> c1b =
-                corfuTable1.getByIndex(CorfuTableTest.StringIndexers.BY_VALUE, "9");
+        Collection<Map.Entry<String, String>> c1a =
+                corfuTable1.getByIndex(StringIndexer.BY_FIRST_LETTER, "9");
+        Collection<Map.Entry<String, String>> c1b =
+                corfuTable1.getByIndex(StringIndexer.BY_VALUE, "9");
         rt1.getAddressSpaceView().prefixTrim(trimMark);
         rt1.getAddressSpaceView().invalidateClientCache();
         rt1.getAddressSpaceView().invalidateServerCaches();
@@ -720,10 +717,9 @@ public class ServerRestartIT extends AbstractIT {
 
         // Start a new client and verify the index.
         CorfuRuntime rt2 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
-        CorfuTable<String, String, CorfuTableTest.StringIndexers, String> corfuTable2 =
-                createTable(rt2);
-        Collection<String> c2 =
-                corfuTable2.getByIndex(CorfuTableTest.StringIndexers.BY_FIRST_LETTER, "9");
+        CorfuTable<String, String> corfuTable2 = createTable(rt2);
+        Collection<Map.Entry<String, String>> c2 =
+                corfuTable2.getByIndex(StringIndexer.BY_FIRST_LETTER, "9");
         assertThat(c1a.size()).isEqualTo(c2.size());
         assertThat(c1a.containsAll(c2)).isTrue();
 
@@ -732,10 +728,9 @@ public class ServerRestartIT extends AbstractIT {
                 .setLoadSmrMapsAtConnect(false)
                 .setCacheDisabled(true)
                 .connect();
-        CorfuTable<String, String, CorfuTableTest.StringIndexers, String> corfuTable3 =
-                createTable(rt3);
-        Collection<String> c3 =
-                corfuTable3.getByIndex(CorfuTableTest.StringIndexers.BY_VALUE, "9");
+        CorfuTable<String, String> corfuTable3 = createTable(rt3);
+        Collection<Map.Entry<String, String>> c3 =
+                corfuTable3.getByIndex(StringIndexer.BY_VALUE, "9");
         assertThat(c1b.size()).isEqualTo(c3.size());
         assertThat(c1b.containsAll(c3)).isTrue();
 

@@ -1,5 +1,6 @@
 package org.corfudb.recovery;
 
+import org.assertj.core.data.MapEntry;
 import org.corfudb.CustomSerializer;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -10,8 +11,8 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.CorfuTableTest;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -732,7 +733,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
         ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
-                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setArguments(new StringIndexer())
                 .setStreamID(CorfuRuntime.getStreamID("test"));
         fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test"), ob);
         fsmr.loadMaps();
@@ -767,7 +768,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         CorfuTable originalTable = originalRuntime.getObjectsView().build()
                 .setType(CorfuTable.class)
-                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
 
@@ -785,8 +786,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-        fsmr.addIndexerToCorfuTableStream("test",
-                CorfuTableTest.StringIndexers.class);
+        fsmr.addIndexerToCorfuTableStream("test", new StringIndexer());
         fsmr.setDefaultObjectsType(CorfuTable.class);
         fsmr.loadMaps();
 
@@ -795,17 +795,18 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         // Recreating the table without explicitly providing the indexer
         CorfuTable recreatedTable = recreatedRuntime.getObjectsView().build()
                 .setType(CorfuTable.class)
+                .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
 
-        assertThat(recreatedTable.getByIndex(CorfuTableTest.StringIndexers.BY_FIRST_LETTER, "a"))
-                .containsExactly("a", "ab");
+        assertThat(recreatedTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a"))
+                .containsExactlyInAnyOrder(MapEntry.entry("k1", "a"), MapEntry.entry("k2", "ab"));
 
         Helpers.getVersionLockedObject(recreatedRuntime, "test", CorfuTable.class).resetUnsafe();
 
         recreatedTable.get("k3");
         assertThat(recreatedTable.hasSecondaryIndices()).isTrue();
-        recreatedTable.getByIndex(CorfuTableTest.StringIndexers.BY_FIRST_LETTER, "a");
+        recreatedTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a");
     }
 
     @Test
@@ -840,7 +841,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
         ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
-                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setArguments(new StringIndexer())
                 .setStreamID(CorfuRuntime.getStreamID("corfuTable"));
         fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("corfuTable"), ob);
         fsmr.loadMaps();
@@ -869,7 +870,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
         ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
-                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setArguments(new StringIndexer())
                 .setStreamID(CorfuRuntime.getStreamID("test"));
         fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test"), ob);
         fsmr.loadMaps();
