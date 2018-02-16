@@ -29,6 +29,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.CorfuTable.IndexRegistry;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
@@ -146,13 +147,14 @@ public class FastObjectLoader {
 
     /**
      * Add an indexer to a stream (that backs a CorfuTable)
-     * @param streamName
-     * @param indexer
+     *
+     * @param streamName    Stream name.
+     * @param indexRegistry Index Registry.
      */
-    public void addIndexerToCorfuTableStream(String streamName, Class<?> indexer) {
+    public void addIndexerToCorfuTableStream(String streamName, IndexRegistry indexRegistry) {
         UUID streamId = CorfuRuntime.getStreamID(streamName);
         ObjectBuilder ob = new ObjectBuilder(runtime).setType(CorfuTable.class)
-                .setArguments(indexer).setStreamID(streamId);
+                .setArguments(indexRegistry).setStreamID(streamId);
         addCustomTypeStream(streamId, ob);
     }
 
