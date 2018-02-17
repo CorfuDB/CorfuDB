@@ -220,49 +220,6 @@ public class Layout {
     }
 
     /**
-     * Return the layout client for a particular index.
-     *
-     * @param index The index to return a layout client for.
-     * @return The layout client at that index, or null, if there is
-     *         no client at that index.
-     */
-    public LayoutClient getLayoutClient(int index) {
-        try {
-            String s = layoutServers.get(index);
-            return runtime.getRouter(s).getClient(LayoutClient.class);
-        } catch (IndexOutOfBoundsException ix) {
-            return null;
-        }
-    }
-
-    /**
-     * Get a java stream representing all layout clients for this layout.
-     *
-     * @return A java stream representing all layout clients.
-     */
-    public Stream<LayoutClient> getLayoutClientStream() {
-        return layoutServers.stream()
-                .map(runtime::getRouter)
-                .map(x -> x.getClient(LayoutClient.class));
-    }
-
-    /**
-     * Return the sequencer client for a particular index.
-     *
-     * @param index The index to return a sequencer client for.
-     * @return The sequencer client at that index, or null, if there is
-     *         no client at that index.
-     */
-    public SequencerClient getSequencer(int index) {
-        try {
-            String s = sequencers.get(index);
-            return runtime.getRouter(s).getClient(SequencerClient.class);
-        } catch (IndexOutOfBoundsException ix) {
-            return null;
-        }
-    }
-
-    /**
      * Given the log's global address, return equivalent local address for a striped log segment.
      *
      * @param globalAddress The global address
@@ -366,19 +323,6 @@ public class Layout {
         }
         return null;
     }
-
-    /**
-     * Get a log unit client at a given index of a particular address.
-     *
-     * @param address The address to check.
-     * @param index   The index of the segment.
-     * @return A log unit client, if present. Null otherwise.
-     */
-    public LogUnitClient getLogUnitClient(long address, int index) {
-        return runtime.getRouter(getStripe(address).getLogServers()
-                .get(index)).getClient(LogUnitClient.class);
-    }
-
 
     /**
      * Get the layout as a JSON string.

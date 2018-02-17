@@ -116,9 +116,7 @@ public class LayoutView extends AbstractView {
                     CompletableFuture<LayoutPrepareResponse> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
-                        LayoutClient layoutClient = runtime.getRouter(x)
-                                .getClient(LayoutClient.class);
-                        cf = layoutClient.prepare(epoch, rank);
+                        cf = runtime.getLayoutClient(getLayout(), x).prepare(epoch, rank);
                     } catch (Exception e) {
                         cf.completeExceptionally(e);
                     }
@@ -207,9 +205,7 @@ public class LayoutView extends AbstractView {
                     CompletableFuture<Boolean> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
-                        LayoutClient layoutClient = runtime.getRouter(x)
-                                .getClient(LayoutClient.class);
-                        cf =  layoutClient.propose(epoch, rank, layout);
+                        cf = runtime.getLayoutClient(getLayout(), x).propose(epoch, rank, layout);
                     } catch (NetworkException e) {
                         cf.completeExceptionally(e);
                     }
@@ -292,12 +288,10 @@ public class LayoutView extends AbstractView {
                     CompletableFuture<Boolean> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
-                        LayoutClient layoutClient = runtime.getRouter(x)
-                                .getClient(LayoutClient.class);
                         if (force) {
-                            cf = layoutClient.force(layout);
+                            cf = runtime.getLayoutClient(layout, x).force(layout);
                         } else {
-                            cf = layoutClient.committed(epoch, layout);
+                            cf = runtime.getLayoutClient(layout, x).committed(epoch, layout);
                         }
                     } catch (NetworkException e) {
                         cf.completeExceptionally(e);

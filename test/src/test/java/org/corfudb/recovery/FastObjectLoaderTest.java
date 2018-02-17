@@ -16,6 +16,7 @@ import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -181,10 +182,11 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canReadHoles() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2);
 
-        LogUnitClient luc = getDefaultRuntime().getRouter(getDefaultConfigurationString())
-                .getClient(LogUnitClient.class);
-        SequencerClient seq = getDefaultRuntime().getRouter(getDefaultConfigurationString())
-                .getClient(SequencerClient.class);
+        Layout layout = getDefaultRuntime().getLayoutView().getLayout();
+        LogUnitClient luc = getDefaultRuntime()
+                .getLogUnitClient(layout, getDefaultConfigurationString());
+        SequencerClient seq = getDefaultRuntime()
+                .getSequencerClient(layout, getDefaultConfigurationString());
 
         seq.nextToken(null, 1);
         luc.fillHole(getDefaultRuntime().getSequencerView()
@@ -400,10 +402,11 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canReadRankOnlyEntries() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, 2);
 
-        LogUnitClient luc = getDefaultRuntime().getRouter(getDefaultConfigurationString())
-                .getClient(LogUnitClient.class);
-        SequencerClient seq = getDefaultRuntime().getRouter(getDefaultConfigurationString())
-                .getClient(SequencerClient.class);
+        Layout layout = getDefaultRuntime().getLayoutView().getLayout();
+        LogUnitClient luc = getDefaultRuntime()
+                .getLogUnitClient(layout, getDefaultConfigurationString());
+        SequencerClient seq = getDefaultRuntime()
+                .getSequencerClient(layout, getDefaultConfigurationString());
 
         long address = seq.nextToken(Collections.emptySet(),1).get().getTokenValue();
         ILogData data = Helpers.createEmptyData(address, DataType.RANK_ONLY,  new IMetadata.DataRank(2))

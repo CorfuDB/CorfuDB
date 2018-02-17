@@ -37,9 +37,9 @@ public class SealServersHelper {
             CompletableFuture<Boolean> cf = new CompletableFuture<>();
             try {
                 // Creating router can cause NetworkException which should be handled.
-                BaseClient baseClient = layout.getRuntime().getRouter(server)
-                        .getClient(BaseClient.class);
-                cf = baseClient.setRemoteEpoch(layout.getEpoch());
+                cf = layout.getRuntime()
+                        .getBaseClient(layout, server)
+                        .setRemoteEpoch(layout.getEpoch());
             } catch (NetworkException ne) {
                 cf.completeExceptionally(ne);
                 log.error("Remote seal SET_EPOCH failed for server {} with {}", server, ne);

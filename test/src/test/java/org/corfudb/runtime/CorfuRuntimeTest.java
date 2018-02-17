@@ -203,7 +203,8 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         runtime.invalidateLayout();
         runtime.layout.get();
 
-        LogUnitClient luc = runtime.getRouter(SERVERS.ENDPOINT_0).getClient(LogUnitClient.class);
+        LogUnitClient luc = runtime
+                .getLogUnitClient(runtime.getLayoutView().getLayout(), SERVERS.ENDPOINT_0);
 
         assertThatThrownBy(() -> luc.read(0).get())
                 .isInstanceOf(ExecutionException.class)

@@ -61,10 +61,9 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
             runtime.invalidateLayout();
-            if (runtime.getLayoutView().getLayout().getUnresponsiveServers()
-                    .contains(request.getEndpoint())) {
-                runtime.getRouter(request.getEndpoint())
-                        .getClient(LogUnitClient.class)
+            newLayout = new Layout(runtime.getLayoutView().getLayout());
+            if (newLayout.getUnresponsiveServers().contains(request.getEndpoint())) {
+                runtime.getLogUnitClient(newLayout, request.getEndpoint())
                         .resetLogUnit()
                         .get();
             }

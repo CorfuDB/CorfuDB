@@ -88,12 +88,11 @@ public class LayoutManagementView extends AbstractView {
     public void bootstrapNewNode(String endpoint) {
 
         // Bootstrap the to-be added node with the old layout.
-        IClientRouter newEndpointRouter = runtime.getRouter(endpoint);
         Layout layout = new Layout(runtime.getLayoutView().getLayout());
         // Ignoring call result as the call returns ACK or throws an exception.
-        CFUtils.getUninterruptibly(newEndpointRouter.getClient(LayoutClient.class)
+        CFUtils.getUninterruptibly(runtime.getLayoutClient(layout, endpoint)
                 .bootstrapLayout(layout));
-        CFUtils.getUninterruptibly(newEndpointRouter.getClient(ManagementClient.class)
+        CFUtils.getUninterruptibly(runtime.getManagementClient(layout, endpoint)
                 .bootstrapManagement(layout));
 
         log.info("bootstrapNewNode: New node {} bootstrapped.", endpoint);
@@ -136,7 +135,7 @@ public class LayoutManagementView extends AbstractView {
                 Layout.LayoutSegment latestSegment =
                         currentLayout.getSegments().get(currentLayout.getSegments().size() - 1);
                 layoutBuilder.addLogunitServer(logUnitStripeIndex,
-                        getMaxGlobalTail(latestSegment),
+                        getMaxGlobalTail(currentLayout, latestSegment),
                         endpoint);
             }
             if (isUnresponsiveServer) {
@@ -174,7 +173,7 @@ public class LayoutManagementView extends AbstractView {
             Layout.LayoutSegment latestSegment =
                     currentLayout.getSegments().get(currentLayout.getSegments().size() - 1);
             layoutBuilder.addLogunitServer(0,
-                    getMaxGlobalTail(latestSegment),
+                    getMaxGlobalTail(currentLayout, latestSegment),
                     endpoint);
             layoutBuilder.removeUnresponsiveServers(Collections.singleton(endpoint));
             newLayout = layoutBuilder.build();
@@ -392,19 +391,20 @@ public class LayoutManagementView extends AbstractView {
      * CHAIN: Block on fetch of global log tail from the head log unitin every stripe.
      * QUORUM: Block on fetch of global log tail from a majority in every stripe.
      *
+     * @param layout  Latest layout to get clients to fetch tails.
      * @param segment Latest layout segment.
      * @return The max global log tail obtained from the log unit servers.
      */
-    private long getMaxGlobalTail(Layout.LayoutSegment segment) {
+    private long getMaxGlobalTail(Layout layout, Layout.LayoutSegment segment) {
         long maxTokenRequested = 0;
 
         // Query the tail of the head log unit in every stripe.
         if (segment.getReplicationMode().equals(Layout.ReplicationMode.CHAIN_REPLICATION)) {
             for (Layout.LayoutStripe stripe : segment.getStripes()) {
                 maxTokenRequested = Math.max(maxTokenRequested,
-                        CFUtils.getUninterruptibly(runtime.getRouter(stripe
-                                .getLogServers().get(0))
-                                .getClient(LogUnitClient.class).getTail()));
+                        CFUtils.getUninterruptibly(
+                                runtime.getLogUnitClient(layout, stripe.getLogServers().get(0))
+                                        .getTail()));
 
             }
         } else if (segment.getReplicationMode()
@@ -412,7 +412,7 @@ public class LayoutManagementView extends AbstractView {
             for (Layout.LayoutStripe stripe : segment.getStripes()) {
                 CompletableFuture<Long>[] completableFutures = stripe.getLogServers()
                         .stream()
-                        .map(s -> runtime.getRouter(s).getClient(LogUnitClient.class).getTail())
+                        .map(s -> runtime.getLogUnitClient(layout, s).getTail())
                         .toArray(CompletableFuture[]::new);
                 QuorumFuturesFactory.CompositeFuture<Long> quorumFuture =
                         QuorumFuturesFactory.getQuorumFuture(Comparator.naturalOrder(),
@@ -447,7 +447,7 @@ public class LayoutManagementView extends AbstractView {
                 .get(0))) {
             Layout.LayoutSegment latestSegment = newLayout.getSegments()
                     .get(newLayout.getSegments().size() - 1);
-            maxTokenRequested = getMaxGlobalTail(latestSegment);
+            maxTokenRequested = getMaxGlobalTail(newLayout, latestSegment);
 
             FastObjectLoader fastObjectLoader = new FastObjectLoader(runtime);
             fastObjectLoader.setRecoverSequencerMode(true);
@@ -463,10 +463,11 @@ public class LayoutManagementView extends AbstractView {
             maxTokenRequested++;
         }
 
+        CorfuRuntime corfuRuntime = newLayout.getRuntime();
+
         // Configuring the new sequencer.
         boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(
-                newLayout
-                        .getSequencer(0)
+                corfuRuntime.getSequencerClient(newLayout, 0)
                         .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch()));
         if (sequencerBootstrapResult) {
             log.info("Sequencer bootstrap successful.");

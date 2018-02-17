@@ -230,9 +230,7 @@ public class AddressSpaceView extends AbstractView {
             return l.segments.stream()
                     .flatMap(seg -> seg.getStripes().stream())
                     .flatMap(stripe -> stripe.getLogServers().stream())
-                    .map(endpoint ->
-                            runtime.getRouter(endpoint)
-                                    .getClient(LogUnitClient.class))
+                    .map(endpoint -> runtime.getLogUnitClient(l, endpoint))
                     .map(LogUnitClient::getTrimMark)
                     .map(CFUtils::getUninterruptibly)
                     .max(Comparator.naturalOrder()).get();
@@ -256,9 +254,7 @@ public class AddressSpaceView extends AbstractView {
                         l.getPrefixSegments(address).stream()
                                 .flatMap(seg -> seg.getStripes().stream())
                                 .flatMap(stripe -> stripe.getLogServers().stream())
-                                .map(endpoint ->
-                                        runtime.getRouter(endpoint)
-                                                .getClient(LogUnitClient.class))
+                                .map(endpoint -> runtime.getLogUnitClient(l, endpoint))
                                 .map(client -> client.prefixTrim(address))
                                 .forEach(CFUtils::getUninterruptibly);
                         return null;    // No return value
@@ -284,9 +280,7 @@ public class AddressSpaceView extends AbstractView {
             l.segments.stream()
                     .flatMap(seg -> seg.getStripes().stream())
                     .flatMap(stripe -> stripe.getLogServers().stream())
-                    .map(endpoint ->
-                            runtime.getRouter(endpoint)
-                                    .getClient(LogUnitClient.class))
+                    .map(endpoint -> runtime.getLogUnitClient(l, endpoint))
                     .map(LogUnitClient::compact)
                     .forEach(CFUtils::getUninterruptibly);
             return null;
@@ -301,9 +295,7 @@ public class AddressSpaceView extends AbstractView {
             l.segments.stream()
                     .flatMap(seg -> seg.getStripes().stream())
                     .flatMap(stripe -> stripe.getLogServers().stream())
-                    .map(endpoint ->
-                            runtime.getRouter(endpoint)
-                                    .getClient(LogUnitClient.class))
+                    .map(endpoint -> runtime.getLogUnitClient(l, endpoint))
                     .map(LogUnitClient::flushCache)
                     .forEach(CFUtils::getUninterruptibly);
             return null;

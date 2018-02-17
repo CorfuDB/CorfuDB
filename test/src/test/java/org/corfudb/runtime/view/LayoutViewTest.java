@@ -212,8 +212,8 @@ public class LayoutViewTest extends AbstractViewTest {
                 corfuRuntime.getLayoutView().updateLayout(newLayout, newLayout.getEpoch());
                 corfuRuntime.invalidateLayout();
                 corfuRuntime.layout.get();
-                corfuRuntime.getRouter(SERVERS.ENDPOINT_0).getClient(SequencerClient.class)
-                        .bootstrap(0L, Collections.EMPTY_MAP, newLayout.getEpoch()).get();
+                corfuRuntime.getSequencerClient(newLayout, SERVERS.ENDPOINT_0)
+                        .bootstrap(0L, Collections.emptyMap(), newLayout.getEpoch()).get();
                 log.debug("layout updated new layout {}", corfuRuntime.getLayoutView().getLayout());
                 layoutReconfiguredLatch.countDown();
             } catch (Exception e) {

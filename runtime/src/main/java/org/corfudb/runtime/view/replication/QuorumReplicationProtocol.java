@@ -74,7 +74,8 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
             try {
                 CompletableFuture<ReadResponse>[] futures = new CompletableFuture[numUnits];
                 for (int i = 0; i < numUnits; i++) {
-                    futures[i] = layout.getLogUnitClient(address, i).read(address);
+                    futures[i] = layout.getRuntime()
+                            .getLogUnitClient(layout, address, i).read(address);
                 }
                 QuorumFuturesFactory.CompositeFuture<ReadResponse> future =
                         QuorumFuturesFactory.getQuorumFuture(new ReadResponseComparator(address),
@@ -235,7 +236,8 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
         CompletableFuture<Boolean>[] futures = new CompletableFuture[numUnits];
         for (int i = 0; i < numUnits; i++) {
             log.trace("Write[{}]: quorum {}/{}", globalAddress, i + 1, numUnits);
-            futures[i] = layout.getLogUnitClient(globalAddress, i).write(data);
+            futures[i] = layout.getRuntime()
+                    .getLogUnitClient(layout, globalAddress, i).write(data);
         }
         QuorumFuturesFactory.CompositeFuture<Boolean> future =
                 QuorumFuturesFactory.getQuorumFuture(Boolean::compareTo, futures,

@@ -43,7 +43,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
             // In chain replication, we start at the chain head.
             try {
                 CFUtils.getUninterruptibly(
-                        layout.getLogUnitClient(globalAddress, 0)
+                        layout.getRuntime().getLogUnitClient(layout, globalAddress, 0)
                                 .write(sh.getSerialized()),
                         OverwriteException.class);
                 propagate(layout, globalAddress, sh.getSerialized());
@@ -66,9 +66,9 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         log.trace("Read[{}]: chain {}/{}", globalAddress, numUnits, numUnits);
         // In chain replication, we read from the last unit, though we can optimize if we
         // know where the committed tail is.
-        ILogData ret =  CFUtils.getUninterruptibly(layout
-                .getLogUnitClient(globalAddress, numUnits - 1)
-                                    .read(globalAddress)).getAddresses()
+        ILogData ret = CFUtils.getUninterruptibly(layout.getRuntime()
+                .getLogUnitClient(layout, globalAddress, numUnits - 1)
+                .read(globalAddress)).getAddresses()
                 .getOrDefault(globalAddress, null);
         return ret == null || ret.isEmpty() ? null : ret;
     }
@@ -82,8 +82,8 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         int numUnits = layout.getSegmentLength(startAddress);
         log.trace("readAll[{}]: chain {}/{}", globalAddresses, numUnits, numUnits);
 
-        Map<Long, LogData> logResult = CFUtils.getUninterruptibly(layout
-                .getLogUnitClient(startAddress, numUnits - 1)
+        Map<Long, LogData> logResult = CFUtils.getUninterruptibly(layout.getRuntime()
+                .getLogUnitClient(layout, startAddress, numUnits - 1)
                 .read(globalAddresses)).getAddresses();
 
         //in case of a hole, do a normal read and use its hole fill policy
@@ -108,8 +108,8 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         int numUnits = layout.getSegmentLength(startAddress);
         log.trace("readRange[{}-{}]: chain {}/{}", startAddress, endAddress, numUnits, numUnits);
 
-        Map<Long, LogData> logResult = CFUtils.getUninterruptibly(layout
-                .getLogUnitClient(startAddress, numUnits - 1)
+        Map<Long, LogData> logResult = CFUtils.getUninterruptibly(layout.getRuntime()
+                .getLogUnitClient(layout, startAddress, numUnits - 1)
                 .read(range)).getAddresses();
 
         //in case of a hole, do a normal read and use its hole fill policy
@@ -147,11 +147,12 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
             try {
                 if (data != null) {
                     CFUtils.getUninterruptibly(
-                            layout.getLogUnitClient(globalAddress, i)
+                            layout.getRuntime().getLogUnitClient(layout, globalAddress, i)
                                     .write(data),
                             OverwriteException.class);
                 } else {
-                    CFUtils.getUninterruptibly(layout.getLogUnitClient(globalAddress, i)
+                    CFUtils.getUninterruptibly(layout.getRuntime()
+                            .getLogUnitClient(layout, globalAddress, i)
                             .fillHole(globalAddress), OverwriteException.class);
                 }
             } catch (OverwriteException oe) {
@@ -184,7 +185,8 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         // we are trying to recover
         int numUnits = layout.getSegmentLength(globalAddress);
         log.debug("Recover[{}]: read chain head {}/{}", globalAddress, 1, numUnits);
-        ILogData ld = CFUtils.getUninterruptibly(layout.getLogUnitClient(globalAddress, 0)
+        ILogData ld = CFUtils.getUninterruptibly(layout.getRuntime()
+                .getLogUnitClient(layout, globalAddress, 0)
                 .read(globalAddress)).getAddresses().getOrDefault(globalAddress, null);
         // If nothing was at the head, this is a bug and we
         // should fail with a runtime exception, as there
@@ -204,8 +206,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
             // in the chain.
             try {
                 CFUtils.getUninterruptibly(
-                        layout.getLogUnitClient(globalAddress, i)
-                                .write(ld),
+                        layout.getRuntime().getLogUnitClient(layout, globalAddress, i).write(ld),
                         OverwriteException.class);
                 // We successfully recovered a write to this member of the chain
                 log.debug("Recover[{}]: recovered write at chain {}/{}", layout, i + 1, numUnits);
@@ -227,7 +228,8 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         // In chain replication, we write synchronously to every unit in
         // the chain.
         try {
-            CFUtils.getUninterruptibly(layout.getLogUnitClient(globalAddress, 0)
+            CFUtils.getUninterruptibly(layout.getRuntime()
+                    .getLogUnitClient(layout, globalAddress, 0)
                     .fillHole(globalAddress), OverwriteException.class);
             propagate(layout, globalAddress, null);
         } catch (OverwriteException oe) {

@@ -762,10 +762,10 @@ public class CorfuRuntime {
     @SuppressWarnings("unchecked")
     private void checkVersion() {
         try {
+            Layout currentLayout = CFUtils.getUninterruptibly(layout);
             List<CompletableFuture<VersionInfo>> versions =
-                    CFUtils.getUninterruptibly(layout).getLayoutServers()
-                        .stream().map(this::getRouter)
-                        .map(r -> r.getClient(BaseClient.class))
+                    currentLayout.getLayoutServers()
+                        .stream().map(s -> getBaseClient(currentLayout, s))
                         .map(BaseClient::getVersionInfo)
                         .collect(Collectors.toList());
 
@@ -815,6 +815,35 @@ public class CorfuRuntime {
             fastLoader.loadMaps();
         }
         return this;
+    }
+
+    public BaseClient getBaseClient(Layout layout, String endpoint) {
+        return getRouter(endpoint).getClient(BaseClient.class);
+    }
+
+    public LayoutClient getLayoutClient(Layout layout, String endpoint) {
+        return getRouter(endpoint).getClient(LayoutClient.class);
+    }
+
+    public SequencerClient getSequencerClient(Layout layout, int index) {
+        return getRouter(layout.getSequencers().get(index)).getClient(SequencerClient.class);
+    }
+
+    public SequencerClient getSequencerClient(Layout layout, String endpoint) {
+        return getRouter(endpoint).getClient(SequencerClient.class);
+    }
+
+    public LogUnitClient getLogUnitClient(Layout layout, long address, int index) {
+        return getRouter(layout.getStripe(address).getLogServers()
+                .get(index)).getClient(LogUnitClient.class);
+    }
+
+    public LogUnitClient getLogUnitClient(Layout layout, String endpoint) {
+        return getRouter(endpoint).getClient(LogUnitClient.class);
+    }
+
+    public ManagementClient getManagementClient(Layout layout, String endpoint) {
+        return getRouter(endpoint).getClient(ManagementClient.class);
     }
 
     // Below are deprecated methods which should no longer be

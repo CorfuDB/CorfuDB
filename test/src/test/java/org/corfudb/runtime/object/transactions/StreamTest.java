@@ -80,7 +80,8 @@ public class StreamTest extends AbstractTransactionsTest {
         final long trimMark = getRuntime().getParameters().getWriteRetry() - 1;
         final String key = "key";
         final String val = "val";
-        LogUnitClient lu = getRuntime().getRouter(getDefaultConfigurationString()).getClient(LogUnitClient.class);
+        LogUnitClient lu = getRuntime().getLogUnitClient(getRuntime().getLayoutView().getLayout(),
+                getDefaultConfigurationString());
         lu.prefixTrim(trimMark).get();
         TXBegin();
         map.put(key, val);

@@ -700,7 +700,7 @@ public class ManagementViewTest extends AbstractViewTest {
     public void blockRecoverySequencerUntilReset() throws Exception {
 
         final Semaphore resetDetected = new Semaphore(1);
-        getManagementTestLayout();
+        Layout layout = getManagementTestLayout();
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
 
@@ -717,9 +717,7 @@ public class ManagementViewTest extends AbstractViewTest {
                             // There is a failure but the BOOTSTRAP_SEQUENCER message has not yet been
                             // sent. So if we request a token now, we should be denied as the
                             // server is sealed and we get a WrongEpochException.
-                            corfuRuntime
-                                    .getRouter(SERVERS.ENDPOINT_1)
-                                    .getClient(SequencerClient.class)
+                            corfuRuntime.getSequencerClient(layout, SERVERS.ENDPOINT_1)
                                     .nextToken(Collections.singleton(CorfuRuntime
                                             .getStreamID("testStream")), 1).get();
                             fail();
@@ -942,10 +940,9 @@ public class ManagementViewTest extends AbstractViewTest {
 
     private Map<Long, LogData> getAllNonEmptyData(CorfuRuntime corfuRuntime,
                                                   String endpoint, long end) throws Exception {
-        ReadResponse readResponse = corfuRuntime.getRouter(endpoint)
-                .getClient(LogUnitClient.class)
-                .read(Range.closed(0L, end))
-                .get();
+        Layout layout = corfuRuntime.getLayoutView().getLayout();
+        ReadResponse readResponse = corfuRuntime.getLogUnitClient(layout, endpoint)
+                .read(Range.closed(0L, end)).get();
         return readResponse.getAddresses().entrySet()
                 .stream()
                 .filter(longLogDataEntry -> !longLogDataEntry.getValue().isEmpty())

@@ -63,8 +63,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         LogData incompleteWrite = getLogData(0, "incomplete".getBytes());
 
         // Write the incomplete write to the head of the chain
-        r.getRouter(SERVERS.ENDPOINT_0).getClient(LogUnitClient.class)
-                .write(incompleteWrite);
+        r.getLogUnitClient(layout, SERVERS.ENDPOINT_0).write(incompleteWrite);
 
         // Attempt to write using the replication protocol.
         // Should result in an overwrite exception
@@ -73,7 +72,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
 
         // At this point, a direct read of the tail should
         // reflect the -other- clients value
-        ILogData readResult = r.getRouter(SERVERS.ENDPOINT_0).getClient(LogUnitClient.class)
+        ILogData readResult = r.getLogUnitClient(layout, SERVERS.ENDPOINT_0)
                 .read(0).get().getAddresses().get(0L);
 
         assertThat(readResult.getPayload(r))
@@ -96,8 +95,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         LogData incompleteWrite = getLogData(0, "incomplete".getBytes());
 
         // Write the incomplete write to the head of the chain
-        r.getRouter(SERVERS.ENDPOINT_0).getClient(LogUnitClient.class)
-                .write(incompleteWrite);
+        r.getLogUnitClient(layout, SERVERS.ENDPOINT_0).write(incompleteWrite);
 
         // At this point, a read
         // reflect the -other- clients value

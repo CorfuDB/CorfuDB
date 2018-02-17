@@ -232,10 +232,9 @@ public class ClusterReconfigIT extends AbstractIT {
      */
     private Map<Long, LogData> getAllData(CorfuRuntime corfuRuntime,
                                           String endpoint, long end) throws Exception {
-        ReadResponse readResponse = corfuRuntime.getRouter(endpoint)
-                .getClient(LogUnitClient.class)
-                .read(Range.closed(0L, end))
-                .get();
+        Layout layout = corfuRuntime.getLayoutView().getLayout();
+        ReadResponse readResponse = corfuRuntime.getLogUnitClient(layout, endpoint)
+                .read(Range.closed(0L, end)).get();
         return readResponse.getAddresses();
     }
 
@@ -273,7 +272,8 @@ public class ClusterReconfigIT extends AbstractIT {
 
         CorfuRuntime corfuRuntime = createDefaultRuntime();
         incrementClusterEpoch(corfuRuntime);
-        corfuRuntime.getRouter("localhost:9000").getClient(BaseClient.class).reset().get();
+        Layout layout = corfuRuntime.getLayoutView().getLayout();
+        corfuRuntime.getBaseClient(layout, "localhost:9000").reset().get();
 
         corfuRuntime = createDefaultRuntime();
         // The shutdown and reset can take an unknown amount of time and there is a chance that the
@@ -307,8 +307,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         CorfuRuntime corfuRuntime = createDefaultRuntime();
         Layout l = incrementClusterEpoch(corfuRuntime);
-        corfuRuntime.getRouter("localhost:9000").getClient(BaseClient.class).restart()
-                .get();
+        corfuRuntime.getBaseClient(l, "localhost:9000").restart().get();
 
         restartServer(corfuRuntime, DEFAULT_ENDPOINT);
 

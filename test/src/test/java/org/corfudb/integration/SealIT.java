@@ -53,9 +53,9 @@ public class SealIT extends AbstractIT{
         cr1.invalidateLayout();
         cr1.layout.get();
 
-        cr1.getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
-                .getClient(SequencerClient.class)
-                .bootstrap(1L, Collections.EMPTY_MAP, currentLayout.getEpoch())
+        cr1.getSequencerClient(cr1.getLayoutView().getLayout(),
+                corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                .bootstrap(1L, Collections.emptyMap(), currentLayout.getEpoch())
                 .get();
 
 
