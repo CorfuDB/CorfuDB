@@ -819,12 +819,14 @@ public class CorfuRuntime {
         return getRouter(endpoint).getClient(LayoutClient.class);
     }
 
-    public SequencerClient getSequencerClient(Layout layout, int index) {
-        return getRouter(layout.getSequencers().get(index)).getClient(SequencerClient.class);
+    public SequencerSenderClient getSequencerClient(Layout layout, int index) {
+        return new SequencerSenderClient(getRouter(layout.getSequencers().get(index))
+                .getClient(SequencerClient.class), layout.getEpoch());
     }
 
-    public SequencerClient getSequencerClient(Layout layout, String endpoint) {
-        return getRouter(endpoint).getClient(SequencerClient.class);
+    public SequencerSenderClient getSequencerClient(Layout layout, String endpoint) {
+        return new SequencerSenderClient(getRouter(endpoint).getClient(SequencerClient.class),
+                layout.getEpoch());
     }
 
     public LogUnitSenderClient getLogUnitClient(Layout layout, long address, int index) {

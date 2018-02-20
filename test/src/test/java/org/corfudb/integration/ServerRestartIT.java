@@ -4,6 +4,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.clients.SequencerSenderClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuTableTest;
 import org.corfudb.runtime.collections.StringIndexer;
@@ -576,7 +577,7 @@ public class ServerRestartIT extends AbstractIT {
                 System.out.println(r + "..no checkpoint/trim");
             }
 
-            SequencerClient sequencerClient = corfuRuntime
+            SequencerSenderClient sequencerClient = corfuRuntime
                     .getSequencerClient(corfuRuntime.getLayoutView().getLayout(),
                             corfuSingleNodeHost + ":" + corfuSingleNodePort);
 
