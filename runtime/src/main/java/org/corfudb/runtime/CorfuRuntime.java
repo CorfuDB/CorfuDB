@@ -33,13 +33,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.recovery.FastObjectLoader;
-import org.corfudb.runtime.clients.BaseClient;
-import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.clients.NettyClientRouter;
-import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
@@ -833,13 +827,14 @@ public class CorfuRuntime {
         return getRouter(endpoint).getClient(SequencerClient.class);
     }
 
-    public LogUnitClient getLogUnitClient(Layout layout, long address, int index) {
-        return getRouter(layout.getStripe(address).getLogServers()
-                .get(index)).getClient(LogUnitClient.class);
+    public LogUnitSenderClient getLogUnitClient(Layout layout, long address, int index) {
+        return new LogUnitSenderClient(getRouter(layout.getStripe(address).getLogServers()
+                .get(index)).getClient(LogUnitClient.class), layout.getEpoch());
     }
 
-    public LogUnitClient getLogUnitClient(Layout layout, String endpoint) {
-        return getRouter(endpoint).getClient(LogUnitClient.class);
+    public LogUnitSenderClient getLogUnitClient(Layout layout, String endpoint) {
+        return new LogUnitSenderClient(getRouter(endpoint).getClient(LogUnitClient.class),
+                layout.getEpoch());
     }
 
     public ManagementClient getManagementClient(Layout layout, String endpoint) {

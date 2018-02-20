@@ -45,7 +45,7 @@ import static org.junit.Assert.fail;
  */
 public class LogUnitClientTest extends AbstractClientTest {
 
-    LogUnitClient client;
+    LogUnitSenderClient client;
     ServerContext serverContext;
     String dirPath;
     LogUnitServer server;
@@ -82,10 +82,11 @@ public class LogUnitClientTest extends AbstractClientTest {
 
     @Override
     Set<IClient> getClientsForTest() {
-        client = new LogUnitClient();
+        LogUnitClient logUnitClient = new LogUnitClient();
+        client = new LogUnitSenderClient(logUnitClient, 0L);
         return new ImmutableSet.Builder<IClient>()
                 .add(new BaseClient())
-                .add(client)
+                .add(logUnitClient)
                 .build();
     }
 

@@ -2,13 +2,7 @@ package org.corfudb.runtime;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
 
-import org.corfudb.runtime.clients.BaseClient;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.clients.SequencerClient;
-import org.corfudb.runtime.clients.TestClientRouter;
-import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 
 import org.corfudb.infrastructure.TestServerRouter;
@@ -203,7 +197,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         runtime.invalidateLayout();
         runtime.layout.get();
 
-        LogUnitClient luc = runtime
+        LogUnitSenderClient luc = runtime
                 .getLogUnitClient(runtime.getLayoutView().getLayout(), SERVERS.ENDPOINT_0);
 
         assertThatThrownBy(() -> luc.read(0).get())

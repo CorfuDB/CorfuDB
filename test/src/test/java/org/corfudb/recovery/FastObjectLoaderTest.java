@@ -8,7 +8,7 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.LogUnitSenderClient;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
@@ -183,7 +183,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2);
 
         Layout layout = getDefaultRuntime().getLayoutView().getLayout();
-        LogUnitClient luc = getDefaultRuntime()
+        LogUnitSenderClient luc = getDefaultRuntime()
                 .getLogUnitClient(layout, getDefaultConfigurationString());
         SequencerClient seq = getDefaultRuntime()
                 .getSequencerClient(layout, getDefaultConfigurationString());
@@ -403,7 +403,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, 2);
 
         Layout layout = getDefaultRuntime().getLayoutView().getLayout();
-        LogUnitClient luc = getDefaultRuntime()
+        LogUnitSenderClient luc = getDefaultRuntime()
                 .getLogUnitClient(layout, getDefaultConfigurationString());
         SequencerClient seq = getDefaultRuntime()
                 .getSequencerClient(layout, getDefaultConfigurationString());

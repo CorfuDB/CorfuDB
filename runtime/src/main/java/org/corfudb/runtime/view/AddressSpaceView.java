@@ -25,7 +25,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.LogUnitSenderClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -226,12 +226,12 @@ public class AddressSpaceView extends AbstractView {
      * Get the first address in the address space.
      */
     public long getTrimMark() {
-        return layoutHelper(l -> {
+        return layoutHelper((Layout l) -> {
             return l.segments.stream()
                     .flatMap(seg -> seg.getStripes().stream())
                     .flatMap(stripe -> stripe.getLogServers().stream())
                     .map(endpoint -> runtime.getLogUnitClient(l, endpoint))
-                    .map(LogUnitClient::getTrimMark)
+                    .map(LogUnitSenderClient::getTrimMark)
                     .map(CFUtils::getUninterruptibly)
                     .max(Comparator.naturalOrder()).get();
         });
@@ -281,7 +281,7 @@ public class AddressSpaceView extends AbstractView {
                     .flatMap(seg -> seg.getStripes().stream())
                     .flatMap(stripe -> stripe.getLogServers().stream())
                     .map(endpoint -> runtime.getLogUnitClient(l, endpoint))
-                    .map(LogUnitClient::compact)
+                    .map(LogUnitSenderClient::compact)
                     .forEach(CFUtils::getUninterruptibly);
             return null;
         });
@@ -296,7 +296,7 @@ public class AddressSpaceView extends AbstractView {
                     .flatMap(seg -> seg.getStripes().stream())
                     .flatMap(stripe -> stripe.getLogServers().stream())
                     .map(endpoint -> runtime.getLogUnitClient(l, endpoint))
-                    .map(LogUnitClient::flushCache)
+                    .map(LogUnitSenderClient::flushCache)
                     .forEach(CFUtils::getUninterruptibly);
             return null;
         });
