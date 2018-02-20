@@ -60,8 +60,10 @@ public class BootstrapUtil {
                             .addClient(new ManagementClient())
                             .addClient(new BaseClient());
 
-                    new LayoutSenderClient(router, layout.getEpoch()).bootstrapLayout(layout).get();
-                    router.getClient(ManagementClient.class).bootstrapManagement(layout).get();
+                    new LayoutSenderClient(router, layout.getEpoch())
+                            .bootstrapLayout(layout).get();
+                    new ManagementSenderClient(router, layout.getEpoch())
+                            .bootstrapManagement(layout).get();
                     router.stop();
                     break;
                 } catch (Exception e) {

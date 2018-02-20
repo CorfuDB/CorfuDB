@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class ManagementClientTest extends AbstractClientTest {
 
-    private ManagementClient client;
+    private ManagementSenderClient client;
     private ManagementServer server;
 
     @Override
@@ -49,10 +49,11 @@ public class ManagementClientTest extends AbstractClientTest {
 
     @Override
     Set<IClient> getClientsForTest() {
-        client = new ManagementClient();
+        ManagementClient managementClient = new ManagementClient();
+        client = new ManagementSenderClient(router, 0L);
         return new ImmutableSet.Builder<IClient>()
                 .add(new BaseClient())
-                .add(client)
+                .add(managementClient)
                 .build();
     }
 

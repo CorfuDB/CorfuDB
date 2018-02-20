@@ -838,8 +838,8 @@ public class CorfuRuntime {
                 layout.getEpoch());
     }
 
-    public ManagementClient getManagementClient(Layout layout, String endpoint) {
-        return getRouter(endpoint).getClient(ManagementClient.class);
+    public ManagementSenderClient getManagementClient(Layout layout, String endpoint) {
+        return new ManagementSenderClient(getRouter(endpoint), layout.getEpoch());
     }
 
     // Below are deprecated methods which should no longer be
