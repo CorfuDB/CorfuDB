@@ -30,7 +30,7 @@ public class SequencerClientTest extends AbstractClientTest {
     @Override
     Set<IClient> getClientsForTest() {
         SequencerClient sequencerClient = new SequencerClient();
-        client = new SequencerSenderClient(sequencerClient, 0L);
+        client = new SequencerSenderClient(router, 0L);
         return new ImmutableSet.Builder<IClient>()
                 .add(sequencerClient)
                 .build();

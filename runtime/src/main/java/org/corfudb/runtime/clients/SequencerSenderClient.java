@@ -10,6 +10,8 @@ import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import lombok.Getter;
+import lombok.Setter;
 
 
 /**
@@ -19,14 +21,16 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
  *
  * <p>Created by zlokhandwala on 2/20/18.
  */
-public class SequencerSenderClient {
+public class SequencerSenderClient implements IClient {
 
-    private final SequencerClient sequencerClient;
+    @Getter
+    @Setter
+    private IClientRouter router;
 
     private final long epoch;
 
-    public SequencerSenderClient(SequencerClient sequencerClient, long epoch) {
-        this.sequencerClient = sequencerClient;
+    public SequencerSenderClient(IClientRouter router, long epoch) {
+        this.router = router;
         this.epoch = epoch;
     }
 
@@ -38,9 +42,8 @@ public class SequencerSenderClient {
      * @return A completable future with the token response from the sequencer.
      */
     public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens) {
-        return sequencerClient.router
-                .sendMessageAndGetCompletable(CorfuMsgType.TOKEN_REQ.payloadMsg(
-                        new TokenRequest(numTokens, streamIDs)).setEpoch(epoch));
+        return router.sendMessageAndGetCompletable(CorfuMsgType.TOKEN_REQ.payloadMsg(
+                new TokenRequest(numTokens, streamIDs)).setEpoch(epoch));
     }
 
     /**
@@ -53,13 +56,12 @@ public class SequencerSenderClient {
      */
     public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens,
                                                       TxResolutionInfo conflictInfo) {
-        return sequencerClient.router
-                .sendMessageAndGetCompletable(CorfuMsgType.TOKEN_REQ.payloadMsg(
-                        new TokenRequest(numTokens, streamIDs, conflictInfo)).setEpoch(epoch));
+        return router.sendMessageAndGetCompletable(CorfuMsgType.TOKEN_REQ.payloadMsg(
+                new TokenRequest(numTokens, streamIDs, conflictInfo)).setEpoch(epoch));
     }
 
     public CompletableFuture<Void> trimCache(Long address) {
-        return sequencerClient.router.sendMessageAndGetCompletable(
+        return router.sendMessageAndGetCompletable(
                 CorfuMsgType.SEQUENCER_TRIM_REQ.payloadMsg(address).setEpoch(epoch));
     }
 
@@ -71,9 +73,8 @@ public class SequencerSenderClient {
      */
     public CompletableFuture<Boolean> bootstrap(Long initialToken, Map<UUID, Long> sequencerTails,
                                                 Long readyStateEpoch) {
-        return sequencerClient.router
-                .sendMessageAndGetCompletable(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(
-                        new SequencerTailsRecoveryMsg(initialToken, sequencerTails,
-                                readyStateEpoch)).setEpoch(epoch));
+        return router.sendMessageAndGetCompletable(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(
+                new SequencerTailsRecoveryMsg(initialToken, sequencerTails,
+                        readyStateEpoch)).setEpoch(epoch));
     }
 }

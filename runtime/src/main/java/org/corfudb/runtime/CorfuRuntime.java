@@ -682,8 +682,8 @@ public class CorfuRuntime {
                     try {
                         IClientRouter router = getRouter(s);
                         // Try to get a layout.
-                        CompletableFuture<Layout> layoutFuture = router
-                                .getClient(LayoutClient.class).getLayout();
+                        CompletableFuture<Layout> layoutFuture = new LayoutSenderClient(router, 0L)
+                                .getLayout();
                         // Wait for layout
                         Layout l = layoutFuture.get();
 
@@ -815,18 +815,17 @@ public class CorfuRuntime {
         return getRouter(endpoint).getClient(BaseClient.class);
     }
 
-    public LayoutClient getLayoutClient(Layout layout, String endpoint) {
-        return getRouter(endpoint).getClient(LayoutClient.class);
+    public LayoutSenderClient getLayoutClient(Layout layout, String endpoint) {
+        return new LayoutSenderClient(getRouter(endpoint), layout.getEpoch());
     }
 
     public SequencerSenderClient getSequencerClient(Layout layout, int index) {
-        return new SequencerSenderClient(getRouter(layout.getSequencers().get(index))
-                .getClient(SequencerClient.class), layout.getEpoch());
+        return new SequencerSenderClient(getRouter(layout.getSequencers().get(index)),
+                layout.getEpoch());
     }
 
     public SequencerSenderClient getSequencerClient(Layout layout, String endpoint) {
-        return new SequencerSenderClient(getRouter(endpoint).getClient(SequencerClient.class),
-                layout.getEpoch());
+        return new SequencerSenderClient(getRouter(endpoint), layout.getEpoch());
     }
 
     public LogUnitSenderClient getLogUnitClient(Layout layout, long address, int index) {

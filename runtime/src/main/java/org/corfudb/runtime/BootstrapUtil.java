@@ -7,11 +7,7 @@ import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
-import org.corfudb.runtime.clients.BaseClient;
-import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
@@ -64,7 +60,7 @@ public class BootstrapUtil {
                             .addClient(new ManagementClient())
                             .addClient(new BaseClient());
 
-                    router.getClient(LayoutClient.class).bootstrapLayout(layout).get();
+                    new LayoutSenderClient(router, layout.getEpoch()).bootstrapLayout(layout).get();
                     router.getClient(ManagementClient.class).bootstrapManagement(layout).get();
                     router.stop();
                     break;
