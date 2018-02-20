@@ -760,7 +760,7 @@ public class CorfuRuntime {
             List<CompletableFuture<VersionInfo>> versions =
                     currentLayout.getLayoutServers()
                         .stream().map(s -> getBaseClient(currentLayout, s))
-                        .map(BaseClient::getVersionInfo)
+                        .map(BaseSenderClient::getVersionInfo)
                         .collect(Collectors.toList());
 
             for (CompletableFuture<VersionInfo> versionCf : versions) {
@@ -811,8 +811,8 @@ public class CorfuRuntime {
         return this;
     }
 
-    public BaseClient getBaseClient(Layout layout, String endpoint) {
-        return getRouter(endpoint).getClient(BaseClient.class);
+    public BaseSenderClient getBaseClient(Layout layout, String endpoint) {
+        return new BaseSenderClient(getRouter(endpoint), layout.getEpoch());
     }
 
     public LayoutSenderClient getLayoutClient(Layout layout, String endpoint) {

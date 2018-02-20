@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.clients.BaseSenderClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -92,7 +93,7 @@ public class HealingDetector implements IDetector {
         // Perform polling of all unresponsive servers.
         return new PollReport.PollReportBuilder()
                 .pollEpoch(layout.getEpoch())
-                .healingNodes(pollRound(members, routerMap))
+                .healingNodes(pollRound(members, routerMap, layout.getEpoch()))
                 .build();
     }
 
@@ -103,7 +104,8 @@ public class HealingDetector implements IDetector {
      * @return Poll Report with detected healed nodes.
      */
     private Set<String> pollRound(List<String> members,
-                                  Map<String, IClientRouter> routerMap) {
+                                  Map<String, IClientRouter> routerMap,
+                                  long epoch) {
 
         Map<String, Integer> pollResultMap = new HashMap<>();
 
@@ -112,7 +114,7 @@ public class HealingDetector implements IDetector {
 
             // Ping all nodes and await their responses.
             Map<String, CompletableFuture<Boolean>> pollCompletableFutures =
-                    pollOnceAsync(members, routerMap);
+                    pollOnceAsync(members, routerMap, epoch);
 
             // Collect all poll responses.
             Set<String> responses = collectResponsesAndVerifyEpochs(members,
@@ -147,13 +149,14 @@ public class HealingDetector implements IDetector {
      */
     private Map<String, CompletableFuture<Boolean>> pollOnceAsync(List<String> members,
                                                                   Map<String, IClientRouter>
-                                                                          routerMap) {
+                                                                          routerMap,
+                                                                  final long epoch) {
 
         // Poll servers for health.  All ping activity will happen in the background.
         final Map<String, CompletableFuture<Boolean>> pollCompletableFutures = new HashMap<>();
         members.forEach(s -> {
             try {
-                pollCompletableFutures.put(s, routerMap.get(s).getClient(BaseClient.class).ping());
+                pollCompletableFutures.put(s, new BaseSenderClient(routerMap.get(s), epoch).ping());
             } catch (Exception e) {
                 CompletableFuture<Boolean> cf = new CompletableFuture<>();
                 cf.completeExceptionally(e);

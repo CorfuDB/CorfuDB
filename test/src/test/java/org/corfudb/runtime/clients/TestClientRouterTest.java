@@ -5,6 +5,7 @@ import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.concurrent.TimeoutException;
@@ -17,16 +18,23 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class TestClientRouterTest extends AbstractCorfuTest {
 
-    @Test
-    public void testRuleDropsMessages() {
+    private BaseSenderClient bc;
+    private TestClientRouter tcr;
+
+    @Before
+    public void setupRouter() {
         TestServerRouter tsr = new TestServerRouter();
         BaseServer bs = new BaseServer(ServerContextBuilder.defaultTestContext(0));
         tsr.addServer(bs);
-        TestClientRouter tcr = new TestClientRouter(tsr);
+        tcr = new TestClientRouter(tsr);
+        BaseClient baseClient = new BaseClient();
+        tcr.addClient(baseClient);
+        bc = new BaseSenderClient(tcr, 0L);
 
-        BaseClient bc = new BaseClient();
-        tcr.addClient(bc);
+    }
 
+    @Test
+    public void testRuleDropsMessages() {
         assertThat(bc.pingSync())
                 .isTrue();
 
@@ -40,14 +48,6 @@ public class TestClientRouterTest extends AbstractCorfuTest {
 
     @Test
     public void onlyDropEpochChangeMessages() {
-        TestServerRouter tsr = new TestServerRouter();
-        BaseServer bs = new BaseServer(ServerContextBuilder.defaultTestContext(0));
-        tsr.addServer(bs);
-        TestClientRouter tcr = new TestClientRouter(tsr);
-
-        BaseClient bc = new BaseClient();
-        tcr.addClient(bc);
-
         tcr.rules.add(new TestRule()
                 .matches(x -> x.getMsgType().equals(CorfuMsgType.SET_EPOCH))
                 .drop());
@@ -62,13 +62,6 @@ public class TestClientRouterTest extends AbstractCorfuTest {
 
     @Test
     public void doesNotUpdateEpochBackward() throws Exception {
-        TestServerRouter tsr = new TestServerRouter();
-        BaseServer bs = new BaseServer(ServerContextBuilder.defaultTestContext(0));
-        tsr.addServer(bs);
-        TestClientRouter tcr = new TestClientRouter(tsr);
-
-        BaseClient bc = new BaseClient();
-        tcr.addClient(bc);
 
         long currentEpoch = tcr.getEpoch();
         tcr.setEpoch(currentEpoch + 1);

@@ -39,69 +39,6 @@ public class BaseClient implements IClient {
     /** Public functions which are exposed to clients. */
 
     /**
-     * Ping the endpoint, synchronously.
-     *
-     * @return True, if the endpoint was reachable, false otherwise.
-     */
-    public boolean pingSync() {
-        try {
-            return ping().get();
-        } catch (Exception e) {
-            log.error("Ping failed due to exception", e);
-            return false;
-        }
-    }
-
-    /**
-     * Sets the epoch on client router and on the target layout server.
-     *
-     * @param newEpoch New Epoch to be set
-     * @return Completable future which returns true on successful epoch set.
-     */
-    public CompletableFuture<Boolean> setRemoteEpoch(long newEpoch) {
-        return router.sendMessageAndGetCompletable(
-                new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, newEpoch));
-    }
-
-    public CompletableFuture<VersionInfo> getVersionInfo() {
-        return router.sendMessageAndGetCompletable(
-                new CorfuMsg(CorfuMsgType.VERSION_REQUEST));
-    }
-
-
-    /**
-     * Ping the endpoint, asynchronously.
-     *
-     * @return A completable future which will be completed with True if
-     *     the endpoint is reachable, otherwise False or exceptional completion.
-     */
-    public CompletableFuture<Boolean> ping() {
-        return router.sendMessageAndGetCompletable(
-                new CorfuMsg(CorfuMsgType.PING));
-    }
-
-    /**
-     * Reset the endpoint, asynchronously.
-     * WARNING: ALL EXISTING DATA ON THIS NODE WILL BE LOST.
-     *
-     * @return A completable future which will be completed with True if
-     *     the endpoint acks, otherwise False or exceptional completion.
-     */
-    public CompletableFuture<Boolean> reset() {
-        return router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.RESET));
-    }
-
-    /**
-     * Restart the endpoint, asynchronously.
-     *
-     * @return A completable future which will be completed with True if
-     *     the endpoint acks, otherwise False or exceptional completion.
-     */
-    public CompletableFuture<Boolean> restart() {
-        return router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.RESTART));
-    }
-
-    /**
      * The handler and handlers which implement this client.
      */
     @Getter

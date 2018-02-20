@@ -14,7 +14,7 @@ import java.util.Set;
  */
 public class BaseClientTest extends AbstractClientTest {
 
-    BaseClient client;
+    BaseSenderClient client;
 
     @Override
     Set<AbstractServer> getServersForTest() {
@@ -25,9 +25,10 @@ public class BaseClientTest extends AbstractClientTest {
 
     @Override
     Set<IClient> getClientsForTest() {
-        client = new BaseClient();
+        BaseClient baseClient = new BaseClient();
+        client = new BaseSenderClient(router, 0L);
         return new ImmutableSet.Builder<IClient>()
-                .add(client)
+                .add(baseClient)
                 .build();
     }
 

@@ -1,0 +1,102 @@
+package org.corfudb.runtime.clients;
+
+import java.util.concurrent.CompletableFuture;
+
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.VersionInfo;
+
+/**
+ * This is a base client which processes basic messages.
+ * It mainly handles PINGs, as well as the ACK/NACKs defined by
+ * the Corfu protocol.
+ *
+ * <p>Created by zlokhandwala on 2/20/18.
+ */
+@Slf4j
+public class BaseSenderClient implements IClient {
+
+    /**
+     * The router to use for the client.
+     */
+    @Getter
+    @Setter
+    private IClientRouter router;
+
+    private final long epoch;
+
+    public BaseSenderClient(IClientRouter router, long epoch) {
+        this.router = router;
+        this.epoch = epoch;
+    }
+
+    /**
+     * Ping the endpoint, synchronously.
+     *
+     * @return True, if the endpoint was reachable, false otherwise.
+     */
+    public boolean pingSync() {
+        try {
+            return ping().get();
+        } catch (Exception e) {
+            log.error("Ping failed due to exception", e);
+            return false;
+        }
+    }
+
+    /**
+     * Sets the epoch on client router and on the target layout server.
+     *
+     * @param newEpoch New Epoch to be set
+     * @return Completable future which returns true on successful epoch set.
+     */
+    public CompletableFuture<Boolean> setRemoteEpoch(long newEpoch) {
+        return router.sendMessageAndGetCompletable(
+                new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, newEpoch).setEpoch(epoch));
+    }
+
+    public CompletableFuture<VersionInfo> getVersionInfo() {
+        return router.sendMessageAndGetCompletable(
+                new CorfuMsg(CorfuMsgType.VERSION_REQUEST).setEpoch(epoch));
+    }
+
+
+    /**
+     * Ping the endpoint, asynchronously.
+     *
+     * @return A completable future which will be completed with True if
+     * the endpoint is reachable, otherwise False or exceptional completion.
+     */
+    public CompletableFuture<Boolean> ping() {
+        return router.sendMessageAndGetCompletable(
+                new CorfuMsg(CorfuMsgType.PING).setEpoch(epoch));
+    }
+
+    /**
+     * Reset the endpoint, asynchronously.
+     * WARNING: ALL EXISTING DATA ON THIS NODE WILL BE LOST.
+     *
+     * @return A completable future which will be completed with True if
+     * the endpoint acks, otherwise False or exceptional completion.
+     */
+    public CompletableFuture<Boolean> reset() {
+        return router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.RESET)
+                .setEpoch(epoch));
+    }
+
+    /**
+     * Restart the endpoint, asynchronously.
+     *
+     * @return A completable future which will be completed with True if
+     * the endpoint acks, otherwise False or exceptional completion.
+     */
+    public CompletableFuture<Boolean> restart() {
+        return router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.RESTART)
+                .setEpoch(epoch));
+    }
+}
