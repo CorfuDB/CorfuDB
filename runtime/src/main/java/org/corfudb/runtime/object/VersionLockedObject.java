@@ -649,7 +649,7 @@ public class VersionLockedObject<T> {
      */
     public void applyUpdateToStreamUnsafe(SMREntry entry, long globalAddress) {
         applyUpdateUnsafe(entry);
-        seek(globalAddress + 1);
+        seek(globalAddress);
     }
 
 }

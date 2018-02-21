@@ -135,11 +135,6 @@ public class StreamViewSMRAdapter implements ISMRStream {
     }
 
     @Override
-    public Stream<SMREntry> stream() {
-        return streamUpTo(Address.MAX);
-    }
-
-    @Override
     public Stream<SMREntry> streamUpTo(long maxGlobal) {
         return streamView.streamUpTo(maxGlobal)
                 .filter(m -> m.getType() == DataType.DATA)

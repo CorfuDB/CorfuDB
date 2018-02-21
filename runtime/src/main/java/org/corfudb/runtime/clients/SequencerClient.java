@@ -48,6 +48,7 @@ public class SequencerClient implements IClient {
     }
 
     public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens) {
+        //System.out.println("q1");
         return router.sendMessageAndGetCompletable(
                 CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs)));
     }
@@ -62,6 +63,7 @@ public class SequencerClient implements IClient {
      */
     public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens,
                                                       TxResolutionInfo conflictInfo) {
+        //System.out.println("q2");
         return router.sendMessageAndGetCompletable(
                 CorfuMsgType.TOKEN_REQ
                         .payloadMsg(new TokenRequest(numTokens, streamIDs, conflictInfo)));

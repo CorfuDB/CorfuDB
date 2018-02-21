@@ -37,8 +37,6 @@ public interface ISMRStream {
 
     void seek(long globalAddress);
 
-    Stream<SMREntry> stream();
-
     Stream<SMREntry> streamUpTo(long maxGlobal);
 
     /**

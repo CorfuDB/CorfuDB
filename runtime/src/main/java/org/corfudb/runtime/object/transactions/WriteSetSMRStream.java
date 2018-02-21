@@ -221,11 +221,6 @@ public class WriteSetSMRStream implements ISMRStream {
     }
 
     @Override
-    public Stream<SMREntry> stream() {
-        return streamUpTo(Address.MAX);
-    }
-
-    @Override
     public Stream<SMREntry> streamUpTo(long maxGlobal) {
         return remainingUpTo(maxGlobal)
                 .stream();
