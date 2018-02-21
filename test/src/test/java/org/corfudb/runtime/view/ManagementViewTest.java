@@ -740,18 +740,15 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
     @Test
-    public void sealDoesNotModifyClientRouterEpoch() throws Exception {
+    public void sealDoesNotModifyClientEpoch() throws Exception {
         Layout l = getManagementTestLayout();
 
         // Seal
-        Layout currentLayout = corfuRuntime.getLayoutView().getCurrentLayout();
-        currentLayout.setEpoch(currentLayout.getEpoch() + 1);
-        currentLayout.moveServersToEpoch();
-
-        for (String router : l.getAllServers()) {
-            assertThat(corfuRuntime.getRouter(router).getEpoch()).isEqualTo(1L);
-        }
-
+        Layout newLayout = new Layout(l);
+        newLayout.setEpoch(newLayout.getEpoch() + 1);
+        newLayout.setRuntime(corfuRuntime);
+        newLayout.moveServersToEpoch();
+        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(l.getEpoch());
     }
 
     @Test

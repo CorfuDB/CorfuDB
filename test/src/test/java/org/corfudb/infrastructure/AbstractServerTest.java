@@ -73,8 +73,9 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
     }
 
     public void sendMessage(UUID clientId, CorfuMsg message) {
-        message.setClientID(clientId);
-        message.setRequestID(requestCounter.getAndIncrement());
+        message.setClientID(clientId)
+                .setRequestID(requestCounter.getAndIncrement())
+                .setEpoch(0L);
         router.sendServerMessage(message);
     }
 

@@ -6,11 +6,13 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.fail;
 
 /** Test the chain replication protocol.
  *
@@ -103,5 +105,52 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
 
         assertThat(readResult.getPayload(r))
                 .isEqualTo("incomplete".getBytes());
+    }
+
+    private void removeLogunit(Layout currentLayout, String endpoint) throws Exception {
+        CorfuRuntime corfuRuntime = getRuntime(currentLayout).connect();
+        Layout layout = new Layout(corfuRuntime.getLayoutView().getLayout());
+        layout.setEpoch(layout.getEpoch() + 1);
+        layout.getLayoutServers().add(endpoint);
+        layout.getSegment(0L).getStripes().get(0).getLogServers().remove(endpoint);
+        layout.setRuntime(corfuRuntime);
+        layout.moveServersToEpoch();
+        corfuRuntime.getLayoutView().updateLayout(layout, 1L);
+    }
+
+    @Test
+    public void cannotWriteAcrossEpochs() throws Exception {
+        setupNodes();
+        final CorfuRuntime r = getDefaultRuntime();
+        Layout layout = new Layout(r.getLayoutView().getLayout());
+        final IReplicationProtocol rp = getProtocol();
+        layout.setRuntime(r);
+
+        LogData incompleteWrite = getLogData(0, "incomplete".getBytes());
+
+        // Write the incomplete write to the head of the chain
+        r.getLogUnitClient(layout, SERVERS.ENDPOINT_0).write(incompleteWrite);
+        removeLogunit(layout, SERVERS.ENDPOINT_2);
+        r.invalidateLayout();
+        r.getLayoutView().getLayout();
+
+        try {
+            // Trigger hole fill.
+            rp.read(layout, 0L);
+            fail("No wrong epoch on write.");
+        } catch (WrongEpochException we) {
+            assertThat(we.getCorrectEpoch()).isEqualTo(1L);
+        }
+
+        layout = new Layout(r.getLayoutView().getLayout());
+        LogData logData = r.getLogUnitClient(layout, SERVERS.ENDPOINT_0).read(0L).get()
+                .getAddresses().get(0L);
+        assertThat(logData.getData()).containsExactly(incompleteWrite.getData());
+        logData = r.getLogUnitClient(layout, SERVERS.ENDPOINT_1).read(0L).get()
+                .getAddresses().get(0L);
+        assertThat(logData.getData()).isNullOrEmpty();
+        logData = r.getLogUnitClient(layout, SERVERS.ENDPOINT_2).read(0L).get()
+                .getAddresses().get(0L);
+        assertThat(logData.getData()).isNullOrEmpty();
     }
 }

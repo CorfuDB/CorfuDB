@@ -16,6 +16,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -660,6 +661,8 @@ public class CorfuRuntime {
         }
     }
 
+    private final AtomicReference<Layout> latestLayout = new AtomicReference<>(null);
+
     /**
      * Return a completable future which is guaranteed to contain a layout.
      * This future will continue retrying until it gets a layout.
@@ -687,48 +690,22 @@ public class CorfuRuntime {
                         // Wait for layout
                         Layout l = layoutFuture.get();
 
-                        // If the layout we got has a smaller epoch than the router,
-                        // we discard it.
-                        if (l.getEpoch() < router.getEpoch()) {
+                        if (latestLayout.get() != null
+                                && latestLayout.get().getEpoch() > l.getEpoch()) {
                             log.warn("fetchLayout: Received a layout with epoch {} from server "
-                                            + "{}:{} smaller than router epoch {}, discarded.",
-                                    l.getEpoch(), router.getHost(),
-                                    router.getPort(), router.getEpoch());
+                                            + "{}:{} smaller than latestLayout epoch {}, "
+                                            + "discarded.",
+                                    l.getEpoch(), router.getHost(), router.getPort(),
+                                    latestLayout.get().getEpoch());
                             continue;
                         }
 
                         checkClusterId(l);
 
                         l.setRuntime(this);
-                        // this.layout should only be assigned to the new layout future
-                        // once it has been completely constructed and initialized.
-                        // For example, assigning this.layout = l
-                        // before setting the layout's runtime can result in other threads
-                        // trying to access a layout with  a null runtime.
-                        // FIXME Synchronization START
-                        // We are updating multiple variables and we need the update to be
-                        // synchronized across all variables.
-                        // Since the variable layoutServers is used only locally within the class
-                        // it is acceptable (at least the code on 10/13/2016 does not have issues)
-                        // but setEpoch of routers needs to be synchronized as those variables are
-                        // not local.
-                        for (String server : l.getAllServers()) {
-                            try {
-                                getRouter(server).setEpoch(l.getEpoch());
-                            } catch (NetworkException ne) {
-                                // We have already received the layout and there is no need to keep
-                                // client waiting.
-                                // NOTE: This is true assuming this happens only at router creation.
-                                // If not we also have to take care of setting the latest epoch on
-                                // Client Router.
-                                if (!l.getUnresponsiveServers().contains(server)) {
-                                    log.warn("fetchLayout: Error getting router : {}", server, ne);
-                                }
-                            }
-                        }
                         layoutServers = l.getLayoutServers();
+                        latestLayout.set(l);
                         layout = layoutFuture;
-                        //FIXME Synchronization END
 
                         log.debug("Layout server {} responded with layout {}", s, l);
                         return l;
