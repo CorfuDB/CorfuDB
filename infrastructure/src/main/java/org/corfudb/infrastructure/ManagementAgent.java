@@ -26,9 +26,6 @@ import org.corfudb.infrastructure.management.IDetector;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
@@ -250,9 +247,8 @@ public class ManagementAgent {
     private void bootstrapPrimarySequencerServer() {
         try {
             Layout layout = serverContext.getManagementLayout();
-            String primarySequencer = layout.getSequencers().get(0);
             boolean bootstrapResult = getCorfuRuntime()
-                    .getSequencerClient(layout, primarySequencer)
+                    .getPrimarySequencerClient(layout)
                     .bootstrap(0L, Collections.emptyMap(), layout.getEpoch())
                     .get();
             sequencerBootstrappedFuture.complete(bootstrapResult);

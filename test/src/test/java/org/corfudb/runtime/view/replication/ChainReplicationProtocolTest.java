@@ -4,7 +4,6 @@ import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
@@ -86,8 +85,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
      * completes a failed write from another client.
      */
     @Test
-    public void failedWriteCanBeRead()
-            throws Exception {
+    public void failedWriteCanBeRead() {
         setupNodes();
         //begin tests
         final CorfuRuntime r = getDefaultRuntime();
@@ -118,6 +116,15 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         corfuRuntime.getLayoutView().updateLayout(layout, 1L);
     }
 
+    /**
+     * Sets up 3 log unit nodes N0, N1 and N2 at epoch 1.
+     * Write data to N0 ONLY.
+     * Now using the chain replication protocol view, the same data is read back.
+     * The read would now fail and would resort to hole filling which would cause the hole filling
+     * client to attempt continuing the writes to N1 and N2 with the same epoch 1.
+     * These new hole fill writes should be rejected by the chain as the cluster has been sealed
+     * and moved to a new epoch 2.
+     */
     @Test
     public void cannotWriteAcrossEpochs() throws Exception {
         setupNodes();

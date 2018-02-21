@@ -34,7 +34,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.recovery.FastObjectLoader;
-import org.corfudb.runtime.clients.*;
+import org.corfudb.runtime.clients.BaseSenderClient;
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.LayoutSenderClient;
+import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.LogUnitSenderClient;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.ManagementSenderClient;
+import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.clients.SequencerSenderClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
@@ -794,6 +804,10 @@ public class CorfuRuntime {
 
     public LayoutSenderClient getLayoutClient(Layout layout, String endpoint) {
         return new LayoutSenderClient(getRouter(endpoint), layout.getEpoch());
+    }
+
+    public SequencerSenderClient getPrimarySequencerClient(Layout layout) {
+        return getSequencerClient(layout, 0);
     }
 
     public SequencerSenderClient getSequencerClient(Layout layout, int index) {

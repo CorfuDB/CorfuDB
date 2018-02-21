@@ -17,7 +17,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.BaseSenderClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
@@ -204,6 +203,11 @@ public class FailureDetector implements IDetector {
     /**
      * Poll all members servers once asynchronously and store their futures in
      * pollCompletableFutures.
+     *
+     * @param members   All active members in the layout.
+     * @param routerMap Map of routers for all active members.
+     * @param epoch     Current epoch for the polling round to stamp the ping messages.
+     * @return Map of Completable futures for the pings.
      */
     private Map<String, CompletableFuture<Boolean>> pollOnceAsync(List<String> members,
                                                                   Map<String, IClientRouter>

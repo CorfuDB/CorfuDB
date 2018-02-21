@@ -6,7 +6,13 @@ import org.corfudb.AbstractCorfuTest;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.*;
+import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.clients.TestClientRouter;
 import org.junit.Before;
 
 import java.util.List;

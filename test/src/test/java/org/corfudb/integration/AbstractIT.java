@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.view.Layout;
@@ -154,7 +153,7 @@ public class AbstractIT extends AbstractCorfuTest {
                         == (oldLayout.getEpoch() + 1)) {
                     break;
                 }
-                Sleep.MILLISECONDS.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+                Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
                 corfuRuntime.invalidateLayout();
             } catch (ShutdownException se) {
                 log.error("Shutdown Exception thrown connecting to server:{} ignored, {}",

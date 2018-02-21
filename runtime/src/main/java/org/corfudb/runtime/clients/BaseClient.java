@@ -3,7 +3,6 @@ package org.corfudb.runtime.clients;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
-import java.util.concurrent.CompletableFuture;
 
 import lombok.Getter;
 import lombok.Setter;

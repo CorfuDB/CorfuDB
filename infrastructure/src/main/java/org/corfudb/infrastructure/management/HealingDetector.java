@@ -16,7 +16,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.BaseSenderClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
@@ -145,6 +144,7 @@ public class HealingDetector implements IDetector {
      *
      * @param members   All unresponsive members.
      * @param routerMap Map of members corresponding to their client routers.
+     * @param epoch     Current epoch for the polling round to stamp the ping messages.
      * @return Map of completable futures generated on their respective pings.
      */
     private Map<String, CompletableFuture<Boolean>> pollOnceAsync(List<String> members,

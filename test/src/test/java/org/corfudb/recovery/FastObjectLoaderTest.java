@@ -9,7 +9,6 @@ import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.LogUnitSenderClient;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.clients.SequencerSenderClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;

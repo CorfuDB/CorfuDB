@@ -1,7 +1,6 @@
 package org.corfudb.integration;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Before;
 import org.junit.Test;

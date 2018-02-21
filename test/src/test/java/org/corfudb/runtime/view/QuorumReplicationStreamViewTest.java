@@ -1,6 +1,5 @@
 package org.corfudb.runtime.view;
 
-import org.corfudb.runtime.clients.SequencerClient;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -24,8 +23,7 @@ public class QuorumReplicationStreamViewTest extends StreamViewTest {
         r.getLayoutView().committed(1L, newLayout);
         r.invalidateLayout();
         r.layout.get();
-        r.getSequencerClient(newLayout, newLayout.getSequencers().get(0))
-                .bootstrap(0L, Collections.emptyMap(), 1L).get();
+        r.getPrimarySequencerClient(newLayout).bootstrap(0L, Collections.emptyMap(), 1L).get();
     }
 
 

@@ -14,10 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
@@ -290,7 +286,7 @@ public class LayoutManagementView extends AbstractView {
      * Attempts to force commit a new layout to the cluster.
      *
      * @param currentLayout the current layout
-     * @param forceLayout the new layout to force
+     * @param forceLayout   the new layout to force
      * @throws QuorumUnreachableException
      */
     public void forceLayout(@Nonnull Layout currentLayout, @Nonnull Layout forceLayout) {
@@ -436,7 +432,7 @@ public class LayoutManagementView extends AbstractView {
      * @param forceReconfigure Flag to force reconfiguration.
      */
     public void reconfigureSequencerServers(Layout originalLayout, Layout newLayout,
-                                             boolean forceReconfigure) {
+                                            boolean forceReconfigure) {
 
         long maxTokenRequested = 0L;
         Map<UUID, Long> streamTails = Collections.emptyMap();
@@ -467,7 +463,7 @@ public class LayoutManagementView extends AbstractView {
 
         // Configuring the new sequencer.
         boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(
-                corfuRuntime.getSequencerClient(newLayout, 0)
+                corfuRuntime.getPrimarySequencerClient(newLayout)
                         .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch()));
         if (sequencerBootstrapResult) {
             log.info("Sequencer bootstrap successful.");

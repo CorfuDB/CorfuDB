@@ -7,7 +7,6 @@ import com.google.common.collect.Sets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
@@ -15,7 +14,6 @@ import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.view.Layout;
 import lombok.extern.slf4j.Slf4j;
 
@@ -61,9 +59,9 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
         @Override
         public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
             runtime.invalidateLayout();
-            newLayout = new Layout(runtime.getLayoutView().getLayout());
-            if (newLayout.getUnresponsiveServers().contains(request.getEndpoint())) {
-                runtime.getLogUnitClient(newLayout, request.getEndpoint())
+            Layout layout = new Layout(runtime.getLayoutView().getLayout());
+            if (layout.getUnresponsiveServers().contains(request.getEndpoint())) {
+                runtime.getLogUnitClient(layout, request.getEndpoint())
                         .resetLogUnit()
                         .get();
             }

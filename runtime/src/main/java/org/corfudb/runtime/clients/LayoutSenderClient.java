@@ -1,16 +1,15 @@
 package org.corfudb.runtime.clients;
 
-import io.netty.channel.ChannelHandlerContext;
-
-import java.lang.invoke.MethodHandles;
 import java.util.concurrent.CompletableFuture;
 
 import javax.annotation.Nonnull;
 
-import org.corfudb.protocols.wireprotocol.*;
-import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
-import org.corfudb.runtime.exceptions.NoBootstrapException;
-import org.corfudb.runtime.exceptions.OutrankedException;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
+import org.corfudb.protocols.wireprotocol.LayoutCommittedRequest;
+import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
+import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
+import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.runtime.view.Layout;
 import lombok.Getter;
 import lombok.Setter;
