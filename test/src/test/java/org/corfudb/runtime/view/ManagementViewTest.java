@@ -102,15 +102,12 @@ public class ManagementViewTest extends AbstractViewTest {
         bootstrapAllServers(l);
         getManagementServer(SERVERS.PORT_0).shutdown();
 
-        CorfuRuntime corfuRuntime = new CorfuRuntime();
-        l.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
-        corfuRuntime.connect();
+        CorfuRuntime corfuRuntime = getRuntime(l).connect();
 
         // Set aggressive timeouts.
         setAggressiveTimeouts(l, corfuRuntime,
-                getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
                 getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime());
-        setAggressiveDetectorTimeouts(SERVERS.PORT_0, SERVERS.PORT_1);
+        setAggressiveDetectorTimeouts(SERVERS.PORT_1);
 
         failureDetected.acquire();
 
@@ -171,9 +168,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 .build();
         bootstrapAllServers(l);
 
-        CorfuRuntime corfuRuntime = new CorfuRuntime();
-        l.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
-        corfuRuntime.connect();
+        CorfuRuntime corfuRuntime = getRuntime(l).connect();
 
         // Setting aggressive timeouts
         setAggressiveTimeouts(l, corfuRuntime,
@@ -206,12 +201,14 @@ public class ManagementViewTest extends AbstractViewTest {
                     .getFailureDetector();
             failureDetector.setInitPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             failureDetector.setPeriodDelta(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-            failureDetector.setMaxPeriodDuration(PARAMETERS.TIMEOUT_SHORT.toMillis());
+            failureDetector.setMaxPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            failureDetector.setInterIterationInterval(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
 
             HealingDetector healingDetector = (HealingDetector) getManagementServer(port)
                     .getManagementAgent()
                     .getHealingDetector();
             healingDetector.setDetectionPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            healingDetector.setInterIterationInterval(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         });
     }
 
@@ -791,6 +788,7 @@ public class ManagementViewTest extends AbstractViewTest {
     public void unblockSealedCluster() throws Exception {
         CorfuRuntime corfuRuntime = getDefaultRuntime();
         Layout l = new Layout(corfuRuntime.getLayoutView().getLayout());
+        setAggressiveDetectorTimeouts(SERVERS.PORT_0);
 
         CFUtils.within(
                 CompletableFuture.allOf(
