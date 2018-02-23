@@ -30,8 +30,7 @@ Options:
 (doseq [endpoint (.toArray (.. localcmd (get "<endpoint>")))]
   (do
      (println (format "PING %s" endpoint))
-     (get-router endpoint localcmd)
-     (let [ping (time-expression (.. (get-base-client) (pingSync)))]
+     (let [ping (time-expression (.. (get-base-client (get-router server localcmd) 0) (pingSync)))]
        (if (:result ping) (println (format "ACK time=%.3fms" (/ (:time ping) 1000000.0)))
            (println (format "NACK timeout=%.3fms" (/ (:time ping) 1000000.0)))
        )

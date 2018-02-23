@@ -3,6 +3,11 @@
 (import org.corfudb.runtime.CorfuRuntime)
 (import org.corfudb.runtime.clients.NettyClientRouter)
 (import org.docopt.Docopt)
+(import org.corfudb.runtime.clients.BaseSenderClient)
+(import org.corfudb.runtime.clients.LayoutSenderClient)
+(import org.corfudb.runtime.clients.SequencerSenderClient)
+(import org.corfudb.runtime.clients.LogUnitSenderClient)
+(import org.corfudb.runtime.clients.ManagementSenderClient)
 (use 'clojure.reflect)
 
 (defn -class-starts-with [obj name] (if (nil? obj) false (.. (.. (.. obj (getClass)) (getName)) (startsWith name))))
@@ -131,19 +136,6 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
 (defn connect-runtime ([] (.. *r (connect)))
                           ([runtime] (.. runtime (connect))))
 
-; Functions that get clients from a router
-(defn get-base-client ([] (.. *o (getClient org.corfudb.runtime.clients.BaseClient)))
-  ([router] (.. router (getClient org.corfudb.runtime.clients.BaseClient))))
-(defn get-layout-client ([] (.. *o (getClient org.corfudb.runtime.clients.LayoutClient)))
-  ([router] (.. router (getClient org.corfudb.runtime.clients.LayoutClient))))
-(defn get-logunit-client ([] (.. *o (getClient org.corfudb.runtime.clients.LogUnitClient)))
-  ([router] (.. router (getClient org.corfudb.runtime.clients.LogUnitClient))))
-(defn get-sequencer-client ([] (.. *o (getClient org.corfudb.runtime.clients.SequencerClient)))
-  ([router] (.. router (getClient org.corfudb.runtime.clients.SequencerClient))))
-(defn get-management-client ([] (.. *o (getClient org.corfudb.runtime.clients.ManagementClient)))
-  ([router] (.. router (getClient org.corfudb.runtime.clients.ManagementClient))))
-
-
 ; Functions to interact with a runtime.
 (defn get-objects-view ([] (.. *r (getObjectsView)))
   ([runtime] (.. runtime (getObjectsView))))
@@ -156,6 +148,13 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
 (defn get-management-view ([] (.. *r (getManagementView)))
       ([runtime] (.. runtime (getManagementView))))
 (defn get-stream ([stream] (.. (.. *r (getStreamsView)) (get stream))))
+
+; Functions that get clients
+(defn get-base-client ([router epoch] (new BaseSenderClient router epoch)))
+(defn get-layout-client ([router epoch] (new LayoutSenderClient router epoch)))
+(defn get-sequencer-client ([router epoch] (new SequencerSenderClient router epoch)))
+(defn get-logunit-client ([router epoch] (new LogUnitSenderClient router epoch)))
+(defn get-management-client ([router epoch] (new ManagementSenderClient router epoch)))
 
 ; Helper functions
 (defn uuid-from-string "Takes a string and parses it to UUID if it is not a UUID"

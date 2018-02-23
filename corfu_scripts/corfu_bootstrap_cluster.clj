@@ -30,10 +30,10 @@ Options:
 
                       (do
                         (doseq [server (.getLayoutServers new-layout)]
-                           (do (get-router server localcmd)
-                               (.get (.bootstrapLayout (get-layout-client) new-layout))
-                               (.get (.bootstrapManagement (get-management-client) new-layout))
-                            ))
+                           (do (let [router (get-router server localcmd)]
+                               (.get (.bootstrapLayout (new LayoutSenderClient router (.getEpoch new-layout)) new-layout))
+                               (.get (.bootstrapManagement (new ManagementSenderClient router (.getEpoch new-layout)) new-layout))
+                            )))
                         (println "New layout installed!")
                         )
                   )))
