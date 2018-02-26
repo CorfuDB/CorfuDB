@@ -6,9 +6,13 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import java.lang.Thread.UncaughtExceptionHandler;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -16,7 +20,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -35,6 +38,7 @@ import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.clients.BaseSenderClient;
+import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.LayoutSenderClient;
@@ -333,7 +337,23 @@ public class CorfuRuntime {
     /**
      * A completable future containing a layout, when completed.
      */
+
     public volatile CompletableFuture<Layout> layout;
+
+    /**
+     * Last obtained layout with the highest epoch seen.
+     */
+    private volatile Layout latestLayout = null;
+
+    /**
+     * Sender Client Map.
+     * map(client type -> map(Endpoint -> map.entry(epoch, senderClient)))
+     * The map.entry is invalidated and overwritten when there is an epoch mismatch.
+     * This ensures that a client for a particular endpoint stamped with the required epoch is
+     * created only once.
+     */
+    private final Map<Class<? extends IClient>,
+            Map<String, Map.Entry<Long, IClient>>> senderClientMap = new ConcurrentHashMap<>();
 
     /** The {@link UUID} of the cluster we are currently connected to, or null, if
      *  there is no cluster yet.
@@ -425,8 +445,7 @@ public class CorfuRuntime {
                         try {
                             newRouter.addClient(new LayoutClient())
                                 .addClient(new SequencerClient())
-                                .addClient(new LogUnitClient().setMetricRegistry(metrics != null
-                                    ? metrics : CorfuRuntime.getDefaultMetrics()))
+                                .addClient(new LogUnitClient())
                                 .addClient(new ManagementClient());
                         } catch (Exception e) {
                             log.warn("Error connecting to router", e);
@@ -671,8 +690,6 @@ public class CorfuRuntime {
         }
     }
 
-    private final AtomicReference<Layout> latestLayout = new AtomicReference<>(null);
-
     /**
      * Return a completable future which is guaranteed to contain a layout.
      * This future will continue retrying until it gets a layout.
@@ -695,18 +712,19 @@ public class CorfuRuntime {
                     try {
                         IClientRouter router = getRouter(s);
                         // Try to get a layout.
-                        CompletableFuture<Layout> layoutFuture = new LayoutSenderClient(router, 0L)
-                                .getLayout();
+                        CompletableFuture<Layout> layoutFuture =
+                                new LayoutSenderClient(router, Layout.INVALID_EPOCH).getLayout();
                         // Wait for layout
                         Layout l = layoutFuture.get();
 
-                        if (latestLayout.get() != null
-                                && latestLayout.get().getEpoch() > l.getEpoch()) {
+                        // If the layout we got has a smaller epoch than the latestLayout epoch,
+                        // we discard it.
+                        if (latestLayout != null && latestLayout.getEpoch() > l.getEpoch()) {
                             log.warn("fetchLayout: Received a layout with epoch {} from server "
                                             + "{}:{} smaller than latestLayout epoch {}, "
                                             + "discarded.",
                                     l.getEpoch(), router.getHost(), router.getPort(),
-                                    latestLayout.get().getEpoch());
+                                    latestLayout.getEpoch());
                             continue;
                         }
 
@@ -714,7 +732,7 @@ public class CorfuRuntime {
 
                         l.setRuntime(this);
                         layoutServers = l.getLayoutServers();
-                        latestLayout.set(l);
+                        latestLayout = l;
                         layout = layoutFuture;
 
                         log.debug("Layout server {} responded with layout {}", s, l);
@@ -798,39 +816,58 @@ public class CorfuRuntime {
         return this;
     }
 
+    private IClient getClient(final Class<? extends IClient> clientClass,
+                              final Layout layout,
+                              final String endpoint) {
+        return senderClientMap.compute(clientClass, (senderClass, stringEntryMap) -> {
+            Map<String, Map.Entry<Long, IClient>> endpointClientMap = stringEntryMap;
+            if (endpointClientMap == null) {
+                endpointClientMap = new HashMap<>();
+            }
+
+            Map.Entry<Long, IClient> clientEntry = endpointClientMap.get(endpoint);
+            if (clientEntry == null || clientEntry.getKey() != layout.getEpoch()) {
+                try {
+                    Constructor<? extends IClient> ctor =
+                            clientClass.getDeclaredConstructor(IClientRouter.class, long.class);
+                    endpointClientMap.put(endpoint, new SimpleEntry<>(layout.getEpoch(),
+                            ctor.newInstance(getRouter(endpoint), layout.getEpoch())));
+                } catch (NoSuchMethodException | IllegalAccessException | InstantiationException
+                        | InvocationTargetException e) {
+                    throw new UnrecoverableCorfuError(e);
+                }
+            }
+            return endpointClientMap;
+        }).get(endpoint).getValue();
+    }
+
     public BaseSenderClient getBaseClient(Layout layout, String endpoint) {
-        return new BaseSenderClient(getRouter(endpoint), layout.getEpoch());
+        return (BaseSenderClient) getClient(BaseSenderClient.class, layout, endpoint);
     }
 
     public LayoutSenderClient getLayoutClient(Layout layout, String endpoint) {
-        return new LayoutSenderClient(getRouter(endpoint), layout.getEpoch());
+        return (LayoutSenderClient) getClient(LayoutSenderClient.class, layout, endpoint);
     }
 
     public SequencerSenderClient getPrimarySequencerClient(Layout layout) {
-        return getSequencerClient(layout, 0);
-    }
-
-    public SequencerSenderClient getSequencerClient(Layout layout, int index) {
-        return new SequencerSenderClient(getRouter(layout.getSequencers().get(index)),
-                layout.getEpoch());
+        return getSequencerClient(layout, layout.getSequencers().get(0));
     }
 
     public SequencerSenderClient getSequencerClient(Layout layout, String endpoint) {
-        return new SequencerSenderClient(getRouter(endpoint), layout.getEpoch());
+        return (SequencerSenderClient) getClient(SequencerSenderClient.class, layout, endpoint);
     }
 
     public LogUnitSenderClient getLogUnitClient(Layout layout, long address, int index) {
-        return new LogUnitSenderClient(getRouter(layout.getStripe(address).getLogServers()
-                .get(index)).getClient(LogUnitClient.class), layout.getEpoch());
+        return getLogUnitClient(layout, layout.getStripe(address).getLogServers().get(index));
     }
 
     public LogUnitSenderClient getLogUnitClient(Layout layout, String endpoint) {
-        return new LogUnitSenderClient(getRouter(endpoint).getClient(LogUnitClient.class),
-                layout.getEpoch());
+        return ((LogUnitSenderClient) getClient(LogUnitSenderClient.class, layout, endpoint))
+                .setMetricRegistry(metrics != null ? metrics : CorfuRuntime.getDefaultMetrics());
     }
 
     public ManagementSenderClient getManagementClient(Layout layout, String endpoint) {
-        return new ManagementSenderClient(getRouter(endpoint), layout.getEpoch());
+        return (ManagementSenderClient) getClient(ManagementSenderClient.class, layout, endpoint);
     }
 
     // Below are deprecated methods which should no longer be

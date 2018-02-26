@@ -83,7 +83,7 @@ public class LogUnitClientTest extends AbstractClientTest {
     @Override
     Set<IClient> getClientsForTest() {
         LogUnitClient logUnitClient = new LogUnitClient();
-        client = new LogUnitSenderClient(logUnitClient, 0L);
+        client = new LogUnitSenderClient(router, 0L);
         return new ImmutableSet.Builder<IClient>()
                 .add(new BaseClient())
                 .add(logUnitClient)

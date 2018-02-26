@@ -1,20 +1,15 @@
 package org.corfudb.runtime.clients;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
-
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
 
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
@@ -34,22 +29,6 @@ public class LogUnitClient implements IClient {
     @Setter
     @Getter
     IClientRouter router;
-
-    @Getter
-    MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-
-    public LogUnitClient setMetricRegistry(@NonNull MetricRegistry metricRegistry) {
-        this.metricRegistry = metricRegistry;
-        return this;
-    }
-
-    public String getHost() {
-        return router.getHost();
-    }
-
-    public Integer getPort() {
-        return router.getPort();
-    }
 
     /**
      * The handler and handlers which implement this client.
@@ -219,12 +198,5 @@ public class LogUnitClient implements IClient {
     private static Object handleTrimMarkResponse(CorfuPayloadMsg<Long> msg,
                                              ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
-    }
-
-    protected Timer.Context getTimerContext(String opName) {
-        Timer t = getMetricRegistry().timer(
-                CorfuRuntime.getMpLUC()
-                        + getHost() + ":" + getPort().toString() + "-" + opName);
-        return t.time();
     }
 }

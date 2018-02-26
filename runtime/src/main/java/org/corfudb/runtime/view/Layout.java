@@ -80,6 +80,12 @@ public class Layout {
     long epoch;
 
     /**
+     * Invalid epoch value.
+     * Is used to fetch layout(epoch agnostic request) by the corfuRuntime.
+     */
+    public static final long INVALID_EPOCH = -1L;
+
+    /**
      * The org.corfudb.runtime this layout is associated with.
      */
     @Getter
