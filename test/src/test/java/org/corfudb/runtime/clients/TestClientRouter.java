@@ -11,7 +11,6 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
 
 import java.time.Duration;
@@ -142,7 +141,7 @@ public class TestClientRouter implements IClientRouter {
     private void handleMessage(Object o) {
         if (o instanceof CorfuMsg) {
             CorfuMsg m = (CorfuMsg) o;
-            if (validateEpochAndClientID(m, channelContext)) {
+            if (validateClientId(m)) {
                 IClient handler = handlerMap.get(m.getMsgType());
                 handler.handleMessage(m, null);
             }
@@ -279,27 +278,16 @@ public class TestClientRouter implements IClientRouter {
     }
 
     /**
-     * Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
-     * the server is in the wrong epoch. Ignored if the message type is reset (which
-     * is valid in any epoch).
+     * Validate the client ID of a CorfuMsg.
      *
      * @param msg The incoming message to validate.
-     * @param ctx The context of the channel handler.
-     * @return True, if the epoch is correct, but false otherwise.
+     * @return True, if the clientID is correct, but false otherwise.
      */
-    public boolean validateEpochAndClientID(CorfuMsg msg, ChannelHandlerContext ctx) {
+    private boolean validateClientId(CorfuMsg msg) {
         // Check if the message is intended for us. If not, drop the message.
         if (!msg.getClientID().equals(clientID)) {
-            log.warn("Incoming message intended for client {}, our id is {}, dropping!", msg.getClientID(), clientID);
-            return false;
-        }
-        // Check if the message is in the right epoch.
-        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != getEpoch()) {
-            CorfuMsg m = new CorfuMsg();
-            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
-                    msg.getEpoch(), getEpoch(), msg);
-             /* If this message was pending a completion, complete it with an error. */
-            completeExceptionally(msg.getRequestID(), new WrongEpochException(getEpoch()));
+            log.warn("Incoming message intended for client {}, our id is {}, dropping!",
+                    msg.getClientID(), clientID);
             return false;
         }
         return true;
