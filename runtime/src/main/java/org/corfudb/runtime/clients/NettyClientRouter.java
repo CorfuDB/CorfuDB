@@ -44,7 +44,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ShutdownException;
-import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.security.sasl.SaslUtils;
@@ -558,7 +557,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * @param msg The incoming message to validate.
      * @return True, if the clientID is correct, but false otherwise.
      */
-    private boolean validateClientID(CorfuMsg msg) {
+    private boolean validateClientId(CorfuMsg msg) {
         // Check if the message is intended for us. If not, drop the message.
         if (!msg.getClientID().equals(parameters.getClientId())) {
             log.warn("Incoming message intended for client {}, our id is {}, dropping!",
@@ -577,7 +576,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 // The message was unregistered, we are dropping it.
                 log.warn("Received unregistered message {}, dropping", m);
             } else {
-                if (validateClientID(m)) {
+                if (validateClientId(m)) {
                     // Route the message to the handler.
                     if (log.isTraceEnabled()) {
                         log.trace("Message routed to {}: {}",

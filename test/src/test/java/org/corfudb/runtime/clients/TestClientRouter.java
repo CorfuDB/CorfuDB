@@ -11,7 +11,6 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
 
 import java.time.Duration;
@@ -142,7 +141,7 @@ public class TestClientRouter implements IClientRouter {
     private void handleMessage(Object o) {
         if (o instanceof CorfuMsg) {
             CorfuMsg m = (CorfuMsg) o;
-            if (validateClientID(m)) {
+            if (validateClientId(m)) {
                 IClient handler = handlerMap.get(m.getMsgType());
                 handler.handleMessage(m, null);
             }
@@ -284,7 +283,7 @@ public class TestClientRouter implements IClientRouter {
      * @param msg The incoming message to validate.
      * @return True, if the clientID is correct, but false otherwise.
      */
-    private boolean validateClientID(CorfuMsg msg) {
+    private boolean validateClientId(CorfuMsg msg) {
         // Check if the message is intended for us. If not, drop the message.
         if (!msg.getClientID().equals(clientID)) {
             log.warn("Incoming message intended for client {}, our id is {}, dropping!",
