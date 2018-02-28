@@ -15,6 +15,7 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
+import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
@@ -22,6 +23,7 @@ import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.Response;
+import org.corfudb.infrastructure.orchestrator.workflows.ForceRemoveWorkflow;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.view.Layout;
@@ -115,6 +117,10 @@ public class Orchestrator {
                 break;
             case HEAL_NODE:
                 workflow = new HealNodeWorkflow((HealNodeRequest) orchReq.getRequest());
+                dispatch(workflow, msg, ctx, r);
+                break;
+            case FORCE_REMOVE_NODE:
+                workflow = new ForceRemoveWorkflow((ForceRemoveNodeRequest) orchReq.getRequest());
                 dispatch(workflow, msg, ctx, r);
                 break;
             default:

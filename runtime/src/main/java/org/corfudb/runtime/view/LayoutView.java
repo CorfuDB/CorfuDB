@@ -276,8 +276,16 @@ public class LayoutView extends AbstractView {
      *
      * @throws WrongEpochException wrong epoch number.
      */
+    public void committed(long epoch, Layout layout) {
+        committed(epoch, layout, false);
+    }
+
+    /**
+     * Send committed layout to the old Layout servers and the new Layout Servers.
+     * If force is true, then the layout forced on all layout servers.
+     */
     @SuppressWarnings("unchecked")
-    public void committed(long epoch, Layout layout)
+    public void committed(long epoch, Layout layout, boolean force)
             throws WrongEpochException {
         CompletableFuture<Boolean>[] commitList = layout.getLayoutServers().stream()
                 .map(x -> {
@@ -286,7 +294,11 @@ public class LayoutView extends AbstractView {
                         // Connection to router can cause network exception too.
                         LayoutClient layoutClient = runtime.getRouter(x)
                                 .getClient(LayoutClient.class);
-                        cf = layoutClient.committed(epoch, layout);
+                        if (force) {
+                            cf = layoutClient.force(layout);
+                        } else {
+                            cf = layoutClient.committed(epoch, layout);
+                        }
                     } catch (NetworkException e) {
                         cf.completeExceptionally(e);
                     }
@@ -301,6 +313,12 @@ public class LayoutView extends AbstractView {
             try {
                 CFUtils.getUninterruptibly(CompletableFuture.anyOf(commitList),
                         WrongEpochException.class, TimeoutException.class, NetworkException.class);
+            } catch (WrongEpochException e) {
+                if (!force) {
+                    throw  e;
+                }
+                log.warn("committed: Error while force committing", e);
+                responses++;
             } catch (TimeoutException | NetworkException e) {
                 timeouts++;
             }

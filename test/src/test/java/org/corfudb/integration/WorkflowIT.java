@@ -9,11 +9,11 @@ import org.corfudb.runtime.view.LayoutBuilder;
 import org.junit.Test;
 
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- *
  * This integration test verifies the behaviour of the add node workflow. In particular, a single node
  * cluster is created and then populated with data, then a new node is added to the cluster,
  * making it of size 2. Checkpointing is then triggered so that the new second node starts servicing
@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * that were populated and checkpointed when the cluster was only 2 nodes. Finally, a client reads
  * back the data generated while growing the cluster to verify that it is correct and can be read
  * from a three node cluster.
- *
+ * <p>
  * Created by Maithem on 12/1/17.
  */
 @Slf4j
@@ -33,15 +33,16 @@ public class WorkflowIT extends AbstractIT {
         return host + ":" + port;
     }
 
+    final Duration timeout = Duration.ofMinutes(5);
+    final Duration pollPeriod = Duration.ofSeconds(5);
+    final int workflowNumRetry = 3;
+
     @Test
     public void AddAndRemoveNodeIT() throws Exception {
         final String host = "localhost";
         final String streamName = "s1";
         final int n1Port = 9000;
         final int numIter = 11_000;
-        final Duration timeout = Duration.ofMinutes(5);
-        final Duration pollPeriod = Duration.ofSeconds(5);
-        final int workflowNumRetry = 3;
 
         // Start node one and populate it with data
         Process server_1 = new CorfuServerRunner()
@@ -132,6 +133,20 @@ public class WorkflowIT extends AbstractIT {
         // the sequencers/layouts/segments nodes include the first and third node
         assertThat(n1Rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
 
+        // Force remove node 3
+        n1Rt.getManagementView().forceRemoveNode(getConnectionString(n3Port), workflowNumRetry,
+                timeout, pollPeriod);
+
+        n1Rt.invalidateLayout();
+        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(1);
+
+        // Re-add node 2
+        n1Rt.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
+                timeout, pollPeriod);
+
+        n1Rt.invalidateLayout();
+        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+
         for (int x = 0; x < numIter; x++) {
             String v = (String) table.get(String.valueOf(x));
             assertThat(v).isEqualTo(String.valueOf(x));
@@ -140,5 +155,148 @@ public class WorkflowIT extends AbstractIT {
         shutdownCorfuServer(server_1);
         shutdownCorfuServer(server_2);
         shutdownCorfuServer(server_3);
+    }
+
+    /**
+     *
+     * This tests will resize the cluster according to the following order,
+     * create a cluster of size 2, then force remove one node. Then, it will
+     * regrow the cluster to 3 nodes and remove one node. 
+     *
+     */
+    @Test
+    public void clusterResizingTest1() throws Exception {
+        final int n0Port = 9000;
+        final int n1Port = 9001;
+        final int n2Port = 9002;
+
+        final int clusterSizeN1 = 1;
+        final int clusterSizeN2 = 2;
+        final int clusterSizeN3 = 3;
+
+        new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n0Port)
+                .setSingle(true)
+                .runServer();
+
+        new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n1Port)
+                .setSingle(false)
+                .runServer();
+
+        new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n2Port)
+                .setSingle(false)
+                .runServer();
+
+        CorfuRuntime n0Rt = new CorfuRuntime(getConnectionString(n0Port)).connect();
+        CorfuTable table = n0Rt.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setStreamName("table1").open();
+
+        final int iter = 1000;
+        for (int x = 0; x < iter; x++) {
+            table.put(String.valueOf(x), String.valueOf(x));
+        }
+
+        n0Rt.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry,
+                timeout, pollPeriod);
+        n0Rt.invalidateLayout();
+
+        assertThat(n0Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+
+        n0Rt.getManagementView().forceRemoveNode(getConnectionString(n1Port), workflowNumRetry,
+                timeout, pollPeriod);
+        n0Rt.invalidateLayout();
+
+        assertThat(n0Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN1);
+
+        n0Rt.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry,
+                timeout, pollPeriod);
+
+        n0Rt.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
+                timeout, pollPeriod);
+
+        n0Rt.invalidateLayout();
+        assertThat(n0Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
+
+        n0Rt.getManagementView().removeNode(getConnectionString(n1Port), workflowNumRetry,
+                timeout, pollPeriod);
+        n0Rt.invalidateLayout();
+        assertThat(n0Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+
+        for (int x = 0; x < iter; x++) {
+            assertThat(table.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
+        }
+    }
+
+    @Test
+    public void clusterResizingTest2() throws Exception {
+        // This test will create a 3 node cluster, then simulate loss of quorum by terminating
+        // two of the three nodes, then the failed nodes are forcefully removed from the cluster.
+        final int n0Port = 9000;
+        final int n1Port = 9001;
+        final int n2Port = 9002;
+
+        final int clusterSizeN1 = 1;
+        final int clusterSizeN3 = 3;
+
+        new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n0Port)
+                .setSingle(true)
+                .runServer();
+
+        Process p1 = new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n1Port)
+                .runServer();
+
+        Process p2 = new CorfuServerRunner()
+                .setHost(host)
+                .setPort(n2Port)
+                .runServer();
+
+        CorfuRuntime n0Rt = new CorfuRuntime(getConnectionString(n0Port)).connect();
+        CorfuTable table = n0Rt.getObjectsView().build()
+                .setType(CorfuTable.class)
+                .setStreamName("table1").open();
+
+        final int iter = 100;
+        for (int x = 0; x < iter; x++) {
+            table.put(String.valueOf(x), String.valueOf(x));
+        }
+
+        n0Rt.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry,
+                timeout, pollPeriod);
+
+        n0Rt.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
+                timeout, pollPeriod);
+
+        n0Rt.invalidateLayout();
+        assertThat(n0Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
+
+        // Kill two nodes from a three node cluster
+        final long timeToWaitForProc = 5000;
+        p1.destroy();
+        p1.waitFor(timeToWaitForProc, TimeUnit.SECONDS);
+
+        p2.destroy();
+        p2.waitFor(timeToWaitForProc, TimeUnit.SECONDS);
+
+        // Force remove the "failed" node
+        n0Rt.getManagementView().forceRemoveNode(getConnectionString(n1Port), workflowNumRetry,
+                timeout, pollPeriod);
+        n0Rt.getManagementView().forceRemoveNode(getConnectionString(n2Port), workflowNumRetry,
+                timeout, pollPeriod);
+        n0Rt.invalidateLayout();
+        assertThat(n0Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN1);
+
+        for (int x = 0; x < iter; x++) {
+            assertThat(table.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
+        }
     }
 }
