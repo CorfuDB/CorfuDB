@@ -337,13 +337,7 @@ public class CorfuRuntime {
     /**
      * A completable future containing a layout, when completed.
      */
-
     public volatile CompletableFuture<Layout> layout;
-
-    /**
-     * Last obtained layout with the highest epoch seen.
-     */
-    private volatile Layout latestLayout = null;
 
     /**
      * Sender Client Map.
@@ -665,7 +659,7 @@ public class CorfuRuntime {
             // Don't create a new request for a layout if there is one pending.
             return;
         }
-        layout = fetchLayout();
+        layout = fetchLayout(CFUtils.getUninterruptibly(layout).getLayoutServers());
     }
 
     /** Check if the cluster Id of the layout matches the client cluster Id.
@@ -695,10 +689,14 @@ public class CorfuRuntime {
      * This future will continue retrying until it gets a layout.
      * If you need this completable future to fail, you should chain it with a timeout.
      *
+     * @param layoutServers Layout servers to fetch the layout from.
      * @return A completable future containing a layout.
      */
-    private CompletableFuture<Layout> fetchLayout() {
-        return CompletableFuture.<Layout>supplyAsync(() -> {
+    private CompletableFuture<Layout> fetchLayout(List<String> layoutServers) {
+
+        // Last obtained layout with the highest epoch seen.
+        final Layout latestLayout = layout != null ? CFUtils.getUninterruptibly(layout) : null;
+        return CompletableFuture.supplyAsync(() -> {
 
             List<String> layoutServersCopy = new ArrayList<>(layoutServers);
             beforeRpcHandler.run();
@@ -731,8 +729,6 @@ public class CorfuRuntime {
                         checkClusterId(l);
 
                         l.setRuntime(this);
-                        layoutServers = l.getLayoutServers();
-                        latestLayout = l;
                         layout = layoutFuture;
 
                         log.debug("Layout server {} responded with layout {}", s, l);
@@ -795,7 +791,7 @@ public class CorfuRuntime {
         if (layout == null) {
             log.info("Connecting to Corfu server instance, layout servers={}", layoutServers);
             // Fetch the current layout and save the future.
-            layout = fetchLayout();
+            layout = fetchLayout(layoutServers);
             try {
                 layout.get();
             } catch (Exception e) {
@@ -816,6 +812,17 @@ public class CorfuRuntime {
         return this;
     }
 
+    /**
+     * Updates the local map of clients.
+     * The epoch, client tuple is invalidated and overwritten when there is an epoch mismatch.
+     * This ensures that a client for a particular endpoint stamped with the required epoch is
+     * created only once.
+     *
+     * @param clientClass Class of client to be fetched.
+     * @param layout      Layout to fetch the epoch to stamp the clients.
+     * @param endpoint    Router endpoint to create the client.
+     * @return client
+     */
     private IClient getClient(final Class<? extends IClient> clientClass,
                               final Layout layout,
                               final String endpoint) {
