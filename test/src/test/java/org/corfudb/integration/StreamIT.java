@@ -77,7 +77,9 @@ public class StreamIT {
 
         //rt.getObjectsView().TXEnd();
 
-        for (int snapshotVersion = 1; snapshotVersion <= 5; snapshotVersion++) {
+        final int snapshotUpperLimit = 5;
+
+        for (int snapshotVersion = 1; snapshotVersion <= snapshotUpperLimit; snapshotVersion++) {
             rt.getObjectsView().TXBuild().setSnapshot(snapshotVersion).setType(TransactionType.SNAPSHOT).begin();
             for (int o = 1; o <= snapshotVersion; o = o + 2) {
                 System.out.println("version " + o);
