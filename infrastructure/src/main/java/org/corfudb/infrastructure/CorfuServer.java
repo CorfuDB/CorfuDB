@@ -23,6 +23,11 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import java.io.File;
 import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -73,9 +78,9 @@ public class CorfuServer {
             "Corfu Server, the server for the Corfu Infrastructure.\n"
                     + "\n"
                     + "Usage:\n"
-                    + "\tcorfu_server (-l <path>|-m) [-ns] [-a <address>] [-t <token>] [-c "
-                    + "<ratio>] [-d <level>] [-p <seconds>] [-M <address>:<port>] [-e [-u "
-                    + "<keystore> -f <keystore_password_file>] [-r <truststore> -w "
+                    + "\tcorfu_server (-l <path>|-m) [-ns] [-a <address>|-q <interface-name>] "
+                    + "[-t <token>] [-c <ratio>] [-d <level>] [-p <seconds>] [-M <address>:<port>] "
+                    + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w "
                     + "<truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-i <channel-implementation>] [-H <seconds>] "
                     + "[-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] [-P <prefix>]"
@@ -100,6 +105,8 @@ public class CorfuServer {
                     + "\n -a <address>, --address=<address>                                      "
                     + "                IP address to advertise to external clients [default: "
                     + "localhost].\n"
+                    + " -q <interface-name>, --network-interface=<interface-name>                "
+                    + "              The name of the network interface.\n"
                     + " -i <channel-implementation>, --implementation <channel-implementation>   "
                     + "              The type of channel to use (auto, nio, epoll, kqueue)"
                     + "[default: nio].\n"
@@ -199,6 +206,12 @@ public class CorfuServer {
 
         log.debug("Started with arguments: " + opts);
 
+        // Fetch the address if given a network interface.
+        if (opts.get("--network-interface") != null) {
+            opts.put("--address",
+                    getAddressFromInterfaceName((String) opts.get("--network-interface")));
+        }
+
         // Create the service directory if it does not exist.
         if (!(Boolean) opts.get("--memory")) {
             File serviceDir = new File((String) opts.get("--log-path"));
@@ -223,6 +236,34 @@ public class CorfuServer {
         corfuServerThread = new Thread(() -> startServer(opts));
         corfuServerThread.setName("CorfuServer");
         corfuServerThread.start();
+    }
+
+    /**
+     * Fetches the IP address given an interface name.
+     * Throws an unrecoverable error and aborts if the server is unable to find a valid address.
+     *
+     * @param interfaceName Network interface name.
+     * @return address for the interface name.
+     */
+    private static String getAddressFromInterfaceName(String interfaceName) {
+        try {
+            Enumeration<InetAddress> inetAddress = NetworkInterface.getByName(interfaceName)
+                    .getInetAddresses();
+            InetAddress currentAddress;
+            while (inetAddress.hasMoreElements()) {
+                currentAddress = inetAddress.nextElement();
+                log.info("currentAddress: {}", currentAddress);
+                if (currentAddress instanceof Inet4Address
+                        && !currentAddress.isLoopbackAddress()) {
+                    return currentAddress.getHostAddress();
+                }
+            }
+        } catch (SocketException e) {
+            log.error("Error fetching address from interface name ", e);
+            throw new UnrecoverableCorfuError(e);
+        }
+        throw new UnrecoverableCorfuError("No valid interfaces with name "
+                + interfaceName + " found.");
     }
 
     /**
