@@ -181,6 +181,11 @@ public class CorfuServer {
                     + " --version                                                                "
                     + "              Show version\n";
 
+    private static final String MEMORY = "--memory";
+    private static final String LOG_PATH = "--log-path";
+    private static final String ADDRESS = "--address";
+    private static final String DEFAULT_ADDRESS = "localhost";
+
     private static volatile Thread corfuServerThread;
     private static volatile Thread shutdownThread;
 
@@ -208,13 +213,15 @@ public class CorfuServer {
 
         // Fetch the address if given a network interface.
         if (opts.get("--network-interface") != null) {
-            opts.put("--address",
+            opts.put(ADDRESS,
                     getAddressFromInterfaceName((String) opts.get("--network-interface")));
+        } else {
+            opts.putIfAbsent(ADDRESS, DEFAULT_ADDRESS);
         }
 
         // Create the service directory if it does not exist.
-        if (!(Boolean) opts.get("--memory")) {
-            File serviceDir = new File((String) opts.get("--log-path"));
+        if (!(Boolean) opts.get(MEMORY)) {
+            File serviceDir = new File((String) opts.get(LOG_PATH));
 
             if (!serviceDir.isDirectory()) {
                 log.error("Service directory {} does not point to a directory. Aborting.",
@@ -226,7 +233,7 @@ public class CorfuServer {
                         + "corfu";
                 File corfuServiceDir = new File(corfuServiceDirPath);
                 // Update the new path with the dedicated child service directory.
-                opts.put("--log-path", corfuServiceDirPath);
+                opts.put(LOG_PATH, corfuServiceDirPath);
                 if (!corfuServiceDir.exists() && corfuServiceDir.mkdirs()) {
                     log.info("Created new service directory at {}.", corfuServiceDir);
                 }
@@ -253,8 +260,7 @@ public class CorfuServer {
             while (inetAddress.hasMoreElements()) {
                 currentAddress = inetAddress.nextElement();
                 log.info("currentAddress: {}", currentAddress);
-                if (currentAddress instanceof Inet4Address
-                        && !currentAddress.isLoopbackAddress()) {
+                if (currentAddress instanceof Inet4Address) {
                     return currentAddress.getHostAddress();
                 }
             }
@@ -299,6 +305,7 @@ public class CorfuServer {
                     b -> configureBootstrapOptions(serverContext, b),
                     serverContext,
                     router,
+                    (String) opts.get(ADDRESS),
                     port).channel().closeFuture().syncUninterruptibly();
         }
     }
@@ -340,6 +347,7 @@ public class CorfuServer {
                           @Nonnull BootstrapConfigurer bootstrapConfigurer,
                           @Nonnull ServerContext context,
                           @Nonnull NettyServerRouter router,
+                          String address,
                           int port) {
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
@@ -348,7 +356,7 @@ public class CorfuServer {
             bootstrapConfigurer.configure(bootstrap);
 
             bootstrap.childHandler(getServerChannelInitializer(context, router));
-            return bootstrap.bind(port).sync();
+            return bootstrap.bind(address, port).sync();
         } catch (InterruptedException ie) {
             throw new UnrecoverableCorfuInterruptedError(ie);
         }
@@ -483,9 +491,9 @@ public class CorfuServer {
 
         corfuServerThread = new Thread(() -> {
             cleanShutdown((NettyServerRouter) serverContext.getServerRouter());
-            if (resetData && !(Boolean) serverContext.getServerConfig().get("--memory")) {
+            if (resetData && !(Boolean) serverContext.getServerConfig().get(MEMORY)) {
                 File serviceDir = new File((String) serverContext.getServerConfig()
-                        .get("--log-path"));
+                        .get(LOG_PATH));
                 try {
                     FileUtils.cleanDirectory(serviceDir);
                 } catch (IOException ioe) {
@@ -589,7 +597,6 @@ public class CorfuServer {
                 .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));
         println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
         println(ansi().a("Service directory: ").fg(WHITE).a(
-                (Boolean) opts.get("--memory") ? "MEMORY mode" :
-                        opts.get("--log-path")).reset());
+                (Boolean) opts.get(MEMORY) ? "MEMORY mode" : opts.get(LOG_PATH)).reset());
     }
 }
