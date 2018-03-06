@@ -31,18 +31,18 @@ public class SequencerView extends AbstractView {
      * @return The first token retrieved.
      */
     public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens) {
-        return layoutHelper(l -> CFUtils.getUninterruptibly(runtime.getPrimarySequencerClient(l)
+        return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                 .nextToken(streamIDs, numTokens)));
     }
 
 
     public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens,
                                    TxResolutionInfo conflictInfo) {
-        return layoutHelper(l -> CFUtils.getUninterruptibly(runtime.getPrimarySequencerClient(l)
+        return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                 .nextToken(streamIDs, numTokens, conflictInfo)));
     }
 
     public void trimCache(long address) {
-        runtime.getPrimarySequencerClient(getCurrentLayout()).trimCache(address);
+        runtime.getLayoutView().getEpochedClient().getPrimarySequencerClient().trimCache(address);
     }
 }

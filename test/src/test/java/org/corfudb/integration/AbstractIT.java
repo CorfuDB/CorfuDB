@@ -9,12 +9,17 @@ import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.ShutdownException;
+import org.corfudb.runtime.view.EpochedClient;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -137,9 +142,9 @@ public class AbstractIT extends AbstractCorfuTest {
 
     public void restartServer(CorfuRuntime corfuRuntime, String endpoint) {
         corfuRuntime.invalidateLayout();
-        Layout oldLayout = corfuRuntime.getLayoutView().getLayout();
+        EpochedClient epochedClient = corfuRuntime.getLayoutView().getEpochedClient();
         try {
-            corfuRuntime.getBaseClient(oldLayout, endpoint).restart().get();
+            epochedClient.getBaseClient(endpoint).restart().get();
         } catch (ExecutionException | InterruptedException e) {
             log.error("Error: {}", e);
         }
@@ -150,10 +155,10 @@ public class AbstractIT extends AbstractCorfuTest {
         while (true) {
             try {
                 if (corfuRuntime.getLayoutView().getLayout().getEpoch()
-                        == (oldLayout.getEpoch() + 1)) {
+                        == (epochedClient.getLayout().getEpoch() + 1)) {
                     break;
                 }
-                Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+                Sleep.MILLISECONDS.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
                 corfuRuntime.invalidateLayout();
             } catch (ShutdownException se) {
                 log.error("Shutdown Exception thrown connecting to server:{} ignored, {}",

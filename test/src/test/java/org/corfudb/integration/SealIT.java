@@ -41,19 +41,18 @@ public class SealIT extends AbstractIT{
          */
 
         Layout currentLayout = new Layout(cr1.getLayoutView().getCurrentLayout());
-        currentLayout.setRuntime(cr1);
         /* 1 */
         currentLayout.setEpoch(currentLayout.getEpoch() + 1);
         /* 2 */
-        currentLayout.moveServersToEpoch();
+        cr1.getLayoutView().getEpochedClient(currentLayout).moveServersToEpoch();
         /* 3 */
         cr1.getLayoutView().updateLayout(currentLayout, 0);
 
         cr1.invalidateLayout();
-        cr1.layout.get();
+        cr1.getLayoutView().getLayout();
 
-        cr1.getSequencerClient(cr1.getLayoutView().getLayout(),
-                corfuSingleNodeHost + ":" + corfuSingleNodePort)
+        cr1.getLayoutView().getEpochedClient()
+                .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort)
                 .bootstrap(1L, Collections.emptyMap(), currentLayout.getEpoch())
                 .get();
 

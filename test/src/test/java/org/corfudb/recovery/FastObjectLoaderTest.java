@@ -8,15 +8,14 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.clients.LogUnitSenderClient;
-import org.corfudb.runtime.clients.SequencerSenderClient;
+import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -182,11 +181,10 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canReadHoles() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2);
 
-        Layout layout = getDefaultRuntime().getLayoutView().getLayout();
-        LogUnitSenderClient luc = getDefaultRuntime()
-                .getLogUnitClient(layout, getDefaultConfigurationString());
-        SequencerSenderClient seq = getDefaultRuntime()
-                .getSequencerClient(layout, getDefaultConfigurationString());
+        LogUnitClient luc = getDefaultRuntime().getLayoutView().getEpochedClient()
+                .getLogUnitClient(getDefaultConfigurationString());
+        SequencerClient seq = getDefaultRuntime().getLayoutView().getEpochedClient()
+                .getSequencerClient(getDefaultConfigurationString());
 
         seq.nextToken(null, 1);
         luc.fillHole(getDefaultRuntime().getSequencerView()
@@ -402,11 +400,10 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canReadRankOnlyEntries() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, 2);
 
-        Layout layout = getDefaultRuntime().getLayoutView().getLayout();
-        LogUnitSenderClient luc = getDefaultRuntime()
-                .getLogUnitClient(layout, getDefaultConfigurationString());
-        SequencerSenderClient seq = getDefaultRuntime()
-                .getSequencerClient(layout, getDefaultConfigurationString());
+        LogUnitClient luc = getDefaultRuntime().getLayoutView().getEpochedClient()
+                .getLogUnitClient(getDefaultConfigurationString());
+        SequencerClient seq = getDefaultRuntime().getLayoutView().getEpochedClient()
+                .getSequencerClient(getDefaultConfigurationString());
 
         long address = seq.nextToken(Collections.emptySet(),1).get().getTokenValue();
         ILogData data = Helpers.createEmptyData(address, DataType.RANK_ONLY,  new IMetadata.DataRank(2))

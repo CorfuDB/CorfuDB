@@ -164,7 +164,8 @@ public class AddNodeWorkflow implements IWorkflow {
 
             for (String endpoint : endpoints) {
                 // Write segment chunk to the new logunit
-                boolean transferSuccess = runtime.getLogUnitClient(newLayout, endpoint)
+                boolean transferSuccess = runtime.getLayoutView().getEpochedClient(newLayout)
+                        .getLogUnitClient(endpoint)
                         .writeRange(entries).get();
 
                 if (!transferSuccess) {

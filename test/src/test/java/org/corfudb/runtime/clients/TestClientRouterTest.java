@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class TestClientRouterTest extends AbstractCorfuTest {
 
-    private BaseSenderClient bc;
+    private BaseClient bc;
     private TestClientRouter tcr;
 
     @Before
@@ -27,9 +27,9 @@ public class TestClientRouterTest extends AbstractCorfuTest {
         BaseServer bs = new BaseServer(ServerContextBuilder.defaultTestContext(0));
         tsr.addServer(bs);
         tcr = new TestClientRouter(tsr);
-        BaseClient baseClient = new BaseClient();
-        tcr.addClient(baseClient);
-        bc = new BaseSenderClient(tcr, 0L);
+        BaseHandler baseHandler = new BaseHandler();
+        tcr.addClient(baseHandler);
+        bc = new BaseClient(tcr, 0L);
 
     }
 

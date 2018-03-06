@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.LogUnitSenderClient;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -79,8 +79,8 @@ public class StreamTest extends AbstractTransactionsTest {
         final long trimMark = getRuntime().getParameters().getWriteRetry() - 1;
         final String key = "key";
         final String val = "val";
-        LogUnitSenderClient lu = getRuntime().getLogUnitClient(getRuntime().getLayoutView().getLayout(),
-                getDefaultConfigurationString());
+        LogUnitClient lu = getRuntime().getLayoutView().getEpochedClient()
+                .getLogUnitClient(getDefaultConfigurationString());
         lu.prefixTrim(trimMark).get();
         TXBegin();
         map.put(key, val);

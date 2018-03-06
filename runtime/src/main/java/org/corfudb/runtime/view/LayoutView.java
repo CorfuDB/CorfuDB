@@ -35,9 +35,15 @@ public class LayoutView extends AbstractView {
      * Retrieves current layout.
      **/
     public Layout getLayout() {
-        return layoutHelper(l -> {
-            return l;
-        });
+        return layoutHelper(EpochedClient::getLayout);
+    }
+
+    public EpochedClient getEpochedClient() {
+        return layoutHelper(l -> l);
+    }
+
+    public EpochedClient getEpochedClient(@Nonnull Layout layout) {
+        return new EpochedClient(layout, runtime);
     }
 
     /**
@@ -88,7 +94,7 @@ public class LayoutView extends AbstractView {
         // For some reason, the alreadyProposedLayout sometimes doesn't have a runtime
         // we need to remove runtime from the layout, but for now, let's manually take
         // it from the original layout.
-        layoutToPropose.setRuntime(layout.getRuntime());
+
         //phase 2: propose the new layout.
         propose(epoch, rank, layoutToPropose);
         //phase 3: commited
@@ -115,7 +121,7 @@ public class LayoutView extends AbstractView {
                     CompletableFuture<LayoutPrepareResponse> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
-                        cf = runtime.getLayoutClient(getLayout(), x).prepare(epoch, rank);
+                        cf = getEpochedClient().getLayoutClient(x).prepare(epoch, rank);
                     } catch (Exception e) {
                         cf.completeExceptionally(e);
                     }
@@ -204,7 +210,7 @@ public class LayoutView extends AbstractView {
                     CompletableFuture<Boolean> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
-                        cf = runtime.getLayoutClient(getLayout(), x).propose(epoch, rank, layout);
+                        cf = getEpochedClient().getLayoutClient(x).propose(epoch, rank, layout);
                     } catch (NetworkException e) {
                         cf.completeExceptionally(e);
                     }
@@ -288,9 +294,9 @@ public class LayoutView extends AbstractView {
                     try {
                         // Connection to router can cause network exception too.
                         if (force) {
-                            cf = runtime.getLayoutClient(layout, x).force(layout);
+                            cf = getEpochedClient(layout).getLayoutClient(x).force(layout);
                         } else {
-                            cf = runtime.getLayoutClient(layout, x).committed(epoch, layout);
+                            cf = getEpochedClient(layout).getLayoutClient(x).committed(epoch, layout);
                         }
                     } catch (NetworkException e) {
                         cf.completeExceptionally(e);

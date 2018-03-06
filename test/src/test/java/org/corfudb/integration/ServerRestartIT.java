@@ -3,7 +3,7 @@ package org.corfudb.integration;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.clients.SequencerSenderClient;
+import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -293,7 +293,7 @@ public class ServerRestartIT extends AbstractIT {
 
         // Block until server is ready.
         runtime.invalidateLayout();
-        runtime.layout.get();
+        runtime.getLayoutView().getLayout();
 
         // Execute Transactions (once Corfu Server was restarted)
         for (int i = 0; i < ITERATIONS; i++) {
@@ -575,9 +575,9 @@ public class ServerRestartIT extends AbstractIT {
                 System.out.println(r + "..no checkpoint/trim");
             }
 
-            SequencerSenderClient sequencerClient = corfuRuntime
-                    .getSequencerClient(corfuRuntime.getLayoutView().getLayout(),
-                            corfuSingleNodeHost + ":" + corfuSingleNodePort);
+            SequencerClient sequencerClient = corfuRuntime
+                    .getLayoutView().getEpochedClient()
+                    .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
 
             TokenResponse expectedTokenResponseA = sequencerClient
                     .nextToken(Collections.singleton(streamNameA), 0)
@@ -600,8 +600,8 @@ public class ServerRestartIT extends AbstractIT {
             corfuRuntime = createDefaultRuntime();
 
             sequencerClient = corfuRuntime
-                    .getSequencerClient(corfuRuntime.getLayoutView().getLayout(),
-                            corfuSingleNodeHost + ":" + corfuSingleNodePort);
+                    .getLayoutView().getEpochedClient()
+                    .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
 
             // check tail recovery after restart
             TokenResponse tokenResponseA = sequencerClient

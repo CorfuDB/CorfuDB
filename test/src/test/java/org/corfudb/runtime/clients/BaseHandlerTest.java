@@ -12,9 +12,9 @@ import java.util.Set;
 /**
  * Created by mwei on 7/27/16.
  */
-public class BaseClientTest extends AbstractClientTest {
+public class BaseHandlerTest extends AbstractClientTest {
 
-    BaseSenderClient client;
+    BaseClient client;
 
     @Override
     Set<AbstractServer> getServersForTest() {
@@ -25,10 +25,10 @@ public class BaseClientTest extends AbstractClientTest {
 
     @Override
     Set<IClient> getClientsForTest() {
-        BaseClient baseClient = new BaseClient();
-        client = new BaseSenderClient(router, 0L);
+        BaseHandler baseHandler = new BaseHandler();
+        client = new BaseClient(router, 0L);
         return new ImmutableSet.Builder<IClient>()
-                .add(baseClient)
+                .add(baseHandler)
                 .build();
     }
 

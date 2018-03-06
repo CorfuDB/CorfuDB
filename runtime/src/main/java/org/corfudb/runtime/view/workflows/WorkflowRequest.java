@@ -3,7 +3,7 @@ package org.corfudb.runtime.view.workflows;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.ManagementSenderClient;
+import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.exceptions.WorkflowResultUnknownException;
@@ -53,7 +53,7 @@ public abstract class WorkflowRequest {
      * @return a management client that is connected to the selected
      * orchestrator
      */
-    protected ManagementSenderClient getOrchestrator(Layout layout) {
+    protected ManagementClient getOrchestrator(Layout layout) {
         List<String> activeLayoutServers = layout.getLayoutServers().stream()
                 .filter(s -> !layout.getUnresponsiveServers().contains(s)
                         && !s.equals(nodeForWorkflow))
@@ -63,7 +63,8 @@ public abstract class WorkflowRequest {
             throw new WorkflowException("getOrchestrator: no available orchestrators " + layout);
         }
 
-        return runtime.getManagementClient(layout, activeLayoutServers.get(0));
+        return runtime.getLayoutView().getEpochedClient(layout)
+                .getManagementClient(activeLayoutServers.get(0));
     }
 
     /**
@@ -84,7 +85,7 @@ public abstract class WorkflowRequest {
      * @throws TimeoutException if the workflow doesn't complete withint the timout
      *                          period
      */
-    private void waitForWorkflow(@Nonnull UUID workflow, @Nonnull ManagementSenderClient client,
+    private void waitForWorkflow(@Nonnull UUID workflow, @Nonnull ManagementClient client,
                                  @Nonnull Duration timeout, @Nonnull Duration pollPeriod)
             throws TimeoutException {
         long tries = timeout.getSeconds() / pollPeriod.getSeconds();
@@ -114,7 +115,7 @@ public abstract class WorkflowRequest {
                 runtime.invalidateLayout();
                 Layout requestLayout = new Layout(runtime.getLayoutView().getLayout());
                 UUID workflowId = sendRequest(requestLayout);
-                ManagementSenderClient orchestrator = getOrchestrator(requestLayout);
+                ManagementClient orchestrator = getOrchestrator(requestLayout);
 
                 waitForWorkflow(workflowId, orchestrator, timeout, pollPeriod);
 

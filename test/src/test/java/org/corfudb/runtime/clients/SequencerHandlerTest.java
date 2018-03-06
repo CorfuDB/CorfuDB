@@ -16,9 +16,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Created by mwei on 12/14/15.
  */
-public class SequencerClientTest extends AbstractClientTest {
+public class SequencerHandlerTest extends AbstractClientTest {
 
-    SequencerSenderClient client;
+    SequencerClient client;
 
     @Override
     Set<AbstractServer> getServersForTest() {
@@ -29,10 +29,10 @@ public class SequencerClientTest extends AbstractClientTest {
 
     @Override
     Set<IClient> getClientsForTest() {
-        SequencerClient sequencerClient = new SequencerClient();
-        client = new SequencerSenderClient(router, 0L);
+        SequencerHandler sequencerHandler = new SequencerHandler();
+        client = new SequencerClient(router, 0L);
         return new ImmutableSet.Builder<IClient>()
-                .add(sequencerClient)
+                .add(sequencerHandler)
                 .build();
     }
 

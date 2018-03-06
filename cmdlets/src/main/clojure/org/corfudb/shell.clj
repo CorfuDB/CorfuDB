@@ -3,11 +3,11 @@
 (import org.corfudb.runtime.CorfuRuntime)
 (import org.corfudb.runtime.clients.NettyClientRouter)
 (import org.docopt.Docopt)
-(import org.corfudb.runtime.clients.BaseSenderClient)
-(import org.corfudb.runtime.clients.LayoutSenderClient)
-(import org.corfudb.runtime.clients.SequencerSenderClient)
-(import org.corfudb.runtime.clients.LogUnitSenderClient)
-(import org.corfudb.runtime.clients.ManagementSenderClient)
+(import org.corfudb.runtime.clients.BaseClient)
+(import org.corfudb.runtime.clients.LayoutClient)
+(import org.corfudb.runtime.clients.SequencerClient)
+(import org.corfudb.runtime.clients.LogUnitClient)
+(import org.corfudb.runtime.clients.ManagementClient)
 (use 'clojure.reflect)
 
 (defn -class-starts-with [obj name] (if (nil? obj) false (.. (.. (.. obj (getClass)) (getName)) (startsWith name))))
@@ -128,10 +128,10 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
           (.. opts (get "--sasl-plain-text-username-file"))
           (.. opts (get "--sasl-plain-text-password-file"))))
       :else (def *o (new NettyClientRouter (get-host endpoint) (get-port endpoint))))
-    (add-client (new org.corfudb.runtime.clients.LayoutClient))
-    (add-client (new org.corfudb.runtime.clients.LogUnitClient))
-    (add-client (new org.corfudb.runtime.clients.SequencerClient))
-    (add-client (new org.corfudb.runtime.clients.ManagementClient))
+    (add-client (new org.corfudb.runtime.clients.LayoutHandler))
+    (add-client (new org.corfudb.runtime.clients.LogUnitHandler))
+    (add-client (new org.corfudb.runtime.clients.SequencerHandler))
+    (add-client (new org.corfudb.runtime.clients.ManagementHandler))
    *o)))
 (defn connect-runtime ([] (.. *r (connect)))
                           ([runtime] (.. runtime (connect))))
@@ -150,11 +150,11 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
 (defn get-stream ([stream] (.. (.. *r (getStreamsView)) (get stream))))
 
 ; Functions that get clients
-(defn get-base-client ([router epoch] (new BaseSenderClient router epoch)))
-(defn get-layout-client ([router epoch] (new LayoutSenderClient router epoch)))
-(defn get-sequencer-client ([router epoch] (new SequencerSenderClient router epoch)))
-(defn get-logunit-client ([router epoch] (new LogUnitSenderClient router epoch)))
-(defn get-management-client ([router epoch] (new ManagementSenderClient router epoch)))
+(defn get-base-client ([router epoch] (new BaseClient router epoch)))
+(defn get-layout-client ([router epoch] (new LayoutClient router epoch)))
+(defn get-sequencer-client ([router epoch] (new SequencerClient router epoch)))
+(defn get-logunit-client ([router epoch] (new LogUnitClient router epoch)))
+(defn get-management-client ([router epoch] (new ManagementClient router epoch)))
 
 ; Helper functions
 (defn uuid-from-string "Takes a string and parses it to UUID if it is not a UUID"

@@ -2,7 +2,7 @@ package org.corfudb.runtime;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
 
-import org.corfudb.runtime.clients.LogUnitSenderClient;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 
@@ -55,7 +55,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         });
 
         scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LARGE, (v) -> {
-            assertThat(rt.layout.get().getRuntime()).isEqualTo(rt);
+            assertThat(rt.getLayoutView().getEpochedClient().getRuntime()).isEqualTo(rt);
         });
 
         executeScheduled(PARAMETERS.CONCURRENCY_TWO, PARAMETERS.TIMEOUT_LONG);
@@ -128,9 +128,8 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
         // Seal
         Layout currentLayout = new Layout(rt.getLayoutView().getCurrentLayout());
-        currentLayout.setRuntime(rt);
         currentLayout.setEpoch(currentLayout.getEpoch() + 1);
-        currentLayout.moveServersToEpoch();
+        rt.getLayoutView().getEpochedClient(currentLayout).moveServersToEpoch();
 
         // Server2 is sealed but will not be able to commit the layout.
         addClientRule(rt, SERVERS.ENDPOINT_2,
@@ -183,17 +182,15 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
         sv.append("testPayload".getBytes());
 
-        l.setRuntime(runtime);
         l.setEpoch(l.getEpoch() + 1);
-        l.moveServersToEpoch();
+        runtime.getLayoutView().getEpochedClient(l).moveServersToEpoch();
 
         // We need to be sure that the layout is invalidated before proceeding
         // This is what would trigger the wrong epoch exception in the consequent read.
         runtime.invalidateLayout();
-        runtime.layout.get();
 
-        LogUnitSenderClient luc = runtime
-                .getLogUnitClient(runtime.getLayoutView().getLayout(), SERVERS.ENDPOINT_0);
+        LogUnitClient luc = runtime
+                .getLayoutView().getEpochedClient().getLogUnitClient(SERVERS.ENDPOINT_0);
 
         assertThatThrownBy(() -> luc.read(0).get())
                 .isInstanceOf(ExecutionException.class)

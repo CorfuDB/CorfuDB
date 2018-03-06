@@ -86,7 +86,7 @@ public abstract class AbstractView {
         final Duration retryRate = runtime.getParameters().getConnectionRetryRate();
         while (true) {
             try {
-                return function.apply(runtime.layout.get());
+                return function.apply(new EpochedClient(runtime.layout.get(), runtime));
             } catch (RuntimeException re) {
                 if (re.getCause() instanceof TimeoutException) {
                     log.warn("Timeout executing remote call, invalidating view and retrying in {}s",
@@ -137,6 +137,6 @@ public abstract class AbstractView {
     @FunctionalInterface
     public interface LayoutFunction<V, R, A extends Throwable,
             B extends Throwable, C extends Throwable, D extends Throwable> {
-        R apply(Layout l) throws A, B, C, D;
+        R apply(EpochedClient l) throws A, B, C, D;
     }
 }

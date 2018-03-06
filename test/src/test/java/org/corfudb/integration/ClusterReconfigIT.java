@@ -230,8 +230,8 @@ public class ClusterReconfigIT extends AbstractIT {
      */
     private Map<Long, LogData> getAllData(CorfuRuntime corfuRuntime,
                                           String endpoint, long end) throws Exception {
-        Layout layout = corfuRuntime.getLayoutView().getLayout();
-        ReadResponse readResponse = corfuRuntime.getLogUnitClient(layout, endpoint)
+        ReadResponse readResponse = corfuRuntime.getLayoutView().getEpochedClient()
+                .getLogUnitClient(endpoint)
                 .read(Range.closed(0L, end)).get();
         return readResponse.getAddresses();
     }
@@ -245,9 +245,8 @@ public class ClusterReconfigIT extends AbstractIT {
      */
     private Layout incrementClusterEpoch(CorfuRuntime corfuRuntime) throws Exception {
         Layout l = new Layout(corfuRuntime.getLayoutView().getLayout());
-        l.setRuntime(corfuRuntime);
         l.setEpoch(l.getEpoch() + 1);
-        l.moveServersToEpoch();
+        corfuRuntime.getLayoutView().getEpochedClient(l).moveServersToEpoch();
         corfuRuntime.getLayoutView().updateLayout(l, 1L);
         corfuRuntime.invalidateLayout();
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(1L);
@@ -270,8 +269,8 @@ public class ClusterReconfigIT extends AbstractIT {
 
         CorfuRuntime corfuRuntime = createDefaultRuntime();
         incrementClusterEpoch(corfuRuntime);
-        Layout layout = corfuRuntime.getLayoutView().getLayout();
-        corfuRuntime.getBaseClient(layout, "localhost:9000").reset().get();
+        corfuRuntime.getLayoutView().getEpochedClient().getBaseClient("localhost:9000")
+                .reset().get();
 
         corfuRuntime = createDefaultRuntime();
         // The shutdown and reset can take an unknown amount of time and there is a chance that the
@@ -305,7 +304,8 @@ public class ClusterReconfigIT extends AbstractIT {
 
         CorfuRuntime corfuRuntime = createDefaultRuntime();
         Layout l = incrementClusterEpoch(corfuRuntime);
-        corfuRuntime.getBaseClient(l, "localhost:9000").restart().get();
+        corfuRuntime.getLayoutView().getEpochedClient(l).getBaseClient("localhost:9000")
+                .restart().get();
 
         restartServer(corfuRuntime, DEFAULT_ENDPOINT);
 

@@ -17,7 +17,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.BaseSenderClient;
+import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -217,7 +217,7 @@ public class FailureDetector implements IDetector {
         Map<String, CompletableFuture<Boolean>> pollCompletableFutures = new HashMap<>();
         members.forEach(s -> {
             try {
-                pollCompletableFutures.put(s, new BaseSenderClient(routerMap.get(s), epoch).ping());
+                pollCompletableFutures.put(s, new BaseClient(routerMap.get(s), epoch).ping());
             } catch (Exception e) {
                 CompletableFuture<Boolean> cf = new CompletableFuture<>();
                 cf.completeExceptionally(e);

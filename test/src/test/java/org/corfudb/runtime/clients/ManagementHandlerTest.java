@@ -29,9 +29,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>
  * Created by zlokhandwala on 11/7/16.
  */
-public class ManagementClientTest extends AbstractClientTest {
+public class ManagementHandlerTest extends AbstractClientTest {
 
-    private ManagementSenderClient client;
+    private ManagementClient client;
     private ManagementServer server;
 
     @Override
@@ -57,11 +57,11 @@ public class ManagementClientTest extends AbstractClientTest {
 
     @Override
     Set<IClient> getClientsForTest() {
-        ManagementClient managementClient = new ManagementClient();
-        client = new ManagementSenderClient(router, 0L);
+        ManagementHandler managementHandler = new ManagementHandler();
+        client = new ManagementClient(router, 0L);
         return new ImmutableSet.Builder<IClient>()
-                .add(new BaseClient())
-                .add(managementClient)
+                .add(new BaseHandler())
+                .add(managementHandler)
                 .build();
     }
 

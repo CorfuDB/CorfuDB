@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.EpochedClient;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -49,11 +50,11 @@ public abstract class AbstractReplicationProtocolTest extends AbstractViewTest {
         //begin tests
         final CorfuRuntime r = getDefaultRuntime();
         final IReplicationProtocol rp = getProtocol();
-        final Layout layout = r.getLayoutView().getLayout();
+        final EpochedClient epochedClient = r.getLayoutView().getEpochedClient();
 
         LogData data = getLogData(0, "hello world".getBytes());
-        rp.write(layout, data);
-        ILogData read = rp.read(layout, 0);
+        rp.write(epochedClient, data);
+        ILogData read = rp.read(epochedClient, 0);
 
         assertThat(read.getType())
                 .isEqualTo(DataType.DATA);
@@ -75,14 +76,14 @@ public abstract class AbstractReplicationProtocolTest extends AbstractViewTest {
         //begin tests
         final CorfuRuntime r = getDefaultRuntime();
         final IReplicationProtocol rp = getProtocol();
-        final Layout layout = r.getLayoutView().getLayout();
+        final EpochedClient epochedClient = r.getLayoutView().getEpochedClient();
 
-        ILogData read = rp.read(layout, 0);
+        ILogData read = rp.read(epochedClient, 0);
 
         assertThat(read.getType())
                 .isNotEqualTo(DataType.EMPTY);
 
-        read = rp.read(layout, 1);
+        read = rp.read(epochedClient, 1);
 
         assertThat(read.getType())
                 .isNotEqualTo(DataType.EMPTY);
@@ -101,12 +102,12 @@ public abstract class AbstractReplicationProtocolTest extends AbstractViewTest {
         //begin tests
         final CorfuRuntime r = getDefaultRuntime();
         final IReplicationProtocol rp = getProtocol();
-        final Layout layout = r.getLayoutView().getLayout();
+        final EpochedClient epochedClient = r.getLayoutView().getEpochedClient();
 
         LogData d1 = getLogData(0, "1".getBytes());
         LogData d2 = getLogData(0, "2".getBytes());
-        rp.write(layout, d1);
-        assertThatThrownBy(() -> rp.write(layout, d2))
+        rp.write(epochedClient, d1);
+        assertThatThrownBy(() -> rp.write(epochedClient, d2))
                 .isInstanceOf(OverwriteException.class);
     }
 }

@@ -25,12 +25,12 @@ import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
 import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
-import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.clients.BaseHandler;
 import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.clients.LayoutHandler;
+import org.corfudb.runtime.clients.LogUnitHandler;
+import org.corfudb.runtime.clients.ManagementHandler;
+import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.TestClientRouter;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.util.NodeLocator;
@@ -144,11 +144,11 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                             : endpoint;
                     TestClientRouter tcn =
                             new TestClientRouter(testServerMap.get(serverName).getServerRouter());
-                    tcn.addClient(new BaseClient())
-                            .addClient(new SequencerClient())
-                            .addClient(new LayoutClient())
-                            .addClient(new LogUnitClient())
-                            .addClient(new ManagementClient());
+                    tcn.addClient(new BaseHandler())
+                            .addClient(new SequencerHandler())
+                            .addClient(new LayoutHandler())
+                            .addClient(new LogUnitHandler())
+                            .addClient(new ManagementHandler());
                     return tcn;
                 }
         );

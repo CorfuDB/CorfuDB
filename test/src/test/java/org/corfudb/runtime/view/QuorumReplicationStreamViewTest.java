@@ -16,14 +16,14 @@ public class QuorumReplicationStreamViewTest extends StreamViewTest {
     public void setRuntime() throws Exception {
         r = getDefaultRuntime().connect();
         // First commit a layout that uses Quorum Replication
-        Layout newLayout = r.layout.get();
+        Layout newLayout = r.getLayoutView().getLayout();
         newLayout.getSegment(0L).setReplicationMode(Layout.ReplicationMode.QUORUM_REPLICATION);
         newLayout.setEpoch(1);
         r.setCacheDisabled(true);
         r.getLayoutView().committed(1L, newLayout);
         r.invalidateLayout();
-        r.layout.get();
-        r.getPrimarySequencerClient(newLayout).bootstrap(0L, Collections.emptyMap(), 1L).get();
+        r.getLayoutView().getEpochedClient(newLayout).getPrimarySequencerClient()
+                .bootstrap(0L, Collections.emptyMap(), 1L).get();
     }
 
 

@@ -6,18 +6,13 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import java.lang.Thread.UncaughtExceptionHandler;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
-import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
@@ -30,25 +25,20 @@ import lombok.Builder.Default;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
 import lombok.Singular;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.recovery.FastObjectLoader;
-import org.corfudb.runtime.clients.BaseSenderClient;
-import org.corfudb.runtime.clients.IClient;
+import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LayoutSenderClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.LogUnitSenderClient;
-import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.clients.ManagementSenderClient;
+import org.corfudb.runtime.clients.LayoutHandler;
+import org.corfudb.runtime.clients.LogUnitHandler;
+import org.corfudb.runtime.clients.ManagementHandler;
+import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
-import org.corfudb.runtime.clients.SequencerClient;
-import org.corfudb.runtime.clients.SequencerSenderClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
@@ -330,24 +320,14 @@ public class CorfuRuntime {
     private List<String> layoutServers;
 
     /**
-     * A map of routers, representing nodes.
+     * Node Router Pool.
      */
-    public Map<String, IClientRouter> nodeRouters;
+    private NodeRouterPool nodeRouterPool;
 
     /**
      * A completable future containing a layout, when completed.
      */
     public volatile CompletableFuture<Layout> layout;
-
-    /**
-     * Sender Client Map.
-     * map(client type -> map(Endpoint -> map.entry(epoch, senderClient)))
-     * The map.entry is invalidated and overwritten when there is an epoch mismatch.
-     * This ensures that a client for a particular endpoint stamped with the required epoch is
-     * created only once.
-     */
-    private final Map<Class<? extends IClient>,
-            Map<String, Map.Entry<Long, IClient>>> senderClientMap = new ConcurrentHashMap<>();
 
     /** The {@link UUID} of the cluster we are currently connected to, or null, if
      *  there is no cluster yet.
@@ -421,33 +401,26 @@ public class CorfuRuntime {
      * a router.
      */
     @Getter
-    @Setter
-    public Function<String, IClientRouter> getRouterFunction = overrideGetRouterFunction != null
-            ? (address) -> overrideGetRouterFunction.apply(this, address) : (address) ->
-                nodeRouters.compute(address, (k, r) -> {
-                    final NettyClientRouter router = (NettyClientRouter) r;
-                    if (router != null) {
-                        // Return an existing router if we already have one and it is connected.
-                        return router;
-                    } else {
-                        NodeLocator node = NodeLocator.parseString(address);
-                        // Generate a new router, start it and add it to the table.
-                        NettyClientRouter newRouter = new NettyClientRouter(node,
-                            getNettyEventLoop(),
-                            getParameters());
-                        log.debug("Connecting to new router {}", node);
-                        try {
-                            newRouter.addClient(new LayoutClient())
-                                .addClient(new SequencerClient())
-                                .addClient(new LogUnitClient())
-                                .addClient(new ManagementClient());
-                        } catch (Exception e) {
-                            log.warn("Error connecting to router", e);
-                            throw e;
-                        }
-                        return newRouter;
-                    }
-                });
+    private final Function<String, IClientRouter> getRouterFunction =
+            overrideGetRouterFunction != null ? (address) ->
+                    overrideGetRouterFunction.apply(this, address) : (address) -> {
+                NodeLocator node = NodeLocator.parseString(address);
+                // Generate a new router, start it and add it to the table.
+                NettyClientRouter newRouter = new NettyClientRouter(node,
+                        getNettyEventLoop(),
+                        getParameters());
+                log.debug("Connecting to new router {}", node);
+                try {
+                    newRouter.addClient(new LayoutHandler())
+                            .addClient(new SequencerHandler())
+                            .addClient(new LogUnitHandler())
+                            .addClient(new ManagementHandler());
+                } catch (Exception e) {
+                    log.warn("Error connecting to router", e);
+                    throw e;
+                }
+                return newRouter;
+            };
 
     /** Factory method for generating new {@link CorfuRuntime}s given a set of
      *  {@link CorfuRuntimeParameters} to configure the runtime with.
@@ -472,15 +445,15 @@ public class CorfuRuntime {
                                 .map(NodeLocator::toString)
                                 .collect(Collectors.toList());
 
-        // Generate the map of routers
-        nodeRouters = new ConcurrentHashMap<>();
-
         // Set the initial cluster Id
         clusterId = parameters.getClusterId();
 
         // Generate or set the NettyEventLoop
         nettyEventLoop = parameters.nettyEventLoop == null ? getNewEventLoopGroup()
                                                             : parameters.nettyEventLoop;
+
+        // Initializing the node router pool.
+        nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
         synchronized (metrics) {
             if (metrics.getNames().isEmpty()) {
@@ -559,13 +532,9 @@ public class CorfuRuntime {
      * Stop all routers associated with this Corfu Runtime.
      **/
     public void stop(boolean shutdown) {
-        for (IClientRouter r : nodeRouters.values()) {
-            r.stop(shutdown);
-        }
+        nodeRouterPool.shutdown();
         if (!shutdown) {
-            // N.B. An icky side-effect of this clobbering is leaking
-            // Pthreads, namely the Netty client-side worker threads.
-            nodeRouters = new ConcurrentHashMap<>();
+            nodeRouterPool = new NodeRouterPool(getRouterFunction);
         }
     }
 
@@ -645,7 +614,7 @@ public class CorfuRuntime {
      * @return The router.
      */
     public IClientRouter getRouter(String address) {
-        return getRouterFunction.apply(address);
+        return nodeRouterPool.getRouter(address);
     }
 
     /**
@@ -711,7 +680,7 @@ public class CorfuRuntime {
                         IClientRouter router = getRouter(s);
                         // Try to get a layout.
                         CompletableFuture<Layout> layoutFuture =
-                                new LayoutSenderClient(router, Layout.INVALID_EPOCH).getLayout();
+                                new LayoutClient(router, Layout.INVALID_EPOCH).getLayout();
                         // Wait for layout
                         Layout l = layoutFuture.get();
 
@@ -728,9 +697,7 @@ public class CorfuRuntime {
 
                         checkClusterId(l);
 
-                        l.setRuntime(this);
                         layout = layoutFuture;
-
                         log.debug("Layout server {} responded with layout {}", s, l);
                         return l;
                     } catch (InterruptedException ie) {
@@ -760,8 +727,8 @@ public class CorfuRuntime {
             Layout currentLayout = CFUtils.getUninterruptibly(layout);
             List<CompletableFuture<VersionInfo>> versions =
                     currentLayout.getLayoutServers()
-                        .stream().map(s -> getBaseClient(currentLayout, s))
-                        .map(BaseSenderClient::getVersionInfo)
+                        .stream().map(s -> getLayoutView().getEpochedClient().getBaseClient(s))
+                        .map(BaseClient::getVersionInfo)
                         .collect(Collectors.toList());
 
             for (CompletableFuture<VersionInfo> versionCf : versions) {
@@ -810,71 +777,6 @@ public class CorfuRuntime {
             fastLoader.loadMaps();
         }
         return this;
-    }
-
-    /**
-     * Updates the local map of clients.
-     * The epoch, client tuple is invalidated and overwritten when there is an epoch mismatch.
-     * This ensures that a client for a particular endpoint stamped with the required epoch is
-     * created only once.
-     *
-     * @param clientClass Class of client to be fetched.
-     * @param layout      Layout to fetch the epoch to stamp the clients.
-     * @param endpoint    Router endpoint to create the client.
-     * @return client
-     */
-    private IClient getClient(final Class<? extends IClient> clientClass,
-                              final Layout layout,
-                              final String endpoint) {
-        return senderClientMap.compute(clientClass, (senderClass, stringEntryMap) -> {
-            Map<String, Map.Entry<Long, IClient>> endpointClientMap = stringEntryMap;
-            if (endpointClientMap == null) {
-                endpointClientMap = new HashMap<>();
-            }
-
-            Map.Entry<Long, IClient> clientEntry = endpointClientMap.get(endpoint);
-            if (clientEntry == null || clientEntry.getKey() != layout.getEpoch()) {
-                try {
-                    Constructor<? extends IClient> ctor =
-                            clientClass.getDeclaredConstructor(IClientRouter.class, long.class);
-                    endpointClientMap.put(endpoint, new SimpleEntry<>(layout.getEpoch(),
-                            ctor.newInstance(getRouter(endpoint), layout.getEpoch())));
-                } catch (NoSuchMethodException | IllegalAccessException | InstantiationException
-                        | InvocationTargetException e) {
-                    throw new UnrecoverableCorfuError(e);
-                }
-            }
-            return endpointClientMap;
-        }).get(endpoint).getValue();
-    }
-
-    public BaseSenderClient getBaseClient(Layout layout, String endpoint) {
-        return (BaseSenderClient) getClient(BaseSenderClient.class, layout, endpoint);
-    }
-
-    public LayoutSenderClient getLayoutClient(Layout layout, String endpoint) {
-        return (LayoutSenderClient) getClient(LayoutSenderClient.class, layout, endpoint);
-    }
-
-    public SequencerSenderClient getPrimarySequencerClient(Layout layout) {
-        return getSequencerClient(layout, layout.getSequencers().get(0));
-    }
-
-    public SequencerSenderClient getSequencerClient(Layout layout, String endpoint) {
-        return (SequencerSenderClient) getClient(SequencerSenderClient.class, layout, endpoint);
-    }
-
-    public LogUnitSenderClient getLogUnitClient(Layout layout, long address, int index) {
-        return getLogUnitClient(layout, layout.getStripe(address).getLogServers().get(index));
-    }
-
-    public LogUnitSenderClient getLogUnitClient(Layout layout, String endpoint) {
-        return ((LogUnitSenderClient) getClient(LogUnitSenderClient.class, layout, endpoint))
-                .setMetricRegistry(metrics != null ? metrics : CorfuRuntime.getDefaultMetrics());
-    }
-
-    public ManagementSenderClient getManagementClient(Layout layout, String endpoint) {
-        return (ManagementSenderClient) getClient(ManagementSenderClient.class, layout, endpoint);
     }
 
     // Below are deprecated methods which should no longer be

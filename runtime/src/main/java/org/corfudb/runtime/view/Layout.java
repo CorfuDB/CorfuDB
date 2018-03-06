@@ -27,7 +27,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
-import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.replication.ChainReplicationProtocol;
 import org.corfudb.runtime.view.replication.IReplicationProtocol;
 import org.corfudb.runtime.view.replication.NeverHoleFillPolicy;
@@ -42,7 +41,7 @@ import org.corfudb.runtime.view.stream.IStreamView;
  */
 @Slf4j
 @Data
-@ToString(exclude = {"runtime"})
+@ToString
 @EqualsAndHashCode
 public class Layout {
     /**
@@ -84,13 +83,6 @@ public class Layout {
      * Is used to fetch layout(epoch agnostic request) by the corfuRuntime.
      */
     public static final long INVALID_EPOCH = -1L;
-
-    /**
-     * The org.corfudb.runtime this layout is associated with.
-     */
-    @Getter
-    @Setter
-    transient CorfuRuntime runtime;
 
     /** The unique Id for the Corfu cluster represented by this layout.
      *  Should remain consistent for the lifetime of the layout. May be
@@ -163,34 +155,6 @@ public class Layout {
         }
 
         return res;
-    }
-
-    /**
-     * Attempts to move all servers in the system to the epoch of this layout.
-     * The seal however waits only for a response from a quorum of layout servers (n/2 + 1),
-     * a quorum of log unit servers in every stripe in case of QUORUM_REPLICATION or
-     * at least one log unit server in every stripe in case of CHAIN_REPLICATION.
-     *
-     * @throws WrongEpochException        If any server is in a higher epoch.
-     * @throws QuorumUnreachableException If enough number of servers cannot be sealed.
-     */
-    public void moveServersToEpoch()
-            throws WrongEpochException, QuorumUnreachableException {
-        log.debug("Requested move of servers to new epoch {} servers are {}", epoch,
-                getAllServers());
-
-        // Set remote epoch on all servers in layout.
-        Map<String, CompletableFuture<Boolean>> resultMap =
-                SealServersHelper.asyncSetRemoteEpoch(this);
-
-        // Validate if we received enough layout server responses.
-        SealServersHelper.waitForLayoutSeal(layoutServers, resultMap);
-        // Validate if we received enough log unit server responses depending on the
-        // replication mode.
-        for (LayoutSegment layoutSegment : getSegments()) {
-            layoutSegment.getReplicationMode().validateSegmentSeal(layoutSegment, resultMap);
-        }
-        log.debug("Layout has been sealed successfully.");
     }
 
     /**

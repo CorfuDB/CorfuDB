@@ -202,7 +202,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             }
         }
 
-        addClient(new BaseClient());
+        addClient(new BaseHandler());
 
 
         // Initialize the channel
