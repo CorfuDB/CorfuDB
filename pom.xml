@@ -15,7 +15,6 @@
         <module>annotationProcessor</module>
         <module>annotations</module>
         <module>samples</module>
-        <module>logReader</module>
         <module>debian</module>
         <module>generator</module>
     </modules>
