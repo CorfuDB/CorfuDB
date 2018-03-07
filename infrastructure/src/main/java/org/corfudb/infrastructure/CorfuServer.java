@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure;
 
+import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
+
 import static org.fusesource.jansi.Ansi.Color.BLUE;
 import static org.fusesource.jansi.Ansi.Color.MAGENTA;
 import static org.fusesource.jansi.Ansi.Color.RED;
@@ -23,11 +25,6 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import java.io.File;
 import java.io.IOException;
-import java.net.Inet4Address;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
-import java.net.SocketException;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -103,8 +100,8 @@ public class CorfuServer {
                     + "                                                                          "
                     + "              The server will be bootstrapped with a simple one-unit layout."
                     + "\n -a <address>, --address=<address>                                      "
-                    + "                IP address to advertise to external clients [default: "
-                    + "localhost].\n"
+                    + "                IP address for the server router to bind to and to "
+                    + "advertise to external clients.\n"
                     + " -q <interface-name>, --network-interface=<interface-name>                "
                     + "              The name of the network interface.\n"
                     + " -i <channel-implementation>, --implementation <channel-implementation>   "
@@ -181,13 +178,10 @@ public class CorfuServer {
                     + " --version                                                                "
                     + "              Show version\n";
 
-    private static final String MEMORY = "--memory";
-    private static final String LOG_PATH = "--log-path";
-    private static final String ADDRESS = "--address";
-    private static final String DEFAULT_ADDRESS = "localhost";
-
     private static volatile Thread corfuServerThread;
     private static volatile Thread shutdownThread;
+    // Bind to all interfaces only if no address or interface specified by the user.
+    private static boolean bindToAllInterfaces = false;
 
     /**
      * Main program entry point.
@@ -213,15 +207,17 @@ public class CorfuServer {
 
         // Fetch the address if given a network interface.
         if (opts.get("--network-interface") != null) {
-            opts.put(ADDRESS,
+            opts.put("--address",
                     getAddressFromInterfaceName((String) opts.get("--network-interface")));
-        } else {
-            opts.putIfAbsent(ADDRESS, DEFAULT_ADDRESS);
+        } else if (opts.get("--address") == null) {
+            // Default the address to localhost and set the bind to all interfaces flag to true.
+            bindToAllInterfaces = true;
+            opts.put("--address", "localhost");
         }
 
         // Create the service directory if it does not exist.
-        if (!(Boolean) opts.get(MEMORY)) {
-            File serviceDir = new File((String) opts.get(LOG_PATH));
+        if (!(Boolean) opts.get("--memory")) {
+            File serviceDir = new File((String) opts.get("--log-path"));
 
             if (!serviceDir.isDirectory()) {
                 log.error("Service directory {} does not point to a directory. Aborting.",
@@ -233,7 +229,7 @@ public class CorfuServer {
                         + "corfu";
                 File corfuServiceDir = new File(corfuServiceDirPath);
                 // Update the new path with the dedicated child service directory.
-                opts.put(LOG_PATH, corfuServiceDirPath);
+                opts.put("--log-path", corfuServiceDirPath);
                 if (!corfuServiceDir.exists() && corfuServiceDir.mkdirs()) {
                     log.info("Created new service directory at {}.", corfuServiceDir);
                 }
@@ -243,33 +239,6 @@ public class CorfuServer {
         corfuServerThread = new Thread(() -> startServer(opts));
         corfuServerThread.setName("CorfuServer");
         corfuServerThread.start();
-    }
-
-    /**
-     * Fetches the IP address given an interface name.
-     * Throws an unrecoverable error and aborts if the server is unable to find a valid address.
-     *
-     * @param interfaceName Network interface name.
-     * @return address for the interface name.
-     */
-    private static String getAddressFromInterfaceName(String interfaceName) {
-        try {
-            Enumeration<InetAddress> inetAddress = NetworkInterface.getByName(interfaceName)
-                    .getInetAddresses();
-            InetAddress currentAddress;
-            while (inetAddress.hasMoreElements()) {
-                currentAddress = inetAddress.nextElement();
-                log.info("currentAddress: {}", currentAddress);
-                if (currentAddress instanceof Inet4Address) {
-                    return currentAddress.getHostAddress();
-                }
-            }
-        } catch (SocketException e) {
-            log.error("Error fetching address from interface name ", e);
-            throw new UnrecoverableCorfuError(e);
-        }
-        throw new UnrecoverableCorfuError("No valid interfaces with name "
-                + interfaceName + " found.");
     }
 
     /**
@@ -305,7 +274,7 @@ public class CorfuServer {
                     b -> configureBootstrapOptions(serverContext, b),
                     serverContext,
                     router,
-                    (String) opts.get(ADDRESS),
+                    (String) opts.get("--address"),
                     port).channel().closeFuture().syncUninterruptibly();
         }
     }
@@ -356,7 +325,13 @@ public class CorfuServer {
             bootstrapConfigurer.configure(bootstrap);
 
             bootstrap.childHandler(getServerChannelInitializer(context, router));
-            return bootstrap.bind(address, port).sync();
+            if (bindToAllInterfaces) {
+                log.info("Corfu Server listening on all interfaces on port:{}", port);
+                return bootstrap.bind(port).sync();
+            } else {
+                log.info("Corfu Server listening on {}:{}", address, port);
+                return bootstrap.bind(address, port).sync();
+            }
         } catch (InterruptedException ie) {
             throw new UnrecoverableCorfuInterruptedError(ie);
         }
@@ -491,9 +466,9 @@ public class CorfuServer {
 
         corfuServerThread = new Thread(() -> {
             cleanShutdown((NettyServerRouter) serverContext.getServerRouter());
-            if (resetData && !(Boolean) serverContext.getServerConfig().get(MEMORY)) {
+            if (resetData && !(Boolean) serverContext.getServerConfig().get("--memory")) {
                 File serviceDir = new File((String) serverContext.getServerConfig()
-                        .get(LOG_PATH));
+                        .get("--log-path"));
                 try {
                     FileUtils.cleanDirectory(serviceDir);
                 } catch (IOException ioe) {
@@ -597,6 +572,7 @@ public class CorfuServer {
                 .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));
         println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
         println(ansi().a("Service directory: ").fg(WHITE).a(
-                (Boolean) opts.get(MEMORY) ? "MEMORY mode" : opts.get(LOG_PATH)).reset());
+                (Boolean) opts.get("--memory") ? "MEMORY mode" :
+                        opts.get("--log-path")).reset());
     }
 }
