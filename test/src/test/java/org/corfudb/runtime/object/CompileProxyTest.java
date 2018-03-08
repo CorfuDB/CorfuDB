@@ -1,7 +1,10 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
@@ -14,6 +17,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 11/11/16.
@@ -38,6 +42,30 @@ public class CompileProxyTest extends AbstractViewTest {
                 .containsEntry("hello", "world");
         assertThat(map)
                 .containsEntry("hell", "world");
+    }
+
+    @Test
+    public void testTrimmedObject() throws Exception {
+        CorfuRuntime rt = getDefaultRuntime();
+
+        // Advance the sequencer counter and trim up to the tail, so that the first
+        // read will be on a trimmed address
+        final int numOfTokens = 10;
+        String streamName = "s1";
+        rt.getSequencerView().nextToken(Collections.singleton(CorfuRuntime.getStreamID(streamName)),
+                numOfTokens);
+
+        // Trim all the way up to the tail
+        rt.getAddressSpaceView().prefixTrim(numOfTokens);
+        rt.getAddressSpaceView().gc();
+        rt.getAddressSpaceView().invalidateServerCaches();
+
+        Map<String, String> map = rt.getObjectsView().build()
+                .setStreamName(streamName)
+                .setTypeToken(new TypeToken<SMRMap<String,String>>() {})
+                .open();
+        assertThatThrownBy(() -> map.get("key1"))
+                .isInstanceOf(TrimmedException.class);
     }
 
     @Test
