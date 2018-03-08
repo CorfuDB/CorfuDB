@@ -180,8 +180,6 @@ public class CorfuServer {
 
     private static volatile Thread corfuServerThread;
     private static volatile Thread shutdownThread;
-    // Bind to all interfaces only if no address or interface specified by the user.
-    private static boolean bindToAllInterfaces = false;
 
     /**
      * Main program entry point.
@@ -205,14 +203,21 @@ public class CorfuServer {
 
         log.debug("Started with arguments: " + opts);
 
+        // Bind to all interfaces only if no address or interface specified by the user.
+        final boolean bindToAllInterfaces;
         // Fetch the address if given a network interface.
         if (opts.get("--network-interface") != null) {
             opts.put("--address",
                     getAddressFromInterfaceName((String) opts.get("--network-interface")));
+            bindToAllInterfaces = false;
         } else if (opts.get("--address") == null) {
-            // Default the address to localhost and set the bind to all interfaces flag to true.
+            // Default the address to localhost and set the bind to all interfaces flag to true,
+            // if the address and interface is not specified.
             bindToAllInterfaces = true;
             opts.put("--address", "localhost");
+        } else {
+            // Address is specified by the user.
+            bindToAllInterfaces = false;
         }
 
         // Create the service directory if it does not exist.
@@ -236,7 +241,7 @@ public class CorfuServer {
             }
         }
 
-        corfuServerThread = new Thread(() -> startServer(opts));
+        corfuServerThread = new Thread(() -> startServer(opts, bindToAllInterfaces));
         corfuServerThread.setName("CorfuServer");
         corfuServerThread.start();
     }
@@ -247,7 +252,7 @@ public class CorfuServer {
      *
      * @param opts Options passed by the user.
      */
-    public static void startServer(Map<String, Object> opts) {
+    public static void startServer(Map<String, Object> opts, boolean bindToAllInterfaces) {
 
         int port = Integer.parseInt((String) opts.get("<port>"));
 
@@ -263,6 +268,7 @@ public class CorfuServer {
 
             NettyServerRouter router = new NettyServerRouter(servers);
             serverContext.setServerRouter(router);
+            serverContext.setBindToAllInterfaces(bindToAllInterfaces);
 
             // Register shutdown handler
             shutdownThread = new Thread(() -> cleanShutdown(router));
@@ -325,7 +331,7 @@ public class CorfuServer {
             bootstrapConfigurer.configure(bootstrap);
 
             bootstrap.childHandler(getServerChannelInitializer(context, router));
-            if (bindToAllInterfaces) {
+            if (context.isBindToAllInterfaces()) {
                 log.info("Corfu Server listening on all interfaces on port:{}", port);
                 return bootstrap.bind(port).sync();
             } else {
@@ -463,6 +469,7 @@ public class CorfuServer {
 
         final Thread previousServerThread = corfuServerThread;
         final Map<String, Object> opts = serverContext.getServerConfig();
+        final boolean bindToAllInterfaces = serverContext.isBindToAllInterfaces();
 
         corfuServerThread = new Thread(() -> {
             cleanShutdown((NettyServerRouter) serverContext.getServerRouter());
@@ -490,7 +497,7 @@ public class CorfuServer {
             // Restart the server.
             log.info("RestartServer: Restarting corfu server");
             printStartupMsg(opts);
-            startServer(opts);
+            startServer(opts, bindToAllInterfaces);
         });
         corfuServerThread.setName("CorfuServer");
         corfuServerThread.start();
