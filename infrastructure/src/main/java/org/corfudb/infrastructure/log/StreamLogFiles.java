@@ -68,7 +68,6 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 @Slf4j
 public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpace {
 
-    public static final short RECORD_DELIMITER = 0x4C45;
     public static final int METADATA_SIZE = Metadata.newBuilder()
             .setChecksum(-1)
             .setLength(-1)
@@ -435,10 +434,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             for (LogEntry entry : compacted) {
 
                 ByteBuffer record = getByteBufferWithMetaData(entry);
-                ByteBuffer recordBuf = ByteBuffer.allocate(Short.BYTES // Delimiter
-                        + record.capacity());
+                ByteBuffer recordBuf = ByteBuffer.allocate(record.capacity());
 
-                recordBuf.putShort(RECORD_DELIMITER);
                 recordBuf.put(record.array());
                 recordBuf.flip();
 
@@ -495,10 +492,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         LinkedHashMap<Long, LogEntry> compacted = new LinkedHashMap<>();
 
         while (o.hasRemaining()) {
-
-            //Skip delimiter
-            o.getShort();
-
             byte[] metadataBuf = new byte[METADATA_SIZE];
             o.get(metadataBuf);
 
@@ -616,16 +609,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         o.flip();
 
         while (o.hasRemaining()) {
-
-            short magic = o.getShort();
-            channelOffset += Short.BYTES;
-
-            if (magic != RECORD_DELIMITER) {
-                log.error("Expected a delimiter but found something else while "
-                        + "trying to read file {}", sh.fileName);
-                throw new DataCorruptionException();
-            }
-
             byte[] metadataBuf = new byte[METADATA_SIZE];
             o.get(metadataBuf);
             channelOffset += METADATA_SIZE;
@@ -919,16 +902,13 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             entryBuffs.add(record);
         }
 
-        // Account for the delimiters
-        totalBytes += (Short.BYTES * entryBuffs.size());
         ByteBuffer allRecordsBuf = ByteBuffer.allocate(totalBytes);
 
         try (MultiReadWriteLock.AutoCloseableLock ignored =
                      segmentLocks.acquireWriteLock(sh.getSegment())) {
             for (int ind = 0; ind < entryBuffs.size(); ind++) {
                 long channelOffset = sh.getWriteChannel().position()
-                        + allRecordsBuf.position() + Short.BYTES + METADATA_SIZE;
-                allRecordsBuf.putShort(RECORD_DELIMITER);
+                        + allRecordsBuf.position() + METADATA_SIZE;
                 allRecordsBuf.put(entryBuffs.get(ind));
                 Metadata metadata = metadataList.get(ind);
                 recordsMap.put(entries.get(ind).getGlobalAddress(),
@@ -960,10 +940,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         ByteBuffer record = getByteBuffer(metadata, logEntry);
 
-        ByteBuffer recordBuf = ByteBuffer.allocate(Short.BYTES // Delimiter
-                + record.capacity());
+        ByteBuffer recordBuf = ByteBuffer.allocate(record.capacity());
 
-        recordBuf.putShort(RECORD_DELIMITER);
         recordBuf.put(record.array());
         recordBuf.flip();
 
@@ -971,7 +949,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         try (MultiReadWriteLock.AutoCloseableLock ignored =
                      segmentLocks.acquireWriteLock(fh.getSegment())) {
-            channelOffset = fh.getWriteChannel().position() + Short.BYTES + METADATA_SIZE;
+            channelOffset = fh.getWriteChannel().position() + METADATA_SIZE;
             fh.getWriteChannel().write(recordBuf);
             channelsToSync.add(fh.getWriteChannel());
             syncTailSegment(address);

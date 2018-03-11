@@ -319,7 +319,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
         log.close();
 
-        final int OVERWRITE_DELIMITER = 0xFFFF;
         final int OVERWRITE_BYTES = 4;
 
         // Overwrite 2 bytes of the checksum and 2 bytes of the entry's address
@@ -333,21 +332,11 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         Metadata metadata = Metadata.parseFrom(metaDataBuf.array());
 
-        final int offset1 = METADATA_SIZE + metadata.getLength();
-        final int offset2 = METADATA_SIZE + metadata.getLength() + Short.BYTES + OVERWRITE_BYTES;
-
-        // Corrupt delimiter in the first segment
-
-        file1.seek(offset1);
-        file1.writeShort(0);
-        file1.close();
-
-        assertThatThrownBy(() -> new StreamLogFiles(getContext(), false).read(0L))
-                .isInstanceOf(DataCorruptionException.class);
+        final int offset = METADATA_SIZE + metadata.getLength() + OVERWRITE_BYTES;
 
         // Corrupt metadata in the second segment
-        file2.seek(offset2);
-        file2.writeInt(OVERWRITE_DELIMITER);
+        file2.seek(offset);
+        file2.writeInt(OVERWRITE_BYTES);
         file2.close();
 
         assertThatThrownBy(() -> new StreamLogFiles(getContext(), false))
