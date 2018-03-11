@@ -310,8 +310,8 @@ public class LogUnitServer extends AbstractServer {
      *     the read() and append(). Any address that cannot be retrieved should be returned as
      *     unwritten (null).
      */
-    public synchronized ILogData handleRetrieval(long address) {
-        LogData entry = streamLog.read(address);
+    public ILogData handleRetrieval(long address) {
+        ILogData entry = streamLog.read(address);
         log.trace("Retrieved[{} : {}]", address, entry);
         return entry;
     }

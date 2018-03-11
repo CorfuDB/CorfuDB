@@ -43,6 +43,23 @@ message LogEntry {
     optional int64 threadId = 18;
 }
 
+message LogEntryMetadataOnly {
+    optional DataType data_type = 1;
+    // don't deserialize bytes
+    optional int64 global_address = 3;
+    repeated string	streams = 6;
+    map<string, int64> logical_addresses = 7;
+    map<string, int64> backpointers = 8;
+    optional DataRank rank = 9;
+    optional CheckpointEntryType checkpointEntryType = 10;
+    optional int64 checkpointId_most_significant = 11;
+    optional int64 checkpointId_least_significant = 12;
+    optional int64 checkpointedStreamId_most_significant = 13;
+    optional int64 checkpointedStreamId_least_significant = 14;
+    //  Tail of the stream at the time of taking the checkpoint snapshot.
+    optional int64 checkpointedStreamStartLogAddress = 15;
+}
+
 message LogHeader {
     optional int32 version = 1;
     optional bool verify_checksum = 2;
