@@ -179,7 +179,6 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             "debian",
             "format",
             "infrastructure",
-            "logReader",
             "runtime",
             "test"]
         artifact_paths = [os.path.join("/root/corfudb",
