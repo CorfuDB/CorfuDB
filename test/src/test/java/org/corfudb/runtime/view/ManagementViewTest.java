@@ -17,8 +17,6 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
@@ -236,7 +234,6 @@ public class ManagementViewTest extends AbstractViewTest {
                 .build();
         bootstrapAllServers(l);
         corfuRuntime = getRuntime(l).connect();
-        l.setRuntime(corfuRuntime);
 
         // Waiting for management servers to send the bootstrap sequencer request and be ready
         // to detect failures to speed up test time.
@@ -700,7 +697,7 @@ public class ManagementViewTest extends AbstractViewTest {
     public void blockRecoverySequencerUntilReset() throws Exception {
 
         final Semaphore resetDetected = new Semaphore(1);
-        getManagementTestLayout();
+        Layout layout = getManagementTestLayout();
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
 
@@ -717,9 +714,8 @@ public class ManagementViewTest extends AbstractViewTest {
                             // There is a failure but the BOOTSTRAP_SEQUENCER message has not yet been
                             // sent. So if we request a token now, we should be denied as the
                             // server is sealed and we get a WrongEpochException.
-                            corfuRuntime
-                                    .getRouter(SERVERS.ENDPOINT_1)
-                                    .getClient(SequencerClient.class)
+                            corfuRuntime.getLayoutView().getEpochedClient(layout)
+                                    .getSequencerClient(SERVERS.ENDPOINT_1)
                                     .nextToken(Collections.singleton(CorfuRuntime
                                             .getStreamID("testStream")), 1).get();
                             fail();
@@ -742,18 +738,14 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
     @Test
-    public void sealDoesNotModifyClientRouterEpoch() throws Exception {
+    public void sealDoesNotModifyClientEpoch() throws Exception {
         Layout l = getManagementTestLayout();
 
         // Seal
-        Layout currentLayout = corfuRuntime.getLayoutView().getCurrentLayout();
-        currentLayout.setEpoch(currentLayout.getEpoch() + 1);
-        currentLayout.moveServersToEpoch();
-
-        for (String router : l.getAllServers()) {
-            assertThat(corfuRuntime.getRouter(router).getEpoch()).isEqualTo(1L);
-        }
-
+        Layout newLayout = new Layout(l);
+        newLayout.setEpoch(newLayout.getEpoch() + 1);
+        corfuRuntime.getLayoutView().getEpochedClient(newLayout).moveServersToEpoch();
+        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(l.getEpoch());
     }
 
     @Test
@@ -763,7 +755,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_0, new TestRule().always().drop());
         layout.setEpoch(2L);
-        layout.moveServersToEpoch();
+        corfuRuntime.getLayoutView().getEpochedClient(layout).moveServersToEpoch();
         corfuRuntime.getLayoutView().updateLayout(layout, 1L);
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
@@ -796,9 +788,8 @@ public class ManagementViewTest extends AbstractViewTest {
                 PARAMETERS.TIMEOUT_NORMAL
         ).join();
 
-        l.setRuntime(corfuRuntime);
         l.setEpoch(l.getEpoch() + 1);
-        l.moveServersToEpoch();
+        corfuRuntime.getLayoutView().getEpochedClient(l).moveServersToEpoch();
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
@@ -913,7 +904,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 0);
 
         rt.invalidateLayout();
-        Layout layoutPhase2 = rt.layout.get();
+        Layout layoutPhase2 = rt.getLayoutView().getLayout();
 
         Layout l2 = new TestLayoutBuilder()
                 .setEpoch(1L)
@@ -942,10 +933,9 @@ public class ManagementViewTest extends AbstractViewTest {
 
     private Map<Long, LogData> getAllNonEmptyData(CorfuRuntime corfuRuntime,
                                                   String endpoint, long end) throws Exception {
-        ReadResponse readResponse = corfuRuntime.getRouter(endpoint)
-                .getClient(LogUnitClient.class)
-                .read(Range.closed(0L, end))
-                .get();
+        ReadResponse readResponse = corfuRuntime.getLayoutView().getEpochedClient()
+                .getLogUnitClient(endpoint)
+                .read(Range.closed(0L, end)).get();
         return readResponse.getAddresses().entrySet()
                 .stream()
                 .filter(longLogDataEntry -> !longLogDataEntry.getValue().isEmpty())
@@ -994,7 +984,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 .build();
         bootstrapAllServers(l1);
         getManagementServer(SERVERS.PORT_1).shutdown();
-        
+
         CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
 
         IStreamView testStream = rt.getStreamsView().get(CorfuRuntime.getStreamID("test"));

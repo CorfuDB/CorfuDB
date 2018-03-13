@@ -7,14 +7,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.ShutdownException;
+import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -137,9 +141,9 @@ public class AbstractIT extends AbstractCorfuTest {
 
     public void restartServer(CorfuRuntime corfuRuntime, String endpoint) {
         corfuRuntime.invalidateLayout();
-        long oldEpoch = corfuRuntime.getLayoutView().getLayout().getEpoch();
+        RuntimeLayout runtimeLayout = corfuRuntime.getLayoutView().getEpochedClient();
         try {
-            corfuRuntime.getRouter(endpoint).getClient(BaseClient.class).restart().get();
+            runtimeLayout.getBaseClient(endpoint).restart().get();
         } catch (ExecutionException | InterruptedException e) {
             log.error("Error: {}", e);
         }
@@ -149,7 +153,8 @@ public class AbstractIT extends AbstractCorfuTest {
         // Hence the while loop.
         while (true) {
             try {
-                if (corfuRuntime.getLayoutView().getLayout().getEpoch() == (oldEpoch + 1)) {
+                if (corfuRuntime.getLayoutView().getLayout().getEpoch()
+                        == (runtimeLayout.getLayout().getEpoch() + 1)) {
                     break;
                 }
                 Sleep.MILLISECONDS.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);

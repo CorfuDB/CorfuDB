@@ -42,7 +42,6 @@ public class SequencerHealingPolicy implements IReconfigurationHandlerPolicy {
         Layout newLayout = layoutBuilder
                 .removeUnresponsiveServers(healedNodes)
                 .build();
-        newLayout.setRuntime(corfuRuntime);
         newLayout.setEpoch(newLayout.getEpoch() + 1);
         return newLayout;
     }

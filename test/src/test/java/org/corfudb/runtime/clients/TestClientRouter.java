@@ -52,27 +52,6 @@ public class TestClientRouter implements IClientRouter {
 
     public volatile AtomicLong requestID;
 
-
-    private long epoch;
-
-    public synchronized long getEpoch() {
-        return epoch;
-    }
-
-    /**
-     * We should never set epoch backwards
-     *
-     * @param epoch
-     */
-    public synchronized void setEpoch(long epoch) {
-        if (epoch < this.epoch) {
-            log.warn("setEpoch: Rejected attempt to set the router {}:{} to epoch {} smaller than current epoch {}",
-                    host, port, epoch, this.epoch);
-            return;
-        }
-        this.epoch = epoch;
-    }
-
     @Getter
     @Setter
     public long serverEpoch;
@@ -214,7 +193,6 @@ public class TestClientRouter implements IClientRouter {
         // Set the message fields.
         message.setClientID(clientID);
         message.setRequestID(thisRequest);
-        message.setEpoch(getEpoch());
         // Generate a future and put it in the completion table.
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequest, cf);
@@ -248,7 +226,6 @@ public class TestClientRouter implements IClientRouter {
         final long thisRequest = requestID.getAndIncrement();
         message.setClientID(clientID);
         message.setRequestID(thisRequest);
-        message.setEpoch(getEpoch());
         // Evaluate rules.
         if (rules.stream()
                 .map(x -> x.evaluate(message, this))

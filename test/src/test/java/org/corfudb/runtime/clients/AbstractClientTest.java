@@ -69,11 +69,11 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
                 x -> {
                     TestClientRouter tcn =
                             new TestClientRouter(serverRouter);
-                    tcn.addClient(new BaseClient())
-                            .addClient(new SequencerClient())
-                            .addClient(new LayoutClient())
-                            .addClient(new LogUnitClient())
-                            .addClient(new ManagementClient());
+                    tcn.addClient(new BaseHandler())
+                            .addClient(new SequencerHandler())
+                            .addClient(new LayoutHandler())
+                            .addClient(new LogUnitHandler())
+                            .addClient(new ManagementHandler());
                     return tcn;
                 }
         );

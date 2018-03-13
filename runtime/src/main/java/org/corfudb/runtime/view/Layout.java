@@ -13,7 +13,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
 
@@ -27,11 +26,7 @@ import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
-import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.replication.ChainReplicationProtocol;
 import org.corfudb.runtime.view.replication.IReplicationProtocol;
 import org.corfudb.runtime.view.replication.NeverHoleFillPolicy;
@@ -46,7 +41,7 @@ import org.corfudb.runtime.view.stream.IStreamView;
  */
 @Slf4j
 @Data
-@ToString(exclude = {"runtime"})
+@ToString
 @EqualsAndHashCode
 public class Layout {
     /**
@@ -84,11 +79,10 @@ public class Layout {
     long epoch;
 
     /**
-     * The org.corfudb.runtime this layout is associated with.
+     * Invalid epoch value.
+     * Is used to fetch layout(epoch agnostic request) by the corfuRuntime.
      */
-    @Getter
-    @Setter
-    transient CorfuRuntime runtime;
+    public static final long INVALID_EPOCH = -1L;
 
     /** The unique Id for the Corfu cluster represented by this layout.
      *  Should remain consistent for the lifetime of the layout. May be
@@ -164,34 +158,6 @@ public class Layout {
     }
 
     /**
-     * Attempts to move all servers in the system to the epoch of this layout.
-     * The seal however waits only for a response from a quorum of layout servers (n/2 + 1),
-     * a quorum of log unit servers in every stripe in case of QUORUM_REPLICATION or
-     * at least one log unit server in every stripe in case of CHAIN_REPLICATION.
-     *
-     * @throws WrongEpochException        If any server is in a higher epoch.
-     * @throws QuorumUnreachableException If enough number of servers cannot be sealed.
-     */
-    public void moveServersToEpoch()
-            throws WrongEpochException, QuorumUnreachableException {
-        log.debug("Requested move of servers to new epoch {} servers are {}", epoch,
-                getAllServers());
-
-        // Set remote epoch on all servers in layout.
-        Map<String, CompletableFuture<Boolean>> resultMap =
-                SealServersHelper.asyncSetRemoteEpoch(this);
-
-        // Validate if we received enough layout server responses.
-        SealServersHelper.waitForLayoutSeal(layoutServers, resultMap);
-        // Validate if we received enough log unit server responses depending on the
-        // replication mode.
-        for (LayoutSegment layoutSegment : getSegments()) {
-            layoutSegment.getReplicationMode().validateSegmentSeal(layoutSegment, resultMap);
-        }
-        log.debug("Layout has been sealed successfully.");
-    }
-
-    /**
      * This function returns a set of all active servers in the layout.
      *
      * @return A set containing all servers in the layout.
@@ -217,49 +183,6 @@ public class Layout {
         allServers.addAll(getAllActiveServers());
         allServers.addAll(unresponsiveServers);
         return allServers;
-    }
-
-    /**
-     * Return the layout client for a particular index.
-     *
-     * @param index The index to return a layout client for.
-     * @return The layout client at that index, or null, if there is
-     *         no client at that index.
-     */
-    public LayoutClient getLayoutClient(int index) {
-        try {
-            String s = layoutServers.get(index);
-            return runtime.getRouter(s).getClient(LayoutClient.class);
-        } catch (IndexOutOfBoundsException ix) {
-            return null;
-        }
-    }
-
-    /**
-     * Get a java stream representing all layout clients for this layout.
-     *
-     * @return A java stream representing all layout clients.
-     */
-    public Stream<LayoutClient> getLayoutClientStream() {
-        return layoutServers.stream()
-                .map(runtime::getRouter)
-                .map(x -> x.getClient(LayoutClient.class));
-    }
-
-    /**
-     * Return the sequencer client for a particular index.
-     *
-     * @param index The index to return a sequencer client for.
-     * @return The sequencer client at that index, or null, if there is
-     *         no client at that index.
-     */
-    public SequencerClient getSequencer(int index) {
-        try {
-            String s = sequencers.get(index);
-            return runtime.getRouter(s).getClient(SequencerClient.class);
-        } catch (IndexOutOfBoundsException ix) {
-            return null;
-        }
     }
 
     /**
@@ -366,19 +289,6 @@ public class Layout {
         }
         return null;
     }
-
-    /**
-     * Get a log unit client at a given index of a particular address.
-     *
-     * @param address The address to check.
-     * @param index   The index of the segment.
-     * @return A log unit client, if present. Null otherwise.
-     */
-    public LogUnitClient getLogUnitClient(long address, int index) {
-        return runtime.getRouter(getStripe(address).getLogServers()
-                .get(index)).getClient(LogUnitClient.class);
-    }
-
 
     /**
      * Get the layout as a JSON string.

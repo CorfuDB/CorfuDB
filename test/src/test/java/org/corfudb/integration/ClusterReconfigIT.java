@@ -22,8 +22,6 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.BaseClient;
-import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Layout;
@@ -232,10 +230,9 @@ public class ClusterReconfigIT extends AbstractIT {
      */
     private Map<Long, LogData> getAllData(CorfuRuntime corfuRuntime,
                                           String endpoint, long end) throws Exception {
-        ReadResponse readResponse = corfuRuntime.getRouter(endpoint)
-                .getClient(LogUnitClient.class)
-                .read(Range.closed(0L, end))
-                .get();
+        ReadResponse readResponse = corfuRuntime.getLayoutView().getEpochedClient()
+                .getLogUnitClient(endpoint)
+                .read(Range.closed(0L, end)).get();
         return readResponse.getAddresses();
     }
 
@@ -248,9 +245,8 @@ public class ClusterReconfigIT extends AbstractIT {
      */
     private Layout incrementClusterEpoch(CorfuRuntime corfuRuntime) throws Exception {
         Layout l = new Layout(corfuRuntime.getLayoutView().getLayout());
-        l.setRuntime(corfuRuntime);
         l.setEpoch(l.getEpoch() + 1);
-        l.moveServersToEpoch();
+        corfuRuntime.getLayoutView().getEpochedClient(l).moveServersToEpoch();
         corfuRuntime.getLayoutView().updateLayout(l, 1L);
         corfuRuntime.invalidateLayout();
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(1L);
@@ -273,7 +269,8 @@ public class ClusterReconfigIT extends AbstractIT {
 
         CorfuRuntime corfuRuntime = createDefaultRuntime();
         incrementClusterEpoch(corfuRuntime);
-        corfuRuntime.getRouter("localhost:9000").getClient(BaseClient.class).reset().get();
+        corfuRuntime.getLayoutView().getEpochedClient().getBaseClient("localhost:9000")
+                .reset().get();
 
         corfuRuntime = createDefaultRuntime();
         // The shutdown and reset can take an unknown amount of time and there is a chance that the
@@ -307,8 +304,8 @@ public class ClusterReconfigIT extends AbstractIT {
 
         CorfuRuntime corfuRuntime = createDefaultRuntime();
         Layout l = incrementClusterEpoch(corfuRuntime);
-        corfuRuntime.getRouter("localhost:9000").getClient(BaseClient.class).restart()
-                .get();
+        corfuRuntime.getLayoutView().getEpochedClient(l).getBaseClient("localhost:9000")
+                .restart().get();
 
         restartServer(corfuRuntime, DEFAULT_ENDPOINT);
 

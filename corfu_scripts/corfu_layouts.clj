@@ -80,9 +80,9 @@ Options:
                                        ; (2) install layout on all servers
                                        (do
                                          (doseq [server (into [] (remove (set (.getLayoutServers layout)) (.getLayoutServers new-layout)))]
-                                                (do (get-router server localcmd)
+                                                (do
                                                     (try
-                                                      (.get (.bootstrapLayout (get-layout-client) new-layout))
+                                                      (.get (.bootstrapLayout (get-layout-client (get-router server localcmd) 0) new-layout))
                                                       (catch Exception e
                                                         (println server ":" (.getMessage e))
                                                         (throw e)))

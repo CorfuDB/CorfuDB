@@ -174,19 +174,19 @@ public class WorkflowIT extends AbstractIT {
         final int clusterSizeN2 = 2;
         final int clusterSizeN3 = 3;
 
-        new CorfuServerRunner()
+        Process p0 = new CorfuServerRunner()
                 .setHost(host)
                 .setPort(n0Port)
                 .setSingle(true)
                 .runServer();
 
-        new CorfuServerRunner()
+        Process p1 = new CorfuServerRunner()
                 .setHost(host)
                 .setPort(n1Port)
                 .setSingle(false)
                 .runServer();
 
-        new CorfuServerRunner()
+        Process p2 = new CorfuServerRunner()
                 .setHost(host)
                 .setPort(n2Port)
                 .setSingle(false)
@@ -231,6 +231,10 @@ public class WorkflowIT extends AbstractIT {
         for (int x = 0; x < iter; x++) {
             assertThat(table.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
         }
+
+        shutdownCorfuServer(p0);
+        shutdownCorfuServer(p1);
+        shutdownCorfuServer(p2);
     }
 
     @Test
@@ -244,7 +248,7 @@ public class WorkflowIT extends AbstractIT {
         final int clusterSizeN1 = 1;
         final int clusterSizeN3 = 3;
 
-        new CorfuServerRunner()
+        Process p0 = new CorfuServerRunner()
                 .setHost(host)
                 .setPort(n0Port)
                 .setSingle(true)
@@ -253,11 +257,13 @@ public class WorkflowIT extends AbstractIT {
         Process p1 = new CorfuServerRunner()
                 .setHost(host)
                 .setPort(n1Port)
+                .setSingle(false)
                 .runServer();
 
         Process p2 = new CorfuServerRunner()
                 .setHost(host)
                 .setPort(n2Port)
+                .setSingle(false)
                 .runServer();
 
         CorfuRuntime n0Rt = new CorfuRuntime(getConnectionString(n0Port)).connect();
@@ -298,5 +304,7 @@ public class WorkflowIT extends AbstractIT {
         for (int x = 0; x < iter; x++) {
             assertThat(table.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
         }
+
+        shutdownCorfuServer(p0);
     }
 }

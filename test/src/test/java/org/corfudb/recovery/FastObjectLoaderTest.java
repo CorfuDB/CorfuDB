@@ -181,10 +181,10 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canReadHoles() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2);
 
-        LogUnitClient luc = getDefaultRuntime().getRouter(getDefaultConfigurationString())
-                .getClient(LogUnitClient.class);
-        SequencerClient seq = getDefaultRuntime().getRouter(getDefaultConfigurationString())
-                .getClient(SequencerClient.class);
+        LogUnitClient luc = getDefaultRuntime().getLayoutView().getEpochedClient()
+                .getLogUnitClient(getDefaultConfigurationString());
+        SequencerClient seq = getDefaultRuntime().getLayoutView().getEpochedClient()
+                .getSequencerClient(getDefaultConfigurationString());
 
         seq.nextToken(null, 1);
         luc.fillHole(getDefaultRuntime().getSequencerView()
@@ -400,10 +400,10 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canReadRankOnlyEntries() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, 2);
 
-        LogUnitClient luc = getDefaultRuntime().getRouter(getDefaultConfigurationString())
-                .getClient(LogUnitClient.class);
-        SequencerClient seq = getDefaultRuntime().getRouter(getDefaultConfigurationString())
-                .getClient(SequencerClient.class);
+        LogUnitClient luc = getDefaultRuntime().getLayoutView().getEpochedClient()
+                .getLogUnitClient(getDefaultConfigurationString());
+        SequencerClient seq = getDefaultRuntime().getLayoutView().getEpochedClient()
+                .getSequencerClient(getDefaultConfigurationString());
 
         long address = seq.nextToken(Collections.emptySet(),1).get().getTokenValue();
         ILogData data = Helpers.createEmptyData(address, DataType.RANK_ONLY,  new IMetadata.DataRank(2))
