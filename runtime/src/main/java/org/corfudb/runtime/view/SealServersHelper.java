@@ -26,19 +26,19 @@ public class SealServersHelper {
     /**
      * Asynchronously set remote epoch on all servers of layout.
      *
-     * @param epochedClient Epoched client stamped with the layout to be sealed.
+     * @param runtimeLayout RuntimeLayout stamped with the layout to be sealed.
      * @return A map of completableFutures for every remoteSetEpoch call.
      */
     public static Map<String, CompletableFuture<Boolean>> asyncSetRemoteEpoch(
-            EpochedClient epochedClient) {
-        Layout layout = epochedClient.getLayout();
+            RuntimeLayout runtimeLayout) {
+        Layout layout = runtimeLayout.getLayout();
         Map<String, CompletableFuture<Boolean>> resultMap = new HashMap<>();
         // Seal layout servers
         layout.getAllServers().forEach(server -> {
             CompletableFuture<Boolean> cf = new CompletableFuture<>();
             try {
                 // Creating router can cause NetworkException which should be handled.
-                cf = epochedClient.getBaseClient(server).setRemoteEpoch(layout.getEpoch());
+                cf = runtimeLayout.getBaseClient(server).setRemoteEpoch(layout.getEpoch());
             } catch (NetworkException ne) {
                 cf.completeExceptionally(ne);
                 log.error("Remote seal SET_EPOCH failed for server {} with {}", server, ne);

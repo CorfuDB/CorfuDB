@@ -30,7 +30,7 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
-import org.corfudb.runtime.view.EpochedClient;
+import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Holder;
@@ -66,15 +66,15 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
      * {@inheritDoc}
      */
     @Override
-    public ILogData peek(EpochedClient epochedClient, long address) {
-        int numUnits = epochedClient.getLayout().getSegmentLength(address);
+    public ILogData peek(RuntimeLayout runtimeLayout, long address) {
+        int numUnits = runtimeLayout.getLayout().getSegmentLength(address);
         log.trace("Peek[{}]: quorum {}/{}", address, numUnits, numUnits);
         try {
             ReadResponse readResponse = null;
             try {
                 CompletableFuture<ReadResponse>[] futures = new CompletableFuture[numUnits];
                 for (int i = 0; i < numUnits; i++) {
-                    futures[i] = epochedClient.getLogUnitClient(address, i).read(address);
+                    futures[i] = runtimeLayout.getLogUnitClient(address, i).read(address);
                 }
                 QuorumFuturesFactory.CompositeFuture<ReadResponse> future =
                         QuorumFuturesFactory.getQuorumFuture(new ReadResponseComparator(address),
@@ -100,12 +100,12 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
      * {@inheritDoc}
      */
     @Override
-    protected void holeFill(EpochedClient epochedClient, long globalAddress) {
-        int numUnits = epochedClient.getLayout().getSegmentLength(globalAddress);
+    protected void holeFill(RuntimeLayout runtimeLayout, long globalAddress) {
+        int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);
         log.trace("fillHole[{}]: quorum head {}/{}", globalAddress, 1, numUnits);
         try (ILogData.SerializationHandle holeData = createEmptyData(globalAddress,
                 DataType.HOLE, new IMetadata.DataRank(0))) {
-            recoveryWrite(epochedClient, holeData.getSerialized());
+            recoveryWrite(runtimeLayout, holeData.getSerialized());
         }
     }
 
@@ -113,7 +113,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
      * {@inheritDoc}
      */
     @Override
-    public void write(EpochedClient epochedClient, ILogData data) throws OverwriteException {
+    public void write(RuntimeLayout runtimeLayout, ILogData data) throws OverwriteException {
         final long globalAddress = data.getGlobalAddress();
         log.debug("Write at {} " + globalAddress);
         IMetadata.DataRank rank = new IMetadata.DataRank(0);
@@ -122,7 +122,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
         try {
             try (ILogData.SerializationHandle sh =
                          data.getSerializedForm()) {
-                future = getWriteFuture(epochedClient, sh.getSerialized());
+                future = getWriteFuture(runtimeLayout, sh.getSerialized());
                 CFUtils.getUninterruptibly(future, QuorumUnreachableException.class,
                         OverwriteException.class, DataOutrankedException.class);
             }
@@ -134,7 +134,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
             if (future.containsThrowableFrom(DataOutrankedException.class)
                     || future.containsThrowableFrom(ValueAdoptedException.class)) {
                 // we are competing with other client that writes the same data or fills a hole
-                boolean adopted = recoveryWrite(epochedClient, data);
+                boolean adopted = recoveryWrite(runtimeLayout, data);
                 if (!adopted) {
                     return;
                 }
@@ -157,7 +157,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
     }
 
 
-    private boolean recoveryWrite(EpochedClient epochedClient, ILogData logData) {
+    private boolean recoveryWrite(RuntimeLayout runtimeLayout, ILogData logData) {
         long address = logData.getGlobalAddress();
         log.debug("Recovery write at {} " + address);
         Holder<ILogData> dh = new Holder<>(logData);
@@ -179,7 +179,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
                         try {
                             return holeFillPolicy
                                     .peekUntilHoleFillRequired(address,
-                                            a -> peek(epochedClient, a));
+                                            a -> peek(runtimeLayout, a));
                         } catch (HoleFillRequiredException e) {
                             log.debug(e.getMessage(), e);
                             // continuing
@@ -190,7 +190,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
                             dh.getRef().getGlobalAddress(),
                             DataType.RANK_ONLY,
                             dh.getRef().getRank())) {
-                        future = getWriteFuture(epochedClient, ph1.getSerialized());
+                        future = getWriteFuture(runtimeLayout, ph1.getSerialized());
                         CFUtils.getUninterruptibly(future, QuorumUnreachableException.class,
                                 OverwriteException.class, DataOutrankedException.class);
                     } catch (LogUnitException | QuorumUnreachableException e) {
@@ -208,7 +208,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
                         }
                     }
                     // phase 2 - only if exception is not thrown from phase 1
-                    future = getWriteFuture(epochedClient, dh.getRef());
+                    future = getWriteFuture(runtimeLayout, dh.getRef());
                     CFUtils.getUninterruptibly(future, QuorumUnreachableException.class,
                             OverwriteException.class, DataOutrankedException.class);
                     log.trace("Write done[{}]: {}", address);
@@ -229,13 +229,13 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
     }
 
     private QuorumFuturesFactory.CompositeFuture<Boolean> getWriteFuture(
-            EpochedClient epochedClient, ILogData data) {
-        int numUnits = epochedClient.getLayout().getSegmentLength(data.getGlobalAddress());
+            RuntimeLayout runtimeLayout, ILogData data) {
+        int numUnits = runtimeLayout.getLayout().getSegmentLength(data.getGlobalAddress());
         long globalAddress = data.getGlobalAddress();
         CompletableFuture<Boolean>[] futures = new CompletableFuture[numUnits];
         for (int i = 0; i < numUnits; i++) {
             log.trace("Write[{}]: quorum {}/{}", globalAddress, i + 1, numUnits);
-            futures[i] = epochedClient.getLogUnitClient(globalAddress, i).write(data);
+            futures[i] = runtimeLayout.getLogUnitClient(globalAddress, i).write(data);
         }
         QuorumFuturesFactory.CompositeFuture<Boolean> future =
                 QuorumFuturesFactory.getQuorumFuture(Boolean::compareTo, futures,

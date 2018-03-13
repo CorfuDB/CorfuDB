@@ -6,7 +6,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.view.EpochedClient;
+import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
@@ -59,22 +59,22 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         //begin tests
         final CorfuRuntime r = getDefaultRuntime();
         final IReplicationProtocol rp = getProtocol();
-        final EpochedClient epochedClient = r.getLayoutView().getEpochedClient();
+        final RuntimeLayout runtimeLayout = r.getLayoutView().getEpochedClient();
 
         LogData failedWrite = getLogData(0, "failed".getBytes());
         LogData incompleteWrite = getLogData(0, "incomplete".getBytes());
 
         // Write the incomplete write to the head of the chain
-        epochedClient.getLogUnitClient(SERVERS.ENDPOINT_0).write(incompleteWrite);
+        runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0).write(incompleteWrite);
 
         // Attempt to write using the replication protocol.
         // Should result in an overwrite exception
-        assertThatThrownBy(() -> rp.write(epochedClient, failedWrite))
+        assertThatThrownBy(() -> rp.write(runtimeLayout, failedWrite))
                 .isInstanceOf(OverwriteException.class);
 
         // At this point, a direct read of the tail should
         // reflect the -other- clients value
-        ILogData readResult = epochedClient.getLogUnitClient(SERVERS.ENDPOINT_0)
+        ILogData readResult = runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0)
                 .read(0).get().getAddresses().get(0L);
 
         assertThat(readResult.getPayload(r))
@@ -91,16 +91,16 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         //begin tests
         final CorfuRuntime r = getDefaultRuntime();
         final IReplicationProtocol rp = getProtocol();
-        final EpochedClient epochedClient = r.getLayoutView().getEpochedClient();
+        final RuntimeLayout runtimeLayout = r.getLayoutView().getEpochedClient();
 
         LogData incompleteWrite = getLogData(0, "incomplete".getBytes());
 
         // Write the incomplete write to the head of the chain
-        epochedClient.getLogUnitClient(SERVERS.ENDPOINT_0).write(incompleteWrite);
+        runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0).write(incompleteWrite);
 
         // At this point, a read
         // reflect the -other- clients value
-        ILogData readResult = rp.read(epochedClient, 0);
+        ILogData readResult = rp.read(runtimeLayout, 0);
 
         assertThat(readResult.getPayload(r))
                 .isEqualTo("incomplete".getBytes());
@@ -130,17 +130,17 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         setupNodes();
         final CorfuRuntime r = getDefaultRuntime();
         Layout layout = new Layout(r.getLayoutView().getLayout());
-        EpochedClient epochedClient = r.getLayoutView().getEpochedClient();
+        RuntimeLayout runtimeLayout = r.getLayoutView().getEpochedClient();
         final IReplicationProtocol rp = getProtocol();
 
         LogData incompleteWrite = getLogData(0, "incomplete".getBytes());
 
         // Write the incomplete write to the head of the chain
-        epochedClient.getLogUnitClient(SERVERS.ENDPOINT_0).write(incompleteWrite);
+        runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0).write(incompleteWrite);
         removeLogunit(layout, SERVERS.ENDPOINT_2);
         r.invalidateLayout();
         r.getLayoutView().getLayout();
-        epochedClient = r.getLayoutView().getEpochedClient();
+        runtimeLayout = r.getLayoutView().getEpochedClient();
 
         try {
             // Trigger hole fill.
@@ -150,13 +150,13 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
             assertThat(we.getCorrectEpoch()).isEqualTo(1L);
         }
 
-        LogData logData = epochedClient.getLogUnitClient(SERVERS.ENDPOINT_0).read(0L).get()
+        LogData logData = runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0).read(0L).get()
                 .getAddresses().get(0L);
         assertThat(logData.getData()).containsExactly(incompleteWrite.getData());
-        logData = epochedClient.getLogUnitClient(SERVERS.ENDPOINT_1).read(0L).get()
+        logData = runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_1).read(0L).get()
                 .getAddresses().get(0L);
         assertThat(logData.getData()).isNullOrEmpty();
-        logData = epochedClient.getLogUnitClient(SERVERS.ENDPOINT_2).read(0L).get()
+        logData = runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_2).read(0L).get()
                 .getAddresses().get(0L);
         assertThat(logData.getData()).isNullOrEmpty();
     }

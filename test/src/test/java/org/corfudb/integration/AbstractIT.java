@@ -9,8 +9,7 @@ import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.ShutdownException;
-import org.corfudb.runtime.view.EpochedClient;
-import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
@@ -142,9 +141,9 @@ public class AbstractIT extends AbstractCorfuTest {
 
     public void restartServer(CorfuRuntime corfuRuntime, String endpoint) {
         corfuRuntime.invalidateLayout();
-        EpochedClient epochedClient = corfuRuntime.getLayoutView().getEpochedClient();
+        RuntimeLayout runtimeLayout = corfuRuntime.getLayoutView().getEpochedClient();
         try {
-            epochedClient.getBaseClient(endpoint).restart().get();
+            runtimeLayout.getBaseClient(endpoint).restart().get();
         } catch (ExecutionException | InterruptedException e) {
             log.error("Error: {}", e);
         }
@@ -155,7 +154,7 @@ public class AbstractIT extends AbstractCorfuTest {
         while (true) {
             try {
                 if (corfuRuntime.getLayoutView().getLayout().getEpoch()
-                        == (epochedClient.getLayout().getEpoch() + 1)) {
+                        == (runtimeLayout.getLayout().getEpoch() + 1)) {
                     break;
                 }
                 Sleep.MILLISECONDS.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);

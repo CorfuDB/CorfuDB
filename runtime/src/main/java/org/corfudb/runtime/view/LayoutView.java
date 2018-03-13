@@ -35,15 +35,15 @@ public class LayoutView extends AbstractView {
      * Retrieves current layout.
      **/
     public Layout getLayout() {
-        return layoutHelper(EpochedClient::getLayout);
+        return layoutHelper(RuntimeLayout::getLayout);
     }
 
-    public EpochedClient getEpochedClient() {
+    public RuntimeLayout getEpochedClient() {
         return layoutHelper(l -> l);
     }
 
-    public EpochedClient getEpochedClient(@Nonnull Layout layout) {
-        return new EpochedClient(layout, runtime);
+    public RuntimeLayout getEpochedClient(@Nonnull Layout layout) {
+        return new RuntimeLayout(layout, runtime);
     }
 
     /**

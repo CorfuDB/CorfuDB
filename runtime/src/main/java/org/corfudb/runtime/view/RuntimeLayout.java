@@ -32,7 +32,7 @@ import org.corfudb.runtime.view.Layout.LayoutSegment;
  */
 @Slf4j
 @Data
-public class EpochedClient {
+public class RuntimeLayout {
 
     @Getter
     private final Layout layout;
@@ -47,7 +47,7 @@ public class EpochedClient {
      * Defensive constructor since we can create a Layout from a JSON file.
      * JSON deserialize is forced through this constructor.
      */
-    public EpochedClient(@Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime) {
+    public RuntimeLayout(@Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime) {
 
         this.layout = new Layout(layout);
         this.runtime = corfuRuntime;
