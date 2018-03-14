@@ -576,7 +576,7 @@ public class ServerRestartIT extends AbstractIT {
             }
 
             SequencerClient sequencerClient = corfuRuntime
-                    .getLayoutView().getEpochedClient()
+                    .getLayoutView().getRuntimeLayout()
                     .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
 
             TokenResponse expectedTokenResponseA = sequencerClient
@@ -600,7 +600,7 @@ public class ServerRestartIT extends AbstractIT {
             corfuRuntime = createDefaultRuntime();
 
             sequencerClient = corfuRuntime
-                    .getLayoutView().getEpochedClient()
+                    .getLayoutView().getRuntimeLayout()
                     .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
 
             // check tail recovery after restart

@@ -230,7 +230,7 @@ public class ClusterReconfigIT extends AbstractIT {
      */
     private Map<Long, LogData> getAllData(CorfuRuntime corfuRuntime,
                                           String endpoint, long end) throws Exception {
-        ReadResponse readResponse = corfuRuntime.getLayoutView().getEpochedClient()
+        ReadResponse readResponse = corfuRuntime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient(endpoint)
                 .read(Range.closed(0L, end)).get();
         return readResponse.getAddresses();
@@ -246,7 +246,7 @@ public class ClusterReconfigIT extends AbstractIT {
     private Layout incrementClusterEpoch(CorfuRuntime corfuRuntime) throws Exception {
         Layout l = new Layout(corfuRuntime.getLayoutView().getLayout());
         l.setEpoch(l.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getEpochedClient(l).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
         corfuRuntime.getLayoutView().updateLayout(l, 1L);
         corfuRuntime.invalidateLayout();
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(1L);
@@ -269,7 +269,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         CorfuRuntime corfuRuntime = createDefaultRuntime();
         incrementClusterEpoch(corfuRuntime);
-        corfuRuntime.getLayoutView().getEpochedClient().getBaseClient("localhost:9000")
+        corfuRuntime.getLayoutView().getRuntimeLayout().getBaseClient("localhost:9000")
                 .reset().get();
 
         corfuRuntime = createDefaultRuntime();
@@ -304,7 +304,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         CorfuRuntime corfuRuntime = createDefaultRuntime();
         Layout l = incrementClusterEpoch(corfuRuntime);
-        corfuRuntime.getLayoutView().getEpochedClient(l).getBaseClient("localhost:9000")
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).getBaseClient("localhost:9000")
                 .restart().get();
 
         restartServer(corfuRuntime, DEFAULT_ENDPOINT);

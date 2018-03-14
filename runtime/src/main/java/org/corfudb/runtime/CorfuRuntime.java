@@ -727,7 +727,7 @@ public class CorfuRuntime {
             Layout currentLayout = CFUtils.getUninterruptibly(layout);
             List<CompletableFuture<VersionInfo>> versions =
                     currentLayout.getLayoutServers()
-                        .stream().map(s -> getLayoutView().getEpochedClient().getBaseClient(s))
+                        .stream().map(s -> getLayoutView().getRuntimeLayout().getBaseClient(s))
                         .map(BaseClient::getVersionInfo)
                         .collect(Collectors.toList());
 

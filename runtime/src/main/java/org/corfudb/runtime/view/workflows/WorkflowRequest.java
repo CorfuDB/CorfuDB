@@ -63,7 +63,7 @@ public abstract class WorkflowRequest {
             throw new WorkflowException("getOrchestrator: no available orchestrators " + layout);
         }
 
-        return runtime.getLayoutView().getEpochedClient(layout)
+        return runtime.getLayoutView().getRuntimeLayout(layout)
                 .getManagementClient(activeLayoutServers.get(0));
     }
 

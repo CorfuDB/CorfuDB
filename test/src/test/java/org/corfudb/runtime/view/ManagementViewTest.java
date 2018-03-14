@@ -714,7 +714,7 @@ public class ManagementViewTest extends AbstractViewTest {
                             // There is a failure but the BOOTSTRAP_SEQUENCER message has not yet been
                             // sent. So if we request a token now, we should be denied as the
                             // server is sealed and we get a WrongEpochException.
-                            corfuRuntime.getLayoutView().getEpochedClient(layout)
+                            corfuRuntime.getLayoutView().getRuntimeLayout(layout)
                                     .getSequencerClient(SERVERS.ENDPOINT_1)
                                     .nextToken(Collections.singleton(CorfuRuntime
                                             .getStreamID("testStream")), 1).get();
@@ -744,7 +744,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // Seal
         Layout newLayout = new Layout(l);
         newLayout.setEpoch(newLayout.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getEpochedClient(newLayout).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(newLayout).moveServersToEpoch();
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(l.getEpoch());
     }
 
@@ -755,7 +755,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_0, new TestRule().always().drop());
         layout.setEpoch(2L);
-        corfuRuntime.getLayoutView().getEpochedClient(layout).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout).moveServersToEpoch();
         corfuRuntime.getLayoutView().updateLayout(layout, 1L);
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
@@ -789,7 +789,7 @@ public class ManagementViewTest extends AbstractViewTest {
         ).join();
 
         l.setEpoch(l.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getEpochedClient(l).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
@@ -933,7 +933,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
     private Map<Long, LogData> getAllNonEmptyData(CorfuRuntime corfuRuntime,
                                                   String endpoint, long end) throws Exception {
-        ReadResponse readResponse = corfuRuntime.getLayoutView().getEpochedClient()
+        ReadResponse readResponse = corfuRuntime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient(endpoint)
                 .read(Range.closed(0L, end)).get();
         return readResponse.getAddresses().entrySet()

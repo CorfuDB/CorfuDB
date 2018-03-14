@@ -181,9 +181,9 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canReadHoles() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2);
 
-        LogUnitClient luc = getDefaultRuntime().getLayoutView().getEpochedClient()
+        LogUnitClient luc = getDefaultRuntime().getLayoutView().getRuntimeLayout()
                 .getLogUnitClient(getDefaultConfigurationString());
-        SequencerClient seq = getDefaultRuntime().getLayoutView().getEpochedClient()
+        SequencerClient seq = getDefaultRuntime().getLayoutView().getRuntimeLayout()
                 .getSequencerClient(getDefaultConfigurationString());
 
         seq.nextToken(null, 1);
@@ -400,9 +400,9 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canReadRankOnlyEntries() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, 2);
 
-        LogUnitClient luc = getDefaultRuntime().getLayoutView().getEpochedClient()
+        LogUnitClient luc = getDefaultRuntime().getLayoutView().getRuntimeLayout()
                 .getLogUnitClient(getDefaultConfigurationString());
-        SequencerClient seq = getDefaultRuntime().getLayoutView().getEpochedClient()
+        SequencerClient seq = getDefaultRuntime().getLayoutView().getRuntimeLayout()
                 .getSequencerClient(getDefaultConfigurationString());
 
         long address = seq.nextToken(Collections.emptySet(),1).get().getTokenValue();

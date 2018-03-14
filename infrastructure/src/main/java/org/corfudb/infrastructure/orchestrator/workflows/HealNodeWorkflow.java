@@ -61,7 +61,7 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
             runtime.invalidateLayout();
             Layout layout = new Layout(runtime.getLayoutView().getLayout());
             if (layout.getUnresponsiveServers().contains(request.getEndpoint())) {
-                runtime.getLayoutView().getEpochedClient(layout)
+                runtime.getLayoutView().getRuntimeLayout(layout)
                         .getLogUnitClient(request.getEndpoint())
                         .resetLogUnit()
                         .get();

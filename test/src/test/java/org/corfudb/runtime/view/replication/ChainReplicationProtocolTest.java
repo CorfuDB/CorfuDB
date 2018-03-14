@@ -59,7 +59,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         //begin tests
         final CorfuRuntime r = getDefaultRuntime();
         final IReplicationProtocol rp = getProtocol();
-        final RuntimeLayout runtimeLayout = r.getLayoutView().getEpochedClient();
+        final RuntimeLayout runtimeLayout = r.getLayoutView().getRuntimeLayout();
 
         LogData failedWrite = getLogData(0, "failed".getBytes());
         LogData incompleteWrite = getLogData(0, "incomplete".getBytes());
@@ -91,7 +91,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         //begin tests
         final CorfuRuntime r = getDefaultRuntime();
         final IReplicationProtocol rp = getProtocol();
-        final RuntimeLayout runtimeLayout = r.getLayoutView().getEpochedClient();
+        final RuntimeLayout runtimeLayout = r.getLayoutView().getRuntimeLayout();
 
         LogData incompleteWrite = getLogData(0, "incomplete".getBytes());
 
@@ -112,7 +112,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         layout.setEpoch(layout.getEpoch() + 1);
         layout.getLayoutServers().add(endpoint);
         layout.getSegment(0L).getStripes().get(0).getLogServers().remove(endpoint);
-        corfuRuntime.getLayoutView().getEpochedClient(layout).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout).moveServersToEpoch();
         corfuRuntime.getLayoutView().updateLayout(layout, 1L);
     }
 
@@ -130,7 +130,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         setupNodes();
         final CorfuRuntime r = getDefaultRuntime();
         Layout layout = new Layout(r.getLayoutView().getLayout());
-        RuntimeLayout runtimeLayout = r.getLayoutView().getEpochedClient();
+        RuntimeLayout runtimeLayout = r.getLayoutView().getRuntimeLayout();
         final IReplicationProtocol rp = getProtocol();
 
         LogData incompleteWrite = getLogData(0, "incomplete".getBytes());
@@ -140,11 +140,11 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         removeLogunit(layout, SERVERS.ENDPOINT_2);
         r.invalidateLayout();
         r.getLayoutView().getLayout();
-        runtimeLayout = r.getLayoutView().getEpochedClient();
+        runtimeLayout = r.getLayoutView().getRuntimeLayout();
 
         try {
             // Trigger hole fill.
-            rp.read(r.getLayoutView().getEpochedClient(layout), 0L);
+            rp.read(r.getLayoutView().getRuntimeLayout(layout), 0L);
             fail("No wrong epoch on write.");
         } catch (WrongEpochException we) {
             assertThat(we.getCorrectEpoch()).isEqualTo(1L);

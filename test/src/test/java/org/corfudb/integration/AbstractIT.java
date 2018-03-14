@@ -141,7 +141,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
     public void restartServer(CorfuRuntime corfuRuntime, String endpoint) {
         corfuRuntime.invalidateLayout();
-        RuntimeLayout runtimeLayout = corfuRuntime.getLayoutView().getEpochedClient();
+        RuntimeLayout runtimeLayout = corfuRuntime.getLayoutView().getRuntimeLayout();
         try {
             runtimeLayout.getBaseClient(endpoint).restart().get();
         } catch (ExecutionException | InterruptedException e) {

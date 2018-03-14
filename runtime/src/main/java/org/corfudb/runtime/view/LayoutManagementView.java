@@ -85,10 +85,10 @@ public class LayoutManagementView extends AbstractView {
         // Bootstrap the to-be added node with the old layout.
         Layout layout = new Layout(runtime.getLayoutView().getLayout());
         // Ignoring call result as the call returns ACK or throws an exception.
-        CFUtils.getUninterruptibly(runtime.getLayoutView().getEpochedClient(layout)
+        CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(layout)
                 .getLayoutClient(endpoint)
                 .bootstrapLayout(layout));
-        CFUtils.getUninterruptibly(runtime.getLayoutView().getEpochedClient(layout)
+        CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(layout)
                 .getManagementClient(endpoint)
                 .bootstrapManagement(layout));
 
@@ -332,7 +332,7 @@ public class LayoutManagementView extends AbstractView {
      */
     private void sealEpoch(Layout layout) throws QuorumUnreachableException {
         layout.setEpoch(layout.getEpoch() + 1);
-        runtime.getLayoutView().getEpochedClient(layout).moveServersToEpoch();
+        runtime.getLayoutView().getRuntimeLayout(layout).moveServersToEpoch();
     }
 
     /**
@@ -387,7 +387,7 @@ public class LayoutManagementView extends AbstractView {
             for (Layout.LayoutStripe stripe : segment.getStripes()) {
                 maxTokenRequested = Math.max(maxTokenRequested,
                         CFUtils.getUninterruptibly(
-                                runtime.getLayoutView().getEpochedClient(layout)
+                                runtime.getLayoutView().getRuntimeLayout(layout)
                                         .getLogUnitClient(stripe.getLogServers().get(0))
                                         .getTail()));
 
@@ -397,7 +397,7 @@ public class LayoutManagementView extends AbstractView {
             for (Layout.LayoutStripe stripe : segment.getStripes()) {
                 CompletableFuture<Long>[] completableFutures = stripe.getLogServers()
                         .stream()
-                        .map(s -> runtime.getLayoutView().getEpochedClient(layout)
+                        .map(s -> runtime.getLayoutView().getRuntimeLayout(layout)
                                 .getLogUnitClient(s).getTail())
                         .toArray(CompletableFuture[]::new);
                 QuorumFuturesFactory.CompositeFuture<Long> quorumFuture =
@@ -451,7 +451,7 @@ public class LayoutManagementView extends AbstractView {
 
         // Configuring the new sequencer.
         boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(
-                runtime.getLayoutView().getEpochedClient(newLayout)
+                runtime.getLayoutView().getRuntimeLayout(newLayout)
                         .getPrimarySequencerClient()
                         .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch()));
         if (sequencerBootstrapResult) {

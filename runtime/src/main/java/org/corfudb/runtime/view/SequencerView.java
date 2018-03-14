@@ -43,6 +43,6 @@ public class SequencerView extends AbstractView {
     }
 
     public void trimCache(long address) {
-        runtime.getLayoutView().getEpochedClient().getPrimarySequencerClient().trimCache(address);
+        runtime.getLayoutView().getRuntimeLayout().getPrimarySequencerClient().trimCache(address);
     }
 }
