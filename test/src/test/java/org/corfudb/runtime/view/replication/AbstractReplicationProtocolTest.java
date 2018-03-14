@@ -49,7 +49,7 @@ public abstract class AbstractReplicationProtocolTest extends AbstractViewTest {
         //begin tests
         final CorfuRuntime r = getDefaultRuntime();
         final IReplicationProtocol rp = getProtocol();
-        final RuntimeLayout runtimeLayout = r.getLayoutView().getEpochedClient();
+        final RuntimeLayout runtimeLayout = r.getLayoutView().getRuntimeLayout();
 
         LogData data = getLogData(0, "hello world".getBytes());
         rp.write(runtimeLayout, data);
@@ -75,7 +75,7 @@ public abstract class AbstractReplicationProtocolTest extends AbstractViewTest {
         //begin tests
         final CorfuRuntime r = getDefaultRuntime();
         final IReplicationProtocol rp = getProtocol();
-        final RuntimeLayout runtimeLayout = r.getLayoutView().getEpochedClient();
+        final RuntimeLayout runtimeLayout = r.getLayoutView().getRuntimeLayout();
 
         ILogData read = rp.read(runtimeLayout, 0);
 
@@ -101,7 +101,7 @@ public abstract class AbstractReplicationProtocolTest extends AbstractViewTest {
         //begin tests
         final CorfuRuntime r = getDefaultRuntime();
         final IReplicationProtocol rp = getProtocol();
-        final RuntimeLayout runtimeLayout = r.getLayoutView().getEpochedClient();
+        final RuntimeLayout runtimeLayout = r.getLayoutView().getRuntimeLayout();
 
         LogData d1 = getLogData(0, "1".getBytes());
         LogData d2 = getLogData(0, "2".getBytes());

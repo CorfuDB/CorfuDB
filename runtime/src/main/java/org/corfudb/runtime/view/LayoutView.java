@@ -38,11 +38,11 @@ public class LayoutView extends AbstractView {
         return layoutHelper(RuntimeLayout::getLayout);
     }
 
-    public RuntimeLayout getEpochedClient() {
+    public RuntimeLayout getRuntimeLayout() {
         return layoutHelper(l -> l);
     }
 
-    public RuntimeLayout getEpochedClient(@Nonnull Layout layout) {
+    public RuntimeLayout getRuntimeLayout(@Nonnull Layout layout) {
         return new RuntimeLayout(layout, runtime);
     }
 
@@ -121,7 +121,7 @@ public class LayoutView extends AbstractView {
                     CompletableFuture<LayoutPrepareResponse> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
-                        cf = getEpochedClient().getLayoutClient(x).prepare(epoch, rank);
+                        cf = getRuntimeLayout().getLayoutClient(x).prepare(epoch, rank);
                     } catch (Exception e) {
                         cf.completeExceptionally(e);
                     }
@@ -210,7 +210,7 @@ public class LayoutView extends AbstractView {
                     CompletableFuture<Boolean> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
-                        cf = getEpochedClient().getLayoutClient(x).propose(epoch, rank, layout);
+                        cf = getRuntimeLayout().getLayoutClient(x).propose(epoch, rank, layout);
                     } catch (NetworkException e) {
                         cf.completeExceptionally(e);
                     }
@@ -294,9 +294,9 @@ public class LayoutView extends AbstractView {
                     try {
                         // Connection to router can cause network exception too.
                         if (force) {
-                            cf = getEpochedClient(layout).getLayoutClient(x).force(layout);
+                            cf = getRuntimeLayout(layout).getLayoutClient(x).force(layout);
                         } else {
-                            cf = getEpochedClient(layout).getLayoutClient(x).committed(epoch, layout);
+                            cf = getRuntimeLayout(layout).getLayoutClient(x).committed(epoch, layout);
                         }
                     } catch (NetworkException e) {
                         cf.completeExceptionally(e);

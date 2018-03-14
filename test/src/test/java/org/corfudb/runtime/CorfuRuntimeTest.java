@@ -55,7 +55,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         });
 
         scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LARGE, (v) -> {
-            assertThat(rt.getLayoutView().getEpochedClient().getRuntime()).isEqualTo(rt);
+            assertThat(rt.getLayoutView().getRuntimeLayout().getRuntime()).isEqualTo(rt);
         });
 
         executeScheduled(PARAMETERS.CONCURRENCY_TWO, PARAMETERS.TIMEOUT_LONG);
@@ -129,7 +129,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         // Seal
         Layout currentLayout = new Layout(rt.getLayoutView().getCurrentLayout());
         currentLayout.setEpoch(currentLayout.getEpoch() + 1);
-        rt.getLayoutView().getEpochedClient(currentLayout).moveServersToEpoch();
+        rt.getLayoutView().getRuntimeLayout(currentLayout).moveServersToEpoch();
 
         // Server2 is sealed but will not be able to commit the layout.
         addClientRule(rt, SERVERS.ENDPOINT_2,
@@ -183,14 +183,14 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         sv.append("testPayload".getBytes());
 
         l.setEpoch(l.getEpoch() + 1);
-        runtime.getLayoutView().getEpochedClient(l).moveServersToEpoch();
+        runtime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
 
         // We need to be sure that the layout is invalidated before proceeding
         // This is what would trigger the wrong epoch exception in the consequent read.
         runtime.invalidateLayout();
 
         LogUnitClient luc = runtime
-                .getLayoutView().getEpochedClient().getLogUnitClient(SERVERS.ENDPOINT_0);
+                .getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_0);
 
         assertThatThrownBy(() -> luc.read(0).get())
                 .isInstanceOf(ExecutionException.class)

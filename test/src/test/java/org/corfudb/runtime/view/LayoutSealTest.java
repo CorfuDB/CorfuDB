@@ -27,7 +27,7 @@ public class LayoutSealTest extends AbstractViewTest {
      * @param replicationMode Replication view to set all segments in the layout with.
      * @return  Built layout with a connected runtime.
      */
-    public RuntimeLayout getEpochedClient(Layout.ReplicationMode replicationMode) {
+    public RuntimeLayout getRuntimeLayout(Layout.ReplicationMode replicationMode) {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
         addServer(SERVERS.PORT_2);
@@ -55,7 +55,7 @@ public class LayoutSealTest extends AbstractViewTest {
                 .build();
         bootstrapAllServers(l);
         CorfuRuntime corfuRuntime = getRuntime(l).connect();
-        RuntimeLayout runtimeLayout = corfuRuntime.getLayoutView().getEpochedClient(l);
+        RuntimeLayout runtimeLayout = corfuRuntime.getLayoutView().getRuntimeLayout(l);
         setAggressiveTimeouts(runtimeLayout);
 
         getManagementServer(SERVERS.PORT_0).shutdown();
@@ -121,7 +121,7 @@ public class LayoutSealTest extends AbstractViewTest {
      */
     @Test
     public void successfulChainSeal() {
-        RuntimeLayout runtimeLayout = getEpochedClient(Layout.ReplicationMode.CHAIN_REPLICATION);
+        RuntimeLayout runtimeLayout = getRuntimeLayout(Layout.ReplicationMode.CHAIN_REPLICATION);
         Layout l = runtimeLayout.getLayout();
         l.setEpoch(l.getEpoch() + 1);
         try {
@@ -143,7 +143,7 @@ public class LayoutSealTest extends AbstractViewTest {
      */
     @Test
     public void failingChainSeal() {
-        RuntimeLayout runtimeLayout = getEpochedClient(Layout.ReplicationMode.CHAIN_REPLICATION);
+        RuntimeLayout runtimeLayout = getRuntimeLayout(Layout.ReplicationMode.CHAIN_REPLICATION);
         Layout l = runtimeLayout.getLayout();
 
         addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_1, new TestRule().drop().always());
@@ -164,7 +164,7 @@ public class LayoutSealTest extends AbstractViewTest {
      */
     @Test
     public void successfulQuorumSeal() {
-        RuntimeLayout runtimeLayout = getEpochedClient(Layout.ReplicationMode.QUORUM_REPLICATION);
+        RuntimeLayout runtimeLayout = getRuntimeLayout(Layout.ReplicationMode.QUORUM_REPLICATION);
         Layout l = runtimeLayout.getLayout();
         l.setEpoch(l.getEpoch() + 1);
         try {
@@ -186,7 +186,7 @@ public class LayoutSealTest extends AbstractViewTest {
      */
     @Test
     public void failingQuorumSeal() {
-        RuntimeLayout runtimeLayout = getEpochedClient(Layout.ReplicationMode.QUORUM_REPLICATION);
+        RuntimeLayout runtimeLayout = getRuntimeLayout(Layout.ReplicationMode.QUORUM_REPLICATION);
         Layout l = runtimeLayout.getLayout();
 
         addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_3,
