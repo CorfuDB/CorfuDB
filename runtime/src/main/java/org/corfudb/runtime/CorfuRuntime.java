@@ -82,6 +82,11 @@ public class CorfuRuntime {
         @Default boolean optimisticUndoDisabled = false;
 
         /**
+         * Max size for a write request.
+         */
+        @Default int maxWriteSize = 0;
+
+        /**
          * Use fast loader to restore objects on connection.
          *
          * <p>If using this utility, you need to be sure that no one
