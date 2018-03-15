@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
@@ -70,8 +69,7 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addToLayout()
                 .setClusterId(r.clusterId)
                 .build();
-        l.setRuntime(r);
-        l.moveServersToEpoch();
+        r.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
         r.getLayoutView().updateLayout(l, 1L);
         r.invalidateLayout();
         assertThat(r.getLayoutView().getLayout().epoch)
@@ -96,8 +94,7 @@ public class LayoutViewTest extends AbstractViewTest {
             .addToLayout()
             .setClusterId(UUID.nameUUIDFromBytes("wrong cluster".getBytes()))
             .build();
-        l.setRuntime(r);
-        l.moveServersToEpoch();
+        r.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
         r.invalidateLayout();
         assertThatThrownBy(() -> r.getLayoutView().updateLayout(l, 1L))
             .isInstanceOf(WrongClusterException.class);
@@ -204,16 +201,15 @@ public class LayoutViewTest extends AbstractViewTest {
                         .addToSegment()
                         .addToLayout()
                         .build();
-                newLayout.setRuntime(corfuRuntime);
                 //TODO need to figure out if we can move to
                 //update layout
-                newLayout.moveServersToEpoch();
+                corfuRuntime.getLayoutView().getRuntimeLayout(newLayout).moveServersToEpoch();
 
                 corfuRuntime.getLayoutView().updateLayout(newLayout, newLayout.getEpoch());
                 corfuRuntime.invalidateLayout();
-                corfuRuntime.layout.get();
-                corfuRuntime.getRouter(SERVERS.ENDPOINT_0).getClient(SequencerClient.class)
-                        .bootstrap(0L, Collections.EMPTY_MAP, newLayout.getEpoch()).get();
+                corfuRuntime.getLayoutView().getRuntimeLayout()
+                        .getSequencerClient(SERVERS.ENDPOINT_0)
+                        .bootstrap(0L, Collections.emptyMap(), newLayout.getEpoch()).get();
                 log.debug("layout updated new layout {}", corfuRuntime.getLayoutView().getLayout());
                 layoutReconfiguredLatch.countDown();
             } catch (Exception e) {
@@ -283,11 +279,8 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
 
-        l.setRuntime(corfuRuntime);
-        newLayout.setRuntime(corfuRuntime);
-
         l.setEpoch(l.getEpoch() + 1);
-        l.moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
         corfuRuntime.getLayoutView().updateLayout(newLayout, 1L);
 
         assertThat(getLayoutServer(SERVERS.PORT_0).getCurrentLayout()).isEqualTo(newLayout);
@@ -347,13 +340,10 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
 
-        l.setRuntime(corfuRuntime);
-        newLayout.setRuntime(corfuRuntime);
-
         // Keep old layout untouched for assertion
         Layout oldLayout = new Layout(l);
         l.setEpoch(l.getEpoch() + 1);
-        l.moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
 
         // We receive responses from PORT_0 and PORT_2
         corfuRuntime.getLayoutView().updateLayout(newLayout, 1L);
@@ -473,9 +463,8 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
 
-        l.setRuntime(corfuRuntime);
         l.setEpoch(l.getEpoch() + 1);
-        l.moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
 
         // STEP 1
         final long rank1 = 1L;
@@ -598,9 +587,8 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
 
-        l.setRuntime(corfuRuntime1);
         l.setEpoch(l.getEpoch() + 1);
-        l.moveServersToEpoch();
+        corfuRuntime1.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
 
         Semaphore proposeLock = new Semaphore(0);
         ExecutorService executorService = Executors.newSingleThreadExecutor();

@@ -59,7 +59,7 @@ Options:
 
 ; a function which reads a logunit entry to stdout
 (defn read-logunit [address] (let [obj
-         (.. (.. (get-logunit-client) (read address)) (get))]
+         (.. (.. (get-logunit-client (get-router (.. localcmd (get "<endpoint>")) localcmd) 0) (read address)) (get))]
 
          (let [read-response (.. (.. obj (getAddresses)) (get address))]
          (if (.equals (.. read-response (getType)) org.corfudb.protocols.wireprotocol.DataType/DATA)
@@ -77,7 +77,7 @@ Options:
           (.. logData (useToken (new TokenResponse address 0 (java.util.Collections/singletonMap stream (long -5)))))
           )
 
-      (.. (.. (get-logunit-client)
+      (.. (.. (get-logunit-client (get-router (.. localcmd (get "<endpoint>")) localcmd) 0)
               (write logData)) (get))
 ))))
 

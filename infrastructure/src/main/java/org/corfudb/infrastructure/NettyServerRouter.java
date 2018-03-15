@@ -77,7 +77,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     }
 
     protected final ExecutorService handlerWorkers =
-            new ForkJoinPool(Runtime.getRuntime().availableProcessors(),
+            new ForkJoinPool(Runtime.getRuntime().availableProcessors() * 2,
                     new ServerThreadFactory(),
                     NettyServerRouter::handleUncaughtException, true);
 
