@@ -276,21 +276,42 @@ public class LayoutServer extends AbstractServer {
      * Force layout enables the server to bypass consensus
      * and accept a new layout.
      *
-     * @param msg              corfu message containing LAYOUT_FORCE
-     * @param ctx              netty ChannelHandlerContext
-     * @param r                server router
+     * @param msg corfu message containing LAYOUT_FORCE
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
      */
     private synchronized void forceLayout(@Nonnull CorfuPayloadMsg<LayoutCommittedRequest> msg,
-                                               @Nonnull ChannelHandlerContext ctx,
-                                               @Nonnull IServerRouter r) {
+                                          @Nonnull ChannelHandlerContext ctx,
+                                          @Nonnull IServerRouter r) {
         LayoutCommittedRequest req = msg.getPayload();
 
         if (req.getEpoch() != getServerEpoch()) {
             // return can't force old epochs
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
-            log.warn("forceLayout: Trying to force a layout with an old epoch. Layout {}, " +
-                    "current epoch {}", req.getLayout(), getServerEpoch());
+            log.warn("forceLayout: Trying to force a layout with an old epoch. Layout {}, "
+                    + "current epoch {}", req.getLayout(), getServerEpoch());
             return;
+        }
+
+        // Check if phase2 data exists.
+        // If yes, throw a wrong epoch exception as this epoch is already occupied.
+        // To force the layout the next epoch slot should be attempted.
+        if (getPhase2Data() != null) {
+            r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH,
+                    getServerEpoch()));
+            return;
+        } else {
+            // Phase1 rank and Phase2 data can be set as this method holds the synchronized lock.
+            Rank rank = getPhase1Rank();
+            if (rank == null) {
+                // If Phase1 rank does not exist, force layout can set a new rank.
+                rank = new Rank(1L, msg.getClientID());
+            } else {
+                // If Phase1 rank exists, it can be overridden with a higher rank.
+                rank = new Rank(rank.getRank() + 1, msg.getClientID());
+            }
+            setPhase1Rank(rank);
+            setPhase2Data(new Phase2Data(rank, req.getLayout()));
         }
 
         setCurrentLayout(req.getLayout());
