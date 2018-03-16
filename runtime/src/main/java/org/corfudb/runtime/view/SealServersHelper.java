@@ -10,6 +10,7 @@ import java.util.concurrent.TimeoutException;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -26,19 +27,19 @@ public class SealServersHelper {
     /**
      * Asynchronously set remote epoch on all servers of layout.
      *
-     * @param runtimeLayout RuntimeLayout stamped with the layout to be sealed.
+     * @param layout Layout to be sealed.
      * @return A map of completableFutures for every remoteSetEpoch call.
      */
-    public static Map<String, CompletableFuture<Boolean>> asyncSetRemoteEpoch(
-            RuntimeLayout runtimeLayout) {
-        Layout layout = runtimeLayout.getLayout();
+    public static Map<String, CompletableFuture<Boolean>> asyncSetRemoteEpoch(Layout layout) {
         Map<String, CompletableFuture<Boolean>> resultMap = new HashMap<>();
         // Seal layout servers
         layout.getAllServers().forEach(server -> {
             CompletableFuture<Boolean> cf = new CompletableFuture<>();
             try {
                 // Creating router can cause NetworkException which should be handled.
-                cf = runtimeLayout.getBaseClient(server).setRemoteEpoch(layout.getEpoch());
+                BaseClient baseClient = layout.getRuntime().getRouter(server)
+                        .getClient(BaseClient.class);
+                cf = baseClient.setRemoteEpoch(layout.getEpoch());
             } catch (NetworkException ne) {
                 cf.completeExceptionally(ne);
                 log.error("Remote seal SET_EPOCH failed for server {} with {}", server, ne);

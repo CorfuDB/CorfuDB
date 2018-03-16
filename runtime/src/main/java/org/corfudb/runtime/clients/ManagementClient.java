@@ -1,13 +1,18 @@
 package org.corfudb.runtime.clients;
 
+import io.netty.channel.ChannelHandlerContext;
+
+import java.lang.invoke.MethodHandles;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import javax.annotation.Nonnull;
-
+import lombok.Getter;
+import lombok.Setter;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
@@ -18,8 +23,13 @@ import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
+
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
+import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
+
+import javax.annotation.Nonnull;
 
 /**
  * A client to the Management Server.
@@ -29,10 +39,44 @@ import org.corfudb.util.CFUtils;
  *
  * <p>Created by zlokhandwala on 11/4/16.
  */
-public class ManagementClient extends AbstractClient {
+public class ManagementClient implements IClient {
 
-    public ManagementClient(IClientRouter router, long epoch) {
-        super(router, epoch);
+    @Setter
+    @Getter
+    IClientRouter router;
+
+    /**
+     * The handler and handlers which implement this client.
+     */
+    @Getter
+    public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
+            .generateHandlers(MethodHandles.lookup(), this);
+
+
+    @ClientHandler(type = CorfuMsgType.ORCHESTRATOR_RESPONSE)
+    private static Object handleOrchestratorResponse(CorfuPayloadMsg<OrchestratorResponse> msg,
+                                                     ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    @ClientHandler(type = CorfuMsgType.HEARTBEAT_RESPONSE)
+    private static Object handleHeartbeatResponse(CorfuPayloadMsg<byte[]> msg,
+                                                  ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    @ClientHandler(type = CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR)
+    private static Object handleNoBootstrapError(CorfuMsg msg,
+                                                 ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+        throw new NoBootstrapException();
+    }
+
+    @ClientHandler(type = CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP_ERROR)
+    private static Object handleAlreadyBootstrappedError(CorfuMsg msg,
+                                                         ChannelHandlerContext ctx, IClientRouter r)
+            throws Exception {
+        throw new AlreadyBootstrappedException();
     }
 
     /**
@@ -43,7 +87,8 @@ public class ManagementClient extends AbstractClient {
      * bootstrap was successful, false otherwise.
      */
     public CompletableFuture<Boolean> bootstrapManagement(Layout l) {
-        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(l));
+        return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST
+                .payloadMsg(l));
     }
 
     /**
@@ -53,7 +98,7 @@ public class ManagementClient extends AbstractClient {
      * @return A future which will be return TRUE if completed successfully else returns FALSE.
      */
     public CompletableFuture<Boolean> handleFailure(long detectorEpoch, Set<String> failedNodes) {
-        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED
+        return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED
                 .payloadMsg(new DetectorMsg(detectorEpoch, failedNodes, Collections.emptySet())));
     }
 
@@ -64,7 +109,7 @@ public class ManagementClient extends AbstractClient {
      * @return A future which will be return TRUE if completed successfully else returns FALSE.
      */
     public CompletableFuture<Boolean> handleHealing(long detectorEpoch, Set<String> healedNodes) {
-        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_HEALING_DETECTED
+        return router.sendMessageAndGetCompletable(CorfuMsgType.MANAGEMENT_HEALING_DETECTED
                 .payloadMsg(new DetectorMsg(detectorEpoch, Collections.emptySet(), healedNodes)));
     }
 
@@ -75,7 +120,7 @@ public class ManagementClient extends AbstractClient {
      * the node which was requested for the heartbeat.
      */
     public CompletableFuture<byte[]> sendHeartbeatRequest() {
-        return sendMessageWithFuture(CorfuMsgType.HEARTBEAT_REQUEST.msg());
+        return router.sendMessageAndGetCompletable(CorfuMsgType.HEARTBEAT_REQUEST.msg());
     }
 
     /**
@@ -85,7 +130,7 @@ public class ManagementClient extends AbstractClient {
      */
     public CreateWorkflowResponse addNodeRequest(@Nonnull String endpoint) {
         OrchestratorMsg req = new OrchestratorMsg(new AddNodeRequest(endpoint));
-        CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
+        CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));
         return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp).getResponse();
@@ -112,9 +157,10 @@ public class ManagementClient extends AbstractClient {
                         isSequencerServer,
                         isLogUnitServer,
                         stripeIndex));
-        CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
-                .ORCHESTRATOR_REQUEST
-                .payloadMsg(req));
+        CompletableFuture<OrchestratorResponse> resp =
+                router.sendMessageAndGetCompletable(CorfuMsgType
+                        .ORCHESTRATOR_REQUEST
+                        .payloadMsg(req));
         return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp).getResponse();
     }
 
@@ -125,7 +171,7 @@ public class ManagementClient extends AbstractClient {
      */
     public QueryResponse queryRequest(@Nonnull UUID workflowId) {
         OrchestratorMsg req = new OrchestratorMsg(new QueryRequest(workflowId));
-        CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
+        CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));
         return (QueryResponse) CFUtils.getUninterruptibly(resp).getResponse();
@@ -138,7 +184,7 @@ public class ManagementClient extends AbstractClient {
      */
     public CreateWorkflowResponse removeNode(@Nonnull String endpoint) {
         OrchestratorMsg req = new OrchestratorMsg(new RemoveNodeRequest(endpoint));
-        CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
+        CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));
         return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp).getResponse();
@@ -153,7 +199,7 @@ public class ManagementClient extends AbstractClient {
      */
     public CreateWorkflowResponse forceRemoveNode(@Nonnull String endpoint) {
         OrchestratorMsg req = new OrchestratorMsg(new ForceRemoveNodeRequest(endpoint));
-        CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
+        CompletableFuture<OrchestratorResponse> resp = router.sendMessageAndGetCompletable(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));
         return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp).getResponse();

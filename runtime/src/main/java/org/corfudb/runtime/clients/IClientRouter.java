@@ -128,6 +128,16 @@ public interface IClientRouter {
     Integer getPort();
 
     /**
+     * Get the current epoch.
+     */
+    long getEpoch();
+
+    /**
+     * Set the current epoch.
+     */
+    void setEpoch(long newEpoch);
+
+    /**
      * Set the Connect timeout
      *
      * @param timeoutConnect timeout for connection in milliseconds.

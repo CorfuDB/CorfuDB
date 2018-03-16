@@ -44,6 +44,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ShutdownException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.security.sasl.SaslUtils;
@@ -71,6 +72,27 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     private Timer timerConnect;
     private Timer timerSyncOp;
     private Counter counterSendDisconnected;
+
+    /**
+     * The epoch this router is in.
+     */
+    @Getter
+    public long epoch;
+
+    /**
+     * We should never set epoch backwards.
+     *
+     * @param epoch
+     */
+    public void setEpoch(long epoch){
+        if (epoch < this.epoch) {
+            log.warn("setEpoch: Rejected attempt to set the "
+                    + "router {} to epoch {} smaller than current epoch {}",
+                node, epoch, this.epoch);
+            return;
+        }
+        this.epoch = epoch;
+    }
 
     /**
      * New connection timeout (milliseconds).
@@ -202,7 +224,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             }
         }
 
-        addClient(new BaseHandler());
+        addClient(new BaseClient());
 
 
         // Initialize the channel
@@ -435,6 +457,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         // Set the message fields.
         message.setClientID(parameters.getClientId());
         message.setRequestID(thisRequest);
+        message.setEpoch(epoch);
 
         // Generate a future and put it in the completion table.
         final CompletableFuture<T> cf = new CompletableFuture<>();
@@ -474,6 +497,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         // Set the base fields for this message.
         message.setClientID(parameters.getClientId());
         message.setRequestID(thisRequest);
+        message.setEpoch(epoch);
         // Write this message out on the channel.
         channel.writeAndFlush(message, channel.voidPromise());
         log.trace("Sent one-way message: {}", message);
@@ -489,6 +513,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     public void sendResponseToServer(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
+        outMsg.setEpoch(epoch);
         ctx.writeAndFlush(outMsg, ctx.voidPromise());
         log.trace("Sent response: {}", outMsg);
     }
@@ -528,16 +553,27 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     }
 
     /**
-     * Validate the clientID of a CorfuMsg.
+     * Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
+     * the server is in the wrong epoch. Ignored if the message type is reset (which
+     * is valid in any epoch).
      *
      * @param msg The incoming message to validate.
-     * @return True, if the clientID is correct, but false otherwise.
+     * @param ctx The context of the channel handler.
+     * @return True, if the epoch is correct, but false otherwise.
      */
-    private boolean validateClientId(CorfuMsg msg) {
+    private boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx) {
         // Check if the message is intended for us. If not, drop the message.
         if (!msg.getClientID().equals(parameters.getClientId())) {
             log.warn("Incoming message intended for client {}, our id is {}, dropping!",
-                    msg.getClientID(), parameters.getClientId());
+                msg.getClientID(), parameters.getClientId());
+            return false;
+        }
+        // Check if the message is in the right epoch.
+        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != epoch) {
+            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
+                msg.getEpoch(), epoch, msg);
+            /* If this message was pending a completion, complete it with an error. */
+            completeExceptionally(msg.getRequestID(), new WrongEpochException(msg.getEpoch()));
             return false;
         }
         return true;
@@ -552,11 +588,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 // The message was unregistered, we are dropping it.
                 log.warn("Received unregistered message {}, dropping", m);
             } else {
-                if (validateClientId(m)) {
+                if (validateEpoch(m, ctx)) {
                     // Route the message to the handler.
                     if (log.isTraceEnabled()) {
                         log.trace("Message routed to {}: {}",
-                                handler.getClass().getSimpleName(), m);
+                            handler.getClass().getSimpleName(), m);
                     }
                     handler.handleMessage(m, ctx);
                 }

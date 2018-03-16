@@ -36,6 +36,7 @@ public class ConservativeFailureHandlerPolicy implements IReconfigurationHandler
                 .removeUnresponsiveServers(healedNodes)
                 .addUnresponsiveServers(failedNodes)
                 .build();
+        newLayout.setRuntime(corfuRuntime);
         newLayout.setEpoch(newLayout.getEpoch() + 1);
         log.info("generateLayout: new Layout {}", newLayout);
         return newLayout;

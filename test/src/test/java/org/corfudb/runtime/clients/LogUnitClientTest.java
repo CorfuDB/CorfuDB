@@ -43,7 +43,7 @@ import static org.junit.Assert.fail;
 /**
  * Created by mwei on 12/14/15.
  */
-public class LogUnitHandlerTest extends AbstractClientTest {
+public class LogUnitClientTest extends AbstractClientTest {
 
     LogUnitClient client;
     ServerContext serverContext;
@@ -82,11 +82,10 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
     @Override
     Set<IClient> getClientsForTest() {
-        LogUnitHandler logUnitHandler = new LogUnitHandler();
-        client = new LogUnitClient(router, 0L);
+        client = new LogUnitClient();
         return new ImmutableSet.Builder<IClient>()
-                .add(new BaseHandler())
-                .add(logUnitHandler)
+                .add(new BaseClient())
+                .add(client)
                 .build();
     }
 

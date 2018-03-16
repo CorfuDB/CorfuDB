@@ -5,7 +5,6 @@ import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.util.concurrent.TimeoutException;
@@ -18,23 +17,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class TestClientRouterTest extends AbstractCorfuTest {
 
-    private BaseClient bc;
-    private TestClientRouter tcr;
-
-    @Before
-    public void setupRouter() {
+    @Test
+    public void testRuleDropsMessages() {
         TestServerRouter tsr = new TestServerRouter();
         BaseServer bs = new BaseServer(ServerContextBuilder.defaultTestContext(0));
         tsr.addServer(bs);
-        tcr = new TestClientRouter(tsr);
-        BaseHandler baseHandler = new BaseHandler();
-        tcr.addClient(baseHandler);
-        bc = new BaseClient(tcr, 0L);
+        TestClientRouter tcr = new TestClientRouter(tsr);
 
-    }
+        BaseClient bc = new BaseClient();
+        tcr.addClient(bc);
 
-    @Test
-    public void testRuleDropsMessages() {
         assertThat(bc.pingSync())
                 .isTrue();
 
@@ -48,6 +40,14 @@ public class TestClientRouterTest extends AbstractCorfuTest {
 
     @Test
     public void onlyDropEpochChangeMessages() {
+        TestServerRouter tsr = new TestServerRouter();
+        BaseServer bs = new BaseServer(ServerContextBuilder.defaultTestContext(0));
+        tsr.addServer(bs);
+        TestClientRouter tcr = new TestClientRouter(tsr);
+
+        BaseClient bc = new BaseClient();
+        tcr.addClient(bc);
+
         tcr.rules.add(new TestRule()
                 .matches(x -> x.getMsgType().equals(CorfuMsgType.SET_EPOCH))
                 .drop());
@@ -58,5 +58,25 @@ public class TestClientRouterTest extends AbstractCorfuTest {
         final long NEW_EPOCH = 9L;
         assertThatThrownBy(() -> bc.setRemoteEpoch(NEW_EPOCH).get())
                 .hasCauseInstanceOf(TimeoutException.class);
+    }
+
+    @Test
+    public void doesNotUpdateEpochBackward() throws Exception {
+        TestServerRouter tsr = new TestServerRouter();
+        BaseServer bs = new BaseServer(ServerContextBuilder.defaultTestContext(0));
+        tsr.addServer(bs);
+        TestClientRouter tcr = new TestClientRouter(tsr);
+
+        BaseClient bc = new BaseClient();
+        tcr.addClient(bc);
+
+        long currentEpoch = tcr.getEpoch();
+        tcr.setEpoch(currentEpoch + 1);
+        assertThat(tcr.getEpoch()).isEqualTo(currentEpoch + 1);
+
+        currentEpoch = tcr.getEpoch();
+        tcr.setEpoch(currentEpoch - 1);
+        assertThat(tcr.getEpoch()).isNotEqualTo(currentEpoch - 1).isEqualTo(currentEpoch);
+
     }
 }

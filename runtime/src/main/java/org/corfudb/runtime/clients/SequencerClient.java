@@ -1,11 +1,19 @@
 package org.corfudb.runtime.clients;
 
+import io.netty.channel.ChannelHandlerContext;
+
+import java.lang.invoke.MethodHandles;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import lombok.Getter;
+import lombok.Setter;
+
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -19,22 +27,29 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
  *
  * <p>Created by mwei on 12/10/15.
  */
-public class SequencerClient extends AbstractClient {
+public class SequencerClient implements IClient {
 
-    public SequencerClient(IClientRouter router, long epoch) {
-        super(router, epoch);
-    }
+
+    @Setter
+    @Getter
+    IClientRouter router;
 
     /**
-     * Fetches the next available token from the sequencer.
-     *
-     * @param streamIDs Set of streamIDs to be assigned ot the token.
-     * @param numTokens Number of tokens to be reserved.
-     * @return A completable future with the token response from the sequencer.
+     * The handler and handlers which implement this client.
      */
+    @Getter
+    public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
+            .generateHandlers(MethodHandles.lookup(), this);
+
+    @ClientHandler(type = CorfuMsgType.TOKEN_RES)
+    private static Object handleTokenResponse(CorfuPayloadMsg<TokenResponse> msg,
+                                              ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
     public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens) {
-        return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(
-                new TokenRequest(numTokens, streamIDs)));
+        return router.sendMessageAndGetCompletable(
+                CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(numTokens, streamIDs)));
     }
 
     /**
@@ -47,12 +62,14 @@ public class SequencerClient extends AbstractClient {
      */
     public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens,
                                                       TxResolutionInfo conflictInfo) {
-        return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(
-                new TokenRequest(numTokens, streamIDs, conflictInfo)));
+        return router.sendMessageAndGetCompletable(
+                CorfuMsgType.TOKEN_REQ
+                        .payloadMsg(new TokenRequest(numTokens, streamIDs, conflictInfo)));
     }
 
     public CompletableFuture<Void> trimCache(Long address) {
-        return sendMessageWithFuture(CorfuMsgType.SEQUENCER_TRIM_REQ.payloadMsg(address));
+        return router.sendMessageAndGetCompletable(CorfuMsgType.SEQUENCER_TRIM_REQ
+                .payloadMsg(address));
     }
 
     /**
@@ -62,8 +79,9 @@ public class SequencerClient extends AbstractClient {
      * @return A CompletableFuture which completes once the sequencer is reset.
      */
     public CompletableFuture<Boolean> bootstrap(Long initialToken, Map<UUID, Long> sequencerTails,
-                                                Long readyStateEpoch) {
-        return sendMessageWithFuture(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(
-                new SequencerTailsRecoveryMsg(initialToken, sequencerTails, readyStateEpoch)));
+                                            Long readyStateEpoch) {
+        return router.sendMessageAndGetCompletable(CorfuMsgType.BOOTSTRAP_SEQUENCER
+                .payloadMsg(new SequencerTailsRecoveryMsg(initialToken, sequencerTails,
+                        readyStateEpoch)));
     }
 }

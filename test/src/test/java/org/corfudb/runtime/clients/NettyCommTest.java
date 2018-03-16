@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 import java.io.File;
 import java.io.IOException;
@@ -48,10 +50,6 @@ public class NettyCommTest extends AbstractCorfuTest {
         }
     }
 
-    private BaseClient getBaseClient(IClientRouter router) {
-        return new BaseClient(router, 0L);
-    }
-
     @Test
     public void nettyServerClientPingable() throws Exception {
         runWithBaseServer(
@@ -62,7 +60,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return new NettyClientRouter("localhost", port);
             },
             (r, d) -> {
-                assertThat(getBaseClient(r).pingSync())
+                assertThat(r.getClient(BaseClient.class).pingSync())
                     .isTrue();
             });
     }
@@ -77,12 +75,12 @@ public class NettyCommTest extends AbstractCorfuTest {
                 return new NettyClientRouter("localhost", port);
             },
             (r, d) -> {
-                assertThat(getBaseClient(r).pingSync())
+                assertThat(r.getClient(BaseClient.class).pingSync())
                         .isTrue();
                 d.shutdownServer();
                 d.bootstrapServer();
 
-                getBaseClient(r).pingSync();
+                r.getClient(BaseClient.class).pingSync();
             });
     }
 
@@ -116,7 +114,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .build())
             ,
             (r, d) -> {
-                assertThat(getBaseClient(r).pingSync())
+                assertThat(r.getClient(BaseClient.class).pingSync())
                     .isTrue();
             });
     }
@@ -151,7 +149,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                         .build());
             },
             (r, d) -> {
-                assertThat(getBaseClient(r).pingSync())
+                assertThat(r.getClient(BaseClient.class).pingSync())
                     .isTrue();
             });
     }
@@ -186,7 +184,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                         .build());
             },
             (r, d) -> {
-                assertThat(getBaseClient(r).pingSync())
+                assertThat(r.getClient(BaseClient.class).pingSync())
                     .isFalse();
             });
     }
@@ -221,7 +219,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                         .build());
             },
             (r, d) -> {
-                assertThat(getBaseClient(r).pingSync())
+                assertThat(r.getClient(BaseClient.class).pingSync())
                     .isFalse();
             });
     }
@@ -255,7 +253,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                         .build());
             },
             (r, d) -> {
-                assertThat(getBaseClient(r).pingSync())
+                assertThat(r.getClient(BaseClient.class).pingSync())
                     .isTrue();
             });
     }
@@ -295,7 +293,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                         .build());
             },
             (r, d) -> {
-                assertThat(getBaseClient(r).pingSync())
+                assertThat(r.getClient(BaseClient.class).pingSync())
                     .isTrue();
             });
     }
@@ -315,7 +313,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     return new NettyClientRouter(nl, CorfuRuntimeParameters.builder().build());
                 },
                 (r, d) -> {
-                    assertThat(getBaseClient(r).pingSync())
+                    assertThat(r.getClient(BaseClient.class).pingSync())
                             .isTrue();
                 });
     }
@@ -340,7 +338,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     return new NettyClientRouter(nl, CorfuRuntimeParameters.builder().build());
                 },
                 (r, d) -> {
-                    assertThat(getBaseClient(r).pingSync())
+                    assertThat(r.getClient(BaseClient.class).pingSync())
                             .isTrue();
                 });
     }
@@ -360,7 +358,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     return new NettyClientRouter(nl, CorfuRuntimeParameters.builder().build());
                 },
                 (r, d) -> {
-                    assertThat(getBaseClient(r).pingSync())
+                    assertThat(r.getClient(BaseClient.class).pingSync())
                             .isFalse();
                 });
     }
@@ -400,7 +398,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                         .build());
             },
             (r, d) -> {
-                assertThat(getBaseClient(r).pingSync())
+                assertThat(r.getClient(BaseClient.class).pingSync())
                     .isFalse();
             });
     }
@@ -467,7 +465,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 .tsPasswordFile("src/test/resources/security/reload/password")
                 .build());
 
-        assertThat(getBaseClient(clientRouter).pingSync()).isFalse();
+        assertThat(clientRouter.getClient(BaseClient.class).pingSync()).isFalse();
         clientRouter.stop();
 
 
@@ -486,7 +484,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                         .tsPasswordFile("src/test/resources/security/reload/password")
                         .build());
         clientRouter.getConnectionFuture().join();
-        assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
+        assertThat(clientRouter.getClient(BaseClient.class).pingSync()).isTrue();
         clientRouter.stop();
 
         serverData.shutdownServer();
@@ -502,7 +500,7 @@ public class NettyCommTest extends AbstractCorfuTest {
         try {
             d.bootstrapServer();
             ncr = ncrc.createNettyClientRouter(port);
-            ncr.addClient(new BaseHandler());
+            ncr.addClient(new BaseClient());
             ncr.start();
             actionFn.runTest(ncr, d);
         } catch (Exception ex) {
@@ -541,8 +539,6 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         final ServerContext serverContext;
 
-        private final String address = "localhost";
-
         public NettyServerData(@Nonnull ServerContext context) {
             this.serverContext = context;
         }
@@ -556,7 +552,6 @@ public class NettyCommTest extends AbstractCorfuTest {
                                                 serverContext, b),
                                             serverContext,
                                             nsr,
-                                            address,
                                             serverContext.getServerConfig(Integer.class,
                                                 "<port>"));
         }

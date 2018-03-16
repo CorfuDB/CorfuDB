@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
@@ -35,15 +36,9 @@ public class LayoutView extends AbstractView {
      * Retrieves current layout.
      **/
     public Layout getLayout() {
-        return layoutHelper(RuntimeLayout::getLayout);
-    }
-
-    public RuntimeLayout getRuntimeLayout() {
-        return layoutHelper(l -> l);
-    }
-
-    public RuntimeLayout getRuntimeLayout(@Nonnull Layout layout) {
-        return new RuntimeLayout(layout, runtime);
+        return layoutHelper(l -> {
+            return l;
+        });
     }
 
     /**
@@ -94,7 +89,7 @@ public class LayoutView extends AbstractView {
         // For some reason, the alreadyProposedLayout sometimes doesn't have a runtime
         // we need to remove runtime from the layout, but for now, let's manually take
         // it from the original layout.
-
+        layoutToPropose.setRuntime(layout.getRuntime());
         //phase 2: propose the new layout.
         propose(epoch, rank, layoutToPropose);
         //phase 3: commited
@@ -121,7 +116,9 @@ public class LayoutView extends AbstractView {
                     CompletableFuture<LayoutPrepareResponse> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
-                        cf = getRuntimeLayout().getLayoutClient(x).prepare(epoch, rank);
+                        LayoutClient layoutClient = runtime.getRouter(x)
+                                .getClient(LayoutClient.class);
+                        cf = layoutClient.prepare(epoch, rank);
                     } catch (Exception e) {
                         cf.completeExceptionally(e);
                     }
@@ -210,7 +207,9 @@ public class LayoutView extends AbstractView {
                     CompletableFuture<Boolean> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
-                        cf = getRuntimeLayout().getLayoutClient(x).propose(epoch, rank, layout);
+                        LayoutClient layoutClient = runtime.getRouter(x)
+                                .getClient(LayoutClient.class);
+                        cf =  layoutClient.propose(epoch, rank, layout);
                     } catch (NetworkException e) {
                         cf.completeExceptionally(e);
                     }
@@ -293,10 +292,12 @@ public class LayoutView extends AbstractView {
                     CompletableFuture<Boolean> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
+                        LayoutClient layoutClient = runtime.getRouter(x)
+                                .getClient(LayoutClient.class);
                         if (force) {
-                            cf = getRuntimeLayout(layout).getLayoutClient(x).force(layout);
+                            cf = layoutClient.force(layout);
                         } else {
-                            cf = getRuntimeLayout(layout).getLayoutClient(x).committed(epoch, layout);
+                            cf = layoutClient.committed(epoch, layout);
                         }
                     } catch (NetworkException e) {
                         cf.completeExceptionally(e);

@@ -26,6 +26,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.view.Layout;
 
@@ -164,8 +165,9 @@ public class AddNodeWorkflow implements IWorkflow {
 
             for (String endpoint : endpoints) {
                 // Write segment chunk to the new logunit
-                boolean transferSuccess = runtime.getLayoutView().getRuntimeLayout(newLayout)
-                        .getLogUnitClient(endpoint)
+                boolean transferSuccess = runtime
+                        .getRouter(endpoint)
+                        .getClient(LogUnitClient.class)
                         .writeRange(entries).get();
 
                 if (!transferSuccess) {

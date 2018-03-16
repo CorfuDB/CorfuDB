@@ -3,15 +3,7 @@ package org.corfudb.runtime.clients;
 import com.google.common.collect.ImmutableSet;
 
 import org.corfudb.format.Types.NodeMetrics;
-import org.corfudb.infrastructure.AbstractServer;
-import org.corfudb.infrastructure.BaseServer;
-import org.corfudb.infrastructure.LayoutServer;
-import org.corfudb.infrastructure.LogUnitServer;
-import org.corfudb.infrastructure.ManagementServer;
-import org.corfudb.infrastructure.SequencerServer;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.infrastructure.*;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.junit.After;
 import org.junit.Test;
@@ -29,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>
  * Created by zlokhandwala on 11/7/16.
  */
-public class ManagementHandlerTest extends AbstractClientTest {
+public class ManagementClientTest extends AbstractClientTest {
 
     private ManagementClient client;
     private ManagementServer server;
@@ -57,11 +49,10 @@ public class ManagementHandlerTest extends AbstractClientTest {
 
     @Override
     Set<IClient> getClientsForTest() {
-        ManagementHandler managementHandler = new ManagementHandler();
-        client = new ManagementClient(router, 0L);
+        client = new ManagementClient();
         return new ImmutableSet.Builder<IClient>()
-                .add(new BaseHandler())
-                .add(managementHandler)
+                .add(new BaseClient())
+                .add(client)
                 .build();
     }
 

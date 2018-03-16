@@ -27,7 +27,7 @@ public class LayoutSealTest extends AbstractViewTest {
      * @param replicationMode Replication view to set all segments in the layout with.
      * @return  Built layout with a connected runtime.
      */
-    public RuntimeLayout getRuntimeLayout(Layout.ReplicationMode replicationMode) {
+    public Layout getLayout(Layout.ReplicationMode replicationMode) {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
         addServer(SERVERS.PORT_2);
@@ -55,21 +55,21 @@ public class LayoutSealTest extends AbstractViewTest {
                 .build();
         bootstrapAllServers(l);
         CorfuRuntime corfuRuntime = getRuntime(l).connect();
-        RuntimeLayout runtimeLayout = corfuRuntime.getLayoutView().getRuntimeLayout(l);
-        setAggressiveTimeouts(runtimeLayout);
+        l.setRuntime(corfuRuntime);
+        setAggressiveTimeouts(l);
 
         getManagementServer(SERVERS.PORT_0).shutdown();
         getManagementServer(SERVERS.PORT_1).shutdown();
         getManagementServer(SERVERS.PORT_2).shutdown();
         getManagementServer(SERVERS.PORT_3).shutdown();
         getManagementServer(SERVERS.PORT_4).shutdown();
-        return runtimeLayout;
+        return l;
     }
 
     /**
      * Sets aggressive timeouts for all test routers.
      */
-    public void setAggressiveTimeouts(RuntimeLayout runtimeLayout) {
+    public void setAggressiveTimeouts(Layout layout) {
         // Setting aggressive timeouts
         List<Integer> serverPorts = new ArrayList<>();
         serverPorts.add(SERVERS.PORT_0);
@@ -77,7 +77,7 @@ public class LayoutSealTest extends AbstractViewTest {
         serverPorts.add(SERVERS.PORT_2);
         serverPorts.add(SERVERS.PORT_3);
         serverPorts.add(SERVERS.PORT_4);
-        List<String> routerEndpoints = new ArrayList<>();
+        List<String> routerEndpoints = new ArrayList<> ();
         routerEndpoints.add(SERVERS.ENDPOINT_0);
         routerEndpoints.add(SERVERS.ENDPOINT_1);
         routerEndpoints.add(SERVERS.ENDPOINT_2);
@@ -85,9 +85,9 @@ public class LayoutSealTest extends AbstractViewTest {
         routerEndpoints.add(SERVERS.ENDPOINT_4);
         serverPorts.forEach(serverPort -> {
             routerEndpoints.forEach(routerEndpoint -> {
-                runtimeLayout.getRuntime().getRouter(routerEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-                runtimeLayout.getRuntime().getRouter(routerEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-                runtimeLayout.getRuntime().getRouter(routerEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+                layout.getRuntime().getRouter(routerEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+                layout.getRuntime().getRouter(routerEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+                layout.getRuntime().getRouter(routerEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             });
         });
     }
@@ -121,11 +121,10 @@ public class LayoutSealTest extends AbstractViewTest {
      */
     @Test
     public void successfulChainSeal() {
-        RuntimeLayout runtimeLayout = getRuntimeLayout(Layout.ReplicationMode.CHAIN_REPLICATION);
-        Layout l = runtimeLayout.getLayout();
+        Layout l = getLayout(Layout.ReplicationMode.CHAIN_REPLICATION);
         l.setEpoch(l.getEpoch() + 1);
         try {
-            runtimeLayout.moveServersToEpoch();
+            l.moveServersToEpoch();
         } catch (QuorumUnreachableException e) {
             e.printStackTrace();
         }
@@ -143,16 +142,14 @@ public class LayoutSealTest extends AbstractViewTest {
      */
     @Test
     public void failingChainSeal() {
-        RuntimeLayout runtimeLayout = getRuntimeLayout(Layout.ReplicationMode.CHAIN_REPLICATION);
-        Layout l = runtimeLayout.getLayout();
+        Layout l = getLayout(Layout.ReplicationMode.CHAIN_REPLICATION);
 
-        addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_1, new TestRule().drop().always());
-        addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_3, new TestRule().drop().always());
-        addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_4, new TestRule().drop().always());
+        addClientRule(l.getRuntime(), SERVERS.ENDPOINT_1, new TestRule().drop().always());
+        addClientRule(l.getRuntime(), SERVERS.ENDPOINT_3, new TestRule().drop().always());
+        addClientRule(l.getRuntime(), SERVERS.ENDPOINT_4, new TestRule().drop().always());
 
         l.setEpoch(l.getEpoch() + 1);
-        assertThatThrownBy(runtimeLayout::moveServersToEpoch)
-                .isInstanceOf(QuorumUnreachableException.class);
+        assertThatThrownBy(() -> l.moveServersToEpoch()).isInstanceOf(QuorumUnreachableException.class);
         assertLayoutEpochs(2, 1, 2);
         assertServerRouterEpochs(2, 1, 2, 1, 1);
     }
@@ -164,11 +161,10 @@ public class LayoutSealTest extends AbstractViewTest {
      */
     @Test
     public void successfulQuorumSeal() {
-        RuntimeLayout runtimeLayout = getRuntimeLayout(Layout.ReplicationMode.QUORUM_REPLICATION);
-        Layout l = runtimeLayout.getLayout();
+        Layout l = getLayout(Layout.ReplicationMode.QUORUM_REPLICATION);
         l.setEpoch(l.getEpoch() + 1);
         try {
-            runtimeLayout.moveServersToEpoch();
+            l.moveServersToEpoch();
         } catch (QuorumUnreachableException e) {
             e.printStackTrace();
         }
@@ -186,15 +182,12 @@ public class LayoutSealTest extends AbstractViewTest {
      */
     @Test
     public void failingQuorumSeal() {
-        RuntimeLayout runtimeLayout = getRuntimeLayout(Layout.ReplicationMode.QUORUM_REPLICATION);
-        Layout l = runtimeLayout.getLayout();
+        Layout l = getLayout(Layout.ReplicationMode.QUORUM_REPLICATION);
 
-        addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_3,
-                new TestRule().drop().always());
+        addClientRule(l.getRuntime(), SERVERS.ENDPOINT_3, new TestRule().drop().always());
 
         l.setEpoch(l.getEpoch() + 1);
-        assertThatThrownBy(runtimeLayout::moveServersToEpoch)
-                .isInstanceOf(QuorumUnreachableException.class);
+        assertThatThrownBy(() -> l.moveServersToEpoch()).isInstanceOf(QuorumUnreachableException.class);
         assertLayoutEpochs(2, 2, 2);
         assertServerRouterEpochs(2, 2, 2, 1, 2);
     }

@@ -7,12 +7,10 @@ import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
-import org.corfudb.runtime.clients.BaseHandler;
+import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LayoutHandler;
 import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.NodeLocator;
@@ -62,14 +60,12 @@ public class BootstrapUtil {
                     log.info("Attempting to bootstrap node:{} with layout:{}", server, layout);
                     IClientRouter router = new NettyClientRouter(NodeLocator.parseString(server),
                             corfuRuntimeParameters);
-                    router.addClient(new LayoutHandler())
-                            .addClient(new ManagementHandler())
-                            .addClient(new BaseHandler());
+                    router.addClient(new LayoutClient())
+                            .addClient(new ManagementClient())
+                            .addClient(new BaseClient());
 
-                    new LayoutClient(router, layout.getEpoch())
-                            .bootstrapLayout(layout).get();
-                    new ManagementClient(router, layout.getEpoch())
-                            .bootstrapManagement(layout).get();
+                    router.getClient(LayoutClient.class).bootstrapLayout(layout).get();
+                    router.getClient(ManagementClient.class).bootstrapManagement(layout).get();
                     router.stop();
                     break;
                 } catch (Exception e) {

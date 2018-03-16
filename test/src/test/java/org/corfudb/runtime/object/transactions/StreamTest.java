@@ -10,6 +10,7 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
@@ -79,8 +80,7 @@ public class StreamTest extends AbstractTransactionsTest {
         final long trimMark = getRuntime().getParameters().getWriteRetry() - 1;
         final String key = "key";
         final String val = "val";
-        LogUnitClient lu = getRuntime().getLayoutView().getRuntimeLayout()
-                .getLogUnitClient(getDefaultConfigurationString());
+        LogUnitClient lu = getRuntime().getRouter(getDefaultConfigurationString()).getClient(LogUnitClient.class);
         lu.prefixTrim(trimMark).get();
         TXBegin();
         map.put(key, val);

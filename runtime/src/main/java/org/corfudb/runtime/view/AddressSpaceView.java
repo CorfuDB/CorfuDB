@@ -128,8 +128,7 @@ public class AddressSpaceView extends AbstractView {
     public void write(IToken token, Object data) throws OverwriteException {
         final ILogData ld = new LogData(DataType.DATA, data);
 
-        layoutHelper(e -> {
-            Layout l = e.getLayout();
+        layoutHelper(l -> {
             // Check if the token issued is in the same
             // epoch as the layout we are about to write
             // to.
@@ -146,7 +145,7 @@ public class AddressSpaceView extends AbstractView {
             try {
                 l.getReplicationMode(token.getTokenValue())
                         .getReplicationProtocol(runtime)
-                        .write(e, ld);
+                        .write(l, ld);
             } catch (RuntimeException re) {
                 // If we have an Overwrite exception, it is already too late for trying
                 // to validate the state of the write, we know that it didn't went through.
@@ -175,9 +174,9 @@ public class AddressSpaceView extends AbstractView {
      *                  has been committed.
      */
     public @Nullable ILogData peek(final long address) {
-        return layoutHelper(e -> e.getLayout().getReplicationMode(address)
+        return layoutHelper(l -> l.getReplicationMode(address)
                     .getReplicationProtocol(runtime)
-                    .peek(e, address));
+                    .peek(l, address));
     }
 
     /**
@@ -227,14 +226,17 @@ public class AddressSpaceView extends AbstractView {
      * Get the first address in the address space.
      */
     public long getTrimMark() {
-        return layoutHelper(
-                e -> e.getLayout().segments.stream()
-                        .flatMap(seg -> seg.getStripes().stream())
-                        .flatMap(stripe -> stripe.getLogServers().stream())
-                        .map(e::getLogUnitClient)
-                        .map(LogUnitClient::getTrimMark)
-                        .map(CFUtils::getUninterruptibly)
-                        .max(Comparator.naturalOrder()).get());
+        return layoutHelper(l -> {
+            return l.segments.stream()
+                    .flatMap(seg -> seg.getStripes().stream())
+                    .flatMap(stripe -> stripe.getLogServers().stream())
+                    .map(endpoint ->
+                            runtime.getRouter(endpoint)
+                                    .getClient(LogUnitClient.class))
+                    .map(LogUnitClient::getTrimMark)
+                    .map(CFUtils::getUninterruptibly)
+                    .max(Comparator.naturalOrder()).get();
+        });
     }
 
     /**
@@ -250,11 +252,13 @@ public class AddressSpaceView extends AbstractView {
     public void prefixTrim(final long address) {
         log.debug("PrefixTrim[{}]", address);
         try {
-            layoutHelper(e -> {
-                        e.getLayout().getPrefixSegments(address).stream()
+            layoutHelper(l -> {
+                        l.getPrefixSegments(address).stream()
                                 .flatMap(seg -> seg.getStripes().stream())
                                 .flatMap(stripe -> stripe.getLogServers().stream())
-                                .map(e::getLogUnitClient)
+                                .map(endpoint ->
+                                        runtime.getRouter(endpoint)
+                                                .getClient(LogUnitClient.class))
                                 .map(client -> client.prefixTrim(address))
                                 .forEach(CFUtils::getUninterruptibly);
                         return null;    // No return value
@@ -276,11 +280,13 @@ public class AddressSpaceView extends AbstractView {
      */
     public void gc() {
         log.debug("GarbageCollect");
-        layoutHelper(e -> {
-            e.getLayout().segments.stream()
+        layoutHelper(l -> {
+            l.segments.stream()
                     .flatMap(seg -> seg.getStripes().stream())
                     .flatMap(stripe -> stripe.getLogServers().stream())
-                    .map(e::getLogUnitClient)
+                    .map(endpoint ->
+                            runtime.getRouter(endpoint)
+                                    .getClient(LogUnitClient.class))
                     .map(LogUnitClient::compact)
                     .forEach(CFUtils::getUninterruptibly);
             return null;
@@ -291,11 +297,13 @@ public class AddressSpaceView extends AbstractView {
      */
     public void invalidateServerCaches() {
         log.debug("InvalidateServerCaches");
-        layoutHelper(e -> {
-            e.getLayout().segments.stream()
+        layoutHelper(l -> {
+            l.segments.stream()
                     .flatMap(seg -> seg.getStripes().stream())
                     .flatMap(stripe -> stripe.getLogServers().stream())
-                    .map(e::getLogUnitClient)
+                    .map(endpoint ->
+                            runtime.getRouter(endpoint)
+                                    .getClient(LogUnitClient.class))
                     .map(LogUnitClient::flushCache)
                     .forEach(CFUtils::getUninterruptibly);
             return null;
@@ -339,10 +347,9 @@ public class AddressSpaceView extends AbstractView {
         for (List<Long> batch : batches) {
             try {
                 //doesn't handle the case where some address have a different replication mode
-                allAddresses.putAll(layoutHelper(e -> e.getLayout()
-                        .getReplicationMode(batch.iterator().next())
+                allAddresses.putAll(layoutHelper(l -> l.getReplicationMode(batch.iterator().next())
                         .getReplicationProtocol(runtime)
-                        .readAll(e, batch)));
+                        .readAll(l, batch)));
             } catch (Exception e) {
                 log.error("cacheFetch: Couldn't read addresses {}", batch, e);
                 throw new UnrecoverableCorfuError(
@@ -361,10 +368,11 @@ public class AddressSpaceView extends AbstractView {
      */
     public @Nonnull
     Map<Long, ILogData> cacheFetch(Set<Long> addresses) {
-        return layoutHelper(e -> e.getLayout().getReplicationMode(addresses.iterator().next())
+        return layoutHelper(l -> l.getReplicationMode(addresses.iterator().next())
                 .getReplicationProtocol(runtime)
-                .readRange(e, addresses));
+                .readRange(l, addresses));
     }
+
 
     /**
      * Explicitly fetch a given address, bypassing the cache.
@@ -372,11 +380,10 @@ public class AddressSpaceView extends AbstractView {
      * @param address An address to read from.
      * @return A result, which will be uncached.
      */
-    public @Nonnull
-    ILogData fetch(final long address) {
-        return layoutHelper(e -> e.getLayout().getReplicationMode(address)
+    public @Nonnull ILogData fetch(final long address) {
+        return layoutHelper(l -> l.getReplicationMode(address)
                 .getReplicationProtocol(runtime)
-                .read(e, address)
+                .read(l, address)
         );
     }
 }

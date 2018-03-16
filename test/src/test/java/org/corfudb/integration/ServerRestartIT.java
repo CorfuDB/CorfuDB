@@ -5,6 +5,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.CorfuTableTest;
 import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
@@ -293,7 +294,7 @@ public class ServerRestartIT extends AbstractIT {
 
         // Block until server is ready.
         runtime.invalidateLayout();
-        runtime.getLayoutView().getLayout();
+        runtime.layout.get();
 
         // Execute Transactions (once Corfu Server was restarted)
         for (int i = 0; i < ITERATIONS; i++) {
@@ -575,19 +576,22 @@ public class ServerRestartIT extends AbstractIT {
                 System.out.println(r + "..no checkpoint/trim");
             }
 
-            SequencerClient sequencerClient = corfuRuntime
-                    .getLayoutView().getRuntimeLayout()
-                    .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
-
-            TokenResponse expectedTokenResponseA = sequencerClient
+            TokenResponse expectedTokenResponseA = corfuRuntime
+                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                    .getClient(SequencerClient.class)
                     .nextToken(Collections.singleton(streamNameA), 0)
                     .get();
 
-            TokenResponse expectedTokenResponseB = sequencerClient
+            TokenResponse expectedTokenResponseB = corfuRuntime
+                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                    .getClient(SequencerClient.class)
                     .nextToken(Collections.singleton(streamNameB), 0)
                     .get();
 
-            TokenResponse expectedGlobalTailResponse = sequencerClient
+
+            TokenResponse expectedGlobalTailResponse = corfuRuntime
+                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                    .getClient(SequencerClient.class)
                     .nextToken(Collections.emptySet(), 0)
                     .get();
 
@@ -599,16 +603,16 @@ public class ServerRestartIT extends AbstractIT {
             corfuServerProcess = runCorfuServer();
             corfuRuntime = createDefaultRuntime();
 
-            sequencerClient = corfuRuntime
-                    .getLayoutView().getRuntimeLayout()
-                    .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
-
             // check tail recovery after restart
-            TokenResponse tokenResponseA = sequencerClient
+            TokenResponse tokenResponseA = corfuRuntime
+                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                    .getClient(SequencerClient.class)
                     .nextToken(Collections.singleton(streamNameA), 1)
                     .get();
 
-            TokenResponse tokenResponseB = sequencerClient
+            TokenResponse tokenResponseB = corfuRuntime
+                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                    .getClient(SequencerClient.class)
                     .nextToken(Collections.singleton(streamNameB), 1)
                     .get();
 

@@ -2,22 +2,33 @@ package org.corfudb.runtime;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
 
+import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.clients.TestClientRouter;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 
+import org.corfudb.infrastructure.TestServerRouter;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -55,7 +66,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         });
 
         scheduleConcurrently(PARAMETERS.NUM_ITERATIONS_LARGE, (v) -> {
-            assertThat(rt.getLayoutView().getRuntimeLayout().getRuntime()).isEqualTo(rt);
+            assertThat(rt.layout.get().getRuntime()).isEqualTo(rt);
         });
 
         executeScheduled(PARAMETERS.CONCURRENCY_TWO, PARAMETERS.TIMEOUT_LONG);
@@ -128,8 +139,9 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
         // Seal
         Layout currentLayout = new Layout(rt.getLayoutView().getCurrentLayout());
+        currentLayout.setRuntime(rt);
         currentLayout.setEpoch(currentLayout.getEpoch() + 1);
-        rt.getLayoutView().getRuntimeLayout(currentLayout).moveServersToEpoch();
+        currentLayout.moveServersToEpoch();
 
         // Server2 is sealed but will not be able to commit the layout.
         addClientRule(rt, SERVERS.ENDPOINT_2,
@@ -182,15 +194,16 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
         sv.append("testPayload".getBytes());
 
+        l.setRuntime(runtime);
         l.setEpoch(l.getEpoch() + 1);
-        runtime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
+        l.moveServersToEpoch();
 
         // We need to be sure that the layout is invalidated before proceeding
         // This is what would trigger the wrong epoch exception in the consequent read.
         runtime.invalidateLayout();
+        runtime.layout.get();
 
-        LogUnitClient luc = runtime
-                .getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_0);
+        LogUnitClient luc = runtime.getRouter(SERVERS.ENDPOINT_0).getClient(LogUnitClient.class);
 
         assertThatThrownBy(() -> luc.read(0).get())
                 .isInstanceOf(ExecutionException.class)
@@ -250,6 +263,77 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
         assertThatThrownBy(() -> sv.append("testPayload".getBytes())).
                 isInstanceOf(SystemUnavailableError.class);
+
+    }
+
+
+     /**
+     * Creates and bootstraps 3 nodes N0, N1 and N2.
+     * The runtime connects to the 3 nodes and sets the clientRouter epochs to 1, 1 and 1.
+     * Now the epoch is updated to 2.
+     * We now simulate a NetworkException while fetching a router to the first node
+     * in the list. The runtime is now invalidated, which forces to update the client router
+     * epochs. This should now update the epochs to the following: 1, 2, 2.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testFailedRouterInFetchLayout() throws Exception {
+
+        final Map<String, TestClientRouter> routerMap = new ConcurrentHashMap<>();
+        final AtomicReference<String> failedNode = new AtomicReference<>();
+
+        // This getRouterFunction simulates the network exception thrown during the
+        // NettyClientRouter creation.
+        // Note: This does not simulate NetworkException while message transfer or connection.
+        CorfuRuntime.overrideGetRouterFunction = (corfuRuntime, endpoint) -> {
+            if (failedNode.get() != null && endpoint.equals(failedNode.get())) {
+                throw new NetworkException("Test server not responding : ",
+                    NodeLocator.builder()
+                        .host(endpoint.split(":")[0])
+                        .port(Integer.parseInt(endpoint.split(":")[1]))
+                        .build());
+            }
+            if (!endpoint.startsWith("test:")) {
+                throw new RuntimeException("Unsupported endpoint in test: " + endpoint);
+            }
+            return routerMap.computeIfAbsent(endpoint,
+                    x -> {
+                        TestClientRouter tcn =
+                                new TestClientRouter(
+                                        (TestServerRouter) getServerRouter(getPort(endpoint)));
+                        tcn.addClient(new BaseClient())
+                                .addClient(new SequencerClient())
+                                .addClient(new LayoutClient())
+                                .addClient(new LogUnitClient())
+                                .addClient(new ManagementClient());
+                        return tcn;
+                    }
+            );
+        };
+
+        Layout l = get3NodeLayout();
+        CorfuRuntime runtime = getRuntime(l).connect();
+        String[] serverArray = runtime.getLayoutView().getLayout().getAllServers()
+                .toArray(new String[l.getAllServers().size()]);
+
+        l.setRuntime(runtime);
+        l.setEpoch(l.getEpoch() + 1);
+        l.moveServersToEpoch();
+        runtime.getLayoutView().updateLayout(l, 1L);
+
+        assertThat(routerMap.get(serverArray[0]).getEpoch()).isEqualTo(1L);
+        assertThat(routerMap.get(serverArray[1]).getEpoch()).isEqualTo(1L);
+        assertThat(routerMap.get(serverArray[2]).getEpoch()).isEqualTo(1L);
+
+        // Simulate router creation failure for the first endpoint in the list.
+        failedNode.set((String) l.getAllServers().toArray()[0]);
+
+        runtime.invalidateLayout();
+        runtime.getLayoutView().getLayout();
+        assertThat(routerMap.get(serverArray[0]).getEpoch()).isEqualTo(1L);
+        assertThat(routerMap.get(serverArray[1]).getEpoch()).isEqualTo(2L);
+        assertThat(routerMap.get(serverArray[2]).getEpoch()).isEqualTo(2L);
 
     }
 }

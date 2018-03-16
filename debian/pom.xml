@@ -5,7 +5,7 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>2.2.0.20180315235450.1447</version>
+        <version>0.1.1</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -70,6 +70,14 @@
                                 <!-- infrastructure is a dependency of cmdlets so it is included -->
                                 <data>
                                     <src>${session.executionRootDirectory}/cmdlets/target/cmdlets-${project.version}-shaded.jar</src>
+                                    <type>file</type>
+                                    <mapper>
+                                        <type>perm</type>
+                                        <prefix>/usr/share/corfu/lib</prefix>
+                                    </mapper>
+                                </data>
+                                <data>
+                                    <src>${session.executionRootDirectory}/logReader/target/logReader-${project.version}-shaded.jar</src>
                                     <type>file</type>
                                     <mapper>
                                         <type>perm</type>
