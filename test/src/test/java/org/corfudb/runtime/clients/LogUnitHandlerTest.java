@@ -401,7 +401,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         Types.Metadata metadata = Types.Metadata.parseFrom(metaDataBuf.array());
         final int fileOffset = Integer.BYTES + METADATA_SIZE + metadata.getLength() + 20;
         final int CORRUPT_BYTES = 0xFFFF;
-        file.seek(fileOffset); // File header + delimiter
+        file.seek(fileOffset); // Skip file header
         file.writeInt(CORRUPT_BYTES);
         file.close();
 
