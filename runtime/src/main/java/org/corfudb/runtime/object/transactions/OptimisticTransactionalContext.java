@@ -356,7 +356,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                         });
             }
             // and move the stream pointer to "skip" this commit entry
-            x.getUnderlyingObject().seek(commitAddress + 1);
+            x.getUnderlyingObject().seek(commitAddress);
             log.trace("Commit[{}] Committed {}", this,  x);
         });
 

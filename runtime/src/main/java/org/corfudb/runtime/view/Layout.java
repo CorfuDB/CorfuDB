@@ -34,6 +34,7 @@ import org.corfudb.runtime.view.replication.QuorumReplicationProtocol;
 import org.corfudb.runtime.view.replication.ReadWaitHoleFillPolicy;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.runtime.view.stream.SimpleView;
 
 /**
  * This class represents the layout of a Corfu instance.
@@ -331,7 +332,8 @@ public class Layout {
 
             @Override
             public IStreamView  getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
-                return new BackpointerStreamView(r, streamId, options);
+                return new SimpleView(streamId, r);
+                //return new BackpointerStreamView(r, streamId, options);
             }
 
             @Override
