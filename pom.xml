@@ -4,7 +4,7 @@
 
     <groupId>org.corfudb</groupId>
     <artifactId>corfu</artifactId>
-    <version>0.1.1</version>
+    <version>2.2.0.20180316191356.9036</version>
 
     <modules>
         <module>infrastructure</module>
@@ -15,7 +15,6 @@
         <module>annotationProcessor</module>
         <module>annotations</module>
         <module>samples</module>
-        <module>logReader</module>
         <module>debian</module>
         <module>generator</module>
     </modules>
