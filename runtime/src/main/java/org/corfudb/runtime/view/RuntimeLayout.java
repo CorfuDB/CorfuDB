@@ -48,9 +48,14 @@ public class RuntimeLayout {
      * JSON deserialize is forced through this constructor.
      */
     public RuntimeLayout(@Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime) {
-
-        this.layout = new Layout(layout);
+        this.layout = shallowCopy(layout);
         this.runtime = corfuRuntime;
+    }
+
+    public Layout shallowCopy(@Nonnull Layout layout) {
+        return new Layout(layout.getLayoutServers(), layout.getSequencers(),
+                layout.getSegments(), layout.getUnresponsiveServers(),
+                layout.getEpoch(), layout.getClusterId());
     }
 
     /**
