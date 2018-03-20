@@ -255,7 +255,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     /** Default constructor. Generates a table without any secondary indexes. */
     public CorfuTable() {
         this(IndexRegistry.empty());
-        log.trace("CorfuTable: Creating a table without secondary indexes! Secondary index lookup"
+        log.info("CorfuTable: Creating a table without secondary indexes! Secondary index lookup"
             + " will DEGRADE to a full scan");
     }
 

@@ -113,10 +113,6 @@ public class ServerContext implements AutoCloseable {
     private final EventLoopGroup workerGroup;
 
     @Getter
-    @Setter
-    private boolean bindToAllInterfaces = false;
-
-    @Getter
     public static final MetricRegistry metrics = new MetricRegistry();
 
     /**

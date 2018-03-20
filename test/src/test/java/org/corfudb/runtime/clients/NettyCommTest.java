@@ -539,8 +539,6 @@ public class NettyCommTest extends AbstractCorfuTest {
 
         final ServerContext serverContext;
 
-        private final String address = "localhost";
-
         public NettyServerData(@Nonnull ServerContext context) {
             this.serverContext = context;
         }
@@ -554,7 +552,6 @@ public class NettyCommTest extends AbstractCorfuTest {
                                                 serverContext, b),
                                             serverContext,
                                             nsr,
-                                            address,
                                             serverContext.getServerConfig(Integer.class,
                                                 "<port>"));
         }

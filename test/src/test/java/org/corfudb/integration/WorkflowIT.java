@@ -34,7 +34,7 @@ public class WorkflowIT extends AbstractIT {
     }
 
     final Duration timeout = Duration.ofMinutes(5);
-    final Duration pollPeriod = Duration.ofMillis(50);
+    final Duration pollPeriod = Duration.ofSeconds(5);
     final int workflowNumRetry = 3;
 
     @Test
