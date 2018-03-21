@@ -3,6 +3,8 @@ package org.corfudb.runtime.view;
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
+
 import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
@@ -59,6 +61,11 @@ public abstract class AbstractView {
         return layoutHelper(function, false);
     }
 
+    /**
+     * Maintains reference of the RuntimeLayout which gets invalidated if the AbstractView
+     * encounters a newer layout. (with a greater epoch)
+     */
+    private AtomicReference<RuntimeLayout> runtimeLayout = new AtomicReference<>();
 
     /**
      * Helper function for view to retrieve layouts.
@@ -86,7 +93,13 @@ public abstract class AbstractView {
         final Duration retryRate = runtime.getParameters().getConnectionRetryRate();
         while (true) {
             try {
-                return function.apply(new RuntimeLayout(runtime.layout.get(), runtime));
+                final Layout layout = runtime.layout.get();
+                return function.apply(runtimeLayout.updateAndGet(rLayout -> {
+                    if (rLayout == null || rLayout.getLayout().getEpoch() != layout.getEpoch()) {
+                        return new RuntimeLayout(layout, runtime);
+                    }
+                    return rLayout;
+                }));
             } catch (RuntimeException re) {
                 if (re.getCause() instanceof TimeoutException) {
                     log.warn("Timeout executing remote call, invalidating view and retrying in {}s",
