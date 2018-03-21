@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Created by mwei on 12/21/15.
  */
-public class LayoutClientTest extends AbstractClientTest {
+public class LayoutHandlerTest extends AbstractClientTest {
 
     LayoutClient client;
 
@@ -31,10 +31,11 @@ public class LayoutClientTest extends AbstractClientTest {
 
     @Override
     Set<IClient> getClientsForTest() {
-        client = new LayoutClient();
+        LayoutHandler layoutHandler = new LayoutHandler();
+        client = new LayoutClient(router, 0L);
         return new ImmutableSet.Builder<IClient>()
-                .add(new BaseClient())
-                .add(client)
+                .add(new BaseHandler())
+                .add(layoutHandler)
                 .build();
     }
 

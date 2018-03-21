@@ -63,7 +63,8 @@ public abstract class WorkflowRequest {
             throw new WorkflowException("getOrchestrator: no available orchestrators " + layout);
         }
 
-        return runtime.getRouter(activeLayoutServers.get(0)).getClient(ManagementClient.class);
+        return runtime.getLayoutView().getRuntimeLayout(layout)
+                .getManagementClient(activeLayoutServers.get(0));
     }
 
     /**
@@ -87,7 +88,7 @@ public abstract class WorkflowRequest {
     private void waitForWorkflow(@Nonnull UUID workflow, @Nonnull ManagementClient client,
                                  @Nonnull Duration timeout, @Nonnull Duration pollPeriod)
             throws TimeoutException {
-        long tries = timeout.getSeconds() / pollPeriod.getSeconds();
+        long tries = timeout.toNanos() / pollPeriod.toNanos();
         for (long x = 0; x < tries; x++) {
             if (!client.queryRequest(workflow).isActive()) {
                 return;

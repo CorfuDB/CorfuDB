@@ -148,7 +148,7 @@ public class FailureDetector implements IDetector {
 
             // Ping all nodes and await their responses.
             Map<String, CompletableFuture<Boolean>> pollCompletableFutures =
-                    pollOnceAsync(members, routerMap);
+                    pollOnceAsync(members, routerMap, epoch);
 
             // Collect responses and increment response counters for successful pings.
             Set<String> responses =
@@ -203,15 +203,21 @@ public class FailureDetector implements IDetector {
     /**
      * Poll all members servers once asynchronously and store their futures in
      * pollCompletableFutures.
+     *
+     * @param members   All active members in the layout.
+     * @param routerMap Map of routers for all active members.
+     * @param epoch     Current epoch for the polling round to stamp the ping messages.
+     * @return Map of Completable futures for the pings.
      */
     private Map<String, CompletableFuture<Boolean>> pollOnceAsync(List<String> members,
                                                                   Map<String, IClientRouter>
-                                                                          routerMap) {
+                                                                          routerMap,
+                                                                  final long epoch) {
         // Poll servers for health.  All ping activity will happen in the background.
         Map<String, CompletableFuture<Boolean>> pollCompletableFutures = new HashMap<>();
         members.forEach(s -> {
             try {
-                pollCompletableFutures.put(s, routerMap.get(s).getClient(BaseClient.class).ping());
+                pollCompletableFutures.put(s, new BaseClient(routerMap.get(s), epoch).ping());
             } catch (Exception e) {
                 CompletableFuture<Boolean> cf = new CompletableFuture<>();
                 cf.completeExceptionally(e);
