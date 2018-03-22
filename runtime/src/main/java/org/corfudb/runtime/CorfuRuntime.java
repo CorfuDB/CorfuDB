@@ -327,6 +327,7 @@ public class CorfuRuntime {
     /**
      * Node Router Pool.
      */
+    @Getter
     private NodeRouterPool nodeRouterPool;
 
     /**
