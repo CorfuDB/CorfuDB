@@ -49,8 +49,9 @@ message LogHeader {
 }
 
 message Metadata {
-    optional sfixed32 checksum = 1;
-    optional sfixed32 length = 2;
+    required sfixed32 payload_checksum = 1;
+    required sfixed32 length_checksum = 2;
+    required sfixed32 length = 3;
 }
 
 //  NodeMetrics is composed of the various metrics of a node
