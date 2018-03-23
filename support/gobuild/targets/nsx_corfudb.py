@@ -168,7 +168,8 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             "/build/toolchain/noarch/apache-maven-3.3.3/bin/mvn clean deploy -DskipTests -DskipITs",
             "mkdir -p /tmp/mvn",
             "mkdir -p /tmp/%s" % (DIST),
-            "cp /root/corfudb/debian/target/*.deb /tmp/%s" % (DIST)
+            "cp /root/corfudb/debian/target/*.deb /tmp/%s" % (DIST),
+            "cp /root/corfudb/migration/target/migration-*-shaded.jar /tmp"
         ]
         # For now, hard-code the sub-module names.
         sub_modules = [
@@ -202,7 +203,8 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
         cmds = ["mkdir -p %s" % publish_dist_dir,
                 "mkdir -p %s/mvn" % publish_dir,
                 "cp -r %s/tmp/mvn %s" % (chroot_dir, publish_dir),
-                "cp %s/tmp/%s/* %s" % (chroot_dir, DIST, publish_dist_dir)]
+                "cp %s/tmp/%s/* %s" % (chroot_dir, DIST, publish_dist_dir),
+                "cp %s/tmp/migration-*-shaded.jar %s/corfu-data-migration.jar" % (chroot_dir, publish_dir)]
         cmd = " && ".join(cmds)
         commands.append({
             "desc": "Copy build collateral to publish directory",
