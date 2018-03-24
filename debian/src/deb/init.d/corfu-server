@@ -16,11 +16,10 @@ export CORFU_HEAP_SIZE_PERCENT=20
 umask 022
 
 ROLENAME="Corfu Infrastructure Server"
-PIDDIR=/var/run/corfu
+RUNDIR=/var/run/corfu
 LOGDIR=/var/log/corfu
 DATADIR=/config/corfu
 CBM_BARRIER=/config/cbm/corfu/START
-TLS_SIGNAL_FILE=/config/corfu/TLS_ENABLED
 CORFU_USER=corfu
 PORT=9000
 . /lib/lsb/init-functions
@@ -37,13 +36,13 @@ wait_for_condition () {
 }
 
 signal_tls () {
-    touch $TLS_SIGNAL_FILE
+    touch $RUNDIR/TLS_ENABLED
 }
 
 ensure_dirs () {
-    if [ ! -d $PIDDIR ]; then
-        mkdir -p $PIDDIR
-        chmod 755 $PIDDIR
+    if [ ! -d $RUNDIR ]; then
+        mkdir -p $RUNDIR
+        chmod 755 $RUNDIR
     fi
     if [ ! -d $LOGDIR ]; then
         mkdir -p $LOGDIR
@@ -52,7 +51,7 @@ ensure_dirs () {
 
 change_ownership () {
     if [ "$corfu_user_exist" = 0 ]; then
-        chown -R $CORFU_USER:$CORFU_USER $PIDDIR
+        chown -R $CORFU_USER:$CORFU_USER $RUNDIR
         chown -R $CORFU_USER:$CORFU_USER $LOGDIR
         chown -R $CORFU_USER:$CORFU_USER $DATADIR
     fi
