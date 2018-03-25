@@ -5,6 +5,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import org.corfudb.protocols.wireprotocol.BatchTokenRequest;
+import org.corfudb.protocols.wireprotocol.BatchTokenResponse;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
@@ -25,6 +29,13 @@ public class SequencerClient extends AbstractClient {
         super(router, epoch);
     }
 
+    public CompletableFuture<TokenResponse> getToken(@Nonnull TokenRequest request) {
+        return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(request));
+    }
+
+    public CompletableFuture<BatchTokenResponse> getBatchToken(@Nonnull BatchTokenRequest request) {
+        return sendMessageWithFuture(CorfuMsgType.TOKEN_BATCH_REQ.payloadMsg(request));
+    }
     /**
      * Fetches the next available token from the sequencer.
      *

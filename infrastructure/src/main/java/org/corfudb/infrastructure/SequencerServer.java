@@ -7,9 +7,12 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableMap.Builder;
 import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -19,6 +22,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.BatchTokenRequest;
+import org.corfudb.protocols.wireprotocol.BatchTokenResponse;
+import org.corfudb.protocols.wireprotocol.BatchTokenResponse.BackpointerToken;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -278,15 +284,15 @@ public class SequencerServer extends AbstractServer {
         TokenRequest req = msg.getPayload();
 
         // sanity backward-compatibility assertion; TODO: remove
-        if (req.getStreams().size() > 1) {
+        if (req.getStreams().length > 1) {
             log.error("TOKEN-QUERY[{}]", req.getStreams());
         }
 
         long maxStreamGlobalTail = Address.NON_EXIST;
 
         // see if this query is for a specific stream-tail
-        if (req.getStreams().size() == 1) {
-            UUID streamId = req.getStreams().iterator().next();
+        if (req.getStreams().length == 1) {
+            UUID streamId = req.getStreams()[0];
 
             if (streamTailToGlobalTailMap.get(streamId) != null) {
                 maxStreamGlobalTail = streamTailToGlobalTailMap.get(streamId);
@@ -295,7 +301,7 @@ public class SequencerServer extends AbstractServer {
 
         // If no streams are specified in the request, this value returns the last global token
         // issued.
-        long responseGlobalTail = (req.getStreams().size() == 0) ? globalLogTail.get() - 1 :
+        long responseGlobalTail = (req.getStreams().length == 0) ? globalLogTail.get() - 1 :
                 maxStreamGlobalTail;
         Token token = new Token(responseGlobalTail, r.getServerEpoch());
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
@@ -370,6 +376,81 @@ public class SequencerServer extends AbstractServer {
                         + " readyStateEpoch = {}",
                 initialToken, streamTailToGlobalTailMap, readyStateEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+    @ServerHandler(type = CorfuMsgType.TOKEN_BATCH_REQ)
+    public synchronized void batchRequest(CorfuPayloadMsg<BatchTokenRequest> msg,
+                                          ChannelHandlerContext ctx,
+                                          IServerRouter r) {
+        final BatchTokenRequest req = msg.getPayload();
+
+        // First, handle conditional requests
+        final List<BackpointerToken> conditionalTokens = new ArrayList<>();
+        for (TxResolutionInfo info : req.getConditionalTokenRequests()) {
+            AtomicReference<byte[]> ref = new AtomicReference<>();
+            TokenType tokenType = txnCanCommit(info, ref);
+            if (tokenType != TokenType.NORMAL) {
+                conditionalTokens.add(new BackpointerToken(Address.ABORTED,
+                    Collections.emptyMap()));
+            } else {
+                final long currentTail = globalLogTail.getAndIncrement();
+                ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
+                for (UUID stream : info.getWriteConflictParams().keySet()) {
+                    streamTailToGlobalTailMap.compute(stream, (k, v) -> {
+                        if (v == null) {
+                            backPointerMap.put(k, Address.NON_EXIST);
+                            return currentTail;
+                        } else {
+                            backPointerMap.put(k, v);
+                            return currentTail;
+                        }
+                    });
+                }
+
+                info.getWriteConflictParams().entrySet()
+                    .stream()
+                    .forEach(txEntry ->
+                        txEntry.getValue().stream().forEach(conflictParam ->
+                            conflictToGlobalTailCache.put(
+                                getConflictHashCode(txEntry
+                                    .getKey(), conflictParam),
+                                currentTail)));
+                conditionalTokens.add(new BackpointerToken(currentTail, backPointerMap.build()));
+            }
+        }
+
+        // Next, handle unconditional requests
+        final List<BackpointerToken> unconditionalTokens = new ArrayList<>();
+        for (UUID[] unconditionalRequest : req.getUnconditionalTokenRequests()) {
+            final long currentTail = globalLogTail.getAndIncrement();
+
+            ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
+            for (UUID stream : unconditionalRequest) {
+                streamTailToGlobalTailMap.compute(stream, (k, v) -> {
+                    if (v == null) {
+                        backPointerMap.put(k, Address.NON_EXIST);
+                        return currentTail;
+                    } else {
+                        backPointerMap.put(k, v);
+                        return currentTail;
+                    }
+                });
+            }
+
+            unconditionalTokens.add(new BackpointerToken(currentTail, backPointerMap.build()));
+        }
+
+        final ImmutableMap.Builder<UUID, Long> streamTailBuilder = new Builder<>();
+        final long globalTail = globalLogTail.get() - 1;
+
+        for (UUID id : req.getReadStreams()) {
+            streamTailBuilder.put(id,
+                streamTailToGlobalTailMap.getOrDefault(id, Address.NON_EXIST));
+        }
+
+        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_BATCH_RES.payloadMsg(
+            new BatchTokenResponse(streamTailBuilder.build(), globalTail, r.getServerEpoch(),
+                unconditionalTokens, conditionalTokens)));
     }
 
     /**

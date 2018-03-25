@@ -5,6 +5,7 @@ import io.netty.buffer.ByteBuf;
 import java.util.Set;
 import java.util.UUID;
 
+import javax.annotation.Nullable;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -36,10 +37,10 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
     final byte reqType;
 
     /** The number of tokens to request. */
-    final Long numTokens;
+    final long numTokens;
 
     /** The streams which are written to by this token request. */
-    final Set<UUID> streams;
+    final UUID[] streams;
 
     /* used for transaction resolution. */
     final TxResolutionInfo txnResolution;
@@ -55,7 +56,7 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
                         TxResolutionInfo conflictInfo) {
         reqType = TK_TX;
         this.numTokens = numTokens;
-        this.streams = streams;
+        this.streams = streams.toArray(new UUID[0]);
         txnResolution = conflictInfo;
     }
 
@@ -74,10 +75,28 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
             this.reqType = TK_MULTI_STREAM;
         }
         this.numTokens = numTokens;
-        this.streams = streams;
+        if (streams != null) {
+            this.streams = streams.toArray(new UUID[0]);
+        } else {
+            this.streams = new UUID[0];
+        }
         txnResolution = null;
     }
 
+    public TokenRequest(boolean next,
+                        @Nullable TxResolutionInfo info,
+                        UUID... streams) {
+        if (!next) {
+            reqType = streams.length == 0 ? TK_RAW : TK_QUERY;
+            numTokens = 0;
+        } else {
+            reqType = info == null ? TK_MULTI_STREAM : TK_TX;
+            numTokens = 1;
+        }
+
+        txnResolution = info;
+        this.streams = streams;
+    }
     /**
      * Deserialization Constructor from Bytebuf to TokenRequest.
      *
@@ -90,25 +109,25 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
 
             case TK_QUERY:
                 numTokens = 0L;
-                streams = ICorfuPayload.setFromBuffer(buf, UUID.class);
+                streams = ICorfuPayload.arrayFromBuffer(buf, UUID.class);
                 txnResolution = null;
                 break;
 
             case TK_RAW:
-                numTokens = ICorfuPayload.fromBuffer(buf, Long.class);
+                numTokens = ICorfuPayload.fromBuffer(buf, long.class);
                 streams = null;
                 txnResolution = null;
                 break;
 
             case TK_MULTI_STREAM:
-                numTokens = ICorfuPayload.fromBuffer(buf, Long.class);
-                streams = ICorfuPayload.setFromBuffer(buf, UUID.class);
+                numTokens = ICorfuPayload.fromBuffer(buf, long.class);
+                streams = ICorfuPayload.arrayFromBuffer(buf, UUID.class);
                 txnResolution = null;
                 break;
 
             case TK_TX:
                 numTokens = ICorfuPayload.fromBuffer(buf, Long.class);
-                streams = ICorfuPayload.setFromBuffer(buf, UUID.class);
+                streams = ICorfuPayload.arrayFromBuffer(buf, UUID.class);
                 txnResolution = new TxResolutionInfo(buf);
                 break;
 

@@ -42,4 +42,10 @@ public class SequencerHandler implements IClient, IHandler<SequencerClient> {
                                               ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }
+
+    @ClientHandler(type = CorfuMsgType.TOKEN_BATCH_RES)
+    private static Object handleBatchTokenResponse(CorfuPayloadMsg<TokenResponse> msg,
+        ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
 }

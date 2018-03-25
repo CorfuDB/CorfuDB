@@ -47,6 +47,8 @@ public enum CorfuMsgType {
     LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), true),
 
     // Sequencer Messages
+    TOKEN_BATCH_REQ(23, new TypeToken<CorfuPayloadMsg<BatchTokenRequest>>() {}),
+    TOKEN_BATCH_RES(24, new TypeToken<CorfuPayloadMsg<BatchTokenResponse>>() {}),
     TOKEN_REQ(25, new TypeToken<CorfuPayloadMsg<TokenRequest>>(){}),
     TOKEN_RES(26, new TypeToken<CorfuPayloadMsg<TokenResponse>>(){}),
     BOOTSTRAP_SEQUENCER(27, new TypeToken<CorfuPayloadMsg<SequencerTailsRecoveryMsg>>(){}),

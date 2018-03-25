@@ -52,6 +52,7 @@ import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.runtime.view.BatchSequencerView;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
@@ -291,7 +292,7 @@ public class CorfuRuntime {
      * A view of the sequencer server in the Corfu server instance.
      */
     @Getter(lazy = true)
-    private final SequencerView sequencerView = new SequencerView(this);
+    private final SequencerView sequencerView = new BatchSequencerView(this);
     /**
      * A view of the address space in the Corfu server instance.
      */

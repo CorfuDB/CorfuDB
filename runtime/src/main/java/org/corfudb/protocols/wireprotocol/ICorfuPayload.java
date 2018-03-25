@@ -15,6 +15,7 @@ import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.nio.charset.StandardCharsets;
 import java.util.EnumMap;
@@ -24,6 +25,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import javax.annotation.Nonnull;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.JsonUtils;
@@ -44,6 +46,7 @@ public interface ICorfuPayload<T> {
                 .put(Byte.class, ByteBuf::readByte)
                 .put(Integer.class, ByteBuf::readInt)
                 .put(Long.class, ByteBuf::readLong)
+                .put(long.class, ByteBuf::readLong)
                 .put(Boolean.class, ByteBuf::readBoolean)
                 .put(Double.class, ByteBuf::readDouble)
                 .put(Float.class, ByteBuf::readFloat)
@@ -108,6 +111,9 @@ public interface ICorfuPayload<T> {
                 } catch (IllegalAccessException e) {
                     throw new RuntimeException(e);
                 }
+            }
+            if (cls.isArray()) {
+                return (T) arrayFromBuffer(buf, cls.getComponentType());
             }
             if (ICorfuPayload.class.isAssignableFrom(cls)) {
                 // Grab the constructor and get convert it to a lambda.
@@ -186,6 +192,23 @@ public interface ICorfuPayload<T> {
             builder.add(fromBuffer(buf, valueClass));
         }
         return builder.build();
+    }
+
+    /** A really simple array implementation. The first entry is the size of the array as an int,
+     * and the next entries are each value.
+     * @param buf           The buffer to deserialize.
+     * @param valueClass    The class of the values.
+     * @param <V>           The type of values.
+     * @return              Array of values.
+     */
+    @SuppressWarnings("unchecked")
+    static <V> V[] arrayFromBuffer(ByteBuf buf, Class<V> valueClass) {
+        int numEntries = buf.readInt();
+        V[] array = (V[]) Array.newInstance(valueClass, numEntries);
+        for (int i = 0; i < numEntries; i++) {
+            array[i] = fromBuffer(buf, valueClass);
+        }
+        return array;
     }
 
     /** A really simple flat list implementation. The first entry is the size of the set as an int,
@@ -271,7 +294,7 @@ public interface ICorfuPayload<T> {
      * @param <T>           The type of the payload.
      * */
     @SuppressWarnings("unchecked")
-    static <T> void serialize(ByteBuf buffer, T payload) {
+    static <T> void serialize(ByteBuf buffer, @Nonnull T payload) {
         // If it's an ICorfuPayload, use the defined serializer.
         // Otherwise serialize the primitive type.
         if (payload instanceof ICorfuPayload) {
@@ -298,6 +321,13 @@ public interface ICorfuPayload<T> {
             byte[] s = ((String) payload).getBytes();
             buffer.writeInt(s.length);
             buffer.writeBytes(s);
+        } else if (payload.getClass().isArray()) {
+            // deal with arrays
+            Object[] array = (Object[]) payload;
+            buffer.writeInt(array.length);
+            for (Object o : array) {
+                serialize(buffer, o);
+            }
         } else if (payload instanceof UUID) {
             buffer.writeLong(((UUID) payload).getMostSignificantBits());
             buffer.writeLong(((UUID) payload).getLeastSignificantBits());
