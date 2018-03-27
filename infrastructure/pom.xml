@@ -49,6 +49,11 @@
             <artifactId>metrics-jvm</artifactId>
             <version>3.1.0</version>
         </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>${logback.classic.version}</version>
+        </dependency>
     </dependencies>
 
 </project>
