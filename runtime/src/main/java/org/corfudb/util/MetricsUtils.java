@@ -12,16 +12,11 @@ import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
 import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
 import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
 import com.github.benmanes.caffeine.cache.Cache;
-
-import java.io.File;
-import java.io.FileInputStream;
-import java.util.Properties;
-import java.util.concurrent.TimeUnit;
-
-import org.slf4j.LoggerFactory;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 public class MetricsUtils {
@@ -31,43 +26,45 @@ public class MetricsUtils {
     private static final MetricSet metricsJVMMem = new MemoryUsageGaugeSet();
     private static final MetricSet metricsJVMThread = new ThreadStatesGaugeSet();
 
-    private static Properties metricsProperties = new Properties();
+    private static int interval;
     @Getter
-    private static boolean metricsCollectionEnabled = true;
+    private static boolean metricsCollectionEnabled = false;
     private static boolean metricsReportingEnabled = false;
     private static String mpTrigger = "filter-trigger"; // internal use only
 
     /**
-     * Load a metrics properties file.
+     * Load metrics properties.
      *
      * <p>The expected properties in this properties file are:
      * <ul>
-     * <li> collection-enabled: Boolean for whether metrics collection is enabled.
-     * <li> reporting-enabled: Boolean for whether CSV output will be generated.
-     * <li> directory: String for the path to the CSV output subdirectory
-     * <li> nterval: Long for the reporting interval for CSV output
+     * <li> interval: Integer taken from vm metricsInterval property
+     * for the reporting interval for CSV output
      * </ul>
      *
-     * <p>For each reporting interval, this function will be
-     * called to re-parse the properties file and to
-     * re-evaluate the value of 'collection-enabled' and
-     * 'reporting-enabled'.  Changes to any other property
-     * in this file will be ignored.
+     * <p>This function will be called to set the value of interval for
+     * reporting. The value of interval is used as an indicator for setting
+     * the metrics behavior. Positive values enable collection and reporting at
+     * provided interval in seconds. Zero indicated only metrics collection.
+     * Negative values disable both collection and reporting.
      */
-    private static void loadPropertiesFile() {
-        String propPath;
+    private static void loadVmProperties() {
+        try {
+            interval = Integer.valueOf(System.getProperty("metricsInterval"));
+        } catch (NumberFormatException e) {
+            log.error("Extracting metricsInterval VM property failed. " +
+                    "Metrics collection and reporting will be disabled");
+            interval = -1;
+        }
 
-        if ((propPath = System.getenv("METRICS_PROPERTIES")) != null) {
-            try (FileInputStream is = new FileInputStream(propPath)) {
-                metricsProperties.load(is);
-                metricsCollectionEnabled = Boolean.valueOf((String) metricsProperties
-                        .get("collection-enabled"));
-                metricsReportingEnabled = Boolean.valueOf((String) metricsProperties
-                        .get("reporting-enabled"));
-            } catch (Exception e) {
-                log.error("Error processing METRICS_PROPERTIES {}: {}", propPath,
-                        e.toString());
-            }
+        if (interval > 0) {
+            metricsCollectionEnabled = true;
+            metricsReportingEnabled = true;
+        } else if (interval == 0) {
+            metricsCollectionEnabled = true;
+            metricsReportingEnabled = false;
+        } else {
+            metricsCollectionEnabled= false;
+            metricsReportingEnabled = false;
         }
     }
 
@@ -85,22 +82,19 @@ public class MetricsUtils {
     /**
      * Start metrics reporting via the Dropwizard 'CsvReporter' file writer.
      * Reporting can be turned on and off via the properties file described
-     * in loadPropertiesFile()'s docs.  The report interval and report
+     * in loadVmProperties()'s docs.  The report interval and report
      * directory cannot be altered at runtime.
      *
      * @param metrics Metrics registry
      */
     public static void metricsReportingSetup(MetricRegistry metrics) {
         metrics.counter(mpTrigger);
-        loadPropertiesFile();
-        String outPath = (String) metricsProperties.get("directory");
-        if (outPath != null && !outPath.isEmpty()) {
-            Long interval = Long.valueOf((String) metricsProperties.get("interval"));
-            File statDir = new File(outPath);
-            statDir.mkdirs();
+        loadVmProperties();
+
+        if (metricsReportingEnabled) {
             MetricFilter f = (name, metric) -> {
                 if (name.equals(mpTrigger)) {
-                    loadPropertiesFile();
+                    loadVmProperties();
                     return false;
                 }
                 return metricsReportingEnabled;

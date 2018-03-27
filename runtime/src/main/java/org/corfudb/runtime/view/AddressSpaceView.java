@@ -26,6 +26,7 @@ import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -86,12 +87,12 @@ public class AddressSpaceView extends AbstractView {
 
 
     /**
-     * Validates the state of a write after an exception occured during the process
+     * Validates the state of a write after an exception occurred during the process
      *
      * There are [currently] three different scenarios:
      *   1. The data was persisted to some log units and we were able to recover it.
-     *   2. The data was not persisted and another client (or ourself) hole filled.
-     *      In that case, we return an OverwriteException and let the nex layer handle it.
+     *   2. The data was not persisted and another client (or this client) hole filled.
+     *      In that case, we return an OverwriteException and let the upper layer handle it.
      *   3. The address we tried to write to was trimmed. In this case, there is no way to
      *      know if the write went through or not. For sanity, we throw an OverwriteException
      *      and let the above layer retry.
@@ -147,13 +148,12 @@ public class AddressSpaceView extends AbstractView {
                 l.getReplicationMode(token.getTokenValue())
                         .getReplicationProtocol(runtime)
                         .write(e, ld);
-            } catch (RuntimeException re) {
+            } catch (OverwriteException | WriteSizeException ex) {
                 // If we have an Overwrite exception, it is already too late for trying
-                // to validate the state of the write, we know that it didn't went through.
-                if (re instanceof OverwriteException) {
-                    throw re;
-                }
-
+                // to validate the state of the write, we know that the write didn't complete.
+                // Large writes are also rejected right away.
+                throw ex;
+            } catch (RuntimeException re) {
                 validateStateOfWrittenEntry(token.getTokenValue(), ld);
             }
             return null;
