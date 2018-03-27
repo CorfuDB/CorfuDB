@@ -270,10 +270,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         }
 
         // Write to the transaction stream if transaction logging is enabled
-        Set<UUID> affectedStreams = new HashSet<>(getWriteSetInfo().getWriteSet()
-                .getEntryMap().keySet());
         if (this.builder.runtime.getObjectsView().isTransactionLogging()) {
-            affectedStreams.add(TRANSACTION_STREAM_ID);
+            getWriteSetInfo().add(TRANSACTION_STREAM_ID);
         }
 
         // Now we obtain a conditional address from the sequencer.
@@ -293,13 +291,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
         try {
             address = this.builder.runtime.getStreamsView()
-                .append(
-                    // a set of stream-IDs that contains the affected streams
-                    affectedStreams,
-                    // a MultiObjectSMREntry that contains the update(s) to objects
-                    collectWriteSetEntries(),
-                    txInfo
-                );
+                .conditionalAppend(
+                    txInfo,
+                    collectWriteSetEntries());
         } catch (AppendException oe) {
             // We were overwritten (and the original snapshot is now conflicting),
             // which means we must abort.
@@ -410,8 +404,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // Otherwise, fetch a read token from the sequencer the linearize
             // ourselves against.
             long currentTail = builder.runtime
-                    .getSequencerView().nextToken(Collections.emptySet(),
-                            0).getToken().getTokenValue();
+                    .getSequencerView().cachedToken().getToken().getTokenValue();
             log.trace("SnapshotTimestamp[{}] {}", this, currentTail);
             return currentTail;
         }

@@ -170,6 +170,18 @@ public class CorfuRuntime {
         String passwordFile;
         //endregion
 
+        //region Sequencer Parameters
+        /** Whether or not to batch requests to the sequencer. */
+        @Default boolean batchSequencerRequests = true;
+
+        /** If batching, how many requests to batch. */
+        @Default int batchSequencerRequestCount = 4;
+
+        /** How long to wait before timing out a batch.*/
+        @Default Duration batchSequencerTimeout = Duration.ofMillis(1);
+
+        //endregion
+
         //region Connection parameters
         /**
          * {@link Duration} before requests timeout.
@@ -292,7 +304,9 @@ public class CorfuRuntime {
      * A view of the sequencer server in the Corfu server instance.
      */
     @Getter(lazy = true)
-    private final SequencerView sequencerView = new BatchSequencerView(this);
+    private final SequencerView sequencerView = parameters.isBatchSequencerRequests()
+                                                ? new BatchSequencerView(this) :
+                                                new SequencerView(this);
     /**
      * A view of the address space in the Corfu server instance.
      */

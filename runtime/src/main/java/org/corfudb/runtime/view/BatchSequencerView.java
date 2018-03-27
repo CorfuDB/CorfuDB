@@ -66,6 +66,8 @@ public class BatchSequencerView extends SequencerView {
 
     final ExecutorService batcher = Executors.newFixedThreadPool(1, new ThreadFactoryBuilder()                                                  .setNameFormat("sequencer-batcher-%d").build());
 
+    volatile long lastGlobal = Address.NEVER_READ;
+    volatile long lastEpoch = -1;
 
     public BatchSequencerView(CorfuRuntime runtime) {
         super(runtime);
@@ -73,28 +75,38 @@ public class BatchSequencerView extends SequencerView {
     }
 
     private void sequencerBatcher() {
-        while (!runtime.isShutdown()) {
-            // A list of completed operations
-            List<BatchSequencerOperation> abortedOps = new ArrayList<>();
-            List<BatchSequencerOperation> readOps = new ArrayList<>();
-            List<BatchSequencerOperation> writeOps = new ArrayList<>();
-            List<BatchSequencerOperation> conditionalWriteOps = new ArrayList<>();
+        // A list of completed operations
+        List<BatchSequencerOperation> readOps = new ArrayList<>();
+        List<BatchSequencerOperation> writeOps = new ArrayList<>();
+        List<BatchSequencerOperation> conditionalWriteOps = new ArrayList<>();
+        List<BatchSequencerOperation> abortedOps = new ArrayList<>();
 
-            Set<UUID> readStreams = new HashSet<>();
-            List<UUID[]> tokenRequests = new ArrayList<>();
-            List<TxResolutionInfo> conditionalTokenRequests = new ArrayList<>();
-            SetMultimap<UUID, ByteBuffer> conflictMap =
-                MultimapBuilder.hashKeys().hashSetValues().build();
+        Set<UUID> readStreams = new HashSet<>();
+        List<UUID[]> tokenRequests = new ArrayList<>();
+        List<TxResolutionInfo> conditionalTokenRequests = new ArrayList<>();
+        SetMultimap<UUID, ByteBuffer> conflictMap =
+            MultimapBuilder.hashKeys().hashSetValues().build();
+
+        while (!runtime.isShutdown()) {
+            readOps.clear();
+            writeOps.clear();
+            conditionalWriteOps.clear();
+            abortedOps.clear();
+
+            readStreams.clear();
+            tokenRequests.clear();
+            conditionalTokenRequests.clear();
+            conflictMap.clear();
+
             try {
-                s.tryAcquire(4, 1, TimeUnit.MILLISECONDS);
+                s.tryAcquire(runtime.getParameters().getBatchSequencerRequestCount()
+                    , runtime.getParameters().getBatchSequencerTimeout().toNanos(),
+                    TimeUnit.NANOSECONDS);
             } catch (InterruptedException ie) {
                 throw new UnrecoverableCorfuInterruptedError(ie);
             }
-            while (queue.size() > 0) {
-                BatchSequencerOperation op = queue.pollFirst();
-                if (op == null) {
-                    break;
-                }
+            BatchSequencerOperation op;
+            while ((op = queue.pollFirst()) != null) {
                 if (op.next) {
                     if (op.info == null) {
                         tokenRequests.add(op.streams);
@@ -110,16 +122,17 @@ public class BatchSequencerView extends SequencerView {
                                 isLocallyConflicted = true;
                                 op.response = new TokenResponse(TokenType.TX_ABORT_CONFLICT,
                                     conflicts.iterator().next().array(),
-                                    new Token(Address.ABORTED,
-                                        0), Collections.emptyMap()
-                                    );
+                                    new Token(Address.ABORTED, 0), Collections.emptyMap());
                                 abortedOps.add(op);
                                 break;
-                            } else {
-                                conflictMap.putAll(e.getKey(), conflictSet);
                             }
                         }
                         if (!isLocallyConflicted) {
+                            op.info.getWriteConflictParams().forEach((id, writeSet) -> {
+                                Set<ByteBuffer> writes = writeSet.stream()
+                                    .map(ByteBuffer::wrap).collect(Collectors.toSet());
+                                conflictMap.putAll(id, writes);
+                            });
                             conditionalTokenRequests.add(op.info);
                             conditionalWriteOps.add(op);
                         }
@@ -137,20 +150,23 @@ public class BatchSequencerView extends SequencerView {
                 try {
                     BatchTokenResponse response =
                         layoutHelper(l -> l.getPrimarySequencerClient().getBatchToken(r).join());
+                    // Update the caches - update the tail first
+                    lastGlobal = response.getGlobalTail();
+                    lastEpoch = response.getEpoch();
+                    abortedOps.forEach(BatchSequencerOperation::completeResponse);
+
                     // Handle a batched read
-                    readOps.forEach(op -> {
-                        if (op.streams.length == 0) {
-                            op.response
-                                = new TokenResponse(response.getGlobalTail(),
-                                response.getEpoch(),
-                                Collections.emptyMap());
+                    readOps.forEach(read -> {
+                        if (read.streams.length == 0) {
+                            read.response
+                                = new TokenResponse(lastGlobal, lastEpoch, Collections.emptyMap());
                         } else {
-                            op.response
+                            read.response
                                 = new TokenResponse(response
-                                .getAddressMap().get(op.streams[0]),
-                                response.getEpoch(), Collections.emptyMap());
+                                .getAddressMap().get(read.streams[0]), lastEpoch
+                                , Collections.emptyMap());
                         }
-                        op.completeResponse();
+                        read.completeResponse();
                     });
 
                     for (int i = 0; i < response.getUnconditionalTokens().size(); i++) {
@@ -164,7 +180,8 @@ public class BatchSequencerView extends SequencerView {
                     for (int i = 0; i < response.getConditionalTokens().size(); i++) {
                         final BackpointerToken token = response.getConditionalTokens().get(i);
                         if (token.getToken() == Address.ABORTED) {
-                            conditionalWriteOps.get(i).response = new TokenResponse(TokenType.TX_ABORT_CONFLICT,
+                            conditionalWriteOps.get(i).response = new TokenResponse(
+                                TokenType.TX_ABORT_CONFLICT,
                                 new byte[0],
                                 new Token(Address.ABORTED,
                                     0), Collections.emptyMap()
@@ -183,9 +200,10 @@ public class BatchSequencerView extends SequencerView {
                     queue.addAll(conditionalWriteOps);
                 }
             }
-
-            abortedOps.forEach(BatchSequencerOperation::completeResponse);
         }
+
+        queue.forEach(op -> op.completion.completeExceptionally(
+            new UnrecoverableCorfuError("Runtime is shut down!")));
     }
 
     private CompletableFuture<TokenResponse> queueBatchOperation(boolean next,
@@ -201,8 +219,8 @@ public class BatchSequencerView extends SequencerView {
     }
 
     @Override
-    public TokenResponse nextConditionalToken(@Nullable TxResolutionInfo info, UUID... streams) {
-        return queueBatchOperation(true, info, streams).join();
+    public TokenResponse nextConditionalToken(@Nullable TxResolutionInfo info) {
+        return queueBatchOperation(true, info).join();
     }
 
     @Override
@@ -213,6 +231,15 @@ public class BatchSequencerView extends SequencerView {
     @Override
     public TokenResponse currentToken(UUID... streams) {
         return queueBatchOperation(false, null, streams).join();
+    }
+
+    @Override
+    public TokenResponse cachedToken(UUID... streams) {
+        if (streams.length > 0 || lastEpoch == -1) {
+            return currentToken(streams);
+        }
+
+        return new TokenResponse(lastGlobal, lastEpoch, Collections.emptyMap());
     }
 
 

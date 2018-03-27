@@ -407,13 +407,11 @@ public class SequencerServer extends AbstractServer {
                     });
                 }
 
-                info.getWriteConflictParams().entrySet()
-                    .stream()
-                    .forEach(txEntry ->
-                        txEntry.getValue().stream().forEach(conflictParam ->
+                info.getWriteConflictParams()
+                    .forEach((id, params) ->
+                        params.forEach(conflictParam ->
                             conflictToGlobalTailCache.put(
-                                getConflictHashCode(txEntry
-                                    .getKey(), conflictParam),
+                                getConflictHashCode(id, conflictParam),
                                 currentTail)));
                 conditionalTokens.add(new BackpointerToken(currentTail, backPointerMap.build()));
             }

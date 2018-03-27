@@ -1,5 +1,8 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Sets;
+import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
 
@@ -22,9 +25,9 @@ public class SequencerView extends AbstractView {
         super(runtime);
     }
 
-    public TokenResponse nextConditionalToken(@Nullable TxResolutionInfo info, UUID... streams) {
+    public TokenResponse nextConditionalToken(@Nullable TxResolutionInfo info) {
         return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
-            .getToken(new TokenRequest(true, info, streams))));
+            .getToken(new TokenRequest(true, info))));
     }
 
     public TokenResponse nextToken(UUID... streams) {
@@ -35,6 +38,10 @@ public class SequencerView extends AbstractView {
     public TokenResponse currentToken(UUID... streams) {
         return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
             .getToken(new TokenRequest(false, null, streams))));
+    }
+
+    public TokenResponse cachedToken(UUID... streams) {
+        return currentToken(streams);
     }
 
     /**
@@ -66,7 +73,14 @@ public class SequencerView extends AbstractView {
             throw new UnrecoverableCorfuError("numTokens other than 1 no longer supported");
         }
 
-        return nextConditionalToken(conflictInfo, streamIDs.toArray(new UUID[0]));
+        // Insert any streams not in the write set to the write set
+        Set<UUID> diff = Sets.difference(streamIDs, conflictInfo.getWriteConflictParams().keySet());
+        ImmutableMap.Builder<UUID, Set<byte[]>> builder = ImmutableMap.builder();
+        builder.putAll(conflictInfo.getWriteConflictParams());
+        diff.forEach(id -> builder.put(id, Collections.emptySet()));
+        conflictInfo.setWriteConflictParams(builder.build());
+
+        return nextConditionalToken(conflictInfo);
     }
 
     public void trimCache(long address) {

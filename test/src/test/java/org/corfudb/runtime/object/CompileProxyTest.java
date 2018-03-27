@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
+import java.util.UUID;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
@@ -52,8 +53,10 @@ public class CompileProxyTest extends AbstractViewTest {
         // read will be on a trimmed address
         final int numOfTokens = 10;
         String streamName = "s1";
-        rt.getSequencerView().nextToken(Collections.singleton(CorfuRuntime.getStreamID(streamName)),
-                numOfTokens);
+        UUID streamId = CorfuRuntime.getStreamID(streamName);
+        for (int i = 0; i < numOfTokens; i++) {
+            rt.getSequencerView().nextToken(streamId);
+        }
 
         // Trim all the way up to the tail
         rt.getAddressSpaceView().prefixTrim(numOfTokens);
