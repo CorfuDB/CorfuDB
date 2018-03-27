@@ -7,18 +7,25 @@ import com.github.benmanes.caffeine.cache.RemovalCause;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import com.google.common.hash.Hasher;
+import com.google.common.hash.Hashing;
 import lombok.Getter;
 
+import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.util.JsonUtils;
 
 /**
@@ -39,6 +46,8 @@ import org.corfudb.util.JsonUtils;
  * <p>Created by mdhawan on 7/27/16.
  */
 public class DataStore implements IDataStore {
+
+    static String EXTENSION = ".ds";
 
     private final Map<String, Object> opts;
     private final boolean isPersistent;
@@ -81,6 +90,16 @@ public class DataStore implements IDataStore {
         return cache;
     }
 
+
+    public static int getChecksum(byte[] bytes) {
+        Hasher hasher = Hashing.crc32c().newHasher();
+        for (byte a : bytes) {
+            hasher.putByte(a);
+        }
+
+        return hasher.hash().asInt();
+    }
+
     /**
      * obtain a {@link LoadingCache}.
      * The cache is backed up by file-per-key uner {@link DataStore::logDir}.
@@ -95,8 +114,17 @@ public class DataStore implements IDataStore {
                     @Override
                     public synchronized void write(@Nonnull String key, @Nonnull String value) {
                         try {
-                            Path path = Paths.get(logDir + File.separator + key);
-                            Files.write(path, value.getBytes());
+                            Path path = Paths.get(logDir + File.separator + key + EXTENSION);
+                            Path tmpPath = Paths.get(logDir + File.separator + key + EXTENSION + ".tmp");
+                            byte[] stringBytes = value.getBytes();
+                            ByteBuffer buffer = ByteBuffer.allocate(value.getBytes().length
+                                    + Integer.BYTES);
+                            buffer.putInt(getChecksum(stringBytes));
+                            buffer.put(stringBytes);
+                            Files.write(tmpPath, buffer.array(), StandardOpenOption.CREATE,
+                                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
+                            Files.move(tmpPath, path, StandardCopyOption.REPLACE_EXISTING,
+                                    StandardCopyOption.ATOMIC_MOVE);
                         } catch (IOException e) {
                             throw new RuntimeException(e);
                         }
@@ -117,11 +145,18 @@ public class DataStore implements IDataStore {
                 .maximumSize(dsCacheSize)
                 .build(key -> {
                     try {
-                        Path path = Paths.get(logDir + File.separator + key);
+                        Path path = Paths.get(logDir + File.separator + key + EXTENSION);
                         if (Files.notExists(path)) {
                             return null;
                         }
-                        return new String(Files.readAllBytes(path));
+                        byte[] bytes = Files.readAllBytes(path);
+                        ByteBuffer buf = ByteBuffer.wrap(bytes);
+                        int checksum = buf.getInt();
+                        byte[] strBytes = Arrays.copyOfRange(bytes, 4, bytes.length);
+                        if (checksum != getChecksum(strBytes)) {
+                            throw new DataCorruptionException();
+                        }
+                        return new String(strBytes);
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     }

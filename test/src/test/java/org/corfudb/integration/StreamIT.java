@@ -1,68 +1,50 @@
 package org.corfudb.integration;
 
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.stream.IStreamView;
-import org.junit.Before;
-
-import java.util.Random;
-import java.util.UUID;
+import org.corfudb.runtime.exceptions.WriteSizeException;
+import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * A set integration tests that exercise the stream API.
  */
 
 public class StreamIT extends AbstractIT {
-    static String corfuSingleNodeHost;
-    static int corfuSingleNodePort;
 
-    @Before
-    public void loadProperties() throws Exception {
-        corfuSingleNodeHost = (String) PROPERTIES.get("corfuSingleNodeHost");
-        corfuSingleNodePort = Integer.parseInt((String) PROPERTIES.get("corfuSingleNodePort"));
-    }
+    @Test
+    public void largeStreamWrite() throws Exception {
+        final String host = "localhost";
+        final String streamName = "s1";
+        final int port = 9000;
 
-//    @Test
-    public void simpleStreamTest() throws Exception {
-
-        Process corfuServerProcess = new CorfuServerRunner()
-                .setHost(corfuSingleNodeHost)
-                .setPort(corfuSingleNodePort)
+        // Start node one and populate it with data
+        Process server_1 = new CorfuServerRunner()
+                .setHost(host)
+                .setPort(port)
+                .setSingle(true)
                 .runServer();
 
-        CorfuRuntime rt = createDefaultRuntime();
-        rt.setCacheDisabled(true);
+        final int maxWriteSize = 100;
 
-        Random rand = new Random();
+        // Configure a client with a max write limit
+        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+                .builder()
+                .maxWriteSize(maxWriteSize)
+                .build();
 
-        UUID streamId = CorfuRuntime.getStreamID(Integer.toString(rand.nextInt()));
+        CorfuRuntime rt = CorfuRuntime.fromParameters(params);
+        rt.parseConfigurationString(host + ":" + port);
+        rt.connect();
 
-        IStreamView s1 = rt.getStreamsView().get(streamId);
+        final int bufSize = maxWriteSize * 2;
 
-        // Verify that the stream is empty
-        assertThat(s1.hasNext())
-                .isFalse();
-
-        // Generate and append random data
-        int entrySize = Integer.valueOf(PROPERTIES.getProperty("largeEntrySize"));
-        final int numEntries = 100;
-        byte[][] data = new byte[numEntries][entrySize];
-
-        for(int x = 0; x < numEntries; x++) {
-            rand.nextBytes(data[x]);
-            s1.append(data[x]);
-        }
-
-        // Read back the data and verify it is correct
-        for(int x = 0; x < numEntries; x++) {
-            ILogData entry = s1.nextUpTo(x);
-            byte[] tmp = (byte[]) entry.getPayload(rt);
-
-            assertThat(tmp).isEqualTo(data[x]);
-        }
-
-        assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
+        // Attempt to write a payload that is greater than the configured limit.
+        assertThatThrownBy(() -> rt.getStreamsView()
+                .get(CorfuRuntime.getStreamID(streamName))
+                .append(new byte[bufSize]))
+                .isInstanceOf(WriteSizeException.class);
+        shutdownCorfuServer(server_1);
     }
 }

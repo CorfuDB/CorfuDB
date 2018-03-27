@@ -17,6 +17,8 @@
         <module>samples</module>
         <module>debian</module>
         <module>generator</module>
+        <module>migration</module>
+
     </modules>
 
 
