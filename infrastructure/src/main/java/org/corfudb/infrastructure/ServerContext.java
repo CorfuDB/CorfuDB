@@ -170,6 +170,10 @@ public class ServerContext implements AutoCloseable {
         }
     }
 
+    String getLocalEndpoint() {
+        return serverConfig.get("--address") + ":" + serverConfig.get("<port>");
+    }
+
     /**
      * Cleanup the DataStore files with names that are prefixes of the specified
      * fileName when so that the number of these files don't exceed the user-defined

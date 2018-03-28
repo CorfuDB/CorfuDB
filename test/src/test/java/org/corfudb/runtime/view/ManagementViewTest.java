@@ -214,6 +214,7 @@ public class ManagementViewTest extends AbstractViewTest {
         Arrays.stream(managementServersPorts).forEach(port -> {
             FailureDetector failureDetector = (FailureDetector) getManagementServer(port)
                     .getManagementAgent()
+                    .getFaultDetectionService()
                     .getFailureDetector();
             failureDetector.setInitPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             failureDetector.setPeriodDelta(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
@@ -222,6 +223,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
             HealingDetector healingDetector = (HealingDetector) getManagementServer(port)
                     .getManagementAgent()
+                    .getFaultDetectionService()
                     .getHealingDetector();
             healingDetector.setDetectionPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             healingDetector.setInterIterationInterval(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
@@ -1765,7 +1767,11 @@ public class ManagementViewTest extends AbstractViewTest {
         addServerRule(SERVERS.PORT_0, new TestRule().matches(m -> m.getMsgType()
                 .equals(CorfuMsgType.READ_RESPONSE)).drop());
 
-        getManagementServer(SERVERS.PORT_0).getManagementAgent().triggerSequencerBootstrap(layout)
+        getManagementServer(SERVERS.PORT_0).getManagementAgent()
+                .getCorfuRuntime().getLayoutManagementView()
+                .asyncSequencerBootstrap(layout,
+                        getManagementServer(SERVERS.PORT_0).getManagementAgent()
+                                .getFaultDetectionService().getDetectionTaskWorkers())
                 .get();
     }
 

@@ -292,7 +292,6 @@ public class AbstractIT extends AbstractCorfuTest {
         private String keyStorePassword = null;
         private String logLevel = "INFO";
         private String logPath = null;
-        private String managementBootstrap = null;
         private String trustStore = null;
         private String trustStorePassword = null;
 
@@ -313,9 +312,7 @@ public class AbstractIT extends AbstractCorfuTest {
             if (single) {
                 command.append(" -s");
             }
-            if (managementBootstrap != null) {
-                command.append(" -M ").append(managementBootstrap);
-            }
+
             if (tlsEnabled) {
                 command.append(" -e");
                 if (keyStore != null) {
