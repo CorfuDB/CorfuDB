@@ -94,9 +94,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
             .nettyEventLoop(NETTY_EVENT_LOOP)
             .build());
-        // Default number of times to read before hole filling to 0
-        // (most aggressive, to surface concurrency issues).
-        runtime.getParameters().setHoleFillRetry(0);
     }
 
     public CorfuRuntime getNewRuntime(@Nonnull NodeLocator node) {

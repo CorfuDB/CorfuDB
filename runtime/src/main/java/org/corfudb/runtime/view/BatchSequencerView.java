@@ -150,25 +150,8 @@ public class BatchSequencerView extends SequencerView {
                 try {
                     BatchTokenResponse response =
                         layoutHelper(l -> l.getPrimarySequencerClient().getBatchToken(r).join());
-                    // Update the caches - update the tail first
-                    lastGlobal = response.getGlobalTail();
-                    lastEpoch = response.getEpoch();
-                    abortedOps.forEach(BatchSequencerOperation::completeResponse);
 
-                    // Handle a batched read
-                    readOps.forEach(read -> {
-                        if (read.streams.length == 0) {
-                            read.response
-                                = new TokenResponse(lastGlobal, lastEpoch, Collections.emptyMap());
-                        } else {
-                            read.response
-                                = new TokenResponse(response
-                                .getAddressMap().get(read.streams[0]), lastEpoch
-                                , Collections.emptyMap());
-                        }
-                        read.completeResponse();
-                    });
-
+                    // Complete the writes first so they can begin writing
                     for (int i = 0; i < response.getUnconditionalTokens().size(); i++) {
                         final BackpointerToken token = response.getUnconditionalTokens().get(i);
                         writeOps.get(i).response = new TokenResponse(token.getToken(),
@@ -194,6 +177,29 @@ public class BatchSequencerView extends SequencerView {
                         }
                         conditionalWriteOps.get(i).completeResponse();
                     }
+
+
+                    // Now handle all the reads. Handle writes before reads prevents
+                    // excessive hole filling.
+
+                    // Update the caches - update the tail first
+                    lastGlobal = response.getGlobalTail();
+                    lastEpoch = response.getEpoch();
+                    abortedOps.forEach(BatchSequencerOperation::completeResponse);
+
+                    // Handle a batched read
+                    readOps.forEach(read -> {
+                        if (read.streams.length == 0) {
+                            read.response
+                                = new TokenResponse(lastGlobal, lastEpoch, Collections.emptyMap());
+                        } else {
+                            read.response
+                                = new TokenResponse(response
+                                .getAddressMap().get(read.streams[0]), lastEpoch
+                                , Collections.emptyMap());
+                        }
+                        read.completeResponse();
+                    });
                 } catch (CompletionException ce) {
                     queue.addAll(readOps);
                     queue.addAll(writeOps);
