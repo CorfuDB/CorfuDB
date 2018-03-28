@@ -177,8 +177,9 @@ public class CorfuRuntime {
         /** If batching, how many requests to batch. */
         @Default int batchSequencerRequestCount = 4;
 
-        /** How long to wait before timing out a batch.*/
-        @Default Duration batchSequencerTimeout = Duration.ofMillis(1);
+        /** How long to wait before timing out a batch.
+         * Default: 300us */
+        @Default Duration batchSequencerTimeout = Duration.ofNanos(300_000);
 
         //endregion
 

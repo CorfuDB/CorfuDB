@@ -134,7 +134,7 @@ public class UndoTest extends AbstractTransactionsTest {
                 .open();
         final int specialKey = 10;
         final String normalValue = "z", specialValue = "y";
-        final int mapSize = 10 * PARAMETERS.NUM_ITERATIONS_LARGE;
+        final int mapSize = PARAMETERS.NUM_ITERATIONS_LARGE;
 
         // populate the map with many elements
         for (int i = 0; i < mapSize; i++)
