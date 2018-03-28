@@ -23,8 +23,7 @@ Options:
 (def localcmd (.. (new Docopt usage) (parse *args)))
 
 (defn print-reset [endpoint] (do (println (str "Reset " endpoint ":"))
-                                 (get-router endpoint localcmd)
-                                 (if (.. (.. (get-base-client) (reset)) (get))
+                                 (if (.. (.. (get-base-client (get-router server localcmd) 0) (reset)) (get))
                                      (println "ACK")
                                      (println "NACK")
                                      )

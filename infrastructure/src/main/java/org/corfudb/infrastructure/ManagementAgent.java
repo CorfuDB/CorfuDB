@@ -26,9 +26,6 @@ import org.corfudb.infrastructure.management.IDetector;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
@@ -250,9 +247,8 @@ public class ManagementAgent {
     private void bootstrapPrimarySequencerServer() {
         try {
             Layout layout = serverContext.getManagementLayout();
-            String primarySequencer = layout.getSequencers().get(0);
-            boolean bootstrapResult = getCorfuRuntime().getRouter(primarySequencer)
-                    .getClient(SequencerClient.class)
+            boolean bootstrapResult = getCorfuRuntime().getLayoutView().getRuntimeLayout(layout)
+                    .getPrimarySequencerClient()
                     .bootstrap(0L, Collections.emptyMap(), layout.getEpoch())
                     .get();
             sequencerBootstrappedFuture.complete(bootstrapResult);
@@ -386,8 +382,9 @@ public class ManagementAgent {
 
                     try {
                         log.info("Attempting to heal nodes in poll report: {}", pollReport);
-                        corfuRuntime.getRouter(getLocalEndpoint())
-                                .getClient(ManagementClient.class)
+                        Layout layout = serverContext.getManagementLayout();
+                        corfuRuntime.getLayoutView().getRuntimeLayout(layout)
+                                .getManagementClient(getLocalEndpoint())
                                 .handleHealing(pollReport.getPollEpoch(),
                                         pollReport.getHealingNodes())
                                 .get();
@@ -481,11 +478,6 @@ public class ManagementAgent {
      * @param pollReport Poll report obtained from failure detection policy.
      */
     private void handleFailures(PollReport pollReport) {
-
-        final ManagementClient localManagementClient = getCorfuRuntime()
-                .getRouter(getLocalEndpoint())
-                .getClient(ManagementClient.class);
-
         try {
             Set<String> failedNodes = new HashSet<>(getNewFailures(pollReport));
 
@@ -495,7 +487,10 @@ public class ManagementAgent {
 
                 log.info("Detected changes in node responsiveness: Failed:{}, pollReport:{}",
                         failedNodes, pollReport);
-                localManagementClient.handleFailure(pollReport.getPollEpoch(), failedNodes).get();
+                Layout layout = serverContext.getManagementLayout();
+                getCorfuRuntime().getLayoutView().getRuntimeLayout(layout)
+                        .getManagementClient(getLocalEndpoint())
+                        .handleFailure(pollReport.getPollEpoch(), failedNodes).get();
             }
 
         } catch (Exception e) {
@@ -523,8 +518,9 @@ public class ManagementAgent {
             for (String layoutServer : layout.getLayoutServers()) {
                 CompletableFuture<Layout> completableFuture = new CompletableFuture<>();
                 try {
-                    completableFuture = getCorfuRuntime().getRouter(layoutServer)
-                            .getClient(LayoutClient.class).getLayout();
+                    completableFuture = getCorfuRuntime().getLayoutView().getRuntimeLayout(layout)
+                            .getLayoutClient(layoutServer)
+                            .getLayout();
                 } catch (Exception e) {
                     completableFuture.completeExceptionally(e);
                 }
@@ -541,20 +537,16 @@ public class ManagementAgent {
             serverContext.saveManagementLayout(quorumLayout);
             layout = serverContext.getManagementLayout();
 
-            // We clone the layout to not pollute the original latestLayout.
-            Layout sealLayout = new Layout(layout);
-            sealLayout.setRuntime(getCorfuRuntime());
-
             // In case of a partial seal, a set of servers can be sealed with a higher epoch.
             // We should be able to detect this and bring the rest of the servers to this epoch.
             long maxOutOfPhaseEpoch = Collections.max(outOfPhaseEpochNodes.values());
             if (maxOutOfPhaseEpoch > layout.getEpoch()) {
-                sealLayout.setEpoch(maxOutOfPhaseEpoch);
+                layout.setEpoch(maxOutOfPhaseEpoch);
             }
 
             // Re-seal all servers with the latestLayout epoch.
             // This has no effect on up-to-date servers. Only the trailing servers are caught up.
-            sealLayout.moveServersToEpoch();
+            getCorfuRuntime().getLayoutView().getRuntimeLayout(layout).moveServersToEpoch();
 
             // Check if any layout server has a stale layout.
             // If yes patch it (commit) with the latestLayout (received from quorum).
@@ -621,8 +613,8 @@ public class ManagementAgent {
                 // Committing this layout directly to the trailing layout servers.
                 // This is safe because this layout is acquired by a quorum fetch which confirms
                 // that there was a consensus on this layout and has been committed to a quorum.
-                boolean result = getCorfuRuntime().getRouter(layoutServer)
-                        .getClient(LayoutClient.class)
+                boolean result = getCorfuRuntime().getLayoutView().getRuntimeLayout(latestLayout)
+                        .getLayoutClient(layoutServer)
                         .committed(latestLayout.getEpoch(), latestLayout).get();
                 if (result) {
                     log.debug("Layout Server: {} successfully patched with latest layout : {}",

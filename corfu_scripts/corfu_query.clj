@@ -23,8 +23,7 @@ Options:
 
 (defn print-query [endpoint] (do
                                (println (format "Query %s:" endpoint))
-                               (get-router endpoint localcmd)
-                               (let [q (.. (get-base-client) (getVersionInfo))]
+                               (let [q (.. (get-base-client (get-router server localcmd) 0) (getVersionInfo))]
                                (println (bean (.. q (get)))))
                                ))
 

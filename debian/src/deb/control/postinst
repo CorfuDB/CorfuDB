@@ -4,8 +4,6 @@ for filename in /usr/share/corfu/bin/*; do
     BASENAME=$(basename "$filename")
     if [ "$BASENAME" == "corfu_server" ]; then
         ln -s /usr/share/corfu/scripts/corfu_server.sh /usr/local/bin/$BASENAME
-    elif [ "$BASENAME" == "corfu_logReader" ]; then
-        ln -s /usr/share/corfu/scripts/corfu_logReader.sh /usr/local/bin/$BASENAME
     else
         ln -s /usr/share/corfu/scripts/cmdlet.sh /usr/local/bin/$BASENAME
     fi

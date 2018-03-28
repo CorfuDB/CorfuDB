@@ -33,7 +33,6 @@ public class PurgeFailurePolicy implements IReconfigurationHandlerPolicy {
                 .removeSequencerServers(failedNodes)
                 .removeLogunitServers(failedNodes)
                 .build();
-        newLayout.setRuntime(corfuRuntime);
         newLayout.setEpoch(newLayout.getEpoch() + 1);
         log.info("generateLayout: new Layout {}", newLayout);
         return newLayout;

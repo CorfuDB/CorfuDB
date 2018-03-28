@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
@@ -26,7 +25,6 @@ import lombok.Builder.Default;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
 import lombok.Singular;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
@@ -36,10 +34,11 @@ import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.LayoutHandler;
+import org.corfudb.runtime.clients.LogUnitHandler;
+import org.corfudb.runtime.clients.ManagementHandler;
+import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
@@ -81,6 +80,11 @@ public class CorfuRuntime {
 
         /** True, if optimistic undo logging is disabled. */
         @Default boolean optimisticUndoDisabled = false;
+
+        /**
+         * Max size for a write request.
+         */
+        @Default int maxWriteSize = 0;
 
         /**
          * Use fast loader to restore objects on connection.
@@ -321,9 +325,10 @@ public class CorfuRuntime {
     private List<String> layoutServers;
 
     /**
-     * A map of routers, representing nodes.
+     * Node Router Pool.
      */
-    public Map<String, IClientRouter> nodeRouters;
+    @Getter
+    private NodeRouterPool nodeRouterPool;
 
     /**
      * A completable future containing a layout, when completed.
@@ -402,34 +407,26 @@ public class CorfuRuntime {
      * a router.
      */
     @Getter
-    @Setter
-    public Function<String, IClientRouter> getRouterFunction = overrideGetRouterFunction != null
-            ? (address) -> overrideGetRouterFunction.apply(this, address) : (address) ->
-                nodeRouters.compute(address, (k, r) -> {
-                    final NettyClientRouter router = (NettyClientRouter) r;
-                    if (router != null) {
-                        // Return an existing router if we already have one and it is connected.
-                        return router;
-                    } else {
-                        NodeLocator node = NodeLocator.parseString(address);
-                        // Generate a new router, start it and add it to the table.
-                        NettyClientRouter newRouter = new NettyClientRouter(node,
-                            getNettyEventLoop(),
-                            getParameters());
-                        log.debug("Connecting to new router {}", node);
-                        try {
-                            newRouter.addClient(new LayoutClient())
-                                .addClient(new SequencerClient())
-                                .addClient(new LogUnitClient().setMetricRegistry(metrics != null
-                                    ? metrics : CorfuRuntime.getDefaultMetrics()))
-                                .addClient(new ManagementClient());
-                        } catch (Exception e) {
-                            log.warn("Error connecting to router", e);
-                            throw e;
-                        }
-                        return newRouter;
-                    }
-                });
+    private final Function<String, IClientRouter> getRouterFunction =
+            overrideGetRouterFunction != null ? (address) ->
+                    overrideGetRouterFunction.apply(this, address) : (address) -> {
+                NodeLocator node = NodeLocator.parseString(address);
+                // Generate a new router, start it and add it to the table.
+                NettyClientRouter newRouter = new NettyClientRouter(node,
+                        getNettyEventLoop(),
+                        getParameters());
+                log.debug("Connecting to new router {}", node);
+                try {
+                    newRouter.addClient(new LayoutHandler())
+                            .addClient(new SequencerHandler())
+                            .addClient(new LogUnitHandler())
+                            .addClient(new ManagementHandler());
+                } catch (Exception e) {
+                    log.warn("Error connecting to router", e);
+                    throw e;
+                }
+                return newRouter;
+            };
 
     /** Factory method for generating new {@link CorfuRuntime}s given a set of
      *  {@link CorfuRuntimeParameters} to configure the runtime with.
@@ -454,15 +451,15 @@ public class CorfuRuntime {
                                 .map(NodeLocator::toString)
                                 .collect(Collectors.toList());
 
-        // Generate the map of routers
-        nodeRouters = new ConcurrentHashMap<>();
-
         // Set the initial cluster Id
         clusterId = parameters.getClusterId();
 
         // Generate or set the NettyEventLoop
         nettyEventLoop = parameters.nettyEventLoop == null ? getNewEventLoopGroup()
                                                             : parameters.nettyEventLoop;
+
+        // Initializing the node router pool.
+        nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
         synchronized (metrics) {
             if (metrics.getNames().isEmpty()) {
@@ -541,13 +538,9 @@ public class CorfuRuntime {
      * Stop all routers associated with this Corfu Runtime.
      **/
     public void stop(boolean shutdown) {
-        for (IClientRouter r : nodeRouters.values()) {
-            r.stop(shutdown);
-        }
+        nodeRouterPool.shutdown();
         if (!shutdown) {
-            // N.B. An icky side-effect of this clobbering is leaking
-            // Pthreads, namely the Netty client-side worker threads.
-            nodeRouters = new ConcurrentHashMap<>();
+            nodeRouterPool = new NodeRouterPool(getRouterFunction);
         }
     }
 
@@ -627,7 +620,7 @@ public class CorfuRuntime {
      * @return The router.
      */
     public IClientRouter getRouter(String address) {
-        return getRouterFunction.apply(address);
+        return nodeRouterPool.getRouter(address);
     }
 
     /**
@@ -641,7 +634,7 @@ public class CorfuRuntime {
             // Don't create a new request for a layout if there is one pending.
             return;
         }
-        layout = fetchLayout();
+        layout = fetchLayout(CFUtils.getUninterruptibly(layout).getLayoutServers());
     }
 
     /** Check if the cluster Id of the layout matches the client cluster Id.
@@ -671,10 +664,14 @@ public class CorfuRuntime {
      * This future will continue retrying until it gets a layout.
      * If you need this completable future to fail, you should chain it with a timeout.
      *
+     * @param layoutServers Layout servers to fetch the layout from.
      * @return A completable future containing a layout.
      */
-    private CompletableFuture<Layout> fetchLayout() {
-        return CompletableFuture.<Layout>supplyAsync(() -> {
+    private CompletableFuture<Layout> fetchLayout(List<String> layoutServers) {
+
+        // Last obtained layout with the highest epoch seen.
+        final Layout latestLayout = layout != null ? CFUtils.getUninterruptibly(layout) : null;
+        return CompletableFuture.supplyAsync(() -> {
 
             List<String> layoutServersCopy = new ArrayList<>(layoutServers);
             beforeRpcHandler.run();
@@ -688,54 +685,25 @@ public class CorfuRuntime {
                     try {
                         IClientRouter router = getRouter(s);
                         // Try to get a layout.
-                        CompletableFuture<Layout> layoutFuture = router
-                                .getClient(LayoutClient.class).getLayout();
+                        CompletableFuture<Layout> layoutFuture =
+                                new LayoutClient(router, Layout.INVALID_EPOCH).getLayout();
                         // Wait for layout
                         Layout l = layoutFuture.get();
 
-                        // If the layout we got has a smaller epoch than the router,
+                        // If the layout we got has a smaller epoch than the latestLayout epoch,
                         // we discard it.
-                        if (l.getEpoch() < router.getEpoch()) {
+                        if (latestLayout != null && latestLayout.getEpoch() > l.getEpoch()) {
                             log.warn("fetchLayout: Received a layout with epoch {} from server "
-                                            + "{}:{} smaller than router epoch {}, discarded.",
-                                    l.getEpoch(), router.getHost(),
-                                    router.getPort(), router.getEpoch());
+                                            + "{}:{} smaller than latestLayout epoch {}, "
+                                            + "discarded.",
+                                    l.getEpoch(), router.getHost(), router.getPort(),
+                                    latestLayout.getEpoch());
                             continue;
                         }
 
                         checkClusterId(l);
 
-                        l.setRuntime(this);
-                        // this.layout should only be assigned to the new layout future
-                        // once it has been completely constructed and initialized.
-                        // For example, assigning this.layout = l
-                        // before setting the layout's runtime can result in other threads
-                        // trying to access a layout with  a null runtime.
-                        // FIXME Synchronization START
-                        // We are updating multiple variables and we need the update to be
-                        // synchronized across all variables.
-                        // Since the variable layoutServers is used only locally within the class
-                        // it is acceptable (at least the code on 10/13/2016 does not have issues)
-                        // but setEpoch of routers needs to be synchronized as those variables are
-                        // not local.
-                        for (String server : l.getAllServers()) {
-                            try {
-                                getRouter(server).setEpoch(l.getEpoch());
-                            } catch (NetworkException ne) {
-                                // We have already received the layout and there is no need to keep
-                                // client waiting.
-                                // NOTE: This is true assuming this happens only at router creation.
-                                // If not we also have to take care of setting the latest epoch on
-                                // Client Router.
-                                if (!l.getUnresponsiveServers().contains(server)) {
-                                    log.warn("fetchLayout: Error getting router : {}", server, ne);
-                                }
-                            }
-                        }
-                        layoutServers = l.getLayoutServers();
                         layout = layoutFuture;
-                        //FIXME Synchronization END
-
                         log.debug("Layout server {} responded with layout {}", s, l);
                         return l;
                     } catch (InterruptedException ie) {
@@ -762,10 +730,10 @@ public class CorfuRuntime {
     @SuppressWarnings("unchecked")
     private void checkVersion() {
         try {
+            Layout currentLayout = CFUtils.getUninterruptibly(layout);
             List<CompletableFuture<VersionInfo>> versions =
-                    CFUtils.getUninterruptibly(layout).getLayoutServers()
-                        .stream().map(this::getRouter)
-                        .map(r -> r.getClient(BaseClient.class))
+                    currentLayout.getLayoutServers()
+                        .stream().map(s -> getLayoutView().getRuntimeLayout().getBaseClient(s))
                         .map(BaseClient::getVersionInfo)
                         .collect(Collectors.toList());
 
@@ -796,7 +764,7 @@ public class CorfuRuntime {
         if (layout == null) {
             log.info("Connecting to Corfu server instance, layout servers={}", layoutServers);
             // Fetch the current layout and save the future.
-            layout = fetchLayout();
+            layout = fetchLayout(layoutServers);
             try {
                 layout.get();
             } catch (Exception e) {

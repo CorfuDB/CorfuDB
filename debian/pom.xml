@@ -73,14 +73,6 @@
                                         <prefix>/usr/share/corfu/lib</prefix>
                                     </mapper>
                                 </data>
-                                <data>
-                                    <src>${session.executionRootDirectory}/logReader/target/logReader-${project.version}-shaded.jar</src>
-                                    <type>file</type>
-                                    <mapper>
-                                        <type>perm</type>
-                                        <prefix>/usr/share/corfu/lib</prefix>
-                                    </mapper>
-                                </data>
                                 <!-- general shell scripts -->
                                 <data>
                                     <src>${session.executionRootDirectory}/bin</src>

@@ -17,6 +17,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -28,6 +29,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
@@ -39,22 +41,22 @@ import org.slf4j.LoggerFactory;
  * In the Corfu runtime, on top of a stream,
  * an SMR object layer implements objects whose history of updates
  * are backed by a stream.
- *
+ * <p>
  * <p>This class implements the methods that an in-memory corfu-object proxy carries
  * in order to by in sync with a stream.
- *
+ * <p>
  * <p>We refer to the program's object as the -corfu object-,
  * and to the internal object implementation as the -proxy-.
- *
+ * <p>
  * <p>If a Corfu object's method is an Accessor, it invokes the proxy's
  * access() method.
- *
+ * <p>
  * <p>If a Corfu object's method is a Mutator or Accessor-Mutator, it invokes the
  * proxy's logUpdate() method.
- *
+ * <p>
  * <p>Finally, if a Corfu object's method is an Accessor-Mutator,
  * it obtains a result by invoking getUpcallResult().
- *
+ * <p>
  * <p>Created by mwei on 11/11/16.
  */
 @Slf4j
@@ -80,7 +82,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-    UUID streamID;
+            UUID streamID;
 
     /**
      * The type of the underlying object. We use this to instantiate
@@ -188,29 +190,30 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
             }
         }
 
-        // Linearize this read against a timestamp
-        final long timestamp =
-                rt.getSequencerView()
-                        .nextToken(Collections.singleton(streamID), 0).getToken()
-                        .getTokenValue();
-        log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
-
         // Perform underlying access
-        try {
-            return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp
-                            && !o.isOptimisticallyModifiedUnsafe(),
-                    o -> o.syncObjectUnsafe(timestamp),
-                    o -> accessMethod.access(o));
-        } catch (TrimmedException te) {
-            log.warn("Access[{}] Encountered Trim, reset and retry", this);
-            // We encountered a TRIM during sync, reset the object
-            underlyingObject.update(o -> {
-                o.resetUnsafe();
-                return null;
-            });
-            // And attempt an access again.
-            return accessInner(accessMethod, conflictObject, isMetricsEnabled);
+        for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
+            // Linearize this read against a timestamp
+            final long timestamp = rt.getSequencerView()
+                            .nextToken(Collections.singleton(streamID), 0).getToken().getTokenValue();
+            log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
+
+            try {
+                return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp
+                                && !o.isOptimisticallyModifiedUnsafe(),
+                        o -> o.syncObjectUnsafe(timestamp),
+                        o -> accessMethod.access(o));
+            } catch (TrimmedException te) {
+                log.warn("accessInner: Encountered a trim exception while accessing version {} on attempt {}",
+                        timestamp, x);
+                // We encountered a TRIM during sync, reset the object
+                underlyingObject.update(o -> {
+                    o.resetUnsafe();
+                    return null;
+                });
+            }
         }
+
+        throw new TrimmedException();
     }
 
     /**

@@ -73,27 +73,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     private Counter counterSendDisconnected;
 
     /**
-     * The epoch this router is in.
-     */
-    @Getter
-    public long epoch;
-
-    /**
-     * We should never set epoch backwards.
-     *
-     * @param epoch
-     */
-    public void setEpoch(long epoch){
-        if (epoch < this.epoch) {
-            log.warn("setEpoch: Rejected attempt to set the "
-                    + "router {} to epoch {} smaller than current epoch {}",
-                node, epoch, this.epoch);
-            return;
-        }
-        this.epoch = epoch;
-    }
-
-    /**
      * New connection timeout (milliseconds).
      */
     @Getter
@@ -223,7 +202,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             }
         }
 
-        addClient(new BaseClient());
+        addClient(new BaseHandler());
 
 
         // Initialize the channel
@@ -456,7 +435,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         // Set the message fields.
         message.setClientID(parameters.getClientId());
         message.setRequestID(thisRequest);
-        message.setEpoch(epoch);
 
         // Generate a future and put it in the completion table.
         final CompletableFuture<T> cf = new CompletableFuture<>();
@@ -496,7 +474,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         // Set the base fields for this message.
         message.setClientID(parameters.getClientId());
         message.setRequestID(thisRequest);
-        message.setEpoch(epoch);
         // Write this message out on the channel.
         channel.writeAndFlush(message, channel.voidPromise());
         log.trace("Sent one-way message: {}", message);
@@ -512,7 +489,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     public void sendResponseToServer(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
-        outMsg.setEpoch(epoch);
         ctx.writeAndFlush(outMsg, ctx.voidPromise());
         log.trace("Sent response: {}", outMsg);
     }
