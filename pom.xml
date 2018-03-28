@@ -155,6 +155,18 @@
             <version>3.0.3</version>
             <scope>provided</scope>
             <type>maven-plugin</type>
+            <exclusions>
+              <exclusion>
+                <groupId>org.apache.httpcomponents</groupId>
+                <artifactId>httpclient</artifactId>
+              </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.httpcomponents</groupId>
+          <artifactId>httpclient</artifactId>
+	         <version>4.5.5</version>
+	         <scope>provided</scope>
         </dependency>
     </dependencies>
 
