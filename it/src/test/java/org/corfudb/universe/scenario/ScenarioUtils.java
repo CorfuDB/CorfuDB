@@ -10,6 +10,7 @@ import org.corfudb.util.Sleep;
 
 import java.time.Duration;
 import java.util.function.IntPredicate;
+import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -17,6 +18,29 @@ import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DE
 
 @Slf4j
 public class ScenarioUtils {
+
+    /**
+     * Refreshes the layout and waits for a limited time for the refreshed layout to
+     * satisfy the expected verifier.
+     *
+     * @param verifier    Layout predicate to test the refreshed layout.
+     * @param corfuClient corfu client.
+     */
+    public static void waitForLayoutChange(Predicate<Layout> verifier, CorfuClient corfuClient) {
+        corfuClient.invalidateLayout();
+        Layout refreshedLayout = corfuClient.getLayout();
+
+        for (int i = 0; i < TestFixtureConst.DEFAULT_WAIT_POLL_ITER; i++) {
+            if (verifier.test(refreshedLayout)) {
+                break;
+            }
+            corfuClient.invalidateLayout();
+            refreshedLayout = corfuClient.getLayout();
+            Sleep.sleepUninterruptibly(Duration.ofSeconds(DEFAULT_WAIT_TIME));
+        }
+
+        assertThat(verifier.test(refreshedLayout)).isTrue();
+    }
 
     /**
      * Refreshes the layout and waits for a limited time for the refreshed layout to

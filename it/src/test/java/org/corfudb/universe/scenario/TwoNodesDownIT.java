@@ -2,10 +2,12 @@ package org.corfudb.universe.scenario;
 
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
+import org.corfudb.util.Sleep;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -15,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import static org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForClusterDown;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 
@@ -54,12 +56,11 @@ public class TwoNodesDownIT extends GenericIntegrationTest {
                 // Verify cluster status is UNAVAILABLE with two node down and one node up
                 corfuClient.invalidateLayout();
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                // TODO: There is a bug with ClusterStatus, see issue #1482, uncomment after patch
-                // assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
                 Map<String, NodeStatus> statusMap = clusterStatusReport.getClientServerConnectivityStatusMap();
                 assertThat(statusMap.get(server0.getEndpoint())).isEqualTo(NodeStatus.UP);
                 assertThat(statusMap.get(server1.getEndpoint())).isEqualTo(NodeStatus.DOWN);
                 assertThat(statusMap.get(server2.getEndpoint())).isEqualTo(NodeStatus.DOWN);
+                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
 
                 // Wait for failure detector finds cluster is down before recovering
                 waitForClusterDown(table);
@@ -67,10 +68,19 @@ public class TwoNodesDownIT extends GenericIntegrationTest {
                 // Sequentially restart two nodes and wait for layout's unresponsive servers to change
                 server1.start();
                 server2.start();
-                waitForUnresponsiveServersChange(size -> size == 0, corfuClient);
+
+                Layout initialLayout = clusterStatusReport.getLayout();
+                waitForLayoutChange(layout -> layout.getEpoch() > initialLayout.getEpoch()
+                        && layout.getUnresponsiveServers().size() == 0, corfuClient);
+
+                final Duration sleepDuration = Duration.ofSeconds(1);
 
                 // Verify cluster status is STABLE
                 clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
+                while (!clusterStatusReport.getClusterStatus().equals(ClusterStatus.STABLE)) {
+                    clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
+                    Sleep.sleepUninterruptibly(sleepDuration);
+                }
                 assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
 
                 // Verify data path working fine

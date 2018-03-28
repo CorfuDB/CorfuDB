@@ -101,14 +101,6 @@ public class ServerContext implements AutoCloseable {
 
     @Getter
     @Setter
-    private IDetector failureDetector;
-
-    @Getter
-    @Setter
-    private IDetector healingDetector;
-
-    @Getter
-    @Setter
     private IReconfigurationHandlerPolicy failureHandlerPolicy;
 
     @Getter
@@ -144,8 +136,6 @@ public class ServerContext implements AutoCloseable {
         this.serverConfig = serverConfig;
         this.dataStore = new DataStore(serverConfig, this::dataStoreFileCleanup);
         generateNodeId();
-        this.failureDetector = new FailureDetector();
-        this.healingDetector = new HealingDetector();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
         this.healingHandlerPolicy = new SequencerHealingPolicy();
 
@@ -168,6 +158,10 @@ public class ServerContext implements AutoCloseable {
         if (!isMetricsReportingSetUp(metrics)) {
             MetricsUtils.metricsReportingSetup(metrics);
         }
+    }
+
+    String getLocalEndpoint() {
+        return serverConfig.get("--address") + ":" + serverConfig.get("<port>");
     }
 
     /**

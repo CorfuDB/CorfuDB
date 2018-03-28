@@ -8,8 +8,6 @@ import org.junit.After;
 import org.junit.Test;
 
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -52,11 +50,11 @@ public class ManagementServerTest extends AbstractServerTest {
      */
     @Test
     public void checkFailureDetectorStatus() {
-        assertThat(managementServer.getManagementAgent().getDetectionTaskWorkers().isShutdown())
-                .isFalse();
+        assertThat(managementServer.getManagementAgent().getRemoteMonitoringService()
+                .getDetectionTaskWorkers().isShutdown()).isFalse();
         managementServer.shutdown();
-        assertThat(managementServer.getManagementAgent().getDetectionTaskWorkers().isShutdown())
-                .isTrue();
+        assertThat(managementServer.getManagementAgent().getRemoteMonitoringService()
+                .getDetectionTaskWorkers().isShutdown()).isTrue();
     }
 
     /**

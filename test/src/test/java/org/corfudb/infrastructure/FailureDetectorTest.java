@@ -73,7 +73,7 @@ public class FailureDetectorTest extends AbstractViewTest {
 
         // A little more than responseTimeout for periodicPolling
         PollReport result = failureDetector.poll(layout, corfuRuntime);
-        assertThat(result.getFailingNodes()).isEmpty();
+        assertThat(result.getChangedNodes()).isEmpty();
         assertThat(result.getOutOfPhaseEpochNodes()).isEmpty();
 
     }
@@ -95,7 +95,7 @@ public class FailureDetectorTest extends AbstractViewTest {
         expectedResult.add(getEndpoint(SERVERS.PORT_1));
         expectedResult.add(getEndpoint(SERVERS.PORT_2));
 
-        assertThat(failureDetector.poll(layout, corfuRuntime).getFailingNodes())
+        assertThat(failureDetector.poll(layout, corfuRuntime).getChangedNodes())
                 .isEqualTo(expectedResult);
 
         /*
@@ -108,7 +108,7 @@ public class FailureDetectorTest extends AbstractViewTest {
         // Has only SERVERS.PORT_1 & SERVERS.PORT_2
         expectedResult.remove(getEndpoint(SERVERS.PORT_0));
 
-        assertThat(failureDetector.poll(layout, corfuRuntime).getFailingNodes())
+        assertThat(failureDetector.poll(layout, corfuRuntime).getChangedNodes())
                 .isEqualTo(expectedResult);
 
     }

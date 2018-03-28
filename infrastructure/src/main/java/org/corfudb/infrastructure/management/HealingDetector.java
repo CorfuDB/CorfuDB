@@ -1,11 +1,8 @@
 package org.corfudb.infrastructure.management;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import com.google.common.collect.ImmutableSet;
+
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -15,7 +12,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.NodeView;
+import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.ManagementClient;
@@ -93,7 +90,7 @@ public class HealingDetector implements IDetector {
         // Perform polling of all unresponsive servers.
         return new PollReport.PollReportBuilder()
                 .pollEpoch(layout.getEpoch())
-                .healingNodes(pollRound(members, routerMap, layout.getEpoch()))
+                .changedNodes(pollRound(members, routerMap, layout.getEpoch()))
                 .build();
     }
 
@@ -103,7 +100,7 @@ public class HealingDetector implements IDetector {
      *
      * @return Poll Report with detected healed nodes.
      */
-    private Set<String> pollRound(List<String> members,
+    private ImmutableSet<String> pollRound(List<String> members,
                                   Map<String, IClientRouter> routerMap,
                                   long epoch) {
 
@@ -113,7 +110,7 @@ public class HealingDetector implements IDetector {
         for (int iteration = 0; iteration < detectionThreshold; iteration++) {
 
             // Ping all nodes and await their responses.
-            Map<String, CompletableFuture<NodeView>> pollCompletableFutures =
+            Map<String, CompletableFuture<ClusterState>> pollCompletableFutures =
                     pollOnceAsync(members, routerMap, epoch);
 
             // Collect all poll responses.
@@ -137,7 +134,7 @@ public class HealingDetector implements IDetector {
         return members.stream()
                 .filter(s -> pollResultMap.get(s) != null
                         && pollResultMap.get(s) == (detectionThreshold - 1))
-                .collect(Collectors.toSet());
+                .collect(ImmutableSet.toImmutableSet());
     }
 
     /**
@@ -148,19 +145,19 @@ public class HealingDetector implements IDetector {
      * @param epoch     Current epoch for the polling round to stamp the ping messages.
      * @return Map of completable futures generated on their respective pings.
      */
-    private Map<String, CompletableFuture<NodeView>> pollOnceAsync(List<String> members,
-                                                                   Map<String, IClientRouter>
-                                                                           routerMap,
-                                                                   final long epoch) {
+    private Map<String, CompletableFuture<ClusterState>> pollOnceAsync(List<String> members,
+                                                                       Map<String, IClientRouter>
+                                                                               routerMap,
+                                                                       final long epoch) {
 
         // Poll servers for health.  All ping activity will happen in the background.
-        final Map<String, CompletableFuture<NodeView>> pollCompletableFutures = new HashMap<>();
+        final Map<String, CompletableFuture<ClusterState>> pollCompletableFutures = new HashMap<>();
         members.forEach(s -> {
             try {
                 pollCompletableFutures.put(s, new ManagementClient(routerMap.get(s), epoch)
                         .sendHeartbeatRequest());
             } catch (Exception e) {
-                CompletableFuture<NodeView> cf = new CompletableFuture<>();
+                CompletableFuture<ClusterState> cf = new CompletableFuture<>();
                 cf.completeExceptionally(e);
                 pollCompletableFutures.put(s, cf);
             }
@@ -180,7 +177,7 @@ public class HealingDetector implements IDetector {
      * @return Set of all responsive nodes.
      */
     private Set<String> collectResponsesAndVerifyEpochs(List<String> members,
-                                                        Map<String, CompletableFuture<NodeView>>
+                                                        Map<String, CompletableFuture<ClusterState>>
                                                                 pollCompletableFutures) {
         // Collect responses and increment response counters for successful pings.
         Set<String> responses = new HashSet<>();

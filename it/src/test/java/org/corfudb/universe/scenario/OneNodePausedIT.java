@@ -8,8 +8,10 @@ import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
+import org.corfudb.util.Sleep;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -67,8 +69,13 @@ public class OneNodePausedIT extends GenericIntegrationTest {
                 server1.resume();
                 waitForUnresponsiveServersChange(size -> size == 0, corfuClient);
 
+                final Duration sleepDuration = Duration.ofSeconds(1);
                 // Verify cluster status is STABLE
                 clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
+                while (!clusterStatusReport.getClusterStatus().equals(ClusterStatus.STABLE)) {
+                    clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
+                    Sleep.sleepUninterruptibly(sleepDuration);
+                }
                 assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
 
                 // Verify data path working fine
