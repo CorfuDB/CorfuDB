@@ -52,6 +52,7 @@ import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.runtime.view.BatchSequencerView;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
@@ -167,6 +168,19 @@ public class CorfuRuntime {
 
         /** A path containing the password file for SASL. */
         String passwordFile;
+        //endregion
+
+        //region Sequencer Parameters
+        /** Whether or not to batch requests to the sequencer. */
+        @Default boolean batchSequencerRequests = true;
+
+        /** If batching, how many requests to batch. */
+        @Default int batchSequencerRequestCount = 4;
+
+        /** How long to wait before timing out a batch.
+         * Default: 300us */
+        @Default Duration batchSequencerTimeout = Duration.ofNanos(300_000);
+
         //endregion
 
         //region Connection parameters
@@ -291,7 +305,9 @@ public class CorfuRuntime {
      * A view of the sequencer server in the Corfu server instance.
      */
     @Getter(lazy = true)
-    private final SequencerView sequencerView = new SequencerView(this);
+    private final SequencerView sequencerView = parameters.isBatchSequencerRequests()
+                                                ? new BatchSequencerView(this) :
+                                                new SequencerView(this);
     /**
      * A view of the address space in the Corfu server instance.
      */

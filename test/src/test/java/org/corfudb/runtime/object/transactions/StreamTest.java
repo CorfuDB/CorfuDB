@@ -3,7 +3,9 @@ package org.corfudb.runtime.object.transactions;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
@@ -92,19 +94,28 @@ public class StreamTest extends AbstractTransactionsTest {
     @Test
     public void sequencerTrimTest() {
 
-        SMRMap<String, String> map = instantiateCorfuObject(SMRMap.class, "A");
+        CorfuRuntime rt = getNewRuntime( CorfuRuntimeParameters.builder()
+            .batchSequencerRequests(false)
+            .build())
+            .connect();
+
+        SMRMap<String, String> map = rt.getObjectsView().build()
+            .setStreamName("A")
+            .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+            .open();
+
         final int numEntries = 10;
-        TXBegin();
+        rt.getObjectsView().TXBegin();
         map.get("a");
         t2(() -> {
-            TXBegin();
+            rt.getObjectsView().TXBegin();
             for (int x = 0; x < numEntries; x++) {
                 map.put(Integer.toString(x), Integer.toString(x));
             }
-            TXEnd();
+            rt.getObjectsView().TXEnd();
         });
 
-        getRuntime().getAddressSpaceView().prefixTrim(1);
+        rt.getAddressSpaceView().prefixTrim(1);
 
         for (int x = 0; x < numEntries; x++) {
             map.put(Integer.toString(x), Integer.toString(x));
@@ -113,7 +124,7 @@ public class StreamTest extends AbstractTransactionsTest {
         boolean abortException = false;
 
         try {
-            TXEnd();
+            rt.getObjectsView().TXEnd();
         } catch (TransactionAbortedException tae) {
             assertThat(tae.getAbortCause()).isEqualTo(AbortCause.SEQUENCER_TRIM);
             abortException = true;
@@ -125,23 +136,32 @@ public class StreamTest extends AbstractTransactionsTest {
     @Test
     public void sequencerOverflowTest() {
 
-        SMRMap<String, String> map = instantiateCorfuObject(SMRMap.class, "A");
+        CorfuRuntime rt = getNewRuntime(
+            CorfuRuntimeParameters.builder()
+                .batchSequencerRequests(false)
+                .build())
+            .connect();
+
+        SMRMap<String, String> map = rt.getObjectsView().build()
+                                        .setStreamName("A")
+                                        .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                                        .open();
         final int numEntries = 2000;
         boolean abortException = false;
 
         try {
-            TXBegin();
+            rt.getObjectsView().TXBegin();
             map.put("0", "0");
 
             t1(() -> {
                 for (int x = 0; x < numEntries; x++) {
-                    TXBegin();
+                    rt.getObjectsView().TXBegin();
                     map.put(Integer.toString(x), Integer.toString(x));
-                    TXEnd();
+                    rt.getObjectsView().TXEnd();
                 }
             });
 
-            TXEnd();
+            rt.getObjectsView().TXEnd();
         } catch (TransactionAbortedException tae) {
             assertThat(tae.getAbortCause()).isEqualTo(AbortCause.SEQUENCER_OVERFLOW);
             abortException = true;

@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
 
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
@@ -235,7 +236,12 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
         addSingleServer(SERVERS.PORT_0);
 
-        CorfuRuntime runtime = getDefaultRuntime();
+        CorfuRuntime runtime = getNewRuntime(
+            CorfuRuntimeParameters.builder()
+                .batchSequencerRequests(false)
+                .build())
+            .connect();
+
         TimeoutHandler th = new TimeoutHandler(runtime, TIMEOUT_CORFU_RUNTIME_IN_MS);
 
         runtime

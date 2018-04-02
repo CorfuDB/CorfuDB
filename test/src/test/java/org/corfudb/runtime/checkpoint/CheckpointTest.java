@@ -34,7 +34,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
     void setRuntime() {
         if (myRuntime != null) {
-            myRuntime.shutdown();
+            //myRuntime.shutdown();
         }
         myRuntime = getNewRuntime(getDefaultNode()).connect();
     }

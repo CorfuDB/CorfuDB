@@ -97,6 +97,18 @@ public class StreamsView extends AbstractView {
         return get(destination);
     }
 
+    /** Append to multiple streams conditionally.
+     *
+     * @param conflictInfo                  Conflict information for conditional append.
+     * @param object                        The object to append.
+     * @return                              The address the object was appended at.
+     * @throws TransactionAbortedException  If the transaction was aborted by the sequencer.
+     */
+    public long conditionalAppend(@Nonnull TxResolutionInfo conflictInfo,
+                                  @Nonnull Object object) throws TransactionAbortedException {
+        return append(conflictInfo.getWriteConflictParams().keySet(), object, conflictInfo);
+    }
+
     /**
      * Append to multiple streams simultaneously, possibly providing
      * information on how to resolve conflicts.

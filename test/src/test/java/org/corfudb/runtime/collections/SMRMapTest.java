@@ -743,6 +743,8 @@ public class SMRMapTest extends AbstractViewTest {
 
         // print stats..
         calculateRequestsPerSecond("TPS", numRecords * numThreads, startTime);
+        calculateRequestsPerSecond("GPS", (numRecords * numThreads) -
+            aborts.get(), startTime);
         calculateAbortRate(aborts.get(), numRecords * numThreads);
     }
 

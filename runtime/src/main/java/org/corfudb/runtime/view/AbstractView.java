@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import java.time.Duration;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -110,8 +111,11 @@ public abstract class AbstractView {
                     log.warn("Server still not ready. Waiting for server to start "
                             + "accepting requests.");
                     Sleep.sleepUninterruptibly(retryRate);
-                } else if (re instanceof WrongEpochException) {
-                    WrongEpochException we = (WrongEpochException) re;
+                } else if (re instanceof WrongEpochException
+                    || (re instanceof CompletionException
+                    && re.getCause() instanceof WrongEpochException)) {
+                    WrongEpochException we = (WrongEpochException)
+                        (re instanceof CompletionException ? re.getCause() : re);
                     log.warn("Got a wrong epoch exception, updating epoch to {} and "
                             + "invalidate view", we.getCorrectEpoch());
                     runtime.invalidateLayout();

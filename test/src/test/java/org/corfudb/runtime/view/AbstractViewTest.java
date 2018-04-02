@@ -94,13 +94,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
             .nettyEventLoop(NETTY_EVENT_LOOP)
             .build());
-        // Default number of times to read before hole filling to 0
-        // (most aggressive, to surface concurrency issues).
-        runtime.getParameters().setHoleFillRetry(0);
     }
 
     public CorfuRuntime getNewRuntime(@Nonnull NodeLocator node) {
-        CorfuRuntime runtime = getNewRuntime(CorfuRuntimeParameters
+        CorfuRuntime runtime = configureRuntime(CorfuRuntimeParameters
             .builder()
             .build());
         runtime.parseConfigurationString(node.getHost() + ":" + node.getPort());
@@ -108,6 +105,14 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     }
 
     public CorfuRuntime getNewRuntime(@Nonnull CorfuRuntimeParameters parameters) {
+        CorfuRuntime runtime = configureRuntime(parameters);
+        runtime.parseConfigurationString(getDefaultNode().getHost()
+            + ":"
+            + getDefaultNode().getPort());
+        return runtime;
+    }
+
+    private CorfuRuntime configureRuntime(@Nonnull CorfuRuntimeParameters parameters) {
         parameters.setNettyEventLoop(NETTY_EVENT_LOOP);
         return CorfuRuntime.fromParameters(parameters);
     }
@@ -123,6 +128,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     public void simulateEndpointDisconnected(CorfuRuntime runtime) {
         ((TestClientRouter) runtime.getRouter(getDefaultEndpoint()))
                 .simulateDisconnectedEndpoint();
+        testServerMap.values().forEach(s -> s.layoutServer.shutdown());
     }
 
     /**

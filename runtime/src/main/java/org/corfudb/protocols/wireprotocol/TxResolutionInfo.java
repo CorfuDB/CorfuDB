@@ -35,7 +35,8 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     final Map<UUID, Set<byte[]>> conflictSet;
 
     @Getter
-    final Map<UUID, Set<byte[]>>  writeConflictParams;
+    @Setter
+    Map<UUID, Set<byte[]>>  writeConflictParams;
 
     /**
      * Constructor for TxResolutionInfo.
