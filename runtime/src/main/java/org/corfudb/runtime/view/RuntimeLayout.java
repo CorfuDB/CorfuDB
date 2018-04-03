@@ -44,12 +44,11 @@ public class RuntimeLayout {
     private final CorfuRuntime runtime;
 
     /**
-     * Defensive constructor since we can create a Layout from a JSON file.
-     * JSON deserialize is forced through this constructor.
+     * Constructor taking a reference of the layout to stamp the clients.
      */
     public RuntimeLayout(@Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime) {
 
-        this.layout = new Layout(layout);
+        this.layout = layout;
         this.runtime = corfuRuntime;
     }
 
@@ -146,7 +145,8 @@ public class RuntimeLayout {
     public LogUnitClient getLogUnitClient(String endpoint) {
         return ((LogUnitClient) getClient(LogUnitClient.class, endpoint))
                 .setMetricRegistry(getRuntime().getMetrics() != null
-                        ? getRuntime().getMetrics() : CorfuRuntime.getDefaultMetrics());
+                        ? getRuntime().getMetrics() : CorfuRuntime.getDefaultMetrics())
+                .setMaxWrite(getRuntime().getParameters().getMaxWriteSize());
     }
 
     public ManagementClient getManagementClient(String endpoint) {
