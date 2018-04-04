@@ -93,6 +93,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // Next, we sync the object, which will bring the object
         // to the correct version, reflecting any optimistic
         // updates.
+        // Get snapshot timestamp in advance so it is not performed under the VLO lock
+        long ts = getSnapshotTimestamp();
         return proxy
                 .getUnderlyingObject()
                 .access(o -> {
@@ -101,7 +103,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                             // Obtain the stream position as when transaction context last
                             // remembered it.
                             long streamReadPosition = getKnownStreamPosition()
-                                    .getOrDefault(proxy.getStreamID(), getSnapshotTimestamp());
+                                    .getOrDefault(proxy.getStreamID(), ts);
 
                             return (
                                     (stream == null || stream.isStreamCurrentContextThreadCurrentContext())
@@ -152,9 +154,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             return wrapper.getUpcallResult();
         }
         // Otherwise, we need to sync the object
+        // Get snapshot timestamp in advance so it is not performed under the VLO lock
+        long ts = getSnapshotTimestamp();
         return proxy.getUnderlyingObject().update(o -> {
             log.trace("Upcall[{}] {} Sync'd", this,  timestamp);
-            syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, this::setAsOptimisticStream);
+            syncWithRetryUnsafe(o, ts, proxy, this::setAsOptimisticStream);
             SMREntry wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
             if (wrapper2 != null && wrapper2.isHaveUpcallResult()) {
                 return wrapper2.getUpcallResult();
