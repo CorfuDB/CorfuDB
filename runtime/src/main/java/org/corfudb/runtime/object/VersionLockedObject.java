@@ -196,7 +196,7 @@ public class VersionLockedObject<T> {
                     }
                 }
             } catch (Exception e) {
-                // If we have an exception, we didn't get a chance to validate the the lock.
+                // If we have an exception, we didn't get a chance to validate the lock.
                 // If it's still valid, then we should re-throw the exception since it was
                 // on a correct view of the object.
                 if (lock.validate(ts)) {
