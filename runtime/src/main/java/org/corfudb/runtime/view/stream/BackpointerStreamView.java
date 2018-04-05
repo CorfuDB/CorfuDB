@@ -402,16 +402,13 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         Long latestTokenValue = null;
 
-        // If the max has been resolved, use it.
         if (maxGlobal != Address.MAX) {
-            latestTokenValue = context.resolvedQueue.ceiling(maxGlobal);
-        }
-
-        // If we don't have a larger token in resolved, or the request was for
-        // a linearized read, fetch the token from the sequencer.
-        if (latestTokenValue == null || maxGlobal == Address.MAX) {
-            latestTokenValue = runtime.getSequencerView()
-                    .nextToken(Collections.singleton(context.id), 0)
+            // If we can find the max in the resolvedQueue, use it.
+            latestTokenValue = runtime.getSequencerView().cachedTail(context.id)
+                .getToken().getTokenValue();
+        } else {
+            // If the request was for a linearized read, fetch the token from the sequencer
+            latestTokenValue = runtime.getSequencerView().tail(context.id)
                     .getToken().getTokenValue();
             log.trace("Read_Fill_Queue[{}] Fetched tail {} from sequencer", this, latestTokenValue);
         }

@@ -45,6 +45,7 @@ import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.AddressSpaceView;
+import org.corfudb.runtime.view.CachedSequencerView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutManagementView;
 import org.corfudb.runtime.view.LayoutView;
@@ -141,6 +142,13 @@ public class CorfuRuntime {
         /** The number of times to retry on a retriable
          * {@link org.corfudb.runtime.exceptions.TrimmedException} during a transaction.*/
         @Default int trimRetry = 2;
+        // endregion
+
+        //region        Sequencer parameters
+        /** Whether or not to use a cached sequencer view. This reduces calls to the sequencer
+         *  with a small memory and abort rate penalty.
+         */
+        @Default boolean sequencerCacheEnabled = true;
         // endregion
 
         //region        Security parameters
@@ -291,7 +299,9 @@ public class CorfuRuntime {
      * A view of the sequencer server in the Corfu server instance.
      */
     @Getter(lazy = true)
-    private final SequencerView sequencerView = new SequencerView(this);
+    private final SequencerView sequencerView = parameters.sequencerCacheEnabled
+                                                ? new CachedSequencerView(this)
+                                                : new SequencerView(this);
     /**
      * A view of the address space in the Corfu server instance.
      */
