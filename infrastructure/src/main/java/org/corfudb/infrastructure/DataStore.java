@@ -28,6 +28,8 @@ import lombok.Getter;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.util.JsonUtils;
 
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
+
 /**
  * Stores data as JSON.
  *
@@ -125,6 +127,7 @@ public class DataStore implements IDataStore {
                                     StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
                             Files.move(tmpPath, path, StandardCopyOption.REPLACE_EXISTING,
                                     StandardCopyOption.ATOMIC_MOVE);
+                            syncDirectory(logDir);
                         } catch (IOException e) {
                             throw new RuntimeException(e);
                         }
