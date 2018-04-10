@@ -20,6 +20,7 @@ import java.util.EnumSet;
 import java.util.Set;
 
 import static com.google.common.collect.Sets.newHashSet;
+import static org.corfudb.migration.EndpointMigration.modifyBindingIpAddress;
 
 /**
  * This migration tool will migrate the local data store files and the log segment files
@@ -47,12 +48,6 @@ public class LogFormat1to2 {
             .getSerializedSize();
 
     /**
-     * Data-store files responsible for layout recovery.
-     */
-    private static final Set<String> layoutStateRecoveryFiles = newHashSet("LAYOUT_CURRENT",
-            "MANAGEMENT_LAYOUT");
-
-    /**
      * Migrates the log segments and data store files.
      *
      * @param args Accepts the arguments in the following order,
@@ -73,10 +68,10 @@ public class LogFormat1to2 {
 
         // migrate log segments
         migrateLUData(corfuDir);
-        // Transform the layout state local datastore files.
-        modifyBindingIpAddress(corfuDir, oldEndpoint, newEndpoint);
         // migrate data-store files.
         migrateLocalDatastore(corfuDir);
+        // Transform the layout state local datastore files.
+        modifyBindingIpAddress(corfuDir, oldEndpoint, newEndpoint);
     }
 
     public static void migrateLocalDatastore(String dirStr) throws IOException {
@@ -119,26 +114,6 @@ public class LogFormat1to2 {
         Files.write(destPath, buffer.array(), StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
         Files.delete(srcPath);
-    }
-
-
-    public static void modifyBindingIpAddress(String dirStr,
-                                              String oldEndpoint,
-                                              String newEndpoint) throws IOException {
-        File dir = new File(dirStr);
-        File[] layoutStateFiles = dir.listFiles(
-                (dir1, name) -> layoutStateRecoveryFiles.stream().anyMatch(name::endsWith));
-
-        for (File file : layoutStateFiles) {
-            Path path = Paths.get(file.getAbsolutePath());
-            byte[] bytes = Files.readAllBytes(path);
-            String data = new String(bytes);
-            bytes = data.replace(oldEndpoint, newEndpoint).getBytes();
-            ByteBuffer buffer = ByteBuffer.allocate(bytes.length);
-            buffer.put(bytes);
-            Files.write(path, buffer.array(), StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
-        }
     }
 
     public static void migrateLUData(String dir) throws IOException {
