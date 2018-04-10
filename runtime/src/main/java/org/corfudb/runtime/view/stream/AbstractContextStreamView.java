@@ -9,7 +9,6 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.StreamCOWEntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
@@ -301,13 +300,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
     protected boolean processEntryForContext(final ILogData data) {
         if (data != null) {
             final Object payload = data.getPayload(runtime);
-            // If this is a COW entry, we update the context as well.
-            if (payload instanceof StreamCOWEntry) {
-                StreamCOWEntry ce = (StreamCOWEntry) payload;
-                pushNewContext(ce.getOriginalStream(),
-                                ce.getFollowUntil());
-                return true;
-            }
         }
         return false;
     }
