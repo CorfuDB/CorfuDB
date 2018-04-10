@@ -20,6 +20,7 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -55,6 +56,8 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
 
 /**
@@ -780,9 +783,20 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                             EnumSet.of(StandardOpenOption.READ));
                 }
             } else {
-                return FileChannel.open(FileSystems.getDefault().getPath(filePath),
-                        EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
-                                StandardOpenOption.CREATE, StandardOpenOption.SPARSE));
+
+                try {
+                    FileChannel channel = FileChannel.open(FileSystems.getDefault().getPath(filePath),
+                            EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
+                                    StandardOpenOption.CREATE_NEW, StandardOpenOption.SPARSE));
+
+                    // First time creating this segment file, need to sync the parent directory
+                    File segFile = new File(filePath);
+                    syncDirectory(segFile.getParent());
+                    return channel;
+                } catch (FileAlreadyExistsException ex) {
+                    return FileChannel.open(FileSystems.getDefault().getPath(filePath),
+                            EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE));
+                }
             }
         } catch (IOException e) {
             log.error("Error opening file {}", filePath, e);
