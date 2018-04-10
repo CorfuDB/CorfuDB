@@ -21,6 +21,8 @@ import java.util.concurrent.ThreadFactory;
 import javax.annotation.Nonnull;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import org.corfudb.util.NodeLocator;
+import org.corfudb.util.NodeLocator.Protocol;
 
 /** An enum representing channel implementation types available to the client. */
 @AllArgsConstructor
@@ -37,11 +39,16 @@ public enum ChannelImplementation {
         (numThreads, factory) ->
             Epoll.isAvailable() ? new EpollEventLoopGroup(numThreads, factory) :
                 KQueue.isAvailable() ? new KQueueEventLoopGroup(numThreads, factory) :
-                    new NioEventLoopGroup(numThreads, factory)),
-    NIO(NioSocketChannel.class, NioServerSocketChannel.class, NioEventLoopGroup::new),
-    EPOLL(EpollSocketChannel.class, EpollServerSocketChannel.class, EpollEventLoopGroup::new),
-    KQUEUE(KQueueSocketChannel.class, KQueueServerSocketChannel.class, KQueueEventLoopGroup::new),
-    LOCAL(LocalChannel.class, LocalServerChannel.class, DefaultEventLoopGroup::new)
+                    new NioEventLoopGroup(numThreads, factory),
+        Protocol.TCP),
+    NIO(NioSocketChannel.class, NioServerSocketChannel.class, NioEventLoopGroup::new,
+        Protocol.TCP),
+    EPOLL(EpollSocketChannel.class, EpollServerSocketChannel.class, EpollEventLoopGroup::new,
+        Protocol.TCP),
+    KQUEUE(KQueueSocketChannel.class, KQueueServerSocketChannel.class, KQueueEventLoopGroup::new,
+        Protocol.TCP),
+    LOCAL(LocalChannel.class, LocalServerChannel.class, DefaultEventLoopGroup::new,
+        Protocol.LOCAL)
     ;
 
     /**
@@ -61,6 +68,12 @@ public enum ChannelImplementation {
      */
     @Getter
     final EventLoopGroupGenerator generator;
+
+    /**
+     * The protocol for this socket type.
+     */
+    @Getter
+    final NodeLocator.Protocol protocol;
 
     /**
      * A functional interface for generating event loops.

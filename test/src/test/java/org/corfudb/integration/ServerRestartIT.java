@@ -438,7 +438,8 @@ public class ServerRestartIT extends AbstractIT {
         final int newMapBStreamTail = 19;
         final int newGlobalTail = 19;
 
-        restartServer(corfuRuntime, DEFAULT_ENDPOINT);
+        restartServer(corfuRuntime, corfuRuntime.getLayoutView()
+            .getLayout().getLayoutServers().get(0));
 
         TokenResponse tokenResponseA = corfuRuntime
                 .getSequencerView()

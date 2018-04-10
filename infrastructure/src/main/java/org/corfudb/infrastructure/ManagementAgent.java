@@ -445,7 +445,8 @@ public class ManagementAgent {
         // We check for the following condition here: If the node is NOT a part of the
         // current layout, it should not attempt to change layout.
         Layout layout = serverContext.getManagementLayout();
-        if (!layout.getAllServers().contains(getLocalEndpoint())) {
+        if (layout.getAllServers().stream().noneMatch(serverContext.getNodeLocator()::isSameNode)
+                || layout.getUnresponsiveServers().stream().anyMatch(serverContext.getNodeLocator()::isSameNode)) {
             log.debug("This Server is not a part of the active layout. "
                     + "Aborting reconfiguration handling.");
             return false;
