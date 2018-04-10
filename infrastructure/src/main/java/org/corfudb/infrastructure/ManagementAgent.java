@@ -29,6 +29,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.concurrent.SingletonResource;
 
@@ -345,8 +346,8 @@ public class ManagementAgent {
         // or has it been marked as unresponsive. If either is true, it should not
         // attempt to change layout.
         Layout layout = serverContext.getManagementLayout();
-        if (!layout.getAllServers().contains(getLocalEndpoint())
-                || layout.getUnresponsiveServers().contains(getLocalEndpoint())) {
+        if (layout.getAllServers().stream().noneMatch(serverContext.getNodeLocator()::isSameNode)
+                || layout.getUnresponsiveServers().stream().anyMatch(serverContext.getNodeLocator()::isSameNode)) {
             log.debug("This Server is not a part of the active layout. "
                     + "Aborting reconfiguration handling.");
             return false;

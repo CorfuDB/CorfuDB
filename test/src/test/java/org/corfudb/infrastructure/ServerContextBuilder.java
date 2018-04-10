@@ -117,6 +117,7 @@ public class ServerContextBuilder {
      */
     public static ServerContext defaultContext(int port) {
         ServerContext sc = new ServerContextBuilder().setPort(port)
+            .setAddress("localhost")
             .setImplementation("auto")
             .build();
         return sc;
