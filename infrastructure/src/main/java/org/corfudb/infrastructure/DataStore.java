@@ -19,6 +19,8 @@ import javax.annotation.Nullable;
 
 import lombok.Getter;
 
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.util.JsonUtils;
 
 /**
@@ -38,6 +40,7 @@ import org.corfudb.util.JsonUtils;
  *
  * <p>Created by mdhawan on 7/27/16.
  */
+@Slf4j
 public class DataStore implements IDataStore {
 
     private final Map<String, Object> opts;
@@ -123,6 +126,7 @@ public class DataStore implements IDataStore {
                         }
                         return new String(Files.readAllBytes(path));
                     } catch (IOException e) {
+                        log.warn("IOException while building datastore", e);
                         throw new RuntimeException(e);
                     }
                 });

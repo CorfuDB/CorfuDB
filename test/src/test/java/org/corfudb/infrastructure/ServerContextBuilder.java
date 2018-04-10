@@ -54,7 +54,11 @@ public class ServerContextBuilder {
     }
 
     public static ServerContext defaultContext(int port) {
-        return new ServerContextBuilder().setPort(port).build();
+        ServerContext sc = new ServerContextBuilder().setPort(port)
+            .setAddress("localhost")
+            .setImplementation("auto")
+            .build();
+        return sc;
     }
 
     public static ServerContext emptyContext() {

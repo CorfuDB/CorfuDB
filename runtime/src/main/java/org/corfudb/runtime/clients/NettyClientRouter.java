@@ -461,7 +461,48 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 }
             }
         });
-        connected = true;
+    }
+
+    /** Connect to a remote server asynchronously.
+     *
+     * @param bootstrap         The channel boostrap to use
+     * @return                  A {@link ChannelFuture} which is c
+     */
+    private ChannelFuture connectAsync(@Nonnull Bootstrap bootstrap) {
+        // If shutdown, return a ChannelFuture that is exceptionally completed.
+        if (shutdown) {
+            return new DefaultChannelPromise(channel, GlobalEventExecutor.INSTANCE)
+                .setFailure(new ShutdownException("Runtime already shutdown!"));
+        }
+        // Use the bootstrap to create a new channel.
+        ChannelFuture f = bootstrap.connect(node.getSocketAddress());
+        f.addListener((ChannelFuture cf) -> channelConnectionFutureHandler(cf, bootstrap));
+        return f;
+    }
+
+    /** Handle when a channel is connected.
+     *
+     * @param future        The future that is completed when the channel is connected/
+     * @param bootstrap     The bootstrap to connect a new channel (used on reconnect).
+     */
+    private void channelConnectionFutureHandler(@Nonnull ChannelFuture future,
+                                                @Nonnull Bootstrap bootstrap) {
+        if (future.isSuccess()) {
+            // Register a future to reconnect in case we get disconnected
+            addReconnectionOnCloseFuture(future.channel(), bootstrap);
+            log.info("connectAsync[{}]: Channel connected.", node);
+        } else {
+            // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
+            // a sleep period.
+            if (!shutdown) {
+                log.info("connectAsync[{}]: Channel connection failed, reconnecting...", node);
+                Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
+                // Call connect, which will retry the call again.
+                // Note that this is not recursive, because it is called in the
+                // context of the handler future.
+                connectAsync(bootstrap);
+            }
+        }
     }
 
     /**

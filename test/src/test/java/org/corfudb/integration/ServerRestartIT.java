@@ -417,7 +417,8 @@ public class ServerRestartIT extends AbstractIT {
         final int newMapBStreamTail = 19;
         final int newGlobalTail = 19;
 
-        assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
+        restartServer(corfuRuntime, corfuRuntime.getLayoutView()
+            .getLayout().getLayoutServers().get(0));
 
         corfuServerProcess = runCorfuServer();
         corfuRuntime = createDefaultRuntime();

@@ -9,9 +9,12 @@ import lombok.Getter;
 import lombok.Setter;
 
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
+import org.corfudb.util.UuidUtils;
 
 import static org.corfudb.util.MetricsUtils.addJvmMetrics;
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
+import static org.corfudb.util.NodeLocator.*;
 
 /**
  * Server Context:
@@ -59,6 +62,20 @@ public class ServerContext {
     @Setter
     private IFailureHandlerPolicy failureHandlerPolicy;
 
+    @Getter(lazy = true)
+    private final NodeLocator nodeLocator = generateLocalNodeLocator();
+
+
+    private NodeLocator generateLocalNodeLocator() {
+        return builder()
+            .bindToAll(bindToAllInterfaces)
+            .protocol(getChannelImplementation().getProtocol())
+            .host(getServerConfig(String.class, "--address"))
+            .port(Integer.parseInt(getServerConfig(String.class, "<port>")))
+            .nodeId(getNodeId())
+            .build();
+    }
+
     @Getter
     public static final MetricRegistry metrics = new MetricRegistry();
 
@@ -73,6 +90,22 @@ public class ServerContext {
         this.serverRouter = serverRouter;
         this.failureDetectorPolicy = new PeriodicPollPolicy();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
+        this.healingHandlerPolicy = new SequencerHealingPolicy();
+
+        // Setup the netty event loops. In tests, these loops may be provided by
+        // a test framework to save resources.
+        final boolean providedEventLoops =
+            getChannelImplementation().equals(ChannelImplementation.LOCAL);
+
+        clientGroup = providedEventLoops
+            ? getServerConfig(EventLoopGroup.class, "client") :
+            getNewClientGroup();
+        workerGroup = providedEventLoops
+            ? getServerConfig(EventLoopGroup.class, "worker") :
+            getNewWorkerGroup();
+        bossGroup = providedEventLoops
+            ? getServerConfig(EventLoopGroup.class, "boss") :
+            getNewBossGroup();
 
         // Metrics setup & reporting configuration
         String mp = "corfu.server.";
@@ -83,6 +116,159 @@ public class ServerContext {
                 MetricsUtils.metricsReportingSetup(metrics);
             }
         }
+    }
+
+    /** Get the {@link ChannelImplementation}to use.
+     *
+     * @return              The server channel type.
+     */
+    public ChannelImplementation getChannelImplementation() {
+        final String type = getServerConfig(String.class, "--implementation");
+        return ChannelImplementation.valueOf(type.toUpperCase());
+    }
+
+
+    public CorfuRuntimeParameters getDefaultRuntimeParameters() {
+        return CorfuRuntime.CorfuRuntimeParameters.builder()
+            .nettyEventLoop(clientGroup)
+            .shutdownNettyEventLoop(false)
+            .tlsEnabled((Boolean) serverConfig.get("--enable-tls"))
+            .keyStore((String) serverConfig.get("--keystore"))
+            .ksPasswordFile((String) serverConfig.get("--keystore-password-file"))
+            .trustStore((String) serverConfig.get("--truststore"))
+            .tsPasswordFile((String) serverConfig.get("--truststore-password-file"))
+            .saslPlainTextEnabled((Boolean) serverConfig.get("--enable-sasl-plain-text-auth"))
+            .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
+            .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
+            .build();
+    }
+
+    /** Generate a Node Id if not present.
+     *
+     */
+    private void generateNodeId() {
+        String currentId = getDataStore().get(String.class, "", ServerContext.NODE_ID);
+        if (currentId == null) {
+            String idString = UuidUtils.asBase64(UUID.randomUUID());
+            log.info("No Node Id, setting to new Id={}", idString);
+            getDataStore().put(String.class, "", ServerContext.NODE_ID, idString);
+        } else {
+            log.info("Node Id = {}", currentId);
+        }
+    }
+
+    /** Get the node id as an UUID.
+     *
+     * @return  A UUID for this node.
+     */
+    public UUID getNodeId() {
+        return UuidUtils.fromBase64(getNodeIdBase64());
+    }
+
+    /** Get the node id as a base64 string.
+     *
+     * @return A node ID for this node, as a base64 string.
+     */
+    public String getNodeIdBase64() {
+        return getDataStore().get(String.class, "", ServerContext.NODE_ID);
+    }
+
+    /** Get a field from the server configuration map.
+     *
+     * @param type          The type of the field.
+     * @param optionName    The name of the option to retrieve.
+     * @param <T>           The type of the field to return.
+     * @return              The field with the give option name.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T getServerConfig(Class<T> type, String optionName) {
+        Object o = getServerConfig().get(optionName);
+        if (type == String.class && !String.class.isInstance(o)) {
+            return (T) o.toString();
+        }
+        return (T) getServerConfig().get(optionName);
+    }
+
+
+    /** Install a single node layout if and only if no layout is currently installed.
+     *  Synchronized, so this method is thread-safe.
+     *
+     *  @return True, if a new layout was installed, false otherwise.
+     */
+    public synchronized boolean installSingleNodeLayoutIfAbsent() {
+        if ((Boolean) getServerConfig().get("--single") && getCurrentLayout() == null) {
+            setCurrentLayout(getNewSingleNodeLayout());
+            return true;
+        }
+        return false;
+    }
+
+    /** Get a new single node layout used for self-bootstrapping a server started with
+     *  the -s flag.
+     *
+     *  @returns A new single node layout with a unique cluster Id
+     *  @throws IllegalArgumentException    If the cluster id was not auto, base64 or a UUID string
+     */
+    public Layout getNewSingleNodeLayout() {
+        final String clusterIdString = (String) getServerConfig().get("--cluster-id");
+        UUID clusterId;
+        if (clusterIdString.equals("auto")) {
+            clusterId = UUID.randomUUID();
+        } else {
+            // Is it a UUID?
+            try {
+                clusterId = UUID.fromString(clusterIdString);
+            } catch (IllegalArgumentException ignore) {
+                // Must be a base64 id, otherwise we will throw InvalidArgumentException again
+                clusterId = UuidUtils.fromBase64(clusterIdString);
+            }
+        }
+        log.info("getNewSingleNodeLayout: Bootstrapping with cluster Id {} [{}]",
+            clusterId, UuidUtils.asBase64(clusterId));
+        String localAddress = getServerConfig().get("--address") + ":"
+            + getServerConfig().get("<port>");
+        return new Layout(
+            Collections.singletonList(getNodeLocator().toString()),
+            Collections.singletonList(getNodeLocator().toString()),
+            Collections.singletonList(new LayoutSegment(
+                Layout.ReplicationMode.CHAIN_REPLICATION,
+                0L,
+                -1L,
+                Collections.singletonList(
+                    new Layout.LayoutStripe(
+                        Collections.singletonList(getNodeLocator().toString())
+                    )
+                )
+            )),
+            0L,
+            clusterId
+        );
+    }
+
+    /** Get the current {@link Layout} stored in the {@link DataStore}.
+     *  @return The current stored {@link Layout}
+     */
+    public Layout getCurrentLayout() {
+        return getDataStore().get(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT);
+    }
+
+    /** Set the current {@link Layout} stored in the {@link DataStore}.
+     *
+     * @param layout The {@link Layout} to set in the {@link DataStore}.
+     */
+    public void setCurrentLayout(Layout layout) {
+        getDataStore().put(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT, layout);
+    }
+
+    /**
+     * Returns the layout history.
+     *
+     * @return list of layouts in the history
+     */
+    public List<Layout> getLayoutHistory() {
+        List<Layout> layouts = dataStore.getAll(Layout.class, PREFIX_LAYOUTS);
+        layouts.sort(Comparator.comparingLong(Layout::getEpoch));
+        return layouts;
     }
 
     /**
@@ -97,11 +283,41 @@ public class ServerContext {
      * Set the serverRouter epoch.
      * @param serverEpoch the epoch to set
      */
-    public void setServerEpoch(long serverEpoch) {
-        dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
-        // Set the epoch in the router as well.
-        //TODO need to figure out if we can remove this redundancy
-        serverRouter.setServerEpoch(serverEpoch);
+    public synchronized void setServerEpoch(long serverEpoch, IServerRouter r) {
+        Long lastEpoch = dataStore.get(Long.class, PREFIX_EPOCH, KEY_EPOCH);
+        if (lastEpoch == null || lastEpoch < serverEpoch) {
+            dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
+            r.setServerEpoch(serverEpoch);
+        } else if (serverEpoch == lastEpoch) {
+            // Setting to the same epoch, don't need to do anything.
+        } else {
+            // Regressing, throw an exception.
+            throw new WrongEpochException(lastEpoch);
+        }
+    }
+
+    public Rank getPhase1Rank() {
+        return dataStore.get(Rank.class, PREFIX_PHASE_1,
+            getServerEpoch() + KEY_SUFFIX_PHASE_1);
+    }
+
+    public void setPhase1Rank(Rank rank) {
+        dataStore.put(Rank.class, PREFIX_PHASE_1,
+            getServerEpoch() + KEY_SUFFIX_PHASE_1, rank);
+    }
+
+    public Phase2Data getPhase2Data() {
+        return dataStore.get(Phase2Data.class, PREFIX_PHASE_2,
+            getServerEpoch() + KEY_SUFFIX_PHASE_2);
+    }
+
+    public void setPhase2Data(Phase2Data phase2Data) {
+        dataStore.put(Phase2Data.class, PREFIX_PHASE_2,
+            getServerEpoch() + KEY_SUFFIX_PHASE_2, phase2Data);
+    }
+
+    public void setLayoutInHistory(Layout layout) {
+        dataStore.put(Layout.class, PREFIX_LAYOUTS, String.valueOf(layout.getEpoch()), layout);
     }
 
     public long getTailSegment() {
@@ -119,11 +335,132 @@ public class ServerContext {
      */
     public long getStartingAddress() {
         Long startingAddress = dataStore.get(Long.class, PREFIX_STARTING_ADDRESS,
-                KEY_STARTING_ADDRESS);
+            KEY_STARTING_ADDRESS);
         return startingAddress == null ? 0 : startingAddress;
     }
 
     public void setStartingAddress(long startingAddress) {
         dataStore.put(Long.class, PREFIX_STARTING_ADDRESS, KEY_STARTING_ADDRESS, startingAddress);
+    }
+
+    /**
+     * Sets the management layout in the persistent datastore.
+     *
+     * @param layout Layout to be persisted
+     */
+    public synchronized void saveManagementLayout(Layout layout) {
+        // Cannot update with a null layout.
+        if (layout == null) {
+            log.warn("saveManagementLayout: Attempted to update with null layout");
+            return;
+        }
+        Layout currentLayout = getManagementLayout();
+        // Update only if new layout has a higher epoch than the existing layout.
+        if (currentLayout == null || layout.getEpoch() > currentLayout.getEpoch()) {
+            // Persisting this new updated layout
+            dataStore.put(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, layout);
+            log.info("saveManagementLayout: Updated to new layout at epoch {}",
+                getManagementLayout().getEpoch());
+        } else {
+            log.debug("saveManagementLayout: "
+                    + "Ignoring layout because new epoch {} <= old epoch {}",
+                layout.getEpoch(), currentLayout.getEpoch());
+        }
+    }
+
+    /**
+     * Fetches the management layout from the persistent datastore.
+     *
+     * @return The last persisted layout
+     */
+    public synchronized Layout getManagementLayout() {
+        return dataStore.get(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT);
+    }
+
+    /** Get a new "boss" group, which services (accepts) incoming connections.
+     *
+     * @return              A boss group.
+     */
+    private EventLoopGroup getNewBossGroup() {
+        final ThreadFactory threadFactory = new ThreadFactoryBuilder()
+            .setNameFormat(getThreadPrefix() + "accept-%d")
+            .build();
+        EventLoopGroup group = getChannelImplementation().getGenerator()
+            .generate(1, threadFactory);
+        log.info("getBossGroup: Type {}", group.getClass().getSimpleName());
+        return group;
+    }
+
+    /** Get a new "worker" group, which services incoming requests.
+     *
+     * @return          A worker group.
+     */
+    private @Nonnull EventLoopGroup getNewWorkerGroup() {
+        final ThreadFactory threadFactory = new ThreadFactoryBuilder()
+            .setNameFormat(getThreadPrefix() + "worker-%d")
+            .build();
+
+        final int requestedThreads =
+            Integer.parseInt(getServerConfig(String.class, "--Threads"));
+        final int numThreads = requestedThreads == 0
+            ? Runtime.getRuntime().availableProcessors() * 2
+            : requestedThreads;
+        EventLoopGroup group = getChannelImplementation().getGenerator()
+            .generate(numThreads, threadFactory);
+
+        log.info("getWorkerGroup: Type {} with {} threads",
+            group.getClass().getSimpleName(), numThreads);
+        return group;
+    }
+
+    /** Get a new "client" group, which services incoming client requests.
+     *
+     * @return          A worker group.
+     */
+    private @Nonnull EventLoopGroup getNewClientGroup() {
+        final ThreadFactory threadFactory = new ThreadFactoryBuilder()
+            .setNameFormat(getThreadPrefix() + "client-%d")
+            .build();
+
+        final int requestedThreads =
+            Integer.parseInt(getServerConfig(String.class, "--Threads"));
+        final int numThreads = requestedThreads == 0
+            ? Runtime.getRuntime().availableProcessors() * 2
+            : requestedThreads;
+        EventLoopGroup group = getChannelImplementation().getGenerator()
+            .generate(numThreads, threadFactory);
+
+        log.info("getClientGroup: Type {} with {} threads",
+            group.getClass().getSimpleName(), numThreads);
+        return group;
+    }
+
+    /** Get the prefix for threads this server creates.
+     *
+     * @return  A string that should be prepended to threads this server creates.
+     */
+    public @Nonnull String getThreadPrefix() {
+        final String prefix = getServerConfig(String.class, "--Prefix");
+        if (prefix.equals("")) {
+            return "";
+        } else {
+            return prefix + "-";
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Cleans up and releases all resources (such as thread pools and files) opened
+     * by this {@link ServerContext}.
+     */
+    @Override
+    public void close() {
+        // Shutdown the active event loops unless they were provided to us
+        if (!getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
+            clientGroup.shutdownGracefully();
+            bossGroup.shutdownGracefully();
+            workerGroup.shutdownGracefully();
+        }
     }
 }
