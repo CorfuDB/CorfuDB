@@ -67,37 +67,6 @@ public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
     @Override
     V get(@ConflictParameter Object key);
 
-    /**
-     * {@inheritDoc}
-     *
-     * <p>Conflicts: this operation produces a conflict with any other
-     * operation on the given key.
-     */
-    @TransactionalMethod
-    @Override
-    default V put(@ConflictParameter K key, V value) {
-        V previous = get(key);
-        blindPut(key, value);
-        return previous;
-    }
-
-
-    /**
-     * This operation behaves like a put operation, but does not
-     * return the previous value, and does not result in a read
-     * of the map.
-     *
-     * <p>Calling this operation produces the same put record as calling
-     * "put" directly. However, the runtime will not try to sync
-     * the object to obtain an upcall.
-     *
-     * <p>Conflicts: this operation produces a conflict with any other
-     * operation on the given key.
-     */
-    @Mutator(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord")
-    default void blindPut(@ConflictParameter K key, V value) {
-        put(key, value);
-    }
 
     /** Generate an undo record for a put, given the previous state of the map
      * and the parameters to the put call.

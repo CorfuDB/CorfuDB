@@ -19,7 +19,9 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.corfudb.annotations.Accessor;
+import org.corfudb.annotations.ConflictParameter;
 import org.corfudb.annotations.CorfuObject;
+import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.TransactionalMethod;
 
 /**
@@ -722,5 +724,38 @@ public class SMRMap<K, V> extends HashMap<K, V> implements ISMRMap<K,V> {
             put(key, newValue);
         }
         return newValue;
+    }
+
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Conflicts: this operation produces a conflict with any other
+     * operation on the given key.
+     */
+    @TransactionalMethod
+    @Override
+    public V put(@ConflictParameter K key, V value) {
+        V previous = get(key);
+        blindPut(key, value);
+        return previous;
+    }
+
+
+    /**
+     * This operation behaves like a put operation, but does not
+     * return the previous value, and does not result in a read
+     * of the map.
+     *
+     * <p>Calling this operation produces the same put record as calling
+     * "put" directly. However, the runtime will not try to sync
+     * the object to obtain an upcall.
+     *
+     * <p>Conflicts: this operation produces a conflict with any other
+     * operation on the given key.
+     */
+    @Mutator(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord")
+    public void blindPut(@ConflictParameter K key, V value) {
+        super.put(key, value);
     }
 }

@@ -18,16 +18,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public abstract class AbstractTransactionContextTest extends AbstractTransactionsTest {
 
-    protected ISMRMap<String, String> testMap;
+    protected SMRMap<String, String> testMap;
 
     @Before
     public void resetMap() {
         testMap = null;
     }
 
-    public ISMRMap<String, String> getMap() {
+    public SMRMap<String, String> getMap() {
         if (testMap == null) {
-            testMap = (ISMRMap<String, String>) instantiateCorfuObject(
+            testMap = (SMRMap<String, String>) instantiateCorfuObject(
                     new TypeToken<SMRMap<String, String>>() {
                     }, "test stream"
             ) ;

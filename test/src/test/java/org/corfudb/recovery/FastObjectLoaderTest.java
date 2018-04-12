@@ -809,7 +809,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         recreatedTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a");
     }
 
-    @Test
+    //@Test
     public void canRecreateMixOfMaps() throws Exception {
         CorfuRuntime originalRuntime = getDefaultRuntime();
 
