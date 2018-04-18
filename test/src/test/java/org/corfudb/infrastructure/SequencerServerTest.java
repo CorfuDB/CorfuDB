@@ -30,7 +30,7 @@ public class SequencerServerTest extends AbstractServerTest {
 
     @Before
     public void bootstrapSequencer() {
-        server.setReadyStateEpoch(0L);
+        server.setBootstrapEpoch(0L);
     }
 
     @Test
@@ -201,10 +201,10 @@ public class SequencerServerTest extends AbstractServerTest {
         tailMap.put(streamB, newTailB);
         tailMap.put(streamC, newTailC);
 
-        // Modifying the readyStateEpoch to simulate sequencer reset.
-        server.setReadyStateEpoch(-1L);
+        // Modifying the bootstrapEpoch to simulate sequencer reset.
+        server.setBootstrapEpoch(-1L);
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.BOOTSTRAP_SEQUENCER,
-                new SequencerTailsRecoveryMsg(globalTail + 2, tailMap, 0L)));
+                new SequencerTailsRecoveryMsg(globalTail + 2, tailMap, 0L, false)));
 
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
                 new TokenRequest(0L, Collections.singleton(streamA))));

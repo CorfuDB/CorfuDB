@@ -6,6 +6,7 @@ import com.google.common.reflect.TypeToken;
 
 import lombok.Getter;
 
+import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
@@ -1185,5 +1186,105 @@ public class ManagementViewTest extends AbstractViewTest {
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
         assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
+    }
+
+    /**
+     * This test starts with a cluster of 3 at epoch 1 with PORT_0 as the primary sequencer.
+     * Now runtime_1 writes 5 entries to streams A and B each.
+     * The token count has increased from 0-9.
+     *
+     * The cluster now reconfigures to mark PORT_1 as the primary sequencer for epoch 2.
+     * A stale client still observing epoch 1 requests 10 tokens from PORT_0.
+     * However 2 tokens are requested from PORT_1.
+     *
+     * The cluster again reconfigures to mark PORT_0 as the primary sequencer for epoch 3.
+     * The state of the new primary sequencer should now be recreated using the FastObjectLoader
+     * and should NOT reflect the 10 invalid tokens requested by the stale client.
+     */
+    @Test
+    public void regressTokenCountToValidDispatchedTokens() throws Exception {
+        final UUID streamA = CorfuRuntime.getStreamID("streamA");
+        final UUID streamB = CorfuRuntime.getStreamID("streamB");
+        byte[] payload = "test_payload".getBytes();
+
+        Layout layout_1 = getManagementTestLayout();
+        // Shut down management servers to prevent auto-reconfiguration.
+        getManagementServer(SERVERS.PORT_0).shutdown();
+        getManagementServer(SERVERS.PORT_1).shutdown();
+        getManagementServer(SERVERS.PORT_2).shutdown();
+
+        SequencerServer server0 = getSequencer(SERVERS.PORT_0);
+        SequencerServer server1 = getSequencer(SERVERS.PORT_1);
+
+        CorfuRuntime runtime_1 = getNewRuntime(getDefaultNode()).connect();
+        CorfuRuntime runtime_2 = getNewRuntime(getDefaultNode()).connect();
+
+        IStreamView streamViewA = runtime_1.getStreamsView().get(streamA);
+        IStreamView streamViewB = runtime_1.getStreamsView().get(streamB);
+
+        // Write 10 entries to the log using runtime_1.
+        // Stream A 0-4
+        streamViewA.append(payload);
+        streamViewA.append(payload);
+        streamViewA.append(payload);
+        streamViewA.append(payload);
+        streamViewA.append(payload);
+        // Stream B 5-9
+        streamViewB.append(payload);
+        streamViewB.append(payload);
+        streamViewB.append(payload);
+        streamViewB.append(payload);
+        streamViewB.append(payload);
+
+        // Add a rule to drop Seal and Paxos messages on PORT_0 (the current primary sequencer).
+        addClientRule(runtime_1, SERVERS.ENDPOINT_0, new TestRule().drop().always());
+        // Trigger reconfiguration and failover the sequencer to PORT_1
+        Layout layout_2 = new LayoutBuilder(layout_1)
+                .assignResponsiveSequencerAsPrimary(Collections.singleton(SERVERS.ENDPOINT_0))
+                .build();
+        layout_2.setEpoch(layout_2.getEpoch() + 1);
+        runtime_1.getLayoutView().getRuntimeLayout(layout_2).moveServersToEpoch();
+        runtime_1.getLayoutView().updateLayout(layout_2, 1L);
+        runtime_1.getLayoutManagementView().reconfigureSequencerServers(layout_1, layout_2, false);
+
+        clearClientRules(runtime_1);
+
+        // Using the stale client with view of epoch 1, request 10 tokens.
+        final int tokenCount = 5;
+        runtime_2.getSequencerView().nextToken(Collections.singleton(streamA), tokenCount);
+        runtime_2.getSequencerView().nextToken(Collections.singleton(streamB), tokenCount);
+        // Using the new client request 2 tokens and write to the log.
+        streamViewA.append(payload);
+        streamViewA.append(payload);
+
+        final int expectedServer0Tokens = 20;
+        final int expectedServer1Tokens = 12;
+        assertThat(server0.getBootstrapEpoch()).isEqualTo(layout_1.getEpoch());
+        assertThat(server1.getBootstrapEpoch()).isEqualTo(layout_2.getEpoch());
+        assertThat(server0.getGlobalLogTail().get()).isEqualTo(expectedServer0Tokens);
+        assertThat(server1.getGlobalLogTail().get()).isEqualTo(expectedServer1Tokens);
+
+        // Trigger reconfiguration to failover back to PORT_0.
+        Layout layout_3 = new LayoutBuilder(layout_2)
+                .assignResponsiveSequencerAsPrimary(Collections.singleton(SERVERS.ENDPOINT_1))
+                .build();
+        layout_3.setEpoch(layout_3.getEpoch() + 1);
+        runtime_1.getLayoutView().getRuntimeLayout(layout_3).moveServersToEpoch();
+        runtime_1.getLayoutView().updateLayout(layout_3, 1L);
+        runtime_1.getLayoutManagementView().reconfigureSequencerServers(layout_2, layout_3, false);
+
+        // Assert that the token count does not reflect the 10 tokens requested by the stale
+        // client on PORT_0.
+        assertThat(server0.getBootstrapEpoch()).isEqualTo(layout_3.getEpoch());
+        assertThat(server1.getBootstrapEpoch()).isEqualTo(layout_2.getEpoch());
+        assertThat(server0.getGlobalLogTail().get()).isEqualTo(expectedServer1Tokens);
+        assertThat(server1.getGlobalLogTail().get()).isEqualTo(expectedServer1Tokens);
+
+        // Assert that the streamTailMap has been reset and returns the correct backpointer.
+        final long expectedBackpointerStreamA = 11;
+        TokenResponse tokenResponse = runtime_1.getSequencerView()
+                .nextToken(Collections.singleton(streamA), 1);
+        assertThat(tokenResponse.getBackpointerMap().get(streamA))
+                .isEqualTo(expectedBackpointerStreamA);
     }
 }
