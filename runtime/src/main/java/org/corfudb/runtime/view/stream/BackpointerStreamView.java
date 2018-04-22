@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view.stream;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -234,6 +235,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         boolean entryAdded = false;
         // The current address which we are reading from.
         long currentAddress = startAddress;
+        // The addresses found during this run.
+        List<Long> foundAddresses = new ArrayList<>();
 
         // Loop until we have reached the stop address.
         while (currentAddress > stopAddress  && Address.isAddress(currentAddress)) {
@@ -264,6 +267,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         || op == BackpointerOp.INCLUDE_STOP) {
                     log.trace("followBackPointers: Adding backpointer to address[{}] to queue", currentAddress);
                     queue.add(currentAddress);
+                    foundAddresses.add(currentAddress);
                     entryAdded = true;
                     // Check if we need to stop
                     if (op == BackpointerOp.INCLUDE_STOP) {
@@ -296,6 +300,22 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 currentAddress = currentAddress - 1;
             }
         }
+
+
+        // was the last element in the resolved queue?
+        if (!foundAddresses.isEmpty()) {
+            long firstEntry = foundAddresses.get(0);
+            long lastEntry = foundAddresses.get(foundAddresses.size() - 1);
+            // If the last backpointer was NON_EXIST (trace back to the beginning of stream)
+            // or something in the resolved queue, we can update the queue.
+            if (currentAddress == Address.NON_EXIST
+                || getCurrentContext().resolvedQueue.contains(lastEntry)) {
+                // Remember all the addresses we found (they must be contiguous)
+                getCurrentContext().resolvedQueue.addAll(foundAddresses);
+                getCurrentContext().maxResolution = firstEntry;
+            }
+        }
+
 
         return entryAdded;
 
@@ -345,6 +365,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 return BackpointerOp.EXCLUDE;
             }
         }
+
         return BackpointerOp.INCLUDE;
     }
 
@@ -429,11 +450,15 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             return false;
         }
 
-        // If everything is available in the resolved
-        // queue, use it
+
+        // Use as much as possible from the resolved queue
+        long resolvedPoint = Long.max(context.maxResolution, context.globalPointer);
+        boolean hasResolved = fillFromResolved(latestTokenValue, context);
+        // If everything is available in the resolved, return
+
         if (context.maxResolution >= latestTokenValue
                 && context.minResolution < context.globalPointer) {
-            return fillFromResolved(latestTokenValue, context);
+            return hasResolved;
         }
 
         // Now we start traversing backpointers, if they are available. We
@@ -445,10 +470,10 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         followBackpointers(context.id, context.readQueue,
                 latestTokenValue,
-                Long.max(context.globalPointer, context.checkpointSnapshotAddress),
+                Long.max(resolvedPoint, context.checkpointSnapshotAddress),
                 d -> BackpointerOp.INCLUDE);
 
-        return ! context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
+        return !context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
     }
 }
 
