@@ -250,19 +250,26 @@ public class ServerContext implements AutoCloseable {
     public Layout getNewSingleNodeLayout() {
         final String clusterIdString = (String) getServerConfig().get("--cluster-id");
         UUID clusterId;
-        if (clusterIdString.equals("auto")) {
-            clusterId = UUID.randomUUID();
+        if (clusterIdString.equals("none")) {
+            clusterId = null;
+            log.warn("getNewSingleNodeLayout: Bootstrapping with NO cluster ID. TEST USE ONLY."
+                    + "(clients will not be able to verify the cluster ID - this is dangerous and "
+                    + " can lead to split brain issues - please check your configuration)");
         } else {
-            // Is it a UUID?
-            try {
-                clusterId = UUID.fromString(clusterIdString);
-            } catch (IllegalArgumentException ignore) {
-                // Must be a base64 id, otherwise we will throw InvalidArgumentException again
-                clusterId = UuidUtils.fromBase64(clusterIdString);
+            if (clusterIdString.equals("auto")) {
+                clusterId = UUID.randomUUID();
+            } else {
+                // Is it a UUID?
+                try {
+                    clusterId = UUID.fromString(clusterIdString);
+                } catch (IllegalArgumentException ignore) {
+                    // Must be a base64 id, otherwise we will throw InvalidArgumentException again
+                    clusterId = UuidUtils.fromBase64(clusterIdString);
+                }
+                log.info("getNewSingleNodeLayout: Bootstrapping with cluster ID {} [{}]",
+                    clusterId, UuidUtils.asBase64(clusterId));
             }
         }
-        log.info("getNewSingleNodeLayout: Bootstrapping with cluster Id {} [{}]",
-            clusterId, UuidUtils.asBase64(clusterId));
         String localAddress = getServerConfig().get("--address") + ":"
             + getServerConfig().get("<port>");
         return new Layout(
