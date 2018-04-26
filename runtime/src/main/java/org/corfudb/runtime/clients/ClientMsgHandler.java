@@ -1,7 +1,10 @@
 package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -12,9 +15,6 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 
 /**
  * Invokes the message handler to handle incoming messages.
@@ -93,7 +93,8 @@ public class ClientMsgHandler {
      * @param o      The object that implements the client.
      * @return Returns a handler to handle incoming messages to clients.
      */
-    public ClientMsgHandler generateHandlers(final MethodHandles.Lookup caller, final Object o) {
+    public ClientMsgHandler generateHandlers(@NonNull final MethodHandles.Lookup caller,
+                                             @NonNull final Object o) {
         Arrays.stream(o.getClass().getDeclaredMethods())
                 .filter(x -> x.isAnnotationPresent(ClientHandler.class))
                 .forEach(x -> {

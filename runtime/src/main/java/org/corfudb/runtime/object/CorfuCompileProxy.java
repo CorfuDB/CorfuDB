@@ -1,10 +1,27 @@
 package org.corfudb.runtime.object;
 
-import static java.lang.Long.min;
-
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.TrimmedUpcallException;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.Sleep;
+import org.corfudb.util.Utils;
+import org.corfudb.util.serializer.ISerializer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Constructor;
 import java.util.Collections;
@@ -13,29 +30,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.AbortCause;
-import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.exceptions.TrimmedUpcallException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.util.MetricsUtils;
-import org.corfudb.util.Sleep;
-import org.corfudb.util.Utils;
-import org.corfudb.util.serializer.ISerializer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static java.lang.Long.min;
 
 /**
  * In the Corfu runtime, on top of a stream,
@@ -155,7 +150,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 undoTargetMap, resetSet);
 
         metrics = rt.getMetrics() != null ? rt.getMetrics() : CorfuRuntime.getDefaultMetrics();
-        mpObj = CorfuRuntime.getMpObj();
+        mpObj = CorfuComponent.OBJ.toString();
         timerAccess = metrics.timer(mpObj + "access");
         timerLogWrite = metrics.timer(mpObj + "log-write");
         timerTxn = metrics.timer(mpObj + "txn");
