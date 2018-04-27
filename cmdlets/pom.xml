@@ -55,7 +55,7 @@
         <dependency>
             <groupId>reply</groupId>
             <artifactId>reply</artifactId>
-            <version>0.3.7</version>
+            <version>0.3.8</version>
             <exclusions>
                 <exclusion>
                     <groupId>jline</groupId>
