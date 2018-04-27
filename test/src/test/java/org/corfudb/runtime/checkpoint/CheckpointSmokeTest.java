@@ -2,9 +2,18 @@ package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.fail;
-
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -16,24 +25,21 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.stream.BackpointerStreamView;
+import org.corfudb.runtime.view.stream.CheckpointStreamAddressSpace;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.runtime.view.stream.SingleStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.*;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 /**
  * Basic smoke tests for checkpoint-in-stream PoC.
  */
 
 public class CheckpointSmokeTest extends AbstractViewTest {
-    final byte serilizerByte = (byte) 20;
-    ISerializer serializer = new CPSerializer(serilizerByte);
+    final byte serializerByte = (byte) 20;
+    ISerializer serializer = new CPSerializer(serializerByte);
     public CorfuRuntime r;
 
     @Before
@@ -71,20 +77,24 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      * 1. Put a couple of keys into an SMRMap "m"
      * 2. Write a checkpoint (3 records total) into "m"'s stream.
      *    The SMREntry records in the checkpoint will *not* match
-     *    the keys written by step #1.
+     *    the key values written by step #1.
      * 3. Put a 3rd key into "m".
      * 4. The current runtime should see all original values of
      *    the three put() keys.
      * 5. Open a new runtime and a new map "m2" on the same stream.
-     *    Verify via get() that we cannot see the first two keys,
-     *    we see the snapshot's keys 7 & 8, and we can also see
+     *    Verify via get() that we cannot see the first two keys values,
+     *    we see the snapshot's values 7 & 8, and we can also see
      *    key 3.
+     * 6. Open a new runtime and a new map "m3" on the same stream.
+     *    Start a snapshot transaction on version 1, we should see the original value.
+     * 7. On this last runtime access keys out of a snapshot transaction, we should
+     *    see the original value.
      *
-     * This is not correct map behavior: keys shouldn't be lost like
-     * this.  But that's the point: the checkpoint *writer* is guilty
-     * of the bad behavior, and the unit test is looking exactly for
-     * bad behavior to confirm that the checkpoint mechanism is doing
-     * something extremely out-of-the-ordinary.
+     *
+     * This is not the correct behaviour. The checkpoint writer should not be modifying the
+     * the checkpoint(ed) data. What we try to prove is that for optimization data is read
+     * from the checkpoint, however, if data is still available we are able to do
+     * snapshot transactions on versions that overlap with the checkpoint for a new runtime.
      *
      * @throws Exception
      */
@@ -99,9 +109,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         final String key3 = "key3";
         final long key3Val = 4343;
 
-        final String key7 = "key7";
         final long key7Val = 7777;
-        final String key8 = "key8";
         final long key8Val = 88;
         final UUID checkpointId = UUID.randomUUID();
         final String checkpointAuthor = "Hey, it's me!";
@@ -111,26 +119,45 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         m.put(key1, key1Val);
         m.put(key2, key2Val);
 
-        // Write our successful checkpoint, 3 records total.
+        // Write our successful checkpoint, 3 records total (start, continuation and end records)
         writeCheckpointRecords(streamId, checkpointAuthor, checkpointId,
-                new Object[]{new Object[]{key8, key8Val}, new Object[]{key7, key7Val}});
+                new Object[]{new Object[]{key1, key8Val}, new Object[]{key2, key7Val}});
 
         // Write our 3rd 'real' key, then check all 3 keys + the checkpoint keys
         m.put(key3, key3Val);
         assertThat(m.get(key1)).isEqualTo(key1Val);
         assertThat(m.get(key2)).isEqualTo(key2Val);
         assertThat(m.get(key3)).isEqualTo(key3Val);
-        assertThat(m.get(key7)).isNull();
-        assertThat(m.get(key8)).isNull();
 
-        // Make a new runtime & map, then look for expected bad behavior
+        // Make a new runtime & map
         setRuntime();
         Map<String, Long> m2 = instantiateMap(streamName);
-        assertThat(m2.get(key1)).isNull();
-        assertThat(m2.get(key2)).isNull();
+
+        // Start a snapshot transaction @1
+        r.getObjectsView().TXBuild()
+                .setType(TransactionType.SNAPSHOT)
+                .setSnapshot(1)
+                .begin();
+
+        assertThat(m2.get(key1)).isEqualTo(key8Val);
+        assertThat(m2.get(key2)).isEqualTo(key7Val);
+        assertThat(m2.get(key3)).isNull();
+
+        r.getObjectsView().TXEnd();
+
+        // Perform a 'get' out of the transaction for the same 'm2'
+        assertThat(m2.get(key1)).isEqualTo(key8Val);
+        assertThat(m2.get(key2)).isEqualTo(key7Val);
         assertThat(m2.get(key3)).isEqualTo(key3Val);
-        assertThat(m2.get(key7)).isEqualTo(key7Val);
-        assertThat(m2.get(key8)).isEqualTo(key8Val);
+
+        // Make a new runtime & map, access directly (we should read values directly from checkpoint)
+        setRuntime();
+        Map<String, Long> m3 = instantiateMap(streamName);
+
+        assertThat(m3.get(key1)).isEqualTo(key8Val);
+        assertThat(m3.get(key2)).isEqualTo(key7Val);
+        assertThat(m3.get(key3)).isEqualTo(key3Val);
+
     }
 
     /** Second smoke test, steps:
@@ -162,7 +189,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     public void smoke2Test() throws Exception {
         final String streamName = "mystream2";
         final UUID streamId = CorfuRuntime.getStreamID(streamName);
-        final UUID checkpointId = UUID.randomUUID();
+        final UUID checkpointId = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
         final String checkpointAuthor = "Marty McFly";
         final String keyPrefixFirst = "first";
         final String keyPrefixMiddle1 = "middle1";
@@ -261,6 +288,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             // should have fudgeFactor added.
             setRuntime();
             Map<String, Long> m2 = instantiateMap(streamName);
+
             for (int i = 0; i < numKeys; i++) {
                 assertThat(m2.get(keyPrefix + Integer.toString(i))).describedAs("get " + i)
                         .isEqualTo(i + fudgeFactor);
@@ -389,7 +417,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                         .setType(TransactionType.SNAPSHOT)
                         .setSnapshot(globalAddr)
                         .begin();
-
                 assertThat(m2.entrySet())
                         .describedAs("Snapshot at global log address " + globalAddr)
                         .isEqualTo(expectedHistory.entrySet());
@@ -421,7 +448,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                                         boolean write1, boolean write2, boolean write3)
             throws Exception {
         final UUID checkpointStreamID = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
-        BackpointerStreamView sv = new BackpointerStreamView(r, checkpointStreamID);
+        SingleStreamView sv = new SingleStreamView(checkpointStreamID, r, CheckpointStreamAddressSpace::new);
         Map<CheckpointEntry.CheckpointDictKey, String> mdKV = new HashMap<>();
         mdKV.put(CheckpointEntry.CheckpointDictKey.START_TIME, "The perfect time");
 
@@ -429,7 +456,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         if (write1) {
             TokenResponse tokResp1 = r.getSequencerView().query(streamId);
             long addr1 = tokResp1.getToken().getTokenValue();
-            mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1 + 1));
+            mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1));
             CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                     checkpointAuthor, checkpointId, streamId, mdKV, null);
             sv.append(cp1, null, null);
@@ -512,11 +539,13 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         mcw2.addMap((SMRMap) mA);
         mcw2.addMap((SMRMap) mB);
         long firstGlobalAddress2 = mcw2.appendCheckpoints(r, author);
+
         assertThat(firstGlobalAddress2).isGreaterThan(firstGlobalAddress1);
 
         setRuntime();
         Map<String, Long> m2A = instantiateMap(streamNameA);
         Map<String, Long> m2B = instantiateMap(streamNameB);
+
         for (int i = 0; i < numKeys; i++) {
             String keyA = "A" + keyPrefix + Integer.toString(i);
             String keyB = "B" + keyPrefix + Integer.toString(i);
@@ -546,6 +575,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
         mcw1.addMap((SMRMap) mA);
         mcw1.addMap((SMRMap) mB);
+
         long trimAddress = mcw1.appendCheckpoints(r, author);
 
         r.getAddressSpaceView().prefixTrim(trimAddress - 1);

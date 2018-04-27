@@ -139,7 +139,7 @@ public interface IStreamView extends
 
     /** Retrieve the next entry from this stream, up to the address given or the
      *  tail of the stream. If there are no entries present, this function
-     *  will return NULL. If there  are holes present in the log, they will
+     *  will return NULL. If there are holes present in the log, they will
      *  be filled.
      * @param maxGlobal The maximum global address to read up to.
      * @return          The next entry in the stream, or NULL, if no entries

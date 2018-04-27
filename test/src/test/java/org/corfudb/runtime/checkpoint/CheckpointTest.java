@@ -1,9 +1,15 @@
 package org.corfudb.runtime.checkpoint;
 
-import lombok.extern.slf4j.Slf4j;
+import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
+
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import lombok.Getter;
-import org.assertj.core.api.ThrowableAssert;
+import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
@@ -15,13 +21,6 @@ import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by dmalkhi on 5/25/17.
@@ -103,7 +102,7 @@ public class CheckpointTest extends AbstractObjectTest {
                     //
                 }
                 // Trim the log
-                currentRuntime.getAddressSpaceView().prefixTrim(checkpointAddress - 1);
+                currentRuntime.getAddressSpaceView().prefixTrim(checkpointAddress);
                 currentRuntime.getAddressSpaceView().gc();
                 currentRuntime.getAddressSpaceView().invalidateServerCaches();
                 currentRuntime.getAddressSpaceView().invalidateClientCache();
@@ -169,15 +168,15 @@ public class CheckpointTest extends AbstractObjectTest {
     }
 
     /**
-     * this test builds two maps, m2A m2B, and brings up three threads:
+     * This test builds two maps, m2A & m2B, and brings up three threads:
      * <p>
-     * 1. one pupolates the maps with mapSize items
+     * 1. one populates the maps with mapSize items
      * 2. one does a periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times
      * 3. one repeatedly (LOW times) starts a fresh runtime, and instantiates the maps.
      * they should rebuild from the latest checkpoint (if available).
      * this thread performs some sanity checks on the map state
      * <p>
-     * Finally, after all three threads finish, again we start a fresh runtime and instante the maps.
+     * Finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
      * This time the we check that the new map instances contains all values
      *
      * @throws Exception
@@ -186,7 +185,7 @@ public class CheckpointTest extends AbstractObjectTest {
     public void periodicCkpointTest() throws Exception {
         final int mapSize = PARAMETERS.NUM_ITERATIONS_LOW;
 
-        // thread 1: pupolates the maps with mapSize items
+        // thread 1: populates the maps with mapSize items
         scheduleConcurrently(1, ignored_task_num -> {
                     populateMaps(mapSize);
                 });
@@ -206,7 +205,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
         executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
 
-        // finally, after all three threads finish, again we start a fresh runtime and instante the maps.
+        // finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
         // This time the we check that the new map instances contains all values
         validateMapRebuild(mapSize, true);
     }
@@ -292,15 +291,15 @@ public class CheckpointTest extends AbstractObjectTest {
      * <p>
      * the test builds two maps, m2A m2B, and brings up three threads:
      * <p>
-     * 1. one pupolates the maps with mapSize items
+     * 1. one populates the maps with mapSize items
      * 2. one does a periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times,
      * and immediately trims the log up to the checkpoint position.
      * 3. one repeats ITERATIONS_LOW starting a fresh runtime, and instantiating the maps.
      * they should rebuild from the latest checkpoint (if available).
      * this thread performs some sanity checks on the map state
      * <p>
-     * Finally, after all three threads finish, again we start a fresh runtime and instante the maps.
-     * This time the we check that the new map instances contains all values
+     * Finally, after all three threads finish, again we start a fresh runtime and instantiate
+     * the maps. This time the we check that the new map instances contains all values
      *
      * @throws Exception
      */
@@ -309,7 +308,7 @@ public class CheckpointTest extends AbstractObjectTest {
     public void periodicCkpointTrimTest() throws Exception {
         final int mapSize = PARAMETERS.NUM_ITERATIONS_LOW;
 
-        // thread 1: pupolates the maps with mapSize items
+        // thread 1: populates the maps with mapSize items
         scheduleConcurrently(1, ignored_task_num -> {
             populateMaps(mapSize);
         });
@@ -329,7 +328,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
         executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
 
-        // finally, after all three threads finish, again we start a fresh runtime and instante the maps.
+        // finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
         // This time the we check that the new map instances contains all values
         validateMapRebuild(mapSize, true);
     }
@@ -377,7 +376,6 @@ public class CheckpointTest extends AbstractObjectTest {
                     getMyRuntime().getAddressSpaceView().gc();
                     getMyRuntime().getAddressSpaceView().invalidateServerCaches();
                     getMyRuntime().getAddressSpaceView().invalidateClientCache();
-
                 }
         );
 
@@ -398,27 +396,13 @@ public class CheckpointTest extends AbstractObjectTest {
                     // finally, instantiate the map for the snapshot and assert is has the right state
                     try {
                         localm2A.get(0);
-                    } catch (TransactionAbortedException te) {
-                        // this is an expected behavior!
+                    } catch (Exception te) {
+                        // this is an expected behavior
+                        assertThat(te).isInstanceOf(TransactionAbortedException.class);
                         trimExceptionFlag.set(true);
                     }
 
-                    if (trimExceptionFlag.get() == false) {
-                        assertThat(localm2A.size())
-                                .isEqualTo(snapshotPosition);
-
-                        // check map positions 0..(snapshot-1)
-                        for (int i = 0; i < snapshotPosition; i++) {
-                            assertThat(localm2A.get(String.valueOf(i)))
-                                    .isEqualTo((long) i);
-                        }
-
-                        // check map positions snapshot..(mapSize-1)
-                        for (int i = snapshotPosition; i < mapSize; i++) {
-                            assertThat(localm2A.get(String.valueOf(i)))
-                                    .isEqualTo(null);
-                        }
-                    }
+                    assertThat(trimExceptionFlag).isTrue();
                 }
         );
 

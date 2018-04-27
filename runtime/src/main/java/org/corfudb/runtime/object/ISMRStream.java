@@ -74,4 +74,6 @@ public interface ISMRStream {
     default UUID getID() {
         return new UUID(0L, 0L);
     }
+
+//    public boolean isSnapshotAvailable(long timestamp);
 }

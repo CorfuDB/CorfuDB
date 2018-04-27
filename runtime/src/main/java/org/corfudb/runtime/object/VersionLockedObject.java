@@ -311,6 +311,7 @@ public class VersionLockedObject<T> {
                 }
                 // Now sync the regular log
                 syncStreamUnsafe(smrStream, timestamp);
+
                 // It's possible that due to reset,
                 // the optimistic stream is no longer
                 // present. Restore it.
@@ -325,20 +326,23 @@ public class VersionLockedObject<T> {
                 this.optimisticStream = null;
             }
             // If we are too far ahead, roll back to the past
-            if (getVersionUnsafe() > timestamp) {
-                try {
-                    rollbackObjectUnsafe(timestamp);
-                    // Rollback successfully got us to the right
-                    // version, we're done.
-                    if (getVersionUnsafe() == timestamp) {
-                        return;
-                    }
-                } catch (NoRollbackException nre) {
-                    log.warn("Rollback[{}] to {} failed {}", this, timestamp, nre);
-                    resetUnsafe();
-                }
-            }
+            this.rollBackToTimestamp(timestamp);
+            // Attempt to sync stream to timestamp, it might have to sync to the tail to build the
+            // history
             syncStreamUnsafe(smrStream, timestamp);
+            // Check if stream was synced ahead and roll back to timestamp if necessary
+            this.rollBackToTimestamp(timestamp);
+        }
+    }
+
+    private void rollBackToTimestamp(long timestamp) {
+        if (getVersionUnsafe() > timestamp) {
+            try {
+                rollbackObjectUnsafe(timestamp);
+            } catch (NoRollbackException nre) {
+                log.warn("Rollback[{}] to {} failed {}", this, timestamp, nre);
+                resetUnsafe();
+            }
         }
     }
 
@@ -579,6 +583,7 @@ public class VersionLockedObject<T> {
             entries = stream.previous();
 
             if (stream.pos() <= rollbackVersion) {
+
                 return;
             }
         }
@@ -601,10 +606,11 @@ public class VersionLockedObject<T> {
      * @param stream    The stream to sync forward
      * @param timestamp The timestamp to sync up to.
      */
-    protected void syncStreamUnsafe(ISMRStream stream, long timestamp) {
+    protected void  syncStreamUnsafe(ISMRStream stream, long timestamp) {
         log.trace("Sync[{}] {}", this, (timestamp == Address.OPTIMISTIC)
                 ? "Optimistic" : "to " + timestamp);
         long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;
+
         stream.streamUpTo(syncTo)
                 .forEachOrdered(entry -> {
                     try {
@@ -649,7 +655,6 @@ public class VersionLockedObject<T> {
      */
     public void applyUpdateToStreamUnsafe(SMREntry entry, long globalAddress) {
         applyUpdateUnsafe(entry);
-        seek(globalAddress + 1);
+        seek(globalAddress);
     }
-
 }

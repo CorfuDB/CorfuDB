@@ -1,7 +1,6 @@
 package org.corfudb.runtime.view;
 
 import static java.util.Objects.requireNonNull;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -15,8 +14,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
-
 import javax.annotation.Nullable;
+
 import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
@@ -30,8 +29,9 @@ import org.corfudb.runtime.view.replication.IReplicationProtocol;
 import org.corfudb.runtime.view.replication.NeverHoleFillPolicy;
 import org.corfudb.runtime.view.replication.QuorumReplicationProtocol;
 import org.corfudb.runtime.view.replication.ReadWaitHoleFillPolicy;
-import org.corfudb.runtime.view.stream.BackpointerStreamView;
+import org.corfudb.runtime.view.stream.CompositeStreamAddressSpace;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.runtime.view.stream.SingleStreamView;
 
 /**
  * This class represents the layout of a Corfu instance.
@@ -335,7 +335,7 @@ public class Layout {
 
             @Override
             public IStreamView  getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
-                return new BackpointerStreamView(r, streamId, options);
+                return new SingleStreamView(streamId, r, CompositeStreamAddressSpace::new, options);
             }
 
             @Override
@@ -372,7 +372,7 @@ public class Layout {
 
             @Override
             public IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
-                return new BackpointerStreamView(r, streamId, options);
+                return new SingleStreamView(streamId, r, CompositeStreamAddressSpace::new, options);
             }
 
             @Override

@@ -181,5 +181,4 @@ public class StreamViewSMRAdapter implements ISMRStream {
     public UUID getID() {
         return streamView.getId();
     }
-
 }

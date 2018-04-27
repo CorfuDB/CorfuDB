@@ -1,5 +1,18 @@
 package org.corfudb.recovery;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
 import org.assertj.core.data.MapEntry;
 import org.corfudb.CustomSerializer;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -20,19 +33,6 @@ import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.catchThrowable;
 
 
 /**
@@ -243,13 +243,12 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
     }
 
+    // TODO: This test will fail because of the undefined behaviour on reading already checkpoint(ed) entries
+    // For the new runtime (rt2) it is only loading the non-checkpointed entries, therefore it is not able to go back to version 4
     @Test
     public void canReadCheckpointWithoutTrim() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, MORE);
         checkPointAll(getDefaultRuntime());
-
-        checkPointAll(getDefaultRuntime());
-
         // Clear are interesting because if applied in wrong order the map might end up wrong
         clearAllMaps();
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
@@ -506,7 +505,6 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .connect();
 
         FastObjectLoader fsm = new FastObjectLoader(rt2);
-        fsm.setLogHasNoCheckPoint(true);
         fsm.setDefaultObjectsType(CorfuTable.class);
         fsm.loadMaps();
 

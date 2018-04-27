@@ -1,6 +1,15 @@
 package org.corfudb.recovery;
 
-import javax.annotation.Nonnull;
+import static org.corfudb.recovery.RecoveryUtils.createObjectIfNotExist;
+import static org.corfudb.recovery.RecoveryUtils.deserializeLogData;
+import static org.corfudb.recovery.RecoveryUtils.getCorfuCompileProxy;
+import static org.corfudb.recovery.RecoveryUtils.getLogData;
+import static org.corfudb.recovery.RecoveryUtils.getSnapShotAddressOfCheckPoint;
+import static org.corfudb.recovery.RecoveryUtils.getStartAddressOfCheckPoint;
+import static org.corfudb.recovery.RecoveryUtils.isCheckPointEntry;
+import static org.corfudb.runtime.view.Address.isAddress;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -14,12 +23,14 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import javax.annotation.Nonnull;
+
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -35,12 +46,8 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
-
-import static org.corfudb.recovery.RecoveryUtils.*;
-import static org.corfudb.runtime.view.Address.isAddress;
 
 /** The FastObjectLoader reconstructs the coalesced state of SMRMaps through sequential log read
  *
@@ -97,10 +104,6 @@ public class FastObjectLoader {
     @Setter
     @Getter
     private boolean recoverSequencerMode;
-
-    @Setter
-    @Getter
-    private boolean logHasNoCheckPoint = false;
 
     private boolean whiteList = false;
     private List<UUID> streamsToLoad = new ArrayList<>();
@@ -307,20 +310,26 @@ public class FastObjectLoader {
      */
     private boolean shouldEntryBeApplied(UUID streamId, SMREntry entry, boolean isCheckpointEntry) {
         // 1.
+        // If the entry is null
+        if (entry == null) {
+            return false;
+        }
+
+        // 2.
         // In white list mode, ignore everything that is not in the list (the list contains the streams
         // passed by the client + derived checkpoint streams).
         if (whiteList && !streamsToLoad.contains(streamId)) {
             return false;
         }
 
-        // 2.
+        // 3.
         // We ignore the transaction stream ID because it is a raw stream
         // We don't want to create a Map for it.
         if (streamId == runtime.getObjectsView().TRANSACTION_STREAM_ID || streamsToIgnore.contains(streamId)) {
             return false;
         }
 
-        // 3.
+        // 4.
         // If the entry was already processed with the previous checkpoint.
         if (!isCheckpointEntry && entryAlreadyContainedInCheckpoint(streamId, entry)) {
             return false;
@@ -392,9 +401,7 @@ public class FastObjectLoader {
 
     private void applySmrEntryToStream(UUID streamId, SMREntry entry, long globalAddress) {
         applySmrEntryToStream(streamId, entry, globalAddress, false);
-
     }
-
 
     private void updateCorfuObjectWithSmrEntry(ILogData logData, LogEntry logEntry, long globalAddress) {
         UUID streamId = logData.getStreams().iterator().next();
@@ -410,22 +417,16 @@ public class FastObjectLoader {
         });
     }
 
-    private void updateCorfuObjectWithCheckPointEntry(ILogData logData, LogEntry logEntry) {
+    private void updateCorfuObjectWithCheckPointEntry(LogEntry logEntry, long globalAddress) {
         CheckpointEntry checkPointEntry = (CheckpointEntry) logEntry;
         // Just one stream, always
         UUID streamId = checkPointEntry.getStreamId();
-        UUID checkPointId = checkPointEntry.getCheckpointId();
-
-        // We need to apply the start address for the version of the object
-        long startAddress = streamsMetaData.get(streamId)
-                .getCheckPoint(checkPointId)
-                .getStartAddress();
 
         // We don't know in advance if there will be smrEntries
         if (checkPointEntry.getSmrEntries() != null) {
             checkPointEntry.getSmrEntries().getSMRUpdates(streamId).forEach((smrEntry) -> {
                 applySmrEntryToStream(checkPointEntry.getStreamId(), smrEntry,
-                        startAddress, true);
+                        globalAddress, true);
             });
         }
     }
@@ -456,11 +457,10 @@ public class FastObjectLoader {
                 updateCorfuObjectWithMultiObjSmrEntry(logEntry, globalAddress);
                 break;
             case CHECKPOINT:
-                updateCorfuObjectWithCheckPointEntry(logData, logEntry);
+                updateCorfuObjectWithCheckPointEntry(logEntry, globalAddress);
                 break;
             default:
                 log.warn("updateCorfuObject[address = {}]: Unknown data type");
-
         }
     }
 
@@ -529,10 +529,7 @@ public class FastObjectLoader {
     private void processLogData(long address, ILogData logData) {
         switch (logData.getType()) {
             case DATA:
-                // Checkpoint should have been processed first
-                if (!isCheckPointEntry(logData) && shouldLogDataBeProcessed(logData)) {
-                    updateCorfuObject(logData);
-                }
+                updateCorfuObject(logData);
                 break;
             case HOLE:
                 break;
@@ -622,31 +619,6 @@ public class FastObjectLoader {
         }
     }
 
-
-    /**
-     * Apply the checkPoints in parallel
-     *
-     * Since each checkpoint is mapped to a single stream, we can parallelize
-     * this operation.
-     *
-     */
-    private void resurrectCheckpoints() {
-        streamsMetaData.entrySet().parallelStream()
-                .forEach(entry -> {
-                    CheckPoint checkPoint = entry.getValue().getLatestCheckPoint();
-                    if (checkPoint == null) {
-                        log.info("resurrectCheckpoints[{}]: Truncated checkpoint for this stream",
-                                Utils.toReadableId(entry.getKey()));
-                        return;
-                    }
-
-                    // For now one by one read and apply
-                    for (long address : checkPoint.getAddresses()) {
-                        updateCorfuObject(getLogData(runtime, loadInCache, address));
-                    }
-                });
-    }
-
     /**
      * This method will only resurrect the stream tails. It is used
      * to recover a sequencer.
@@ -662,20 +634,7 @@ public class FastObjectLoader {
      */
     private void recoverRuntime() {
         log.info("recoverRuntime: Resurrecting the runtime");
-
-        // If the user is sure that he has no checkpoint,
-        // we can just do the last step. Risky, but the flag is
-        // explicit enough.
-        if (logHasNoCheckPoint) {
-            applyForEachAddress(this::processLogData);
-        } else {
-            applyForEachAddress(this::findCheckPointsInLogAddress);
-            resurrectCheckpoints();
-
-            resetAddressProcessed();
-            applyForEachAddress(this::processLogData);
-        }
-
+        applyForEachAddress(this::processLogData);
     }
 
     /**

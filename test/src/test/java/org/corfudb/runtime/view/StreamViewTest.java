@@ -1,6 +1,13 @@
 package org.corfudb.runtime.view;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.util.List;
+import java.util.UUID;
+
 import lombok.Getter;
+
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
@@ -8,12 +15,6 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.List;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 1/8/16.
@@ -59,8 +60,8 @@ public class StreamViewTest extends AbstractViewTest {
 
         IStreamView txStream = runtime.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID, options);
         final int firstIter = 50;
+        byte[] data = "Hello World!".getBytes();
         for (int x = 0; x < firstIter; x++) {
-            byte[] data = "Hello World!".getBytes();
             txStream.append(data);
         }
 
@@ -171,17 +172,17 @@ public class StreamViewTest extends AbstractViewTest {
         // Seeking to the beginning
         sv.seek(0);
         assertThat(sv.next().getPayload(r))
-                .isEqualTo("a".getBytes());
+                .isEqualTo("b".getBytes());
 
         // Seeking to the end
         sv.seek(2);
-        assertThat(sv.next().getPayload(r))
-                .isEqualTo("c".getBytes());
+        assertThat(sv.next())
+                .isNull();
 
         // Seeking to the middle
         sv.seek(1);
         assertThat(sv.next().getPayload(r))
-                .isEqualTo("b".getBytes());
+                .isEqualTo("c".getBytes());
     }
 
     @Test
