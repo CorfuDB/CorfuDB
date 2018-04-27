@@ -11,6 +11,7 @@ import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -350,7 +351,7 @@ public class SequencerServer extends AbstractServer {
     public synchronized void resetServer(CorfuPayloadMsg<SequencerTailsRecoveryMsg> msg,
                                          ChannelHandlerContext ctx, IServerRouter r) {
         long initialToken = msg.getPayload().getGlobalTail();
-        final Map<UUID, Long> streamTails = msg.getPayload().getStreamTails();
+        final Map<UUID, Long> tails = msg.getPayload().getStreamTails();
         final long readyEpoch = msg.getPayload().getReadyStateEpoch();
 
         // Boolean flag to denote whether this bootstrap message is just updating an existing
@@ -391,7 +392,7 @@ public class SequencerServer extends AbstractServer {
 
             // Clear the existing map as it could have been populated by an earlier reset.
             streamTailToGlobalTailMap.clear();
-            streamTailToGlobalTailMap.putAll(streamTails);
+            streamTailToGlobalTailMap.putAll(tails);
         }
 
         // Mark the sequencer as ready after the tails have been populated.

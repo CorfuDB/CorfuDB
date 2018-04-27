@@ -401,7 +401,17 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // If we don't have a larger token in resolved, or the request was for
         // a linearized read, fetch the token from the sequencer.
-        if (latestTokenValue == null || maxGlobal == Address.MAX) {
+
+        // check if this is a transaction and if hints are available
+        if (TransactionalContext.isInTransaction()
+                && TransactionalContext.getCurrentContext().builder.getAccessHints() != null
+                && maxGlobal != Address.MAX
+                && latestTokenValue == null
+                && read(maxGlobal).hasBackpointer(context.id)) {
+            // Stream tail exists in maxGlobal, no need to request the stream tail
+            // from the sequencer
+            latestTokenValue = maxGlobal;
+        } else if (latestTokenValue == null || maxGlobal == Address.MAX) {
             latestTokenValue = runtime.getSequencerView().query(context.id)
                     .getToken().getTokenValue();
             log.trace("Read_Fill_Queue[{}] Fetched tail {} from sequencer", this, latestTokenValue);

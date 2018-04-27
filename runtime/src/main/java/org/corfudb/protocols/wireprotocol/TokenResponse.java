@@ -1,20 +1,19 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
+import lombok.AllArgsConstructor;
+import lombok.Data;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-
 /**
  * Created by mwei on 8/8/16.
  */
-@Data
 @AllArgsConstructor
+@Data
 public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
 
     public static byte[] NO_CONFLICT_KEY = new byte[]{};
@@ -49,6 +48,9 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     /** The backpointer map, if available. */
     final Map<UUID, Long> backpointerMap;
 
+    /**
+     * A tails map that contains the result for a multi-tail query.
+     */
     final List<Long> streamTails;
 
     /**

@@ -777,15 +777,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Write a partial buffer
         entryBuf.limit(entryBuf.capacity() - 1);
-        System.out.println("cap " + entryBuf.capacity());
-        System.out.println("limit " + entryBuf.limit());
         // Append the buffer after the header
         long end = logFile.getChannel().size();
         logFile.getChannel().position(end);
-        System.out.println("position " + logFile.getChannel().position());
-        int bytesWritten = logFile.getChannel().write(entryBuf);
-        System.out.println("bytesWritten " + bytesWritten);
-        System.out.println("position " + logFile.getChannel().position());
         logFile.close();
 
         // Verify that the segment address space can be parsed and that the partial write is ignored

@@ -1,7 +1,11 @@
 package org.corfudb.runtime.object.transactions;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -13,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
@@ -53,9 +58,18 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     private final Set<ICorfuSMRProxyInternal> modifiedProxies =
             new HashSet<>();
 
+    /**
+     * these hints are initialized when the transaction retrieves the snapshotTimestamp.
+     * These hints are used service to locally service stream tail queries instead of
+     * making a request to the sequencer.
+     */
+    @Getter
+    public Map<UUID, Long> sequencerHints = null;
+
 
     OptimisticTransactionalContext(TransactionBuilder builder) {
         super(builder);
+        getSnapshotTimestamp();
     }
 
     /**
@@ -88,7 +102,12 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // to the correct version, reflecting any optimistic
         // updates.
         // Get snapshot timestamp in advance so it is not performed under the VLO lock
-        long ts = getSnapshotTimestamp();
+
+        // if there are sequencer hints available use the corresponding tail time snapshot instead of
+        // the global time snapshot
+        long ts = (getSequencerHints() != null) ? getSequencerHints().getOrDefault(proxy.getStreamID(),
+                getSnapshotTimestamp()) : getSnapshotTimestamp();
+
         return proxy
                 .getUnderlyingObject()
                 .access(o -> {
@@ -111,7 +130,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                             // inside syncObjectUnsafe, depending on the object
                             // version, we may need to undo or redo
                             // committed changes, or apply forward committed changes.
-                            syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, this::setAsOptimisticStream);
+                            syncWithRetryUnsafe(o, ts, proxy, this::setAsOptimisticStream);
 
                             // Update the global positions map. The value obtained from underlying
                             // object must be under object's write-lock.
@@ -149,7 +168,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         }
         // Otherwise, we need to sync the object
         // Get snapshot timestamp in advance so it is not performed under the VLO lock
-        long ts = getSnapshotTimestamp();
+        long ts = (getSequencerHints() != null) ? getSequencerHints().getOrDefault(proxy.getStreamID(),
+                getSnapshotTimestamp()) : getSnapshotTimestamp();
+        
         return proxy.getUnderlyingObject().update(o -> {
             log.trace("Upcall[{}] {} Sync'd", this,  timestamp);
             syncWithRetryUnsafe(o, ts, proxy, this::setAsOptimisticStream);
@@ -252,7 +273,6 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * @return  the commit address
      */
     public long getConflictSetAndCommit(ConflictSetInfo conflictSet) {
-
         if (TransactionalContext.isInNestedTransaction()) {
             getParentContext().addTransaction(this);
             commitAddress = AbstractTransactionalContext.FOLDED_ADDRESS;
@@ -318,6 +338,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     }
 
     /** Try to commit the optimistic updates to each proxy. */
+
     protected void tryCommitAllProxies() {
         // First, get the committed entry
         // in order to get the backpointers
@@ -405,14 +426,30 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         if (atc != null && atc != this) {
             // If we're in a nested transaction, the first read timestamp
             // needs to come from the root.
+            this.sequencerHints = ((OptimisticTransactionalContext)atc).getSequencerHints();
             return atc.getSnapshotTimestamp();
         } else {
             // Otherwise, fetch a read token from the sequencer the linearize
             // ourselves against.
-            long currentTail = builder.runtime
-                    .getSequencerView().query().getToken().getTokenValue();
-            log.trace("SnapshotTimestamp[{}] {}", this, currentTail);
-            return currentTail;
+            if (builder.getAccessHints() != null) {
+                TokenResponse resp = builder.runtime.getSequencerView().query(builder.accessHints);
+                long currentTail = resp.getToken().getTokenValue();
+                sequencerHints = populateHints(builder.accessHints, resp.getStreamTails());
+                return currentTail;
+            } else {
+                long currentTail = builder.runtime
+                        .getSequencerView().query().getToken().getTokenValue();
+                log.trace("SnapshotTimestamp[{}] {}", this, currentTail);
+                return currentTail;
+            }
         }
+    }
+
+    private Map<UUID, Long> populateHints(UUID[] ids, List<Long> tails) {
+        Map<UUID, Long> hints = new HashMap<>(ids.length);
+        for (int x = 0; x < ids.length; x++) {
+            hints.put(ids[x], tails.get(x));
+        }
+        return hints;
     }
 }

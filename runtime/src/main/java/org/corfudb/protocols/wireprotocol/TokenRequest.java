@@ -32,6 +32,8 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
     public static final byte TK_MULTI_STREAM = 3;
     public static final byte TK_TX = 4;
 
+    public static final byte TK_QUERY_ALL = 5;
+
     /** The type of request, one of the above. */
     final byte reqType;
 
@@ -88,6 +90,7 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
 
         switch (reqType) {
 
+            case TK_QUERY_ALL:
             case TK_QUERY:
                 numTokens = 0L;
                 streams = ICorfuPayload.listFromBuffer(buf, UUID.class);
@@ -123,7 +126,7 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, reqType);
-        if (reqType != TK_QUERY) {
+        if (reqType != TK_QUERY && reqType != TK_QUERY_ALL) {
             ICorfuPayload.serialize(buf, numTokens);
         }
 

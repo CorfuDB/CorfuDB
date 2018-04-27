@@ -5,6 +5,9 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.corfudb.runtime.CorfuRuntime;
 
+import java.util.List;
+import java.util.UUID;
+
 /** Helper class to build transactional contexts.
  *
  * <p>Created by mwei on 11/21/16.
@@ -23,6 +26,14 @@ public class TransactionBuilder {
      *
      */
     public TransactionType type = TransactionType.OPTIMISTIC;
+
+    /**
+     * List of stream ids that the transaction might access.
+     * These hints can improve the performance of transactions
+     * that touch many tables.
+     *
+     */
+    public UUID[] accessHints;
 
     /** For snapshot transactions, the address the
      * snapshot will start at.
