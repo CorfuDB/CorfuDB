@@ -91,6 +91,7 @@ public abstract class AbstractView {
             throws A, B, C, D {
         runtime.beforeRpcHandler.run();
         final Duration retryRate = runtime.getParameters().getConnectionRetryRate();
+        int systemDownTriggerCounter = runtime.getParameters().getSystemDownHandlerTriggerLimit();
         while (true) {
             try {
                 final Layout layout = runtime.layout.get();
@@ -118,7 +119,9 @@ public abstract class AbstractView {
                 } else if (re instanceof NetworkException) {
                     log.warn("layoutHelper: System seems unavailable", re);
 
-                    runtime.systemDownHandler.run();
+                    if (--systemDownTriggerCounter <= 0) {
+                        runtime.systemDownHandler.run();
+                    }
                     runtime.invalidateLayout();
                     Sleep.sleepUninterruptibly(retryRate);
                 } else {
