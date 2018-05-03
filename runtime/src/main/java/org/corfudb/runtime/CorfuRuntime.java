@@ -202,6 +202,17 @@ public class CorfuRuntime {
         @Default
         ChannelImplementation socketType = ChannelImplementation.NIO;
 
+        /**
+         * Number of retries to reconnect to an unresponsive system before invoking the
+         * systemDownHandler. This is mainly required to allow the fault detection mechanism
+         * to detect and reconfigure the cluster.
+         * The fault detection takes at least 3 seconds to recognize a failure.
+         * Each retry is attempted after a sleep of {@literal connectionRetryRate}
+         * invoking the systemDownHandler after a minimum of
+         * (systemDownHandlerTriggerLimit * connectionRetryRate) seconds. Default: 20 seconds.
+         */
+        @Default int systemDownHandlerTriggerLimit = 20;
+
         /** The initial list of layout servers. */
         @Singular List<NodeLocator> layoutServers;
         //endregion
@@ -675,6 +686,7 @@ public class CorfuRuntime {
 
             List<String> layoutServersCopy = new ArrayList<>(layoutServers);
             beforeRpcHandler.run();
+            int systemDownTriggerCounter = getParameters().getSystemDownHandlerTriggerLimit();
 
             while (true) {
 
@@ -717,7 +729,9 @@ public class CorfuRuntime {
                 log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}",
                         parameters.connectionRetryRate);
 
-                systemDownHandler.run();
+                if (--systemDownTriggerCounter <= 0) {
+                    systemDownHandler.run();
+                }
 
                 Sleep.sleepUninterruptibly(parameters.connectionRetryRate);
                 if (isShutdown) {
