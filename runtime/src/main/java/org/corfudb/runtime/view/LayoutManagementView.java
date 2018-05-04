@@ -426,6 +426,7 @@ public class LayoutManagementView extends AbstractView {
 
         long maxTokenRequested = 0L;
         Map<UUID, Long> streamTails = Collections.emptyMap();
+        boolean bootstrapWithoutTailsUpdate = true;
 
         // Reconfigure Primary Sequencer if required
         if (forceReconfigure
@@ -447,13 +448,15 @@ public class LayoutManagementView extends AbstractView {
 
             // Incrementing the maxTokenRequested value for sequencer reset.
             maxTokenRequested++;
+            bootstrapWithoutTailsUpdate = false;
         }
 
         // Configuring the new sequencer.
         boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(
                 runtime.getLayoutView().getRuntimeLayout(newLayout)
                         .getPrimarySequencerClient()
-                        .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch()));
+                        .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch(),
+                                bootstrapWithoutTailsUpdate));
         if (sequencerBootstrapResult) {
             log.info("Sequencer bootstrap successful.");
         } else {

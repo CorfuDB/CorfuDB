@@ -38,7 +38,7 @@ public class SequencerHandlerTest extends AbstractClientTest {
 
     @Before
     public void bootstrapSequencer() {
-        client.bootstrap(0L, Collections.EMPTY_MAP, 0L);
+        client.bootstrap(0L, Collections.emptyMap(), 0L, false);
     }
 
     @Test

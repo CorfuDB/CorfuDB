@@ -58,12 +58,19 @@ public class SequencerClient extends AbstractClient {
     /**
      * Resets the sequencer with the specified initialToken
      *
-     * @param initialToken Token Number which the sequencer starts distributing.
+     * @param initialToken                Token Number which the sequencer starts distributing.
+     * @param sequencerTails              Sequencer tails map.
+     * @param readyStateEpoch             Epoch at which the sequencer is ready and to stamp tokens.
+     * @param bootstrapWithoutTailsUpdate True, if this is a delta message and just updates an
+     *                                    existing primary sequencer with the new epoch.
+     *                                    False otherwise.
      * @return A CompletableFuture which completes once the sequencer is reset.
      */
     public CompletableFuture<Boolean> bootstrap(Long initialToken, Map<UUID, Long> sequencerTails,
-                                                Long readyStateEpoch) {
+                                                Long readyStateEpoch,
+                                                boolean bootstrapWithoutTailsUpdate) {
         return sendMessageWithFuture(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(
-                new SequencerTailsRecoveryMsg(initialToken, sequencerTails, readyStateEpoch)));
+                new SequencerTailsRecoveryMsg(initialToken, sequencerTails, readyStateEpoch,
+                        bootstrapWithoutTailsUpdate)));
     }
 }

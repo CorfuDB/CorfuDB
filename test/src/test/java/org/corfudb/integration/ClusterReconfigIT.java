@@ -12,10 +12,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -211,12 +213,12 @@ public class ClusterReconfigIT extends AbstractIT {
                 .nextToken(Collections.singleton(CorfuRuntime.getStreamID("test")), 0);
         long lastAddress = tokenResponse.getTokenValue();
 
-        Map<Long, LogData> map_0 = getAllData(corfuRuntime, "localhost:9000", lastAddress);
-        Map<Long, LogData> map_1 = getAllData(corfuRuntime, "localhost:9001", lastAddress);
-        Map<Long, LogData> map_2 = getAllData(corfuRuntime, "localhost:9002", lastAddress);
+        Map<Long, LogData> map_0 = getAllNonEmptyData(corfuRuntime, "localhost:9000", lastAddress);
+        Map<Long, LogData> map_1 = getAllNonEmptyData(corfuRuntime, "localhost:9001", lastAddress);
+        Map<Long, LogData> map_2 = getAllNonEmptyData(corfuRuntime, "localhost:9002", lastAddress);
 
-        assertThat(map_1.equals(map_0)).isTrue();
-        assertThat(map_2.equals(map_0)).isTrue();
+        assertThat(map_1.entrySet()).containsOnlyElementsOf(map_0.entrySet());
+        assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
     }
 
     /**
@@ -228,12 +230,15 @@ public class ClusterReconfigIT extends AbstractIT {
      * @return Map of all the addresses contained by the node corresponding to the data stored.
      * @throws Exception
      */
-    private Map<Long, LogData> getAllData(CorfuRuntime corfuRuntime,
-                                          String endpoint, long end) throws Exception {
+    private Map<Long, LogData> getAllNonEmptyData(CorfuRuntime corfuRuntime,
+                                                  String endpoint, long end) throws Exception {
         ReadResponse readResponse = corfuRuntime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient(endpoint)
                 .read(Range.closed(0L, end)).get();
-        return readResponse.getAddresses();
+        return readResponse.getAddresses().entrySet()
+                .stream()
+                .filter(longLogDataEntry -> !longLogDataEntry.getValue().isEmpty())
+                .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
     }
 
     /**

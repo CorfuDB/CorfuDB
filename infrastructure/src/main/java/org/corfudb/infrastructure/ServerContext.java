@@ -62,6 +62,8 @@ public class ServerContext implements AutoCloseable {
     private static final String KEY_TAIL_SEGMENT = "CURRENT";
     private static final String PREFIX_STARTING_ADDRESS = "STARTING_ADDRESS";
     private static final String KEY_STARTING_ADDRESS = "CURRENT";
+    private static final String KEY_SEQUENCER = "SEQUENCER";
+    private static final String PREFIX_SEQUENCER_EPOCH = "EPOCH";
 
     // Management Server
     private static final String PREFIX_MANAGEMENT = "MANAGEMENT";
@@ -381,6 +383,26 @@ public class ServerContext implements AutoCloseable {
 
     public void setStartingAddress(long startingAddress) {
         dataStore.put(Long.class, PREFIX_STARTING_ADDRESS, KEY_STARTING_ADDRESS, startingAddress);
+    }
+
+    /**
+     * Persists the sequencer epoch. This is set only by the SequencerServer in the resetServer.
+     * No lock required as it relies on the resetServer lock.
+     *
+     * @param sequencerEpoch Epoch to persist.
+     */
+    public void setSequencerEpoch(long sequencerEpoch) {
+        dataStore.put(Long.class, KEY_SEQUENCER, PREFIX_SEQUENCER_EPOCH, sequencerEpoch);
+    }
+
+    /**
+     * Fetch the persisted sequencer epoch.
+     *
+     * @return Sequencer epoch.
+     */
+    public long getSequencerEpoch() {
+        Long epoch = dataStore.get(Long.class, KEY_SEQUENCER, PREFIX_SEQUENCER_EPOCH);
+        return epoch == null ? Layout.INVALID_EPOCH : epoch;
     }
 
     /**

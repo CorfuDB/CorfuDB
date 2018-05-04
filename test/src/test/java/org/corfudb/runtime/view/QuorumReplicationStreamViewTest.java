@@ -23,7 +23,7 @@ public class QuorumReplicationStreamViewTest extends StreamViewTest {
         r.getLayoutView().committed(1L, newLayout);
         r.invalidateLayout();
         r.getLayoutView().getRuntimeLayout(newLayout).getPrimarySequencerClient()
-                .bootstrap(0L, Collections.emptyMap(), 1L).get();
+                .bootstrap(0L, Collections.emptyMap(), 1L, false).get();
     }
 
 

@@ -249,7 +249,7 @@ public class ManagementAgent {
             Layout layout = serverContext.getManagementLayout();
             boolean bootstrapResult = getCorfuRuntime().getLayoutView().getRuntimeLayout(layout)
                     .getPrimarySequencerClient()
-                    .bootstrap(0L, Collections.emptyMap(), layout.getEpoch())
+                    .bootstrap(0L, Collections.emptyMap(), layout.getEpoch(), false)
                     .get();
             sequencerBootstrappedFuture.complete(bootstrapResult);
             // If false, the sequencer is already bootstrapped with a higher epoch.
