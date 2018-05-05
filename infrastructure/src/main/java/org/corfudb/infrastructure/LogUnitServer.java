@@ -12,9 +12,11 @@ import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 import lombok.Getter;
@@ -74,6 +76,11 @@ public class LogUnitServer extends AbstractServer {
                             .setDaemon(true)
                             .setNameFormat("LogUnit-Maintenance-%d")
                             .build());
+
+    ThreadFactory threadFactory = new ServerThreadFactory("Logunit-",
+            new ServerThreadFactory.ExceptionHandler());
+
+    ExecutorService executor = Executors.newFixedThreadPool(BatchWriter.BATCH_SIZE, threadFactory);
 
     private ScheduledFuture<?> compactor;
 
@@ -322,6 +329,11 @@ public class LogUnitServer extends AbstractServer {
         streamLog.release(address, (LogData) entry);
     }
 
+    @Override
+    public ExecutorService getExecutor() {
+        return executor;
+    }
+
     /**
      * Shutdown the server.
      */
@@ -330,6 +342,7 @@ public class LogUnitServer extends AbstractServer {
         compactor.cancel(true);
         scheduler.shutdownNow();
         batchWriter.close();
+        executor.shutdownNow();
     }
 
     @VisibleForTesting
