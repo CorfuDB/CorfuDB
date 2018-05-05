@@ -25,6 +25,7 @@ import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import lombok.Getter;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.util.JsonUtils;
 
@@ -47,6 +48,7 @@ import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
  *
  * <p>Created by mdhawan on 7/27/16.
  */
+@Slf4j
 public class DataStore implements IDataStore {
 
     static String EXTENSION = ".ds";
@@ -161,6 +163,7 @@ public class DataStore implements IDataStore {
                         }
                         return new String(strBytes);
                     } catch (IOException e) {
+                        log.warn("IOException while building datastore", e);
                         throw new RuntimeException(e);
                     }
                 });

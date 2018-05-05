@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.NodeLocator;
 import org.junit.After;
 import org.junit.Before;
 
@@ -62,6 +63,10 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
      */
     private IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
         runtimeRouterMap.putIfAbsent(runtime, new ConcurrentHashMap<>());
+        if (endpoint.startsWith("local://") || endpoint.startsWith("tcp://")) {
+            NodeLocator nl = NodeLocator.parseString(endpoint);
+            endpoint = nl.getHost() + ":" + nl.getPort();
+        }
         if (!endpoint.startsWith("test:")) {
             throw new RuntimeException("Unsupported endpoint in test: " + endpoint);
         }

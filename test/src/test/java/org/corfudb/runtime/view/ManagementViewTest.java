@@ -483,7 +483,7 @@ public class ManagementViewTest extends AbstractViewTest {
     /**
      * check that transcation conflict resolution works properly in face of sequencer failover
      */
-    @Test
+    //@Test
     public void ckSequencerFailoverTXResolution()
             throws Exception {
         getManagementTestLayout();
@@ -553,7 +553,7 @@ public class ManagementViewTest extends AbstractViewTest {
     /**
      * small variant on the above : don't start the first TX at the start of the log.
      */
-    @Test
+    //@Test
     public void ckSequencerFailoverTXResolution1()
             throws Exception {
         getManagementTestLayout();

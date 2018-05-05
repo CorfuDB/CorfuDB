@@ -26,9 +26,11 @@ import org.corfudb.infrastructure.management.HealingDetector;
 import org.corfudb.infrastructure.management.IDetector;
 import org.corfudb.runtime.view.SequencerHealingPolicy;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.UuidUtils;
 
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
+import static org.corfudb.util.NodeLocator.*;
 
 /**
  * Server Context:
@@ -118,6 +120,20 @@ public class ServerContext implements AutoCloseable {
     @Setter
     private boolean bindToAllInterfaces = false;
 
+    @Getter(lazy = true)
+    private final NodeLocator nodeLocator = generateLocalNodeLocator();
+
+
+    private NodeLocator generateLocalNodeLocator() {
+        return builder()
+            .bindToAll(bindToAllInterfaces)
+            .protocol(getChannelImplementation().getProtocol())
+            .host(getServerConfig(String.class, "--address"))
+            .port(Integer.parseInt(getServerConfig(String.class, "<port>")))
+            .nodeId(getNodeId())
+            .build();
+    }
+
     @Getter
     public static final MetricRegistry metrics = new MetricRegistry();
 
@@ -139,7 +155,7 @@ public class ServerContext implements AutoCloseable {
         // Setup the netty event loops. In tests, these loops may be provided by
         // a test framework to save resources.
         final boolean providedEventLoops =
-                 getChannelImplementation().equals(ChannelImplementation.LOCAL);
+            getChannelImplementation().equals(ChannelImplementation.LOCAL);
 
         clientGroup = providedEventLoops
             ? getServerConfig(EventLoopGroup.class, "client") :
@@ -174,17 +190,17 @@ public class ServerContext implements AutoCloseable {
 
     public CorfuRuntimeParameters getDefaultRuntimeParameters() {
         return CorfuRuntime.CorfuRuntimeParameters.builder()
-                .nettyEventLoop(clientGroup)
-                .shutdownNettyEventLoop(false)
-                .tlsEnabled((Boolean) serverConfig.get("--enable-tls"))
-                .keyStore((String) serverConfig.get("--keystore"))
-                .ksPasswordFile((String) serverConfig.get("--keystore-password-file"))
-                .trustStore((String) serverConfig.get("--truststore"))
-                .tsPasswordFile((String) serverConfig.get("--truststore-password-file"))
-                .saslPlainTextEnabled((Boolean) serverConfig.get("--enable-sasl-plain-text-auth"))
-                .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
-                .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
-                .build();
+            .nettyEventLoop(clientGroup)
+            .shutdownNettyEventLoop(false)
+            .tlsEnabled((Boolean) serverConfig.get("--enable-tls"))
+            .keyStore((String) serverConfig.get("--keystore"))
+            .ksPasswordFile((String) serverConfig.get("--keystore-password-file"))
+            .trustStore((String) serverConfig.get("--truststore"))
+            .tsPasswordFile((String) serverConfig.get("--truststore-password-file"))
+            .saslPlainTextEnabled((Boolean) serverConfig.get("--enable-sasl-plain-text-auth"))
+            .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
+            .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
+            .build();
     }
 
     /** Generate a Node Id if not present.
@@ -226,6 +242,10 @@ public class ServerContext implements AutoCloseable {
      */
     @SuppressWarnings("unchecked")
     public <T> T getServerConfig(Class<T> type, String optionName) {
+        Object o = getServerConfig().get(optionName);
+        if (type == String.class && !String.class.isInstance(o)) {
+            return (T) o.toString();
+        }
         return (T) getServerConfig().get(optionName);
     }
 
@@ -268,15 +288,15 @@ public class ServerContext implements AutoCloseable {
         String localAddress = getServerConfig().get("--address") + ":"
             + getServerConfig().get("<port>");
         return new Layout(
-            Collections.singletonList(localAddress),
-            Collections.singletonList(localAddress),
+            Collections.singletonList(getNodeLocator().toString()),
+            Collections.singletonList(getNodeLocator().toString()),
             Collections.singletonList(new LayoutSegment(
                 Layout.ReplicationMode.CHAIN_REPLICATION,
                 0L,
                 -1L,
                 Collections.singletonList(
                     new Layout.LayoutStripe(
-                        Collections.singletonList(localAddress)
+                        Collections.singletonList(getNodeLocator().toString())
                     )
                 )
             )),
@@ -339,22 +359,22 @@ public class ServerContext implements AutoCloseable {
 
     public Rank getPhase1Rank() {
         return dataStore.get(Rank.class, PREFIX_PHASE_1,
-                getServerEpoch() + KEY_SUFFIX_PHASE_1);
+            getServerEpoch() + KEY_SUFFIX_PHASE_1);
     }
 
     public void setPhase1Rank(Rank rank) {
         dataStore.put(Rank.class, PREFIX_PHASE_1,
-                getServerEpoch() + KEY_SUFFIX_PHASE_1, rank);
+            getServerEpoch() + KEY_SUFFIX_PHASE_1, rank);
     }
 
     public Phase2Data getPhase2Data() {
         return dataStore.get(Phase2Data.class, PREFIX_PHASE_2,
-                getServerEpoch() + KEY_SUFFIX_PHASE_2);
+            getServerEpoch() + KEY_SUFFIX_PHASE_2);
     }
 
     public void setPhase2Data(Phase2Data phase2Data) {
         dataStore.put(Phase2Data.class, PREFIX_PHASE_2,
-                getServerEpoch() + KEY_SUFFIX_PHASE_2, phase2Data);
+            getServerEpoch() + KEY_SUFFIX_PHASE_2, phase2Data);
     }
 
     public void setLayoutInHistory(Layout layout) {
@@ -377,7 +397,7 @@ public class ServerContext implements AutoCloseable {
      */
     public long getStartingAddress() {
         Long startingAddress = dataStore.get(Long.class, PREFIX_STARTING_ADDRESS,
-                KEY_STARTING_ADDRESS);
+            KEY_STARTING_ADDRESS);
         return startingAddress == null ? 0 : startingAddress;
     }
 
@@ -422,11 +442,11 @@ public class ServerContext implements AutoCloseable {
             // Persisting this new updated layout
             dataStore.put(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, layout);
             log.info("saveManagementLayout: Updated to new layout at epoch {}",
-                    getManagementLayout().getEpoch());
+                getManagementLayout().getEpoch());
         } else {
             log.debug("saveManagementLayout: "
-                            + "Ignoring layout because new epoch {} <= old epoch {}",
-                    layout.getEpoch(), currentLayout.getEpoch());
+                    + "Ignoring layout because new epoch {} <= old epoch {}",
+                layout.getEpoch(), currentLayout.getEpoch());
         }
     }
 
@@ -445,10 +465,10 @@ public class ServerContext implements AutoCloseable {
      */
     private EventLoopGroup getNewBossGroup() {
         final ThreadFactory threadFactory = new ThreadFactoryBuilder()
-                .setNameFormat(getThreadPrefix() + "accept-%d")
-                .build();
+            .setNameFormat(getThreadPrefix() + "accept-%d")
+            .build();
         EventLoopGroup group = getChannelImplementation().getGenerator()
-                .generate(1, threadFactory);
+            .generate(1, threadFactory);
         log.info("getBossGroup: Type {}", group.getClass().getSimpleName());
         return group;
     }
@@ -459,19 +479,19 @@ public class ServerContext implements AutoCloseable {
      */
     private @Nonnull EventLoopGroup getNewWorkerGroup() {
         final ThreadFactory threadFactory = new ThreadFactoryBuilder()
-                .setNameFormat(getThreadPrefix() + "worker-%d")
-                .build();
+            .setNameFormat(getThreadPrefix() + "worker-%d")
+            .build();
 
         final int requestedThreads =
-                Integer.parseInt(getServerConfig(String.class, "--Threads"));
+            Integer.parseInt(getServerConfig(String.class, "--Threads"));
         final int numThreads = requestedThreads == 0
-                ? Runtime.getRuntime().availableProcessors() * 2
-                : requestedThreads;
+            ? Runtime.getRuntime().availableProcessors() * 2
+            : requestedThreads;
         EventLoopGroup group = getChannelImplementation().getGenerator()
             .generate(numThreads, threadFactory);
 
         log.info("getWorkerGroup: Type {} with {} threads",
-                group.getClass().getSimpleName(), numThreads);
+            group.getClass().getSimpleName(), numThreads);
         return group;
     }
 
@@ -481,8 +501,8 @@ public class ServerContext implements AutoCloseable {
      */
     private @Nonnull EventLoopGroup getNewClientGroup() {
         final ThreadFactory threadFactory = new ThreadFactoryBuilder()
-                .setNameFormat(getThreadPrefix() + "client-%d")
-                .build();
+            .setNameFormat(getThreadPrefix() + "client-%d")
+            .build();
 
         final int requestedThreads =
             Integer.parseInt(getServerConfig(String.class, "--Threads"));

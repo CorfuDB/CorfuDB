@@ -134,14 +134,21 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      */
     protected IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
         runtimeRouterMap.putIfAbsent(runtime, new ConcurrentHashMap<>());
+        if (endpoint.startsWith("local://") || endpoint.startsWith("tcp://")) {
+            NodeLocator nl = NodeLocator.parseString(endpoint);
+            endpoint = nl.getHost() + ":" + nl.getPort();
+        }
         if (!endpoint.startsWith("test:") && !endpoint.startsWith(testHostname)) {
             throw new RuntimeException("Unsupported endpoint in test: " + endpoint);
         }
+
+        final String parsedEndpoint = endpoint;
         return runtimeRouterMap.get(runtime).computeIfAbsent(endpoint,
                 x -> {
-                    String serverName = endpoint.startsWith(testHostname) ?
-                            endpoint.substring(endpoint.indexOf("test"), endpoint.length() - 1)
-                            : endpoint;
+                    String serverName = parsedEndpoint.startsWith(testHostname) ?
+                            parsedEndpoint.substring(parsedEndpoint.indexOf("test"),
+                                parsedEndpoint.length() - 1)
+                            : parsedEndpoint;
                     TestClientRouter tcn =
                             new TestClientRouter(testServerMap.get(serverName).getServerRouter());
                     tcn.addClient(new BaseHandler())

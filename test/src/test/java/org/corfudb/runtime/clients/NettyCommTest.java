@@ -2,11 +2,15 @@ package org.corfudb.runtime.clients;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.google.common.collect.ImmutableMap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -19,9 +23,14 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.CorfuServer;
+import org.corfudb.infrastructure.LayoutServer;
+import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.infrastructure.ManagementServer;
 import org.corfudb.infrastructure.NettyServerRouter;
+import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -42,14 +51,10 @@ public class NettyCommTest extends AbstractCorfuTest {
 
     private Integer findRandomOpenPort() throws IOException {
         try (
-                ServerSocket socket = new ServerSocket(0);
+            ServerSocket socket = new ServerSocket(0);
         ) {
             return socket.getLocalPort();
         }
-    }
-
-    private BaseClient getBaseClient(IClientRouter router) {
-        return new BaseClient(router, 0L);
     }
 
     @Test
@@ -78,12 +83,16 @@ public class NettyCommTest extends AbstractCorfuTest {
             },
             (r, d) -> {
                 assertThat(getBaseClient(r).pingSync())
-                        .isTrue();
+                    .isTrue();
                 d.shutdownServer();
                 d.bootstrapServer();
 
                 getBaseClient(r).pingSync();
             });
+    }
+
+    private BaseClient getBaseClient(IClientRouter router) {
+        return new BaseClient(router, 0L);
     }
 
     @Test
@@ -100,14 +109,15 @@ public class NettyCommTest extends AbstractCorfuTest {
                         .setKeystorePasswordFile("src/test/resources/security/storepass")
                         .setTruststore("src/test/resources/security/s1.jks")
                         .setTruststorePasswordFile("src/test/resources/security/storepass")
+                        .setAddress("localhost")
                         .setPort(port)
                         .build()
                 );
                 return d;
             },
             (port) -> new NettyClientRouter(
-                    NodeLocator.builder().host("localhost").port(port).build(),
-                    CorfuRuntimeParameters.builder()
+                NodeLocator.builder().host("localhost").port(port).build(),
+                CorfuRuntimeParameters.builder()
                     .tlsEnabled(true)
                     .keyStore("src/test/resources/security/r1.jks")
                     .ksPasswordFile("src/test/resources/security/storepass")
@@ -125,7 +135,7 @@ public class NettyCommTest extends AbstractCorfuTest {
     public void nettyTlsMutualAuth() throws Exception {
         runWithBaseServer(
             (port) -> {
-            NettyServerData d = new NettyServerData(new ServerContextBuilder()
+                NettyServerData d = new NettyServerData(new ServerContextBuilder()
                     .setImplementation("auto")
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
@@ -135,6 +145,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust1.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setTlsMutualAuthEnabled(true)
+                    .setAddress("localhost")
                     .setPort(port)
                     .build());
                 return d;
@@ -170,6 +181,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust1.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setSaslPlainTextAuth(false)
+                    .setAddress("localhost")
                     .setPort(port)
                     .build());
                 return d;
@@ -205,6 +217,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust2.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setTlsMutualAuthEnabled(true)
+                    .setAddress("localhost")
                     .setPort(port)
                     .build());
                 return d;
@@ -239,6 +252,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setKeystorePasswordFile("src/test/resources/security/storepass")
                     .setTruststore("src/test/resources/security/trust2.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
+                    .setAddress("localhost")
                     .setPort(port)
                     .build());
                 return d;
@@ -276,6 +290,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust1.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setSaslPlainTextAuth(true)
+                    .setAddress("localhost")
                     .setPort(port)
                     .build());
                 return d;
@@ -303,21 +318,21 @@ public class NettyCommTest extends AbstractCorfuTest {
     @Test
     public void nettyServerClientHandshakeDefaultId() throws Exception {
         runWithBaseServer(
-                (port) -> {
-                    return new NettyServerData(ServerContextBuilder.defaultContext(port));
-                },
-                (port) -> {
-                    NodeLocator nl = NodeLocator.builder()
-                            .host("localhost")
-                            .port(port)
-                            .nodeId(UUID.fromString("00000000-0000-0000-0000-000000000000"))
-                            .build();
-                    return new NettyClientRouter(nl, CorfuRuntimeParameters.builder().build());
-                },
-                (r, d) -> {
-                    assertThat(getBaseClient(r).pingSync())
-                            .isTrue();
-                });
+            (port) -> {
+                return new NettyServerData(ServerContextBuilder.defaultContext(port));
+            },
+            (port) -> {
+                NodeLocator nl = NodeLocator.builder()
+                    .host("localhost")
+                    .port(port)
+                    .nodeId(UUID.fromString("00000000-0000-0000-0000-000000000000"))
+                    .build();
+                return new NettyClientRouter(nl, CorfuRuntimeParameters.builder().build());
+            },
+            (r, d) -> {
+                assertThat(getBaseClient(r).pingSync())
+                    .isTrue();
+            });
     }
 
     UUID nodeId;
@@ -325,44 +340,44 @@ public class NettyCommTest extends AbstractCorfuTest {
     @Test
     public void nettyServerClientHandshakeMatchIds() throws Exception {
         runWithBaseServer(
-                (port) -> {
-                    ServerContext sc = ServerContextBuilder
-                            .defaultContext(port);
-                    nodeId = sc.getNodeId();
-                    return new NettyServerData(sc);
-                },
-                (port) -> {
-                    NodeLocator nl = NodeLocator.builder()
-                            .host("localhost")
-                            .port(port)
-                            .nodeId(nodeId)
-                            .build();
-                    return new NettyClientRouter(nl, CorfuRuntimeParameters.builder().build());
-                },
-                (r, d) -> {
-                    assertThat(getBaseClient(r).pingSync())
-                            .isTrue();
-                });
+            (port) -> {
+                ServerContext sc = ServerContextBuilder
+                    .defaultContext(port);
+                nodeId = sc.getNodeId();
+                return new NettyServerData(sc);
+            },
+            (port) -> {
+                NodeLocator nl = NodeLocator.builder()
+                    .host("localhost")
+                    .port(port)
+                    .nodeId(nodeId)
+                    .build();
+                return new NettyClientRouter(nl, CorfuRuntimeParameters.builder().build());
+            },
+            (r, d) -> {
+                assertThat(getBaseClient(r).pingSync())
+                    .isTrue();
+            });
     }
 
     @Test
     public void nettyServerClientHandshakeMismatchId() throws Exception {
         runWithBaseServer(
-                (port) -> {
-                    return new NettyServerData(ServerContextBuilder.defaultContext(port));
-                },
-                (port) -> {
-                    NodeLocator nl = NodeLocator.builder()
-                            .host("localhost")
-                            .port(port)
-                            .nodeId(UUID.nameUUIDFromBytes("test".getBytes()))
-                            .build();
-                    return new NettyClientRouter(nl, CorfuRuntimeParameters.builder().build());
-                },
-                (r, d) -> {
-                    assertThat(getBaseClient(r).pingSync())
-                            .isFalse();
-                });
+            (port) -> {
+                return new NettyServerData(ServerContextBuilder.defaultContext(port));
+            },
+            (port) -> {
+                NodeLocator nl = NodeLocator.builder()
+                    .host("localhost")
+                    .port(port)
+                    .nodeId(UUID.nameUUIDFromBytes("test".getBytes()))
+                    .build();
+                return new NettyClientRouter(nl, CorfuRuntimeParameters.builder().build());
+            },
+            (r, d) -> {
+                assertThat(getBaseClient(r).pingSync())
+                    .isFalse();
+            });
     }
 
     @Test
@@ -381,6 +396,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust1.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setSaslPlainTextAuth(true)
+                    .setAddress("localhost")
                     .setPort(port)
                     .build());
                 return d;
@@ -451,6 +467,7 @@ public class NettyCommTest extends AbstractCorfuTest {
                 .setTruststore(serverTrustFile.getAbsolutePath())
                 .setTruststorePasswordFile("src/test/resources/security/reload/password")
                 .setTlsMutualAuthEnabled(true)
+                .setAddress("localhost")
                 .setPort(port)
                 .build()
         );
@@ -477,24 +494,23 @@ public class NettyCommTest extends AbstractCorfuTest {
             Files.copy(serverTrustWithClient.toPath(), serverTrustFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
         }
         clientRouter = new NettyClientRouter(
-                NodeLocator.builder().host("localhost").port(port).build(),
-                CorfuRuntimeParameters.builder()
-                        .tlsEnabled(true)
-                        .keyStore("src/test/resources/security/reload/client_key.jks")
-                        .ksPasswordFile("src/test/resources/security/reload/password")
-                        .trustStore(clientTrustFile.getAbsolutePath())
-                        .tsPasswordFile("src/test/resources/security/reload/password")
-                        .build());
+            NodeLocator.builder().host("localhost").port(port).build(),
+            CorfuRuntimeParameters.builder()
+                .tlsEnabled(true)
+                .keyStore("src/test/resources/security/reload/client_key.jks")
+                .ksPasswordFile("src/test/resources/security/reload/password")
+                .trustStore(clientTrustFile.getAbsolutePath())
+                .tsPasswordFile("src/test/resources/security/reload/password")
+                .build());
         clientRouter.getConnectionFuture().join();
         assertThat(getBaseClient(clientRouter).pingSync()).isTrue();
-        clientRouter.stop();
 
         serverData.shutdownServer();
     }
 
     void runWithBaseServer(NettyServerDataConstructor nsdc,
-            NettyClientRouterConstructor ncrc, NettyCommFunction actionFn)
-            throws Exception {
+        NettyClientRouterConstructor ncrc, NettyCommFunction actionFn)
+        throws Exception {
         int port = findRandomOpenPort();
 
         NettyServerData d = nsdc.createNettyServerData(port);
@@ -540,29 +556,29 @@ public class NettyCommTest extends AbstractCorfuTest {
         volatile ChannelFuture f;
 
         final ServerContext serverContext;
-
-        private final String address = "localhost";
+        CorfuServer server;
 
         public NettyServerData(@Nonnull ServerContext context) {
-            this.serverContext = context;
+            serverContext = context;
+            server = new CorfuServer(serverContext,
+                ImmutableMap.<Class<? extends AbstractServer>, AbstractServer>builder()
+                    .put(BaseServer.class, new BaseServer(serverContext))
+                    .build()
+            );
+            f = server.start();
         }
 
         void bootstrapServer() throws Exception {
-            NettyServerRouter nsr =
-                new NettyServerRouter(Collections.singletonList(new BaseServer(serverContext)));
-            f = CorfuServer.startAndListen(serverContext.getBossGroup(),
-                                            serverContext.getWorkerGroup(),
-                                            b -> CorfuServer.configureBootstrapOptions(
-                                                serverContext, b),
-                                            serverContext,
-                                            nsr,
-                                            address,
-                                            serverContext.getServerConfig(Integer.class,
-                                                "<port>"));
+
         }
 
         public void shutdownServer() {
-            f.channel().close().awaitUninterruptibly();
+            if (!f.channel().closeFuture().isDone()) {
+                f.channel().close().awaitUninterruptibly();
+                if (server != null) {
+                    server.close();
+                }
+            }
         }
 
     }

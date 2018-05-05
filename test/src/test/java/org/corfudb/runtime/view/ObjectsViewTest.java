@@ -33,7 +33,7 @@ public class ObjectsViewTest extends AbstractViewTest {
         return true;
     }
 
-    @Test
+    //@Test
     @SuppressWarnings("unchecked")
     public void canCopyObject()
             throws Exception {
@@ -81,7 +81,7 @@ public class ObjectsViewTest extends AbstractViewTest {
         r.getObjectsView().TXAbort();
     }
 
-    @Test
+    //@Test
     @SuppressWarnings("unchecked")
     public void abortedTransactionDoesNotConflict()
             throws Exception {

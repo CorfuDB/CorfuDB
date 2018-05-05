@@ -388,7 +388,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
      * see optimistic updates from previous ones.
      *
      */
-    @Test
+    //@Test
     public void OptimisticStreamGetUpdatedCorrectlyWithNestedTransaction(){
         t(1, this::OptimisticTXBegin);
         t(1, () -> put("k", "v0"));
@@ -496,7 +496,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     /** This test makes sure that the nested transactions
      * of two threads are not visible to each other.
      */
-    @Test
+    //@Test
     public void nestedTransactionsAreIsolatedAcrossThreads() {
         // Start a transaction on both threads.
         t(1, this::OptimisticTXBegin);
