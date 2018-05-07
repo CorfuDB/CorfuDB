@@ -404,33 +404,21 @@ public class LayoutBuilder {
      * @param endpoints Log unit servers to be removed
      * @return Workflow manager
      */
-    public LayoutBuilder removeLogunitServers(Set<String> endpoints){
+    public LayoutBuilder removeLogunitServers(Set<String> endpoints) {
 
-        // Not making changes in the original list in case of exceptions.
-        // Copy the list so that we can have an atomic result and no partial removals
-        List<LayoutSegment> modifiedLayoutSegments = new ArrayList<>(layout.getSegments());
+        Layout tempLayout = new Layout(layout);
 
-        for (LayoutSegment layoutSegment : modifiedLayoutSegments) {
+        List<LayoutSegment> layoutSegments = tempLayout.getSegments();
+        for (LayoutSegment layoutSegment : layoutSegments) {
             for (LayoutStripe layoutStripe : layoutSegment.getStripes()) {
-
-                List<String> loguintServers = layoutStripe.getLogServers();
-
-                for (int k = 0; k < loguintServers.size(); ) {
-                    String logunitServer = loguintServers.get(k);
-                    if (endpoints.contains(logunitServer)) {
-                        if (loguintServers.size() == 1) {
-                            throw new LayoutModificationException(
-                                    "Attempting to remove all logunit. "
-                                            + "No replicas available.");
-                        }
-                        loguintServers.remove(k);
-                    } else {
-                        k++;
-                    }
+                for (String endpoint : endpoints) {
+                    int minReplicationFactor = layoutSegment.getReplicationMode()
+                            .getMinReplicationFactor(tempLayout);
+                    removeFromStripe(endpoint, layoutStripe, minReplicationFactor);
                 }
             }
         }
-        layout.getSegments().retainAll(modifiedLayoutSegments);
+        layout = tempLayout;
         return this;
     }
 

@@ -671,6 +671,28 @@ public class CorfuRuntime {
     }
 
     /**
+     * Detects connections to nodes in the router pool which are no longer present in the layout.
+     * For each of these nodes, the router is stopped and the reference is removed from the pool.
+     * If this is not done, the reference remains and Netty keeps attempting to reconnect to the
+     * disconnected node.
+     *
+     * @param layout The latest layout.
+     */
+    private void pruneRemovedRouters(@Nonnull Layout layout) {
+        nodeRouterPool.getNodeRouters().keySet().stream()
+                .filter(endpoint -> !layout.getAllServers().contains(endpoint))
+                .forEach(endpoint -> {
+                    try {
+                        nodeRouterPool.getNodeRouters().get(endpoint).stop();
+                        nodeRouterPool.getNodeRouters().remove(endpoint);
+                    } catch (Exception e) {
+                        log.warn("fetchLayout: Exception in stopping and removing "
+                                + "router connection to node {} :", endpoint, e);
+                    }
+                });
+    }
+
+    /**
      * Return a completable future which is guaranteed to contain a layout.
      * This future will continue retrying until it gets a layout.
      * If you need this completable future to fail, you should chain it with a timeout.
@@ -717,6 +739,10 @@ public class CorfuRuntime {
 
                         layout = layoutFuture;
                         log.debug("Layout server {} responded with layout {}", s, l);
+
+                        // Prune away removed node routers from the nodeRouterPool.
+                        pruneRemovedRouters(l);
+
                         return l;
                     } catch (InterruptedException ie) {
                         throw new UnrecoverableCorfuInterruptedError(

@@ -349,7 +349,7 @@ public class LayoutManagementView extends AbstractView {
             prepareRank = 1L;
         } catch (OutrankedException oe) {
             // Update rank since outranked.
-            log.error("Conflict in updating layout by failureHandlerDispatcher: {}", oe);
+            log.error("Conflict in updating layout by attemptConsensus: {}", oe);
             // Update rank to be able to outrank other competition and complete paxos.
             prepareRank = oe.getNewRank() + 1;
             throw oe;

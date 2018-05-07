@@ -45,9 +45,6 @@ public class FailureDetectorTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
         bootstrapAllServers(layout);
-        getManagementServer(SERVERS.PORT_0).shutdown();
-        getManagementServer(SERVERS.PORT_1).shutdown();
-        getManagementServer(SERVERS.PORT_2).shutdown();
 
         corfuRuntime = getRuntime(layout).connect();
 
@@ -65,11 +62,9 @@ public class FailureDetectorTest extends AbstractViewTest {
 
     /**
      * Polls 3 running servers. Poll returns no failures.
-     *
-     * @throws InterruptedException Sleep interrupted
      */
     @Test
-    public void pollNoFailures() throws InterruptedException {
+    public void pollNoFailures() {
 
         // A little more than responseTimeout for periodicPolling
         PollReport result = failureDetector.poll(layout, corfuRuntime);
@@ -83,11 +78,9 @@ public class FailureDetectorTest extends AbstractViewTest {
      * Returns failed status for the 3 servers.
      * We then restart server SERVERS.PORT_0, run polls again.
      * Assert only 2 failures. SERVERS.PORT_1 & SERVERS.PORT_2
-     *
-     * @throws InterruptedException
      */
     @Test
-    public void pollFailures() throws InterruptedException {
+    public void pollFailures() {
 
         addServerRule(SERVERS.PORT_0, new TestRule().always().drop());
         addServerRule(SERVERS.PORT_1, new TestRule().always().drop());

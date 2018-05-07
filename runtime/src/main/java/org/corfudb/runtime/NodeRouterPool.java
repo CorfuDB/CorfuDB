@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import org.corfudb.runtime.clients.IClientRouter;
 @Slf4j
 public class NodeRouterPool {
 
+    @Getter(AccessLevel.PROTECTED)
     private final Map<String, IClientRouter> nodeRouters = new ConcurrentHashMap<>();
 
     /**

@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -19,16 +20,26 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.management.IDetector;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
+import org.corfudb.protocols.wireprotocol.NodeView;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
+import org.corfudb.protocols.wireprotocol.ServerMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
+import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.concurrent.SingletonResource;
 
@@ -79,7 +90,7 @@ public class ManagementAgent {
      * - Detection of healed nodes.
      */
     @Getter
-    private ScheduledExecutorService detectionTasksScheduler;
+    private final ScheduledExecutorService detectionTasksScheduler;
     /**
      * To dispatch tasks for failure or healed nodes detection.
      */
@@ -106,6 +117,37 @@ public class ManagementAgent {
     private volatile CompletableFuture<Boolean> sequencerBootstrappedFuture;
 
     /**
+     * The management agent attempts to bootstrap a NOT_READY sequencer if the sequencerNotReadyCounter
+     * counter exceeds this value.
+     */
+    private static final int SEQUENCER_NOT_READY_THRESHOLD = 3;
+
+    /**
+     * This tuple maintains, in an epoch, how many heartbeats the primary sequencer has responded
+     * in not bootstrapped (NOT_READY) state.
+     */
+    @Getter
+    @Setter
+    @AllArgsConstructor
+    private class SequencerNotReadyCounter {
+        private final long epoch;
+        private int counter;
+    }
+
+    private SequencerNotReadyCounter sequencerNotReadyCounter;
+
+    /**
+     * Cluster metrics collection.
+     */
+    //  Service to poll local node metrics.
+    private final ScheduledExecutorService localMetricsPollingService;
+    //  Locally collected server metrics polling interval.
+    private static final Duration METRICS_POLL_INTERVAL = Duration.ofMillis(3000);
+    //  Local copy of the local node's server metrics.
+    @Getter(AccessLevel.PROTECTED)
+    private volatile ServerMetrics localServerMetrics;
+
+    /**
      * Checks and restores if a layout is present in the local datastore to recover from.
      * Spawns the initialization task which recovers if required, bootstraps sequencer and
      * schedules detector tasks.
@@ -123,6 +165,9 @@ public class ManagementAgent {
                 ? opts.get("--management-server").toString() : null;
 
         sequencerBootstrappedFuture = new CompletableFuture<>();
+
+        localServerMetrics = new ServerMetrics(NodeLocator.parseString(getLocalEndpoint()),
+                new SequencerMetrics(SequencerStatus.UNKNOWN));
 
         // If no state was preserved, there is no layout to recover.
         if (serverContext.getManagementLayout() == null) {
@@ -167,6 +212,12 @@ public class ManagementAgent {
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
                         .setNameFormat(serverContext.getThreadPrefix() + "DetectionWorker-%d")
+                        .build());
+
+        this.localMetricsPollingService = Executors.newSingleThreadScheduledExecutor(
+                new ThreadFactoryBuilder()
+                        .setDaemon(true)
+                        .setNameFormat(serverContext.getThreadPrefix() + "LocalMetricsPolling")
                         .build());
 
         // Creating the initialization task thread.
@@ -215,6 +266,12 @@ public class ManagementAgent {
 
             // Initiating periodic task to poll for failures.
             try {
+                localMetricsPollingService.scheduleAtFixedRate(
+                        this::updateLocalMetrics,
+                        0,
+                        METRICS_POLL_INTERVAL.toMillis(),
+                        TimeUnit.MILLISECONDS);
+
                 detectionTasksScheduler.scheduleAtFixedRate(
                         this::detectorTaskScheduler,
                         0,
@@ -310,6 +367,45 @@ public class ManagementAgent {
     }
 
     /**
+     * Task to collect local node metrics.
+     * This task collects the following:
+     * Boolean Status of layout, sequencer and logunit servers.
+     * These metrics are then composed into ServerMetrics model and stored locally.
+     */
+    private void updateLocalMetrics() {
+        // Initializing the status of components
+        // No need to poll unless node is bootstrapped.
+        Layout layout = serverContext.getManagementLayout();
+        if (layout == null) {
+            return;
+        }
+
+        // Build and replace existing locally stored nodeMetrics
+        SequencerMetrics sequencerMetrics;
+        // This is an optimization. If this node is not the primary sequencer for the current
+        // layout, there is no reason to request metrics from this sequencer.
+        if (layout.getSequencers().get(0).equals(getLocalEndpoint())) {
+            try {
+                sequencerMetrics = CFUtils.getUninterruptibly(
+                        getCorfuRuntime()
+                                .getLayoutView().getRuntimeLayout(layout)
+                                .getSequencerClient(getLocalEndpoint())
+                                .requestMetrics());
+            } catch (ServerNotReadyException snre) {
+                sequencerMetrics = new SequencerMetrics(SequencerStatus.NOT_READY);
+            } catch (Exception e) {
+                log.error("Error while requesting metrics from the sequencer: ", e);
+                sequencerMetrics = new SequencerMetrics(SequencerStatus.UNKNOWN);
+            }
+        } else {
+            sequencerMetrics = new SequencerMetrics(SequencerStatus.UNKNOWN);
+        }
+
+        localServerMetrics =
+                new ServerMetrics(NodeLocator.parseString(getLocalEndpoint()), sequencerMetrics);
+    }
+
+    /**
      * Schedules the detection tasks run by detectorTaskScheduler.
      * It schedules exactly one instance of the following tasks.
      * - Failure detection tasks.
@@ -333,20 +429,16 @@ public class ManagementAgent {
     /**
      * Checks if this management client is allowed to handle reconfigurations.
      * - This client is not authorized to trigger reconfigurations if this node is not a part
-     * of the current layout OR it has been marked as unresponsive in the latest layout.
-     * The node is marked responsive by any of the other nodes which can poll and sense this
-     * node's recovery.
+     * of the current layout.
      *
-     * @return True of node is allowed to handle reconfigurations. False otherwise.
+     * @return True if node is allowed to handle reconfigurations. False otherwise.
      */
     private boolean canHandleReconfigurations() {
 
-        // We check for 2 conditions here: If the node is NOT a part of the current layout
-        // or has it been marked as unresponsive. If either is true, it should not
-        // attempt to change layout.
+        // We check for the following condition here: If the node is NOT a part of the
+        // current layout, it should not attempt to change layout.
         Layout layout = serverContext.getManagementLayout();
-        if (!layout.getAllServers().contains(getLocalEndpoint())
-                || layout.getUnresponsiveServers().contains(getLocalEndpoint())) {
+        if (!layout.getAllServers().contains(getLocalEndpoint())) {
             log.debug("This Server is not a part of the active layout. "
                     + "Aborting reconfiguration handling.");
             return false;
@@ -471,6 +563,19 @@ public class ManagementAgent {
         return result;
     }
 
+    private SequencerStatus getPrimarySequencerStatus(Layout layout, PollReport pollReport) {
+        String primarySequencer = layout.getSequencers().get(0);
+        NodeView nodeView = pollReport.getNodeViewMap().get(primarySequencer);
+        // If we have a stale poll report, we should discard this and continue polling.
+        if (layout.getEpoch() > pollReport.getPollEpoch()) {
+            log.warn("getPrimarySequencerStatus: Received poll report for epoch {} but currently "
+                    + "at epoch {}", pollReport.getPollEpoch(), layout.getEpoch());
+            return SequencerStatus.UNKNOWN;
+        } else {
+            return nodeView.getServerMetrics().getSequencerMetrics().getSequencerStatus();
+        }
+    }
+
     /**
      * Analyzes the poll report and triggers the failure handler if status change
      * of node detected.
@@ -483,14 +588,36 @@ public class ManagementAgent {
 
             // These conditions are mutually exclusive. If there is a failure to be
             // handled, we don't need to explicitly fix the unfilled layout slot. Else we do.
+            Layout layout = serverContext.getManagementLayout();
             if (!failedNodes.isEmpty() || isCurrentLayoutSlotUnFilled(pollReport)) {
 
                 log.info("Detected changes in node responsiveness: Failed:{}, pollReport:{}",
                         failedNodes, pollReport);
-                Layout layout = serverContext.getManagementLayout();
                 getCorfuRuntime().getLayoutView().getRuntimeLayout(layout)
                         .getManagementClient(getLocalEndpoint())
                         .handleFailure(pollReport.getPollEpoch(), failedNodes).get();
+
+            } else if (!getPrimarySequencerStatus(layout, pollReport)
+                    .equals(SequencerStatus.READY)) {
+                // If failures are not present we can check if the primary sequencer has been
+                // bootstrapped from the heartbeat responses received.
+                if (sequencerNotReadyCounter == null
+                        || sequencerNotReadyCounter.getEpoch() != layout.getEpoch()) {
+                    // If the epoch is different than the poll epoch, we reset the timeout state.
+                    sequencerNotReadyCounter = new SequencerNotReadyCounter(layout.getEpoch(), 1);
+
+                } else if (sequencerNotReadyCounter.getEpoch() == layout.getEpoch()) {
+                    // If the epoch is same as the epoch being tracked in the tuple, we need to
+                    // increment the count and attempt to bootstrap the sequencer if the count has
+                    // crossed the threshold.
+                    sequencerNotReadyCounter.setCounter(sequencerNotReadyCounter.getCounter() + 1);
+                    if (sequencerNotReadyCounter.getCounter() >= SEQUENCER_NOT_READY_THRESHOLD) {
+                        // Launch task to bootstrap the primary sequencer.
+                        log.info("Attempting to bootstrap the primary sequencer.");
+                        getCorfuRuntime().getLayoutManagementView()
+                                .reconfigureSequencerServers(layout, layout, true);
+                    }
+                }
             }
 
         } catch (Exception e) {
@@ -637,6 +764,7 @@ public class ManagementAgent {
         shutdown = true;
         detectionTasksScheduler.shutdownNow();
         detectionTaskWorkers.shutdownNow();
+        localMetricsPollingService.shutdownNow();
 
         try {
             initializationTaskThread.interrupt();
@@ -644,6 +772,8 @@ public class ManagementAgent {
             detectionTasksScheduler.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(),
                     TimeUnit.SECONDS);
             detectionTaskWorkers.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(),
+                    TimeUnit.SECONDS);
+            localMetricsPollingService.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(),
                     TimeUnit.SECONDS);
         } catch (InterruptedException ie) {
             log.debug("detectionTaskWorkers awaitTermination interrupted : {}", ie);
