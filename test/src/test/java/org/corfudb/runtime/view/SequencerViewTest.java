@@ -21,25 +21,25 @@ public class SequencerViewTest extends AbstractViewTest {
     @Test
     public void canAcquireFirstToken() {
         CorfuRuntime r = getDefaultRuntime();
-        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1).getToken())
+        assertThat(r.getSequencerView().next(CorfuRuntime.getStreamID("test")).getToken())
                 .isEqualTo(new Token(0L, 0L));
     }
 
     @Test
     public void tokensAreIncrementing() {
         CorfuRuntime r = getDefaultRuntime();
-        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1).getToken())
+        assertThat(r.getSequencerView().next(CorfuRuntime.getStreamID("test")).getToken())
                 .isEqualTo(new Token(0L, 0L));
-        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1).getToken())
+        assertThat(r.getSequencerView().next(CorfuRuntime.getStreamID("test")).getToken())
                 .isEqualTo(new Token(1L, 0L));
     }
 
     @Test
     public void checkTokenWorks() {
         CorfuRuntime r = getDefaultRuntime();
-        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 1).getToken())
+        assertThat(r.getSequencerView().next(CorfuRuntime.getStreamID("test")).getToken())
                 .isEqualTo(new Token(0L, 0L));
-        assertThat(r.getSequencerView().nextToken(Collections.emptySet(), 0).getToken())
+        assertThat(r.getSequencerView().tail(CorfuRuntime.getStreamID("test")).getToken())
                 .isEqualTo(new Token(0L, 0L));
     }
 

@@ -52,8 +52,10 @@ public class CompileProxyTest extends AbstractViewTest {
         // read will be on a trimmed address
         final int numOfTokens = 10;
         String streamName = "s1";
-        rt.getSequencerView().nextToken(Collections.singleton(CorfuRuntime.getStreamID(streamName)),
-                numOfTokens);
+
+        for (int i = 0; i < numOfTokens; i++) {
+            rt.getSequencerView().next((CorfuRuntime.getStreamID(streamName)));
+        }
 
         // Trim all the way up to the tail
         rt.getAddressSpaceView().prefixTrim(numOfTokens);
