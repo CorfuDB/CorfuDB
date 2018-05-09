@@ -727,7 +727,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
                     Map<K, V> slot = secondaryIndex.get(indexKey);
 
                     if (slot == null) {
-                        return;
+                        continue;
                     }
                     slot.remove(key, value);
                 }
