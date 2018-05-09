@@ -81,4 +81,19 @@ public class SequencerClient extends AbstractClient {
                 new SequencerTailsRecoveryMsg(initialToken, sequencerTails, readyStateEpoch,
                         bootstrapWithoutTailsUpdate)));
     }
+
+    /**
+     * Resets the sequencer with the specified initialToken.
+     * BootstrapWithoutTailsUpdate defaulted to false.
+     *
+     * @param initialToken    Token Number which the sequencer starts distributing.
+     * @param sequencerTails  Sequencer tails map.
+     * @param readyStateEpoch Epoch at which the sequencer is ready and to stamp tokens.
+     * @return A CompletableFuture which completes once the sequencer is reset.
+     */
+    public CompletableFuture<Boolean> bootstrap(Long initialToken,
+                                                Map<UUID, Long> sequencerTails,
+                                                Long readyStateEpoch) {
+        return bootstrap(initialToken, sequencerTails, readyStateEpoch, false);
+    }
 }
