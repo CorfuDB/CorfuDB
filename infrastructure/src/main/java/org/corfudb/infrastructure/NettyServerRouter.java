@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinWorkerThread;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nonnull;
@@ -33,54 +34,6 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 public class NettyServerRouter extends ChannelInboundHandlerAdapter
         implements IServerRouter {
 
-    public static class ServerThreadFactory
-            implements ForkJoinPool.ForkJoinWorkerThreadFactory {
-
-        public static final String THREAD_PREFIX = "ServerRouter-";
-        final AtomicInteger threadNumber = new AtomicInteger(0);
-
-        public static class ServerWorkerThread extends ForkJoinWorkerThread {
-
-            protected ServerWorkerThread(final ForkJoinPool pool, final String threadName) {
-                super(pool);
-                this.setName(threadName);
-                this.setUncaughtExceptionHandler(NettyServerRouter::handleUncaughtException);
-            }
-
-            @Override
-            protected void onTermination(Throwable exception) {
-                if (exception != null) {
-                    log.error("onTermination: Thread terminated due to {}:{}",
-                            exception.getClass().getSimpleName(),
-                            exception.getMessage(),
-                            exception);
-                } else {
-                    log.debug("onTermination: Thread terminated (completed normally).");
-                }
-                super.onTermination(exception);
-            }
-        }
-
-        @Override
-        public ForkJoinWorkerThread newThread(ForkJoinPool pool) {
-            return new ServerWorkerThread(pool,
-                    THREAD_PREFIX + threadNumber.getAndIncrement());
-        }
-    }
-
-    protected static void handleUncaughtException(Thread t, @Nonnull Throwable e) {
-        log.error("handleUncaughtException[{}]: Uncaught {}:{}",
-                t.getName(),
-                e.getClass().getSimpleName(),
-                e.getMessage(),
-                e);
-    }
-
-    protected final ExecutorService handlerWorkers =
-            new ForkJoinPool(Runtime.getRuntime().availableProcessors() * 2,
-                    new ServerThreadFactory(),
-                    NettyServerRouter::handleUncaughtException, true);
-
     /**
      * This map stores the mapping from message type to netty server handler.
      */
@@ -96,6 +49,11 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     /** The {@link AbstractServer}s this {@link NettyServerRouter} routes messages for. */
     @Getter
     final List<AbstractServer> servers;
+
+    /** The rate to flush messages in ms.
+     *  TODO: move to server context.
+     */
+    private static final int FLUSH_RATE_MS = 10;
 
     /** Construct a new {@link NettyServerRouter}.
      *
@@ -130,7 +88,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      */
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
-        ctx.writeAndFlush(outMsg, ctx.voidPromise());
+        ctx.write(outMsg, ctx.voidPromise());
         log.trace("Sent response: {}", outMsg);
     }
 
@@ -155,6 +113,13 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
         return true;
     }
 
+    @Override
+    public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+        super.channelRegistered(ctx);
+        // Periodically flush the the context.
+        ctx.executor().scheduleAtFixedRate(ctx::flush, FLUSH_RATE_MS, FLUSH_RATE_MS, TimeUnit.MILLISECONDS);
+    }
+
     /**
      * Handle an incoming message read on the channel.
      *
@@ -176,20 +141,9 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
                 if (validateEpoch(m, ctx)) {
                     // Route the message to the handler.
                     if (log.isTraceEnabled()) {
-                        log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(),
-                                msg);
+                        log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
                     }
-                    handlerWorkers.submit(() -> {
-                        try {
-                            handler.handleMessage(m, ctx, this);
-                        } catch (Throwable t) {
-                            log.error("channelRead: Handling {} failed due to {}:{}",
-                                    m != null ? m.getMsgType() : "UNKNOWN",
-                                    t.getClass().getSimpleName(),
-                                    t.getMessage(),
-                                    t);
-                        }
-                    });
+                    handler.handleMessage(m, ctx, this);
                 }
             }
         } catch (Exception e) {
@@ -198,9 +152,18 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     }
 
     @Override
+    public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+        super.channelReadComplete(ctx);
+        // Flush any pending messages that were written.
+        ctx.flush();
+    }
+
+    @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         log.error("Error in handling inbound message, {}", cause);
         ctx.close();
     }
 
+    public void shutdown() {
+    }
 }
