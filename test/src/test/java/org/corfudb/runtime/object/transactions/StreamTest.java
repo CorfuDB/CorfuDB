@@ -10,7 +10,6 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
@@ -55,7 +54,7 @@ public class StreamTest extends AbstractTransactionsTest {
     @Test
     public void testOverWriteRetry() {
         UUID svId = CorfuRuntime.getStreamID("stream1");
-        final long trimMark = getRuntime().getWriteRetry() - 1;
+        final long trimMark = getRuntime().getParameters().getWriteRetry() - 1;
         getRuntime().getAddressSpaceView().prefixTrim(trimMark);
         final int payloadSize = 100;
         assertThatThrownBy(() -> getRuntime().getStreamsView().append(Collections.singleton(svId),
@@ -66,7 +65,7 @@ public class StreamTest extends AbstractTransactionsTest {
     @Test
     public void testBackpointersSvOverwriteRetry() {
         UUID svId = CorfuRuntime.getStreamID("stream1");
-        final long trimMark = getRuntime().getWriteRetry() - 1;
+        final long trimMark = getRuntime().getParameters().getWriteRetry() - 1;
         getRuntime().getAddressSpaceView().prefixTrim(trimMark);
         final int payloadSize = 100;
         IStreamView sv = getRuntime().getStreamsView().get(svId);
@@ -77,10 +76,11 @@ public class StreamTest extends AbstractTransactionsTest {
     @Test
     public void testTxnOverwriteRetry() throws Exception {
         SMRMap<String, String> map = instantiateCorfuObject(SMRMap.class, "A");
-        final long trimMark = getRuntime().getWriteRetry() - 1;
+        final long trimMark = getRuntime().getParameters().getWriteRetry() - 1;
         final String key = "key";
         final String val = "val";
-        LogUnitClient lu = getRuntime().getRouter(getDefaultConfigurationString()).getClient(LogUnitClient.class);
+        LogUnitClient lu = getRuntime().getLayoutView().getRuntimeLayout()
+                .getLogUnitClient(getDefaultConfigurationString());
         lu.prefixTrim(trimMark).get();
         TXBegin();
         map.put(key, val);

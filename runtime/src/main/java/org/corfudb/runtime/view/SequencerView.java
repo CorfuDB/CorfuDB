@@ -23,11 +23,11 @@ public class SequencerView extends AbstractView {
     }
 
     public TokenResponse query() {
-        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).query()));
+        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getPrimarySequencerClient().query()));
     }
 
     public TokenResponse query(@Nonnull UUID stream) {
-        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0).query(stream)));
+        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getPrimarySequencerClient().query(stream)));
     }
 
     /**
@@ -43,7 +43,7 @@ public class SequencerView extends AbstractView {
      */
     @Deprecated
     public TokenResponse nextToken(List<UUID> streamIds, int numTokens) {
-        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0)
+        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getPrimarySequencerClient()
             .nextToken(streamIds, numTokens)));
     }
 
@@ -69,17 +69,15 @@ public class SequencerView extends AbstractView {
 
 
     public TokenResponse nextToken(List<UUID> streamIDs, TxResolutionInfo conflictInfo) {
-        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0)
+        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getPrimarySequencerClient()
             .nextToken(streamIDs, conflictInfo)));
     }
 
     public TokenResponse nextToken(List<UUID> streamIDs) {
-        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getSequencer(0)
-            .nextToken(streamIDs)));
+        return layoutHelper(l -> CFUtils.getUninterruptibly(l.getPrimarySequencerClient().nextToken(streamIDs)));
     }
 
     public void trimCache(long address) {
-        getCurrentLayout().getSequencer(0)
-            .trimCache(address);
+        runtime.getLayoutView().getRuntimeLayout().getPrimarySequencerClient().trimCache(address);
     }
 }

@@ -15,9 +15,12 @@ import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.NoRollbackException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 //TODO Discard TransactionStream for building maps but not for constructing tails
 
@@ -110,6 +113,11 @@ public class VersionLockedObject<T> {
     private final Supplier<T> newObjectFn;
 
     /**
+     * Correctness Logging
+     */
+    private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
+
+    /**
      * The VersionLockedObject maintains a versioned object which is backed by an ISMRStream,
      * and is optionally backed by an additional optimistic update stream.
      *
@@ -180,12 +188,15 @@ public class VersionLockedObject<T> {
                 log.trace("Access [{}] Direct (optimistic-read) access at {}",
                         this, getVersionUnsafe());
                     R ret = accessFunction.apply(object);
+
+                    long versionForCorrectness = getVersionUnsafe();
                     if (lock.validate(ts)) {
+                        correctnessLogger.trace("Version, {}", versionForCorrectness);
                         return ret;
                     }
                 }
             } catch (Exception e) {
-                // If we have an exception, we didn't get a chance to validate the the lock.
+                // If we have an exception, we didn't get a chance to validate the lock.
                 // If it's still valid, then we should re-throw the exception since it was
                 // on a correct view of the object.
                 if (lock.validate(ts)) {
@@ -211,12 +222,16 @@ public class VersionLockedObject<T> {
             if (directAccessCheckFunction.apply(this)) {
                 log.trace("Access [{}] Direct (writelock) access at {}", this, getVersionUnsafe());
                 R ret = accessFunction.apply(object);
+
+                long versionForCorrectness = getVersionUnsafe();
                 if (lock.validate(ts)) {
+                    correctnessLogger.trace("Version, {}", versionForCorrectness);
                     return ret;
                 }
             }
             // If not, perform the update operations
             updateFunction.accept(this);
+            correctnessLogger.trace("Version, {}", getVersionUnsafe());
             log.trace("Access [{}] Updated (writelock) access at {}", this, getVersionUnsafe());
             return accessFunction.apply(object);
             // And perform the access
@@ -606,7 +621,7 @@ public class VersionLockedObject<T> {
                         entry.setUpcallResult(res);
                     } catch (Exception e) {
                         log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
-                        throw new RuntimeException(e);
+                        throw new UnrecoverableCorfuError(e);
                     }
                 });
     }

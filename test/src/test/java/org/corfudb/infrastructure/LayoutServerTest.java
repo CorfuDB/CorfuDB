@@ -442,7 +442,6 @@ public class LayoutServerTest extends AbstractServerTest {
     public void testReboot() throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         LayoutServer s1 = getDefaultServer(serviceDir);
-        setServer(s1);
 
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         final long NEW_EPOCH = 99L;
@@ -460,7 +459,6 @@ public class LayoutServerTest extends AbstractServerTest {
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             LayoutServer s2 = getDefaultServer(serviceDir);
-            setServer(s2);
             commitReturnsAck(s2, i, NEW_EPOCH + 1);
             s2.shutdown();
         }
@@ -493,8 +491,15 @@ public class LayoutServerTest extends AbstractServerTest {
     }
 
     private LayoutServer getDefaultServer(String serviceDir) {
-        LayoutServer s1 = new LayoutServer(new ServerContextBuilder().setSingle(false).setMemory(false).setLogPath(serviceDir).setServerRouter(getRouter()).build());
+        ServerContext sc = new ServerContextBuilder()
+                .setSingle(false)
+                .setMemory(false)
+                .setLogPath(serviceDir)
+                .setServerRouter(getRouter())
+                .build();
+        LayoutServer s1 = new LayoutServer(sc);
         setServer(s1);
+        getRouter().addServer(new BaseServer(sc));
         return s1;
     }
 

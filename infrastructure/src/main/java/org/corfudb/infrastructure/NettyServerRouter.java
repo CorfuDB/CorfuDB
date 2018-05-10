@@ -4,8 +4,9 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 
+import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinWorkerThread;
@@ -31,9 +32,6 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 @ChannelHandler.Sharable
 public class NettyServerRouter extends ChannelInboundHandlerAdapter
         implements IServerRouter {
-
-    public static final String PREFIX_EPOCH = "SERVER_EPOCH";
-    public static final String KEY_EPOCH = "CURRENT";
 
     public static class ServerThreadFactory
             implements ForkJoinPool.ForkJoinWorkerThreadFactory {
@@ -79,16 +77,14 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     }
 
     protected final ExecutorService handlerWorkers =
-            new ForkJoinPool(Runtime.getRuntime().availableProcessors(),
+            new ForkJoinPool(Runtime.getRuntime().availableProcessors() * 2,
                     new ServerThreadFactory(),
                     NettyServerRouter::handleUncaughtException, true);
 
     /**
      * This map stores the mapping from message type to netty server handler.
      */
-    Map<CorfuMsgType, AbstractServer> handlerMap;
-
-    BaseServer baseServer;
+    private final Map<CorfuMsgType, AbstractServer> handlerMap;
 
     /**
      * The epoch of this router. This is managed by the base server implementation.
@@ -97,41 +93,32 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     @Setter
     long serverEpoch;
 
-    /**
-     * Returns a new NettyServerRouter.
-     * @param opts map of options (FIXME: unused)
-     */
-    public NettyServerRouter(Map<String, Object> opts) {
-        handlerMap = new ConcurrentHashMap<>();
-        baseServer = new BaseServer();
-        addServer(baseServer);
-    }
+    /** The {@link AbstractServer}s this {@link NettyServerRouter} routes messages for. */
+    @Getter
+    final List<AbstractServer> servers;
 
-    /**
-     * Add a new netty server handler to the router.
+    /** Construct a new {@link NettyServerRouter}.
      *
-     * @param server The server to add.
+     * @param servers   A list of {@link AbstractServer}s this router will route
+     *                  messages for.
      */
-    public void addServer(AbstractServer server) {
-        // Iterate through all types of CorfuMsgType, registering the handler
-        server.getHandler().getHandledTypes()
-                .forEach(x -> {
-                    handlerMap.put(x, server);
-                    log.trace("Registered {} to handle messages of type {}", server, x);
-                });
+    public NettyServerRouter(List<AbstractServer> servers) {
+        this.servers = servers;
+        handlerMap = new EnumMap<>(CorfuMsgType.class);
+        servers.forEach(server -> server.getHandler().getHandledTypes()
+            .forEach(x -> handlerMap.put(x, server)));
     }
 
     /**
-     * Remove a server from the router.
-     * @param server  server to remove
+     * {@inheritDoc}
+     *
+     * @deprecated This operation is no longer supported. The router will only route messages for
+     * servers provided at construction time.
      */
-    public void removeServer(AbstractServer server) {
-        // Iterate through all types of CorfuMsgType, un-registering the handler
-        server.getHandler().getHandledTypes()
-                .forEach(x -> {
-                    handlerMap.remove(x, server);
-                    log.trace("Un-Registered {} to handle messages of type {}", server, x);
-                });
+    @Override
+    @Deprecated
+    public void addServer(AbstractServer server) {
+        throw new UnsupportedOperationException("No longer supported");
     }
 
     /**
@@ -143,7 +130,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      */
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
-        ctx.writeAndFlush(outMsg);
+        ctx.writeAndFlush(outMsg, ctx.voidPromise());
         log.trace("Sent response: {}", outMsg);
     }
 

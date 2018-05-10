@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -29,11 +28,14 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.CorfuTable.IndexRegistry;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectBuilder;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -143,6 +145,19 @@ public class FastObjectLoader {
         customTypeStreams.put(streamId, ob);
     }
 
+    /**
+     * Add an indexer to a stream (that backs a CorfuTable)
+     *
+     * @param streamName    Stream name.
+     * @param indexRegistry Index Registry.
+     */
+    public void addIndexerToCorfuTableStream(String streamName, IndexRegistry indexRegistry) {
+        UUID streamId = CorfuRuntime.getStreamID(streamName);
+        ObjectBuilder ob = new ObjectBuilder(runtime).setType(CorfuTable.class)
+                .setArguments(indexRegistry).setStreamID(streamId);
+        addCustomTypeStream(streamId, ob);
+    }
+
     private Class getStreamType(UUID streamId) {
         if (customTypeStreams.containsKey(streamId)) {
             return customTypeStreams.get(streamId).getType();
@@ -172,7 +187,7 @@ public class FastObjectLoader {
 
     public FastObjectLoader(@Nonnull final CorfuRuntime corfuRuntime) {
         this.runtime = corfuRuntime;
-        loadInCache = !corfuRuntime.cacheDisabled;
+        loadInCache = !corfuRuntime.getParameters().isCacheDisabled();
         streamsMetaData = new HashMap<>();
     }
 
@@ -220,12 +235,8 @@ public class FastObjectLoader {
             fail(msg);
         }
         for (Future future : futureList) {
-            try {
-                future.get();
-            } catch (ExecutionException | InterruptedException e) {
-                log.error("Error in invokingNecromancer task : {}", e);
-                fail("FastSMRLoader recovery failed.");
-            }
+            CFUtils.getUninterruptibly(future);
+
         }
     }
 
@@ -369,7 +380,7 @@ public class FastObjectLoader {
             // Create an Object only for non-checkpoints
 
             // If it is a special type, create it with the object builder
-            if (objectType != defaultObjectsType) {
+            if (customTypeStreams.containsKey(streamId)) {
                 createObjectIfNotExist(customTypeStreams.get(streamId), serializer);
             }
             else {

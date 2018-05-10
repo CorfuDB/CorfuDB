@@ -129,7 +129,7 @@ public class StreamsView extends AbstractView {
             // Token w/ conflict info
             : runtime.getSequencerView().nextToken(streamIds, conflictInfo);
 
-        for (int x = 0; x < runtime.getWriteRetry(); x++) {
+        for (int x = 0; x < runtime.getParameters().getWriteRetry(); x++) {
 
             // Is our token a valid type?
             switch (tokenResponse.getRespType()) {
@@ -216,10 +216,11 @@ public class StreamsView extends AbstractView {
         }
 
         log.error("append[{}]: failed after {} retries , streams {}, write size {} bytes",
-            tokenResponse.getTokenValue(),
-            runtime.getWriteRetry(),
-            streamIds.stream().map(Utils::toReadableId).collect(Collectors.toSet()),
-            ILogData.getSerializedSize(object));
+                tokenResponse.getTokenValue(),
+                runtime.getParameters().getWriteRetry(),
+                streamIds.stream().map(Utils::toReadableId).collect(Collectors.toSet()),
+                ILogData.getSerializedSize(object));
+
         throw new AppendException();
     }
 }

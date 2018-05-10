@@ -30,7 +30,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
      *                                     logunit nodes removed. Invalid removal.
      */
     @Test
-    public void checkRemovalOfNodes() throws LayoutModificationException, CloneNotSupportedException {
+    public void checkRemovalOfNodes() throws LayoutModificationException {
         Layout originalLayout = new TestLayoutBuilder()
                 .setEpoch(1L)
                 .addLayoutServer(SERVERS.PORT_0)
@@ -45,6 +45,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_0)
                 .addLogUnit(SERVERS.PORT_2)
+                .addLogUnit(SERVERS.PORT_3)
                 .addToSegment()
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_1)
@@ -112,12 +113,14 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .buildSegment()
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_2)
+                .addLogUnit(SERVERS.PORT_3)
                 .addToSegment()
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_1)
                 .addLogUnit(SERVERS.PORT_3)
                 .addToSegment()
                 .addToLayout()
+                .setClusterId(originalLayout.getClusterId())
                 .build();
 
         failedNodes.clear();
@@ -142,8 +145,10 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .buildSegment()
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_2)
+                .addLogUnit(SERVERS.PORT_3)
                 .addToSegment()
                 .buildStripe()
+                .addLogUnit(SERVERS.PORT_1)
                 .addLogUnit(SERVERS.PORT_3)
                 .addToSegment()
                 .addToLayout()
@@ -166,11 +171,11 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
         assertThatThrownBy(() ->
                 layoutBuilder.removeSequencerServer(allNodes.get(2))
         ).isInstanceOf(LayoutModificationException.class);
-        // Remove SERVERS.PORT_1 from logunits
-        layoutBuilder.removeLogunitServer(allNodes.get(1));
-        // No effect on removing removed node
-        layoutBuilder.removeLogunitServer(allNodes.get(1));
-        // Remove SERVERS.PORT_2 from logunit server should throw error.
+        // Reject remove if redundancy is lost
+        assertThatThrownBy(() ->
+                layoutBuilder.removeLogunitServer(allNodes.get(1))
+        ).isInstanceOf(LayoutModificationException.class);
+        // Reject remove if stripe size is one
         assertThatThrownBy(() ->
                 layoutBuilder.removeLogunitServer(allNodes.get(2))
         ).isInstanceOf(LayoutModificationException.class);

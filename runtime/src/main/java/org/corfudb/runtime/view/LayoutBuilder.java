@@ -7,11 +7,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
+
+import javax.annotation.Nonnull;
 
 /**
  * Allows us to make modifications to a layout.
@@ -35,9 +38,19 @@ public class LayoutBuilder {
      *
      * @param layout Base layout to be modified.
      */
-    public LayoutBuilder(Layout layout) throws CloneNotSupportedException {
-        this.layout = (Layout) layout.clone();
+    public LayoutBuilder(Layout layout) {
+        this.layout = new Layout(layout);
         this.epoch = layout.getEpoch();
+    }
+
+    /**
+     * Set layout's epoch
+     * @param epoch epoch to set
+     * @return this builder
+     */
+    public LayoutBuilder setEpoch(long epoch) {
+        this.epoch = epoch;
+        return this;
     }
 
     /**
@@ -67,21 +80,28 @@ public class LayoutBuilder {
      *
      * @return
      */
-    public LayoutBuilder removeUnResponsiveServers(Set<String> endpoints) {
+    public LayoutBuilder removeUnresponsiveServers(Set<String> endpoints) {
         layout.getUnresponsiveServers().removeAll(endpoints);
         return this;
     }
 
+    /**
+     * Removes an unresponsive server
+     * @param endpoint the endpoint of the server to remove
+     * @return this builder
+     */
+    public LayoutBuilder removeUnresponsiveServer(@Nonnull String endpoint) {
+        layout.getUnresponsiveServers().remove(endpoint);
+        return this;
+    }
 
     /**
      * Removes the Layout Server passed
      *
      * @param endpoint Endpoint to be removed
      * @return Workflow manager
-     * @throws LayoutModificationException If attempt to remove all layout servers.
      */
-    public LayoutBuilder removeLayoutServer(String endpoint)
-            throws LayoutModificationException {
+    public LayoutBuilder removeLayoutServer(String endpoint) {
 
         List<String> layoutServers = layout.getLayoutServers();
         for (int i = 0; i < layoutServers.size(); i++) {
@@ -102,10 +122,8 @@ public class LayoutBuilder {
      *
      * @param endpoints Layout server endpoints to be removed from the layout.
      * @return Workflow manager
-     * @throws LayoutModificationException If attempt to remove all layout servers.
      */
-    public LayoutBuilder removeLayoutServers(Set<String> endpoints)
-            throws LayoutModificationException {
+    public LayoutBuilder removeLayoutServers(Set<String> endpoints) {
 
         // Not making changes in the original list in case of exceptions.
         // Copy the list so that we can have an atomic result and no partial removals
@@ -195,18 +213,35 @@ public class LayoutBuilder {
     }
 
     /**
+     * Add a log unit server to a specific stripe in a specific segment.
+     *
+     * @param endpoint     Endpoint to add to the log unit list.
+     * @param segmentIndex Segment to which the log unit is to be added.
+     * @param stripeIndex  Stripe to which the log unit is to be added.
+     * @return this.
+     */
+    public LayoutBuilder addLogunitServerToSegment(String endpoint,
+                                                   int segmentIndex,
+                                                   int stripeIndex) {
+        LayoutStripe stripe = layout.getSegments().get(segmentIndex).getStripes().get(stripeIndex);
+        if (!stripe.getLogServers().contains(endpoint)) {
+            stripe.getLogServers().add(endpoint);
+        }
+        return this;
+    }
+
+    /**
      * Merges the specified segment and the segment before this.
      * No addition or removal of stripes are allowed.
      * Only 1 log unit server addition/removal allowed between segments.
      *
      * @param segmentIndex Segment to merge.
      * @return this.
-     * @throws LayoutModificationException
      */
-    public LayoutBuilder mergePreviousSegment(int segmentIndex)
-            throws LayoutModificationException {
+    public LayoutBuilder mergePreviousSegment(int segmentIndex) {
         if (segmentIndex < 1) {
-            throw new LayoutModificationException("No segments to merge.");
+            log.warn("mergePreviousSegment: No segments to merge.");
+            return this;
         }
 
         List<LayoutSegment> layoutSegmentList = layout.getSegments();
@@ -254,10 +289,8 @@ public class LayoutBuilder {
      *
      * @param endpoints Failed endpoints.
      * @return LayoutBuilder
-     * @throws LayoutModificationException throws if no working sequencer left.
      */
-    public LayoutBuilder assignResponsiveSequencerAsPrimary(Set<String> endpoints)
-            throws LayoutModificationException {
+    public LayoutBuilder assignResponsiveSequencerAsPrimary(Set<String> endpoints) {
 
         List<String> modifiedSequencerServers = new ArrayList<>(layout.getSequencers());
         for (int i = 0; i < modifiedSequencerServers.size(); i++) {
@@ -277,10 +310,8 @@ public class LayoutBuilder {
      *
      * @param endpoint Sequencer server to be removed
      * @return Workflow manager
-     * @throws LayoutModificationException Cannot remove the only sequencer server.
      */
-    public LayoutBuilder removeSequencerServer(String endpoint)
-            throws LayoutModificationException {
+    public LayoutBuilder removeSequencerServer(String endpoint) {
 
         List<String> sequencerServers = layout.getSequencers();
         for (int i = 0; i < sequencerServers.size(); i++) {
@@ -300,10 +331,8 @@ public class LayoutBuilder {
      *
      * @param endpoints Set of sequencer servers to be removed
      * @return Workflow manager
-     * @throws LayoutModificationException Cannot remove the only sequencer server.
      */
-    public LayoutBuilder removeSequencerServers(Set<String> endpoints)
-            throws LayoutModificationException {
+    public LayoutBuilder removeSequencerServers(Set<String> endpoints) {
 
         // Not making changes in the original list in case of exceptions.
         // Copy the list so that we can have an atomic result and no partial removals
@@ -324,35 +353,48 @@ public class LayoutBuilder {
     }
 
     /**
+     * Remove an endpoint from a segment.
+     *
+     * @param endpoint             The endpoint to remove
+     * @param layoutStripe         the stripe to remove the endpoint from
+     * @param minReplicationFactor The least number of nodes needed to
+     *                             maintain redundancy
+     */
+    public void removeFromStripe(String endpoint, LayoutStripe layoutStripe,
+                                 int minReplicationFactor) {
+        if (layoutStripe.getLogServers().remove(endpoint)) {
+            if (layoutStripe.getLogServers().isEmpty()) {
+                throw new LayoutModificationException(
+                        "Attempting to remove all logunit in stripe. "
+                                + "No replicas available.");
+            }
+
+            if (layoutStripe.getLogServers().size() < minReplicationFactor) {
+                throw new LayoutModificationException(
+                        "Change will cause redundancy loss!");
+            }
+        }
+    }
+
+    /**
      * Removes the logunit endpoint from the layout.
      *
      * @param endpoint Log unit server to be removed
      * @return Workflow manager
-     * @throws LayoutModificationException Cannot remove non-replicated logunit
      */
-    public LayoutBuilder removeLogunitServer(String endpoint)
-            throws LayoutModificationException {
+    public LayoutBuilder removeLogunitServer(String endpoint) {
 
-        List<LayoutSegment> layoutSegments = layout.getSegments();
+        Layout tempLayout = new Layout(layout);
+
+        List<LayoutSegment> layoutSegments = tempLayout.getSegments();
         for (LayoutSegment layoutSegment : layoutSegments) {
             for (LayoutStripe layoutStripe : layoutSegment.getStripes()) {
-
-                List<String> loguintServers = layoutStripe.getLogServers();
-
-                for (int k = 0; k < loguintServers.size(); k++) {
-                    if (loguintServers.get(k).equals(endpoint)) {
-                        if (loguintServers.size() == 1) {
-                            throw new LayoutModificationException(
-                                    "Attempting to remove all logunit. No replicas available.");
-                        }
-                        loguintServers.remove(k);
-                        return this;
-                    }
-                }
-
+                int minReplicationFactor = layoutSegment.getReplicationMode()
+                        .getMinReplicationFactor(tempLayout);
+                removeFromStripe(endpoint, layoutStripe, minReplicationFactor);
             }
         }
-
+        layout = tempLayout;
         return this;
     }
 
@@ -361,36 +403,22 @@ public class LayoutBuilder {
      *
      * @param endpoints Log unit servers to be removed
      * @return Workflow manager
-     * @throws LayoutModificationException Cannot remove non-replicated logunit
      */
-    public LayoutBuilder removeLogunitServers(Set<String> endpoints)
-            throws LayoutModificationException {
+    public LayoutBuilder removeLogunitServers(Set<String> endpoints) {
 
-        // Not making changes in the original list in case of exceptions.
-        // Copy the list so that we can have an atomic result and no partial removals
-        List<LayoutSegment> modifiedLayoutSegments = new ArrayList<>(layout.getSegments());
+        Layout tempLayout = new Layout(layout);
 
-        for (LayoutSegment layoutSegment : modifiedLayoutSegments) {
+        List<LayoutSegment> layoutSegments = tempLayout.getSegments();
+        for (LayoutSegment layoutSegment : layoutSegments) {
             for (LayoutStripe layoutStripe : layoutSegment.getStripes()) {
-
-                List<String> loguintServers = layoutStripe.getLogServers();
-
-                for (int k = 0; k < loguintServers.size(); ) {
-                    String logunitServer = loguintServers.get(k);
-                    if (endpoints.contains(logunitServer)) {
-                        if (loguintServers.size() == 1) {
-                            throw new LayoutModificationException(
-                                    "Attempting to remove all logunit. "
-                                            + "No replicas available.");
-                        }
-                        loguintServers.remove(k);
-                    } else {
-                        k++;
-                    }
+                for (String endpoint : endpoints) {
+                    int minReplicationFactor = layoutSegment.getReplicationMode()
+                            .getMinReplicationFactor(tempLayout);
+                    removeFromStripe(endpoint, layoutStripe, minReplicationFactor);
                 }
             }
         }
-        layout.getSegments().retainAll(modifiedLayoutSegments);
+        layout = tempLayout;
         return this;
     }
 
@@ -405,7 +433,8 @@ public class LayoutBuilder {
                 layout.getSequencers(),
                 layout.getSegments(),
                 layout.getUnresponsiveServers(),
-                this.epoch);
+                this.epoch,
+                layout.getClusterId());
     }
 
 }

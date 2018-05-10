@@ -1,13 +1,14 @@
 package org.corfudb.runtime.view;
 
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
@@ -20,6 +21,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 1/6/16.
@@ -65,13 +67,37 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addLogUnit(SERVERS.PORT_0)
                 .addToSegment()
                 .addToLayout()
+                .setClusterId(r.clusterId)
                 .build();
-        l.setRuntime(r);
-        l.moveServersToEpoch();
+        r.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
         r.getLayoutView().updateLayout(l, 1L);
         r.invalidateLayout();
         assertThat(r.getLayoutView().getLayout().epoch)
                 .isEqualTo(1L);
+    }
+
+    /** Make sure that trying to set a layout with the wrong cluster id results
+     *  in a wrong epoch exception.
+     */
+    @Test
+    public void cannotSetLayoutWithWrongId()
+        throws Exception {
+        CorfuRuntime r = getDefaultRuntime().connect();
+        Layout l = new TestLayoutBuilder()
+            .setEpoch(1)
+            .addLayoutServer(SERVERS.PORT_0)
+            .addSequencer(SERVERS.PORT_0)
+            .buildSegment()
+            .buildStripe()
+            .addLogUnit(SERVERS.PORT_0)
+            .addToSegment()
+            .addToLayout()
+            .setClusterId(UUID.nameUUIDFromBytes("wrong cluster".getBytes()))
+            .build();
+        r.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
+        r.invalidateLayout();
+        assertThatThrownBy(() -> r.getLayoutView().updateLayout(l, 1L))
+            .isInstanceOf(WrongClusterException.class);
     }
 
     @Test
@@ -175,16 +201,15 @@ public class LayoutViewTest extends AbstractViewTest {
                         .addToSegment()
                         .addToLayout()
                         .build();
-                newLayout.setRuntime(corfuRuntime);
                 //TODO need to figure out if we can move to
                 //update layout
-                newLayout.moveServersToEpoch();
+                corfuRuntime.getLayoutView().getRuntimeLayout(newLayout).moveServersToEpoch();
 
                 corfuRuntime.getLayoutView().updateLayout(newLayout, newLayout.getEpoch());
                 corfuRuntime.invalidateLayout();
-                corfuRuntime.layout.get();
-                corfuRuntime.getRouter(SERVERS.ENDPOINT_0).getClient(SequencerClient.class)
-                        .bootstrap(0L, Collections.EMPTY_MAP, newLayout.getEpoch()).get();
+                corfuRuntime.getLayoutView().getRuntimeLayout()
+                        .getSequencerClient(SERVERS.ENDPOINT_0)
+                        .bootstrap(0L, Collections.emptyMap(), newLayout.getEpoch(), true).get();
                 log.debug("layout updated new layout {}", corfuRuntime.getLayoutView().getLayout());
                 layoutReconfiguredLatch.countDown();
             } catch (Exception e) {
@@ -254,11 +279,8 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
 
-        l.setRuntime(corfuRuntime);
-        newLayout.setRuntime(corfuRuntime);
-
         l.setEpoch(l.getEpoch() + 1);
-        l.moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
         corfuRuntime.getLayoutView().updateLayout(newLayout, 1L);
 
         assertThat(getLayoutServer(SERVERS.PORT_0).getCurrentLayout()).isEqualTo(newLayout);
@@ -318,13 +340,10 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
 
-        l.setRuntime(corfuRuntime);
-        newLayout.setRuntime(corfuRuntime);
-
         // Keep old layout untouched for assertion
-        Layout oldLayout = (Layout) l.clone();
+        Layout oldLayout = new Layout(l);
         l.setEpoch(l.getEpoch() + 1);
-        l.moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
 
         // We receive responses from PORT_0 and PORT_2
         corfuRuntime.getLayoutView().updateLayout(newLayout, 1L);
@@ -444,9 +463,8 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
 
-        l.setRuntime(corfuRuntime);
         l.setEpoch(l.getEpoch() + 1);
-        l.moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
 
         // STEP 1
         final long rank1 = 1L;
@@ -569,9 +587,8 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
 
-        l.setRuntime(corfuRuntime1);
         l.setEpoch(l.getEpoch() + 1);
-        l.moveServersToEpoch();
+        corfuRuntime1.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
 
         Semaphore proposeLock = new Semaphore(0);
         ExecutorService executorService = Executors.newSingleThreadExecutor();

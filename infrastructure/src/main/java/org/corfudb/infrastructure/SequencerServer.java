@@ -5,7 +5,6 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 
 import io.netty.channel.ChannelHandlerContext;
-
 import java.lang.invoke.MethodHandles;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +33,7 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 import org.eclipse.collections.api.map.primitive.MutableObjectLongMap;
 import org.eclipse.collections.impl.map.mutable.primitive.ObjectLongHashMap;
+import org.corfudb.runtime.view.Layout;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -139,20 +139,20 @@ public class SequencerServer extends AbstractServer {
      * Handler for this server.
      */
     @Getter
-    private final CorfuMsgHandler handler = new CorfuMsgHandler()
-        .generateHandlers(MethodHandles.lookup(), this);
+    private final CorfuMsgHandler handler =
+            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
 
 
     @Getter
     @Setter
-    private volatile long readyStateEpoch = -1;
+    private volatile long bootstrapEpoch = Layout.INVALID_EPOCH;
 
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
-        if ((readyStateEpoch != serverContext.getServerEpoch())
-            && (!msg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER))) {
+        if ((bootstrapEpoch != serverContext.getServerEpoch())
+                && (!msg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER))) {
             log.warn("Rejecting msg at sequencer : sequencerStateEpoch:{}, serverEpoch:{}, "
-                + "msg:{}", readyStateEpoch, serverContext.getServerEpoch(), msg);
+                    + "msg:{}", bootstrapEpoch, serverContext.getServerEpoch(), msg);
             return false;
         }
         return true;
@@ -230,7 +230,6 @@ public class SequencerServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-
     /**
      * Service an incoming request to bootstrap the sequencer.
      *
@@ -240,18 +239,31 @@ public class SequencerServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.BOOTSTRAP_SEQUENCER)
     public void bootstrapServer(CorfuPayloadMsg<SequencerTailsRecoveryMsg> msg,
-        ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+        ChannelHandlerContext ctx, IServerRouter r) {
         long ts = lock.writeLock();
         try {
             long initialToken = msg.getPayload().getGlobalTail();
             final Map<UUID, Long> streamTails = msg.getPayload().getStreamTails();
             final long readyEpoch = msg.getPayload().getReadyStateEpoch();
 
+            // Boolean flag to denote whether this bootstrap message is just updating an existing
+            // primary sequencer with the new epoch (if set to true) or bootstrapping a currently
+            // NOT_READY sequencer.
+            final boolean bootstrapWithoutTailsUpdate = msg.getPayload()
+                    .getBootstrapWithoutTailsUpdate();
+
+            // If bootstrapEpoch is -1 (startup), the sequencer should not accept
+            // bootstrapWithoutTailsUpdate bootstrap messages.
+            if (bootstrapEpoch == Layout.INVALID_EPOCH && bootstrapWithoutTailsUpdate) {
+                log.warn("Cannot update existing sequencer. Require full bootstrap.");
+                r.sendResponse(ctx, msg, CorfuMsgType.NACK.msg());
+                return;
+            }
+
             // Stale bootstrap request should be discarded.
-            if (readyStateEpoch > readyEpoch) {
-                log.info("bootstrapServer: Sequencer already bootstrapped at epoch {}. "
-                        + "Discarding bootstrap request with epoch {}", readyStateEpoch,
-                    readyEpoch);
+            if (serverContext.getSequencerEpoch() >= readyEpoch) {
+                log.info("Sequencer already bootstrapped at epoch {}. "
+                        + "Discarding bootstrap request with epoch {}", bootstrapEpoch, readyEpoch);
                 r.sendResponse(ctx, msg, CorfuMsgType.NACK.msg());
                 return;
             }
@@ -281,11 +293,8 @@ public class SequencerServer extends AbstractServer {
             }
 
             // Mark the sequencer as ready after the tails have been populated.
-            readyStateEpoch = readyEpoch;
-
-            log.info("bootstrapServer: Sequencer reset with token = {}, streamTailMap = {},"
-                    + " readyStateEpoch = {}",
-                initialToken, streamTailMap, readyStateEpoch);
+            bootstrapEpoch = readyEpoch;
+            serverContext.setSequencerEpoch(readyEpoch);
         } finally {
             lock.unlock(ts);
         }
@@ -294,7 +303,7 @@ public class SequencerServer extends AbstractServer {
 
 
     /**
-     * Service an incoming request to bootstrap the sequencer.
+     * Service an incoming token request
      *
      * @param msg                   The token request message.
      * @param ctx                   The incoming channel handler context.
@@ -371,6 +380,7 @@ public class SequencerServer extends AbstractServer {
                 maxStreamGlobalTail =
                     streamTailMap.getIfAbsent(streamId, Address.NON_EXIST);
             }
+
             while (maxStreamGlobalTail == Address.NON_EXIST && !lock.validate(ts)) {
                 ts = lock.tryOptimisticRead();
                 maxStreamGlobalTail = streamTailMap
@@ -401,11 +411,11 @@ public class SequencerServer extends AbstractServer {
 
         return CorfuMsgType.TOKEN_RES.payloadMsg(
             new TokenResponse(prevTail, serverEpoch));
-
     }
 
 
     /**
+<<<<<<< HEAD
      * Service a requests for transaction commit.
      * This method checks if a transaction can commit by calling
      * {@link this#verifyCommitUnsafe(long, TxResolutionInfo, long)}.
@@ -559,6 +569,7 @@ public class SequencerServer extends AbstractServer {
                 log.trace("verifyCommitUnsafe: OK[{}] conflict-stream[{}](ts={})", txInfo,
                     Utils.toReadableId(streamId), streamTail);
             }
+
         }
         return null;
     }

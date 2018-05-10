@@ -4,9 +4,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,6 +41,7 @@ public class LongevityApp {
     // How much time we live the application hangs once the duration is finished
     // and the application is hanged
     static final int APPLICATION_TIMEOUT_IN_MS = 10000;
+    static final long TIME_TO_WAIT_FOR_RUNTIME_TO_CONNECT = 60000;
 
     static final int QUEUE_CAPACITY = 1000;
 
@@ -52,7 +55,16 @@ public class LongevityApp {
         this.numberThreads = numberThreads;
 
         operationQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
-        rt = new CorfuRuntime(configurationString).connect();
+
+        rt = new CorfuRuntime(configurationString);
+
+        try {
+            tryToConnectTimeout(TIME_TO_WAIT_FOR_RUNTIME_TO_CONNECT);
+        } catch (SystemUnavailableError e) {
+            System.exit(1);
+        }
+
+
         state = new State(50, 100, rt);
 
         taskProducer = Executors.newSingleThreadExecutor();
@@ -125,8 +137,6 @@ public class LongevityApp {
 
             exitStatus = checkpointHasFinished ? 0 : 1;
             System.exit(exitStatus);
-
-
         }
     }
 
@@ -196,6 +206,22 @@ public class LongevityApp {
             op.execute();
         };
         checkpointer.scheduleAtFixedRate(cpTrimTask, 30, 20, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Try to connect the runtime and throws a SystemUnavailableError if cannot connect
+     * within the timeout.
+     *
+     * @param timeoutInMs
+     * @throws SystemUnavailableError
+     */
+    private void tryToConnectTimeout (long timeoutInMs) throws SystemUnavailableError {
+        try {
+            CompletableFuture.supplyAsync(() -> rt.connect()).get(timeoutInMs, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            Correctness.recordOperation("Liveness, " + false, false);
+            throw new SystemUnavailableError(e.getMessage());
+        }
     }
 
 

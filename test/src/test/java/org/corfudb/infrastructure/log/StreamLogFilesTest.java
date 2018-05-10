@@ -19,6 +19,7 @@ import java.util.Set;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.format.Types;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
@@ -64,8 +65,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // same entry.
         final StreamLog newLog = new StreamLogFiles(getContext(), true);
         assertThatThrownBy(() -> {
-            newLog
-                    .append(address0, new LogData(DataType.DATA, b));
+            newLog.append(address0, new LogData(DataType.DATA, b));
         })
                 .isInstanceOf(OverwriteException.class);
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
@@ -319,7 +319,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
         log.close();
 
-        final int OVERWRITE_DELIMITER = 0xFFFF;
         final int OVERWRITE_BYTES = 4;
 
         // Overwrite 2 bytes of the checksum and 2 bytes of the entry's address
@@ -333,21 +332,11 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         Metadata metadata = Metadata.parseFrom(metaDataBuf.array());
 
-        final int offset1 = METADATA_SIZE + metadata.getLength();
-        final int offset2 = METADATA_SIZE + metadata.getLength() + Short.BYTES + OVERWRITE_BYTES;
-
-        // Corrupt delimiter in the first segment
-
-        file1.seek(offset1);
-        file1.writeShort(0);
-        file1.close();
-
-        assertThatThrownBy(() -> new StreamLogFiles(getContext(), false).read(0L))
-                .isInstanceOf(DataCorruptionException.class);
+        final int offset = METADATA_SIZE + metadata.getLength() + OVERWRITE_BYTES;
 
         // Corrupt metadata in the second segment
-        file2.seek(offset2);
-        file2.writeInt(OVERWRITE_DELIMITER);
+        file2.seek(offset);
+        file2.writeInt(OVERWRITE_BYTES);
         file2.close();
 
         assertThatThrownBy(() -> new StreamLogFiles(getContext(), false))
@@ -416,7 +405,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.trim(address);
 
         // Verify that the unwritten address trim is not persisted
-        StreamLogFiles.SegmentHandle sh = log.getSegmentHandleForAddress(address);
+        SegmentHandle sh = log.getSegmentHandleForAddress(address);
         assertThat(sh.getPendingTrims().size()).isEqualTo(0);
 
         // Write to the same address
@@ -466,7 +455,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         log.compact();
 
-        StreamLogFiles.SegmentHandle sh = log.getSegmentHandleForAddress(logChunk);
+        SegmentHandle sh = log.getSegmentHandleForAddress(logChunk);
 
         assertThat(logChunk).isGreaterThan(StreamLogFiles.TRIM_THRESHOLD);
         assertThat(sh.getPendingTrims().size()).isEqualTo(logChunk);
@@ -566,8 +555,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         long trimAddress = endSegment * StreamLogFiles.RECORDS_PER_LOG_FILE + 1;
 
         // Get references to the segments that will be trimmed
-        Set<StreamLogFiles.SegmentHandle> trimmedHandles = new HashSet();
-        for (StreamLogFiles.SegmentHandle sh : ((StreamLogFiles)log).getSegmentHandles()) {
+        Set<SegmentHandle> trimmedHandles = new HashSet();
+        for (SegmentHandle sh : ((StreamLogFiles)log).getSegmentHandles()) {
             if (sh.getSegment() < endSegment) {
                 trimmedHandles.add(sh);
             }
@@ -609,8 +598,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         }
 
         // Verify that the trimmed segment channels are closed
-        for (StreamLogFiles.SegmentHandle sh : trimmedHandles) {
-            assertThat(sh.getLogChannel().isOpen()).isFalse();
+        for (SegmentHandle sh : trimmedHandles) {
+            assertThat(sh.getWriteChannel().isOpen()).isFalse();
             assertThat(sh.getPendingTrimChannel().isOpen()).isFalse();
             assertThat(sh.getTrimmedChannel().isOpen()).isFalse();
         }
@@ -694,5 +683,123 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(logsDir.list()).hasSize(expectedFilesAfterReset);
         assertThat(log.getGlobalTail()).isEqualTo(globalTailAfterReset);
         assertThat(log.getTrimMark()).isEqualTo(trimMarkAfterReset);
+    }
+
+    @Test
+    public void partialHeaderMetadataTest() throws Exception {
+        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        String logFilePath = logDir + File.separator + 0 + ".log";
+
+        File dir = new File(logDir);
+        dir.mkdir();
+        RandomAccessFile logFile = new RandomAccessFile(logFilePath, "rw");
+
+        Types.LogHeader header = Types.LogHeader.newBuilder()
+                .setVersion(StreamLogFiles.VERSION)
+                .setVerifyChecksum(false)
+                .build();
+
+        // Simulate a partial metadata write for the log header
+        ByteBuffer buf = StreamLogFiles.getByteBufferWithMetaData(header);
+        buf.limit(StreamLogFiles.METADATA_SIZE - 1);
+        logFile.getChannel().write(buf);
+        logFile.close();
+
+        // Open a StreamLog and write an entry in the segment that has the partial metadata write
+        StreamLog log = new StreamLogFiles(getContext(), false);
+        long address0 = 0;
+        assertThat(log.read(address0)).isNull();
+        log.close();
+    }
+
+    @Test
+    public void partialHeaderTest() throws Exception {
+        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        String logFilePath = logDir + File.separator + 0 + ".log";
+
+        File dir = new File(logDir);
+        dir.mkdir();
+        RandomAccessFile logFile = new RandomAccessFile(logFilePath, "rw");
+
+        Types.LogHeader header = Types.LogHeader.newBuilder()
+                .setVersion(StreamLogFiles.VERSION)
+                .setVerifyChecksum(false)
+                .build();
+
+        // Simulate a partial log header write
+        ByteBuffer buf = StreamLogFiles.getByteBufferWithMetaData(header);
+        buf.limit(buf.capacity() - 1);
+        logFile.getChannel().write(buf);
+        logFile.close();
+
+        StreamLog log = new StreamLogFiles(getContext(), false);
+        ByteBuf b = Unpooled.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        // Write to segment 0
+        long address0 = 0;
+        log.append(address0, new LogData(DataType.DATA, b));
+        log.close();
+
+        // Open the segment again and verify that the entry write can be read (i.e. log file can be
+        // parsed correctly).
+        log = new StreamLogFiles(getContext(), false);
+        assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+    }
+
+    @Test
+    public void partialEntryTest() throws Exception {
+        StreamLog log = new StreamLogFiles(getContext(), false);
+
+        // Force the creation of segment 0
+        long address0 = 0;
+        log.read(address0);
+        log.close();
+
+        // Simulate a partially written log entry
+        final int serializedEntrySize = 100;
+        byte[] entryBytes = new byte[serializedEntrySize];
+        Metadata metadata = Metadata.newBuilder()
+                .setPayloadChecksum(StreamLogFiles.getChecksum(serializedEntrySize))
+                .setLengthChecksum(StreamLogFiles.getChecksum(entryBytes.length))
+                .setLength(entryBytes.length)
+                .build();
+
+        ByteBuffer entryBuf = ByteBuffer.allocate(entryBytes.length + metadata.getSerializedSize());
+        entryBuf.put(metadata.toByteArray());
+        entryBuf.put(entryBytes);
+        entryBuf.flip();
+
+        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        String logFilePath = logDir + File.separator + 0 + ".log";
+
+        RandomAccessFile logFile = new RandomAccessFile(logFilePath, "rw");
+
+        // Write a partial buffer
+        entryBuf.limit(entryBuf.capacity() - 1);
+        System.out.println("cap " + entryBuf.capacity());
+        System.out.println("limit " + entryBuf.limit());
+        // Append the buffer after the header
+        long end = logFile.getChannel().size();
+        logFile.getChannel().position(end);
+        System.out.println("position " + logFile.getChannel().position());
+        int bytesWritten = logFile.getChannel().write(entryBuf);
+        System.out.println("bytesWritten " + bytesWritten);
+        System.out.println("position " + logFile.getChannel().position());
+        logFile.close();
+
+        // Verify that the segment address space can be parsed and that the partial write is ignored
+        log = new StreamLogFiles(getContext(), false);
+        assertThat(log.read(address0)).isNull();
+
+        // Attempt to write after the partial write and very that it can be read back
+        ByteBuf b = Unpooled.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        log.append(address0, new LogData(DataType.DATA, b));
+        log.close();
+
+        log = new StreamLogFiles(getContext(), false);
+        assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
     }
 }

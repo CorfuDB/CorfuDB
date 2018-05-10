@@ -1,7 +1,8 @@
 package org.corfudb.infrastructure;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.FailureDetectorMsg;
+import org.corfudb.protocols.wireprotocol.DetectorMsg;
+import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
 import org.corfudb.runtime.view.Layout;
 import org.junit.After;
 import org.junit.Test;
@@ -26,22 +27,18 @@ public class ManagementServerTest extends AbstractServerTest {
     public ManagementServer getDefaultServer() {
         // Adding layout server for management server runtime to connect to.
         ServerContext serverContext = new ServerContextBuilder()
-                .setSingle(true)
+                .setSingle(false)
                 .setPort(SERVERS.PORT_0)
                 .setServerRouter(getRouter())
                 .build();
         // Required for management server to fetch layout.
         router.addServer(new LayoutServer(serverContext));
-        router.addServer(new BaseServer());
+        router.addServer(new BaseServer(serverContext));
         // Required to fetch global tails while handling failures.
         router.addServer(new LogUnitServer(serverContext));
         // Required for management server to bootstrap during initialization.
         router.addServer(new SequencerServer(serverContext));
-        managementServer = new ManagementServer(new ServerContextBuilder()
-                .setSingle(false)
-                .setPort(SERVERS.PORT_0)
-                .setServerRouter(getRouter())
-                .build());
+        managementServer = new ManagementServer(serverContext);
         return managementServer;
     }
 
@@ -55,9 +52,11 @@ public class ManagementServerTest extends AbstractServerTest {
      */
     @Test
     public void checkFailureDetectorStatus() {
-        assertThat(!managementServer.getFailureDetectorService().isShutdown());
+        assertThat(managementServer.getManagementAgent().getDetectionTaskWorkers().isShutdown())
+                .isFalse();
         managementServer.shutdown();
-        assertThat(managementServer.getFailureDetectorService().isShutdown());
+        assertThat(managementServer.getManagementAgent().getDetectionTaskWorkers().isShutdown())
+                .isTrue();
     }
 
     /**
@@ -66,6 +65,7 @@ public class ManagementServerTest extends AbstractServerTest {
     @Test
     public void bootstrapManagementServer() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
         sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
         sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
@@ -78,15 +78,14 @@ public class ManagementServerTest extends AbstractServerTest {
     @Test
     public void triggerFailureHandler() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
-        Set<String> set = new HashSet<>();
-        set.add("key");
+        sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
         sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
-                new FailureDetectorMsg(Collections.singleton("key"), Collections.emptySet())));
+                new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR);
         sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
         sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
-                new FailureDetectorMsg(Collections.singleton("key"), Collections.emptySet())));
+                new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
     }
 }

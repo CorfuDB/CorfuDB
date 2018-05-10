@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -19,6 +20,10 @@ public class TestLayoutBuilder {
     List<String> layoutServers;
     List<String> unresponsiveServers;
     List<TestSegmentBuilder> segments;
+
+    @Getter
+    @Setter
+    UUID clusterId;
 
     @Getter
     @Setter
@@ -44,6 +49,7 @@ public class TestLayoutBuilder {
                 .addLogUnit(port)
                 .addToSegment()
                 .addToLayout()
+                .setClusterId(UUID.randomUUID())
                 .build();
     }
 
@@ -80,7 +86,7 @@ public class TestLayoutBuilder {
                 sequencerServers,
                 segmentList,
                 unresponsiveServers,
-                epoch);
+                epoch, clusterId);
     }
 
     @Accessors(chain = true)

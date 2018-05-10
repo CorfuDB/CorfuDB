@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -218,12 +219,12 @@ public class CheckpointWriter<T extends Map> {
                 .getObjectType();
 
         if (enablePutAll) {
-            Iterable<List<Object>> partitions = Iterables.partition(map.keySet(), batchSize);
+            Iterable<List<Map.Entry>> partitions = Iterables.partition(map.entrySet(), batchSize);
 
-            for (List<Object> partition : partitions) {
+            for (List<Map.Entry> partition : partitions) {
                 Map tmp = new HashMap();
-                for (Object k : partition) {
-                    tmp.put(keyMutator.apply(k), valueMutator.apply(map.get(k)));
+                for (Map.Entry entry : partition) {
+                    tmp.put(keyMutator.apply(entry.getKey()), valueMutator.apply(map.get(entry.getValue())));
                 }
 
                 SMREntry smrEntry = new SMREntry("putAll", new Object[]{tmp}, serializer
@@ -245,30 +246,32 @@ public class CheckpointWriter<T extends Map> {
                 numBytes += cp.getSmrEntriesBytes();
             }
         } else {
-            Iterators.partition(map.keySet().stream()
-                    .map(k -> {
-                        return new SMREntry("put",
-                                new Object[]{keyMutator.apply(k), valueMutator.apply(map.get(k))},
-                                serializer);
-                    }).iterator(), batchSize)
-                    .forEachRemaining(entries -> {
-                        MultiSMREntry smrEntries = new MultiSMREntry();
-                        for (int i = 0; i < ((List) entries).size(); i++) {
-                            smrEntries.addTo((SMREntry) ((List) entries).get(i));
-                        }
-                        CheckpointEntry cp = new CheckpointEntry(CheckpointEntry
-                                .CheckpointEntryType.CONTINUATION,
-                                author, checkpointId, streamId, mdkv, smrEntries);
-                        long pos = sv.append(Collections.singleton(checkpointStreamID), cp, null);
 
-                        postAppendFunc.accept(cp, pos);
-                        continuationAddresses.add(pos);
+            Iterable<List<Map.Entry>> partitions = Iterables.partition(map.entrySet(), batchSize);
 
-                        numEntries++;
-                        // CheckpointEntry::serialize() has a side-effect we use
-                        // for an accurate count of serialized bytes of SRMEntries.
-                        numBytes += cp.getSmrEntriesBytes();
-                    });
+            for (List<Map.Entry> partition : partitions) {
+                MultiSMREntry smrEntries = new MultiSMREntry();
+                for (Map.Entry entry : partition) {
+                    smrEntries.addTo(new SMREntry("put",
+                            new Object[]{keyMutator.apply(entry.getKey()),
+                                    valueMutator.apply(entry.getValue())},
+                            serializer));
+                }
+
+                CheckpointEntry cp = new CheckpointEntry(CheckpointEntry
+                        .CheckpointEntryType.CONTINUATION,
+                        author, checkpointId, streamId, mdkv, smrEntries);
+                long pos = sv.append(Collections.singleton(checkpointStreamID), cp, null);
+
+                postAppendFunc.accept(cp, pos);
+                continuationAddresses.add(pos);
+
+                numEntries++;
+                // CheckpointEntry::serialize() has a side-effect we use
+                // for an accurate count of serialized bytes of SRMEntries.
+                numBytes += cp.getSmrEntriesBytes();
+
+            }
         }
 
         return continuationAddresses;

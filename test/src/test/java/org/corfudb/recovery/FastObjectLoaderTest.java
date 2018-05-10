@@ -1,5 +1,6 @@
 package org.corfudb.recovery;
 
+import org.assertj.core.data.MapEntry;
 import org.corfudb.CustomSerializer;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -10,8 +11,8 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.CorfuTableTest;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -157,7 +158,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canReadWithCacheDisable() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2);
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
                 .setCacheDisabled(true)
                 .connect();
 
@@ -180,10 +181,10 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canReadHoles() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2);
 
-        LogUnitClient luc = getDefaultRuntime().getRouter(getDefaultConfigurationString())
-                .getClient(LogUnitClient.class);
-        SequencerClient seq = getDefaultRuntime().getRouter(getDefaultConfigurationString())
-                .getClient(SequencerClient.class);
+        LogUnitClient luc = getDefaultRuntime().getLayoutView().getRuntimeLayout()
+                .getLogUnitClient(getDefaultConfigurationString());
+        SequencerClient seq = getDefaultRuntime().getLayoutView().getRuntimeLayout()
+                .getSequencerClient(getDefaultConfigurationString());
 
         seq.nextToken(Collections.emptyList());
         luc.fillHole(getDefaultRuntime().getSequencerView()
@@ -237,7 +238,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, MORE);
 
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
                 .connect();
         FastObjectLoader fsm = new FastObjectLoader(rt2)
                 .setBatchReadSize(2)
@@ -399,10 +400,10 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canReadRankOnlyEntries() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, 2);
 
-        LogUnitClient luc = getDefaultRuntime().getRouter(getDefaultConfigurationString())
-                .getClient(LogUnitClient.class);
-        SequencerClient seq = getDefaultRuntime().getRouter(getDefaultConfigurationString())
-                .getClient(SequencerClient.class);
+        LogUnitClient luc = getDefaultRuntime().getLayoutView().getRuntimeLayout()
+                .getLogUnitClient(getDefaultConfigurationString());
+        SequencerClient seq = getDefaultRuntime().getLayoutView().getRuntimeLayout()
+                .getSequencerClient(getDefaultConfigurationString());
 
         long address = seq.nextToken(Collections.emptySet(),1).get().getTokenValue();
         ILogData data = Helpers.createEmptyData(address, DataType.RANK_ONLY,  new IMetadata.DataRank(2))
@@ -507,7 +508,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
                 .connect();
 
         FastObjectLoader fsm = new FastObjectLoader(rt2);
@@ -524,8 +525,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
-                .connect();
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
 
         FastObjectLoader fsm = new FastObjectLoader(rt2);
         fsm.addStreamToIgnore("Map1");
@@ -545,7 +545,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 2);
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
                 .connect();
         FastObjectLoader fsm = new FastObjectLoader(rt2);
         fsm.addStreamToIgnore("Map1");
@@ -562,7 +562,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
                 .connect();
 
         long firstMileStone = 2;
@@ -590,7 +590,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         long snapShotAddress = checkPointAll(getDefaultRuntime());
         Helpers.trim(getDefaultRuntime(), snapShotAddress);
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
                 .connect();
 
         // Force a read from 0
@@ -607,7 +607,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     @Test
     public void doNotReconstructTransactionStreams() throws Exception {
         addSingleServer(SERVERS.PORT_0);
-        CorfuRuntime rt1 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt1 = getNewRuntime(getDefaultNode())
                 .setTransactionLogging(true)
                 .connect();
         populateMaps(SOME, rt1, CorfuTable.class, true, 2);
@@ -632,7 +632,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     @Test
     public void doReconstructTransactionStreamTail() throws Exception {
         addSingleServer(SERVERS.PORT_0);
-        CorfuRuntime rt1 = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime rt1 = getNewRuntime(getDefaultNode())
                 .setTransactionLogging(true)
                 .connect();
 
@@ -698,7 +698,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         originalMap.put("a", "b");
 
-        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime recreatedRuntime = getNewRuntime(getDefaultNode())
                 .connect();
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
@@ -728,12 +728,12 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         originalTable.put("a", "b");
 
-        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime recreatedRuntime = getNewRuntime(getDefaultNode())
                 .connect();
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
         ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
-                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setArguments(new StringIndexer())
                 .setStreamID(CorfuRuntime.getStreamID("test"));
         fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test"), ob);
         fsmr.loadMaps();
@@ -755,6 +755,12 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     }
 
+    /**
+     * Here we providing and indexer to the FastLoader. After reconstruction, we open the map
+     * without specifying the indexer, but we are still able to use the indexer.
+     *
+     * @throws Exception
+     */
     @Test
     public void canRecreateCorfuTableWithIndex() throws Exception {
         CorfuRuntime originalRuntime = getDefaultRuntime();
@@ -762,7 +768,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         CorfuTable originalTable = originalRuntime.getObjectsView().build()
                 .setType(CorfuTable.class)
-                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
 
@@ -770,34 +776,37 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         originalTable.put("k2", "ab");
         originalTable.put("k3", "ba");
 
-        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime recreatedRuntime = getNewRuntime(getDefaultNode())
                 .connect();
 
-        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
-        ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
-                .setArguments(CorfuTableTest.StringIndexers.class)
-                .setStreamID(CorfuRuntime.getStreamID("test"));
-        fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test"), ob);
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap(originalTable);
+        long cpAddress = mcw.appendCheckpoints(originalRuntime, "author");
+        Helpers.trim(originalRuntime, cpAddress);
 
+
+        FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
+        fsmr.addIndexerToCorfuTableStream("test", new StringIndexer());
+        fsmr.setDefaultObjectsType(CorfuTable.class);
         fsmr.loadMaps();
 
         Helpers.assertThatMapIsBuilt(originalRuntime, recreatedRuntime, "test", originalTable, CorfuTable.class);
 
-
+        // Recreating the table without explicitly providing the indexer
         CorfuTable recreatedTable = recreatedRuntime.getObjectsView().build()
                 .setType(CorfuTable.class)
-                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
 
-        assertThat(recreatedTable.getByIndex(CorfuTableTest.StringIndexers.BY_FIRST_LETTER, "a"))
-                .containsExactly("a", "ab");
+        assertThat(recreatedTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a"))
+                .containsExactlyInAnyOrder(MapEntry.entry("k1", "a"), MapEntry.entry("k2", "ab"));
 
         Helpers.getVersionLockedObject(recreatedRuntime, "test", CorfuTable.class).resetUnsafe();
 
         recreatedTable.get("k3");
         assertThat(recreatedTable.hasSecondaryIndices()).isTrue();
-        recreatedTable.getByIndex(CorfuTableTest.StringIndexers.BY_FIRST_LETTER, "a");
+        recreatedTable.getByIndex(StringIndexer.BY_FIRST_LETTER, "a");
     }
 
     @Test
@@ -827,12 +836,12 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         smrMap.put("i", "j");
         corfuTable.put("k", "l");
 
-        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime recreatedRuntime = getNewRuntime(getDefaultNode())
                 .connect();
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
         ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
-                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setArguments(new StringIndexer())
                 .setStreamID(CorfuRuntime.getStreamID("corfuTable"));
         fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("corfuTable"), ob);
         fsmr.loadMaps();
@@ -856,12 +865,12 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         originalTable.put("a", "b");
 
-        CorfuRuntime recreatedRuntime = new CorfuRuntime(getDefaultConfigurationString())
+        CorfuRuntime recreatedRuntime = getNewRuntime(getDefaultNode())
                 .connect();
 
         FastObjectLoader fsmr = new FastObjectLoader(recreatedRuntime);
         ObjectBuilder ob = new ObjectBuilder(recreatedRuntime).setType(CorfuTable.class)
-                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setArguments(new StringIndexer())
                 .setStreamID(CorfuRuntime.getStreamID("test"));
         fsmr.addCustomTypeStream(CorfuRuntime.getStreamID("test"), ob);
         fsmr.loadMaps();
@@ -899,7 +908,8 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         streamsToLoad.add("Map1");
         streamsToLoad.add("Map3");
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString()).connect();
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
+                                .connect();
         FastObjectLoader loader = new FastObjectLoader(rt2)
                 .setDefaultObjectsType(CorfuTable.class)
                 .addStreamsToLoad(streamsToLoad);
@@ -930,7 +940,8 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         streamsToLoad.add("Map1");
         streamsToLoad.add("Map3");
 
-        CorfuRuntime rt2 = new CorfuRuntime(getDefaultConfigurationString()).connect();
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
+                                .connect();
         FastObjectLoader loader = new FastObjectLoader(rt2)
                 .setDefaultObjectsType(CorfuTable.class)
                 .addStreamsToLoad(streamsToLoad);

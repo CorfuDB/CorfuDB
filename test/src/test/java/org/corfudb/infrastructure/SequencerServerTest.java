@@ -30,7 +30,17 @@ public class SequencerServerTest extends AbstractServerTest {
 
     @Before
     public void bootstrapSequencer() {
-        server.setReadyStateEpoch(0L);
+        server.setBootstrapEpoch(0L);
+    }
+
+    /**
+     * Verifies that the SEQUENCER_METRICS_REQUEST is responded by the SEQUENCER_METRICS_RESPONSE
+     */
+    @Test
+    public void sequencerMetricsRequest() {
+        sendMessage(CorfuMsgType.SEQUENCER_METRICS_REQUEST.msg());
+        assertThat(getLastMessage().getMsgType())
+                .isEqualTo(CorfuMsgType.SEQUENCER_METRICS_RESPONSE);
     }
 
     @Test
@@ -145,10 +155,10 @@ public class SequencerServerTest extends AbstractServerTest {
         tailMap.put(streamB, newTailB);
         tailMap.put(streamC, newTailC);
 
-        // Modifying the readyStateEpoch to simulate sequencer reset.
-        server.setReadyStateEpoch(-1L);
+        // Modifying the bootstrapEpoch to simulate sequencer reset.
+        server.setBootstrapEpoch(-1L);
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.BOOTSTRAP_SEQUENCER,
-                new SequencerTailsRecoveryMsg(globalTail + 2, tailMap, 0L)));
+                new SequencerTailsRecoveryMsg(globalTail + 2, tailMap, 0L, false)));
 
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
                 new TokenRequest(0L, Collections.singleton(streamA))));

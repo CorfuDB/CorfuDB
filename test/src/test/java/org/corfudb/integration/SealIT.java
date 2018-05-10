@@ -1,7 +1,6 @@
 package org.corfudb.integration;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Before;
 import org.junit.Test;
@@ -41,21 +40,20 @@ public class SealIT extends AbstractIT{
          *   3. Propose the new layout by driving paxos.
          */
 
-        Layout currentLayout = (Layout) cr1.getLayoutView().getCurrentLayout().clone();
-        currentLayout.setRuntime(cr1);
+        Layout currentLayout = new Layout(cr1.getLayoutView().getCurrentLayout());
         /* 1 */
         currentLayout.setEpoch(currentLayout.getEpoch() + 1);
         /* 2 */
-        currentLayout.moveServersToEpoch();
+        cr1.getLayoutView().getRuntimeLayout(currentLayout).moveServersToEpoch();
         /* 3 */
         cr1.getLayoutView().updateLayout(currentLayout, 0);
 
         cr1.invalidateLayout();
-        cr1.layout.get();
+        cr1.getLayoutView().getLayout();
 
-        cr1.getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
-                .getClient(SequencerClient.class)
-                .bootstrap(1L, Collections.EMPTY_MAP, currentLayout.getEpoch())
+        cr1.getLayoutView().getRuntimeLayout()
+                .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                .bootstrap(1L, Collections.emptyMap(), currentLayout.getEpoch(), true)
                 .get();
 
 

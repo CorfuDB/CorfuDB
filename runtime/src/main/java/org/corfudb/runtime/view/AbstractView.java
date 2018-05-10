@@ -1,19 +1,19 @@
 package org.corfudb.runtime.view;
 
+import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.Nonnull;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.util.Utils;
+import org.corfudb.util.Sleep;
 
 /**
  * All views inherit from AbstractView.
@@ -47,13 +47,9 @@ public abstract class AbstractView {
                 return runtime.layout.get();
             } catch (Exception ex) {
                 log.warn("Error executing remote call, invalidating view and retrying in {}s",
-                        runtime.retryRate, ex);
+                        runtime.getParameters().getConnectionRetryRate(), ex);
                 runtime.invalidateLayout();
-                try {
-                    Thread.sleep(runtime.retryRate * 1000);
-                } catch (InterruptedException ie) {
-                    throw new UnrecoverableCorfuInterruptedError("Interrupted while fetching layout", ie);
-                }
+                Sleep.sleepUninterruptibly(runtime.getParameters().getConnectionRetryRate());
             }
         }
     }
@@ -65,6 +61,11 @@ public abstract class AbstractView {
         return layoutHelper(function, false);
     }
 
+    /**
+     * Maintains reference of the RuntimeLayout which gets invalidated if the AbstractView
+     * encounters a newer layout. (with a greater epoch)
+     */
+    private AtomicReference<RuntimeLayout> runtimeLayout = new AtomicReference<>();
 
     /**
      * Helper function for view to retrieve layouts.
@@ -88,50 +89,49 @@ public abstract class AbstractView {
                                                                           function,
                                                        boolean rethrowAllExceptions)
             throws A, B, C, D {
-
         runtime.beforeRpcHandler.run();
-        while(true) {
+        final Duration retryRate = runtime.getParameters().getConnectionRetryRate();
+        int systemDownTriggerCounter = runtime.getParameters().getSystemDownHandlerTriggerLimit();
+        while (true) {
             try {
-                return function.apply(runtime.layout.get());
+                final Layout layout = runtime.layout.get();
+                return function.apply(runtimeLayout.updateAndGet(rLayout -> {
+                    if (rLayout == null || rLayout.getLayout().getEpoch() != layout.getEpoch()) {
+                        return new RuntimeLayout(layout, runtime);
+                    }
+                    return rLayout;
+                }));
             } catch (RuntimeException re) {
                 if (re.getCause() instanceof TimeoutException) {
                     log.warn("Timeout executing remote call, invalidating view and retrying in {}s",
-                            runtime.retryRate);
-                    runtime.invalidateLayout();
-                    Utils.sleepUninterruptibly(runtime.retryRate * 1000);
+                            retryRate);
                 } else if (re instanceof ServerNotReadyException) {
                     log.warn("Server still not ready. Waiting for server to start "
                             + "accepting requests.");
-                    Utils.sleepUninterruptibly(runtime.retryRate * 1000);
                 } else if (re instanceof WrongEpochException) {
                     WrongEpochException we = (WrongEpochException) re;
                     log.warn("Got a wrong epoch exception, updating epoch to {} and "
                             + "invalidate view", we.getCorrectEpoch());
-                    runtime.invalidateLayout();
                 } else if (re instanceof NetworkException) {
                     log.warn("layoutHelper: System seems unavailable", re);
 
-                    runtime.systemDownHandler.run();
-                    runtime.invalidateLayout();
-
-                    try {
-                        Thread.sleep(runtime.retryRate * 1000);
-                    } catch (InterruptedException e) {
-                        log.warn("Interrupted Exception in layout helper.", e);
+                    if (--systemDownTriggerCounter <= 0) {
+                        runtime.systemDownHandler.run();
                     }
-
                 } else {
                     throw re;
                 }
                 if (rethrowAllExceptions) {
                     throw new RuntimeException(re);
                 }
+                runtime.invalidateLayout();
+                Sleep.sleepUninterruptibly(retryRate);
 
             } catch (InterruptedException ie) {
                 throw new UnrecoverableCorfuInterruptedError("Interrupted in layoutHelper", ie);
             } catch (ExecutionException ex) {
-                log.warn("Error executing remote call, invalidating view and retrying in {}s",
-                        runtime.retryRate, ex);
+                log.warn("Error executing remote call, invalidating view and retrying in {} ms",
+                        retryRate, ex);
 
                 // If SystemUnavailable exception is thrown by the layout.get() completable future,
                 // the exception will materialize as an ExecutionException. In that case, we need to propagate
@@ -141,7 +141,7 @@ public abstract class AbstractView {
                 }
 
                 runtime.invalidateLayout();
-                Utils.sleepUninterruptibly(runtime.retryRate * 1000);
+                Sleep.sleepUninterruptibly(retryRate);
             }
         }
     }
@@ -149,6 +149,6 @@ public abstract class AbstractView {
     @FunctionalInterface
     public interface LayoutFunction<V, R, A extends Throwable,
             B extends Throwable, C extends Throwable, D extends Throwable> {
-        R apply(Layout l) throws A, B, C, D;
+        R apply(RuntimeLayout l) throws A, B, C, D;
     }
 }

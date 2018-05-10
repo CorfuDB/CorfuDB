@@ -3,6 +3,11 @@
 (import org.corfudb.runtime.CorfuRuntime)
 (import org.corfudb.runtime.clients.NettyClientRouter)
 (import org.docopt.Docopt)
+(import org.corfudb.runtime.clients.BaseClient)
+(import org.corfudb.runtime.clients.LayoutClient)
+(import org.corfudb.runtime.clients.SequencerClient)
+(import org.corfudb.runtime.clients.LogUnitClient)
+(import org.corfudb.runtime.clients.ManagementClient)
 (use 'clojure.reflect)
 
 (defn -class-starts-with [obj name] (if (nil? obj) false (.. (.. (.. obj (getClass)) (getName)) (startsWith name))))
@@ -123,26 +128,13 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
           (.. opts (get "--sasl-plain-text-username-file"))
           (.. opts (get "--sasl-plain-text-password-file"))))
       :else (def *o (new NettyClientRouter (get-host endpoint) (get-port endpoint))))
-    (add-client (new org.corfudb.runtime.clients.LayoutClient))
-    (add-client (new org.corfudb.runtime.clients.LogUnitClient))
-    (add-client (new org.corfudb.runtime.clients.SequencerClient))
-    (add-client (new org.corfudb.runtime.clients.ManagementClient))
+    (add-client (new org.corfudb.runtime.clients.LayoutHandler))
+    (add-client (new org.corfudb.runtime.clients.LogUnitHandler))
+    (add-client (new org.corfudb.runtime.clients.SequencerHandler))
+    (add-client (new org.corfudb.runtime.clients.ManagementHandler))
    *o)))
 (defn connect-runtime ([] (.. *r (connect)))
                           ([runtime] (.. runtime (connect))))
-
-; Functions that get clients from a router
-(defn get-base-client ([] (.. *o (getClient org.corfudb.runtime.clients.BaseClient)))
-  ([router] (.. router (getClient org.corfudb.runtime.clients.BaseClient))))
-(defn get-layout-client ([] (.. *o (getClient org.corfudb.runtime.clients.LayoutClient)))
-  ([router] (.. router (getClient org.corfudb.runtime.clients.LayoutClient))))
-(defn get-logunit-client ([] (.. *o (getClient org.corfudb.runtime.clients.LogUnitClient)))
-  ([router] (.. router (getClient org.corfudb.runtime.clients.LogUnitClient))))
-(defn get-sequencer-client ([] (.. *o (getClient org.corfudb.runtime.clients.SequencerClient)))
-  ([router] (.. router (getClient org.corfudb.runtime.clients.SequencerClient))))
-(defn get-management-client ([] (.. *o (getClient org.corfudb.runtime.clients.ManagementClient)))
-  ([router] (.. router (getClient org.corfudb.runtime.clients.ManagementClient))))
-
 
 ; Functions to interact with a runtime.
 (defn get-objects-view ([] (.. *r (getObjectsView)))
@@ -153,7 +145,16 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
   ([runtime] (.. runtime (getSequencerView))))
 (defn get-layout-view ([] (.. *r (getLayoutView)))
   ([runtime] (.. runtime (getLayoutView))))
+(defn get-management-view ([] (.. *r (getManagementView)))
+      ([runtime] (.. runtime (getManagementView))))
 (defn get-stream ([stream] (.. (.. *r (getStreamsView)) (get stream))))
+
+; Functions that get clients
+(defn get-base-client ([router epoch] (new BaseClient router epoch)))
+(defn get-layout-client ([router epoch] (new LayoutClient router epoch)))
+(defn get-sequencer-client ([router epoch] (new SequencerClient router epoch)))
+(defn get-logunit-client ([router epoch] (new LogUnitClient router epoch)))
+(defn get-management-client ([router epoch] (new ManagementClient router epoch)))
 
 ; Helper functions
 (defn uuid-from-string "Takes a string and parses it to UUID if it is not a UUID"

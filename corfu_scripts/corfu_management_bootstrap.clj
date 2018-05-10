@@ -24,8 +24,7 @@ Options:
 (def localcmd (.. (new Docopt usage) (parse *args)))
 
 (defn build-layout [endpoint layout] (do
-                                       (get-router endpoint localcmd)
-                                       (let [q (.. (get-management-client) (bootstrapManagement (Layout/fromJSONString (str layout))))]
+                                       (let [q (.. (get-management-client (get-router server localcmd) 0) (bootstrapManagement (Layout/fromJSONString (str layout))))]
                                             (.. q (get))
                                             )
                                        (println endpoint "bootstrapped successfully")

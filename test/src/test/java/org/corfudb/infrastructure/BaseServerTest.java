@@ -15,7 +15,7 @@ public class BaseServerTest extends AbstractServerTest {
     @Override
     public AbstractServer getDefaultServer() {
         if (bs == null) {
-            bs = new BaseServer();
+            bs = new BaseServer(ServerContextBuilder.defaultTestContext(0));
         }
         return bs;
     }
@@ -30,10 +30,8 @@ public class BaseServerTest extends AbstractServerTest {
     @Test
     public void shutdownServerDoesNotRespond() {
         getDefaultServer().shutdown();
-        Assertions.assertThat(getLastMessage())
-                .isNull();
         sendMessage(new CorfuMsg(CorfuMsgType.PING));
-        Assertions.assertThat(getLastMessage())
-                .isNull();
+        Assertions.assertThat(getLastMessage().getMsgType())
+            .isEqualTo(CorfuMsgType.ERROR_SHUTDOWN_EXCEPTION);
     }
 }

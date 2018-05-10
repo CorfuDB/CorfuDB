@@ -1,5 +1,13 @@
 package org.corfudb.runtime.view;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
+import io.netty.channel.DefaultEventLoopGroup;
+import io.netty.channel.EventLoopGroup;
+
+import javax.annotation.Nonnull;
 import lombok.Data;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
@@ -16,21 +24,25 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
 import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.clients.BaseHandler;
 import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.clients.LayoutHandler;
+import org.corfudb.runtime.clients.LogUnitHandler;
+import org.corfudb.runtime.clients.ManagementHandler;
+import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.TestClientRouter;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.util.NodeLocator;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
 
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import org.junit.BeforeClass;
 
 /**
  * This class serves as a base class for most higher-level Corfu unit tests
@@ -72,14 +84,40 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     final Map<CorfuRuntime, Map<String, TestClientRouter>>
             runtimeRouterMap = new ConcurrentHashMap<>();
 
+    /** Test Endpoint hostname. */
+    private final static String testHostname = "tcp://test";
+
     /** Initialize the AbstractViewTest. */
     public AbstractViewTest() {
         // Force all new CorfuRuntimes to override the getRouterFn
         CorfuRuntime.overrideGetRouterFunction = this::getRouterFunction;
-        runtime = new CorfuRuntime(getDefaultEndpoint());
+        runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
+            .nettyEventLoop(NETTY_EVENT_LOOP)
+            .build());
         // Default number of times to read before hole filling to 0
         // (most aggressive, to surface concurrency issues).
         runtime.getParameters().setHoleFillRetry(0);
+    }
+
+    public CorfuRuntime getNewRuntime(@Nonnull NodeLocator node) {
+        CorfuRuntime runtime = getNewRuntime(CorfuRuntimeParameters
+            .builder()
+            .build());
+        runtime.parseConfigurationString(node.getHost() + ":" + node.getPort());
+        return runtime;
+    }
+
+    public CorfuRuntime getNewRuntime(@Nonnull CorfuRuntimeParameters parameters) {
+        parameters.setNettyEventLoop(NETTY_EVENT_LOOP);
+        return CorfuRuntime.fromParameters(parameters);
+    }
+
+    public NodeLocator getDefaultNode() {
+        return NodeLocator.builder()
+            .host("test")
+            .port(SERVERS.PORT_0)
+            .nodeId(getServer(SERVERS.PORT_0).serverContext.getNodeId())
+            .build();
     }
 
     public void simulateEndpointDisconnected(CorfuRuntime runtime) {
@@ -87,26 +125,30 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 .simulateDisconnectedEndpoint();
     }
 
-    /** Function for obtaining a router, given a runtime and an endpoint.
+    /**
+     * Function for obtaining a router, given a runtime and an endpoint.
      *
-     * @param runtime       The CorfuRuntime to obtain a router for.
-     * @param endpoint      An endpoint string for the router.
+     * @param runtime  The CorfuRuntime to obtain a router for.
+     * @param endpoint An endpoint string for the router.
      * @return
      */
-    private IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
+    protected IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
         runtimeRouterMap.putIfAbsent(runtime, new ConcurrentHashMap<>());
-        if (!endpoint.startsWith("test:")) {
+        if (!endpoint.startsWith("test:") && !endpoint.startsWith(testHostname)) {
             throw new RuntimeException("Unsupported endpoint in test: " + endpoint);
         }
         return runtimeRouterMap.get(runtime).computeIfAbsent(endpoint,
                 x -> {
+                    String serverName = endpoint.startsWith(testHostname) ?
+                            endpoint.substring(endpoint.indexOf("test"), endpoint.length() - 1)
+                            : endpoint;
                     TestClientRouter tcn =
-                            new TestClientRouter(testServerMap.get(endpoint).getServerRouter());
-                    tcn.addClient(new BaseClient())
-                            .addClient(new SequencerClient())
-                            .addClient(new LayoutClient())
-                            .addClient(new LogUnitClient())
-                            .addClient(new ManagementClient());
+                            new TestClientRouter(testServerMap.get(serverName).getServerRouter());
+                    tcn.addClient(new BaseHandler())
+                            .addClient(new SequencerHandler())
+                            .addClient(new LayoutHandler())
+                            .addClient(new LogUnitHandler())
+                            .addClient(new ManagementHandler());
                     return tcn;
                 }
         );
@@ -117,7 +159,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      */
     @Before
     public void resetTests() {
-        testServerMap.clear();
         runtime.parseConfigurationString(getDefaultConfigurationString());
        //         .setCacheDisabled(true); // Disable cache during unit tests to fully stress the system.
         runtime.getAddressSpaceView().resetCaches();
@@ -125,7 +166,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     @After
     public void cleanupBuffers() {
-        testServerMap.values().stream().forEach(x -> {
+        testServerMap.values().forEach(x -> {
             x.getLogUnitServer().shutdown();
             x.getManagementServer().shutdown();
         });
@@ -133,6 +174,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         while (runtime.getObjectsView().TXActive()) {
             runtime.getObjectsView().TXAbort();
         }
+
+        runtimeRouterMap.keySet().forEach(CorfuRuntime::shutdown);
+        runtimeRouterMap.clear();
+        testServerMap.clear();
     }
 
     /** Add a server at a specific port, using the given configuration options.
@@ -141,7 +186,9 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param config    The configuration to use for the server.
      */
     public void addServer(int port, Map<String, Object> config) {
-        addServer(port, new ServerContext(config, new TestServerRouter(port)));
+        ServerContext sc = new ServerContext(config);
+        sc.setServerRouter(new TestServerRouter(port));
+        addServer(port, sc);
     }
 
     /**
@@ -248,7 +295,8 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         TestServer primarySequencerNode = testServerMap.get(l.getSequencers().get(0));
         primarySequencerNode.sequencerServer
                 .handleMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerTailsRecoveryMsg(0L,
-                        Collections.EMPTY_MAP, l.getEpoch())), null, primarySequencerNode.serverRouter);
+                        Collections.emptyMap(), l.getEpoch(), false)), null,
+                        primarySequencerNode.serverRouter);
     }
 
     /** Get a default CorfuRuntime. The default CorfuRuntime is connected to a single-node
@@ -262,14 +310,43 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return getRuntime().connect();
     }
 
+    static EventLoopGroup NETTY_EVENT_LOOP;
+
+    @BeforeClass
+    public static void initEventGroup() {
+        NETTY_EVENT_LOOP =
+            new DefaultEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2,
+                new ThreadFactoryBuilder()
+                    .setNameFormat("netty-%d")
+                    .setDaemon(true)
+                    .setUncaughtExceptionHandler((thread, throwable) -> {
+                        assertThat(false)
+                            .as("Thread " + thread.getName()
+                                + " unexpectedly terminated with "
+                                + throwable.getClass().getSimpleName())
+                            .isTrue();
+                    })
+                .build());
+    }
+
+    @AfterClass
+    public static void cleanEventGroup() {
+        NETTY_EVENT_LOOP.shutdownGracefully().syncUninterruptibly();
+    }
+
     /**
      * Create a runtime based on the provided layout.
      * @param l
      * @return
      */
     public CorfuRuntime getRuntime(Layout l) {
-        String cfg = l.getLayoutServers().stream().collect(Collectors.joining(","));
-        return new CorfuRuntime(cfg);
+        CorfuRuntimeParameters parameters = CorfuRuntimeParameters.builder()
+            .nettyEventLoop(NETTY_EVENT_LOOP)
+            .build();
+        CorfuRuntime runtime = CorfuRuntime.fromParameters(parameters);
+        runtime.parseConfigurationString(l.layoutServers.stream()
+            .collect(Collectors.joining(",")));
+        return runtime;
     }
 
     /** Clear installed rules for the default runtime.
@@ -355,6 +432,15 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return "test:" + port;
     }
 
+    /**
+     * Get the port from the endpoint.
+     *
+     * @param endpoint The endpoint string.
+     * @return The port in the endpoint.
+     */
+    public Integer getPort(String endpoint) {
+        return Integer.parseInt(endpoint.split(":")[1]);
+    }
 
     // Private
 
@@ -374,13 +460,17 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
         TestServer(Map<String, Object> optsMap)
         {
-            this(new ServerContext(optsMap, new TestServerRouter()));
+            this(new ServerContext(optsMap));
+            serverContext.setServerRouter(new TestServerRouter());
         }
 
         TestServer(ServerContext serverContext) {
             this.serverContext = serverContext;
             this.serverRouter = serverContext.getServerRouter();
-            this.baseServer = new BaseServer();
+            if (serverRouter == null) {
+                serverRouter = new TestServerRouter();
+            }
+            this.baseServer = new BaseServer(serverContext);
             this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);
@@ -395,7 +485,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
         TestServer(int port)
         {
-            this(ServerContextBuilder.defaultContext(port).getServerConfig());
+            this(ServerContextBuilder.defaultTestContext(port).getServerConfig());
         }
 
         void addToTest(int port, AbstractViewTest test) {

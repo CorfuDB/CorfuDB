@@ -47,9 +47,4 @@ else
       byteman=""
 fi
 
-while true; do
 "$JAVA" -cp "$CLASSPATH" $JVMFLAGS $byteman org.corfudb.infrastructure.CorfuServer $*
-if [ $? -ne 100 ]; then
-break
-fi
-done

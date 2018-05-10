@@ -72,7 +72,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // We loop forever until we are interrupted, since we may have to
         // acquire an address several times until we are successful.
-        for (int x = 0; x < runtime.getWriteRetry(); x++) {
+        for (int x = 0; x < runtime.getParameters().getWriteRetry(); x++) {
             // Next, we call the acquisitionCallback, if present, informing
             // the client of the token that we acquired.
             if (acquisitionCallback != null) {
@@ -126,7 +126,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         log.error("append[{}]: failed after {} retries, write size {} bytes",
                 tokenResponse.getTokenValue(),
-                runtime.getWriteRetry(),
+                runtime.getParameters().getWriteRetry(),
                 ILogData.getSerializedSize(object));
         throw new AppendException();
     }
@@ -278,7 +278,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             log.trace("followBackPointers: calculate the next address");
 
-            if (!runtime.isBackpointersDisabled() && d.hasBackpointer(streamId)) {
+            if (!runtime.getParameters().isBackpointersDisabled() && d.hasBackpointer(streamId)) {
                 long tmp = d.getBackpointer(streamId);
                 log.trace("followBackPointers: backpointer points to {}", tmp);
                 // if backpointer is a valid log address or Address.NON_EXIST

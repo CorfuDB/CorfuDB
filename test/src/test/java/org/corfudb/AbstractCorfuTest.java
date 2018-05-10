@@ -1,16 +1,23 @@
 package org.corfudb;
 
+import java.io.IOException;
+import javax.annotation.Nonnull;
 import org.assertj.core.api.AbstractObjectAssert;
 import org.assertj.core.api.AbstractThrowableAssert;
 import org.corfudb.test.DisabledOnTravis;
+import org.corfudb.test.concurrent.TestThreadGroups;
+import org.corfudb.test.logging.TestLogger;
+import org.corfudb.util.CFUtils;
+import org.corfudb.util.Sleep;
+import org.corfudb.util.concurrent.SingletonResource;
 import org.fusesource.jansi.Ansi;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.TestRule;
 import org.junit.runners.model.Statement;
 import org.junit.runner.Description;
-import org.junit.runners.model.MultipleFailureException;
 
 import java.io.File;
 import java.util.*;
@@ -45,6 +52,22 @@ public class AbstractCorfuTest {
     public static final CorfuTestServers SERVERS =
             new CorfuTestServers();
 
+    public static final int LOG_ELEMENTS = 25;
+
+    public static final SingletonResource<TestLogger> LOGGER =
+        SingletonResource.withInitial(() -> new TestLogger(LOG_ELEMENTS));
+
+    @Before
+    public void initLogging() {
+        LOGGER.get().reset(); // Get a logger instance and reset it
+    }
+
+    @AfterClass
+    public static void shutdownNettyGroups() {
+        TestThreadGroups.shutdownThreadGroups();
+        LOGGER.cleanup(TestLogger::reset);
+    }
+
     /** A watcher which prints whether tests have failed or not, for a useful
      * report which can be read on Travis.
      */
@@ -60,34 +83,82 @@ public class AbstractCorfuTest {
             return new Statement() {
                 @Override
                 public void evaluate() throws Throwable {
-                    starting(description);
+                    Thread testThread = null;
                     try {
+                        starting(description);
                         // Skip the test if we're on travis and the test is
                         // annotated to be disabled.
-                        if( PARAMETERS.TRAVIS_BUILD &&
-                                description.getAnnotation
-                                        (DisabledOnTravis.class) != null ||
+                        if (PARAMETERS.TRAVIS_BUILD &&
+                            description.getAnnotation
+                                (DisabledOnTravis.class) != null ||
                             PARAMETERS.TRAVIS_BUILD &&
                                 description.getTestClass()
-                                        .getAnnotation(DisabledOnTravis.class)
-                                        != null) {
+                                    .getAnnotation(DisabledOnTravis.class)
+                                    != null) {
                             travisSkipped(description);
                         } else {
-                            statement.evaluate();
-                            succeeded(description);
-                        }
+                            // Test will complete with a throwable if failed,
+                            // otherwise it will contain null.
+                            CompletableFuture<Throwable> testCompletion = new CompletableFuture<>();
+                            testThread = new Thread(() -> {
+                                try {
+                                    statement.evaluate();
+                                    testCompletion.complete(null);
+                                } catch (Throwable t) {
+                                    testCompletion.complete(t);
+                                }
+                            });
+                            testThread.setName("test-main");
+                            testThread.start();
 
-                    } catch (org.junit.internal.AssumptionViolatedException  e)
-                    {
-                        skipped(e, description);
-                        MultipleFailureException.assertEmpty(Collections
-                                .singletonList(e));
-                    } catch (Throwable e) {
-                        failed(e, description);
-                        MultipleFailureException.assertEmpty(Collections
-                                                    .singletonList(e));
+                            // Generate a timeout
+                            CompletableFuture<Throwable> timeoutCompletion =
+                                CFUtils.within(testCompletion, PARAMETERS.TIMEOUT_LONG);
+                            Throwable t;
+                            try {
+                                t = timeoutCompletion.join();
+                            } catch (CompletionException e) {
+                                if (e.getCause() instanceof TimeoutException) {
+                                    timedOut(description);
+                                } else {
+                                    failed(e, description);
+                                }
+                                throw e;
+                            } finally {
+                                // If the testThread is still alive for some reason
+                                // interrupt it.
+                                if (testThread.isAlive()) {
+                                    testThread.interrupt();
+                                }
+                            }
+                            if (t == null) {
+                                succeeded(description);
+                            } else if (t instanceof org.junit.internal.AssumptionViolatedException) {
+                                skipped(t, description);
+                                throw t;
+                            } else {
+                                failed(t, description);
+                                throw t;
+                            }
+                        }
                     } finally {
                         finished(description);
+                        if (testThread != null && testThread.isAlive()) {
+                            // Wait a short timeout for the testThread to end after
+                            // being interrupted
+                            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+                            if (testThread.isAlive()) {
+                                System.out.println(ansi().fgRed().bold()
+                                    .a("Warning: test thread could not be killed!").reset());
+                                StackTraceElement[] testTrace = testThread.getStackTrace();
+                                if (testTrace.length > 0) {
+                                    System.out.println(ansi().a("Thread method: ")
+                                        .a(testTrace[0].getClassName())
+                                        .a(":")
+                                        .a(testTrace[0].getMethodName()));
+                                }
+                            }
+                        }
                     }
                 }
             };
@@ -102,6 +173,49 @@ public class AbstractCorfuTest {
             }
             System.out.print(ansi().a("[").fg(Ansi.Color.GREEN).a("PASS")
                     .reset().a("]" + testStatus).newline());
+            System.out.flush();
+        }
+
+        /** Print a list of the active threads.
+         *
+         */
+        protected void printThreads() {
+            System.out.println(ansi().fgCyan().bold().a("Active Threads At Test Failure")
+                .reset());
+            System.out.println(ansi().format("%-40s %s",
+                "Thread name", "Method"));
+            Map<Thread, StackTraceElement[]> threads = Thread.getAllStackTraces();
+            threads.entrySet().forEach(e -> {
+                // Don't print the current thread.
+                if (!e.getKey().equals(Thread.currentThread())) {
+                    if (e.getValue().length > 0) {
+                        System.out.println(ansi().format("%-40s %s:%s",
+                            e.getKey().getName(),
+                            e.getValue()[0].getClassName(),
+                            e.getValue()[0].getMethodName()));
+                    } else {
+                        System.out.println(ansi().format("%-40s (no trace available)",
+                            e.getKey().getName()));
+                    }
+                }
+            });
+        }
+
+        /** Print the latest logs, up to the number of log entries defined in LOG_ELEMENTS.
+         *
+         */
+        protected void printLogs() {
+            System.out.println(ansi().fgCyan().bold().a("Last ").a(LOG_ELEMENTS)
+                .a(" Logs Until Failure")
+                .reset());
+            Iterable<byte[]> logEvents = LOGGER.get().getEventsAndReset();
+            logEvents.forEach(e -> {
+                try {
+                    System.out.write(e);
+                } catch (IOException ie) {
+                    System.out.println("Exception printing log: " + ie.getMessage());
+                }
+            });
         }
 
         /** Run when the test fails, prints the name of the exception
@@ -118,6 +232,22 @@ public class AbstractCorfuTest {
                     .a(" - ").a(e.getClass().getSimpleName())
                     .a(lineOut)
                     .a("]").newline());
+            printThreads();
+            printLogs();
+            System.out.flush();
+        }
+
+        /** Run when the test fails to complete in time.
+         * @param description   A description of the method run.
+         */
+        protected void timedOut(@Nonnull Description description) {
+            System.out.print(ansi().a("[")
+                .fg(Ansi.Color.RED)
+                .a("TIMED OUT").reset()
+                .a("]").newline());
+            printThreads();
+            printLogs();
+            System.out.flush();
         }
 
         /** Gets whether or not the given class inherits from the class
@@ -174,6 +304,7 @@ public class AbstractCorfuTest {
                     .fg(Ansi.Color.YELLOW)
                     .a("SKIPPED").reset()
                     .a("]").newline());
+            System.out.flush();
         }
 
         /** Run when a test is skipped due to not meeting prereqs.
@@ -186,6 +317,7 @@ public class AbstractCorfuTest {
                     .a("SKIPPED -").reset()
                     .a(e.getClass().toString())
                     .a("]").newline());
+            System.out.flush();
         }
 
         /** Run before a test starts.
@@ -196,6 +328,8 @@ public class AbstractCorfuTest {
                     .getMethodName()));
             System.out.flush();
         }
+
+
     };
 
     /** Delete a folder.

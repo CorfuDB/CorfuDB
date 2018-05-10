@@ -20,6 +20,8 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.AppendException;
+import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
@@ -92,6 +94,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // Next, we sync the object, which will bring the object
         // to the correct version, reflecting any optimistic
         // updates.
+        // Get snapshot timestamp in advance so it is not performed under the VLO lock
+        long ts = getSnapshotTimestamp();
         return proxy
                 .getUnderlyingObject()
                 .access(o -> {
@@ -100,7 +104,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                             // Obtain the stream position as when transaction context last
                             // remembered it.
                             long streamReadPosition = getKnownStreamPosition()
-                                    .getOrDefault(proxy.getStreamID(), getSnapshotTimestamp());
+                                    .getOrDefault(proxy.getStreamID(), ts);
 
                             return (
                                     (stream == null || stream.isStreamCurrentContextThreadCurrentContext())
@@ -151,9 +155,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             return wrapper.getUpcallResult();
         }
         // Otherwise, we need to sync the object
+        // Get snapshot timestamp in advance so it is not performed under the VLO lock
+        long ts = getSnapshotTimestamp();
         return proxy.getUnderlyingObject().update(o -> {
             log.trace("Upcall[{}] {} Sync'd", this,  timestamp);
-            syncWithRetryUnsafe(o, getSnapshotTimestamp(), proxy, this::setAsOptimisticStream);
+            syncWithRetryUnsafe(o, ts, proxy, this::setAsOptimisticStream);
             SMREntry wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
             if (wrapper2 != null && wrapper2.isHaveUpcallResult()) {
                 return wrapper2.getUpcallResult();
@@ -279,26 +285,32 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // This step currently happens all at once, and we get an
         // address of -1L if it is rejected.
         long address = -1L;
+        final TxResolutionInfo txInfo =
+            // TxResolution info:
+            // 1. snapshot timestamp
+            // 2. a map of conflict params, arranged by streamID's
+            // 3. a map of write conflict-params, arranged by
+            // streamID's
+            new TxResolutionInfo(getTransactionID(),
+                getSnapshotTimestamp(),
+                conflictSet.getHashedConflictSet(),
+                getWriteSetInfo().getHashedConflictSet());
 
-        address = this.builder.runtime.getStreamsView()
+        try {
+            address = this.builder.runtime.getStreamsView()
                 .append(
-
-                        // a set of stream-IDs that contains the affected streams
-                        affectedStreams,
-
-                        // a MultiObjectSMREntry that contains the update(s) to objects
-                        collectWriteSetEntries(),
-
-                        // TxResolution info:
-                        // 1. snapshot timestamp
-                        // 2. a map of conflict params, arranged by streamID's
-                        // 3. a map of write conflict-params, arranged by
-                        // streamID's
-                        new TxResolutionInfo(getTransactionID(),
-                                getSnapshotTimestamp(),
-                                conflictSet.getHashedConflictSet(),
-                                getWriteSetInfo().getHashedConflictSet())
+                    // a set of stream-IDs that contains the affected streams
+                    affectedStreams,
+                    // a MultiObjectSMREntry that contains the update(s) to objects
+                    collectWriteSetEntries(),
+                    txInfo
                 );
+        } catch (AppendException oe) {
+            // We were overwritten (and the original snapshot is now conflicting),
+            // which means we must abort.
+            throw new TransactionAbortedException(txInfo, null, null,
+                AbortCause.CONFLICT, oe, this);
+        }
 
         log.trace("Commit[{}] Acquire address {}", this, address);
 

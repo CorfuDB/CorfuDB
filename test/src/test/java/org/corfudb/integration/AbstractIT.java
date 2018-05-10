@@ -3,14 +3,22 @@ package org.corfudb.integration;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.ShutdownException;
+import org.corfudb.runtime.view.RuntimeLayout;
+import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -19,12 +27,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 
 /**
  * Integration tests.
  * Created by zlokhandwala on 4/28/17.
  */
+@Slf4j
 public class AbstractIT extends AbstractCorfuTest {
     static final String DEFAULT_HOST = "localhost";
     static final int DEFAULT_PORT = 9000;
@@ -129,6 +139,33 @@ public class AbstractIT extends AbstractCorfuTest {
         }
     }
 
+    public void restartServer(CorfuRuntime corfuRuntime, String endpoint) {
+        corfuRuntime.invalidateLayout();
+        RuntimeLayout runtimeLayout = corfuRuntime.getLayoutView().getRuntimeLayout();
+        try {
+            runtimeLayout.getBaseClient(endpoint).restart().get();
+        } catch (ExecutionException | InterruptedException e) {
+            log.error("Error: {}", e);
+        }
+
+        // The shutdown and restart can take an unknown amount of time and there is a chance that
+        // the newer runtime may also connect to the older corfu server (before restart).
+        // Hence the while loop.
+        while (true) {
+            try {
+                if (corfuRuntime.getLayoutView().getLayout().getEpoch()
+                        == (runtimeLayout.getLayout().getEpoch() + 1)) {
+                    break;
+                }
+                Sleep.MILLISECONDS.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+                corfuRuntime.invalidateLayout();
+            } catch (ShutdownException se) {
+                log.error("Shutdown Exception thrown connecting to server:{} ignored, {}",
+                        endpoint, se);
+            }
+        }
+    }
+
     /**
      * Get list of children (descendant) process identifiers (recursive)
      *
@@ -230,7 +267,7 @@ public class AbstractIT extends AbstractCorfuTest {
                                     Files.write(Paths.get(logfile), "\n".getBytes(),
                                             StandardOpenOption.APPEND);
                                 } catch (Exception e) {
-                                    e.printStackTrace();
+                                    log.error("StreamGobbler: Error, {}", e);
                                 }
                             }
                     );

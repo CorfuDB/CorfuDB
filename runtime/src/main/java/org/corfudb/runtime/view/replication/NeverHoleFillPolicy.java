@@ -2,11 +2,10 @@ package org.corfudb.runtime.view.replication;
 
 import java.util.function.Function;
 import javax.annotation.Nonnull;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.util.Sleep;
 
 
 /**
@@ -41,12 +40,8 @@ public class NeverHoleFillPolicy implements IHoleFillPolicy {
         int tryNum = 0;
         do {
             if (tryNum != 0) {
-                try {
-                    log.trace("Peek[{}] Retrying read {}", address, tryNum);
-                    Thread.sleep(waitMs);
-                } catch (InterruptedException ie) {
-                    throw new UnrecoverableCorfuInterruptedError("Peek interrupted", ie);
-                }
+                log.trace("Peek[{}] Retrying read {}", address, tryNum);
+                Sleep.MILLISECONDS.sleepUninterruptibly(waitMs);
             }
             data = peekFunction.apply(address);
             tryNum++;

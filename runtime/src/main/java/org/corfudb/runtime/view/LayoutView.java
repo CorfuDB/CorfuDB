@@ -14,10 +14,10 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
 
@@ -35,9 +35,15 @@ public class LayoutView extends AbstractView {
      * Retrieves current layout.
      **/
     public Layout getLayout() {
-        return layoutHelper(l -> {
-            return l;
-        });
+        return layoutHelper(RuntimeLayout::getLayout);
+    }
+
+    public RuntimeLayout getRuntimeLayout() {
+        return layoutHelper(l -> l);
+    }
+
+    public RuntimeLayout getRuntimeLayout(@Nonnull Layout layout) {
+        return new RuntimeLayout(layout, runtime);
     }
 
     /**
@@ -76,13 +82,15 @@ public class LayoutView extends AbstractView {
                     currentLayout.getEpoch(), epoch - 1, epoch);
             throw new WrongEpochException(epoch - 1);
         }
+        if (currentLayout.getClusterId() != null
+            && !currentLayout.getClusterId().equals(layout.getClusterId())) {
+            log.error("updateLayout: Requested layout has cluster Id {} but expected {}",
+                    layout.getClusterId(), currentLayout.getClusterId());
+            throw new WrongClusterException(currentLayout.getClusterId(), layout.getClusterId());
+        }
         //phase 1: prepare with a given rank.
         Layout alreadyProposedLayout = prepare(epoch, rank);
         Layout layoutToPropose = alreadyProposedLayout != null ? alreadyProposedLayout : layout;
-        // For some reason, the alreadyProposedLayout sometimes doesn't have a runtime
-        // we need to remove runtime from the layout, but for now, let's manually take
-        // it from the original layout.
-        layoutToPropose.setRuntime(layout.getRuntime());
         //phase 2: propose the new layout.
         propose(epoch, rank, layoutToPropose);
         //phase 3: commited
@@ -109,9 +117,7 @@ public class LayoutView extends AbstractView {
                     CompletableFuture<LayoutPrepareResponse> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
-                        LayoutClient layoutClient = runtime.getRouter(x)
-                                .getClient(LayoutClient.class);
-                        cf = layoutClient.prepare(epoch, rank);
+                        cf = getRuntimeLayout().getLayoutClient(x).prepare(epoch, rank);
                     } catch (Exception e) {
                         cf.completeExceptionally(e);
                     }
@@ -200,9 +206,7 @@ public class LayoutView extends AbstractView {
                     CompletableFuture<Boolean> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
-                        LayoutClient layoutClient = runtime.getRouter(x)
-                                .getClient(LayoutClient.class);
-                        cf =  layoutClient.propose(epoch, rank, layout);
+                        cf = getRuntimeLayout().getLayoutClient(x).propose(epoch, rank, layout);
                     } catch (NetworkException e) {
                         cf.completeExceptionally(e);
                     }
@@ -269,17 +273,27 @@ public class LayoutView extends AbstractView {
      *
      * @throws WrongEpochException wrong epoch number.
      */
+    public void committed(long epoch, Layout layout) {
+        committed(epoch, layout, false);
+    }
+
+    /**
+     * Send committed layout to the old Layout servers and the new Layout Servers.
+     * If force is true, then the layout forced on all layout servers.
+     */
     @SuppressWarnings("unchecked")
-    public void committed(long epoch, Layout layout)
+    public void committed(long epoch, Layout layout, boolean force)
             throws WrongEpochException {
         CompletableFuture<Boolean>[] commitList = layout.getLayoutServers().stream()
                 .map(x -> {
                     CompletableFuture<Boolean> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
-                        LayoutClient layoutClient = runtime.getRouter(x)
-                                .getClient(LayoutClient.class);
-                        cf = layoutClient.committed(epoch, layout);
+                        if (force) {
+                            cf = getRuntimeLayout(layout).getLayoutClient(x).force(layout);
+                        } else {
+                            cf = getRuntimeLayout(layout).getLayoutClient(x).committed(epoch, layout);
+                        }
                     } catch (NetworkException e) {
                         cf.completeExceptionally(e);
                     }
@@ -294,6 +308,12 @@ public class LayoutView extends AbstractView {
             try {
                 CFUtils.getUninterruptibly(CompletableFuture.anyOf(commitList),
                         WrongEpochException.class, TimeoutException.class, NetworkException.class);
+            } catch (WrongEpochException e) {
+                if (!force) {
+                    throw  e;
+                }
+                log.warn("committed: Error while force committing", e);
+                responses++;
             } catch (TimeoutException | NetworkException e) {
                 timeouts++;
             }

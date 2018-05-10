@@ -4,7 +4,7 @@
 
     <groupId>org.corfudb</groupId>
     <artifactId>corfu</artifactId>
-    <version>0.1-SNAPSHOT</version>
+    <version>0.2.0-SNAPSHOT</version>
 
     <modules>
         <module>infrastructure</module>
@@ -15,9 +15,10 @@
         <module>annotationProcessor</module>
         <module>annotations</module>
         <module>samples</module>
-        <module>logReader</module>
         <module>debian</module>
         <module>generator</module>
+        <module>migration</module>
+
     </modules>
 
 
@@ -42,6 +43,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <logback.classic.version>1.2.3</logback.classic.version>
     </properties>
 
     <scm>
@@ -106,7 +108,7 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <version>3.0.0</version>
+            <version>3.8.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -144,13 +146,8 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId> <!-- Use 'netty-all' for 4.0 or above -->
-            <version>4.1.10.Final</version>
+            <version>4.1.18.Final</version>
             <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-classic</artifactId>
-            <version>1.2.3</version>
         </dependency>
         <dependency>
             <groupId>org.codehaus.mojo</groupId>
@@ -158,10 +155,30 @@
             <version>3.0.3</version>
             <scope>provided</scope>
             <type>maven-plugin</type>
+            <exclusions>
+              <exclusion>
+                <groupId>org.apache.httpcomponents</groupId>
+                <artifactId>httpclient</artifactId>
+              </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.httpcomponents</groupId>
+          <artifactId>httpclient</artifactId>
+	         <version>4.5.5</version>
+	         <scope>provided</scope>
         </dependency>
     </dependencies>
 
     <build>
+
+        <extensions>
+            <extension>
+                <groupId>kr.motd.maven</groupId>
+                <artifactId>os-maven-plugin</artifactId>
+                <version>1.5.0.Final</version>
+            </extension>
+        </extensions>
 
         <pluginManagement>
             <plugins>
@@ -367,36 +384,6 @@
                         </configuration>
                     </execution>
                 </executions>
-            </plugin>
-            <plugin>
-                <groupId>pl.project13.maven</groupId>
-                <artifactId>git-commit-id-plugin</artifactId>
-                <version>2.1.15</version>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>revision</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <dotGitDirectory>${project.basedir}/.git</dotGitDirectory>
-                    <dateFormat>MM.dd.yyyy '@' HH:mm:ss z</dateFormat>
-                    <verbose>false</verbose>
-                    <generateGitPropertiesFile>true</generateGitPropertiesFile>
-                    <generateGitPropertiesFilename>target/generated-sources/resources/git.properties
-                    </generateGitPropertiesFilename>
-                    <format>properties</format>
-                    <abbrevLength>7</abbrevLength>
-                    <gitDescribe>
-                        <skip>false</skip>
-                        <always>true</always>
-                        <abbrev>7</abbrev>
-                        <dirty>-dirty</dirty>
-                        <match>*</match>
-                        <forceLongFormat>false</forceLongFormat>
-                    </gitDescribe>
-                </configuration>
             </plugin>
         </plugins>
 

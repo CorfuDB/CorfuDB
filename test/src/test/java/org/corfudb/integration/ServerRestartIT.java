@@ -5,7 +5,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.CorfuTableTest;
+import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
@@ -79,7 +79,7 @@ public class ServerRestartIT extends AbstractIT {
         final Random randomSeed = new Random();
         final long SEED = randomSeed.nextLong();
         // Keep this print at all times to reproduce any failed test.
-        System.out.println("SEED = " + Long.toHexString(SEED));
+        testStatus += "SEED=" + Long.toHexString(SEED);
         return new Random(SEED);
     }
 
@@ -140,7 +140,6 @@ public class ServerRestartIT extends AbstractIT {
 
             for (int i = 0; i < ITERATIONS; i++) {
 
-                System.out.println("Iteration #" + i);
                 boolean serverRestart = rand.nextInt(TOTAL_PERCENTAGE) < SERVER_RESTART_PERCENTAGE;
                 boolean clientRestart = rand.nextInt(TOTAL_PERCENTAGE) < CLIENT_RESTART_PERCENTAGE;
 
@@ -283,7 +282,7 @@ public class ServerRestartIT extends AbstractIT {
             }
 
             return true;
-        },CLIENT_DELAY_POST_SHUTDOWN, TimeUnit.MILLISECONDS);
+        }, CLIENT_DELAY_POST_SHUTDOWN, TimeUnit.MILLISECONDS);
         offline.shutdown();
 
         Thread.sleep(CORFU_SERVER_DOWN_TIME);
@@ -294,7 +293,7 @@ public class ServerRestartIT extends AbstractIT {
 
         // Block until server is ready.
         runtime.invalidateLayout();
-        runtime.layout.get();
+        runtime.getLayoutView().getLayout();
 
         // Execute Transactions (once Corfu Server was restarted)
         for (int i = 0; i < ITERATIONS; i++) {
@@ -439,20 +438,14 @@ public class ServerRestartIT extends AbstractIT {
         final int newMapBStreamTail = 19;
         final int newGlobalTail = 19;
 
-        assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
+        restartServer(corfuRuntime, DEFAULT_ENDPOINT);
 
-        corfuServerProcess = runCorfuServer();
-        corfuRuntime = createDefaultRuntime();
         TokenResponse tokenResponseA = corfuRuntime
-                .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
-                .getClient(SequencerClient.class)
-                .nextToken(Collections.singleton(streamNameA), 1)
-                .get();
+                .getSequencerView()
+                .nextToken(Collections.singleton(streamNameA), 1);
         TokenResponse tokenResponseB = corfuRuntime
-                .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
-                .getClient(SequencerClient.class)
-                .nextToken(Collections.singleton(streamNameB), 1)
-                .get();
+                .getSequencerView()
+                .nextToken(Collections.singleton(streamNameB), 1);
 
         assertThat(tokenResponseA.getToken().getTokenValue()).isEqualTo(newGlobalTail + 1);
         assertThat(tokenResponseA.getBackpointerMap().get(streamNameA))
@@ -582,22 +575,19 @@ public class ServerRestartIT extends AbstractIT {
                 System.out.println(r + "..no checkpoint/trim");
             }
 
-            TokenResponse expectedTokenResponseA = corfuRuntime
-                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
-                    .getClient(SequencerClient.class)
+            SequencerClient sequencerClient = corfuRuntime
+                    .getLayoutView().getRuntimeLayout()
+                    .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
+
+            TokenResponse expectedTokenResponseA = sequencerClient
                     .nextToken(Collections.singleton(streamNameA), 0)
                     .get();
 
-            TokenResponse expectedTokenResponseB = corfuRuntime
-                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
-                    .getClient(SequencerClient.class)
+            TokenResponse expectedTokenResponseB = sequencerClient
                     .nextToken(Collections.singleton(streamNameB), 0)
                     .get();
 
-
-            TokenResponse expectedGlobalTailResponse = corfuRuntime
-                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
-                    .getClient(SequencerClient.class)
+            TokenResponse expectedGlobalTailResponse = sequencerClient
                     .nextToken(Collections.emptySet(), 0)
                     .get();
 
@@ -609,16 +599,16 @@ public class ServerRestartIT extends AbstractIT {
             corfuServerProcess = runCorfuServer();
             corfuRuntime = createDefaultRuntime();
 
+            sequencerClient = corfuRuntime
+                    .getLayoutView().getRuntimeLayout()
+                    .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
+
             // check tail recovery after restart
-            TokenResponse tokenResponseA = corfuRuntime
-                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
-                    .getClient(SequencerClient.class)
+            TokenResponse tokenResponseA = sequencerClient
                     .nextToken(Collections.singleton(streamNameA), 1)
                     .get();
 
-            TokenResponse tokenResponseB = corfuRuntime
-                    .getRouter(corfuSingleNodeHost + ":" + corfuSingleNodePort)
-                    .getClient(SequencerClient.class)
+            TokenResponse tokenResponseB = sequencerClient
                     .nextToken(Collections.singleton(streamNameB), 1)
                     .get();
 
@@ -675,17 +665,14 @@ public class ServerRestartIT extends AbstractIT {
 
     private CorfuTable createTable(CorfuRuntime corfuRuntime) {
         return corfuRuntime.getObjectsView().build()
-                .setTypeToken(
-                        new TypeToken<CorfuTable<String, String,
-                                CorfuTableTest.StringIndexers, String>>() {
-                        })
-                .setArguments(CorfuTableTest.StringIndexers.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
     }
 
     /**
-     * Data generation. First 40,000 entries are written to the table.
+     * Data generation. First 1000 entries are written to the table.
      * The log is then check-pointed and trimmed. The server is then restarted.
      * We now start 2 clients rt2 and rt3, both of which should recreate the log and also
      * reconstruct the indices.
@@ -699,11 +686,10 @@ public class ServerRestartIT extends AbstractIT {
         // Start server
         Process corfuProcess = runCorfuServer();
 
-        // Write 40,000 entries.
+        // Write 1000 entries.
         CorfuRuntime rt1 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
-        CorfuTable<String, String, CorfuTableTest.StringIndexers, String> corfuTable1 =
-                createTable(rt1);
-        final int num = 40_000;
+        CorfuTable<String, String> corfuTable1 = createTable(rt1);
+        final int num = 1000;
         for (int i = 0; i < num; i++) {
             corfuTable1.put(Integer.toString(i), Integer.toString(i));
         }
@@ -712,10 +698,10 @@ public class ServerRestartIT extends AbstractIT {
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(corfuTable1);
         long trimMark = mcw.appendCheckpoints(rt1, "author");
-        Collection<String> c1a =
-                corfuTable1.getByIndex(CorfuTableTest.StringIndexers.BY_FIRST_LETTER, "9");
-        Collection<String> c1b =
-                corfuTable1.getByIndex(CorfuTableTest.StringIndexers.BY_VALUE, "9");
+        Collection<Map.Entry<String, String>> c1a =
+                corfuTable1.getByIndex(StringIndexer.BY_FIRST_LETTER, "9");
+        Collection<Map.Entry<String, String>> c1b =
+                corfuTable1.getByIndex(StringIndexer.BY_VALUE, "9");
         rt1.getAddressSpaceView().prefixTrim(trimMark);
         rt1.getAddressSpaceView().invalidateClientCache();
         rt1.getAddressSpaceView().invalidateServerCaches();
@@ -727,10 +713,9 @@ public class ServerRestartIT extends AbstractIT {
 
         // Start a new client and verify the index.
         CorfuRuntime rt2 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
-        CorfuTable<String, String, CorfuTableTest.StringIndexers, String> corfuTable2 =
-                createTable(rt2);
-        Collection<String> c2 =
-                corfuTable2.getByIndex(CorfuTableTest.StringIndexers.BY_FIRST_LETTER, "9");
+        CorfuTable<String, String> corfuTable2 = createTable(rt2);
+        Collection<Map.Entry<String, String>> c2 =
+                corfuTable2.getByIndex(StringIndexer.BY_FIRST_LETTER, "9");
         assertThat(c1a.size()).isEqualTo(c2.size());
         assertThat(c1a.containsAll(c2)).isTrue();
 
@@ -739,10 +724,9 @@ public class ServerRestartIT extends AbstractIT {
                 .setLoadSmrMapsAtConnect(false)
                 .setCacheDisabled(true)
                 .connect();
-        CorfuTable<String, String, CorfuTableTest.StringIndexers, String> corfuTable3 =
-                createTable(rt3);
-        Collection<String> c3 =
-                corfuTable3.getByIndex(CorfuTableTest.StringIndexers.BY_VALUE, "9");
+        CorfuTable<String, String> corfuTable3 = createTable(rt3);
+        Collection<Map.Entry<String, String>> c3 =
+                corfuTable3.getByIndex(StringIndexer.BY_VALUE, "9");
         assertThat(c1b.size()).isEqualTo(c3.size());
         assertThat(c1b.containsAll(c3)).isTrue();
 
