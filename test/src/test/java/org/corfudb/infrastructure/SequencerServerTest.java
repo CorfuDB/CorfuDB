@@ -120,62 +120,6 @@ public class SequencerServerTest extends AbstractServerTest {
     }
 
     @Test
-    public void checkBackpointersWork() {
-        UUID streamA = UUID.nameUUIDFromBytes("streamA".getBytes());
-        UUID streamB = UUID.nameUUIDFromBytes("streamB".getBytes());
-
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
-            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                    new TokenRequest(1L, Collections.singleton(streamA))));
-            Token thisTokenA = getLastPayloadMessageAs(TokenResponse.class).getToken();
-
-            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                    new TokenRequest(1L, Collections.singleton(streamA))));
-            long checkTokenAValue = getLastPayloadMessageAs(TokenResponse.class).getBackpointerMap().get(streamA);
-
-            assertThat(thisTokenA.getTokenValue())
-                    .isEqualTo(checkTokenAValue);
-
-            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                    new TokenRequest(1L, Collections.singleton(streamB))));
-            Token thisTokenB = getLastPayloadMessageAs(TokenResponse.class).getToken();
-
-            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                    new TokenRequest(1L, Collections.singleton(streamB))));
-            long checkTokenBValue = getLastPayloadMessageAs(TokenResponse.class).getBackpointerMap().get(streamB);
-
-            assertThat(thisTokenB.getTokenValue())
-                    .isEqualTo(checkTokenBValue);
-
-            final long MULTI_TOKEN = 5L;
-
-            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                    new TokenRequest(MULTI_TOKEN, Collections.singleton(streamA))));
-            thisTokenA = getLastPayloadMessageAs(TokenResponse.class).getToken();
-
-            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                    new TokenRequest(1L, Collections.singleton(streamA))));
-            checkTokenAValue = getLastPayloadMessageAs(TokenResponse.class).getBackpointerMap().get(streamA);
-
-            assertThat(thisTokenA.getTokenValue() + MULTI_TOKEN - 1)
-                    .isEqualTo(checkTokenAValue);
-
-            // check the requesting multiple tokens does not break the back-pointer for the multi-entry
-            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                    new TokenRequest(1L, Collections.singleton(streamA))));
-            thisTokenA = getLastPayloadMessageAs(TokenResponse.class).getToken();
-
-            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
-                    new TokenRequest(MULTI_TOKEN, Collections.singleton(streamA))));
-            checkTokenAValue = getLastPayloadMessageAs(TokenResponse.class).getBackpointerMap().get(streamA);
-
-            assertThat(thisTokenA.getTokenValue())
-                    .isEqualTo(checkTokenAValue);
-
-        }
-    }
-
-    @Test
     public void SequencerWillResetTails() throws Exception {
         UUID streamA = UUID.nameUUIDFromBytes("streamA".getBytes());
         UUID streamB = UUID.nameUUIDFromBytes("streamB".getBytes());

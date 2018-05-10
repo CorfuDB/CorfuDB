@@ -515,8 +515,6 @@ public class ManagementViewTest extends AbstractViewTest {
         sv.append(testPayload);
         sv.append(testPayload);
 
-        assertThat(getSequencer(SERVERS.PORT_0).getGlobalLogTail().get()).isEqualTo(beforeFailure);
-        assertThat(getSequencer(SERVERS.PORT_1).getGlobalLogTail().get()).isEqualTo(0L);
 
         induceSequencerFailureAndWait();
 
@@ -524,9 +522,6 @@ public class ManagementViewTest extends AbstractViewTest {
         getCorfuRuntime().getSequencerView().nextToken(
                 Collections.singleton(CorfuRuntime.getStreamID("streamA")),
                 0);
-        // verify that a failover sequencer was started with the correct starting-tail
-        //
-        assertThat(getSequencer(SERVERS.PORT_1).getGlobalLogTail().get()).isEqualTo(beforeFailure);
 
         sv.append(testPayload);
         sv.append(testPayload);
@@ -555,13 +550,6 @@ public class ManagementViewTest extends AbstractViewTest {
                 .build();
 
         assertThat(getCorfuRuntime().getLayoutView().getLayout()).isEqualTo(expectedLayout);
-
-        // verify that the new sequencer is advancing the tail properly
-        assertThat(getSequencer(SERVERS.PORT_1).getGlobalLogTail().get()).isEqualTo(afterFailure);
-
-        // sanity check that no other sequencer is active
-        assertThat(getSequencer(SERVERS.PORT_2).getGlobalLogTail().get()).isEqualTo(0L);
-
     }
 
     protected <T> Object instantiateCorfuObject(TypeToken<T> tType, String name) {
@@ -1359,8 +1347,12 @@ public class ManagementViewTest extends AbstractViewTest {
 
         // Using the stale client with view of epoch 1, request 10 tokens.
         final int tokenCount = 5;
-        runtime_2.getSequencerView().nextToken(Collections.singleton(streamA), tokenCount);
-        runtime_2.getSequencerView().nextToken(Collections.singleton(streamB), tokenCount);
+        for (int i = 0; i < tokenCount; i++) {
+            runtime_2.getSequencerView().nextToken(Collections.singletonList(streamA));
+        }
+        for (int i = 0; i < tokenCount; i++) {
+            runtime_2.getSequencerView().nextToken(Collections.singletonList(streamB));
+        }
         // Using the new client request 2 tokens and write to the log.
         streamViewA.append(payload);
         streamViewA.append(payload);
@@ -1369,8 +1361,8 @@ public class ManagementViewTest extends AbstractViewTest {
         final int expectedServer1Tokens = 12;
         assertThat(server0.getBootstrapEpoch()).isEqualTo(layout_1.getEpoch());
         assertThat(server1.getBootstrapEpoch()).isEqualTo(layout_2.getEpoch());
-        assertThat(server0.getGlobalLogTail().get()).isEqualTo(expectedServer0Tokens);
-        assertThat(server1.getGlobalLogTail().get()).isEqualTo(expectedServer1Tokens);
+        assertThat(server0.getLogTail()).isEqualTo(expectedServer0Tokens);
+        assertThat(server1.getLogTail()).isEqualTo(expectedServer1Tokens);
 
         // Trigger reconfiguration to failover back to PORT_0.
         Layout layout_3 = new LayoutBuilder(layout_2)
@@ -1385,8 +1377,8 @@ public class ManagementViewTest extends AbstractViewTest {
         // client on PORT_0.
         assertThat(server0.getBootstrapEpoch()).isEqualTo(layout_3.getEpoch());
         assertThat(server1.getBootstrapEpoch()).isEqualTo(layout_2.getEpoch());
-        assertThat(server0.getGlobalLogTail().get()).isEqualTo(expectedServer1Tokens);
-        assertThat(server1.getGlobalLogTail().get()).isEqualTo(expectedServer1Tokens);
+        assertThat(server0.getLogTail()).isEqualTo(expectedServer0Tokens);
+        assertThat(server1.getLogTail()).isEqualTo(expectedServer1Tokens);
 
         // Assert that the streamTailMap has been reset and returns the correct backpointer.
         final long expectedBackpointerStreamA = 11;
