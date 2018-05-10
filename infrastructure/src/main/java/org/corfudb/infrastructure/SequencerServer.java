@@ -20,15 +20,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.BackpointerResponse;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
-import org.corfudb.protocols.wireprotocol.TokenRequest;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.wireprotocol.TokenType;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 import org.eclipse.collections.api.map.primitive.MutableObjectLongMap;
@@ -203,8 +195,7 @@ public class SequencerServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.SEQUENCER_TRIM_REQ)
     public void trimCache(@Nonnull CorfuPayloadMsg<Long> msg,
-        @Nonnull ChannelHandlerContext ctx,
-        IServerRouter r, boolean isMetricsEnabled) {
+        @Nonnull ChannelHandlerContext ctx, IServerRouter r) {
         long ts = 0;
         try {
             ts = lock.writeLock();
@@ -311,7 +302,7 @@ public class SequencerServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.TOKEN_REQ)
     public void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
-        ChannelHandlerContext ctx, IServerRouter r, boolean isMetricsEnabled) {
+        ChannelHandlerContext ctx, IServerRouter r) {
         final TokenRequest req = msg.getPayload();
         final long serverEpoch = r.getServerEpoch();
 
@@ -357,6 +348,17 @@ public class SequencerServer extends AbstractServer {
             new TokenResponse(logTail - 1, serverEpoch));
     }
 
+    /**
+     * Service an incoming metrics request with the metrics response.
+     */
+    @ServerHandler(type = CorfuMsgType.SEQUENCER_METRICS_REQUEST)
+    public void handleMetricsRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        // Sequencer Ready flag is set to true as this message will be responded to only if the
+        // sequencer is in a ready state.
+        SequencerMetrics sequencerMetrics = new SequencerMetrics(SequencerMetrics.SequencerStatus.READY);
+        r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.SEQUENCER_METRICS_RESPONSE,
+                sequencerMetrics));
+    }
 
     /**
      * Service a query request for a stream tail.
@@ -415,7 +417,6 @@ public class SequencerServer extends AbstractServer {
 
 
     /**
-<<<<<<< HEAD
      * Service a requests for transaction commit.
      * This method checks if a transaction can commit by calling
      * {@link this#verifyCommitUnsafe(long, TxResolutionInfo, long)}.
@@ -514,7 +515,6 @@ public class SequencerServer extends AbstractServer {
                     final Long conflictTail = conflictToTailCache
                         .getIfPresent(conflictKeyHash);
                     final Long validatedAddress = null;
-                        //txInfo.getValidatedStreams().get(streamId);
 
                     if (txSnapshotTimestamp < maxConflictWildcard) {
                         log.debug("verifyCommitUnsafe: ABORT[{}] snapshot-ts[{}] WILDCARD ts=[{}]",
