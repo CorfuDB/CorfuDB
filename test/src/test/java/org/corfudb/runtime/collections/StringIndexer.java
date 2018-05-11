@@ -6,14 +6,19 @@ import java.util.stream.Stream;
 
 public class StringIndexer implements CorfuTable.IndexRegistry<String, String> {
 
-    public static CorfuTable.IndexName BY_VALUE = () -> "BY_VALUE";
-    public static CorfuTable.IndexName BY_FIRST_LETTER = () -> "BY_FIRST_LETTER";
+    public static final CorfuTable.IndexName BY_VALUE = () -> "BY_VALUE";
+    public static final CorfuTable.IndexName BY_FIRST_LETTER = () -> "BY_FIRST_LETTER";
 
-    private static CorfuTable.Index<String, String, ? extends Comparable<?>> BY_VALUE_INDEX =
-            new CorfuTable.Index<>(BY_VALUE, (key, val) -> val);
+    private static final CorfuTable.Index<String, String, ? extends Comparable<?>> BY_VALUE_INDEX =
+            new CorfuTable.Index<>(
+                                   BY_VALUE,
+                                   (CorfuTable.IndexFunction<String, String, String>) (key, val) -> val);
 
-    private static CorfuTable.Index<String, String, ? extends Comparable<?>> BY_FIRST_LETTER_INDEX =
-            new CorfuTable.Index<>(BY_FIRST_LETTER, (key, val) -> Character.toString(val.charAt(0)));
+    private static final CorfuTable.Index<String, String, ? extends Comparable<?>> BY_FIRST_LETTER_INDEX =
+            new CorfuTable.Index<>(
+                                   BY_FIRST_LETTER,
+                                   (CorfuTable.IndexFunction<String, String, String>) (key, val) ->
+                                           Character.toString(val.charAt(0)));
 
     @Override
     public Iterator<CorfuTable.Index<String, String, ? extends Comparable<?>>> iterator() {
@@ -21,23 +26,14 @@ public class StringIndexer implements CorfuTable.IndexRegistry<String, String> {
     }
 
     @Override
-    public <I extends Comparable<?>>
-    Optional<CorfuTable.IndexFunction<String, String, I>> get(CorfuTable.IndexName name) {
+    public Optional<CorfuTable.Index<String, String, ? extends Comparable<?>>> get(CorfuTable.IndexName name) {
         String indexName = (name != null)? name.get() : null;
 
         if (BY_VALUE.get().equals(indexName)) {
-            @SuppressWarnings("unchecked")
-            CorfuTable.IndexFunction<String, String, I> function =
-                    (CorfuTable.IndexFunction<String, String, I>)
-                            BY_VALUE_INDEX.getIndexFunction();
-            return Optional.of(function);
+            return Optional.of(BY_VALUE_INDEX);
 
         } else if (BY_FIRST_LETTER.get().equals(indexName)) {
-            @SuppressWarnings("unchecked")
-            CorfuTable.IndexFunction<String, String, I> function =
-                    (CorfuTable.IndexFunction<String, String, I>)
-                            BY_FIRST_LETTER_INDEX.getIndexFunction();
-            return Optional.of(function);
+            return Optional.of(BY_FIRST_LETTER_INDEX);
         } else {
             return Optional.empty();
         }

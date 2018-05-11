@@ -81,20 +81,43 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     public interface IndexFunction<K, V, I extends Comparable<?>> extends BiFunction<K, V, I> {
     }
 
+    @FunctionalInterface
+    public interface MultiValueIndexFunction<K, V, I extends Comparable<?>>
+            extends BiFunction<K, V, Iterable<I>> {
+    }
+
     /**
-     * Descriptor of named {@link CorfuTable.IndexFunction} entry.
+     * Descriptor of named indexing function entry. The indexing function can
+     * be single indexer {@link CorfuTable.IndexFunction} mapping a value to single
+     * secondary index value, or a multi indexer {@link CorfuTable.MultiValueIndexFunction}
+     * mapping a value to multiple secondary index values.
      *
      * @param <K> type of the record key associated with {@code IndexKey}.
      * @param <V> type of the record value associated with {@code IndexKey}.
      * @param <I> type of the index value computed using the {@code IndexKey}.
      */
     public static class Index<K, V, I extends Comparable<?>> {
-        private CorfuTable.IndexName name;
-        private CorfuTable.IndexFunction<K, V, I> indexFunction;
+        private final CorfuTable.IndexName name;
+        private final CorfuTable.IndexFunction<K, V, I> indexFunction;
+        private final CorfuTable.MultiValueIndexFunction<K, V, I> multiValueIndexFunction;
+
+        // A flag representing whether a single indexer or a multi indexer
+        private final boolean monoIndex;
 
         public Index(CorfuTable.IndexName name, CorfuTable.IndexFunction<K, V, I> indexFunction) {
             this.name = name;
             this.indexFunction = indexFunction;
+            this.multiValueIndexFunction =
+                    (k, v) -> Collections.singletonList(indexFunction.apply(k, v));
+            monoIndex = true;
+        }
+
+        public Index(CorfuTable.IndexName name,
+                     CorfuTable.MultiValueIndexFunction<K, V, I> indexFunction) {
+            this.name = name;
+            this.indexFunction = (k, v) -> indexFunction.apply(k, v).iterator().next();
+            this.multiValueIndexFunction = indexFunction;
+            monoIndex = false;
         }
 
         public CorfuTable.IndexName getName() {
@@ -103,6 +126,14 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
 
         public CorfuTable.IndexFunction<K, V, I> getIndexFunction() {
             return indexFunction;
+        }
+
+        public CorfuTable.MultiValueIndexFunction<K, V, I> getMultiValueIndexFunction() {
+            return multiValueIndexFunction;
+        }
+
+        private boolean isMonoIndex() {
+            return monoIndex;
         }
 
         @Override
@@ -130,7 +161,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
 
         CorfuTable.IndexRegistry<?, ?> EMPTY = new CorfuTable.IndexRegistry<Object, Object>() {
             @Override
-            public <I extends Comparable<?>> Optional<CorfuTable.IndexFunction<Object, Object, I>> get(CorfuTable.IndexName name) {
+            public Optional<CorfuTable.Index<Object, Object, ? extends Comparable<?>>> get(CorfuTable.IndexName name) {
                 return Optional.empty();
             }
 
@@ -144,10 +175,9 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
          * Obtain the {@link CorfuTable.IndexFunction} via its registered {@link CorfuTable.IndexName}.
          *
          * @param name name of the {@code IndexKey} previously registered.
-         * @param <I>  type of the {@code IndexKey}.
          * @return the instance of {@link CorfuTable.IndexFunction} registered to the lookup name.
          */
-        <I extends Comparable<?>> Optional<CorfuTable.IndexFunction<K, V, I>> get(CorfuTable.IndexName name);
+        Optional<CorfuTable.Index<K, V, ? extends Comparable<?>>> get(CorfuTable.IndexName name);
 
         /**
          * Obtain a static {@link CorfuTable.IndexRegistry} with no registered {@link CorfuTable.IndexFunction}s.
@@ -315,13 +345,12 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     public @Nonnull
     <I extends Comparable<I>>
     Collection<Entry<K, V>> getByIndex(@Nonnull IndexName indexName, I indexKey) {
-        String name = indexName.get();
-        Map<K, V> res = secondaryIndexes.get(name).get(indexKey);
-        if (res == null) {
-            return Collections.emptySet();
-        }
+        String secondaryIndex = indexName.get();
+        Map<K, V> res = secondaryIndexes.get(secondaryIndex).get(indexKey);
 
-        return new HashSet<>(secondaryIndexes.get(name).get(indexKey).entrySet());
+        return res == null ?
+                Collections.emptySet():
+                new HashSet<>(res.entrySet());
     }
 
     /**
@@ -723,13 +752,21 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
                 for (Index<K, V, ? extends Comparable> index : indexSpec) {
                     String indexName = index.getName().get();
                     Map<Comparable, Map<K, V>> secondaryIndex = secondaryIndexes.get(indexName);
-                    Comparable indexKey = index.indexFunction.apply(key, value);
-                    Map<K, V> slot = secondaryIndex.get(indexKey);
-
-                    if (slot == null) {
-                        return;
+                    if (index.isMonoIndex()) {
+                        Comparable indexKey = index.indexFunction.apply(key, value);
+                        Map<K, V> slot = secondaryIndex.get(indexKey);
+                        if (slot != null) {
+                            slot.remove(key, value);
+                        }
+                    } else {
+                        for (Comparable<?> indexKey
+                                : index.getMultiValueIndexFunction().apply(key, value)) {
+                            Map<K, V> slot = secondaryIndex.get(indexKey);
+                            if (slot != null) {
+                                slot.remove(key, value);
+                            }
+                        }
                     }
-                    slot.remove(key, value);
                 }
             }
         } catch (Exception e) {
@@ -756,10 +793,18 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
                 for (Index<K, V, ? extends Comparable> index : indexSpec) {
                     String indexName = index.getName().get();
                     Map<Comparable, Map<K, V>> secondaryIndex = secondaryIndexes.get(indexName);
-                    Comparable indexKey = index.getIndexFunction().apply(key, value);
-
-                    Map<K, V> slot = secondaryIndex.computeIfAbsent(indexKey, k -> new HashMap<>());
-                    slot.put(key, value);
+                    if (index.isMonoIndex()) {
+                        Comparable indexKey = index.getIndexFunction().apply(key, value);
+                        Map<K, V> slot = secondaryIndex.computeIfAbsent(indexKey, k -> new HashMap<>());
+                        slot.put(key, value);
+                    } else {
+                        for (Comparable<?> indexKey
+                                : index.getMultiValueIndexFunction().apply(key, value)) {
+                            Map<K, V> slot = secondaryIndex
+                                    .computeIfAbsent(indexKey, k -> new HashMap<>());
+                            slot.put(key, value);
+                        }
+                    }
                 }
             }
         } catch (Exception e) {
