@@ -114,15 +114,16 @@ public abstract class AbstractView {
                             + "invalidate view", we.getCorrectEpoch());
                 } else if (re instanceof NetworkException) {
                     log.warn("layoutHelper: System seems unavailable", re);
-
-                    if (--systemDownTriggerCounter <= 0) {
-                        runtime.systemDownHandler.run();
-                    }
                 } else {
                     throw re;
                 }
                 if (rethrowAllExceptions) {
                     throw new RuntimeException(re);
+                }
+
+                // Invoking the systemDownHandler if the client cannot connect to the server.
+                if (--systemDownTriggerCounter <= 0) {
+                    runtime.systemDownHandler.run();
                 }
                 runtime.invalidateLayout();
                 Sleep.sleepUninterruptibly(retryRate);
