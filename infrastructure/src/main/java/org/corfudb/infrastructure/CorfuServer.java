@@ -282,6 +282,9 @@ public class CorfuServer {
                     router,
                     (String) opts.get("--address"),
                     port).channel().closeFuture().syncUninterruptibly();
+        } catch (Exception e) {
+            log.error("CorfuServer: Server exiting due to unrecoverable error: ", e);
+            throw new UnrecoverableCorfuError(e);
         }
     }
 

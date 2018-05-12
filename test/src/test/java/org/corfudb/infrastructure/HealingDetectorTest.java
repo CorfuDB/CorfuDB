@@ -46,9 +46,6 @@ public class HealingDetectorTest extends AbstractViewTest {
                 .addUnresponsiveServer(SERVERS.PORT_2)
                 .build();
         bootstrapAllServers(layout);
-        getManagementServer(SERVERS.PORT_0).shutdown();
-        getManagementServer(SERVERS.PORT_1).shutdown();
-        getManagementServer(SERVERS.PORT_2).shutdown();
 
         corfuRuntime = getRuntime(layout).connect();
 
@@ -64,7 +61,7 @@ public class HealingDetectorTest extends AbstractViewTest {
      * Returns healed status for SERVERS.PORT_2.
      */
     @Test
-    public void pollHealedNodes() throws InterruptedException {
+    public void pollHealedNodes() {
 
         addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
 
@@ -73,7 +70,5 @@ public class HealingDetectorTest extends AbstractViewTest {
 
         assertThat(healingDetector.poll(layout, corfuRuntime).getHealingNodes())
                 .isEqualTo(expectedResult);
-
-
     }
 }

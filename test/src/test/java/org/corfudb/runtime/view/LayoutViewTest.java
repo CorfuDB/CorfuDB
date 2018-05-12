@@ -209,7 +209,7 @@ public class LayoutViewTest extends AbstractViewTest {
                 corfuRuntime.invalidateLayout();
                 corfuRuntime.getLayoutView().getRuntimeLayout()
                         .getSequencerClient(SERVERS.ENDPOINT_0)
-                        .bootstrap(0L, Collections.emptyMap(), newLayout.getEpoch()).get();
+                        .bootstrap(0L, Collections.emptyMap(), newLayout.getEpoch(), true).get();
                 log.debug("layout updated new layout {}", corfuRuntime.getLayoutView().getLayout());
                 layoutReconfiguredLatch.countDown();
             } catch (Exception e) {

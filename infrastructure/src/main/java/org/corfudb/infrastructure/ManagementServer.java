@@ -11,19 +11,20 @@ import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.format.Types.NodeMetrics;
-
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
+import org.corfudb.protocols.wireprotocol.NodeView;
+import org.corfudb.protocols.wireprotocol.ServerMetrics;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.concurrent.SingletonResource;
 
 
@@ -265,7 +266,9 @@ public class ManagementServer extends AbstractServer {
     /**
      * Handles the heartbeat request.
      * It accumulates the metrics required to build
-     * and send the response(NodeMetrics).
+     * and send the response.
+     * The response comprises of the local nodeMetrics and
+     * this node's view of the cluster (NodeView).
      *
      * @param msg corfu message containing HEARTBEAT_REQUEST
      * @param ctx netty ChannelHandlerContext
@@ -273,11 +276,14 @@ public class ManagementServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.HEARTBEAT_REQUEST)
     public void handleHeartbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        // Currently builds a default instance of the model.
-        // TODO: Collect metrics from Layout, Sequencer and LogUnit Servers.
-        NodeMetrics nodeMetrics = NodeMetrics.getDefaultInstance();
-        r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.HEARTBEAT_RESPONSE,
-                nodeMetrics.toByteArray()));
+        ServerMetrics localServerMetrics = getManagementAgent().getLocalServerMetrics();
+        NodeView.NodeViewBuilder nodeViewBuilder = NodeView.builder()
+                .endpoint(NodeLocator.parseString(getLocalEndpoint()));
+        if (localServerMetrics != null) {
+            nodeViewBuilder.serverMetrics(getManagementAgent().getLocalServerMetrics());
+        }
+        r.sendResponse(ctx, msg, CorfuMsgType.HEARTBEAT_RESPONSE
+                .payloadMsg(nodeViewBuilder.build()));
     }
 
     /**

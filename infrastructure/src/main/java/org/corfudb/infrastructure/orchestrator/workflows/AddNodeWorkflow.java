@@ -144,7 +144,10 @@ public class AddNodeWorkflow implements IWorkflow {
             return;
         }
 
-        for (long chunkStart = segment.getStart(); chunkStart < segment.getEnd()
+        // State transfer should start from segment start address or trim mark whichever is lower.
+        long segmentStart = Math.max(trimMark, segment.getStart());
+
+        for (long chunkStart = segmentStart; chunkStart < segment.getEnd()
                 ; chunkStart = chunkStart + CHUNK_SIZE) {
             long chunkEnd = Math.min((chunkStart + CHUNK_SIZE - 1), segment.getEnd() - 1);
 

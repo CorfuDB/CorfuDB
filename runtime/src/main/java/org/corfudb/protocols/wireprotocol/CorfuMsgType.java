@@ -47,10 +47,12 @@ public enum CorfuMsgType {
     LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), true),
 
     // Sequencer Messages
-    TOKEN_REQ(25, new TypeToken<CorfuPayloadMsg<TokenRequest>>(){}),
-    TOKEN_RES(26, new TypeToken<CorfuPayloadMsg<TokenResponse>>(){}),
-    BOOTSTRAP_SEQUENCER(27, new TypeToken<CorfuPayloadMsg<SequencerTailsRecoveryMsg>>(){}),
-    SEQUENCER_TRIM_REQ(28, new TypeToken<CorfuPayloadMsg<Long>>() {}),
+    TOKEN_REQ(20, new TypeToken<CorfuPayloadMsg<TokenRequest>>(){}),
+    TOKEN_RES(21, new TypeToken<CorfuPayloadMsg<TokenResponse>>(){}),
+    BOOTSTRAP_SEQUENCER(22, new TypeToken<CorfuPayloadMsg<SequencerTailsRecoveryMsg>>(){}),
+    SEQUENCER_TRIM_REQ(23, new TypeToken<CorfuPayloadMsg<Long>>() {}),
+    SEQUENCER_METRICS_REQUEST(24, TypeToken.of(CorfuMsg.class), true),
+    SEQUENCER_METRICS_RESPONSE(25, new TypeToken<CorfuPayloadMsg<SequencerMetrics>>(){}, true),
 
     // Logging Unit Messages
     WRITE(30, new TypeToken<CorfuPayloadMsg<WriteRequest>>() {}),
@@ -89,13 +91,12 @@ public enum CorfuMsgType {
     MANAGEMENT_BOOTSTRAP_REQUEST(70, new TypeToken<CorfuPayloadMsg<Layout>>(){}, true),
     MANAGEMENT_NOBOOTSTRAP_ERROR(71, TypeToken.of(CorfuMsg.class), true),
     MANAGEMENT_ALREADY_BOOTSTRAP_ERROR(72, TypeToken.of(CorfuMsg.class), true),
-    MANAGEMENT_START_FAILURE_HANDLER(73, TypeToken.of(CorfuMsg.class), true),
-    MANAGEMENT_HEALING_DETECTED(74, new TypeToken<CorfuPayloadMsg<DetectorMsg>>(){}, true),
-    MANAGEMENT_FAILURE_DETECTED(75, new TypeToken<CorfuPayloadMsg<DetectorMsg>>(){}, true),
-    HEARTBEAT_REQUEST(76, TypeToken.of(CorfuMsg.class), true),
-    HEARTBEAT_RESPONSE(77, new TypeToken<CorfuPayloadMsg<byte[]>>(){}, true),
-    ORCHESTRATOR_REQUEST(78, new TypeToken<CorfuPayloadMsg<OrchestratorMsg>>() {}, true),
-    ORCHESTRATOR_RESPONSE(79, new TypeToken<CorfuPayloadMsg<OrchestratorResponse>>() {}, true),
+    MANAGEMENT_HEALING_DETECTED(73, new TypeToken<CorfuPayloadMsg<DetectorMsg>>(){}, true),
+    MANAGEMENT_FAILURE_DETECTED(74, new TypeToken<CorfuPayloadMsg<DetectorMsg>>(){}, true),
+    HEARTBEAT_REQUEST(75, TypeToken.of(CorfuMsg.class)),
+    HEARTBEAT_RESPONSE(76, new TypeToken<CorfuPayloadMsg<NodeView>>(){}, true),
+    ORCHESTRATOR_REQUEST(77, new TypeToken<CorfuPayloadMsg<OrchestratorMsg>>() {}, true),
+    ORCHESTRATOR_RESPONSE(78, new TypeToken<CorfuPayloadMsg<OrchestratorResponse>>() {}, true),
 
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true),
     ERROR_SHUTDOWN_EXCEPTION(201, TypeToken.of(CorfuMsg.class), true),

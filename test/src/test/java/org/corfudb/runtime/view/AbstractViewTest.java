@@ -295,7 +295,8 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         TestServer primarySequencerNode = testServerMap.get(l.getSequencers().get(0));
         primarySequencerNode.sequencerServer
                 .handleMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerTailsRecoveryMsg(0L,
-                        Collections.EMPTY_MAP, l.getEpoch())), null, primarySequencerNode.serverRouter);
+                        Collections.emptyMap(), l.getEpoch(), false)), null,
+                        primarySequencerNode.serverRouter);
     }
 
     /** Get a default CorfuRuntime. The default CorfuRuntime is connected to a single-node

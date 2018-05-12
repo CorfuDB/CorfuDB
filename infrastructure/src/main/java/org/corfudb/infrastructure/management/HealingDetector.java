@@ -15,9 +15,10 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.NodeView;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
@@ -112,7 +113,7 @@ public class HealingDetector implements IDetector {
         for (int iteration = 0; iteration < detectionThreshold; iteration++) {
 
             // Ping all nodes and await their responses.
-            Map<String, CompletableFuture<Boolean>> pollCompletableFutures =
+            Map<String, CompletableFuture<NodeView>> pollCompletableFutures =
                     pollOnceAsync(members, routerMap, epoch);
 
             // Collect all poll responses.
@@ -147,18 +148,19 @@ public class HealingDetector implements IDetector {
      * @param epoch     Current epoch for the polling round to stamp the ping messages.
      * @return Map of completable futures generated on their respective pings.
      */
-    private Map<String, CompletableFuture<Boolean>> pollOnceAsync(List<String> members,
-                                                                  Map<String, IClientRouter>
-                                                                          routerMap,
-                                                                  final long epoch) {
+    private Map<String, CompletableFuture<NodeView>> pollOnceAsync(List<String> members,
+                                                                   Map<String, IClientRouter>
+                                                                           routerMap,
+                                                                   final long epoch) {
 
         // Poll servers for health.  All ping activity will happen in the background.
-        final Map<String, CompletableFuture<Boolean>> pollCompletableFutures = new HashMap<>();
+        final Map<String, CompletableFuture<NodeView>> pollCompletableFutures = new HashMap<>();
         members.forEach(s -> {
             try {
-                pollCompletableFutures.put(s, new BaseClient(routerMap.get(s), epoch).ping());
+                pollCompletableFutures.put(s, new ManagementClient(routerMap.get(s), epoch)
+                        .sendHeartbeatRequest());
             } catch (Exception e) {
-                CompletableFuture<Boolean> cf = new CompletableFuture<>();
+                CompletableFuture<NodeView> cf = new CompletableFuture<>();
                 cf.completeExceptionally(e);
                 pollCompletableFutures.put(s, cf);
             }
@@ -178,7 +180,7 @@ public class HealingDetector implements IDetector {
      * @return Set of all responsive nodes.
      */
     private Set<String> collectResponsesAndVerifyEpochs(List<String> members,
-                                                        Map<String, CompletableFuture<Boolean>>
+                                                        Map<String, CompletableFuture<NodeView>>
                                                                 pollCompletableFutures) {
         // Collect responses and increment response counters for successful pings.
         Set<String> responses = new HashSet<>();

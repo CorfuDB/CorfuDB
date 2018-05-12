@@ -2,6 +2,14 @@ package org.corfudb.infrastructure;
 
 import com.codahale.metrics.Timer;
 import io.netty.channel.ChannelHandlerContext;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.ExceptionMsg;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.util.MetricsUtils;
+
+import javax.annotation.Nonnull;
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -12,14 +20,6 @@ import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.Set;
-
-import javax.annotation.Nonnull;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.ExceptionMsg;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.util.MetricsUtils;
 
 /**
  * This class implements message handlers for {@link AbstractServer} implementations.
@@ -35,6 +35,8 @@ import org.corfudb.util.MetricsUtils;
  */
 @Slf4j
 public class CorfuMsgHandler {
+
+    private static final String CORFU_INFRASTRUCTURE_PREFIX = "corfu.infrastructure.message-handler.";
 
     /**
      * A functional interface for server message handlers. Server message handlers should
@@ -225,7 +227,8 @@ public class CorfuMsgHandler {
             };
         } else {
             // Otherwise, generate a timer based on the operation name
-            final Timer timer = ServerContext.getMetrics().timer(type.toString());
+            final Timer timer = ServerContext.getMetrics()
+                    .timer(CORFU_INFRASTRUCTURE_PREFIX + type.toString().toLowerCase());
             // And wrap the handler around a new lambda which measures the execution time.
             return (msg, ctx, r) -> {
                 if (server.isShutdown()) {

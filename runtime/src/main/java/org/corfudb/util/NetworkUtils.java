@@ -32,7 +32,6 @@ public class NetworkUtils {
             InetAddress currentAddress;
             while (inetAddress.hasMoreElements()) {
                 currentAddress = inetAddress.nextElement();
-                log.info("currentAddress: {}", currentAddress);
                 if (currentAddress instanceof Inet4Address) {
                     return currentAddress.getHostAddress();
                 }

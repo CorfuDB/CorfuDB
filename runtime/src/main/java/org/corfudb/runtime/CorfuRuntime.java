@@ -202,6 +202,17 @@ public class CorfuRuntime {
         @Default
         ChannelImplementation socketType = ChannelImplementation.NIO;
 
+        /**
+         * Number of retries to reconnect to an unresponsive system before invoking the
+         * systemDownHandler. This is mainly required to allow the fault detection mechanism
+         * to detect and reconfigure the cluster.
+         * The fault detection takes at least 3 seconds to recognize a failure.
+         * Each retry is attempted after a sleep of {@literal connectionRetryRate}
+         * invoking the systemDownHandler after a minimum of
+         * (systemDownHandlerTriggerLimit * connectionRetryRate) seconds. Default: 20 seconds.
+         */
+        @Default int systemDownHandlerTriggerLimit = 20;
+
         /** The initial list of layout servers. */
         @Singular List<NodeLocator> layoutServers;
         //endregion
@@ -660,6 +671,28 @@ public class CorfuRuntime {
     }
 
     /**
+     * Detects connections to nodes in the router pool which are no longer present in the layout.
+     * For each of these nodes, the router is stopped and the reference is removed from the pool.
+     * If this is not done, the reference remains and Netty keeps attempting to reconnect to the
+     * disconnected node.
+     *
+     * @param layout The latest layout.
+     */
+    private void pruneRemovedRouters(@Nonnull Layout layout) {
+        nodeRouterPool.getNodeRouters().keySet().stream()
+                .filter(endpoint -> !layout.getAllServers().contains(endpoint))
+                .forEach(endpoint -> {
+                    try {
+                        nodeRouterPool.getNodeRouters().get(endpoint).stop();
+                        nodeRouterPool.getNodeRouters().remove(endpoint);
+                    } catch (Exception e) {
+                        log.warn("fetchLayout: Exception in stopping and removing "
+                                + "router connection to node {} :", endpoint, e);
+                    }
+                });
+    }
+
+    /**
      * Return a completable future which is guaranteed to contain a layout.
      * This future will continue retrying until it gets a layout.
      * If you need this completable future to fail, you should chain it with a timeout.
@@ -675,6 +708,7 @@ public class CorfuRuntime {
 
             List<String> layoutServersCopy = new ArrayList<>(layoutServers);
             beforeRpcHandler.run();
+            int systemDownTriggerCounter = getParameters().getSystemDownHandlerTriggerLimit();
 
             while (true) {
 
@@ -705,6 +739,10 @@ public class CorfuRuntime {
 
                         layout = layoutFuture;
                         log.debug("Layout server {} responded with layout {}", s, l);
+
+                        // Prune away removed node routers from the nodeRouterPool.
+                        pruneRemovedRouters(l);
+
                         return l;
                     } catch (InterruptedException ie) {
                         throw new UnrecoverableCorfuInterruptedError(
@@ -717,7 +755,9 @@ public class CorfuRuntime {
                 log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}",
                         parameters.connectionRetryRate);
 
-                systemDownHandler.run();
+                if (--systemDownTriggerCounter <= 0) {
+                    systemDownHandler.run();
+                }
 
                 Sleep.sleepUninterruptibly(parameters.connectionRetryRate);
                 if (isShutdown) {

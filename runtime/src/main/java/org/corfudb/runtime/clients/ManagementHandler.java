@@ -1,5 +1,6 @@
 package org.corfudb.runtime.clients;
 
+
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
@@ -9,6 +10,7 @@ import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.NodeView;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
@@ -46,7 +48,7 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
     }
 
     @ClientHandler(type = CorfuMsgType.HEARTBEAT_RESPONSE)
-    private static Object handleHeartbeatResponse(CorfuPayloadMsg<byte[]> msg,
+    private static Object handleHeartbeatResponse(CorfuPayloadMsg<NodeView> msg,
                                                   ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }

@@ -1,8 +1,11 @@
 package org.corfudb.runtime.clients;
 
 import com.google.common.collect.ImmutableSet;
+
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.junit.Before;
 import org.junit.Test;
@@ -18,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 public class SequencerHandlerTest extends AbstractClientTest {
 
-    SequencerClient client;
+    private SequencerClient client;
 
     @Override
     Set<AbstractServer> getServersForTest() {
@@ -38,7 +41,14 @@ public class SequencerHandlerTest extends AbstractClientTest {
 
     @Before
     public void bootstrapSequencer() {
-        client.bootstrap(0L, Collections.EMPTY_MAP, 0L);
+        client.bootstrap(0L, Collections.emptyMap(), 0L, false);
+    }
+
+    @Test
+    public void requestSequencerMetrics()
+            throws Exception {
+        SequencerMetrics sequencerMetrics = client.requestMetrics().get();
+        assertThat(sequencerMetrics.getSequencerStatus()).isEqualTo(SequencerStatus.READY);
     }
 
     @Test
