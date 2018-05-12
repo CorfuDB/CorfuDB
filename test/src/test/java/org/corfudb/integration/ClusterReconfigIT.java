@@ -15,6 +15,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -24,9 +26,11 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.junit.Before;
 import org.junit.Test;
@@ -534,5 +538,65 @@ public class ClusterReconfigIT extends AbstractIT {
         shutdownCorfuServer(corfuServer_1);
         shutdownCorfuServer(corfuServer_2);
         shutdownCorfuServer(corfuServer_3);
+    }
+
+    /**
+     * This test starts a single corfu node. The CorfuRuntime is registered with a
+     * systemDownHandler which releases a semaphore. The test waits on this semaphore to
+     * complete successfully.
+     */
+    @Test
+    public void testSystemDownHandler() throws Exception {
+
+        final int PORT_0 = 9000;
+        Process corfuServer_1 = runSinglePersistentServer(corfuSingleNodeHost, PORT_0);
+        final Semaphore semaphore = new Semaphore(1);
+        semaphore.acquire();
+
+        // Create map and set up daemon writer thread.
+        CorfuRuntimeParameters corfuRuntimeParameters = CorfuRuntimeParameters.builder()
+                .layoutServer(NodeLocator.parseString("localhost:9000"))
+                .cacheDisabled(true)
+                .systemDownHandlerTriggerLimit(1)
+                .build();
+
+        CorfuRuntime runtime = CorfuRuntime.fromParameters(corfuRuntimeParameters)
+                .registerSystemDownHandler(() ->
+                        assertThatCode(semaphore::release).doesNotThrowAnyException())
+                .connect();
+
+        CorfuTable table = runtime.getObjectsView()
+                .build()
+                .setType(CorfuTable.class)
+                .setStreamName("test")
+                .open();
+        final String data = createStringOfSize(1_000);
+        Random r = getRandomNumberGenerator();
+
+        // A preliminary write into the corfu table.
+        runtime.getObjectsView().TXBegin();
+        table.put(Integer.toString(r.nextInt()), data);
+        runtime.getObjectsView().TXEnd();
+
+        // Killing the server.
+        assertThat(shutdownCorfuServer(corfuServer_1)).isTrue();
+
+        Thread t = new Thread(() -> {
+            for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+                try {
+                    runtime.getObjectsView().TXBegin();
+                    table.put(Integer.toString(r.nextInt()), data);
+                    runtime.getObjectsView().TXEnd();
+                    break;
+                } catch (TransactionAbortedException tae) {
+                    // A transaction aborted exception is expected during
+                    // some reconfiguration cases.
+                }
+            }
+        });
+        t.start();
+
+        // Wait for the systemDownHandler to be invoked.
+        semaphore.tryAcquire(PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS);
     }
 }
