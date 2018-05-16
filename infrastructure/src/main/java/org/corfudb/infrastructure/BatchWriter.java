@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import com.github.benmanes.caffeine.cache.CacheWriter;
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -17,20 +18,27 @@ import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.ValueAdoptedException;
 
 /**
  * BatchWriter is a class that will intercept write-through calls to batch and
  * sync writes.
  */
 @Slf4j
-public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
+public class BatchWriter implements AutoCloseable {
 
     static final int BATCH_SIZE = 50;
-    private StreamLog streamLog;
+
+    private final StreamLog streamLog;
+
+    private final LoadingCache<Long, ILogData> cache;
+
     private BlockingQueue<BatchWriterOperation> operationsQueue;
     final ExecutorService writerService = Executors
             .newSingleThreadExecutor(new ThreadFactoryBuilder()
@@ -43,85 +51,43 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
      *
      * @param streamLog stream log for writes (can be in memory or file)
      */
-    public BatchWriter(StreamLog streamLog) {
+    public BatchWriter(StreamLog streamLog, LoadingCache<Long, ILogData> cache) {
         this.streamLog = streamLog;
+        this.cache = cache;
         operationsQueue = new LinkedBlockingQueue<>();
         writerService.submit(this::batchWriteProcessor);
     }
 
-    @Override
-    public void write(@Nonnull K key, @Nonnull V value) {
-        try {
-            CompletableFuture<Void> cf = new CompletableFuture();
-            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.WRITE,
-                    (Long) key, (LogData) value, null, cf));
-            cf.get();
-        } catch (Exception e) {
-            log.trace("Write Exception {}", e);
-            if (e.getCause() instanceof RuntimeException) {
-                throw (RuntimeException) e.getCause();
-            } else {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
-    public void bulkWrite(List<LogData> entries) {
-        try {
-            CompletableFuture<Void> cf = new CompletableFuture();
-            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.RANGE_WRITE,
-                    null, null, entries, cf));
-        } catch (Exception e) {
-            log.trace("Write Exception {}", e);
-            if (e.getCause() instanceof RuntimeException) {
-                throw (RuntimeException) e.getCause();
-            } else {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
     /**
-     * Trim an address from the log.
-     *
-     * @param address log address to trim
+     * Add an operation to the batch writer queue
+     * @param op Batch writer operation
      */
-    public void trim(@Nonnull long address) {
-        try {
-            CompletableFuture<Void> cf = new CompletableFuture();
-            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.TRIM,
-                    address, null, null, cf));
-            cf.get();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+    public void add(BatchWriterOperation op) {
+        operationsQueue.add(op);
     }
 
-    /**
-     * Trim addresses from log up to a prefix.
-     *
-     * @param address prefix address to trim to (inclusive)
-     */
-    public void prefixTrim(@Nonnull long address) {
-        try {
-            CompletableFuture<Void> cf = new CompletableFuture();
-            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.PREFIX_TRIM,
-                    address, null, null, cf));
-            cf.get();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
+    private void completeOperation(BatchWriterOperation op) {
+        log.trace("Completing operation {}", op);
+        if (op.getException() == null) {
+            if (op.getLogData() != null) {
+                cache.put(op.getAddress(), op.getLogData());
+            } else if (op.getEntries() != null) {
+                for (LogData ld : op.getEntries()) {
+                    cache.put(ld.getGlobalAddress(), ld);
+                }
+            }
 
-    @Override
-    public void delete(K key, V value, RemovalCause removalCause) {
-    }
+            op.getRouter().sendResponse(op.getCtx(), op.getMsg(), CorfuMsgType.ACK.msg());
 
-    private void handleOperationResults(BatchWriterOperation operation) {
-        if (operation.getException() == null) {
-            operation.getFuture().complete(null);
-        } else {
-            operation.getFuture().completeExceptionally(operation.getException());
+        } else if (op.getException() instanceof TrimmedException) {
+            op.getRouter().sendResponse(op.getCtx(), op.getMsg(), CorfuMsgType.ERROR_TRIMMED.msg());
+        } else if (op.getException() instanceof OverwriteException) {
+            op.getRouter().sendResponse(op.getCtx(), op.getMsg(), CorfuMsgType.ERROR_OVERWRITE.msg());
+        } else if (op.getException() instanceof DataOutrankedException) {
+            op.getRouter().sendResponse(op.getCtx(), op.getMsg(), CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
+        } else if (op.getException() instanceof ValueAdoptedException) {
+            op.getRouter().sendResponse(op.getCtx(), op.getMsg(), CorfuMsgType.ERROR_VALUE_ADOPTED
+                    .payloadMsg(((ValueAdoptedException) op.getException()).getReadResponse()));
         }
     }
 
@@ -145,7 +111,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                         log.trace("Sync'd {} writes", processed);
 
                         for (BatchWriterOperation operation : res) {
-                            handleOperationResults(operation);
+                            completeOperation(operation);
                         }
                         res.clear();
                         processed = 0;

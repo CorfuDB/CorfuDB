@@ -163,6 +163,8 @@ public class LogUnitServerTest extends AbstractServerTest {
         for (int i = 0; i < num_iterations_very_low; i++)
             rawWrite(START_ADDRESS+i, low_payload+i, streamName);
 
+        //Thread.sleep(5000);
+
         for (int i = 0; i < num_iterations_very_low; i++)
             assertThat(s1)
                 .containsDataAtAddress(START_ADDRESS+i);
@@ -192,6 +194,8 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         for (int i = 0; i < num_iterations_very_low; i++)
             rawWrite(START_ADDRESS+num_iterations_very_low+i, low_payload+i, streamName);
+
+        //Thread.sleep(5000);
 
         for (int i = 0; i < num_iterations_very_low; i++)
             assertThat(s2)

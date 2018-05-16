@@ -99,7 +99,7 @@ public class LogUnitServer extends AbstractServer {
 
     private final StreamLog streamLog;
 
-    private final BatchWriter<Long, ILogData> batchWriter;
+    private final BatchWriter batchWriter;
 
     /**
      * Returns a new LogUnitServer.
@@ -123,18 +123,14 @@ public class LogUnitServer extends AbstractServer {
             streamLog = new StreamLogFiles(serverContext, (Boolean) opts.get("--no-verify"));
         }
 
-        batchWriter = new BatchWriter(streamLog);
-
         dataCache = Caffeine.<Long, ILogData>newBuilder()
                 .<Long, ILogData>weigher((k, v) -> ((LogData) v).getData() == null ? 1 : (
                         (LogData) v).getData().length)
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
-                .writer(batchWriter)
                 .build(this::handleRetrieval);
 
-        MetricRegistry metrics = serverContext.getMetrics();
-//        MetricsUtils.addCacheGauges(metrics, metricsPrefix + "cache.", dataCache);
+        batchWriter = new BatchWriter(streamLog, dataCache);
 
         Runnable task = () -> streamLog.compact();
         compactor = scheduler.scheduleAtFixedRate(task, 10, 45, TimeUnit.MINUTES);
@@ -164,18 +160,15 @@ public class LogUnitServer extends AbstractServer {
         log.debug("log write: global: {}, streams: {}, backpointers: {}", msg
                 .getPayload().getGlobalAddress(), msg.getPayload().getData().getBackpointerMap());
 
-        try {
-            dataCache.put(msg.getPayload().getGlobalAddress(), msg.getPayload().getData());
-            r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
+        ILogData ld = msg.getPayload().getData();
+        BatchWriterOperation op = new BatchWriterOperation(BatchWriterOperation.Type.WRITE);
+        op.setAddress(ld.getGlobalAddress());
+        op.setLogData((LogData) ld);
+        op.setMsg(msg);
+        op.setCtx(ctx);
+        op.setRouter(r);
 
-        } catch (OverwriteException ex) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
-        } catch (DataOutrankedException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
-        } catch (ValueAdoptedException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_VALUE_ADOPTED.payloadMsg(e
-                    .getReadResponse()));
-        }
+        batchWriter.add(op);
     }
 
     @ServerHandler(type = CorfuMsgType.READ_REQUEST)
@@ -221,38 +214,41 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.FILL_HOLE)
     private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
         IServerRouter r) {
-        try {
-            long address = msg.getPayload().getAddress();
-            dataCache.put(address, LogData.getHole(address));
-            r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
 
-        } catch (OverwriteException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
-        } catch (DataOutrankedException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
-        } catch (ValueAdoptedException e) {
+        long address = msg.getPayload().getAddress();
+        BatchWriterOperation op = new BatchWriterOperation(BatchWriterOperation.Type.WRITE);
+        op.setAddress(address);
+        op.setLogData(LogData.getHole(address));
+        op.setMsg(msg);
+        op.setCtx(ctx);
+        op.setRouter(r);
 
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_VALUE_ADOPTED.payloadMsg(e
-                    .getReadResponse()));
-        }
+        batchWriter.add(op);
     }
 
     @ServerHandler(type = CorfuMsgType.TRIM)
     private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        batchWriter.trim(msg.getPayload().getAddress());
-        //TODO(Maithem): should we return an error if the write fails
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        long addressToTrim = msg.getPayload().getAddress();
+        BatchWriterOperation op = new BatchWriterOperation(BatchWriterOperation.Type.TRIM);
+        op.setAddress(addressToTrim);
+        op.setMsg(msg);
+        op.setCtx(ctx);
+        op.setRouter(r);
+
+        batchWriter.add(op);
     }
 
     @ServerHandler(type = CorfuMsgType.PREFIX_TRIM)
     private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
                             IServerRouter r) {
-        try {
-            batchWriter.prefixTrim(msg.getPayload().getAddress());
-            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-        } catch (TrimmedException ex) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
-        }
+        long prefixToTrim = msg.getPayload().getAddress();
+        BatchWriterOperation op = new BatchWriterOperation(BatchWriterOperation.Type.PREFIX_TRIM);
+        op.setAddress(prefixToTrim);
+        op.setMsg(msg);
+        op.setCtx(ctx);
+        op.setRouter(r);
+
+        batchWriter.add(op);
     }
 
     @ServerHandler(type = CorfuMsgType.COMPACT_REQUEST)
@@ -285,8 +281,13 @@ public class LogUnitServer extends AbstractServer {
     private void rangeWrite(CorfuPayloadMsg<RangeWriteMsg> msg,
                                   ChannelHandlerContext ctx, IServerRouter r) {
         List<LogData> entries = msg.getPayload().getEntries();
-        batchWriter.bulkWrite(entries);
-        r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
+        BatchWriterOperation op = new BatchWriterOperation(BatchWriterOperation.Type.RANGE_WRITE);
+        op.setEntries(entries);
+        op.setMsg(msg);
+        op.setCtx(ctx);
+        op.setRouter(r);
+
+        batchWriter.add(op);
     }
 
     /**
@@ -295,6 +296,7 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.RESET_LOGUNIT)
     private void resetLogUnit(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        // should call flush on the batch writer
         streamLog.reset();
         dataCache.invalidateAll();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
