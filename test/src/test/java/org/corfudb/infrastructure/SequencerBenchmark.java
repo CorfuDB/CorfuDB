@@ -1,14 +1,23 @@
 package org.corfudb.infrastructure;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
+
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.test.benchmark.AbstractCorfuBenchmark;
 import org.corfudb.test.benchmark.CorfuBenchmarkState;
-import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.Measurement;
+import org.openjdk.jmh.annotations.Param;
+import org.openjdk.jmh.annotations.Threads;
+import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
-
-import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
 
 /** A set of benchmarks for the sequencer server. */
 public class SequencerBenchmark extends AbstractCorfuBenchmark {
@@ -71,8 +80,9 @@ public class SequencerBenchmark extends AbstractCorfuBenchmark {
 
         TxResolutionInfo getResolutionInfo() {
             Set<byte[]> conflictSetParameters = new HashSet<>();
+            final int byte_size = 8;
             for (int i = 0; i < CONFLICTS_PER_STREAM; i++) {
-                byte[] bytes = new byte[8];
+                byte[] bytes = new byte[byte_size];
                 bytes[0] = (byte) i;
                 conflictSetParameters.add(bytes);
             }

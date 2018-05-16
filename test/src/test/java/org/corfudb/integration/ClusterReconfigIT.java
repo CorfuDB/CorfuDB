@@ -316,7 +316,7 @@ public class ClusterReconfigIT extends AbstractIT {
         corfuRuntime.getLayoutView().getRuntimeLayout(l).getBaseClient("localhost:9000")
                 .restart().get();
 
-        restartServer(corfuRuntime, l.getLayoutServers().get(0));
+        restartServer(corfuRuntime, DEFAULT_ENDPOINT);
 
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch())
                 .isGreaterThanOrEqualTo(l.getEpoch() + 1);

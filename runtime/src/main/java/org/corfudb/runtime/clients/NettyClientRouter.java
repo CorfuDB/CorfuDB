@@ -327,7 +327,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 .setFailure(new ShutdownException("Runtime already shutdown!"));
         }
         // Use the bootstrap to create a new channel.
-        ChannelFuture f = bootstrap.connect(node.getSocketAddress());
+        ChannelFuture f = bootstrap.connect(node.getHost(), node.getPort());
         f.addListener((ChannelFuture cf) -> channelConnectionFutureHandler(cf, bootstrap));
         return f;
     }
