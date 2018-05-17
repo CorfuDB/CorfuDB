@@ -18,15 +18,13 @@ import javax.annotation.Nonnull;
 
 import javax.annotation.Nullable;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
-import lombok.ToString;
-import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.replication.ChainReplicationProtocol;
 import org.corfudb.runtime.view.replication.IReplicationProtocol;
 import org.corfudb.runtime.view.replication.NeverHoleFillPolicy;
@@ -39,10 +37,7 @@ import org.corfudb.runtime.view.stream.IStreamView;
  * This class represents the layout of a Corfu instance.
  * Created by mwei on 12/8/15.
  */
-@Slf4j
 @Data
-@ToString
-@EqualsAndHashCode
 public class Layout {
     /**
      * A Gson parser.
@@ -183,6 +178,15 @@ public class Layout {
         allServers.addAll(getAllActiveServers());
         allServers.addAll(unresponsiveServers);
         return allServers;
+    }
+
+    /**
+     * Returns the primary sequencer.
+     *
+     * @return The primary sequencer.
+     */
+    public String getPrimarySequencer() {
+        return sequencers.get(0);
     }
 
     /**
@@ -343,6 +347,13 @@ public class Layout {
                             r.getParameters().getHoleFillRetry()));
                 }
             }
+
+            @Override
+            public ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment,
+                                                            Set<String> responsiveNodes) {
+                return !responsiveNodes.containsAll(layoutSegment.getAllLogServers())
+                        ? ClusterStatus.UNAVAILABLE : ClusterStatus.STABLE;
+            }
         },
         QUORUM_REPLICATION {
             @Override
@@ -374,6 +385,32 @@ public class Layout {
                 }
             }
 
+            @Override
+            public ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment,
+                                                            Set<String> responsiveNodes) {
+                ClusterStatus clusterStatus = ClusterStatus.STABLE;
+                // At least a quorum of nodes should be reachable in every stripe for the cluster
+                // to be STABLE.
+                for (LayoutStripe layoutStripe : layoutSegment.getStripes()) {
+                    List<String> responsiveLogServers
+                            = new ArrayList<>(layoutStripe.getLogServers());
+                    // Retain only the responsive servers.
+                    responsiveLogServers.retainAll(responsiveNodes);
+
+                    if (!responsiveLogServers.containsAll(layoutStripe.getLogServers())) {
+                        if (clusterStatus.equals(ClusterStatus.STABLE)) {
+                            clusterStatus = ClusterStatus.DEGRADED;
+                        }
+                        int quorumSize = (layoutStripe.getLogServers().size() / 2) + 1;
+                        if (responsiveLogServers.size() < quorumSize) {
+                            clusterStatus = ClusterStatus.UNAVAILABLE;
+                            break;
+                        }
+                    }
+                }
+                return clusterStatus;
+            }
+
         }, NO_REPLICATION {
             @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,
@@ -392,6 +429,12 @@ public class Layout {
             public IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
                 throw new UnsupportedOperationException("Stream view used without a"
                         + " replication mode");
+            }
+
+            @Override
+            public ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment,
+                                                            Set<String> responsiveNodes) {
+                throw new UnsupportedOperationException("Unsupported cluster health check.");
             }
         };
 
@@ -416,6 +459,15 @@ public class Layout {
         public IReplicationProtocol getReplicationProtocol(CorfuRuntime r) {
             throw new UnsupportedOperationException();
         }
+
+        /**
+         * Returns the health of the cluster for a given segment.
+         *
+         * @param layoutSegment   Layout Segment
+         * @param responsiveNodes Set of all responsive nodes.
+         * @return Cluster Health.
+         */
+        public abstract ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment, Set<String> responsiveNodes);
     }
 
 

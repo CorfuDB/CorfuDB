@@ -278,7 +278,9 @@ public class ManagementServer extends AbstractServer {
     public void handleHeartbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         ServerMetrics localServerMetrics = getManagementAgent().getLocalServerMetrics();
         NodeView.NodeViewBuilder nodeViewBuilder = NodeView.builder()
-                .endpoint(NodeLocator.parseString(getLocalEndpoint()));
+                .endpoint(NodeLocator.parseString(getLocalEndpoint()))
+                // Fetch the node's view of the cluster.
+                .networkMetrics(managementAgent.getConnectivityView());
         if (localServerMetrics != null) {
             nodeViewBuilder.serverMetrics(getManagementAgent().getLocalServerMetrics());
         }

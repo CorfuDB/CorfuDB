@@ -28,20 +28,29 @@ public class NodeView implements ICorfuPayload<NodeView> {
      */
     private final ServerMetrics serverMetrics;
 
+    /**
+     * Node's view of the cluster.
+     */
+    private final NetworkMetrics networkMetrics;
+
     public NodeView(NodeLocator endpoint,
-                    ServerMetrics serverMetrics) {
+                    ServerMetrics serverMetrics,
+                    NetworkMetrics networkMetrics) {
         this.endpoint = endpoint;
         this.serverMetrics = serverMetrics;
+        this.networkMetrics = networkMetrics;
     }
 
     public NodeView(ByteBuf buf) {
         endpoint = NodeLocator.parseString(ICorfuPayload.fromBuffer(buf, String.class));
         serverMetrics = ICorfuPayload.fromBuffer(buf, ServerMetrics.class);
+        networkMetrics = ICorfuPayload.fromBuffer(buf, NetworkMetrics.class);
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, endpoint.toString());
         ICorfuPayload.serialize(buf, serverMetrics);
+        ICorfuPayload.serialize(buf, networkMetrics);
     }
 }
