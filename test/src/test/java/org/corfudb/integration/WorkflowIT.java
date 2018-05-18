@@ -256,12 +256,8 @@ public class WorkflowIT extends AbstractIT {
         assertThat(n0Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
 
         // Kill two nodes from a three node cluster
-        final long timeToWaitForProc = 5000;
-        p1.destroy();
-        p1.waitFor(timeToWaitForProc, TimeUnit.SECONDS);
-
-        p2.destroy();
-        p2.waitFor(timeToWaitForProc, TimeUnit.SECONDS);
+        shutdownCorfuServer(p1);
+        shutdownCorfuServer(p2);
 
         // Force remove the "failed" node
         n0Rt.getManagementView().forceRemoveNode(getConnectionString(n1Port), workflowNumRetry,
