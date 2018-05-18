@@ -8,6 +8,7 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutBuilder;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
@@ -37,35 +38,30 @@ public class WorkflowIT extends AbstractIT {
     final Duration pollPeriod = Duration.ofMillis(50);
     final int workflowNumRetry = 3;
 
+    private Process runServer(int port, boolean single) throws IOException {
+        return new CorfuServerRunner()
+                .setHost(host)
+                .setPort(port)
+                .setSingle(single)
+                .runServer();
+    }
+
     @Test
     public void AddAndRemoveNodeIT() throws Exception {
-        final String host = "localhost";
         final String streamName = "s1";
         final int n1Port = 9000;
         final int numIter = 11_000;
 
         // Start node one and populate it with data
-        Process server_1 = new CorfuServerRunner()
-                .setHost(host)
-                .setPort(n1Port)
-                .setSingle(true)
-                .runServer();
+        Process server_1 = runServer(n1Port, true);
 
         // start a second node
         final int n2Port = 9001;
-        Process server_2 = new CorfuServerRunner()
-                .setHost(host)
-                .setPort(n2Port)
-                .setSingle(false)
-                .runServer();
+        Process server_2 = runServer(n2Port, false);
 
         // start a third node
         final int n3Port = 9002;
-        Process server_3 = new CorfuServerRunner()
-                .setHost(host)
-                .setPort(n3Port)
-                .setSingle(false)
-                .runServer();
+        Process server_3 = runServer(n3Port, false);
 
         CorfuRuntime n1Rt = new CorfuRuntime(getConnectionString(n1Port))
                 .setCacheDisabled(true).connect();
@@ -127,6 +123,7 @@ public class WorkflowIT extends AbstractIT {
         // Remove node 2 again and verify that the epoch doesn't change
         n1Rt.getManagementView().removeNode(getConnectionString(n2Port), workflowNumRetry,
                 timeout, pollPeriod);
+        shutdownCorfuServer(server_2);
 
         n1Rt.invalidateLayout();
         // Verify that the layout epoch hasn't changed after the second remove and that
@@ -136,10 +133,12 @@ public class WorkflowIT extends AbstractIT {
         // Force remove node 3
         n1Rt.getManagementView().forceRemoveNode(getConnectionString(n3Port), workflowNumRetry,
                 timeout, pollPeriod);
+        shutdownCorfuServer(server_3);
 
         n1Rt.invalidateLayout();
         assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(1);
 
+        server_2 = runServer(n2Port, false);
         // Re-add node 2
         n1Rt.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
                 timeout, pollPeriod);
@@ -154,7 +153,6 @@ public class WorkflowIT extends AbstractIT {
 
         shutdownCorfuServer(server_1);
         shutdownCorfuServer(server_2);
-        shutdownCorfuServer(server_3);
     }
 
     /**
@@ -174,23 +172,9 @@ public class WorkflowIT extends AbstractIT {
         final int clusterSizeN2 = 2;
         final int clusterSizeN3 = 3;
 
-        Process p0 = new CorfuServerRunner()
-                .setHost(host)
-                .setPort(n0Port)
-                .setSingle(true)
-                .runServer();
-
-        Process p1 = new CorfuServerRunner()
-                .setHost(host)
-                .setPort(n1Port)
-                .setSingle(false)
-                .runServer();
-
-        Process p2 = new CorfuServerRunner()
-                .setHost(host)
-                .setPort(n2Port)
-                .setSingle(false)
-                .runServer();
+        Process p0 = runServer(n0Port, true);
+        Process p1 = runServer(n1Port, false);
+        Process p2 = runServer(n2Port, false);
 
         CorfuRuntime n0Rt = new CorfuRuntime(getConnectionString(n0Port)).connect();
         CorfuTable table = n0Rt.getObjectsView().build()
@@ -248,23 +232,9 @@ public class WorkflowIT extends AbstractIT {
         final int clusterSizeN1 = 1;
         final int clusterSizeN3 = 3;
 
-        Process p0 = new CorfuServerRunner()
-                .setHost(host)
-                .setPort(n0Port)
-                .setSingle(true)
-                .runServer();
-
-        Process p1 = new CorfuServerRunner()
-                .setHost(host)
-                .setPort(n1Port)
-                .setSingle(false)
-                .runServer();
-
-        Process p2 = new CorfuServerRunner()
-                .setHost(host)
-                .setPort(n2Port)
-                .setSingle(false)
-                .runServer();
+        Process p0 = runServer(n0Port, true);
+        Process p1 = runServer(n1Port, false);
+        Process p2 = runServer(n2Port, false);
 
         CorfuRuntime n0Rt = new CorfuRuntime(getConnectionString(n0Port)).connect();
         CorfuTable table = n0Rt.getObjectsView().build()
