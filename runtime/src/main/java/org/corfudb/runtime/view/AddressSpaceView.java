@@ -6,33 +6,30 @@ import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.Iterables;
-
-
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
-import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.CorfuComponent;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -69,7 +66,8 @@ public class AddressSpaceView extends AbstractView {
     public AddressSpaceView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
         MetricRegistry metrics = runtime.getMetrics();
-        final String pfx = String.format("%s0x%x.cache.", runtime.getMpASV(), this.hashCode());
+        final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ASV.toString(),
+                                         this.hashCode());
         metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::estimatedSize);
         metrics.register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
         metrics.register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());

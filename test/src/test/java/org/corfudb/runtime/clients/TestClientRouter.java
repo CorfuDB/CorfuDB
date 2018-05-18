@@ -1,9 +1,11 @@
 package org.corfudb.runtime.clients;
 
+import com.codahale.metrics.Timer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestServerRouter;
@@ -12,9 +14,13 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -22,7 +28,6 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import org.corfudb.util.NodeLocator;
 
 import static org.corfudb.AbstractCorfuTest.PARAMETERS;
 
@@ -61,6 +66,7 @@ public class TestClientRouter implements IClientRouter {
     public UUID clientID;
 
     private volatile boolean connected = true;
+    private Map<CorfuMsgType, String> timerNameCache = new HashMap<>();
 
     public void simulateDisconnectedEndpoint() {
         connected = false;
@@ -179,7 +185,9 @@ public class TestClientRouter implements IClientRouter {
      * or a timeout in the case there is no response.
      */
     @Override
-    public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message) {
+    public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx,
+                                                                 @NonNull CorfuMsg message) {
+        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         // Simulate a "disconnected endpoint"
         if (!connected) {
             log.trace("Disconnected endpoint " + host + ":" + port);
@@ -187,6 +195,11 @@ public class TestClientRouter implements IClientRouter {
                                                                     .host(host)
                                                                     .port(port).build());
         }
+
+        // Set up the timer and context to measure request
+        final Timer roundTripMsgTimer = getTimer(message);
+        final Timer.Context roundTripMsgContext = MetricsUtils
+                .getConditionalContext(isEnabled, roundTripMsgTimer);
 
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
@@ -204,14 +217,31 @@ public class TestClientRouter implements IClientRouter {
                 log.trace(Thread.currentThread().getId() + ":Sent message: {}", message);
                 routeMessage(message);
         }
+
+        // Generate a benchmarked future to measure the underlying request
+        final CompletableFuture<T> cfBenchmarked = cf.thenApply(x -> {
+            MetricsUtils.stopConditionalContext(roundTripMsgContext);
+            return x;
+        });
+
         // Generate a timeout future, which will complete exceptionally if the main future is not completed.
-        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
+        final CompletableFuture<T> cfTimeout = CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
         cfTimeout.exceptionally(e -> {
             outstandingRequests.remove(thisRequest);
             log.debug("Remove request {} due to timeout!", thisRequest);
             return null;
         });
         return cfTimeout;
+    }
+
+    // Create a timer using appropriate cached timer names
+    private Timer getTimer(@NonNull CorfuMsg message) {
+        if (!timerNameCache.containsKey(message.getMsgType())) {
+            timerNameCache.put(message.getMsgType(),
+                    CorfuComponent.CR.toString() + message.getMsgType().name().toLowerCase());
+        }
+        return CorfuRuntime.getDefaultMetrics()
+                .timer(timerNameCache.get(message.getMsgType()));
     }
 
     /**
