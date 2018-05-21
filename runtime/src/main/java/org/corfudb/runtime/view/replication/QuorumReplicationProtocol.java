@@ -6,14 +6,6 @@
 
 package org.corfudb.runtime.view.replication;
 
-import java.time.Duration;
-import java.util.Comparator;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -28,15 +20,23 @@ import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
-import org.corfudb.runtime.view.RuntimeLayout;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
+import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Holder;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
+
+import java.time.Duration;
+import java.util.Comparator;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 /**
  * Created by kspirov on 4/23/17.
@@ -170,7 +170,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
             IRetry.build(ExponentialBackoffRetry.class, () -> {
                 QuorumFuturesFactory.CompositeFuture<Boolean> future = null;
                 try {
-                    log.debug("Recovery write loop for " + log);
+                    log.debug("Recovery write loop for {}", log);
                     // increment the rank
                     dh.getRef().releaseBuffer();
                     dh.getRef().setRank(dh.getRef().getRank().buildHigherRank());

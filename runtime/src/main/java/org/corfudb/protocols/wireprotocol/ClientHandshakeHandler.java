@@ -5,13 +5,12 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.UUID;
-
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * The ClientHandshakeHandler initiates the handshake upon socket connection.
@@ -90,12 +89,12 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
 
         try {
             handshakeResponse = (CorfuPayloadMsg<HandshakeResponse>) m;
-            log.info("channelRead: Handshake Response received. Removing " + READ_TIMEOUT_HANDLER +
-                " from pipeline.");
+            log.info("channelRead: Handshake Response received. Removing {} from pipeline.",
+                    READ_TIMEOUT_HANDLER);
             ctx.pipeline().remove(READ_TIMEOUT_HANDLER);
         } catch (ClassCastException e) {
-            log.warn("channelRead: Non-handshake message received by handshake handler. Send upstream only " +
-                "if handshake succeeded.");
+            log.warn("channelRead: Non-handshake message received by handshake handler. " +
+                    "Send upstream only if handshake succeeded.");
             if (this.handshakeState.completed()) {
                 // Only send upstream if handshake is complete.
                 super.channelRead(ctx, m);
@@ -103,7 +102,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
                 // Otherwise, drop message.
                 try {
                     CorfuMsg msg = (CorfuMsg) m;
-                    log.debug("channelRead: Dropping message: " + msg.getMsgType().name());
+                    log.debug("channelRead: Dropping message: {}", msg.getMsgType().name());
                 } catch (Exception ex) {
                     log.error("channelRead: Message received is not a valid CorfuMsg type.");
                 }
@@ -122,16 +121,15 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             // Validation failed, client opened a socket to server with id
             // 'nodeId', instead server's id is 'serverId'
             log.error("channelRead: Handshake validation failed. Server node id mismatch.");
-            log.debug("channelRead: Client opened socket to server {" + this.nodeId
-                + "} instead, connected to: {" + serverId + "}");
+            log.debug("channelRead: Client opened socket to server [{}] instead, connected to: [{}]",
+                    this.nodeId, serverId);
             this.fireHandshakeFailed(ctx);
             return;
         }
 
-        log.info("channelRead: Handshake succeeded. Server Corfu Version: {" + corfuVersion + "}");
+        log.info("channelRead: Handshake succeeded. Server Corfu Version: [{}]", corfuVersion);
+        log.debug("channelRead: There are [{}] messages in queue to be flushed.", this.messages.size());
         // Flush messages in queue
-        log.debug("channelRead: There are {" + this.messages.size() + "} messages in queue to " +
-            "be flushed.");
         for (CorfuMsg message : this.messages) {
             ctx.writeAndFlush(message);
         }
@@ -151,7 +149,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void channelActive(ChannelHandlerContext ctx)
         throws Exception {
-        log.info("channelActive: Outgoing connection established to: " + ctx.channel().remoteAddress());
+        log.info("channelActive: Outgoing connection established to: {}", ctx.channel().remoteAddress());
 
         // Write the handshake & add a timeout listener.
         CorfuMsg handshake = CorfuMsgType.HANDSHAKE_INITIATE
@@ -159,7 +157,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
 
         log.info("channelActive: Initiate handshake. Send handshake message.");
         ctx.writeAndFlush(handshake);
-        log.debug("channelActive: Add " + READ_TIMEOUT_HANDLER + " to channel pipeline.");
+        log.debug("channelActive: Add {} to channel pipeline.", READ_TIMEOUT_HANDLER);
         ctx.pipeline().addBefore(ctx.name(), READ_TIMEOUT_HANDLER, new ReadTimeoutHandler(this.handshakeTimeout));
     }
 
@@ -264,5 +262,3 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         ctx.fireUserEventTriggered(ClientHandshakeEvent.CONNECTED);
     }
 }
-
-
