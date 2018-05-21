@@ -3,6 +3,22 @@ package org.corfudb.util;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import io.netty.buffer.ByteBuf;
+import jdk.internal.org.objectweb.asm.ClassReader;
+import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
+import jdk.internal.org.objectweb.asm.tree.ClassNode;
+import jdk.internal.org.objectweb.asm.tree.InsnList;
+import jdk.internal.org.objectweb.asm.tree.MethodNode;
+import jdk.internal.org.objectweb.asm.util.Printer;
+import jdk.internal.org.objectweb.asm.util.Textifier;
+import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.recovery.FastObjectLoader;
+import org.corfudb.recovery.RecoveryUtils;
+import org.corfudb.runtime.CorfuRuntime;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -19,21 +35,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import jdk.internal.org.objectweb.asm.ClassReader;
-import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
-import jdk.internal.org.objectweb.asm.tree.ClassNode;
-import jdk.internal.org.objectweb.asm.tree.InsnList;
-import jdk.internal.org.objectweb.asm.tree.MethodNode;
-import jdk.internal.org.objectweb.asm.util.Printer;
-import jdk.internal.org.objectweb.asm.util.Textifier;
-import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.recovery.FastObjectLoader;
-import org.corfudb.recovery.RecoveryUtils;
-import org.corfudb.runtime.CorfuRuntime;
 
 
 /**
@@ -440,10 +441,10 @@ public class Utils {
                 log.info("printLogAnatomy: Number of Entries: 1");
                 log.info("--------------------------");
             } else if (le.getType() == LogEntry.LogEntryType.MULTIOBJSMR) {
-                log.info("printLogAnatomy: Number of Streams: " + logData.getStreams().size());
+                log.info("printLogAnatomy: Number of Streams: {}", logData.getStreams().size());
                 ((MultiObjectSMREntry)le).getEntryMap().forEach((stream, multiSmrEntry) -> {
-                    log.info("printLogAnatomy: Number of Entries: " + multiSmrEntry
-                            .getSMRUpdates(stream).size());
+                    log.info("printLogAnatomy: Number of Entries: {}",
+                            multiSmrEntry.getSMRUpdates(stream).size());
                 });
                 log.info("--------------------------");
             }

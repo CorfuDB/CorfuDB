@@ -6,19 +6,17 @@ import io.netty.channel.ChannelPromise;
 import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.util.AttributeKey;
-
-import java.util.ArrayDeque;
-import java.util.Queue;
-import java.util.UUID;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.HandshakeMsg;
 import org.corfudb.protocols.wireprotocol.HandshakeResponse;
 import org.corfudb.protocols.wireprotocol.HandshakeState;
+
+import java.util.ArrayDeque;
+import java.util.Queue;
+import java.util.UUID;
 
 /**
  * The ServerHandshakeHandler waits for the handshake message, validates and sends
@@ -77,8 +75,8 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
 
         try {
             handshake = (CorfuPayloadMsg<HandshakeMsg>) m;
-            log.debug("channelRead: Handshake Message received. Removing " + READ_TIMEOUT_HANDLER +
-                    " from pipeline.");
+            log.debug("channelRead: Handshake Message received. Removing {} from pipeline.",
+                    READ_TIMEOUT_HANDLER);
             ctx.pipeline().remove(READ_TIMEOUT_HANDLER);
         } catch (ClassCastException e) {
             log.warn("channelRead: Non-handshake message received by handshake handler." +
@@ -89,8 +87,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
             } else {
                 // Otherwise, drop message.
                 try {
-                    log.debug("channelRead: Dropping message: " +
-                            ((CorfuMsg) m).getMsgType().name());
+                    log.debug("channelRead: Dropping message: {}", ((CorfuMsg) m).getMsgType().name());
                 } catch (Exception ex) {
                     log.error("channelRead: Message received by Server is not a valid " +
                             "CorfuMsg type.");
@@ -107,8 +104,8 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         if (serverId.equals(UUID.fromString("00000000-0000-0000-0000-000000000000"))) {
             log.info("channelRead: node id matching is not requested by client.");
         } else if (!serverId.equals(this.nodeId)) {
-            log.error("channelRead: Invalid handshake: this is " + this.nodeId +
-                    " and client is trying to connect to " + serverId);
+            log.error("channelRead: Invalid handshake: this is {} and client is trying to connect to {}",
+                    this.nodeId, serverId);
             this.fireHandshakeFailed(ctx);
             return;
         }
@@ -116,16 +113,15 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         // Store clientID as a channel attribute.
         ctx.channel().attr(clientIdAttrKey).set(clientId);
         log.info("channelRead: Handshake validated by Server.");
-        log.debug("channelRead: Sending handshake response: Node Id: " + this.nodeId +
-                " Corfu Version: " + this.corfuVersion);
+        log.debug("channelRead: Sending handshake response: Node Id: {} Corfu Version: {}",
+                this.nodeId, this.corfuVersion);
 
         CorfuMsg handshakeResponse = CorfuMsgType.HANDSHAKE_RESPONSE
                 .payloadMsg(new HandshakeResponse(this.nodeId, this.corfuVersion));
         ctx.writeAndFlush(handshakeResponse);
 
         // Flush messages in queue
-        log.debug("channelRead: There are {" + this.messages.size() + "} messages in queue to " +
-                "be flushed.");
+        log.debug("channelRead: There are [{}] messages in queue to be flushed.", this.messages.size());
         for (CorfuMsg message : this.messages) {
             ctx.writeAndFlush(message);
         }
@@ -144,8 +140,8 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
      */
     @Override
     public void channelActive(final ChannelHandlerContext ctx) throws Exception {
-        log.info("channelActive: Incoming connection established from: " +
-                ctx.channel().remoteAddress() + " Start Read Timeout.");
+        log.info("channelActive: Incoming connection established from: {} Start Read Timeout.",
+                ctx.channel().remoteAddress());
         ctx.pipeline().addBefore(ctx.name(), READ_TIMEOUT_HANDLER,
                 new ReadTimeoutHandler(this.timeoutInSeconds));
     }
@@ -174,7 +170,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
             throws Exception {
-        log.error("exceptionCaught: Exception caught: " + cause.getMessage());
+        log.error("exceptionCaught: Exception caught: {}", cause.getMessage());
 
         if (cause instanceof ReadTimeoutException) {
             // Read timeout: no inbound traffic detected in a period of time.

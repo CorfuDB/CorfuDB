@@ -171,8 +171,8 @@ public class MetricsUtils {
         if (!directory.isDirectory() ||
             !directory.exists() ||
             !directory.canWrite()) {
-            log.warn("Provided CSV directory : {} doesn't exist, isn't a directory, or not accessible " +
-                    "for writes. Disabling CSV Reporting.");
+            log.warn("Provided CSV directory : {} doesn't exist, isn't a directory, or " +
+                    "not accessible for writes. Disabling CSV Reporting.", directory);
             metricsCsvReportingEnabled = false;
             return;
         }
