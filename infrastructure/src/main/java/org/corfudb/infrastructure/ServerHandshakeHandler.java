@@ -14,7 +14,7 @@ import org.corfudb.protocols.wireprotocol.HandshakeMsg;
 import org.corfudb.protocols.wireprotocol.HandshakeResponse;
 import org.corfudb.protocols.wireprotocol.HandshakeState;
 
-import java.util.ArrayDeque;
+import java.util.LinkedList;
 import java.util.Queue;
 import java.util.UUID;
 
@@ -31,10 +31,9 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
     private final String corfuVersion;
     private final HandshakeState state;
     private final int timeoutInSeconds;
-    private final Queue<CorfuMsg> messages = new ArrayDeque();
+    private final Queue<CorfuMsg> messages = new LinkedList<>();
     private static final  AttributeKey<UUID> clientIdAttrKey = AttributeKey.valueOf("ClientID");
     private static final String READ_TIMEOUT_HANDLER = "readTimeoutHandler";
-
 
     /**
      * Creates a new ServerHandshakeHandler which will handle the handshake--initiated by a client
@@ -122,8 +121,8 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
 
         // Flush messages in queue
         log.debug("channelRead: There are [{}] messages in queue to be flushed.", this.messages.size());
-        for (CorfuMsg message : this.messages) {
-            ctx.writeAndFlush(message);
+        while (!messages.isEmpty()) {
+            ctx.writeAndFlush(messages.poll());
         }
 
         // Remove this handler from the pipeline; handshake is completed.
@@ -241,4 +240,3 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         this.state.set(false, true);
     }
 }
-

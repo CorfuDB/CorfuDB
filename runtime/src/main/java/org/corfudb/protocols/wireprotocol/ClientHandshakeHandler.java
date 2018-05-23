@@ -8,7 +8,7 @@ import io.netty.handler.timeout.ReadTimeoutHandler;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.ArrayDeque;
+import java.util.LinkedList;
 import java.util.Queue;
 import java.util.UUID;
 
@@ -30,7 +30,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     private final UUID nodeId;
     private final int handshakeTimeout;
     private final HandshakeState handshakeState;
-    private final Queue<CorfuMsg> messages = new ArrayDeque();
+    private final Queue<CorfuMsg> messages = new LinkedList<>();
     private static final String READ_TIMEOUT_HANDLER = "readTimeoutHandler";
 
     /** Events that the handshaker sends to downstream handlers.
@@ -40,7 +40,6 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         CONNECTED,  /* Connection succeeded. */
         FAILED      /* Handshake failed. */
     }
-
 
     /**
      * Creates a new ClientHandshakeHandler which will handle the handshake between the
@@ -130,8 +129,8 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         log.info("channelRead: Handshake succeeded. Server Corfu Version: [{}]", corfuVersion);
         log.debug("channelRead: There are [{}] messages in queue to be flushed.", this.messages.size());
         // Flush messages in queue
-        for (CorfuMsg message : this.messages) {
-            ctx.writeAndFlush(message);
+        while (!messages.isEmpty()) {
+            ctx.writeAndFlush(messages.poll());
         }
 
         // Remove this handler from the pipeline; handshake is completed.
