@@ -370,65 +370,64 @@ public class CorfuServer {
      */
     private static ChannelInitializer getServerChannelInitializer(@Nonnull ServerContext context,
             @Nonnull NettyServerRouter router) {
-        // Security variables
-        final SslContext sslContext;
-        final String[] enabledTlsProtocols;
-        final String[] enabledTlsCipherSuites;
-
-        // Security Initialization
-        Boolean tlsEnabled = context.getServerConfig(Boolean.class, "--enable-tls");
-        Boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class,
-                "--enable-tls-mutual-auth");
-        if (tlsEnabled) {
-            // Get the TLS cipher suites to enable
-            String ciphs = context.getServerConfig(String.class, "--tls-ciphers");
-            if (ciphs != null) {
-                List<String> ciphers = Pattern.compile(",")
-                        .splitAsStream(ciphs)
-                        .map(String::trim)
-                        .collect(Collectors.toList());
-                enabledTlsCipherSuites = ciphers.toArray(new String[ciphers.size()]);
-            } else {
-                enabledTlsCipherSuites = new String[]{};
-            }
-
-            // Get the TLS protocols to enable
-            String protos = context.getServerConfig(String.class, "--tls-protocols");
-            if (protos != null) {
-                List<String> protocols = Pattern.compile(",")
-                        .splitAsStream(protos)
-                        .map(String::trim)
-                        .collect(Collectors.toList());
-                enabledTlsProtocols = protocols.toArray(new String[protocols.size()]);
-            } else {
-                enabledTlsProtocols = new String[]{};
-            }
-
-
-            try {
-                sslContext = SslContextConstructor.constructSslContext(true,
-                    context.getServerConfig(String.class, "--keystore"),
-                    context.getServerConfig(String.class, "--keystore-password-file"),
-                    context.getServerConfig(String.class, "--truststore"),
-                    context.getServerConfig(String.class,
-                        "--truststore-password-file"));
-            } catch (SSLException e) {
-                log.error("Could not build the SSL context", e);
-                throw new UnrecoverableCorfuError("Couldn't build the SSL context", e);
-            }
-        } else {
-            enabledTlsCipherSuites = new String[]{};
-            enabledTlsProtocols = new String[]{};
-            sslContext = null;
-        }
-
-        Boolean saslPlainTextAuth = context.getServerConfig(Boolean.class,
-                "--enable-sasl-plain-text-auth");
 
         // Generate the initializer.
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
+
+                // Security variables
+                final SslContext sslContext;
+                final String[] enabledTlsProtocols;
+                final String[] enabledTlsCipherSuites;
+
+                // Security Initialization
+                Boolean tlsEnabled = context.getServerConfig(Boolean.class, "--enable-tls");
+                Boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class,
+                        "--enable-tls-mutual-auth");
+                if (tlsEnabled) {
+                    // Get the TLS cipher suites to enable
+                    String ciphs = context.getServerConfig(String.class, "--tls-ciphers");
+                    if (ciphs != null) {
+                        enabledTlsCipherSuites = Pattern.compile(",")
+                                .splitAsStream(ciphs)
+                                .map(String::trim)
+                                .toArray(String[]::new);
+                    } else {
+                        enabledTlsCipherSuites = new String[]{};
+                    }
+
+                    // Get the TLS protocols to enable
+                    String protos = context.getServerConfig(String.class, "--tls-protocols");
+                    if (protos != null) {
+                        enabledTlsProtocols = Pattern.compile(",")
+                                .splitAsStream(protos)
+                                .map(String::trim)
+                                .toArray(String[]::new);
+                    } else {
+                        enabledTlsProtocols = new String[]{};
+                    }
+
+                    try {
+                        sslContext = SslContextConstructor.constructSslContext(true,
+                                context.getServerConfig(String.class, "--keystore"),
+                                context.getServerConfig(String.class, "--keystore-password-file"),
+                                context.getServerConfig(String.class, "--truststore"),
+                                context.getServerConfig(String.class,
+                                        "--truststore-password-file"));
+                    } catch (SSLException e) {
+                        log.error("Could not build the SSL context", e);
+                        throw new RuntimeException("Couldn't build the SSL context", e);
+                    }
+                } else {
+                    enabledTlsCipherSuites = new String[]{};
+                    enabledTlsProtocols = new String[]{};
+                    sslContext = null;
+                }
+
+                Boolean saslPlainTextAuth = context.getServerConfig(Boolean.class,
+                        "--enable-sasl-plain-text-auth");
+
                 // If TLS is enabled, setup the encryption pipeline.
                 if (tlsEnabled) {
                     SSLEngine engine = sslContext.newEngine(ch.alloc());

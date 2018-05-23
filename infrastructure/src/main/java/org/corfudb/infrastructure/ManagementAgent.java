@@ -232,7 +232,10 @@ public class ManagementAgent {
         // One these tasks finish successfully, they initiate the detection tasks.
         this.initializationTaskThread = new Thread(this::initializationTask);
         this.initializationTaskThread.setUncaughtExceptionHandler(
-                (thread, throwable) -> log.error("Error in initialization task: {}", throwable));
+                (thread, throwable) -> {
+                    log.error("Error in initialization task: {}", throwable);
+                    shutdown();
+                });
         this.initializationTaskThread.start();
     }
 
