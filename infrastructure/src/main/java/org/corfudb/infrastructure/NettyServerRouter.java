@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinWorkerThread;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nonnull;
@@ -21,7 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 /**
  * The netty server router routes incoming messages to registered roles using
@@ -203,4 +204,17 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
         ctx.close();
     }
 
+
+    public void shutdown() {
+        handlerWorkers.shutdown();
+        try {
+            if (!handlerWorkers.awaitTermination(5, TimeUnit.SECONDS)) {
+                log.warn("Shutdown within 5 seconds failed, force shutdown");
+                handlerWorkers.shutdownNow();
+            }
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new UnrecoverableCorfuInterruptedError(ie);
+        }
+    }
 }

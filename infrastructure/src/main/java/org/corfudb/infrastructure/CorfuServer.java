@@ -2,7 +2,7 @@ package org.corfudb.infrastructure;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -15,6 +15,22 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
+import lombok.Getter;
+
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
@@ -28,19 +44,6 @@ import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
-
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
-import java.io.File;
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 import static org.fusesource.jansi.Ansi.Color.BLUE;
@@ -59,7 +62,7 @@ import static org.fusesource.jansi.Ansi.ansi;
  */
 
 @Slf4j
-public class CorfuServer {
+public class CorfuServer implements AutoCloseable {
     /**
      * This string defines the command line arguments,
      * in the docopt DSL (see http://docopt.org) for the executable.
@@ -178,8 +181,11 @@ public class CorfuServer {
                     + " --version                                                                "
                     + "              Show version\n";
 
-    private static volatile Thread corfuServerThread;
-    private static volatile Thread shutdownThread;
+    private static volatile CorfuServer ACTIVE_SERVER;
+
+    private static volatile boolean SHUTDOWN_SERVER = false;
+    private static volatile boolean CLEANUP_SERVER = false;
+    private static volatile boolean bindToAllInterfaces = true;
 
     /**
      * Main program entry point.
@@ -204,7 +210,6 @@ public class CorfuServer {
         log.debug("Started with arguments: {}", opts);
 
         // Bind to all interfaces only if no address or interface specified by the user.
-        final boolean bindToAllInterfaces;
         // Fetch the address if given a network interface.
         if (opts.get("--network-interface") != null) {
             opts.put("--address",
@@ -241,51 +246,136 @@ public class CorfuServer {
             }
         }
 
-        corfuServerThread = new Thread(() -> startServer(opts, bindToAllInterfaces));
-        corfuServerThread.setName("CorfuServer");
-        corfuServerThread.start();
+        // Register shutdown handler
+        Thread shutdownThread = new Thread(CorfuServer::cleanShutdown);
+        shutdownThread.setName("ShutdownThread");
+        Runtime.getRuntime().addShutdownHook(shutdownThread);
+
+        while (!SHUTDOWN_SERVER) {
+            final ServerContext sc = new ServerContext(opts);
+            try (CorfuServer corfuServer = new CorfuServer(sc)) {
+                ACTIVE_SERVER = corfuServer;
+                corfuServer.start().channel().closeFuture().syncUninterruptibly();
+            }
+
+            if (CLEANUP_SERVER) {
+                log.warn("main: cleanup reqeusted, DELETE server data files");
+                if (!sc.getServerConfig(Boolean.class, "--memory")) {
+                    File serviceDir = new File(sc.getServerConfig(String.class, "--log-path"));
+                    try {
+                        FileUtils.cleanDirectory(serviceDir);
+                    } catch (IOException ioe) {
+                        throw new UnrecoverableCorfuError(ioe);
+                    }
+                }
+                CLEANUP_SERVER = false;
+                log.warn("main: cleanup completed, expect clean startup");
+            }
+        }
+
+        log.info("main: Server exiting due to shutdown");
     }
 
-    /**
-     * Creates all the components of the Corfu Server.
-     * Starts the Server Router.
-     *
-     * @param opts Options passed by the user.
-     */
-    public static void startServer(Map<String, Object> opts, boolean bindToAllInterfaces) {
 
-        int port = Integer.parseInt((String) opts.get("<port>"));
+    @Getter
+    private final ServerContext serverContext;
 
-        // Create a common Server Context for all servers to access.
-        try (ServerContext serverContext = new ServerContext(opts)) {
-            List<AbstractServer> servers = ImmutableList.<AbstractServer>builder()
-                    .add(new BaseServer(serverContext))
-                    .add(new SequencerServer(serverContext))
-                    .add(new LayoutServer(serverContext))
-                    .add(new LogUnitServer(serverContext))
-                    .add(new ManagementServer(serverContext))
-                    .build();
+    @Getter
+    private final Map<Class<? extends AbstractServer>, AbstractServer> serverMap;
 
-            NettyServerRouter router = new NettyServerRouter(servers);
-            serverContext.setServerRouter(router);
-            serverContext.setBindToAllInterfaces(bindToAllInterfaces);
+    @Getter
+    private final NettyServerRouter router;
 
-            // Register shutdown handler
-            shutdownThread = new Thread(() -> cleanShutdown(router));
-            shutdownThread.setName("ShutdownThread");
-            Runtime.getRuntime().addShutdownHook(shutdownThread);
+    private volatile boolean shutdown = false;
 
-            startAndListen(serverContext.getBossGroup(),
-                    serverContext.getWorkerGroup(),
-                    b -> configureBootstrapOptions(serverContext, b),
-                    serverContext,
-                    router,
-                    (String) opts.get("--address"),
-                    port).channel().closeFuture().syncUninterruptibly();
-        } catch (Exception e) {
-            log.error("CorfuServer: Server exiting due to unrecoverable error: ", e);
-            throw new UnrecoverableCorfuError(e);
+    private ChannelFuture bindFuture;
+
+    public CorfuServer(@Nonnull ServerContext serverContext) {
+        this(serverContext,
+            ImmutableMap.<Class<? extends AbstractServer>, AbstractServer>builder()
+                .put(BaseServer.class, new BaseServer(serverContext))
+                .put(SequencerServer.class, new SequencerServer(serverContext))
+                .put(LayoutServer.class, new LayoutServer(serverContext))
+                .put(LogUnitServer.class, new LogUnitServer(serverContext))
+                .put(ManagementServer.class, new ManagementServer(serverContext))
+                .build()
+            );
+    }
+
+    public CorfuServer(@Nonnull ServerContext serverContext,
+                       @Nonnull Map<Class<? extends AbstractServer>, AbstractServer> serverMap) {
+        this.serverContext = serverContext;
+        this.serverContext.setBindToAllInterfaces(bindToAllInterfaces);
+        this.serverMap = serverMap;
+        router = new NettyServerRouter(new ArrayList<>(serverMap.values()));
+    }
+
+    public ChannelFuture start() {
+        bindFuture = startAndListen(serverContext.getBossGroup(),
+            serverContext.getWorkerGroup(),
+            b -> configureBootstrapOptions(serverContext, b),
+            serverContext,
+            router,
+            (String) serverContext.getServerConfig().get("--address"),
+            Integer.parseInt((String) serverContext.getServerConfig().get("<port>")));
+
+        return bindFuture.syncUninterruptibly();
+    }
+
+    @Override
+    public synchronized void close() {
+        if (!shutdown) {
+            log.info("close: Shutting down Corfu server and cleaning resources");
+            shutdown = true;
+            serverContext.close();
+            bindFuture.channel().close().syncUninterruptibly();
+
+            // A executor service to create the shutdown threads
+            // plus name the threads correctly.
+            final ExecutorService shutdownService =
+                Executors.newFixedThreadPool(serverMap.size());
+
+            // Turn into a list of futures on the shutdown, returning
+            // generating a log message to inform of the result.
+            CompletableFuture[] shutdownFutures = serverMap.values().stream()
+                .map(s -> CompletableFuture.runAsync(() -> {
+                    try {
+                        Thread.currentThread().setName(s.getClass().getSimpleName()
+                            + "-shutdown");
+                        log.info("close: Shutting down {}",
+                            s.getClass().getSimpleName());
+                        s.shutdown();
+                        log.info("close: Cleanly shutdown {}",
+                            s.getClass().getSimpleName());
+                    } catch (Exception e) {
+                        log.error("close: Failed to cleanly shutdown {}",
+                            s.getClass().getSimpleName(), e);
+                    }
+                }, shutdownService))
+                .toArray(CompletableFuture[]::new);
+
+            CompletableFuture.allOf(shutdownFutures).join();
+            shutdownService.shutdown();
+            router.shutdown();
+            log.info("close: Server shutdown and resources released");
+        } else {
+            log.trace("close: Server already shutdown");
         }
+    }
+
+    /** Get the requested Corfu server.
+     *
+     * @param serverClass
+     * @param <T>
+     * @return
+     */
+    @SuppressWarnings("unchecked")
+    public @Nonnull <T extends AbstractServer> T getServer(@Nonnull Class<T> serverClass) {
+        T server = (T) serverMap.get(serverClass);
+        if (server == null) {
+            throw new UnrecoverableCorfuError("Server does not exist");
+        }
+        return server;
     }
 
     /** A functional interface for receiving and configuring a {@link ServerBootstrap}.
@@ -470,76 +560,25 @@ public class CorfuServer {
      */
     public static void restartServer(ServerContext serverContext, boolean resetData) {
 
-        final Thread previousServerThread = corfuServerThread;
         final Map<String, Object> opts = serverContext.getServerConfig();
-        final boolean bindToAllInterfaces = serverContext.isBindToAllInterfaces();
 
-        corfuServerThread = new Thread(() -> {
-            cleanShutdown((NettyServerRouter) serverContext.getServerRouter());
-            if (resetData && !(Boolean) serverContext.getServerConfig().get("--memory")) {
-                File serviceDir = new File((String) serverContext.getServerConfig()
-                        .get("--log-path"));
-                try {
-                    FileUtils.cleanDirectory(serviceDir);
-                } catch (IOException ioe) {
-                    throw new UnrecoverableCorfuError(ioe);
-                }
-            }
-            serverContext.close();
+        if (resetData) {
+            CLEANUP_SERVER = true;
+        }
 
-            // Wait for previous server thread to join.
-            try {
-                previousServerThread.join();
-                Runtime.getRuntime().removeShutdownHook(shutdownThread);
-            } catch (InterruptedException ie) {
-                throw new UnrecoverableCorfuInterruptedError(ie);
-            }
+        log.info("RestartServer: Shutting down corfu server");
+        ACTIVE_SERVER.close();
 
-            Runtime.getRuntime().removeShutdownHook(shutdownThread);
-
-            // Restart the server.
-            log.info("RestartServer: Restarting corfu server");
-            printStartupMsg(opts);
-            startServer(opts, bindToAllInterfaces);
-        });
-        corfuServerThread.setName("CorfuServer");
-        corfuServerThread.start();
+        log.info("RestartServer: Starting corfu server");
     }
 
     /**
      * Attempt to cleanly shutdown all the servers.
      */
-    public static void cleanShutdown(@Nonnull NettyServerRouter router) {
+    public static void cleanShutdown() {
         log.info("CleanShutdown: Starting Cleanup.");
-        // Create a list of servers
-        final List<AbstractServer> servers = router.getServers();
-
-        // A executor service to create the shutdown threads
-        // plus name the threads correctly.
-        final ExecutorService shutdownService =
-                Executors.newFixedThreadPool(servers.size());
-
-        // Turn into a list of futures on the shutdown, returning
-        // generating a log message to inform of the result.
-        CompletableFuture[] shutdownFutures = servers.stream()
-                .map(s -> CompletableFuture.runAsync(() -> {
-                    try {
-                        Thread.currentThread().setName(s.getClass().getSimpleName()
-                                + "-shutdown");
-                        log.info("CleanShutdown: Shutting down {}",
-                                s.getClass().getSimpleName());
-                        s.shutdown();
-                        log.info("CleanShutdown: Cleanly shutdown {}",
-                                s.getClass().getSimpleName());
-                    } catch (Exception e) {
-                        log.error("CleanShutdown: Failed to cleanly shutdown {}",
-                                s.getClass().getSimpleName(), e);
-                    }
-                }, shutdownService))
-                .toArray(CompletableFuture[]::new);
-
-        CompletableFuture.allOf(shutdownFutures).join();
-        log.info("CleanShutdown: Shutdown Complete.");
+        SHUTDOWN_SERVER = true;
+        ACTIVE_SERVER.close();
     }
 
     /**

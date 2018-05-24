@@ -46,7 +46,6 @@ import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
  *
  * <p>Created by mdhawan on 7/27/16.
  */
-
 public class DataStore implements IDataStore {
 
     static String EXTENSION = ".ds";
