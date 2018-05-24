@@ -3,8 +3,10 @@ package org.corfudb.runtime.view;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.CacheLoader;
+import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.collect.Iterables;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -24,6 +26,14 @@ import org.corfudb.util.CorfuComponent;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.io.File;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -48,6 +58,19 @@ public class AddressSpaceView extends AbstractView {
             .expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .recordStats()
+            .writer(new CacheWriter<Long, ILogData>() {
+                @Override
+                public void write(@Nonnull Long key, @Nonnull ILogData value) {
+                    writeLU(value);
+                }
+
+                @Override
+                public void delete(@Nonnull Long key,
+                                   @Nullable ILogData value,
+                                   @Nonnull RemovalCause cause) {
+
+                }
+            })
             .build(new CacheLoader<Long, ILogData>() {
                 @Override
                 public ILogData load(Long value) throws Exception {
@@ -124,9 +147,8 @@ public class AddressSpaceView extends AbstractView {
      *                              another value.
      * @throws WrongEpochException  If the token epoch is invalid.
      */
-    public void write(IToken token, Object data) throws OverwriteException {
-        final ILogData ld = new LogData(DataType.DATA, data);
-
+    public void writeLU(ILogData ld) {
+        IToken token = ld.getToken();
         layoutHelper(e -> {
             Layout l = e.getLayout();
             // Check if the token issued is in the same
@@ -136,8 +158,6 @@ public class AddressSpaceView extends AbstractView {
                 throw new StaleTokenException(l.getEpoch());
             }
 
-            // Set the data to use the token
-            ld.useToken(token);
             ld.setId(runtime.getParameters().getClientId());
 
 
@@ -156,10 +176,16 @@ public class AddressSpaceView extends AbstractView {
             }
             return null;
         }, true);
+    }
 
+    public void write(IToken token, Object data) throws OverwriteException {
+        final ILogData ld = new LogData(DataType.DATA, data);
+        ld.useToken(token);
         // Cache the successful write
         if (!runtime.getParameters().isCacheDisabled()) {
             readCache.put(token.getTokenValue(), ld);
+        } else {
+            writeLU(ld);
         }
     }
 

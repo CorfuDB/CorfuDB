@@ -141,11 +141,15 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
         return size;
     }
 
+    void setToken(IToken token);
+    IToken getToken();
+
     /** Assign a given token to this log data.
      *
      * @param token     The token to use.
      */
     default void useToken(IToken token) {
+        setToken(token);
         setGlobalAddress(token.getTokenValue());
         if (token.getBackpointerMap().size() > 0) {
             setBackpointerMap(token.getBackpointerMap());

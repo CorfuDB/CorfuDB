@@ -26,6 +26,14 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     final DataType type;
 
     @Getter
+    IToken token;
+
+    @Override
+    public void setToken(IToken token) {
+        this.token = token;
+    }
+
+    @Getter
     byte[] data;
 
     private ByteBuf serializedCache = null;
