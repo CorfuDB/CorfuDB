@@ -316,7 +316,8 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addToSegment()
                 .addToLayout()
                 .build();
-        bootstrapAllServers(l);
+        Layout copy = new Layout(l);
+        bootstrapAllServers(copy);
         CorfuRuntime corfuRuntime = getRuntime(l).connect();
 
 
