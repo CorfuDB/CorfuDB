@@ -14,6 +14,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.Getter;
@@ -140,6 +143,16 @@ public class SequencerServer extends AbstractServer {
             return false;
         }
         return true;
+    }
+
+    ThreadFactory threadFactory = new ServerThreadFactory("sequencer-",
+            new ServerThreadFactory.ExceptionHandler());
+
+    ExecutorService executor = Executors.newSingleThreadExecutor(threadFactory);
+
+    @Override
+    public ExecutorService getExecutor() {
+        return executor;
     }
 
     /**
@@ -547,6 +560,12 @@ public class SequencerServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
                 TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token,
                 backPointerMap.build())));
+    }
+
+    @Override
+    public void shutdown() {
+        super.shutdown();
+        executor.shutdownNow();
     }
 
     @VisibleForTesting
