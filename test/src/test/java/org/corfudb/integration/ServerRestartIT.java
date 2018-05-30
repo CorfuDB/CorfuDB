@@ -1,23 +1,25 @@
 package org.corfudb.integration;
 
+import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.collections.StringIndexer;
+import org.corfudb.runtime.collections.StringMultiIndexer;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.CFUtils;
-import org.corfudb.runtime.collections.SMRMap;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
-import java.io.IOException;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -38,7 +40,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import com.google.common.reflect.TypeToken;
 
 /**
  * Tests the recovery of the Corfu instance.
@@ -663,10 +664,10 @@ public class ServerRestartIT extends AbstractIT {
 
     }
 
-    private CorfuTable createTable(CorfuRuntime corfuRuntime) {
+    private CorfuTable createTable(CorfuRuntime corfuRuntime, CorfuTable.IndexRegistry indexer) {
         return corfuRuntime.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setArguments(new StringIndexer())
+                .setArguments(indexer)
                 .setStreamName("test")
                 .open();
     }
@@ -688,7 +689,7 @@ public class ServerRestartIT extends AbstractIT {
 
         // Write 1000 entries.
         CorfuRuntime rt1 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
-        CorfuTable<String, String> corfuTable1 = createTable(rt1);
+        CorfuTable<String, String> corfuTable1 = createTable(rt1, new StringIndexer());
         final int num = 1000;
         for (int i = 0; i < num; i++) {
             corfuTable1.put(Integer.toString(i), Integer.toString(i));
@@ -713,7 +714,7 @@ public class ServerRestartIT extends AbstractIT {
 
         // Start a new client and verify the index.
         CorfuRuntime rt2 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
-        CorfuTable<String, String> corfuTable2 = createTable(rt2);
+        CorfuTable<String, String> corfuTable2 = createTable(rt2, new StringIndexer());
         Collection<Map.Entry<String, String>> c2 =
                 corfuTable2.getByIndex(StringIndexer.BY_FIRST_LETTER, "9");
         assertThat(c1a.size()).isEqualTo(c2.size());
@@ -724,7 +725,7 @@ public class ServerRestartIT extends AbstractIT {
                 .setLoadSmrMapsAtConnect(false)
                 .setCacheDisabled(true)
                 .connect();
-        CorfuTable<String, String> corfuTable3 = createTable(rt3);
+        CorfuTable<String, String> corfuTable3 = createTable(rt3, new StringIndexer());
         Collection<Map.Entry<String, String>> c3 =
                 corfuTable3.getByIndex(StringIndexer.BY_VALUE, "9");
         assertThat(c1b.size()).isEqualTo(c3.size());
@@ -733,6 +734,74 @@ public class ServerRestartIT extends AbstractIT {
         // Stop the corfu server.
         assertThat(shutdownCorfuServer(corfuProcess)).isTrue();
     }
+
+    /**
+     * This test has the following steps in order to verify the multi index reconstruction:
+     * 1) Writes 1000 entries to the table
+     * 2) Checkpionts and trims
+     * 3) Shuts down and restarts the corfu server
+     * 4) Starts a client with cache and fast loading and verify multi index
+     * 5) Starts a client without cache and fast loading and verify multi index
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testCorfuTableMultiIndexReconstruction() throws Exception {
+        // Start server
+        Process corfuProcess = runCorfuServer();
+
+        // Write 1000 entries
+        CorfuRuntime runtime1 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        CorfuTable<String, String> corfuTable1 = createTable(runtime1, new StringMultiIndexer());
+
+        final int numEntries = 1000;
+        for (int i = 0; i < numEntries; i++) {
+            StringBuilder value = new StringBuilder();
+            value.append("tag")
+                    .append(i)
+                    .append(" tag")
+                    .append(i + 1)
+                    .append(" tag")
+                    .append(i + 2);
+            String key = "key" + i;
+            corfuTable1.put(key, value.toString());
+        }
+
+        // Checkpoint and trim
+        MultiCheckpointWriter multiCheckpointWriter = new MultiCheckpointWriter();
+        multiCheckpointWriter.addMap(corfuTable1);
+        long trimMark = multiCheckpointWriter.appendCheckpoints(runtime1, "Sam.Behnam");
+        Collection<Map.Entry<String, String>> resultInitial =
+                corfuTable1.getByIndex(StringMultiIndexer.BY_EACH_WORD, "tag666");
+        runtime1.getAddressSpaceView().prefixTrim(trimMark);
+        runtime1.getAddressSpaceView().invalidateClientCache();
+        runtime1.getAddressSpaceView().invalidateServerCaches();
+        runtime1.getAddressSpaceView().gc();
+
+        //Restart the corfu server
+        assertThat(shutdownCorfuServer(corfuProcess)).isTrue();
+        corfuProcess = runCorfuServer();
+
+        // Start a new client and verify the multi index.
+        CorfuRuntime runtime2 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        CorfuTable<String, String> corfuTable2 = createTable(runtime2, new StringMultiIndexer());
+        Collection<Map.Entry<String, String>> resultAfterRestart =
+                corfuTable2.getByIndex(StringMultiIndexer.BY_EACH_WORD, "tag666");
+        assertThat(resultAfterRestart.size()).isEqualTo(resultInitial.size());
+        assertThat(resultAfterRestart.containsAll(resultInitial)).isTrue();
+
+        // Start a new client with cache and fast object loading disabled and verify multi index.
+        CorfuRuntime runtime3 = new CorfuRuntime(DEFAULT_ENDPOINT)
+                .setLoadSmrMapsAtConnect(false)
+                .setCacheDisabled(true)
+                .connect();
+        CorfuTable<String, String> corfuTable3 = createTable(runtime3, new StringMultiIndexer());
+        Collection<Map.Entry<String, String>> resultDisabledCacheAndFasLoader =
+                corfuTable3.getByIndex(StringMultiIndexer.BY_EACH_WORD, "tag666");
+        assertThat(resultDisabledCacheAndFasLoader.size()).isEqualTo(resultInitial.size());
+        assertThat(resultDisabledCacheAndFasLoader.containsAll(resultInitial)).isTrue();
+
+        // Stop the corfu server
+        assertThat(shutdownCorfuServer(corfuProcess)).isTrue();
+    }
 }
-
-
