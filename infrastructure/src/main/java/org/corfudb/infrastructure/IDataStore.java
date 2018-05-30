@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import java.util.List;
 
 /**
  * Key Value data store abstraction that provides persistence for variables that need
@@ -18,7 +17,7 @@ public interface IDataStore {
      * @param tclass the class of the object being stored
      * @param prefix namespace
      * @param key    key-value key to store into
-     * @param value  key-value value
+     * @param value  Immutable value (or a value that won't be changed)
      */
     public <T> void put(Class<T> tclass, String prefix, String key, T value);
 
@@ -40,16 +39,4 @@ public interface IDataStore {
      * @param key    key-value key to delete
      */
     public <T> void delete(Class<T> tclass, String prefix, String key);
-
-    /**
-     * Retrieves all the values under a prefix.
-     *
-     * <p>NOTE there is no ordered retrieval provided.
-     *
-     * @param tclass the class of the objects being retrieved.
-     * @param prefix namespace
-     * @return list of all values stored under namespace
-     */
-    public <T> List<T> getAll(Class<T> tclass, String prefix);
-
 }

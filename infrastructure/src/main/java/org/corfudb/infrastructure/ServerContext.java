@@ -301,17 +301,6 @@ public class ServerContext implements AutoCloseable {
     }
 
     /**
-     * Returns the layout history.
-     *
-     * @return list of layouts in the history
-     */
-    public List<Layout> getLayoutHistory() {
-        List<Layout> layouts = dataStore.getAll(Layout.class, PREFIX_LAYOUTS);
-        layouts.sort(Comparator.comparingLong(Layout::getEpoch));
-        return layouts;
-    }
-
-    /**
      * The epoch of this router. This is managed by the base server implementation.
      */
     public synchronized long getServerEpoch() {

@@ -289,8 +289,6 @@ public class LayoutManagementView extends AbstractView {
         }
 
         runtime.getLayoutView().committed(forceLayout.getEpoch(), forceLayout, true);
-
-        reconfigureSequencerServers(currentLayout, forceLayout, true);
     }
 
 
