@@ -34,6 +34,19 @@ def update_version_number(base_version=None):
     write_version_string_to_pom(new_version)
     write_version_string_to_tanuki_wrapper(new_version)
 
+def set_version_number(version):
+    """
+    str -> None
+    Set a specified project version number for corfudb repository.
+    """
+    verify_and_get_version_number()
+    new_version_to_check = string_to_version_number(version)
+    assert len(new_version_to_check) == 5 and \
+            len(filter(lambda x: type(x) == int, new_version_to_check)) == 5, \
+            "The provided version {} doesn't fit into format a.b.c.d.e".format(new_version_to_check)
+    write_version_string_to_pom(version)
+    write_version_string_to_tanuki_wrapper(version)
+
 def verify_and_get_version_number():
     """
     None -> list(int)
@@ -96,6 +109,19 @@ def version_number_to_string(version):
     """
     return ".".join(map(lambda x: str(x), version))
 
+def string_to_version_number(s):
+    """
+    str -> list(int)
+    Convert the string to version number list.
+    Exit if the format of string is not correct.
+    """
+    s_list = s.split(".")
+    try:
+        v_list = [int(x) for x in s_list]
+    except ValueError:
+        assert False, "[ERROR] Failed to convert to numbers from version string!"
+    return v_list
+
 def write_version_string_to_pom(new_version):
     """
     str -> None
@@ -139,9 +165,14 @@ if __name__ == "__main__":
             help="Patch version number of CorfuDB.")
     arg_parser.add_argument("--print-version", action="store_true", required=False,
             help="Print the current CorfuDB version.")
+    arg_parser.add_argument("--set-version", type=str, required=False,
+            help="Set the CorfuDB version.")
     args = arg_parser.parse_args()
     if args.print_version:
         print(version_number_to_string(verify_and_get_version_number()))
+        sys.exit(0)
+    if args.set_version:
+        set_version_number(args.set_version)
         sys.exit(0)
     if args.major == None and args.minor == None and args.patch == None:
         update_version_number()
