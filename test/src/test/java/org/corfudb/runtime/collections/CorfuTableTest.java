@@ -1,16 +1,16 @@
 package org.corfudb.runtime.collections;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
+import org.assertj.core.data.MapEntry;
+import org.corfudb.runtime.view.AbstractViewTest;
+import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import org.assertj.core.data.MapEntry;
-import org.corfudb.runtime.view.AbstractViewTest;
-import org.junit.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class CorfuTableTest extends AbstractViewTest {
 
@@ -62,6 +62,28 @@ public class CorfuTableTest extends AbstractViewTest {
                 .containsExactly("ab");
     }
 
+    /**
+     * Can create create multiple index for the same value
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    public void canReadFromMultipleIndices() {
+                CorfuTable<String, String> corfuTable = getDefaultRuntime()
+                        .getObjectsView()
+                        .build()
+                        .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                        .setArguments(new StringMultiIndexer())
+                        .setStreamName("test-map")
+                        .open();
+
+        corfuTable.put("k1", "dog fox cat");
+        corfuTable.put("k2", "dog bat");
+        corfuTable.put("k3", "fox");
+
+        final Collection<Map.Entry<String, String>> result =
+                corfuTable.getByIndex(StringMultiIndexer.BY_EACH_WORD, "fox");
+        assertThat(project(result)).containsExactlyInAnyOrder("dog fox cat", "fox");
+    }
 
     @Test
     @SuppressWarnings("unchecked")

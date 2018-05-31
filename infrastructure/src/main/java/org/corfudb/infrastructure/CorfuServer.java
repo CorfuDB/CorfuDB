@@ -1,13 +1,5 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
-
-import static org.fusesource.jansi.Ansi.Color.BLUE;
-import static org.fusesource.jansi.Ansi.Color.MAGENTA;
-import static org.fusesource.jansi.Ansi.Color.RED;
-import static org.fusesource.jansi.Ansi.Color.WHITE;
-import static org.fusesource.jansi.Ansi.ansi;
-
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import com.google.common.collect.ImmutableList;
@@ -23,18 +15,6 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
-import java.io.File;
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
@@ -48,6 +28,26 @@ import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
+import static org.fusesource.jansi.Ansi.Color.BLUE;
+import static org.fusesource.jansi.Ansi.Color.MAGENTA;
+import static org.fusesource.jansi.Ansi.Color.RED;
+import static org.fusesource.jansi.Ansi.Color.WHITE;
+import static org.fusesource.jansi.Ansi.ansi;
 
 
 /**
@@ -201,7 +201,7 @@ public class CorfuServer {
         final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
         root.setLevel(level);
 
-        log.debug("Started with arguments: " + opts);
+        log.debug("Started with arguments: {}", opts);
 
         // Bind to all interfaces only if no address or interface specified by the user.
         final boolean bindToAllInterfaces;
@@ -370,65 +370,64 @@ public class CorfuServer {
      */
     private static ChannelInitializer getServerChannelInitializer(@Nonnull ServerContext context,
             @Nonnull NettyServerRouter router) {
-        // Security variables
-        final SslContext sslContext;
-        final String[] enabledTlsProtocols;
-        final String[] enabledTlsCipherSuites;
-
-        // Security Initialization
-        Boolean tlsEnabled = context.getServerConfig(Boolean.class, "--enable-tls");
-        Boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class,
-                "--enable-tls-mutual-auth");
-        if (tlsEnabled) {
-            // Get the TLS cipher suites to enable
-            String ciphs = context.getServerConfig(String.class, "--tls-ciphers");
-            if (ciphs != null) {
-                List<String> ciphers = Pattern.compile(",")
-                        .splitAsStream(ciphs)
-                        .map(String::trim)
-                        .collect(Collectors.toList());
-                enabledTlsCipherSuites = ciphers.toArray(new String[ciphers.size()]);
-            } else {
-                enabledTlsCipherSuites = new String[]{};
-            }
-
-            // Get the TLS protocols to enable
-            String protos = context.getServerConfig(String.class, "--tls-protocols");
-            if (protos != null) {
-                List<String> protocols = Pattern.compile(",")
-                        .splitAsStream(protos)
-                        .map(String::trim)
-                        .collect(Collectors.toList());
-                enabledTlsProtocols = protocols.toArray(new String[protocols.size()]);
-            } else {
-                enabledTlsProtocols = new String[]{};
-            }
-
-
-            try {
-                sslContext = SslContextConstructor.constructSslContext(true,
-                    context.getServerConfig(String.class, "--keystore"),
-                    context.getServerConfig(String.class, "--keystore-password-file"),
-                    context.getServerConfig(String.class, "--truststore"),
-                    context.getServerConfig(String.class,
-                        "--truststore-password-file"));
-            } catch (SSLException e) {
-                log.error("Could not build the SSL context", e);
-                throw new UnrecoverableCorfuError("Couldn't build the SSL context", e);
-            }
-        } else {
-            enabledTlsCipherSuites = new String[]{};
-            enabledTlsProtocols = new String[]{};
-            sslContext = null;
-        }
-
-        Boolean saslPlainTextAuth = context.getServerConfig(Boolean.class,
-                "--enable-sasl-plain-text-auth");
 
         // Generate the initializer.
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
+
+                // Security variables
+                final SslContext sslContext;
+                final String[] enabledTlsProtocols;
+                final String[] enabledTlsCipherSuites;
+
+                // Security Initialization
+                Boolean tlsEnabled = context.getServerConfig(Boolean.class, "--enable-tls");
+                Boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class,
+                        "--enable-tls-mutual-auth");
+                if (tlsEnabled) {
+                    // Get the TLS cipher suites to enable
+                    String ciphs = context.getServerConfig(String.class, "--tls-ciphers");
+                    if (ciphs != null) {
+                        enabledTlsCipherSuites = Pattern.compile(",")
+                                .splitAsStream(ciphs)
+                                .map(String::trim)
+                                .toArray(String[]::new);
+                    } else {
+                        enabledTlsCipherSuites = new String[]{};
+                    }
+
+                    // Get the TLS protocols to enable
+                    String protos = context.getServerConfig(String.class, "--tls-protocols");
+                    if (protos != null) {
+                        enabledTlsProtocols = Pattern.compile(",")
+                                .splitAsStream(protos)
+                                .map(String::trim)
+                                .toArray(String[]::new);
+                    } else {
+                        enabledTlsProtocols = new String[]{};
+                    }
+
+                    try {
+                        sslContext = SslContextConstructor.constructSslContext(true,
+                                context.getServerConfig(String.class, "--keystore"),
+                                context.getServerConfig(String.class, "--keystore-password-file"),
+                                context.getServerConfig(String.class, "--truststore"),
+                                context.getServerConfig(String.class,
+                                        "--truststore-password-file"));
+                    } catch (SSLException e) {
+                        log.error("Could not build the SSL context", e);
+                        throw new RuntimeException("Couldn't build the SSL context", e);
+                    }
+                } else {
+                    enabledTlsCipherSuites = new String[]{};
+                    enabledTlsProtocols = new String[]{};
+                    sslContext = null;
+                }
+
+                Boolean saslPlainTextAuth = context.getServerConfig(Boolean.class,
+                        "--enable-sasl-plain-text-auth");
+
                 // If TLS is enabled, setup the encryption pipeline.
                 if (tlsEnabled) {
                     SSLEngine engine = sslContext.newEngine(ch.alloc());

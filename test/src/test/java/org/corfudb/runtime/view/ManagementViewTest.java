@@ -27,6 +27,8 @@ import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
+import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
@@ -1425,5 +1427,93 @@ public class ManagementViewTest extends AbstractViewTest {
         // Assert that the primary sequencer is bootstrapped.
         assertThat(corfuRuntime.getLayoutView().getRuntimeLayout().getPrimarySequencerClient()
                 .requestMetrics().get().getSequencerStatus()).isEqualTo(SequencerStatus.READY);
+    }
+
+    /**
+     * Tests the Cluster Status Query API.
+     * The test starts with setting up a 3 node cluster:
+     * Layout Servers = PORT_0, PORT_1, PORT_2.
+     * Sequencer Servers = PORT_0, PORT_1, PORT_2.
+     * LogUnit Servers = PORT_1, PORT_2.
+     *
+     * STEP 1: First status query:
+     * All nodes up. Cluster status: STABLE.
+     *
+     * STEP 2: In this step the client is partitioned from the 2 nodes in the cluster.
+     * The cluster however is healthy. Status query:
+     * PORT_0 and PORT_1 are DOWN. Cluster status: STABLE
+     *
+     * STEP 3: Client connections are restored from the previous step. PORT_0 is failed.
+     * This causes sequencer failover. But since PORT_0 was not a log unit server, the cluster is
+     * still reachable. Status query:
+     * PORT_0 is DOWN. Cluster status: DEGRADED.
+     *
+     * STEP 4: PORT_1 is failed. The cluster is non-operational now. Status query:
+     * PORT_0 and PORT_1 DOWN. Cluster status: UNAVAILABLE.
+     */
+    @Test
+    public void queryClusterStatus() throws Exception {
+        Layout layout = getManagementTestLayout();
+        getCorfuRuntime().getLayoutView().getLayout().getAllServers().forEach(endpoint ->
+                getCorfuRuntime().getRouter(endpoint)
+                        .setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis()));
+
+        // STEP 1.
+        ClusterStatusReport clusterStatus = getCorfuRuntime().getManagementView().getClusterStatus();
+        Map<String, NodeStatus> nodeStatusMap = clusterStatus.getClientServerConnectivityStatusMap();
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.UP);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.UP);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
+        assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
+
+        // STEP 2.
+        TestRule rule = new TestRule()
+                .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.HEARTBEAT_REQUEST))
+                .drop();
+        addClientRule(getCorfuRuntime(), SERVERS.ENDPOINT_0, rule);
+        addClientRule(getCorfuRuntime(), SERVERS.ENDPOINT_1, rule);
+        clusterStatus = getCorfuRuntime().getManagementView().getClusterStatus();
+        nodeStatusMap = clusterStatus.getClientServerConnectivityStatusMap();
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.DOWN);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.DOWN);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
+        assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
+
+        // STEP 3.
+        clearClientRules(getCorfuRuntime());
+        addServerRule(SERVERS.PORT_0, new TestRule().drop().always());
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            if (corfuRuntime.getLayoutView().getLayout().getEpoch() != layout.getEpoch())
+                break;
+            corfuRuntime.invalidateLayout();
+        }
+        clusterStatus = getCorfuRuntime().getManagementView().getClusterStatus();
+        nodeStatusMap = clusterStatus.getClientServerConnectivityStatusMap();
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.DOWN);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.UP);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
+        assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
+
+        // STEP 4.
+        // Since there will be no epoch change as majority of servers are down, we rely on PORT_2
+        // to send a MANAGEMENT_FAILURE_DETECTED after which we query the cluster status.
+        Semaphore latch = new Semaphore(1);
+        latch.acquire();
+        addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
+                new TestRule().matches(corfuMsg -> {
+                    if (corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)) {
+                        latch.release();
+                    }
+                    return true;
+                }));
+        addServerRule(SERVERS.PORT_1, new TestRule().drop().always());
+        latch.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toMillis(), TimeUnit.MILLISECONDS);
+        clusterStatus = getCorfuRuntime().getManagementView().getClusterStatus();
+        nodeStatusMap = clusterStatus.getClientServerConnectivityStatusMap();
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.DOWN);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.DOWN);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
+        assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
     }
 }

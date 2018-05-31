@@ -1,8 +1,6 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
-import java.lang.invoke.MethodHandles;
-import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +10,9 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.util.Sleep;
+
+import javax.annotation.Nonnull;
+import java.lang.invoke.MethodHandles;
 
 /**
  * Created by mwei on 12/8/15.
@@ -90,7 +90,7 @@ public class BaseServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.RESET)
     private void doReset(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.warn("Remote reset requested from client " + msg.getClientID());
+        log.warn("Remote reset requested from client {}", msg.getClientID());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         CorfuServer.restartServer(serverContext, true);
     }
@@ -105,7 +105,7 @@ public class BaseServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.RESTART)
     private void doRestart(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.warn("Remote restart requested from client " + msg.getClientID());
+        log.warn("Remote restart requested from client {}", msg.getClientID());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         CorfuServer.restartServer(serverContext, false);
     }

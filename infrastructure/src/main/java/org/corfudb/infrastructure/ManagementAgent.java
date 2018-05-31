@@ -29,6 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.IDetector;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
+import org.corfudb.protocols.wireprotocol.NetworkMetrics;
 import org.corfudb.protocols.wireprotocol.NodeView;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
@@ -117,8 +118,8 @@ public class ManagementAgent {
     private volatile CompletableFuture<Boolean> sequencerBootstrappedFuture;
 
     /**
-     * The management agent attempts to bootstrap a NOT_READY sequencer if the sequencerNotReadyCounter
-     * counter exceeds this value.
+     * The management agent attempts to bootstrap a NOT_READY sequencer if the
+     * sequencerNotReadyCounter counter exceeds this value.
      */
     private static final int SEQUENCER_NOT_READY_THRESHOLD = 3;
 
@@ -146,6 +147,12 @@ public class ManagementAgent {
     //  Local copy of the local node's server metrics.
     @Getter(AccessLevel.PROTECTED)
     private volatile ServerMetrics localServerMetrics;
+    //  A view of peers' connectivity.
+    // Connectivity of any unresponsive nodes responding. Updated by HealingDetector.
+    private Set<String> responsiveNodesPeerView = Collections.emptySet();
+    // Connectivity of any responsive nodes not responding. Updated by FailureDetector.
+    private Set<String> unresponsiveNodesPeerView = Collections.emptySet();
+
 
     /**
      * Checks and restores if a layout is present in the local datastore to recover from.
@@ -225,7 +232,10 @@ public class ManagementAgent {
         // One these tasks finish successfully, they initiate the detection tasks.
         this.initializationTaskThread = new Thread(this::initializationTask);
         this.initializationTaskThread.setUncaughtExceptionHandler(
-                (thread, throwable) -> log.error("Error in initialization task: {}", throwable));
+                (thread, throwable) -> {
+                    log.error("Error in initialization task: {}", throwable);
+                    shutdown();
+                });
         this.initializationTaskThread.start();
     }
 
@@ -448,6 +458,23 @@ public class ManagementAgent {
     }
 
     /**
+     * Combines the peer connectivity view from the failure and the healing detectors.
+     * This map containing the view of the detectors is used to create the NodeView.
+     * This NodeView is sent in the HeartbeatResponse message.
+     *
+     * @return Peer connectivity view map
+     */
+    NetworkMetrics getConnectivityView() {
+        Map<String, Boolean> peerConnectivityDeltaMap = new HashMap<>();
+        responsiveNodesPeerView.forEach(s -> peerConnectivityDeltaMap.put(s, true));
+        unresponsiveNodesPeerView.forEach(s -> peerConnectivityDeltaMap.put(s, false));
+        // If the management server is not bootstrapped, stamp with INVALID_EPOCH.
+        long peerConnectivitySnapshotEpoch = serverContext.getManagementLayout() != null
+                ? serverContext.getManagementLayout().getEpoch() : Layout.INVALID_EPOCH;
+        return new NetworkMetrics(peerConnectivitySnapshotEpoch, peerConnectivityDeltaMap);
+    }
+
+    /**
      * This contains the healing mechanism.
      * - This task is executed in intervals of 1 second (default). This task is blocked until
      * the management server is bootstrapped and has a connected runtime.
@@ -468,6 +495,8 @@ public class ManagementAgent {
                 CorfuRuntime corfuRuntime = getCorfuRuntime();
                 PollReport pollReport =
                         healingDetector.poll(serverContext.getManagementLayout(), corfuRuntime);
+
+                responsiveNodesPeerView = pollReport.getHealingNodes();
 
                 if (!pollReport.getHealingNodes().isEmpty()) {
 
@@ -516,6 +545,8 @@ public class ManagementAgent {
                 // Execute the failure detection poll round.
                 PollReport pollReport =
                         failureDetector.poll(serverContext.getManagementLayout(), corfuRuntime);
+
+                unresponsiveNodesPeerView = pollReport.getFailingNodes();
 
                 // Corrects out of phase epoch issues if present in the report. This method
                 // performs re-sealing of all nodes if required and catchup of a layout server to

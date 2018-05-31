@@ -5,26 +5,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
-import java.lang.Thread.UncaughtExceptionHandler;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeoutException;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import javax.annotation.Nonnull;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Data;
 import lombok.Getter;
-import lombok.NonNull;
+import lombok.Setter;
 import lombok.Singular;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
@@ -37,8 +22,8 @@ import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.LayoutHandler;
 import org.corfudb.runtime.clients.LogUnitHandler;
 import org.corfudb.runtime.clients.ManagementHandler;
-import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
@@ -59,6 +44,22 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
+
+import javax.annotation.Nonnull;
+import java.lang.Thread.UncaughtExceptionHandler;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeoutException;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/9/15.
@@ -359,26 +360,18 @@ public class CorfuRuntime {
     @Getter
     private volatile boolean isShutdown = false;
 
-    /**
-     * Metrics: meter (counter), histogram.
-     */
-    private static final String mp = "corfu.runtime.";
-    @Getter
-    private static final String mpASV = mp + "as-view.";
-    @Getter
-    private static final String mpLUC = mp + "log-unit-client.";
-    @Getter
-    private static final String mpCR = mp + "client-router.";
-    @Getter
-    private static final String mpObj = mp + "object.";
     @Getter
     private static MetricRegistry defaultMetrics = new MetricRegistry();
     @Getter
+    @Setter
     private MetricRegistry metrics = new MetricRegistry();
 
-    public CorfuRuntime setMetrics(@NonNull MetricRegistry metrics) {
-        this.metrics = metrics;
-        return this;
+    /** Initialize a default static registry which through that different metrics
+     * can be registered and reported */
+    static {
+        synchronized (defaultMetrics) {
+            MetricsUtils.metricsReportingSetup(defaultMetrics);
+        }
     }
 
     /**
@@ -473,9 +466,7 @@ public class CorfuRuntime {
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
         synchronized (metrics) {
-            if (metrics.getNames().isEmpty()) {
-                MetricsUtils.metricsReportingSetup(metrics);
-            }
+            MetricsUtils.metricsReportingSetup(metrics);
         }
         log.info("Corfu runtime version {} initialized.", getVersionString());
     }

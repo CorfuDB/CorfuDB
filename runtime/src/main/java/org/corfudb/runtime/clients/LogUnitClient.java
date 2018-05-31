@@ -6,16 +6,8 @@ import com.google.common.collect.Range;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-
 import lombok.Getter;
 import lombok.NonNull;
-
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -32,7 +24,14 @@ import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WriteSizeException;
+import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.serializer.Serializers;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 
 /**
@@ -72,7 +71,7 @@ public class LogUnitClient extends AbstractClient {
 
     private Timer.Context getTimerContext(String opName) {
         Timer t = getMetricRegistry().timer(
-                CorfuRuntime.getMpLUC()
+                CorfuComponent.LUC.toString()
                         + getHost() + ":" + getPort().toString() + "-" + opName);
         return t.time();
     }

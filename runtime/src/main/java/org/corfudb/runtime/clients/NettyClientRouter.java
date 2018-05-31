@@ -1,7 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.bootstrap.Bootstrap;
@@ -18,20 +16,8 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.concurrent.GlobalEventExecutor;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicLong;
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLException;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler;
@@ -50,9 +36,25 @@ import org.corfudb.security.sasl.SaslUtils;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
+
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -64,13 +66,6 @@ import org.corfudb.util.Sleep;
 @ChannelHandler.Sharable
 public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         implements IClientRouter {
-
-    /**
-     * Metrics: meter (counter), histogram.
-     */
-    private Timer timerConnect;
-    private Timer timerSyncOp;
-    private Counter counterSendDisconnected;
 
     /**
      * New connection timeout (milliseconds).
@@ -154,6 +149,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
 
     private SslContext sslContext;
+    private final Map<CorfuMsgType, String> timerNameCache = new HashMap<>();
 
     /**
      * Creates a new NettyClientRouter connected to the specified host and port with the
@@ -182,13 +178,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         requestID = new AtomicLong();
         outstandingRequests = new ConcurrentHashMap<>();
         shutdown = true;
-
-        MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
-
-        String pfx = CorfuRuntime.getMpCR() + node + ".";
-        timerConnect = metrics.timer(pfx + "connectAsync");
-        timerSyncOp = metrics.timer(pfx + "sync-op");
-        counterSendDisconnected = metrics.counter(pfx + "send-disconnected");
 
         if (parameters.isTlsEnabled()) {
             try {
@@ -411,10 +400,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      *     or a timeout in the case there is no response.
      */
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx,
-        CorfuMsg message) {
+        @NonNull CorfuMsg message) {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
-        // Check the connection future, and wait for it to be successful before
-        // sending the message.
+
+        // Check the connection future. If connected, continue with sending the message.
+        // If timed out, return a exceptionally completed with the timeout.
         try {
             connectionFuture
                 .get(parameters.getConnectionTimeout().toMillis(), TimeUnit.MILLISECONDS);
@@ -422,16 +412,19 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             Thread.currentThread().interrupt();
             throw new UnrecoverableCorfuInterruptedError(e);
         } catch (TimeoutException | ExecutionException e) {
-            // If we timed out, return a CompletableFuture exceptionally completed
-            // with the timeout.
             CompletableFuture<T> f = new CompletableFuture<>();
             f.completeExceptionally(e);
             return f;
         }
-        final Timer.Context context = MetricsUtils
-            .getConditionalContext(isEnabled, timerSyncOp);
+
+        // Set up the timer and context to measure request
+        final Timer roundTripMsgTimer = getTimer(message);
+        final Timer.Context roundTripMsgContext = MetricsUtils
+                .getConditionalContext(isEnabled, roundTripMsgTimer);
+
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
+
         // Set the message fields.
         message.setClientID(parameters.getClientId());
         message.setRequestID(thisRequest);
@@ -439,6 +432,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         // Generate a future and put it in the completion table.
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequest, cf);
+
         // Write the message out to the channel.
         if (ctx == null) {
             channel.writeAndFlush(message, channel.voidPromise());
@@ -446,20 +440,34 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             ctx.writeAndFlush(message, ctx.voidPromise());
         }
         log.trace("Sent message: {}", message);
-        final CompletableFuture<T> cfElapsed = cf.thenApply(x -> {
-            MetricsUtils.stopConditionalContext(context);
+
+        // Generate a benchmarked future to measure the underlying request
+        final CompletableFuture<T> cfBenchmarked = cf.thenApply(x -> {
+            MetricsUtils.stopConditionalContext(roundTripMsgContext);
             return x;
         });
+
         // Generate a timeout future, which will complete exceptionally
         // if the main future is not completed.
         final CompletableFuture<T> cfTimeout =
-            CFUtils.within(cfElapsed, Duration.ofMillis(timeoutResponse));
+            CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
         cfTimeout.exceptionally(e -> {
             outstandingRequests.remove(thisRequest);
             log.debug("Remove request {} due to timeout!", thisRequest);
             return null;
         });
         return cfTimeout;
+    }
+
+    // Create a timer using appropriate cached timer names
+    private Timer getTimer(@NonNull CorfuMsg message) {
+        if (!timerNameCache.containsKey(message.getMsgType())) {
+            timerNameCache.put(message.getMsgType(),
+                    CorfuComponent.CR.toString() + message.getMsgType().name().toLowerCase());
+        }
+
+        return CorfuRuntime.getDefaultMetrics()
+                .timer(timerNameCache.get(message.getMsgType()));
     }
 
     /**
