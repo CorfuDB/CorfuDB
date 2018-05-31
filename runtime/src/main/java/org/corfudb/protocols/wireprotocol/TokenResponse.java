@@ -2,6 +2,8 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -29,6 +31,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
         conflictKey = NO_CONFLICT_KEY;
         token = new Token(tokenValue, epoch);
         this.backpointerMap = backpointerMap;
+        this.streamTails = Collections.emptyList();
     }
 
     /** the cause/type of response. */
@@ -46,6 +49,8 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     /** The backpointer map, if available. */
     final Map<UUID, Long> backpointerMap;
 
+    final List<Long> streamTails;
+
     /**
      * Deserialization Constructor from a Bytebuf to TokenResponse.
      *
@@ -58,6 +63,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
         Long epoch = ICorfuPayload.fromBuffer(buf, Long.class);
         token = new Token(tokenValue, epoch);
         backpointerMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
+        streamTails = ICorfuPayload.listFromBuffer(buf, Long.class);
     }
 
     @Override
@@ -67,6 +73,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
         ICorfuPayload.serialize(buf, token.getTokenValue());
         ICorfuPayload.serialize(buf, token.getEpoch());
         ICorfuPayload.serialize(buf, backpointerMap);
+        ICorfuPayload.serialize(buf, streamTails);
     }
 
     @Override

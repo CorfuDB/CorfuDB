@@ -111,7 +111,6 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
     public void moreReadQueueTest() {
         CorfuRuntime runtime = getDefaultRuntime();
         IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
-        final int ten = 10;
 
         // initially, populate the stream with appends
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {

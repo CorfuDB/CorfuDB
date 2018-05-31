@@ -54,14 +54,14 @@ public class SequencerHandlerTest extends AbstractClientTest {
     @Test
     public void canGetAToken()
             throws Exception {
-        client.nextToken(Collections.<UUID>emptySet(), 1).get();
+        client.nextToken(Collections.emptyList(), 1).get();
     }
 
     @Test
     public void tokensAreIncrementing()
             throws Exception {
-        Token token = client.nextToken(Collections.<UUID>emptySet(), 1).get().getToken();
-        Token token2 = client.nextToken(Collections.<UUID>emptySet(), 1).get().getToken();
+        Token token = client.nextToken(Collections.emptyList(), 1).get().getToken();
+        Token token2 = client.nextToken(Collections.emptyList(), 1).get().getToken();
         assertThat(token2.getTokenValue())
                 .isGreaterThan(token.getTokenValue());
     }
@@ -69,8 +69,8 @@ public class SequencerHandlerTest extends AbstractClientTest {
     @Test
     public void checkTokenPositionWorks()
             throws Exception {
-        Token token = client.nextToken(Collections.<UUID>emptySet(), 1).get().getToken();
-        Token token2 = client.nextToken(Collections.<UUID>emptySet(), 0).get().getToken();
+        Token token = client.nextToken(Collections.emptyList(), 1).get().getToken();
+        Token token2 = client.nextToken(Collections.emptyList(), 0).get().getToken();
         assertThat(token)
                 .isEqualTo(token2);
     }
@@ -80,19 +80,19 @@ public class SequencerHandlerTest extends AbstractClientTest {
             throws Exception {
         UUID streamA = UUID.nameUUIDFromBytes("streamA".getBytes());
         UUID streamB = UUID.nameUUIDFromBytes("streamB".getBytes());
-        client.nextToken(Collections.singleton(streamA), 1).get();
-        Token tokenA = client.nextToken(Collections.singleton(streamA), 1).get().getToken();
-        Token tokenA2 = client.nextToken(Collections.singleton(streamA), 0).get().getToken();
+        client.nextToken(Collections.singletonList(streamA), 1).get();
+        Token tokenA = client.nextToken(Collections.singletonList(streamA), 1).get().getToken();
+        Token tokenA2 = client.nextToken(Collections.singletonList(streamA), 0).get().getToken();
         assertThat(tokenA)
                 .isEqualTo(tokenA2);
-        Token tokenB = client.nextToken(Collections.singleton(streamB), 0).get().getToken();
+        Token tokenB = client.nextToken(Collections.singletonList(streamB), 0).get().getToken();
         assertThat(tokenB)
                 .isNotEqualTo(tokenA2);
-        Token tokenB2 = client.nextToken(Collections.singleton(streamB), 1).get().getToken();
-        Token tokenB3 = client.nextToken(Collections.singleton(streamB), 0).get().getToken();
+        Token tokenB2 = client.nextToken(Collections.singletonList(streamB), 1).get().getToken();
+        Token tokenB3 = client.nextToken(Collections.singletonList(streamB), 0).get().getToken();
         assertThat(tokenB2)
                 .isEqualTo(tokenB3);
-        Token tokenA3 = client.nextToken(Collections.singleton(streamA), 0).get().getToken();
+        Token tokenA3 = client.nextToken(Collections.singletonList(streamA), 0).get().getToken();
         assertThat(tokenA3)
                 .isEqualTo(tokenA2);
     }
