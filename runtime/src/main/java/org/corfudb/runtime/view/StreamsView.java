@@ -10,7 +10,6 @@ import javax.annotation.Nullable;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.logprotocol.StreamCOWEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
@@ -61,40 +60,6 @@ public class StreamsView extends AbstractView {
         return runtime.getLayoutView().getLayout().getSegments().get(
                 runtime.getLayoutView().getLayout().getSegments().size() - 1)
                 .getReplicationMode().getStreamView(runtime, stream, options);
-    }
-
-    /**
-     * Make a copy-on-append copy of a stream.
-     *
-     * @param source      The UUID of the stream to make a copy of.
-     * @param destination The UUID of the destination stream. It must not exist.
-     * @return A view
-     */
-    public IStreamView copy(UUID source, UUID destination, long timestamp) {
-        boolean written = false;
-        while (!written) {
-            TokenResponse tokenResponse =
-                    runtime.getSequencerView().nextToken(Collections.singleton(destination), 1);
-            if (tokenResponse.getBackpointerMap().get(destination) != null
-                    && Address.isAddress(tokenResponse.getBackpointerMap().get(destination))) {
-                // Reading from this address will cause a hole fill
-                runtime.getAddressSpaceView().read(tokenResponse.getTokenValue());
-                throw new RuntimeException("Stream already exists!");
-            }
-            StreamCOWEntry entry = new StreamCOWEntry(source, timestamp);
-            TokenResponse cowToken = new TokenResponse(tokenResponse.getTokenValue(),
-                    tokenResponse.getEpoch(), Collections.singletonMap(destination,
-                    Address.COW_BACKPOINTER));
-            try {
-                runtime.getAddressSpaceView().write(cowToken, entry);
-                written = true;
-            } catch (OverwriteException oe) {
-                log.warn("hole fill during COW entry append, retrying...");
-            } catch (StaleTokenException se) {
-                // simply loop
-            }
-        }
-        return get(destination);
     }
 
     /**

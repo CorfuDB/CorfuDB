@@ -35,45 +35,6 @@ public class ObjectsViewTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canCopyObject()
-            throws Exception {
-        //begin tests
-        CorfuRuntime r = getDefaultRuntime();
-
-        Map<String, String> smrMap = r.getObjectsView().build()
-                                                    .setStreamName("map a")
-                                                    .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
-                                                    .open();
-
-        smrMap.put("a", "a");
-
-        Map<String, String> smrMapCopy = r.getObjectsView()
-                .copy(smrMap, "map a copy");
-        smrMapCopy.put("b", "b");
-
-        assertThat(smrMapCopy)
-                .containsEntry("a", "a")
-                .containsEntry("b", "b");
-
-        assertThat(smrMap)
-                .containsEntry("a", "a")
-                .doesNotContainEntry("b", "b");
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    public void cannotCopyNonCorfuObject()
-            throws Exception {
-        //begin tests
-        CorfuRuntime r = getDefaultRuntime();
-
-        assertThatThrownBy(() -> {
-            r.getObjectsView().copy(new HashMap<String, String>(), CorfuRuntime.getStreamID("test"));
-        }).isInstanceOf(RuntimeException.class);
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
     public void canAbortNoTransaction()
             throws Exception {
         //begin tests

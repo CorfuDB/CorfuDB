@@ -65,45 +65,6 @@ public class ObjectsView extends AbstractView {
     }
 
     /**
-     * Creates a copy-on-append copy of an object.
-     *
-     * @param obj         The object that should be copied.
-     * @param destination The destination ID of the object to be copied.
-     * @param <T>         The type of the object being copied.
-     * @return A copy-on-append copy of the object.
-     */
-    @SuppressWarnings("unchecked")
-    public <T> T copy(@NonNull T obj, @NonNull UUID destination) {
-        ICorfuSMR<T> proxy = (ICorfuSMR<T>)obj;
-        ObjectID oid = new ObjectID(destination, proxy.getCorfuSMRProxy().getObjectType());
-        return (T) objectCache.computeIfAbsent(oid, x -> {
-            IStreamView sv = runtime.getStreamsView().copy(proxy.getCorfuStreamID(),
-                    destination, proxy.getCorfuSMRProxy().getVersion());
-            try {
-                return
-                        CorfuCompileWrapperBuilder.getWrapper(proxy.getCorfuSMRProxy()
-                                        .getObjectType(), runtime, sv.getId(), null,
-                                Serializers.JSON);
-            } catch (Exception ex) {
-                throw new RuntimeException(ex);
-            }
-        });
-    }
-
-    /**
-     * Creates a copy-on-append copy of an object.
-     *
-     * @param obj         The object that should be copied.
-     * @param destination The destination stream name of the object to be copied.
-     * @param <T>         The type of the object being copied.
-     * @return A copy-on-append copy of the object.
-     */
-    @SuppressWarnings("unchecked")
-    public <T> T copy(@NonNull T obj, @NonNull String destination) {
-        return copy(obj, CorfuRuntime.getStreamID(destination));
-    }
-
-    /**
      * Begins a transaction on the current thread.
      * Automatically selects the correct transaction strategy.
      * Modifications to objects will not be visible
