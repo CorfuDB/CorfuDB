@@ -7,6 +7,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 
 import javax.annotation.Nonnull;
@@ -18,6 +19,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -36,7 +38,7 @@ import java.util.Set;
 @Slf4j
 public class CorfuMsgHandler {
 
-    private static final String CORFU_INFRASTRUCTURE_PREFIX = "corfu.infrastructure.message-handler.";
+    private final Map<CorfuMsgType, String> timerNameCache = new HashMap<>();
 
     /**
      * A functional interface for server message handlers. Server message handlers should
@@ -198,8 +200,8 @@ public class CorfuMsgHandler {
         }
     }
 
-    /** Generate a conditional handler, which instruments the handler with metrics if enabled
-     *  and checks whether the server is shutdown and ready.
+    /** Generate a conditional handler, which instruments the handler with metrics if configured
+     * as enabled and checks whether the server is shutdown and ready.
      * @param server        The {@link AbstractServer} the message is being handled for.
      * @param type          The {@link CorfuMsgType} the message is being handled for.
      * @param handler       The {@link Handler} which handles the message.
@@ -209,43 +211,36 @@ public class CorfuMsgHandler {
     private Handler<CorfuMsg> generateConditionalHandler(@Nonnull final AbstractServer server,
             @Nonnull final CorfuMsgType type,
             @Nonnull final Handler<CorfuMsg> handler) {
-        if (!MetricsUtils.isMetricsCollectionEnabled()) {
-            // If metrics are disabled, register the handler without instrumentation.
-            return (msg, ctx, r) -> {
-                if (server.isShutdown()) {
-                    log.warn("Server received {} but is shutdown.", msg.getMsgType().toString());
-                    r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SHUTDOWN_EXCEPTION.msg());
-                    return;
-                }
+        // Generate a timer based on the Corfu message type
+        final Timer timer = getTimer(type);
 
-                if (!server.isServerReadyToHandleMsg(msg)) {
-                    r.sendResponse(ctx, msg, CorfuMsgType.NOT_READY.msg());
-                    return;
-                }
+        // Register the handler. Depending on metrics collection configuration by MetricsUtil,
+        // handler will be instrumented by the metrics context.
+        return (msg, ctx, r) -> {
+            if (server.isShutdown()) {
+                log.warn("Server received {} but is shutdown.", msg.getMsgType().toString());
+                r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SHUTDOWN_EXCEPTION.msg());
+                return;
+            }
 
+            if (!server.isServerReadyToHandleMsg(msg)) {
+                r.sendResponse(ctx, msg, CorfuMsgType.NOT_READY.msg());
+                return;
+            }
+
+
+            try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {
                 handler.handle(msg, ctx, r);
-            };
-        } else {
-            // Otherwise, generate a timer based on the operation name
-            final Timer timer = ServerContext.getMetrics()
-                    .timer(CORFU_INFRASTRUCTURE_PREFIX + type.toString().toLowerCase());
-            // And wrap the handler around a new lambda which measures the execution time.
-            return (msg, ctx, r) -> {
-                if (server.isShutdown()) {
-                    log.warn("Server received {} but is shutdown.", msg.getMsgType().toString());
-                    r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SHUTDOWN_EXCEPTION.msg());
-                    return;
-                }
+            }
+        };
+    }
 
-                if (!server.isServerReadyToHandleMsg(msg)) {
-                    r.sendResponse(ctx, msg, CorfuMsgType.NOT_READY.msg());
-                    return;
-                }
+    // Create a timer using cached timer name for the corresponding type
+    private Timer getTimer(@Nonnull CorfuMsgType type) {
+        timerNameCache.computeIfAbsent(type,
+                                       aType -> (CorfuComponent.INFRA_MSG_HANDLER +
+                                                 aType.name().toLowerCase()));
 
-                try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {
-                    handler.handle(msg, ctx, r);
-                }
-            };
-        }
+        return ServerContext.getMetrics().timer(timerNameCache.get(type));
     }
 }
