@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
 import lombok.Builder;
 import lombok.Data;
 import lombok.Singular;
@@ -121,5 +122,31 @@ public class NodeLocator implements Serializable {
         }
 
         return sb.toString();
+    }
+
+
+    /** Returns true if the provided string points to the same node.
+     *
+     * <p>A string points to the same node as this {@link NodeLocator} if
+     * it has the same node ID, or it has no node ID and points to the same
+     * host and port.
+     *
+     * @param nodeString    The string to check.
+     * @return              True, if the string points to the node referenced by this {@link this}.
+     * @throws IllegalArgumentException     If the provided string cannot be parsed as a
+     *                                      {@link NodeLocator}.
+     */
+    public boolean isSameNode(@Nonnull String nodeString) {
+        NodeLocator otherNode = NodeLocator.parseString(nodeString);
+        // The nodes are the same if their Node IDs are the same.
+        if (otherNode.getNodeId() != null && otherNode.getNodeId().equals(getNodeId())) {
+            return true;
+        } else {
+            // Otherwise, the both node IDs must not be set
+            // and must match by host and port.
+            return !(otherNode.getNodeId() == null && getNodeId() != null)
+                && otherNode.getHost().equals(getHost())
+                && otherNode.getPort() == getPort();
+        }
     }
 }

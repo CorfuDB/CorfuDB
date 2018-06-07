@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.google.common.collect.ImmutableMap;
 import java.util.UUID;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.NodeLocator.Protocol;
@@ -74,6 +75,48 @@ public class NodeLocatorTest extends AbstractViewTest {
 
         assertThat(locator)
             .isEqualToComparingFieldByField(parsed);
+    }
+
+    @Test
+    public void testLegacyStringIsEqual() {
+        NodeLocator locator = NodeLocator.builder()
+            .host("localhost")
+            .port(1)
+            .nodeId(null)
+            .build();
+
+        assertThat(locator.isSameNode("localhost:1"))
+            .isTrue();
+    }
+
+    @Test
+    public void testStringWithoutIdIsEqual() {
+        NodeLocator locator = NodeLocator.builder()
+            .host("localhost")
+            .port(1)
+            .nodeId(null)
+            .build();
+
+        assertThat(locator.isSameNode(locator.toString()))
+            .isTrue();
+    }
+
+    @Test
+    public void testStringWithIdIsEqual() {
+        NodeLocator locator = NodeLocator.builder()
+            .host("localhost")
+            .port(1)
+            .nodeId(null)
+            .build();
+
+        NodeLocator locatorWithId = NodeLocator.builder()
+            .host("localhost")
+            .port(1)
+            .nodeId(UUID.nameUUIDFromBytes("test".getBytes()))
+            .build();
+
+        assertThat(locator.isSameNode(locatorWithId.toString()))
+            .isTrue();
     }
 
 }
