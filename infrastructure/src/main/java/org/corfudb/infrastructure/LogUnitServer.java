@@ -77,11 +77,6 @@ public class LogUnitServer extends AbstractServer {
                             .setNameFormat("LogUnit-Maintenance-%d")
                             .build());
 
-    ThreadFactory threadFactory = new ServerThreadFactory("Logunit-",
-            new ServerThreadFactory.ExceptionHandler());
-
-    ExecutorService executor = Executors.newFixedThreadPool(BatchWriter.BATCH_SIZE, threadFactory);
-
     private ScheduledFuture<?> compactor;
 
     /**
@@ -329,20 +324,15 @@ public class LogUnitServer extends AbstractServer {
         streamLog.release(address, (LogData) entry);
     }
 
-    @Override
-    public ExecutorService getExecutor() {
-        return executor;
-    }
-
     /**
      * Shutdown the server.
      */
     @Override
     public void shutdown() {
+        super.shutdown();
         compactor.cancel(true);
         scheduler.shutdownNow();
         batchWriter.close();
-        executor.shutdownNow();
     }
 
     @VisibleForTesting
