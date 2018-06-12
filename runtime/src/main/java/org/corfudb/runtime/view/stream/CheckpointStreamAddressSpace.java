@@ -5,9 +5,9 @@ import com.google.common.collect.Lists;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Function;
 
 import lombok.Getter;
+import lombok.Synchronized;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
@@ -23,6 +23,9 @@ import org.corfudb.util.Utils;
  * The Checkpoint Stream Address Space resolves the space of addresses of a checkpoint(ed) stream,
  * therefore it is capable of following backpointers and resolving the checkpoint at the same time,
  * i.e., determine how to traverse the cp stream
+ *
+ * For the checkpoint stream address space we override the methods: next, removeAddresses and syncUpTo
+ * because for the checkpoint stream there is no notion of resolvedAddressLimit, whatever is present is conclusive.
  *
  * Created by amartinezman on 4/18/18.
  */
@@ -51,15 +54,19 @@ public class CheckpointStreamAddressSpace extends StreamAddressSpace {
     }
 
     @Override
+    /**
+     * Returns the highest checkpoint(ed) address, i.e., the upper limit of the range of addresses
+     * that are contained in this checkpoint (from the regular stream).
+     */
     public long getLastAddressSynced() {
-        if (maxInd == -1) {
+        if (maxInd.get() == -1) {
             return Address.NON_ADDRESS;
         } else {
             return lastCPAddress;
         }
     }
 
-    private void setLastCheckpointedAddress(ILogData firstCPEntry) {
+    private void setCheckpointBoundary(ILogData firstCPEntry) {
         if (firstCPEntry.hasCheckpointMetadata()) {
             CheckpointEntry cpEntry = (CheckpointEntry)
                     firstCPEntry.getPayload(runtime);
@@ -72,6 +79,67 @@ public class CheckpointStreamAddressSpace extends StreamAddressSpace {
     }
 
     @Override
+    public long next() {
+        if (currInd.get() + 1 > maxInd.get()) {
+            return Address.NON_ADDRESS;
+        } else {
+            currInd.incrementAndGet();
+            return addresses.get(currInd.get());
+        }
+    }
+
+    @Override
+    @Synchronized
+    public void removeAddresses(long upperBound) {
+        int removedAddresses = 0;
+        int index = this.addresses.indexOf(upperBound);
+        if (index != -1) {
+            for (int i = index; i >= 0; i--){
+                removedAddresses ++;
+                this.addresses.remove(i);
+            }
+
+            // Reset indexes if pointing to tha space of addresses being removed
+            // else, rebase.
+            if (currInd.get() <= index) {
+                // Reset current index to first entry in the stream
+                currInd.set(-1);
+            } else {
+                currInd.getAndAdd(-removedAddresses);
+            }
+
+            maxInd.set(this.addresses.size() - 1);
+        }
+    }
+
+    @Override
+    public void syncUpTo(long globalAddress, long newTail, long lowerBound) {
+        // Ensure there is an upper limit to sync up to
+        if (newTail != Address.NON_EXIST) {
+            if (getMax() < newTail) {
+                long oldTail = lowerBound;
+
+                if (maxInd.get() != -1) {
+                    if (lowerBound > addresses.get(maxInd.get())) {
+                        oldTail = lowerBound;
+                    } else {
+                        oldTail = getMax();
+                    }
+                }
+
+                findAddresses(globalAddress, oldTail, newTail);
+
+            } else if (getMax() != newTail) {
+                int addressesAdded = findAddresses(globalAddress, lowerBound, newTail);
+
+                if (currInd.get() != -1) {
+                    currInd.getAndAdd(addressesAdded);
+                }
+            }
+        }
+    }
+
+    @Override
     public long getCurrentPointer() {
         // The current pointer refers to the current version of the object, which is in fact related
         // to the last global address synced for this checkpoint stream.
@@ -79,20 +147,22 @@ public class CheckpointStreamAddressSpace extends StreamAddressSpace {
     }
 
     @Override
-    public int findAddresses(long oldTail, long newTail, Function<Long, ILogData> readFn) {
+    public int findAddresses(long globalAddress, long oldTail, long newTail) {
         List<Long> addressesToAdd = new ArrayList<>(100);
 
         while (newTail > oldTail) {
             try {
-                ILogData d = readFn.apply(newTail);
+                ILogData d = read(newTail);
                 if (d.getType() != DataType.HOLE) {
                     if (d.containsStream(streamId)) {
                         BackpointerOp op = resolveCheckpoint(d, newTail);
                         if (op == BackpointerOp.INCLUDE
                                 || op == BackpointerOp.INCLUDE_STOP) {
                             addressesToAdd.add(newTail);
+                            if(op == BackpointerOp.INCLUDE_STOP) {
+                                break;
+                            }
                         }
-                        setLastCheckpointedAddress(d);
                     }
 
                     newTail = d.getBackpointer(streamId);
@@ -155,6 +225,7 @@ public class CheckpointStreamAddressSpace extends StreamAddressSpace {
                             cpEntry.getCpType(),
                             Utils.toReadableId(cpEntry.getCheckpointId()),
                             cpEntry.getCheckpointAuthorId());
+                    setCheckpointBoundary(data);
                     // We have reached the start of the checkpoint, include address and
                     // stop following backpointers
                     return BackpointerOp.INCLUDE_STOP;

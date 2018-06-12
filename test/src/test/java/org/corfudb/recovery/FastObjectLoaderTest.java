@@ -243,8 +243,6 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
     }
 
-    // TODO: This test will fail because of the undefined behaviour on reading already checkpoint(ed) entries
-    // For the new runtime (rt2) it is only loading the non-checkpointed entries, therefore it is not able to go back to version 4
     @Test
     public void canReadCheckpointWithoutTrim() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, MORE);
@@ -754,7 +752,6 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     @Test
     public void canRecreateCorfuTableWithIndex() throws Exception {
         CorfuRuntime originalRuntime = getDefaultRuntime();
-
 
         CorfuTable originalTable = originalRuntime.getObjectsView().build()
                 .setType(CorfuTable.class)

@@ -1,7 +1,37 @@
 package org.corfudb;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.fusesource.jansi.Ansi.ansi;
+
+import java.io.File;
 import java.io.IOException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.IntConsumer;
+
 import javax.annotation.Nonnull;
+
 import org.assertj.core.api.AbstractObjectAssert;
 import org.assertj.core.api.AbstractThrowableAssert;
 import org.corfudb.test.DisabledOnTravis;
@@ -16,21 +46,8 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.TestRule;
-import org.junit.runners.model.Statement;
 import org.junit.runner.Description;
-
-import java.io.File;
-import java.util.*;
-import java.util.concurrent.*;
-import java.time.Duration;
-
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.IntConsumer;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.fusesource.jansi.Ansi.ansi;
+import org.junit.runners.model.Statement;
 
 /**
  * Created by mwei on 12/13/15.
@@ -870,7 +887,7 @@ public class AbstractCorfuTest {
     }
     /**
      * This engine takes the testSM state machine (same as scheduleInterleaved above),
-     * and executes state machines in separate threads running concurrenty.
+     * and executes state machines in separate threads running concurrently.
      * There is no explicit interleaving control here.
      *
      * @param numThreads specifies desired concurrency level

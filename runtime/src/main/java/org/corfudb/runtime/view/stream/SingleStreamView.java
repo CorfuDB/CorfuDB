@@ -9,6 +9,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import javax.annotation.Nonnull;
+
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -128,14 +129,16 @@ public class SingleStreamView implements IStreamView {
             // exception here - any other exception we should pass up
             // to the client.
             try {
-                runtime.getAddressSpaceView()
-                        .write(tokenResponse, object);
+                // Add this address as a hint to the space of addresses of the underlying stream
+                this.sas.addAddresses(Arrays.asList(tokenResponse.getToken().getTokenValue()));
+                runtime.getAddressSpaceView().write(tokenResponse, object);
                 // The write completed successfully, so we return this
                 // address to the client.
-                this.sas.addAddresses(Arrays.asList(tokenResponse.getToken().getTokenValue()));
                 return tokenResponse.getToken().getTokenValue();
             } catch (OverwriteException oe) {
                 log.trace("Overwrite occurred at {}", tokenResponse);
+                // Failed to write to this address, remove hint from address space
+                this.sas.removeAddress(tokenResponse.getToken().getTokenValue());
                 // We got overwritten, so we call the deacquisition callback
                 // to inform the client we didn't get the address.
                 if (deacquisitionCallback != null) {
@@ -151,6 +154,8 @@ public class SingleStreamView implements IStreamView {
                                 1);
             } catch (StaleTokenException te) {
                 log.trace("Token grew stale occurred at {}", tokenResponse);
+                // Failed to write to this address, remove hint from address space
+                this.sas.removeAddress(tokenResponse.getToken().getTokenValue());
                 if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                     log.debug("Deacquisition requested abort");
                     return Address.NON_ADDRESS;
@@ -160,7 +165,6 @@ public class SingleStreamView implements IStreamView {
                 tokenResponse = runtime.getSequencerView()
                         .nextToken(Collections.singleton(id),
                                 1);
-
             }
         }
 
@@ -191,16 +195,17 @@ public class SingleStreamView implements IStreamView {
     }
 
     void syncAddressSpace(long globalAddress, long lowerBound) {
-        // Sync Stream Address space from Global Address to specified lower bound (range),
+        // Sync Stream Address space from Global Address to specified lower bound (within this range),
         // if lower bound -1, sync to the beginning of the stream.
         if (globalAddress <= this.sas.getLastAddressSynced()) {
             return;
         } else {
             // We leverage the stream address space to decide up to which point to synchronize
-            // the stream. The reasoning behind this is that a composite address space might request
-            // tails for several streams at the same time (for instance, regular and checkpoint stream).
-            // Making a single sequencer call instead of two is an important performance optimization.
-            this.sas.syncUpTo(globalAddress, Address.NOT_FOUND, lowerBound, this::read);
+            // the stream (upper bound/limit). The reasoning behind this is that a composite address
+            // space might request tails for several streams at the same time (for instance, regular
+            // and checkpoint stream). Making a single sequencer call instead of two is an important
+            // performance optimization.
+            this.sas.syncUpTo(globalAddress, Address.NOT_FOUND, lowerBound);
         }
     }
 
@@ -209,7 +214,7 @@ public class SingleStreamView implements IStreamView {
         if (sas.hasNext()) {
             return read(sas.next());
         } else {
-            // Force a sequencer call
+            // Sync address space to ensure there is no 'next' available address for this stream
             syncAddressSpace(this.sas.getLastAddressSynced() + 1, Address.NON_ADDRESS);
 
             if (sas.hasNext()) {
@@ -230,7 +235,12 @@ public class SingleStreamView implements IStreamView {
     public ILogData nextUpTo(long maxGlobal) {
         if (sas.hasNext()) {
             long address = sas.next();
-            if (address > maxGlobal && (sas.getCurrentPointer() > maxGlobal)) {
+            // Note: compare against currentPointer instead of the given address.
+            // The underlying implementation of StreamAddressSpace could be retrieving
+            // intermediate addresses e.g., compositeStreamAddress space
+            // can retrieve a checkpoint address (which summarizes the state of the regular stream
+            // up to a certain address actually given by getCurrentPointer).
+            if (sas.getCurrentPointer() > maxGlobal) {
                 sas.previous();
                 return null;
             }

@@ -1,7 +1,6 @@
 package org.corfudb.runtime.view.stream;
 
 import java.util.List;
-import java.util.function.Function;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.view.StreamOptions;
@@ -18,15 +17,13 @@ import org.corfudb.runtime.view.StreamOptions;
  */
 public interface IStreamAddressSpace {
 
-    /**
+   /**
      * Reset the address space, i.e., reset pointers.
-     *
      */
-    void reset() ;
+    void reset();
 
     /**
      * Seeks for a specific address, and moves the pointer in the stream to this position.
-     *
      */
     void seek(long address);
 
@@ -103,9 +100,7 @@ public interface IStreamAddressSpace {
      *
      * @return true if exists, false otherwise.
      */
-    boolean hasNext
-
-    ();
+    boolean hasNext();
 
     /**
      * Determines if there is a valid address in the stream while traversing backwards
@@ -123,10 +118,16 @@ public interface IStreamAddressSpace {
     void removeAddresses(long upperBound);
 
     /**
+     * Removes specific address from this address space.
+     *
+     * @param address address to remove from this space.
+     */
+    void removeAddress(long address);
+
+    /**
      * Sync/update the space of addresses between newTail and lowerBound.
      */
-    void syncUpTo(long globalAddress, long newTail, long lowerBound,
-                         Function<Long, ILogData> readFn);
+    void syncUpTo(long globalAddress, long newTail, long lowerBound);
 
     /**
      * Determines if a given address is contained in the space of addresses of this stream
@@ -151,7 +152,7 @@ public interface IStreamAddressSpace {
      *
      * @return the number of addresses found for this stream.
      */
-    int findAddresses(long oldTail, long newTail, Function<Long, ILogData> readFn);
+    int findAddresses(long globalAddress, long oldTail, long newTail);
 
     /**
      * Indicates if the space of addresses is empty for this stream.
@@ -166,4 +167,12 @@ public interface IStreamAddressSpace {
      * @param address address where the stream space should be pointing to.
      */
     void setPointerToPosition(long address);
+
+    /**
+     * Read an address.
+     *
+     * @param address global address to be read.
+     * @return actual data read from specified address.
+     */
+    ILogData read(final long address);
 }

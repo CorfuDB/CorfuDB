@@ -3,7 +3,6 @@ package org.corfudb.runtime.collections;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.reflect.TypeToken;
 
 import java.util.AbstractMap;
 import java.util.Collection;
@@ -25,7 +24,6 @@ import lombok.Getter;
 import lombok.ToString;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -236,6 +234,7 @@ public class CorfuMapTest extends AbstractViewTest {
     @Test
     public void loadsFollowedByGetsConcurrent()
             throws Exception {
+
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
                 .setStreamID(UUID.randomUUID())
@@ -271,6 +270,66 @@ public class CorfuMapTest extends AbstractViewTest {
         calculateRequestsPerSecond("RPS", num_records * num_threads, startTime);
     }
 
+
+    /**
+     * Two different runtimes concurrently write to the same map (over non conflicting keys).
+     * Both instances of the maps should reflect the updates done by each runtime.
+     *
+     *
+     * @throws Exception
+     */
+    @Test
+    public void concurrentWritesSameMapDifferentRuntimes()
+            throws Exception {
+
+        UUID streamID = UUID.randomUUID();
+
+        Map<String, String> mapRT1 = getRuntime().getObjectsView()
+                .build()
+                .setStreamID(streamID)
+                .setTypeToken(CorfuTable.<String,String>getMapType())
+                .open();
+
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
+                .setTransactionLogging(true)
+                .connect();
+
+        Map<String, String> mapRT2 = rt2.getObjectsView()
+                .build()
+                .setStreamID(streamID)
+                .setTypeToken(CorfuTable.<String,String>getMapType())
+                .open();
+
+        final int numThreads = PARAMETERS.CONCURRENCY_SOME;
+        final int numRecords = PARAMETERS.NUM_ITERATIONS_LOW;
+        mapRT1.clear();
+        mapRT2.clear();
+
+        scheduleConcurrently(numThreads, threadNumber -> {
+            int base = threadNumber * numRecords;
+            for (int i = base; i < base + numRecords; i++) {
+                if (i % 2 == 0) {
+                    assertThat(mapRT2.put(Integer.toString(i), Integer.toString(i)))
+                            .isEqualTo(null);
+                } else  {
+                    assertThat(mapRT1.put(Integer.toString(i), Integer.toString(i)))
+                            .isEqualTo(null);
+                }
+            }
+        });
+
+        executeScheduled(numThreads, PARAMETERS.TIMEOUT_LONG);
+
+        scheduleConcurrently(numThreads, threadNumber -> {
+            int base = threadNumber * numRecords;
+            for (int i = base; i < base + numRecords; i++) {
+                assertThat(mapRT1.get(Integer.toString(i)))
+                        .isEqualTo(Integer.toString(i));
+            }
+        });
+
+        executeScheduled(numThreads, PARAMETERS.TIMEOUT_LONG);
+    }
 
     @Test
     @SuppressWarnings("unchecked")

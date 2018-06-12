@@ -330,8 +330,6 @@ public class VersionLockedObject<T> {
             // Attempt to sync stream to timestamp, it might have to sync to the tail to build the
             // history
             syncStreamUnsafe(smrStream, timestamp);
-            // Check if stream was synced ahead and roll back to timestamp if necessary
-            this.rollBackToTimestamp(timestamp);
         }
     }
 
@@ -606,7 +604,7 @@ public class VersionLockedObject<T> {
      * @param stream    The stream to sync forward
      * @param timestamp The timestamp to sync up to.
      */
-    protected void  syncStreamUnsafe(ISMRStream stream, long timestamp) {
+    protected void syncStreamUnsafe(ISMRStream stream, long timestamp) {
         log.trace("Sync[{}] {}", this, (timestamp == Address.OPTIMISTIC)
                 ? "Optimistic" : "to " + timestamp);
         long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;

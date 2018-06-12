@@ -1,14 +1,14 @@
 package org.corfudb.runtime.object.transactions;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.junit.Test;
 
 /**
  * Created by dalia on 3/6/17.
@@ -113,7 +113,7 @@ public class UndoTest extends AbstractTransactionsTest {
     }
 
     /**
-     * Check that optimisitcUndoable is properly reset.
+     * Check that optimisticUndoable is properly reset.
      *
      * An irreversible modification causes a total object-rebuild.
      * <p>
@@ -134,7 +134,7 @@ public class UndoTest extends AbstractTransactionsTest {
                 .open();
         final int specialKey = 10;
         final String normalValue = "z", specialValue = "y";
-        final int mapSize = 10 * PARAMETERS.NUM_ITERATIONS_LARGE;
+        final int mapSize = 10 * PARAMETERS.NUM_ITERATIONS_MODERATE;
 
         // populate the map with many elements
         for (int i = 0; i < mapSize; i++)

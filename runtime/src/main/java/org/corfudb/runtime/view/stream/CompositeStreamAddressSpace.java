@@ -3,7 +3,6 @@ package org.corfudb.runtime.view.stream;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Function;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -25,14 +24,14 @@ public class CompositeStreamAddressSpace implements IStreamAddressSpace {
     private BackpointerStreamAddressSpace regularSAS;
     private CheckpointStreamAddressSpace cpSAS;
     private boolean pointerOnRegularStream;
-    final private CorfuRuntime r;
+    final private CorfuRuntime runtime;
     final private UUID regularStreamId;
     final private UUID cpStreamId;
 
     public CompositeStreamAddressSpace(UUID id, CorfuRuntime runtime) {
         regularStreamId = id;
         cpStreamId = CorfuRuntime.getCheckpointStreamIdFromId(id);
-        r = runtime;
+        this.runtime = runtime;
         regularSAS = new BackpointerStreamAddressSpace(regularStreamId, runtime);
         cpSAS = new CheckpointStreamAddressSpace(cpStreamId, runtime);
         pointerOnRegularStream = true;
@@ -64,11 +63,26 @@ public class CompositeStreamAddressSpace implements IStreamAddressSpace {
             }
         } catch (RuntimeException re) {
             // If address is not valid on the regular stream, try to seek this address in the CP stream
-            cpSAS.seek(address);
-            // If this succeeds, move pointer in regular SAS to follow at the same point of the CP
-            // and reset pointer to CP stream
-            regularSAS.setPointerToPosition(cpSAS.getLastAddressSynced());
-            pointerOnRegularStream = false;
+            try {
+                cpSAS.seek(address);
+                // Move pointer in regular SAS to follow at the same point of the CP
+                // and reset pointer to CP stream
+                regularSAS.setPointerToPosition(cpSAS.getLastAddressSynced());
+                pointerOnRegularStream = false;
+            } catch (RuntimeException rte) {
+                // If address corresponds to the checkpoint snapshot address,
+                // seek the beginning of the CP stream
+                if (address == cpSAS.getLastAddressSynced()) {
+                    cpSAS.seek(cpSAS.getMin());
+                    // Move pointer in regular SAS to follow at the same point of the CP
+                    // and reset pointer to CP stream
+                    regularSAS.setPointerToPosition(cpSAS.getLastAddressSynced());
+                    pointerOnRegularStream = false;
+                } else if (!(address <= cpSAS.getMin())){
+                    // if CP address is not subsumed by another checkpoint, throw exception
+                    throw rte;
+                }
+            }
         }
     }
 
@@ -83,13 +97,9 @@ public class CompositeStreamAddressSpace implements IStreamAddressSpace {
 
     @Override
     public long getLastAddressSynced() {
-        // If regularSAS has no address, maybe it was checkpoint(ed)/trimmed, the CP Stream Address
-        // Space will have info regarding the last address that was synced for this stream and cp..
-        if (pointerOnRegularStream) {
-            return regularSAS.getLastAddressSynced();
-        } else {
-             return cpSAS.getLastAddressSynced();
-        }
+        // getLastAddressSynced for the cpSAS returns the actual address that was checkpoint(ed)
+        // on the regular stream, rather than the actual address of the checkpoint stream.
+        return Math.max(regularSAS.getLastAddressSynced(), cpSAS.getLastAddressSynced());
     }
 
     @Override
@@ -98,7 +108,7 @@ public class CompositeStreamAddressSpace implements IStreamAddressSpace {
             return regularSAS.next();
         } else {
             // If pointer is on the checkpoint stream and there is no next in this stream
-            // we need to move onto the continuation  of the stream on the regularSAS
+            // we need to move onto the continuation of the stream on the regularSAS
             if (cpSAS.hasNext()) {
                 return cpSAS.next();
             } else if (regularSAS.hasNext()) {
@@ -195,6 +205,12 @@ public class CompositeStreamAddressSpace implements IStreamAddressSpace {
         }
     }
 
+    @Override
+    public void removeAddress(long address) {
+        this.regularSAS.removeAddress(address);
+        this.cpSAS.removeAddress(address);
+    }
+
     /**
      * <p>The composite stream address space is based on the notion that a stream's address space
      *    is two-fold, composed by the address space of: the regular stream and the checkpoint
@@ -217,22 +233,19 @@ public class CompositeStreamAddressSpace implements IStreamAddressSpace {
      * @param newTail stream tail.
      * @param lowerBound lower bound to sync up to. The range of addresses to sync is given by the space
      *                   between newTail and lowerBound.
-     * @param readFn read function.
      */
-    public void syncUpTo(long globalAddress, long newTail, long lowerBound,
-                         Function<Long, ILogData> readFn) {
-
+    public void syncUpTo(long globalAddress, long newTail, long lowerBound) {
         // If the requested tail is lower than the last address synced (snapshot transaction),
         // sync the regular stream to get granular address resolution.
         if (newTail != Address.NOT_FOUND && newTail <= getLastAddressSynced()) {
-            regularSAS.syncUpTo(globalAddress, newTail, lowerBound, readFn);
+            regularSAS.syncUpTo(globalAddress, newTail, lowerBound);
         } else if (!(globalAddress < cpSAS.getMax() && cpSAS.containsAddress(globalAddress))) {
             // Do not sync if globalAddress is contained in the space of the CP SAS
             long upperLimitAddressesCheckpointed = Address.NON_ADDRESS;
 
             // Get Regular Stream Tail
             if (newTail == Address.NOT_FOUND) {
-                Token tokenRegular = r.getSequencerView()
+                Token tokenRegular = runtime.getSequencerView()
                         .nextToken(Collections.singleton(regularStreamId), 0).getToken();
                 newTail = tokenRegular.getTokenValue();
             }
@@ -240,13 +253,13 @@ public class CompositeStreamAddressSpace implements IStreamAddressSpace {
             // Get CP Stream Tail
             // TODO: This is incurring in an extra sequencer call, but with PR #1277 this can be replaced
             // TODO: to request both stream tails under the same call.
-            Token token = r.getSequencerView()
+            Token token = runtime.getSequencerView()
                     .nextToken(Collections.singleton(cpStreamId), 0).getToken();
             long cpTail = token.getTokenValue();
 
             // Sync the CP SAS, if tail exists for the CP stream
             if (cpTail != Address.NON_EXIST) {
-                cpSAS.syncUpTo(globalAddress, cpTail, lowerBound, readFn);
+                cpSAS.syncUpTo(globalAddress, cpTail, lowerBound);
 
                 // Get the maximum address that has been checkpoint(ed) for the regular stream.
                 // This will give the lower bound, so we sync the regular stream down until this limit
@@ -257,9 +270,6 @@ public class CompositeStreamAddressSpace implements IStreamAddressSpace {
                     // lower or equal than upper address in the cp stream, move the pointer
                     // to the Checkpoint SAS, so we read data from the cp and set the pointer
                     // on regular stream to the limit covered by the CP
-                    // TODO: we might need to rollback these positions as they have already been applied
-                    // TODO: to the stream (look into this) or we could remove the cp addresses if regular stream
-                    // TODO: is resolved for the range of the CP.
                     if (pointerOnRegularStream && regularSAS.getCurrentPointer() <= upperLimitAddressesCheckpointed) {
                         pointerOnRegularStream = false;
                         regularSAS.setPointerToPosition(upperLimitAddressesCheckpointed);
@@ -278,11 +288,18 @@ public class CompositeStreamAddressSpace implements IStreamAddressSpace {
             // for this stream
             if (regularSAS.getLastAddressSynced() < newTail) {
                 try {
-                    regularSAS.syncUpTo(globalAddress, newTail, lowerBound, readFn);
+                    regularSAS.syncUpTo(globalAddress, newTail, lowerBound);
                 } catch (TrimmedException te) {
                     // Throw exception if we were attempting to fulfill a snapshot transaction,
-                    // in the space of checkpoint addresses
+                    // in the space of checkpoint addresses (address subsumed by the checkpoint)
                     if (cpSAS.getLastAddressSynced() > globalAddress) {
+                        // Snapshot cannot be satisfied, remove all addresses from regular stream under the last checkpoint(ed) address
+                        regularSAS.removeAddresses(cpSAS.getLastAddressSynced());
+                        te.setRetriable(false);
+                        throw te;
+//                        }
+                    } else if (cpSAS.isEmpty()) {
+                        // No actual checkpoint to subsume the trimmed address
                         throw te;
                     }
                 }
@@ -292,13 +309,9 @@ public class CompositeStreamAddressSpace implements IStreamAddressSpace {
                     pointerOnRegularStream = false;
                 }
 
-                // If we were able to build the regular log from the beginning with no trimmed
-                // exceptions, then remove the checkpoint entries, this way we will be able
-                // to provide snapshot transactions at the granularity of checkpoint(ed) entries
-                if (globalAddress < upperLimitAddressesCheckpointed &&
-                        regularSAS.getMin() > globalAddress) {
+                // If the globalAddress is in the space of checkpoint(ed) address but still exists (has not been trimmed) move to regular stream to satisfy the snapshot transaction
+                if (globalAddress < upperLimitAddressesCheckpointed) {
                     pointerOnRegularStream = true;
-                    cpSAS.removeAddresses(cpSAS.getMax());
                 } else {
                     regularSAS.setPointerToPosition(upperLimitAddressesCheckpointed);
                 }
@@ -322,7 +335,7 @@ public class CompositeStreamAddressSpace implements IStreamAddressSpace {
     }
 
     @Override
-    public int findAddresses(long oldTail, long newTail, Function<Long, ILogData> readFn) {
+    public int findAddresses(long globalAddress, long oldTail, long newTail) {
         throw new UnsupportedOperationException("findAddresses");
     }
 
@@ -334,5 +347,17 @@ public class CompositeStreamAddressSpace implements IStreamAddressSpace {
     @Override
     public void setPointerToPosition(long address) {
         this.regularSAS.setPointerToPosition(address);
+    }
+
+    @Override
+    public ILogData read(final long address) {
+        try {
+            return runtime.getAddressSpaceView().read(address);
+        } catch (TrimmedException te) {
+            // If a trimmed exception is encountered remove address from the space of valid addresses
+            // as it is no longer available.
+            this.removeAddresses(address);
+            throw te;
+        }
     }
 }

@@ -1,6 +1,14 @@
 package org.corfudb.runtime.collections;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import com.google.common.reflect.TypeToken;
+
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -9,12 +17,6 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ObjectsView;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.Assert.*;
 
 /**
  * Created by kjames88 on 3/23/17.

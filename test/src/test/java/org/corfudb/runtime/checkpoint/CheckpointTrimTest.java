@@ -1,16 +1,18 @@
 package org.corfudb.runtime.checkpoint;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
+
+import java.util.Map;
+
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
 import org.junit.Test;
-
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 5/25/17.
@@ -89,6 +91,8 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .setStreamName("test")
                 .open();
 
+        boolean snapshotTransactionCompleted = true;
+
         // try to get a snapshot inside the gap
         getRuntime().getObjectsView()
                 .TXBuild()
@@ -96,9 +100,27 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .setSnapshot(checkpointAddress-1)
                 .begin();
 
-        // Reading an entry from scratch should be ok
-        assertThat(newTestMap.get("a"))
-                .isEqualTo("a"+(nCheckpoints-1));
+        try {
+            // Reading an entry from this snapshot should result in a TransactionAbortedException
+            // Given the state of the stream:
+            // (1) Regular Stream: 0 1 2
+            //     CP Stream:      3 4 5
+            // (2) Regular Stream: 0 1 2 6 7 8
+            //     CP Stream:      3 4 5 9 10 11 ----> (second checkpoint subsumes the first cp) therefore it will result in
+            // ---->               9 10 11
+            // (3) Trim from address 2 results in:
+            //     Regular Stream: 6 7 8
+            //     CP Stream:      9 10 11
+            // A snapshot transaction @7 is NOT possible, as the checkpoint subsumes the state of the stream from address 8.
+
+            newTestMap.get("a");
+        } catch (Exception e) {
+            snapshotTransactionCompleted = false;
+            assertThat(e).isInstanceOf(TransactionAbortedException.class);
+            assertThat(e.getCause()).isInstanceOf(TrimmedException.class);
+        }
+
+        assertThat(snapshotTransactionCompleted).isEqualTo(false);
     }
 
 
