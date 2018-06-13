@@ -1,4 +1,4 @@
-RELEASENAME = 'eclipse'
+RELEASENAME = 'flash'
 BRANCH = 'nsx-corfu'
 
 UBUNTU_MIRROR = "http://ubtmirror.nsbu.eng.vmware.com/ubuntu"
