@@ -390,7 +390,7 @@ public class LayoutBuilder {
         for (LayoutSegment layoutSegment : layoutSegments) {
             for (LayoutStripe layoutStripe : layoutSegment.getStripes()) {
                 int minReplicationFactor = layoutSegment.getReplicationMode()
-                        .getMinReplicationFactor(tempLayout);
+                        .getMinReplicationFactor(tempLayout, layoutStripe);
                 removeFromStripe(endpoint, layoutStripe, minReplicationFactor);
             }
         }
@@ -413,7 +413,7 @@ public class LayoutBuilder {
             for (LayoutStripe layoutStripe : layoutSegment.getStripes()) {
                 for (String endpoint : endpoints) {
                     int minReplicationFactor = layoutSegment.getReplicationMode()
-                            .getMinReplicationFactor(tempLayout);
+                            .getMinReplicationFactor(tempLayout, layoutStripe);
                     removeFromStripe(endpoint, layoutStripe, minReplicationFactor);
                 }
             }
