@@ -5,6 +5,7 @@ import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.Layout.ReplicationMode;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,6 +36,7 @@ public class LayoutManagementViewTest extends AbstractViewTest{
                 .addSequencer(SERVERS.PORT_1)
                 .addSequencer(SERVERS.PORT_2)
                 .buildSegment()
+                .setReplicationMode(ReplicationMode.QUORUM_REPLICATION)
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_0)
                 .addLogUnit(SERVERS.PORT_1)

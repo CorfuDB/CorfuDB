@@ -1478,9 +1478,10 @@ public class ManagementViewTest extends AbstractViewTest {
         // STEP 3.
         clearClientRules(getCorfuRuntime());
         addServerRule(SERVERS.PORT_0, new TestRule().drop().always());
+        getManagementServer(SERVERS.PORT_0).shutdown();
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
-            if (corfuRuntime.getLayoutView().getLayout().getEpoch() != layout.getEpoch())
+            if (!corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers().isEmpty())
                 break;
             corfuRuntime.invalidateLayout();
         }
@@ -1500,11 +1501,14 @@ public class ManagementViewTest extends AbstractViewTest {
                 new TestRule().matches(corfuMsg -> {
                     if (corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)) {
                         latch.release();
+                        return true;
                     }
-                    return true;
-                }));
+                    return false;
+                }).drop());
         addServerRule(SERVERS.PORT_1, new TestRule().drop().always());
-        latch.tryAcquire(PARAMETERS.TIMEOUT_NORMAL.toMillis(), TimeUnit.MILLISECONDS);
+        getManagementServer(SERVERS.PORT_1).shutdown();
+        assertThat(latch.tryAcquire(PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS))
+                .isTrue();
         clusterStatus = getCorfuRuntime().getManagementView().getClusterStatus();
         nodeStatusMap = clusterStatus.getClientServerConnectivityStatusMap();
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.DOWN);

@@ -329,8 +329,8 @@ public class Layout {
             }
 
             @Override
-            public int getMinReplicationFactor(Layout layout) {
-                return 2;
+            public int getMinReplicationFactor(Layout layout, LayoutStripe stripe) {
+                return 1;
             }
 
             @Override
@@ -366,8 +366,8 @@ public class Layout {
             }
 
             @Override
-            public int getMinReplicationFactor(Layout layout) {
-                return (layout.getLayoutServers().size() / 2) + 1;
+            public int getMinReplicationFactor(Layout layout, LayoutStripe stripe) {
+                return (stripe.getLogServers().size() / 2) + 1;
             }
 
             @Override
@@ -421,7 +421,7 @@ public class Layout {
             }
 
             @Override
-            public int getMinReplicationFactor(Layout layout) {
+            public int getMinReplicationFactor(Layout layout, LayoutStripe stripe) {
                 return 1;
             }
 
@@ -447,12 +447,14 @@ public class Layout {
                 throws QuorumUnreachableException;
 
         /**
-         * Compute the min replication factor for replication protocol
+         * Compute the min replication factor for the log unit servers in the replication protocol
+         * for a specific stripe.
          *
-         * @param layout the layout to compute the min replication factor for
+         * @param layout the layout to compute the min replication factor for.
+         * @param stripe The stripe for which the minimum replication factor is needed.
          * @return the minimum amount of nodes required to maintain replication
          */
-        public abstract int getMinReplicationFactor(Layout layout);
+        public abstract int getMinReplicationFactor(Layout layout, LayoutStripe stripe);
 
         public abstract IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options);
 
