@@ -57,8 +57,8 @@ public class StreamTest extends AbstractTransactionsTest {
         final long trimMark = getRuntime().getParameters().getWriteRetry() - 1;
         getRuntime().getAddressSpaceView().prefixTrim(trimMark);
         final int payloadSize = 100;
-        assertThatThrownBy(() -> getRuntime().getStreamsView().append(Collections.singleton(svId),
-                new byte[payloadSize], null))
+        assertThatThrownBy(() -> getRuntime().getStreamsView().append(
+                new byte[payloadSize], null, svId))
                 .isInstanceOf(AppendException.class);
     }
 

@@ -9,7 +9,6 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -309,7 +308,7 @@ public class StreamViewTest extends AbstractViewTest {
         byte[] testPayload = "hello world".getBytes();
 
         // Generate a hole.
-        r.getSequencerView().nextToken(Collections.singleton(streamA), 1);
+        r.getSequencerView().next(streamA);
 
         // Write to the stream, and read back. The hole should be filled.
         IStreamView sv = r.getStreamsView().get(streamA);
@@ -337,14 +336,14 @@ public class StreamViewTest extends AbstractViewTest {
 
         //generate a stream hole
         TokenResponse tr =
-                r.getSequencerView().nextToken(Collections.singleton(streamA), 1);
+                r.getSequencerView().next(streamA);
 
         // read from an address that hasn't been written to
         // causing a hole fill
         r.getAddressSpaceView().read(tr.getToken().getTokenValue());
 
 
-        tr = r.getSequencerView().nextToken(Collections.singleton(streamA), 1);
+        tr = r.getSequencerView().next(streamA);
 
         // read from an address that hasn't been written to
         // causing a hole fill

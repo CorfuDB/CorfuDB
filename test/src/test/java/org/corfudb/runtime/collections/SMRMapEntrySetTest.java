@@ -6,7 +6,6 @@ import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -80,7 +79,7 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
         CountDownLatch l3 = new CountDownLatch(1);
 
         // Block until sequencer operational.
-        r.getSequencerView().nextToken(Collections.EMPTY_SET, 0);
+        r.getSequencerView().next();
 
         // first thread: create and manipulate map
         scheduleConcurrently(t -> {
