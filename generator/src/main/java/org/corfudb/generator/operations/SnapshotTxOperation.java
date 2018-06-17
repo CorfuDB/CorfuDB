@@ -5,7 +5,6 @@ import org.corfudb.generator.Correctness;
 import org.corfudb.generator.State;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
@@ -31,7 +30,7 @@ public class SnapshotTxOperation extends Operation {
             // Safety Hack for not having snapshot in the future
 
             long currentMax = state.getRuntime().getSequencerView()
-                    .nextToken(Collections.emptySet(), 0)
+                    .query()
                     .getToken().getTokenValue();
 
             long snapShotAddress = Long.min(trimMark + delta, currentMax);

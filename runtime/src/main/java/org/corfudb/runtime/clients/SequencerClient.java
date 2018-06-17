@@ -1,7 +1,7 @@
 package org.corfudb.runtime.clients;
 
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -40,7 +40,7 @@ public class SequencerClient extends AbstractClient {
      * @param numTokens Number of tokens to be reserved.
      * @return A completable future with the token response from the sequencer.
      */
-    public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens) {
+    public CompletableFuture<TokenResponse> nextToken(List<UUID> streamIDs, long numTokens) {
         return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(
                 new TokenRequest(numTokens, streamIDs)));
     }
@@ -53,7 +53,7 @@ public class SequencerClient extends AbstractClient {
      * @param conflictInfo Transaction resolution conflict parameters.
      * @return A completable future with the token response from the sequencer.
      */
-    public CompletableFuture<TokenResponse> nextToken(Set<UUID> streamIDs, long numTokens,
+    public CompletableFuture<TokenResponse> nextToken(List<UUID> streamIDs, long numTokens,
                                                       TxResolutionInfo conflictInfo) {
         return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(
                 new TokenRequest(numTokens, streamIDs, conflictInfo)));

@@ -1,13 +1,10 @@
 package org.corfudb.runtime.object.transactions;
 
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 import lombok.Getter;
@@ -17,12 +14,9 @@ import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
-import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
@@ -274,11 +268,13 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         }
 
         // Write to the transaction stream if transaction logging is enabled
-        Set<UUID> affectedStreams = new HashSet<>(getWriteSetInfo().getWriteSet()
-                .getEntryMap().keySet());
+        Set<UUID> affectedStreamsIds = new HashSet<>(getWriteSetInfo().getWriteSet().getEntryMap().keySet());
+
         if (this.builder.runtime.getObjectsView().isTransactionLogging()) {
-            affectedStreams.add(TRANSACTION_STREAM_ID);
+            affectedStreamsIds.add(TRANSACTION_STREAM_ID);
         }
+
+        UUID[] affectedStreams = affectedStreamsIds.toArray(new UUID[affectedStreamsIds.size()]);
 
         // Now we obtain a conditional address from the sequencer.
         // This step currently happens all at once, and we get an
@@ -298,11 +294,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         try {
             address = this.builder.runtime.getStreamsView()
                 .append(
-                    // a set of stream-IDs that contains the affected streams
-                    affectedStreams,
                     // a MultiObjectSMREntry that contains the update(s) to objects
                     collectWriteSetEntries(),
-                    txInfo
+                    txInfo,
+                    // a set of stream-IDs that contains the affected streams
+                    affectedStreams
                 );
         } catch (AppendException oe) {
             // We were overwritten (and the original snapshot is now conflicting),
@@ -414,8 +410,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // Otherwise, fetch a read token from the sequencer the linearize
             // ourselves against.
             long currentTail = builder.runtime
-                    .getSequencerView().nextToken(Collections.emptySet(),
-                            0).getToken().getTokenValue();
+                    .getSequencerView().query().getToken().getTokenValue();
             log.trace("SnapshotTimestamp[{}] {}", this, currentTail);
             return currentTail;
         }

@@ -6,7 +6,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Collections;
-import java.util.HashSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -32,7 +31,7 @@ public class SealIT extends AbstractIT{
         CorfuRuntime cr1 = createDefaultRuntime();
         CorfuRuntime cr2 = createDefaultRuntime();
 
-        Long beforeAddress = cr2.getSequencerView().nextToken(new HashSet<>(),1).getToken().getTokenValue();
+        Long beforeAddress = cr2.getSequencerView().next().getToken().getTokenValue();
 
         /* We will trigger a Paxos round, this is what will happen:
          *   1. Set our layout (same than before) with a new Epoch
@@ -67,7 +66,7 @@ public class SealIT extends AbstractIT{
          *
          * These steps get cr2 in the new epoch.
          */
-        Long afterAddress = cr2.getSequencerView().nextToken(new HashSet<>(),1).getToken().getTokenValue();
+        Long afterAddress = cr2.getSequencerView().next().getToken().getTokenValue();
         assertThat(cr2.getLayoutView().getCurrentLayout().getEpoch()).
             isEqualTo(cr1.getLayoutView().getCurrentLayout().getEpoch());
         assertThat(afterAddress).isEqualTo(beforeAddress+1);

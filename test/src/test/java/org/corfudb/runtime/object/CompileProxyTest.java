@@ -2,19 +2,15 @@ package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
 
-import java.util.Collections;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -52,8 +48,7 @@ public class CompileProxyTest extends AbstractViewTest {
         // read will be on a trimmed address
         final int numOfTokens = 10;
         String streamName = "s1";
-        rt.getSequencerView().nextToken(Collections.singleton(CorfuRuntime.getStreamID(streamName)),
-                numOfTokens);
+        rt.getSequencerView().next(CorfuRuntime.getStreamID(streamName));
 
         // Trim all the way up to the tail
         rt.getAddressSpaceView().prefixTrim(numOfTokens);
@@ -304,7 +299,7 @@ public class CompileProxyTest extends AbstractViewTest {
         int concurrency = PARAMETERS.CONCURRENCY_LOTS;
 
         // Blocking until sequencer becomes functional.
-        getDefaultRuntime().getSequencerView().nextToken(Collections.EMPTY_SET, 0);
+        getDefaultRuntime().getSequencerView().next();
 
         // schedule 'concurrency' number of threads,
         // each one put()'s a key with its thread index
@@ -371,7 +366,7 @@ public class CompileProxyTest extends AbstractViewTest {
         int concurrency = PARAMETERS.CONCURRENCY_LOTS;
 
         // Block until sequencer operational.
-        getDefaultRuntime().getSequencerView().nextToken(Collections.EMPTY_SET, 0);
+        getDefaultRuntime().getSequencerView().next();
 
         // set up 'concurrency' number of threads that concurrency update sharedCorfuCompound, each to a different value
         scheduleConcurrently(concurrency, t -> {
