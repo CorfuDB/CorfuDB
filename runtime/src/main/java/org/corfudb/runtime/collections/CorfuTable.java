@@ -161,7 +161,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
 
         CorfuTable.IndexRegistry<?, ?> EMPTY = new CorfuTable.IndexRegistry<Object, Object>() {
             @Override
-            public Optional<CorfuTable.Index<Object, Object, ? extends Comparable<?>>> get(CorfuTable.IndexName name) {
+            public <I extends Comparable<?>> Optional<CorfuTable.Index<Object, Object, I>> get(CorfuTable.IndexName name) {
                 return Optional.empty();
             }
 
@@ -177,7 +177,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
          * @param name name of the {@code IndexKey} previously registered.
          * @return the instance of {@link CorfuTable.IndexFunction} registered to the lookup name.
          */
-        Optional<CorfuTable.Index<K, V, ? extends Comparable<?>>> get(CorfuTable.IndexName name);
+        <I extends Comparable<?>> Optional<CorfuTable.Index<K, V, I>> get(CorfuTable.IndexName name);
 
         /**
          * Obtain a static {@link CorfuTable.IndexRegistry} with no registered {@link CorfuTable.IndexFunction}s.
