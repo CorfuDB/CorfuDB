@@ -427,8 +427,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Write cp #1 of 3
         if (write1) {
-            TokenResponse tokResp1 = r.getSequencerView().nextToken(Collections.singleton(streamId)
-                    , 0);
+            TokenResponse tokResp1 = r.getSequencerView().query(streamId);
             long addr1 = tokResp1.getToken().getTokenValue();
             mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1 + 1));
             CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,

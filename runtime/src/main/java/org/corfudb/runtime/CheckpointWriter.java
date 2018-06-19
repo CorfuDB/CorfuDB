@@ -2,15 +2,12 @@ package org.corfudb.runtime;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Iterators;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -179,7 +176,7 @@ public class CheckpointWriter<T extends Map> {
                 ImmutableMap.copyOf(this.mdkv);
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                 author, checkpointId, streamId, mdkv, null);
-        startAddress = sv.append(Collections.singleton(checkpointStreamID), cp, null);
+        startAddress = sv.append(cp, null, checkpointStreamID);
 
         postAppendFunc.accept(cp, startAddress);
         return startAddress;
@@ -235,7 +232,7 @@ public class CheckpointWriter<T extends Map> {
                 CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
                         author, checkpointId, streamId, mdkv, smrEntries);
 
-                long pos = sv.append(Collections.singleton(checkpointStreamID), cp, null);
+                long pos = sv.append(cp, null, checkpointStreamID);
 
                 postAppendFunc.accept(cp, pos);
                 continuationAddresses.add(pos);
@@ -261,7 +258,7 @@ public class CheckpointWriter<T extends Map> {
                 CheckpointEntry cp = new CheckpointEntry(CheckpointEntry
                         .CheckpointEntryType.CONTINUATION,
                         author, checkpointId, streamId, mdkv, smrEntries);
-                long pos = sv.append(Collections.singleton(checkpointStreamID), cp, null);
+                long pos = sv.append(cp, null, checkpointStreamID);
 
                 postAppendFunc.accept(cp, pos);
                 continuationAddresses.add(pos);
@@ -295,7 +292,7 @@ public class CheckpointWriter<T extends Map> {
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
                 author, checkpointId, streamId, mdkv, null);
 
-        endAddress = sv.append(Collections.singleton(checkpointStreamID), cp, null);
+        endAddress = sv.append(cp, null, checkpointStreamID);
 
         postAppendFunc.accept(cp, endAddress);
         return endAddress;
@@ -308,7 +305,7 @@ public class CheckpointWriter<T extends Map> {
      */
     public static long startGlobalSnapshotTxn(CorfuRuntime rt) {
         TokenResponse tokenResponse =
-                rt.getSequencerView().nextToken(Collections.EMPTY_SET, 0);
+                rt.getSequencerView().query();
         long globalTail = tokenResponse.getToken().getTokenValue();
         rt.getObjectsView().TXBuild()
                 .setType(TransactionType.SNAPSHOT)

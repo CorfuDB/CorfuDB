@@ -214,7 +214,7 @@ public class ClusterReconfigIT extends AbstractIT {
     private void verifyData(CorfuRuntime corfuRuntime) throws Exception {
 
         TokenResponse tokenResponse = corfuRuntime.getSequencerView()
-                .nextToken(Collections.singleton(CorfuRuntime.getStreamID("test")), 0);
+                .query(CorfuRuntime.getStreamID("test"));
         long lastAddress = tokenResponse.getTokenValue();
 
         Map<Long, LogData> map_0 = getAllNonEmptyData(corfuRuntime, "localhost:9000", lastAddress);

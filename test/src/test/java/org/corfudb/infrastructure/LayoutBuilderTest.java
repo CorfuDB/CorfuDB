@@ -4,6 +4,7 @@ import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.Layout.ReplicationMode;
 import org.corfudb.runtime.view.LayoutBuilder;
 import org.junit.Test;
 
@@ -42,6 +43,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .addSequencer(SERVERS.PORT_1)
                 .addSequencer(SERVERS.PORT_2)
                 .buildSegment()
+                .setReplicationMode(ReplicationMode.QUORUM_REPLICATION)
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_0)
                 .addLogUnit(SERVERS.PORT_2)
@@ -111,6 +113,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .addSequencer(SERVERS.PORT_1)
                 .addSequencer(SERVERS.PORT_2)
                 .buildSegment()
+                .setReplicationMode(ReplicationMode.QUORUM_REPLICATION)
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_2)
                 .addLogUnit(SERVERS.PORT_3)
@@ -143,6 +146,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .addLayoutServer(SERVERS.PORT_3)
                 .addSequencer(SERVERS.PORT_2)
                 .buildSegment()
+                .setReplicationMode(ReplicationMode.QUORUM_REPLICATION)
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_2)
                 .addLogUnit(SERVERS.PORT_3)

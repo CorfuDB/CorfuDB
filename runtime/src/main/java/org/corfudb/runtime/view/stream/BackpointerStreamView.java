@@ -1,6 +1,5 @@
 package org.corfudb.runtime.view.stream;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -68,7 +67,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                        Function<TokenResponse, Boolean> deacquisitionCallback) {
         // First, we get a token from the sequencer.
         TokenResponse tokenResponse = runtime.getSequencerView()
-                .nextToken(Collections.singleton(id), 1);
+                .next(id);
 
         // We loop forever until we are interrupted, since we may have to
         // acquire an address several times until we are successful.
@@ -106,9 +105,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 }
                 // Request a new token, informing the sequencer we were
                 // overwritten.
-                tokenResponse = runtime.getSequencerView()
-                        .nextToken(Collections.singleton(id),
-                             1);
+                tokenResponse = runtime.getSequencerView().next(id);
             } catch (StaleTokenException te) {
                 log.trace("Token grew stale occurred at {}", tokenResponse);
                 if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
@@ -117,10 +114,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 }
                 // Request a new token, informing the sequencer we were
                 // overwritten.
-                tokenResponse = runtime.getSequencerView()
-                        .nextToken(Collections.singleton(id),
-                                1);
-
+                tokenResponse = runtime.getSequencerView().next(id);
             }
         }
 
@@ -183,8 +177,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     @Override
     public boolean getHasNext(QueuedStreamContext context) {
         return  !context.readQueue.isEmpty()
-                || runtime.getSequencerView()
-                .nextToken(Collections.singleton(context.id), 0).getToken().getTokenValue()
+                || runtime.getSequencerView().query(context.id).getToken().getTokenValue()
                         > context.globalPointer;
     }
 
@@ -369,8 +362,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             try {
                 if (followBackpointers(checkpointId, context.readCpQueue,
                         runtime.getSequencerView()
-                                .nextToken(Collections.singleton(checkpointId), 0)
-                                .getToken().getTokenValue(),
+                                .query(checkpointId).getToken().getTokenValue(),
                         Address.NEVER_READ, d -> resolveCheckpoint(context, d, maxGlobal))) {
                     log.trace("Read_Fill_Queue[{}] Using checkpoint with {} entries",
                             this, context.readCpQueue.size());
@@ -410,8 +402,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         // If we don't have a larger token in resolved, or the request was for
         // a linearized read, fetch the token from the sequencer.
         if (latestTokenValue == null || maxGlobal == Address.MAX) {
-            latestTokenValue = runtime.getSequencerView()
-                    .nextToken(Collections.singleton(context.id), 0)
+            latestTokenValue = runtime.getSequencerView().query(context.id)
                     .getToken().getTokenValue();
             log.trace("Read_Fill_Queue[{}] Fetched tail {} from sequencer", this, latestTokenValue);
         }

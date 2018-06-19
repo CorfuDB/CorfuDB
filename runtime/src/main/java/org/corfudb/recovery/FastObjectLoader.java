@@ -2,7 +2,6 @@ package org.corfudb.recovery;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -249,7 +248,7 @@ public class FastObjectLoader {
     }
 
     private void findAndSetLogTail() {
-        logTail = runtime.getSequencerView().nextToken(Collections.emptySet(), 0).getTokenValue();
+        logTail = runtime.getSequencerView().query().getTokenValue();
     }
 
     private void resetAddressProcessed() {

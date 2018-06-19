@@ -441,12 +441,8 @@ public class ServerRestartIT extends AbstractIT {
 
         restartServer(corfuRuntime, DEFAULT_ENDPOINT);
 
-        TokenResponse tokenResponseA = corfuRuntime
-                .getSequencerView()
-                .nextToken(Collections.singleton(streamNameA), 1);
-        TokenResponse tokenResponseB = corfuRuntime
-                .getSequencerView()
-                .nextToken(Collections.singleton(streamNameB), 1);
+        TokenResponse tokenResponseA = corfuRuntime.getSequencerView().next(streamNameA);
+        TokenResponse tokenResponseB = corfuRuntime.getSequencerView().next(streamNameB);
 
         assertThat(tokenResponseA.getToken().getTokenValue()).isEqualTo(newGlobalTail + 1);
         assertThat(tokenResponseA.getBackpointerMap().get(streamNameA))
@@ -474,15 +470,14 @@ public class ServerRestartIT extends AbstractIT {
         final CorfuRuntime corfuRuntime = createDefaultRuntime();
 
         // wait for this server long enough to start (by requesting token service)
-        TokenResponse firsttr = corfuRuntime.getSequencerView().nextToken(Collections.emptySet(),
-                1);
+        TokenResponse firsttr = corfuRuntime.getSequencerView().next();
 
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
 
         corfuServerProcess = runCorfuServer();
 
         corfuRuntime.invalidateLayout();
-        TokenResponse tr = corfuRuntime.getSequencerView().nextToken(Collections.emptySet(), 1);
+        TokenResponse tr = corfuRuntime.getSequencerView().next();
 
         assertThat(tr.getEpoch())
                 .isEqualTo(1);
@@ -581,15 +576,15 @@ public class ServerRestartIT extends AbstractIT {
                     .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
 
             TokenResponse expectedTokenResponseA = sequencerClient
-                    .nextToken(Collections.singleton(streamNameA), 0)
+                    .nextToken(Collections.singletonList(streamNameA), 0)
                     .get();
 
             TokenResponse expectedTokenResponseB = sequencerClient
-                    .nextToken(Collections.singleton(streamNameB), 0)
+                    .nextToken(Collections.singletonList(streamNameB), 0)
                     .get();
 
             TokenResponse expectedGlobalTailResponse = sequencerClient
-                    .nextToken(Collections.emptySet(), 0)
+                    .nextToken(Collections.emptyList(), 0)
                     .get();
 
 
@@ -606,11 +601,11 @@ public class ServerRestartIT extends AbstractIT {
 
             // check tail recovery after restart
             TokenResponse tokenResponseA = sequencerClient
-                    .nextToken(Collections.singleton(streamNameA), 1)
+                    .nextToken(Collections.singletonList(streamNameA), 1)
                     .get();
 
             TokenResponse tokenResponseB = sequencerClient
-                    .nextToken(Collections.singleton(streamNameB), 1)
+                    .nextToken(Collections.singletonList(streamNameB), 1)
                     .get();
 
             assertThat(tokenResponseA.getTokenValue()).isEqualTo(expectedGlobalTailResponse
