@@ -82,7 +82,7 @@ public class LayoutServer extends AbstractServer {
         this.serverContext = serverContext;
 
         if (serverContext.installSingleNodeLayoutIfAbsent()) {
-            setLayoutInHistory(serverContext.getCurrentLayout());
+            setLayoutInHistory(getCurrentLayout());
         }
     }
 
@@ -341,7 +341,12 @@ public class LayoutServer extends AbstractServer {
 
 
     public Layout getCurrentLayout() {
-        return serverContext.getCurrentLayout();
+        Layout layout = serverContext.getCurrentLayout();
+        if (layout != null) {
+            return new Layout(layout);
+        } else {
+            return null;
+        }
     }
 
     /**
