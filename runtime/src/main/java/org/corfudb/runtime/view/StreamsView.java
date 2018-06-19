@@ -69,13 +69,13 @@ public class StreamsView extends AbstractView {
      * @param streamIDs    The streams to append to.
      * @param object       The object to append to each stream.
      * @param conflictInfo Conflict information for the sequencer to check.
+     * @param cacheOption  The caching mode for write/append
      * @return The address the entry was written to.
      * @throws TransactionAbortedException If the transaction was aborted by
      *                                     the sequencer.
      */
     public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
-                       @Nonnull UUID ... streamIDs) {
-
+                       @Nonnull CacheOption cacheOption, @Nonnull UUID ... streamIDs) {
         // Go to the sequencer, grab an initial token.
         TokenResponse tokenResponse = conflictInfo == null
                 ? runtime.getSequencerView().next(streamIDs) // Token w/o conflict info
@@ -112,7 +112,7 @@ public class StreamsView extends AbstractView {
 
             // Attempt to write to the log
             try {
-                runtime.getAddressSpaceView().write(tokenResponse, object);
+                runtime.getAddressSpaceView().write(tokenResponse, object, cacheOption);
                 // If we're here, we succeeded, return the acquired token
                 return tokenResponse.getTokenValue();
             } catch (OverwriteException oe) {
@@ -162,5 +162,15 @@ public class StreamsView extends AbstractView {
                 Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()),
                 ILogData.getSerializedSize(object));
         throw new AppendException();
+    }
+
+    /**
+     * Append to multiple streams and caches the result.
+     *
+     * @see StreamsView#append(Object, TxResolutionInfo, CacheOption, UUID...)
+     */
+    public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
+                       @Nonnull UUID ... streamIDs) {
+       return append(object, conflictInfo, CacheOption.WRITE_THROUGH, streamIDs);
     }
 }
