@@ -277,7 +277,7 @@ def count_id_table_ops_per_tx(access_ops, mutate_ops,table_id):
 def count_all_ops_time():
     '''
     Answers the query: how much time did a single call of each operation take on average?
-    Creates a pie chart and two bar charts
+    Creates a box plot and a bar chart
     '''
     print 7
     # Count total time taken by each op
@@ -288,67 +288,41 @@ def count_all_ops_time():
         else:
             counts[get_event_name(point)] += [nano_to_milli(get_duration(point))]
 
+    # Create box plot with entire distribution
+    fig = plt.figure()
+    plt.hold = True
+    boxes = []
+    for op in counts.keys():
+        boxes.append([counts[op]])
+    plt.boxplot(boxes, vert=0, sym='')
+
+    means = [np.mean(x) for x in boxes]
+    plt.scatter(means, np.arange(1, len(counts.keys()) + 1))
+    plt.yticks(np.arange(1, len(counts.keys()) + 1), counts.keys())
+    plt.xlim(left=-1)
+    plt.xlabel("Time (ms)")
+    plt.title("Time per Operation")
+
+    plt.savefig(output_path + "count_all_ops_time_boxplot.png", bbox_inches='tight')
+    plt.clf()
+
     # Average out time for each op
     total_time = 0
-    std = {}  # op name --> std dev
-
     for op in counts:  # counts: op name --> avg time taken per call of op
-        std[op] = np.std(counts[op])
         counts[op] = sum(counts[op]) / (len(counts[op]) * 1.0)
         total_time += counts[op]
 
-    # Create pie chart
+    # Sort values and labels in ascending order by value
     values = []
     labels = []
-    error = []
-    other = 0
     for key, value in sorted(counts.iteritems(), key=lambda (k, v): (v, k)):
-        if value / (1.0 * total_time) < 0.015:
-            other += value
-            continue
         labels += [key + "\n" + str(value) + " ms"]  # label = name of op + time taken by op (ms) [string]
         values += [value]  # value = time taken by op
-        error += [std[key]]
-    labels += ["Other\n" + str(other) + " ms"]
-    values += [other]
-    error += [0]
 
+    # Color Scheme
     colors = plt.cm.Set2(np.array([(i - len(labels) / 16) / (len(labels) * 2.0) for i in range(0, 2*len(labels), 2)]))
-    fig = plt.figure(figsize=[10, 10])
-    ax = fig.add_subplot(111)
 
-    pie_wedge_collection = ax.pie(values, colors=colors, labels=labels, pctdistance=0.7, radius=3, autopct='%1.1f%%')
-
-    plt.axis('equal')
-    for pie_wedge in pie_wedge_collection[0]:
-        pie_wedge.set_edgecolor('white')
-    fig.text(.5, .05, "Total Time: " + str(total_time) + " ms", ha='center', fontweight="bold")
-    plt.savefig(output_path + "count_all_ops_time.png", bbox_inches='tight')
-    plt.clf()
-
-    # Create bar graph with error
-    plt.rcdefaults()
-    fig, ax = plt.subplots()
-
-    labels = [l.split("\n")[0] for l in labels]
-    y_pos = np.arange(len(labels))
-
-    r = ax.barh(y_pos, values, xerr=error, align='center', color=colors, ecolor='black')
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(labels)
-    ax.invert_yaxis()  # labels read top-to-bottom
-    ax.set_xlabel('Time (ms)')
-    ax.set_title('Average Time per Operation')
-
-    for rect in r:
-        width = rect.get_width()
-        plt.text(rect.get_width() + 2, rect.get_y() + 0.5 * rect.get_height(),
-                 '%f' % width, ha='center', va='center')
-
-    plt.savefig(output_path + "count_all_ops_time_bar_error.png", bbox_inches='tight')
-    plt.clf()
-
-    # Create bar graph without error
+    # Create bar graph
     plt.rcdefaults()
     fig, ax = plt.subplots()
 
@@ -473,12 +447,11 @@ def count_reads():
 
 ### Display Results
 setup()
-count_active_threads()
-count_seq_calls()
-count_ops_per_tx()
-count_table_ops_per_tx(["containsKey"], ["put"])
-count_id_table_ops_per_tx(["containsKey"], ["put"], "7c4f2940-7893-3334-a6cb-7a87bf045c0d")
-count_all_ops()
+# count_active_threads()
+# count_seq_calls()
+# count_ops_per_tx()
+# count_table_ops_per_tx(["containsKey"], ["put"])
+# count_id_table_ops_per_tx(["containsKey"], ["put"], "7c4f2940-7893-3334-a6cb-7a87bf045c0d")
 count_all_ops_time()
-count_all_ops_time_by_tx()
-count_reads()
+# count_all_ops_time_by_tx()
+# count_reads()
