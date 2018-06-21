@@ -25,6 +25,7 @@ import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -176,10 +177,17 @@ public class CheckpointWriter<T extends Map> {
                 ImmutableMap.copyOf(this.mdkv);
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                 author, checkpointId, streamId, mdkv, null);
-        startAddress = sv.append(cp, null, checkpointStreamID);
+        startAddress = nonCachedAppend(cp, checkpointStreamID);
 
         postAppendFunc.accept(cp, startAddress);
         return startAddress;
+    }
+
+    /**
+     *  Append an object to a stream without caching the entries.
+     */
+    private long nonCachedAppend(Object object, UUID ... streamIDs) {
+        return sv.append(object, null, CacheOption.WRITE_AROUND, streamIDs);
     }
 
     /** Append zero or more CONTINUATION records to this
@@ -232,7 +240,7 @@ public class CheckpointWriter<T extends Map> {
                 CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
                         author, checkpointId, streamId, mdkv, smrEntries);
 
-                long pos = sv.append(cp, null, checkpointStreamID);
+                long pos = nonCachedAppend(cp, checkpointStreamID);
 
                 postAppendFunc.accept(cp, pos);
                 continuationAddresses.add(pos);
@@ -258,7 +266,7 @@ public class CheckpointWriter<T extends Map> {
                 CheckpointEntry cp = new CheckpointEntry(CheckpointEntry
                         .CheckpointEntryType.CONTINUATION,
                         author, checkpointId, streamId, mdkv, smrEntries);
-                long pos = sv.append(cp, null, checkpointStreamID);
+                long pos = nonCachedAppend(cp, checkpointStreamID);
 
                 postAppendFunc.accept(cp, pos);
                 continuationAddresses.add(pos);
@@ -292,7 +300,7 @@ public class CheckpointWriter<T extends Map> {
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.END,
                 author, checkpointId, streamId, mdkv, null);
 
-        endAddress = sv.append(cp, null, checkpointStreamID);
+        endAddress = nonCachedAppend(cp, checkpointStreamID);
 
         postAppendFunc.accept(cp, endAddress);
         return endAddress;
