@@ -40,6 +40,10 @@ def get_duration(entry):
     return int(entry.split("[dur]")[1].split()[0])
 
 
+def get_method_name(entry):
+    return entry.split("[method]")[1].split()[0]
+
+
 def nano_to_milli(time):
     return time / 1000000.0
 
@@ -274,6 +278,139 @@ def count_id_table_ops_per_tx(access_ops, mutate_ops,table_id):
     plt.clf()
 
 
+def count_all_ops():
+    '''
+    Answers the query: how many times was each operation called w.r.t. the total number of calls?
+    Creates a pie chart
+    '''
+    print 6
+    # Count number of times each operation was called
+    counts = {}  # op name --> count
+    for point in points:
+        if get_event_name(point) not in counts:
+            counts[get_event_name(point)] = 1
+        else:
+            counts[get_event_name(point)] += 1
+
+    # Sort values and labels in ascending order by value
+    values = []
+    labels = []
+    other = 0
+    total_count = sum(counts.values())
+    for key, value in sorted(counts.iteritems(), key=lambda (k, v): (v, k)):
+        if value / (1.0 * total_count) < 0.015:
+            other += value
+            continue
+        labels += [key + "\n(" + str(value) + ")"]  # label = name of op + num of occurrences [string]
+        values += [value]  # value = time taken by op
+    labels += ["Other" + "\n(" + str(other) + ")"]
+    values += [other]
+
+    # Create pie chart
+    colors = plt.cm.Set2(np.array([(i - len(counts) / 16) / (len(counts) * 2.0) for i in range(0, 2 * len(counts), 2)]))
+
+    fig = plt.figure(figsize=[10, 10])
+    ax = fig.add_subplot(111)
+    pie_wedge_collection = ax.pie(values, colors=colors, labels=labels, pctdistance=0.7, radius=3, autopct='%1.1f%%')
+    plt.axis('equal')
+    for pie_wedge in pie_wedge_collection[0]:
+        pie_wedge.set_edgecolor('white')
+    fig.text(.5, .05, "Total Count: " + str(total_count) + " ops", ha='center', fontweight="bold")
+
+    plt.savefig(output_path + "count_all_ops.png", bbox_inches='tight')
+    plt.clf()
+
+
+def count_all_methods():
+    '''
+    Answers the query: how many times was each method called w.r.t. the total number of calls?
+    Creates a pie chart
+    '''
+    print 6.5
+    # Count number of times each operation was called
+    counts = {}  # op name --> count
+    for point in points:
+        if "[method]" in point:
+            if get_method_name(point) not in counts:
+                counts[get_method_name(point)] = 1
+            else:
+                counts[get_method_name(point)] += 1
+
+    # Sort values and labels in ascending order by value
+    values = []
+    labels = []
+    other = 0
+    total_count = sum(counts.values())
+    for key, value in sorted(counts.iteritems(), key=lambda (k, v): (v, k)):
+        if value / (1.0 * total_count) < 0.015:
+            print(value)
+            other += value
+            continue
+        labels += [key + "\n(" + str(value) + ")"]  # label = name of op + num of occurrences [string]
+        values += [value]  # value = time taken by op
+    labels += ["Other" + "\n(" + str(other) + ")"]
+    values += [other]
+
+    # Create pie chart
+    colors = plt.cm.Set2(np.array([(i - len(counts) / 16) / (len(counts) * 2.0) for i in range(0, 2 * len(counts), 2)]))
+
+    fig = plt.figure(figsize=[10, 10])
+    ax = fig.add_subplot(111)
+    pie_wedge_collection = ax.pie(values, colors=colors, labels=labels, pctdistance=0.7, radius=3, autopct='%1.1f%%')
+    plt.axis('equal')
+    for pie_wedge in pie_wedge_collection[0]:
+        pie_wedge.set_edgecolor('white')
+    fig.text(.5, .05, "Total Count: " + str(total_count) + " ops", ha='center', fontweight="bold")
+
+    plt.savefig(output_path + "count_all_methods.png", bbox_inches='tight')
+    plt.clf()
+
+
+def count_all_methods_by_id(table_id):
+    '''
+    Answers the query: how many times was each method called for a given table w.r.t. the total number of calls?
+    Creates a pie chart
+    '''
+    print 6.75
+    # Count number of times each operation was called
+    counts = {}  # op name --> count
+    for point in points:
+        if table_id in point and "[method]" in point:
+            if get_method_name(point) not in counts:
+                counts[get_method_name(point)] = 1
+            else:
+                counts[get_method_name(point)] += 1
+
+    # Sort values and labels in ascending order by value
+    values = []
+    labels = []
+    other = 0
+    total_count = sum(counts.values())
+    for key, value in sorted(counts.iteritems(), key=lambda (k, v): (v, k)):
+        if value / (1.0 * total_count) < 0.015:
+            print(value)
+            other += value
+            continue
+        labels += [key + "\n(" + str(value) + ")"]  # label = name of op + num of occurrences [string]
+        values += [value]  # value = time taken by op
+    labels += ["Other" + "\n(" + str(other) + ")"]
+    values += [other]
+
+    # Create pie chart
+    colors = plt.cm.Set2(np.array([(i - len(counts) / 16) / (len(counts) * 2.0) for i in range(0, 2 * len(counts), 2)]))
+
+    fig = plt.figure(figsize=[10, 10])
+    ax = fig.add_subplot(111)
+    pie_wedge_collection = ax.pie(values, colors=colors, labels=labels, pctdistance=0.7, radius=3, autopct='%1.1f%%')
+    plt.axis('equal')
+    for pie_wedge in pie_wedge_collection[0]:
+        pie_wedge.set_edgecolor('white')
+    fig.text(.5, .05, "Total Count: " + str(total_count) + " ops", ha='center', fontweight="bold")
+
+    plt.savefig(output_path + "count_all_methods_by_id.png", bbox_inches='tight')
+    plt.clf()
+
+
 def count_all_ops_time():
     '''
     Answers the query: how much time did a single call of each operation take on average?
@@ -452,6 +589,9 @@ setup()
 # count_ops_per_tx()
 # count_table_ops_per_tx(["containsKey"], ["put"])
 # count_id_table_ops_per_tx(["containsKey"], ["put"], "7c4f2940-7893-3334-a6cb-7a87bf045c0d")
-count_all_ops_time()
+count_all_ops()
+count_all_methods()
+count_all_methods_by_id("7c4f2940-7893-3334-a6cb-7a87bf045c0d")
+# count_all_ops_time()
 # count_all_ops_time_by_tx()
 # count_reads()
