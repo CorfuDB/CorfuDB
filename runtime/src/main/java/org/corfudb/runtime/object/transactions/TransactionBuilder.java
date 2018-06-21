@@ -1,5 +1,7 @@
 package org.corfudb.runtime.object.transactions;
 
+import java.util.Collections;
+
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -37,6 +39,10 @@ public class TransactionBuilder {
      * to the builder.
      */
     public void begin() {
+        if (type == TransactionType.SNAPSHOT && snapshot < 0) {
+            snapshot = runtime.getSequencerView().nextToken(Collections.emptySet(), 0)
+                    .getTokenValue();
+        }
         TransactionalContext.newContext(type.get.apply(this));
     }
 }

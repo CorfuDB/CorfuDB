@@ -4,6 +4,8 @@ import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.collections.SMRMap;
 import org.junit.Test;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 /**
  * Created by mwei on 11/22/16.
  */
@@ -88,5 +90,31 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
         t(0, this::TXEnd);
         t(0, this::TXEnd);
 
+    }
+
+    /* Test if the default address for a snapshot transaction is the current tail */
+    @Test
+    public void snapshotTxnDefaultIsTailOfStream() {
+        final int NUM_ITEMS = 5;
+        SMRMap<String, Integer> map = (SMRMap<String, Integer>)
+                instantiateCorfuObject(
+                        new TypeToken<SMRMap<String, Integer>>() {
+                        },
+                        "A"
+                );
+
+        for (int i = 0; i < NUM_ITEMS; i++) {
+            map.put("key" + i, i);
+        }
+
+        // Intentionally omit .setSnapshot() on the builder.
+        getDefaultRuntime().getObjectsView().TXBuild()
+                .setType(TransactionType.SNAPSHOT)
+                .begin();
+        try {
+            assertThat(map.size()).isEqualTo(NUM_ITEMS);
+        } finally {
+            TXEnd();
+        }
     }
 }
