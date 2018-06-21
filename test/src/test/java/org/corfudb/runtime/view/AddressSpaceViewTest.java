@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
@@ -82,6 +83,37 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 .matchesDataAtAddress(1, "1".getBytes());
         LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_2))
                 .isEmptyAtAddress(0);
+    }
+
+    @Test
+    public void testUncachedWrites() {
+        CorfuRuntime r = getRuntime().connect();
+
+        final long epoch = r.getLayoutView().getLayout().getEpoch();
+
+        // Write two entries, with different cache options
+        r.getAddressSpaceView().write(new TokenResponse(0, epoch,
+                Collections.singletonMap(CorfuRuntime.getStreamID("stream1"), Address.NO_BACKPOINTER)),
+                "payload".getBytes(), CacheOption.WRITE_THROUGH);
+
+        r.getAddressSpaceView().write(new TokenResponse(1, epoch,
+                        Collections.singletonMap(CorfuRuntime.getStreamID("stream1"), Address.NO_BACKPOINTER)),
+                "payload".getBytes(), CacheOption.WRITE_AROUND);
+
+        // write with the default write method
+        r.getAddressSpaceView().write(new TokenResponse(2, epoch,
+                        Collections.singletonMap(CorfuRuntime.getStreamID("stream1"), Address.NO_BACKPOINTER)),
+                "payload".getBytes());
+
+        // Verify that write to address 0 is cached and that the write to address 1 isn't cached
+
+        LoadingCache<Long, ILogData> clientCache = r.getAddressSpaceView().getReadCache();
+
+        assertThat(clientCache.getIfPresent(0L)).isNotNull();
+        assertThat(clientCache.getIfPresent(1L)).isNull();
+        // Since the default behavior of write is to cache entries, address 2 should
+        // be cached
+        assertThat(clientCache.getIfPresent(2L)).isNotNull();
     }
 
     @Test
