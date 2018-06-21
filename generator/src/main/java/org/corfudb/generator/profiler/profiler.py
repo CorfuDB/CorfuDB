@@ -274,28 +274,6 @@ def count_id_table_ops_per_tx(access_ops, mutate_ops,table_id):
     plt.clf()
 
 
-def count_all_ops():
-    '''
-    Answers the query: how many times was each operation called w.r.t. the total number of calls?
-    Creates a pie chart
-    '''
-    print 6
-    # Count number of times each operation was called
-    counts = {}  # op name --> count
-    for point in points:
-        if get_event_name(point) not in counts:
-            counts[get_event_name(point)] = 1
-        else:
-            counts[get_event_name(point)] += 1
-
-    # Create pie chart
-    plt.pie(counts.values(), labels=counts.keys(), colors=['gold', 'yellowgreen', 'lightcoral', 'lightskyblue'],
-            autopct='%1.1f%%')
-    plt.axis('equal')
-    plt.savefig(output_path + "count_all_ops.png", bbox_inches='tight')
-    plt.clf()
-
-
 def count_all_ops_time():
     '''
     Answers the query: how much time did a single call of each operation take on average?
@@ -495,12 +473,12 @@ def count_reads():
 
 ### Display Results
 setup()
-# count_active_threads()
-# count_seq_calls()
-# count_ops_per_tx()
-# count_table_ops_per_tx(["containsKey"], ["put"])
-# count_id_table_ops_per_tx(["containsKey"], ["put"], "7c4f2940-7893-3334-a6cb-7a87bf045c0d")
-# count_all_ops()
+count_active_threads()
+count_seq_calls()
+count_ops_per_tx()
+count_table_ops_per_tx(["containsKey"], ["put"])
+count_id_table_ops_per_tx(["containsKey"], ["put"], "7c4f2940-7893-3334-a6cb-7a87bf045c0d")
+count_all_ops()
 count_all_ops_time()
-# count_all_ops_time_by_tx()
-# count_reads()
+count_all_ops_time_by_tx()
+count_reads()
