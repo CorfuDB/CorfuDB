@@ -111,7 +111,7 @@ def count_seq_calls():
 def count_ops_per_tx():
     '''
     Answers the query: how many operations are performed per transaction?
-    Creates a bar chart
+    Creates a histogram
     '''
     print 3
     # Count number of ops in every transaction
@@ -136,14 +136,28 @@ def count_ops_per_tx():
     x = num_num_ops.keys()
     y = num_num_ops.values()
 
-    # Create bar chart
-    width = 1 / 1.5
-    plt.bar(x, y, width, color="blue")
-    plt.title("Num Ops per Transaction")
-    plt.xlabel("Num Ops")
-    plt.ylabel("Num Txs")
+    # Create histogram
+    data = []
+    for num in num_num_ops:
+        for i in range(num_num_ops[num]):
+            data += [num]
+    weights = np.ones_like(data) / float(len(data))
+    plt.hist(data, weights=weights, facecolor='limegreen')
+
+    plt.xlabel('Num Ops')
+    plt.ylabel('Frequency')
+    plt.title('Num Ops per Transaction')
+    plt.grid(True)
     plt.savefig(output_path + "count_ops_per_tx.png", bbox_inches='tight')
     plt.clf()
+
+
+def count_table_ops():
+    '''
+    Answers query: how many read/write table operations are performed on each table?
+    Creates a horizontal stacked bar chart
+    '''
+    print 3.5
 
 
 def count_table_ops_per_tx(access_ops, mutate_ops):  # access_ops, mutate_ops = list of strings with names of ops
@@ -326,7 +340,7 @@ def count_all_methods():
     Answers the query: how many times was each method called w.r.t. the total number of calls?
     Creates a pie chart
     '''
-    print 6.5
+    print 7
     # Count number of times each operation was called
     counts = {}  # op name --> count
     for point in points:
@@ -366,12 +380,57 @@ def count_all_methods():
     plt.clf()
 
 
+def count_all_methods_tx():
+    '''
+    Answers the query: how many times was each method called in a transaction w.r.t. the total number of calls?
+    Creates a pie chart
+    '''
+    print 8
+    # Count number of times each operation was called
+    counts = {}  # op name --> count
+    for point in points:
+        if "(tx)" in point and "[method]" in point:
+            if get_method_name(point) not in counts:
+                counts[get_method_name(point)] = 1
+            else:
+                counts[get_method_name(point)] += 1
+
+    # Sort values and labels in ascending order by value
+    values = []
+    labels = []
+    other = 0
+    total_count = sum(counts.values())
+    for key, value in sorted(counts.iteritems(), key=lambda (k, v): (v, k)):
+        if value / (1.0 * total_count) < 0.015:
+            print(value)
+            other += value
+            continue
+        labels += [key + "\n(" + str(value) + ")"]  # label = name of op + num of occurrences [string]
+        values += [value]  # value = time taken by op
+    labels += ["Other" + "\n(" + str(other) + ")"]
+    values += [other]
+
+    # Create pie chart
+    colors = plt.cm.Set2(np.array([(i - len(counts) / 16) / (len(counts) * 2.0) for i in range(0, 2 * len(counts), 2)]))
+
+    fig = plt.figure(figsize=[10, 10])
+    ax = fig.add_subplot(111)
+    pie_wedge_collection = ax.pie(values, colors=colors, labels=labels, pctdistance=0.7, radius=3, autopct='%1.1f%%')
+    plt.axis('equal')
+    for pie_wedge in pie_wedge_collection[0]:
+        pie_wedge.set_edgecolor('white')
+    fig.text(.5, .05, "Total Count: " + str(total_count) + " ops", ha='center', fontweight="bold")
+
+    plt.savefig(output_path + "count_all_methods_tx.png", bbox_inches='tight')
+    plt.clf()
+
+
 def count_all_methods_by_id(table_id):
     '''
     Answers the query: how many times was each method called for a given table w.r.t. the total number of calls?
     Creates a pie chart
     '''
-    print 6.75
+    print 9
     # Count number of times each operation was called
     counts = {}  # op name --> count
     for point in points:
@@ -416,7 +475,7 @@ def count_all_ops_time():
     Answers the query: how much time did a single call of each operation take on average?
     Creates a box plot and a bar chart
     '''
-    print 7
+    print 10
     # Count total time taken by each op
     counts = {}  # op name --> list of durations (ms)
     for point in points:
@@ -488,7 +547,7 @@ def count_all_ops_time_by_tx():
     w.r.t. the total runtime of all transactions?
     Creates a pie chart and two bar charts
     '''
-    print 8
+    print 11
     # Count total time taken by each op w/i each tx
     # NOT CORRECT for same reason as above!
     txs = []  # list of lists, txs[i] = np.array of how much time each op takes in tx i
@@ -540,7 +599,7 @@ def count_reads():
     Answers the query: how many reads (both tx and non-tx) are done per millisecond?
     Creates a scatter plot, with both tx reads and non-tx reads
     '''
-    print 9
+    print 12
     # Count tx reads
     counts_tx = {}  # ms interval --> count of tx reads
     for point in points:
@@ -586,12 +645,13 @@ def count_reads():
 setup()
 # count_active_threads()
 # count_seq_calls()
-# count_ops_per_tx()
+count_ops_per_tx()
 # count_table_ops_per_tx(["containsKey"], ["put"])
 # count_id_table_ops_per_tx(["containsKey"], ["put"], "7c4f2940-7893-3334-a6cb-7a87bf045c0d")
-count_all_ops()
-count_all_methods()
-count_all_methods_by_id("7c4f2940-7893-3334-a6cb-7a87bf045c0d")
+# count_all_ops()
+# count_all_methods()
+# count_all_methods_tx()
+# count_all_methods_by_id("7c4f2940-7893-3334-a6cb-7a87bf045c0d")
 # count_all_ops_time()
 # count_all_ops_time_by_tx()
 # count_reads()
