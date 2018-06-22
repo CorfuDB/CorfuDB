@@ -332,7 +332,7 @@ public class CorfuRuntime {
          * an NIO based implementation is used.
          */
         @Default
-        ChannelImplementation socketType = ChannelImplementation.NIO;
+        ChannelImplementation socketType = ChannelImplementation.AUTO;
 
         /**
          * Number of retries to reconnect to an unresponsive system before invoking the
