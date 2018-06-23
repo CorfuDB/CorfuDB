@@ -38,7 +38,7 @@ public interface ICorfuPayload<T> {
         T construct(ByteBuf buf);
     }
 
-    ConcurrentHashMap<Class<?>, PayloadConstructor<?>>
+    static ConcurrentHashMap<Class<?>, PayloadConstructor<?>>
             constructorMap = new ConcurrentHashMap<>(
                     ImmutableMap.<Class<?>, PayloadConstructor<?>>builder()
                 .put(Byte.class, ByteBuf::readByte)

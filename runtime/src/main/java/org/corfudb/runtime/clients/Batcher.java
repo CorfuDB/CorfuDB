@@ -19,7 +19,7 @@ public class Batcher {
 
     static void flusher() {
 
-        final int batchSize = 300;
+        final int batchSize = 5000;
         int i = 0;
         Set<Channel> channelSet = new HashSet<>(5);
         processing = true;
@@ -44,9 +44,8 @@ public class Batcher {
 
     public static void writeAndFlush(Channel channel, Object message) {
         queue.add(new TaskItem(channel, message));
-        if (!processing) {
+
             channel.pipeline().lastContext().executor().execute(Batcher::flusher);
-        }
     }
     
     @Data
