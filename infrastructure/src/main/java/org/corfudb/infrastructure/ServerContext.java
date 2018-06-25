@@ -424,8 +424,22 @@ public class ServerContext implements AutoCloseable {
      *
      * @return The last persisted layout
      */
-    public synchronized Layout getManagementLayout() {
+    public Layout getManagementLayout() {
         return dataStore.get(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT);
+    }
+
+    /**
+     * Fetches and creates a copy of the Management Layout from the local datastore.
+     *
+     * @return Copy of the management layout from the datastore.
+     */
+    public Layout copyManagementLayout() {
+        Layout l = getManagementLayout();
+        if (l != null) {
+            return new Layout(l);
+        } else {
+            return null;
+        }
     }
 
     /** Get a new "boss" group, which services (accepts) incoming connections.
