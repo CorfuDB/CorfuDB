@@ -1,8 +1,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import os as os
 
-input_path = "/Users/vshriya/Desktop/current/CorfuDB/test/client-1529017385323.log"
-output_path = "results/shriya/"
+#input_path = "/Users/vshriya/Desktop/current/CorfuDB/test/client-1529017385323.log"
+input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/generator/src/main/java/org/corfudb/generator/profiler/data/client-1524272351029.log"
+input_directory = "/Users/vshriya/Desktop/current/CorfuDB/test/my_files"
+output_path = "results/shriya/new/"
 points = []  # all data points, aka each entry in log files
 all_ops = []  # all operations mentioned in log files
 
@@ -19,6 +22,26 @@ def setup():
             all_ops.append(get_event_name(point))
 
     # sort points by start time
+    points.sort(key=lambda x: get_time_stamp(x))
+
+def setup_all():
+    global points, all_ops
+
+    # open file and populate global vars
+    for subdir, dirs, files in os.walk(input_directory):
+        for file in files:
+            # print os.path.join(subdir, file)
+            filepath = subdir + os.sep + file
+            print(filepath)
+
+            f = open(filepath)
+            for point in f.readlines():
+                points.append(point)
+                if get_event_name(point) not in all_ops:
+                    all_ops.append(get_event_name(point))
+
+    # sort points by start time
+    print(len(points))
     points.sort(key=lambda x: get_time_stamp(x))
 
 
@@ -158,6 +181,46 @@ def count_table_ops():
     Creates a horizontal stacked bar chart
     '''
     print 3.5
+
+    counts = {} # table_id --> {op --> count}
+    for point in points:
+        if "[id]" in point or "[ids]" in points:
+            if get_table_ID(point) not in counts:
+                counts[get_table_ID(point)] = {}
+            if get_event_name(point) not in counts[get_table_ID(point)]:
+                counts[get_table_ID(point)][get_event_name(point)] = 1
+            else:
+                counts[get_table_ID(point)][get_event_name(point)] += 1
+
+    # WIP!!!!!
+
+    num_set = [{'Language': 75, 'Science': 88, 'Math': 96},
+               {'Language': 71, 'Science': 95, 'Math': 92},
+               {'Language': 75, 'Science': 90, 'Math': 89}]
+
+    lan_guage = [['Language', 'Science', 'Math'],
+                 ['Science', 'Math', 'Language'],
+                 ['Math', 'Language', 'Science']]
+    colors = ["r", "g", "b"]
+    names = sorted(num_set[0].keys())
+    values = np.array([[data[name] for name in order] for data, order in zip(num_set, lan_guage)])
+    lefts = np.insert(np.cumsum(values, axis=1), 0, 0, axis=1)[:, :-1]
+    orders = np.array(lan_guage)
+    bottoms = np.arange(len(lan_guage))
+
+    for name, color in zip(names, colors):
+        idx = np.where(orders == name)
+        value = values[idx]
+        left = lefts[idx]
+        plt.bar(left=left, height=0.8, width=value, bottom=bottoms,
+                color=color, orientation="horizontal", label=name)
+    plt.yticks(bottoms + 0.4, ["Student-%d" % (t + 1) for t in bottoms])
+    plt.legend(loc="best", bbox_to_anchor=(1.0, 1.00))
+    plt.subplots_adjust(right=0.75)
+    # Turn on the grid
+    plt.minorticks_on()
+    plt.grid(which='major', linestyle='-', linewidth='0.5', color='green')
+    plt.grid(which='minor', linestyle=':', linewidth='0.5', color='black')
 
 
 def count_table_ops_per_tx(access_ops, mutate_ops):  # access_ops, mutate_ops = list of strings with names of ops
@@ -488,13 +551,18 @@ def count_all_ops_time():
     fig = plt.figure()
     plt.hold = True
     boxes = []
-    for op in counts.keys():
-        boxes.append([counts[op]])
+    # for op in counts.keys():
+    #     boxes.append([counts[op]])
+    # plt.boxplot(boxes, vert=0, sym='')
+    yticks = []
+    for key, value in sorted(counts.iteritems(), key=lambda (k, v): -1 * np.mean(v)):
+        boxes.append([counts[key]])
+        yticks.append(key)
     plt.boxplot(boxes, vert=0, sym='')
 
     means = [np.mean(x) for x in boxes]
     plt.scatter(means, np.arange(1, len(counts.keys()) + 1))
-    plt.yticks(np.arange(1, len(counts.keys()) + 1), counts.keys())
+    plt.yticks(np.arange(1, len(counts.keys()) + 1), yticks)
     plt.xlim(left=-1)
     plt.xlabel("Time (ms)")
     plt.title("Time per Operation")
@@ -642,16 +710,18 @@ def count_reads():
 
 
 ### Display Results
+#setup_all()
 setup()
 # count_active_threads()
 # count_seq_calls()
-count_ops_per_tx()
+# count_ops_per_tx()
+# count_table_ops()
 # count_table_ops_per_tx(["containsKey"], ["put"])
 # count_id_table_ops_per_tx(["containsKey"], ["put"], "7c4f2940-7893-3334-a6cb-7a87bf045c0d")
 # count_all_ops()
 # count_all_methods()
 # count_all_methods_tx()
 # count_all_methods_by_id("7c4f2940-7893-3334-a6cb-7a87bf045c0d")
-# count_all_ops_time()
+count_all_ops_time()
 # count_all_ops_time_by_tx()
 # count_reads()
