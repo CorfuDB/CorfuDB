@@ -55,6 +55,10 @@ def get_thread_ID(entry):
     return int(entry.split()[1])
 
 
+def get_table_ID(entry):
+    return entry.split("[id]")[1].split()[0]
+
+
 def get_event_name(entry):
     return entry.split()[3].split()[0]
 
@@ -136,7 +140,7 @@ def count_seq_calls():
 def count_ops_per_tx():
     '''
     Answers the query: how many operations are performed per transaction?
-    Creates a histogram
+    Creates a histogram and a box plot
     '''
     print 3
     # Count number of ops in every transaction
@@ -146,13 +150,25 @@ def count_ops_per_tx():
         if get_event_name(point) == "TXBegin":
             counts[get_thread_ID(point)] = 0
         elif get_event_name(point) == "TXEnd":
-            if get_thread_ID(point) not in counts:
-                print("weird...")
-                continue
             num_ops += [counts[get_thread_ID(point)]]
             counts[get_thread_ID(point)] = 0
         elif get_thread_ID(point) in counts:
             counts[get_thread_ID(point)] += 1
+
+    # Create box plot
+    bp_dict = plt.boxplot(num_ops, vert=0, sym='k.')
+
+    # Label median
+    x, y = bp_dict['medians'][0].get_xydata()[1]  # top of median line
+    plt.text(x, y + 0.01, '%.1f' % x, horizontalalignment='center')  # draw above, centered
+
+    # Plot/label mean
+    plt.scatter(np.mean(num_ops), [1], color='red')
+    plt.text(np.mean(num_ops), (1 + 0.01), '%.1f' % np.mean(num_ops), horizontalalignment='center', fontsize=12)
+
+    plt.xscale('log')
+    plt.savefig(output_path + "count_ops_per_tx_boxplot.png", bbox_inches='tight')
+    plt.clf()
 
     # Count frequency of each number of ops
     num_num_ops = {}  # number --> number of times that number appears
@@ -170,7 +186,7 @@ def count_ops_per_tx():
         for i in range(num_num_ops[num]):
             data += [num]
     weights = np.ones_like(data) / float(len(data))
-    plt.hist(data, weights=weights, facecolor='limegreen')
+    plt.hist(data, weights=weights, facecolor='#a7d656')
 
     plt.xlabel('Num Ops')
     plt.ylabel('Frequency')
@@ -183,9 +199,9 @@ def count_ops_per_tx():
 def count_avg_time_per_tx():
     '''
     Answers the query: how much time, on average, does a transaction take?
-    Creates a boxplot
+    Creates a box plot
     '''
-    print 3.25
+    print 4
     # Count number of ops in every transaction
     counts = {}  # thread num --> count of ops (in one tx in that thread)
     times = []  # list of number of ops taken by each tx
@@ -197,61 +213,79 @@ def count_avg_time_per_tx():
             counts[get_thread_ID(point)] = 0
 
     # Create boxplot
-    plt.boxplot(times, vert=0, sym='k.')
-    plt.scatter(np.mean(times), [1], color='red')
-    plt.xscale('log')
-    print(sorted(times))
+    bp_dict = plt.boxplot(times, vert=0, sym='k.')
 
+    # Label median
+    x, y = bp_dict['medians'][0].get_xydata()[1]  # top of median line
+    plt.text(x, y + 0.01, '%.1f' % x, horizontalalignment='center')  # draw above, centered
+
+    # Plot/label mean
+    plt.scatter(np.mean(times), [1], color='red')
+    plt.text(np.mean(times), (1 + 0.01), '%.1f' % np.mean(times), horizontalalignment='center', fontsize=12)
+
+    plt.xscale('log')
     plt.savefig(output_path + "count_avg_time_per_tx_boxplot.png", bbox_inches='tight')
     plt.clf()
 
 
-def count_table_ops():
+def count_table_ops(access_ops, mutate_ops):  # access_ops, mutate_ops = list of strings with names of ops
     '''
     Answers query: how many read/write table operations are performed on each table?
     Creates a horizontal stacked bar chart
     '''
-    print 3.5
-
-    counts = {} # table_id --> {op --> count}
+    print 5
+    # Count number of access/mutate ops for each table
+    counts = {}  # table_id --> [access ops count, mutate ops count]
     for point in points:
-        if "[id]" in point or "[ids]" in points:
+        if "[method]" in point:
             if get_table_ID(point) not in counts:
-                counts[get_table_ID(point)] = {}
-            if get_event_name(point) not in counts[get_table_ID(point)]:
-                counts[get_table_ID(point)][get_event_name(point)] = 1
-            else:
-                counts[get_table_ID(point)][get_event_name(point)] += 1
+                counts[get_table_ID(point)] = [0, 0]
+            if get_method_name(point) in access_ops:
+                counts[get_table_ID(point)][0] += 1
+            if get_method_name(point) in mutate_ops:
+                counts[get_table_ID(point)][1] += 1
 
-    # WIP!!!!!
+    # Process counts dict to make suitable for bar chart
+    tables = counts.keys()
+    labels = ["access", "mutate"]
 
-    num_set = [{'Language': 75, 'Science': 88, 'Math': 96},
-               {'Language': 71, 'Science': 95, 'Math': 92},
-               {'Language': 75, 'Science': 90, 'Math': 89}]
+    access_ops_counts = np.array([counts[table_id][0] for table_id in counts.keys()])
+    mutate_ops_counts = np.array([counts[table_id][1] for table_id in counts.keys()])
+    data = np.array([access_ops_counts, mutate_ops_counts])
 
-    lan_guage = [['Language', 'Science', 'Math'],
-                 ['Science', 'Math', 'Language'],
-                 ['Math', 'Language', 'Science']]
-    colors = ["r", "g", "b"]
-    names = sorted(num_set[0].keys())
-    values = np.array([[data[name] for name in order] for data, order in zip(num_set, lan_guage)])
-    lefts = np.insert(np.cumsum(values, axis=1), 0, 0, axis=1)[:, :-1]
-    orders = np.array(lan_guage)
-    bottoms = np.arange(len(lan_guage))
+    # Create bar chart
+    y_pos = np.arange(len(tables))
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111)
 
-    for name, color in zip(names, colors):
-        idx = np.where(orders == name)
-        value = values[idx]
-        left = lefts[idx]
-        plt.bar(left=left, height=0.8, width=value, bottom=bottoms,
-                color=color, orientation="horizontal", label=name)
-    plt.yticks(bottoms + 0.4, ["Student-%d" % (t + 1) for t in bottoms])
-    plt.legend(loc="best", bbox_to_anchor=(1.0, 1.00))
-    plt.subplots_adjust(right=0.75)
-    # Turn on the grid
-    plt.minorticks_on()
-    plt.grid(which='major', linestyle='-', linewidth='0.5', color='green')
-    plt.grid(which='minor', linestyle=':', linewidth='0.5', color='black')
+    colors = plt.cm.Set2(np.array([(i - len(counts) / 16) / (len(counts) * 2.0) for i in range(0, 2 * len(counts), 2)]))
+
+    patch_handles = []
+    left = np.zeros(len(tables))  # left alignment of data starts at zero
+    for i, d in enumerate(data):
+        print(i, d)
+        patch_handles.append(ax.barh(y_pos, d,
+                                     color=colors[i % len(colors)], align='center',
+                                     left=left, label=labels[i]))
+        # accumulate the left-hand offsets
+        left += d
+
+    # go through all of the bar segments and annotate
+    for j in xrange(len(patch_handles)):
+        for i, patch in enumerate(patch_handles[j].get_children()):
+            print(patch_handles[j].get_children())
+            bl = patch.get_xy()
+            x = 0.5 * patch.get_width() + bl[0]
+            y = 0.5 * patch.get_height() + bl[1]
+            ax.text(x, y, data[j, i], ha='center')
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(tables)
+    ax.set_xlabel('Count of Ops')
+    ax.set_ylabel('Table ID')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+
+    plt.savefig(output_path + "count_table_ops.png", bbox_inches='tight')
+    plt.clf()
 
 
 def count_table_ops_per_tx(access_ops, mutate_ops):  # access_ops, mutate_ops = list of strings with names of ops
@@ -259,7 +293,7 @@ def count_table_ops_per_tx(access_ops, mutate_ops):  # access_ops, mutate_ops = 
     Answers query: how many read/write table operations are performed per transaction?
     Creates a double bar graph
     '''
-    print 4
+    print 6
     counts_access = {}  # thread num --> count of access ops
     counts_mutate = {}  # thread num --> count of mutate ops
     num_access_ops = []  # contains total number of access ops in each tx
@@ -788,9 +822,9 @@ def count_reads():
 setup()
 # count_active_threads()
 # count_seq_calls()
-# count_avg_time_per_tx()
-# count_ops_per_tx()
-count_table_ops()
+count_ops_per_tx()
+count_avg_time_per_tx()
+count_table_ops(["containsKey"], ["put"])
 # count_table_ops_per_tx(["containsKey"], ["put"])
 # count_id_table_ops_per_tx(["containsKey"], ["put"], "7c4f2940-7893-3334-a6cb-7a87bf045c0d")
 # count_all_ops()
