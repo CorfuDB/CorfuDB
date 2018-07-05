@@ -68,7 +68,7 @@ public class MultiCheckpointWriter<T extends Map> {
      */
 
     public long appendCheckpoints(CorfuRuntime rt, String author,
-                                  BiConsumer<CheckpointEntry,Long> postAppendFunc)
+                                  BiConsumer<CheckpointEntry, Long> postAppendFunc)
             throws Exception {
         long globalAddress = CheckpointWriter.startGlobalSnapshotTxn(rt);
         log.trace("appendCheckpoints: author '{}' at globalAddress {} begins",
@@ -80,28 +80,21 @@ public class MultiCheckpointWriter<T extends Map> {
             for (ICorfuSMR<T> map : maps) {
                 UUID streamId = map.getCorfuStreamID();
                 final long mapCpStart = System.currentTimeMillis();
-                while (true) {
-                    CheckpointWriter<T> cpw = new CheckpointWriter(rt, streamId, author, (T) map);
-                    cpw.setEnablePutAll(enablePutAll);
-                    ISerializer serializer =
-                            ((CorfuCompileProxy<Map>) map.getCorfuSMRProxy())
-                                    .getSerializer();
-                    cpw.setSerializer(serializer);
-                    cpw.setPostAppendFunc(postAppendFunc);
-                    log.trace("appendCheckpoints: checkpoint map {} begin",
-                            Utils.toReadableId(map.getCorfuStreamID()));
-                    try {
-                        List<Long> addresses = cpw.appendCheckpoint();
-                        log.trace("appendCheckpoints: checkpoint map {} end",
-                                Utils.toReadableId(map.getCorfuStreamID()));
-                        checkpointLogAddresses.addAll(addresses);
-                        break;
-                    } catch (TransactionAbortedException ae) {
-                        log.warn("appendCheckpoints: checkpoint map {} "
-                                        + "TransactionAbortedException, retry",
-                                Utils.toReadableId(map.getCorfuStreamID()));
-                    }
-                }
+
+                CheckpointWriter<T> cpw = new CheckpointWriter(rt, streamId, author, (T) map);
+                cpw.setEnablePutAll(enablePutAll);
+                ISerializer serializer =
+                        ((CorfuCompileProxy<Map>) map.getCorfuSMRProxy())
+                                .getSerializer();
+                cpw.setSerializer(serializer);
+                cpw.setPostAppendFunc(postAppendFunc);
+                log.trace("appendCheckpoints: checkpoint map {} begin",
+                        Utils.toReadableId(map.getCorfuStreamID()));
+                List<Long> addresses = cpw.appendCheckpoint();
+                log.trace("appendCheckpoints: checkpoint map {} end",
+                        Utils.toReadableId(map.getCorfuStreamID()));
+                checkpointLogAddresses.addAll(addresses);
+
                 final long mapCpEnd = System.currentTimeMillis();
 
                 log.info("appendCheckpoints: took {} ms to checkpoint map {}",
