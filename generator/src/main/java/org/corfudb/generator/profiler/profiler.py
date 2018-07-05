@@ -1,11 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os as os
+from scipy import stats
 
-#input_path = "/Users/vshriya/Desktop/current/CorfuDB/test/client-1529017385323.log"
-input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/generator/src/main/java/org/corfudb/generator/profiler/data/client-1524272351029.log"
+input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/test/client-1529017385323.log"
+#input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/generator/src/main/java/org/corfudb/generator/profiler/data/client-1524272351029.log"
 input_directory = "/Users/vshriya/Desktop/current/CorfuDB/test/my_files"
-output_path = "results/shriya/new/"
+output_path = "results/shriya/jul5/"
 points = []  # all data points, aka each entry in log files
 all_ops = []  # all operations mentioned in log files
 
@@ -23,6 +24,7 @@ def setup():
 
     # sort points by start time
     points.sort(key=lambda x: get_time_stamp(x))
+
 
 def setup_all():
     global points, all_ops
@@ -93,7 +95,7 @@ def count_active_threads():
         x += [key - min(counts.keys())]
         y += [len(counts[key])]
 
-    plt.scatter(x, y)
+    plt.scatter(x, y, alpha=0.5)
     plt.title("Number of Active Threads vs. Time Elapsed")
     plt.xlabel("Time Elapsed (ms)")
     plt.ylabel("Number of Active Threads")
@@ -144,6 +146,9 @@ def count_ops_per_tx():
         if get_event_name(point) == "TXBegin":
             counts[get_thread_ID(point)] = 0
         elif get_event_name(point) == "TXEnd":
+            if get_thread_ID(point) not in counts:
+                print("weird...")
+                continue
             num_ops += [counts[get_thread_ID(point)]]
             counts[get_thread_ID(point)] = 0
         elif get_thread_ID(point) in counts:
@@ -172,6 +177,32 @@ def count_ops_per_tx():
     plt.title('Num Ops per Transaction')
     plt.grid(True)
     plt.savefig(output_path + "count_ops_per_tx.png", bbox_inches='tight')
+    plt.clf()
+
+
+def count_avg_time_per_tx():
+    '''
+    Answers the query: how much time, on average, does a transaction take?
+    Creates a boxplot
+    '''
+    print 3.25
+    # Count number of ops in every transaction
+    counts = {}  # thread num --> count of ops (in one tx in that thread)
+    times = []  # list of number of ops taken by each tx
+    for point in points:
+        if get_event_name(point) == "TXBegin":
+            counts[get_thread_ID(point)] = get_time_stamp(point)
+        elif get_event_name(point) == "TXEnd":
+            times += [nano_to_milli(get_time_stamp(point) - counts[get_thread_ID(point)])]
+            counts[get_thread_ID(point)] = 0
+
+    # Create boxplot
+    plt.boxplot(times, vert=0, sym='k.')
+    plt.scatter(np.mean(times), [1], color='red')
+    plt.xscale('log')
+    print(sorted(times))
+
+    plt.savefig(output_path + "count_avg_time_per_tx_boxplot.png", bbox_inches='tight')
     plt.clf()
 
 
@@ -289,7 +320,7 @@ def count_table_ops_per_tx(access_ops, mutate_ops):  # access_ops, mutate_ops = 
     plt.clf()
 
 
-def count_id_table_ops_per_tx(access_ops, mutate_ops,table_id):
+def count_id_table_ops_per_tx(access_ops, mutate_ops, table_id):
     '''
     Answers query: how many read/write table operations are performed on a given table per transaction?
     Creates a double bar graph
@@ -547,6 +578,45 @@ def count_all_ops_time():
         else:
             counts[get_event_name(point)] += [nano_to_milli(get_duration(point))]
 
+    # Create bar graph of trimmed avg time for each op
+    trimmed_counts = {}
+    # Average out time for each op
+    for op in counts:  # counts: op name --> trimmed avg time taken per call of op
+        trimmed_counts[op] = stats.trim_mean(counts[op], 0.3)
+
+    # Sort values and labels in ascending order by value
+    values = []
+    labels = []
+    for key, value in sorted(trimmed_counts.iteritems(), key=lambda (k, v): (v, k)):
+        labels += [key + "\n" + str(value) + " ms"]  # label = name of op + time taken by op (ms) [string]
+        values += [value]  # value = time taken by op
+
+    # Color Scheme
+    colors = plt.cm.Set2(
+        np.array([(i - len(labels) / 16) / (len(labels) * 2.0) for i in range(0, 2 * len(labels), 2)]))
+
+    # Create bar graph
+    plt.rcdefaults()
+    fig, ax = plt.subplots()
+
+    labels = [l.split("\n")[0] for l in labels]
+    y_pos = np.arange(len(labels))
+
+    r = ax.barh(y_pos, values, align='center', color=colors, ecolor='black')
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(labels)
+    ax.invert_yaxis()  # labels read top-to-bottom
+    ax.set_xlabel('Time (ms)')
+    ax.set_title('Trimmed Average Time per Operation')
+
+    for rect in r:
+        width = rect.get_width()
+        plt.text(rect.get_width() + 2, rect.get_y() + 0.5 * rect.get_height(),
+                 '%f' % width, ha='center', va='center')
+
+    plt.savefig(output_path + "count_all_ops_time_bar_trimmed.png", bbox_inches='tight')
+    plt.clf()
+
     # Create box plot with entire distribution
     fig = plt.figure()
     plt.hold = True
@@ -558,11 +628,15 @@ def count_all_ops_time():
     for key, value in sorted(counts.iteritems(), key=lambda (k, v): -1 * np.mean(v)):
         boxes.append([counts[key]])
         yticks.append(key)
-    plt.boxplot(boxes, vert=0, sym='')
+    boxplot_info = plt.boxplot(boxes, vert=0, sym='k.')
+    print(boxplot_info)
+    print(boxplot_info['fliers'])
+    print(len(boxplot_info['fliers']))
 
     means = [np.mean(x) for x in boxes]
-    plt.scatter(means, np.arange(1, len(counts.keys()) + 1))
+    plt.scatter(means, np.arange(1, len(counts.keys()) + 1), color='red')
     plt.yticks(np.arange(1, len(counts.keys()) + 1), yticks)
+    plt.xscale('log')
     plt.xlim(left=-1)
     plt.xlabel("Time (ms)")
     plt.title("Time per Operation")
@@ -714,14 +788,15 @@ def count_reads():
 setup()
 # count_active_threads()
 # count_seq_calls()
+# count_avg_time_per_tx()
 # count_ops_per_tx()
-# count_table_ops()
+count_table_ops()
 # count_table_ops_per_tx(["containsKey"], ["put"])
 # count_id_table_ops_per_tx(["containsKey"], ["put"], "7c4f2940-7893-3334-a6cb-7a87bf045c0d")
 # count_all_ops()
 # count_all_methods()
 # count_all_methods_tx()
 # count_all_methods_by_id("7c4f2940-7893-3334-a6cb-7a87bf045c0d")
-count_all_ops_time()
+# count_all_ops_time()
 # count_all_ops_time_by_tx()
 # count_reads()
