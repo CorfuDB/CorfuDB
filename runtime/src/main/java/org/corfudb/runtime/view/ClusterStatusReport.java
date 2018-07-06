@@ -17,17 +17,37 @@ public class ClusterStatusReport {
     /**
      * Connectivity to the node.
      */
-    enum NodeStatus {
+    public enum NodeStatus {
+
+        /**
+         * Node is reachable.
+         */
         UP,
+
+        /**
+         * Node is not reachable.
+         */
         DOWN
     }
 
     /**
      * Health of the cluster.
      */
-    enum ClusterStatus {
+    public enum ClusterStatus {
+
+        /**
+         * The cluster is stable and all nodes are operational.
+         */
         STABLE(0),
+
+        /**
+         * The cluster is operational but working with reduced redundancy.
+         */
         DEGRADED(1),
+
+        /**
+         * The cluster is not operational.
+         */
         UNAVAILABLE(2);
 
         @Getter
