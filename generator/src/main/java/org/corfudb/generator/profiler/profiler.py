@@ -6,7 +6,7 @@ from scipy import stats
 
 # input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/test/client-1529017385323.log"
 # input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/generator/src/main/java/org/corfudb/generator/profiler/data/client-1524272351029.log"
-input_directory = "/Users/vshriya/Desktop/current/CorfuDB/test/my_files"
+input_directory = "/Users/vshriya/Documents/CorfuDB/CorfuDB/test/my_files"
 output_path = "results/shriya/jul6/"
 points = []  # all data points, aka each entry in log files
 all_ops = []  # all operations mentioned in log files
