@@ -9,6 +9,7 @@ import org.corfudb.runtime.view.LayoutBuilder;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -21,8 +22,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class LayoutBuilderTest extends AbstractCorfuTest {
 
-    final int SERVER_ENTRY_3 = 3;
-    final int SERVER_ENTRY_4 = 4;
+    private static final int SERVER_ENTRY_3 = 3;
+    private static final int SERVER_ENTRY_4 = 4;
 
     /**
      * Tests the Layout Workflow manager by removing nodes.
@@ -64,7 +65,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
         allNodes.add(TestLayoutBuilder.getEndpoint(SERVERS.PORT_3));
         allNodes.add(TestLayoutBuilder.getEndpoint(SERVERS.PORT_4));
 
-        Set<String> failedNodes = new HashSet<String>();
+        Set<String> failedNodes = new HashSet<>();
         LayoutBuilder layoutBuilder = new LayoutBuilder(originalLayout);
 
         //Preparing failed nodes set.
@@ -244,5 +245,90 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .build();
 
         assertThat(layoutBuilder.build()).isEqualTo(expectedLayout);
+    }
+
+    /**
+     * Reassign a failover sequencer server from the set of responsive nodes.
+     * It asserts that assigned sequencer server was not picked from
+     * unresponsive servers
+     *
+     * @throws Exception
+     */
+    @Test
+    public void reassignResponsiveSequencer() throws Exception {
+
+        Layout originalLayout = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_2)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_2)
+                .addToSegment()
+                .addToLayout()
+                .addUnresponsiveServer(SERVERS.PORT_1)
+                .build();
+
+        LayoutBuilder layoutBuilder = new LayoutBuilder(originalLayout)
+                .assignResponsiveSequencerAsPrimary(Collections.singleton(SERVERS.ENDPOINT_0))
+                .addUnresponsiveServers(Collections.singleton(SERVERS.ENDPOINT_0));
+
+        // Since nodes 0 and 1 are both unresponsive, ENDPOINT_2 should be chosen as the primary
+        // sequencer server.
+        // Expected layout
+        Layout expectedLayout = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_2)
+                .addToSegment()
+                .addToLayout()
+                .addUnresponsiveServer(SERVERS.PORT_1)
+                .addUnresponsiveServer(SERVERS.PORT_0)
+                .build();
+
+        assertThat(layoutBuilder.build()).isEqualTo(expectedLayout);
+    }
+
+    /**
+     * This test attempts to failover the sequencer server while all layout sequencers
+     * are unresponsive. It verifies that {@link LayoutModificationException} is thrown
+     * in case of such unsuccessful failover.
+     *
+     * @throws Exception
+     */
+    @Test (expected = LayoutModificationException.class)
+    public void unsuccessfulSequencerFailoverThrowsException() throws Exception {
+        Layout originalLayout = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_2)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_2)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        LayoutBuilder layoutBuilder = new LayoutBuilder(originalLayout)
+                .addUnresponsiveServers(Collections.singleton(SERVERS.ENDPOINT_0))
+                .addUnresponsiveServers(Collections.singleton(SERVERS.ENDPOINT_1))
+                .addUnresponsiveServers(Collections.singleton(SERVERS.ENDPOINT_2))
+                .assignResponsiveSequencerAsPrimary(Collections.singleton(SERVERS.ENDPOINT_0));
+        layoutBuilder.build();
     }
 }
