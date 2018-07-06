@@ -1,12 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os as os
+import time
 from scipy import stats
 
-input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/test/client-1529017385323.log"
-#input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/generator/src/main/java/org/corfudb/generator/profiler/data/client-1524272351029.log"
+# input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/test/client-1529017385323.log"
+# input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/generator/src/main/java/org/corfudb/generator/profiler/data/client-1524272351029.log"
 input_directory = "/Users/vshriya/Desktop/current/CorfuDB/test/my_files"
-output_path = "results/shriya/jul5/"
+output_path = "results/shriya/jul6/"
 points = []  # all data points, aka each entry in log files
 all_ops = []  # all operations mentioned in log files
 
@@ -290,10 +291,11 @@ def count_table_ops(access_ops, mutate_ops):  # access_ops, mutate_ops = list of
 
 def count_table_ops_per_tx(access_ops, mutate_ops):  # access_ops, mutate_ops = list of strings with names of ops
     '''
-    Answers query: how many read/write table operations are performed per transaction?
-    Creates a double bar graph
+    Answers query: how many read/write table operations are performed, on average, per transaction?
+    Creates a horizontal stacked bar chart
     '''
     print 6
+    # WIP!!!!!!!
     counts_access = {}  # thread num --> count of access ops
     counts_mutate = {}  # thread num --> count of mutate ops
     num_access_ops = []  # contains total number of access ops in each tx
@@ -316,6 +318,64 @@ def count_table_ops_per_tx(access_ops, mutate_ops):  # access_ops, mutate_ops = 
                 if "[method] " + op in point and get_thread_ID(point) in counts_mutate:
                     counts_mutate[get_thread_ID(point)] += 1
                     break
+
+    # Count number of access/mutate ops for each table
+    counts = {}  # table_id --> [access ops count, mutate ops count]
+    access_ops_counts = []
+    mutate_ops_counts = []
+    for point in points:
+        if get_event_name(point) == "TXBegin":
+            print("hi")
+        if "[method]" in point:
+            if get_table_ID(point) not in counts:
+                counts[get_table_ID(point)] = [0, 0]
+            if get_method_name(point) in access_ops:
+                counts[get_table_ID(point)][0] += 1
+            if get_method_name(point) in mutate_ops:
+                counts[get_table_ID(point)][1] += 1
+
+    # Process dicts to make suitable for bar chart
+    tables = counts.keys()
+    labels = ["access", "mutate"]
+
+    access_ops_counts = np.array([counts[table_id][0] for table_id in counts.keys()])
+    mutate_ops_counts = np.array([counts[table_id][1] for table_id in counts.keys()])
+    data = np.array([access_ops_counts, mutate_ops_counts])
+
+    # Create bar chart
+    y_pos = np.arange(len(tables))
+    fig = plt.figure(figsize=(10, 8))
+    ax = fig.add_subplot(111)
+
+    colors = plt.cm.Set2(
+        np.array([(i - len(counts) / 16) / (len(counts) * 2.0) for i in range(0, 2 * len(counts), 2)]))
+
+    patch_handles = []
+    left = np.zeros(len(tables))  # left alignment of data starts at zero
+    for i, d in enumerate(data):
+        print(i, d)
+        patch_handles.append(ax.barh(y_pos, d,
+                                     color=colors[i % len(colors)], align='center',
+                                     left=left, label=labels[i]))
+        # accumulate the left-hand offsets
+        left += d
+
+    # go through all of the bar segments and annotate
+    for j in xrange(len(patch_handles)):
+        for i, patch in enumerate(patch_handles[j].get_children()):
+            print(patch_handles[j].get_children())
+            bl = patch.get_xy()
+            x = 0.5 * patch.get_width() + bl[0]
+            y = 0.5 * patch.get_height() + bl[1]
+            ax.text(x, y, data[j, i], ha='center')
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(tables)
+    ax.set_xlabel('Count of Ops')
+    ax.set_ylabel('Table ID')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+
+    plt.savefig(output_path + "count_table_ops.png", bbox_inches='tight')
+    plt.clf()
 
     # Count frequency of each number of ops
     num_num_access_ops = {}  # number --> number of times that number appears
@@ -598,25 +658,15 @@ def count_all_methods_by_id(table_id):
     plt.clf()
 
 
-def count_all_ops_time():
+def create_trimmed_bar_graph(counts_dict, trim_constant, output_file):
     '''
-    Answers the query: how much time did a single call of each operation take on average?
-    Creates a box plot and a bar chart
+    A helper function that calculates trim_constant% trimmed mean and outputs a bar graph representing
+    this data to location output_file.
     '''
-    print 10
-    # Count total time taken by each op
-    counts = {}  # op name --> list of durations (ms)
-    for point in points:
-        if get_event_name(point) not in counts:
-            counts[get_event_name(point)] = [nano_to_milli(get_duration(point))]
-        else:
-            counts[get_event_name(point)] += [nano_to_milli(get_duration(point))]
-
-    # Create bar graph of trimmed avg time for each op
     trimmed_counts = {}
     # Average out time for each op
-    for op in counts:  # counts: op name --> trimmed avg time taken per call of op
-        trimmed_counts[op] = stats.trim_mean(counts[op], 0.3)
+    for op in counts_dict:  # counts: op name --> trimmed avg time taken per call of op
+        trimmed_counts[op] = stats.trim_mean(counts_dict[op], trim_constant)
 
     # Sort values and labels in ascending order by value
     values = []
@@ -648,24 +698,38 @@ def count_all_ops_time():
         plt.text(rect.get_width() + 2, rect.get_y() + 0.5 * rect.get_height(),
                  '%f' % width, ha='center', va='center')
 
-    plt.savefig(output_path + "count_all_ops_time_bar_trimmed.png", bbox_inches='tight')
+    plt.savefig(output_file, bbox_inches='tight')
     plt.clf()
+
+
+def count_all_ops_time():
+    '''
+    Answers the query: how much time did a single call of each operation take on average?
+    Creates a box plot and bar charts of medians, means, and trimmed means
+    '''
+    print 10
+    # Count total time taken by each op
+    counts = {}  # op name --> list of durations (ms)
+    for point in points:
+        if get_event_name(point) not in counts:
+            counts[get_event_name(point)] = [nano_to_milli(get_duration(point))]
+        else:
+            counts[get_event_name(point)] += [nano_to_milli(get_duration(point))]
+
+    # Create bar graph of trimmed avg time for each op
+    create_trimmed_bar_graph(counts, 0.1, output_path + "count_all_ops_time_bar_10.png")
+    create_trimmed_bar_graph(counts, 0.2, output_path + "count_all_ops_time_bar_20.png")
+    create_trimmed_bar_graph(counts, 0.3, output_path + "count_all_ops_time_bar_30.png")
 
     # Create box plot with entire distribution
     fig = plt.figure()
     plt.hold = True
     boxes = []
-    # for op in counts.keys():
-    #     boxes.append([counts[op]])
-    # plt.boxplot(boxes, vert=0, sym='')
     yticks = []
     for key, value in sorted(counts.iteritems(), key=lambda (k, v): -1 * np.mean(v)):
         boxes.append([counts[key]])
-        yticks.append(key)
+        yticks += [str(key) + " (median: " + str(np.median(counts[key])) + ")"]
     boxplot_info = plt.boxplot(boxes, vert=0, sym='k.')
-    print(boxplot_info)
-    print(boxplot_info['fliers'])
-    print(len(boxplot_info['fliers']))
 
     means = [np.mean(x) for x in boxes]
     plt.scatter(means, np.arange(1, len(counts.keys()) + 1), color='red')
@@ -694,7 +758,7 @@ def count_all_ops_time():
     # Color Scheme
     colors = plt.cm.Set2(np.array([(i - len(labels) / 16) / (len(labels) * 2.0) for i in range(0, 2*len(labels), 2)]))
 
-    # Create bar graph
+    # Create bar graph for mean
     plt.rcdefaults()
     fig, ax = plt.subplots()
 
@@ -713,7 +777,7 @@ def count_all_ops_time():
         plt.text(rect.get_width() + 2, rect.get_y() + 0.5 * rect.get_height(),
                  '%f' % width, ha='center', va='center')
 
-    plt.savefig(output_path + "count_all_ops_time_bar.png", bbox_inches='tight')
+    plt.savefig(output_path + "count_all_ops_time_mean_bar.png", bbox_inches='tight')
     plt.clf()
 
 
@@ -817,20 +881,75 @@ def count_reads():
     plt.clf()
 
 
+def count_access_lock_ops():
+    '''
+    Answers query: how much time do accessLock/accessLockOps operations take for each table?
+    Creates a horizontal stacked bar chart
+    '''
+    print 16
+    # Count number of access/mutate ops for each table
+    counts = {}  # table_id --> list of times
+    for point in points:
+        if "accessLock" in point:
+            if get_table_ID(point) not in counts:
+                counts[get_table_ID(point)] = []
+            counts[get_table_ID(point)] += [nano_to_milli(get_duration(point))]
+
+    # Create boxplot
+    fig = plt.figure()
+    plt.hold = True
+    boxes = []
+    yticks = []
+    for key, value in counts.iteritems():
+        boxes.append([counts[key]])
+        yticks.append(key)
+    boxplot_info = plt.boxplot(boxes, vert=0, sym='k.')
+    print(boxplot_info)
+    print(boxplot_info['fliers'])
+    print(len(boxplot_info['fliers']))
+
+    means = [np.mean(x) for x in boxes]
+    plt.scatter(means, np.arange(1, len(counts.keys()) + 1), color='red')
+
+    for median in boxplot_info['medians']:
+        # Label median
+        x, y = median.get_xydata()[1]  # top of median line
+        plt.text(x, y + 0.01, '%.5f' % x, horizontalalignment='center')  # draw above, centered
+
+    # # Plot/label mean
+    # plt.scatter(np.mean(times), [1], color='red')
+    # plt.text(np.mean(times), (1 + 0.01), '%.1f' % np.mean(times), horizontalalignment='center', fontsize=12)
+
+    plt.yticks(np.arange(1, len(counts.keys()) + 1), yticks)
+    plt.xscale('log')
+    plt.xlim(left=-1)
+    plt.xlabel("Time (ms)")
+    plt.ylabel("Table ID")
+    plt.title("Time per Access Lock Operation")
+
+    plt.savefig(output_path + "count_access_lock_ops.png", bbox_inches='tight')
+    plt.clf()
+
+
 ### Display Results
-#setup_all()
-setup()
-# count_active_threads()
-# count_seq_calls()
-count_ops_per_tx()
-count_avg_time_per_tx()
+start_time = time.time()
+
+setup_all()
+# setup()
+count_active_threads()
+count_seq_calls()
+# count_ops_per_tx()
+# count_avg_time_per_tx()
 count_table_ops(["containsKey"], ["put"])
 # count_table_ops_per_tx(["containsKey"], ["put"])
 # count_id_table_ops_per_tx(["containsKey"], ["put"], "7c4f2940-7893-3334-a6cb-7a87bf045c0d")
-# count_all_ops()
-# count_all_methods()
+count_all_ops()
+count_all_methods()
 # count_all_methods_tx()
 # count_all_methods_by_id("7c4f2940-7893-3334-a6cb-7a87bf045c0d")
-# count_all_ops_time()
+count_all_ops_time()
 # count_all_ops_time_by_tx()
-# count_reads()
+count_reads()
+count_access_lock_ops()
+
+print("Time: ", time.time() - start_time)
