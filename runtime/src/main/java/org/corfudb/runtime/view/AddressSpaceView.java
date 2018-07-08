@@ -67,7 +67,7 @@ public class AddressSpaceView extends AbstractView {
     public AddressSpaceView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
         MetricRegistry metrics = runtime.getMetrics();
-        final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ASV.toString(),
+        final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(),
                                          this.hashCode());
         metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::estimatedSize);
         metrics.register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());

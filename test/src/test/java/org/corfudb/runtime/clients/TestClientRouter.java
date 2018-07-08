@@ -238,7 +238,8 @@ public class TestClientRouter implements IClientRouter {
     private Timer getTimer(@NonNull CorfuMsg message) {
         if (!timerNameCache.containsKey(message.getMsgType())) {
             timerNameCache.put(message.getMsgType(),
-                    CorfuComponent.CR.toString() + message.getMsgType().name().toLowerCase());
+                               CorfuComponent.CLIENT_ROUTER.toString() +
+                               message.getMsgType().name().toLowerCase());
         }
         return CorfuRuntime.getDefaultMetrics()
                 .timer(timerNameCache.get(message.getMsgType()));

@@ -70,9 +70,12 @@ public class LogUnitClient extends AbstractClient {
     }
 
     private Timer.Context getTimerContext(String opName) {
-        Timer t = getMetricRegistry().timer(
-                CorfuComponent.LUC.toString()
-                        + getHost() + ":" + getPort().toString() + "-" + opName);
+        final String timerName = String.format("%s%s:%s-%s",
+                CorfuComponent.LOG_UNIT_CLIENT.toString(),
+                getHost(),
+                getPort().toString(),
+                opName);
+        Timer t = getMetricRegistry().timer(timerName);
         return t.time();
     }
 
