@@ -112,31 +112,12 @@ public class MetricsUtils {
         metricsJvmCollectionEnabled = Boolean.valueOf(System.getProperty(PROPERTY_JVM_METRICS_COLLECTION));
         metricsLogAnalysisEnabled = Boolean.valueOf(System.getProperty(PROPERTY_LOG_ANALYSIS_COLLECTION));
 
-        try {
-            metricsLogInterval = Long.valueOf(System.getProperty(PROPERTY_LOG_INTERVAL));
-            metricsSlf4jReportingEnabled = metricsLogInterval > 0 ? true : false;
-        } catch (NumberFormatException e) {
-            log.warn("Extracting metrics log reporting interval property failed. " +
-                    "Reporting to corfu metrics log is disabled", e);
-            metricsSlf4jReportingEnabled = false;
-        }
+        metricsLogInterval = Long.valueOf(System.getProperty(PROPERTY_LOG_INTERVAL, "0"));
+        metricsSlf4jReportingEnabled = metricsLogInterval > 0 ? true : false;
 
-        try {
-            metricsCsvInterval = Long.valueOf(System.getProperty(PROPERTY_CSV_INTERVAL));
-            metricsCsvFolder = String.valueOf(System.getProperty(PROPERTY_CSV_FOLDER));
-            metricsCsvReportingEnabled = metricsCsvInterval > 0 ? true : false;
-        } catch (NumberFormatException e) {
-            log.warn("Extracting metrics CSV reporting interval property failed. " +
-                    "Reporting to corfu metrics csv files is disabled", e);
-            metricsCsvReportingEnabled = false;
-        }
-
-        if (!metricsCollectionEnabled) {
-            metricsJmxReportingEnabled = false;
-            metricsSlf4jReportingEnabled = false;
-            metricsCsvReportingEnabled = false;
-            log.info("Corfu metrics collection and all reporting types are disabled");
-        }
+        metricsCsvInterval = Long.valueOf(System.getProperty(PROPERTY_CSV_INTERVAL, "0"));
+        metricsCsvFolder = String.valueOf(System.getProperty(PROPERTY_CSV_FOLDER));
+        metricsCsvReportingEnabled = metricsCsvInterval > 0 ? true : false;
     }
 
     /**
@@ -162,6 +143,7 @@ public class MetricsUtils {
         if (isMetricsReportingSetUp(metrics)) return;
 
         metrics.counter(mpTrigger);
+
         loadVmProperties();
 
         if (metricsCollectionEnabled) {
@@ -170,6 +152,9 @@ public class MetricsUtils {
             setupLogAnalysisMetrics(metrics);
             setupJmxReporting(metrics);
             setupSlf4jReporting(metrics);
+            log.info("Corfu metrics collection and all reporting types are enabled");
+        } else {
+            log.info("Corfu metrics collection and all reporting types are disabled");
         }
     }
 

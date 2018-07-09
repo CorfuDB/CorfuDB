@@ -152,13 +152,8 @@ public class ServerContext implements AutoCloseable {
             getNewBossGroup();
 
         // Metrics setup & reporting configuration
-        String mp = "corfu.server.";
-        synchronized (metrics) {
-            if (!isMetricsReportingSetUp(metrics)) {
-//                addJvmMetrics(metrics, mp);
-//                MetricsUtils.addCacheGauges(metrics, mp + "datastore.cache.", dataStore.getCache());
-                MetricsUtils.metricsReportingSetup(metrics);
-            }
+        if (!isMetricsReportingSetUp(metrics)) {
+            MetricsUtils.metricsReportingSetup(metrics);
         }
     }
 
