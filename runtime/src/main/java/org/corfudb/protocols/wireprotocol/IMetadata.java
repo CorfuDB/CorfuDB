@@ -22,6 +22,7 @@ import lombok.Value;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.Layout;
 
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_ID;
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_START_LOG_ADDRESS;
@@ -101,6 +102,10 @@ public interface IMetadata {
         getMetadataMap().put(LogUnitMetadataType.GLOBAL_ADDRESS, address);
     }
 
+    default void setEpoch(Long epoch) {
+        getMetadataMap().put(LogUnitMetadataType.EPOCH, epoch);
+    }
+
     default void setClientId(UUID clientId) {getMetadataMap().put(LogUnitMetadataType.CLIENT_ID, clientId); }
 
     @SuppressWarnings("unchecked")
@@ -132,6 +137,20 @@ public interface IMetadata {
         }
         return Optional.ofNullable((Long) getMetadataMap()
                 .get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse((long) -1);
+    }
+
+    /**
+     * Get Log's epoch.
+     *
+     * @return epoch.
+     */
+    default Long getEpoch() {
+        if (getMetadataMap() == null
+                || getMetadataMap().get(LogUnitMetadataType.EPOCH) == null) {
+            return Layout.INVALID_EPOCH;
+        }
+        return Optional.ofNullable((Long) getMetadataMap()
+                .get(LogUnitMetadataType.EPOCH)).orElse(Layout.INVALID_EPOCH);
     }
 
     default void clearCommit() {
@@ -205,7 +224,8 @@ public interface IMetadata {
         CHECKPOINTED_STREAM_ID(8, TypeToken.of(UUID.class)),
         CHECKPOINTED_STREAM_START_LOG_ADDRESS(9, TypeToken.of(Long.class)),
         CLIENT_ID(10, TypeToken.of(UUID.class)),
-        THREAD_ID(11, TypeToken.of(Long.class))
+        THREAD_ID(11, TypeToken.of(Long.class)),
+        EPOCH(12, TypeToken.of(Long.class))
         ;
         final int type;
         @Getter
@@ -247,5 +267,5 @@ public interface IMetadata {
         }
     }
 
-    
+
 }

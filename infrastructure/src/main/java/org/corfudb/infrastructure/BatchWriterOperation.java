@@ -18,17 +18,20 @@ public class BatchWriterOperation {
         WRITE,
         RANGE_WRITE,
         TRIM,
-        PREFIX_TRIM
+        PREFIX_TRIM,
+        EPOCH_WATER_MARK,
+        RESET
     }
 
     private final Type type;
     private final Long address;
     private final LogData logData;
+    private final Long epoch;
     private final List<LogData> entries;
     private final CompletableFuture future;
     private Exception exception;
 
 
     public static BatchWriterOperation SHUTDOWN = new BatchWriterOperation(Type.SHUTDOWN,
-            null, null, null, null);
+            null, null, null, null, null);
 }
