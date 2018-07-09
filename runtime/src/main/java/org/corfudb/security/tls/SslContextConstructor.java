@@ -8,8 +8,6 @@ import java.security.NoSuchAlgorithmException;
 import java.security.UnrecoverableKeyException;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLException;
-
-import io.netty.handler.ssl.SslProvider;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -42,9 +40,9 @@ public class SslContextConstructor {
         ReloadableTrustManagerFactory tmf = new ReloadableTrustManagerFactory(trustStorePath, tsPasswordFile);
 
         if (isServer) {
-            return SslContextBuilder.forServer(kmf).sslProvider(SslProvider.OPENSSL).trustManager(tmf).build();
+            return SslContextBuilder.forServer(kmf).trustManager(tmf).build();
         } else {
-            return SslContextBuilder.forClient().sslProvider(SslProvider.OPENSSL).keyManager(kmf).trustManager(tmf).build();
+            return SslContextBuilder.forClient().keyManager(kmf).trustManager(tmf).build();
         }
     }
 
