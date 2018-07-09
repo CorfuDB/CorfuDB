@@ -4,10 +4,10 @@ import os as os
 import time
 from scipy import stats
 
-# input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/test/client-1529017385323.log"
+input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/test/client-1529017385323.log"
 # input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/generator/src/main/java/org/corfudb/generator/profiler/data/client-1524272351029.log"
-input_directory = "/Users/vshriya/Documents/CorfuDB/CorfuDB/test/my_files"
-output_path = "results/shriya/jul6/"
+# input_directory = "/Users/vshriya/Documents/CorfuDB/CorfuDB/test/maithem_test"
+output_path = "results/shriya/jul9/"
 points = []  # all data points, aka each entry in log files
 all_ops = []  # all operations mentioned in log files
 
@@ -35,13 +35,17 @@ def setup_all():
         for file in files:
             # print os.path.join(subdir, file)
             filepath = subdir + os.sep + file
+            if "log" not in filepath:
+                continue
             print(filepath)
 
             f = open(filepath)
             for point in f.readlines():
-                points.append(point)
-                if get_event_name(point) not in all_ops:
-                    all_ops.append(get_event_name(point))
+                if "cacheLoad" not in point:  # filtering out cacheLoads
+                    points.append(point)
+                    if get_event_name(point) not in all_ops:
+                        all_ops.append(get_event_name(point))
+
 
     # sort points by start time
     print(len(points))
@@ -193,7 +197,7 @@ def count_ops_per_tx():
     plt.ylabel('Frequency')
     plt.title('Num Ops per Transaction')
     plt.grid(True)
-    plt.savefig(output_path + "count_ops_per_tx.png", bbox_inches='tight')
+    plt.savefig(output_path + "count_ops_per_tx_histogram.png", bbox_inches='tight')
     plt.clf()
 
 
@@ -237,22 +241,20 @@ def count_table_ops(access_ops, mutate_ops):  # access_ops, mutate_ops = list of
     print 5
     # Count number of access/mutate ops for each table
     counts = {}  # table_id --> [access ops count, mutate ops count]
+    labels = access_ops + mutate_ops
     for point in points:
         if "[method]" in point:
             if get_table_ID(point) not in counts:
-                counts[get_table_ID(point)] = [0, 0]
-            if get_method_name(point) in access_ops:
-                counts[get_table_ID(point)][0] += 1
-            if get_method_name(point) in mutate_ops:
-                counts[get_table_ID(point)][1] += 1
+                counts[get_table_ID(point)] = [0 for _ in range(len(labels))]
+            if get_method_name(point) in labels:
+                counts[get_table_ID(point)][labels.index(get_method_name(point))] += 1
 
     # Process counts dict to make suitable for bar chart
     tables = counts.keys()
-    labels = ["access", "mutate"]
-
-    access_ops_counts = np.array([counts[table_id][0] for table_id in counts.keys()])
-    mutate_ops_counts = np.array([counts[table_id][1] for table_id in counts.keys()])
-    data = np.array([access_ops_counts, mutate_ops_counts])
+    data = []
+    for op in labels:
+        data += [np.array([counts[table_id][labels.index(op)] for table_id in counts.keys()])]
+    data = np.array(data)
 
     # Create bar chart
     y_pos = np.arange(len(tables))
@@ -264,7 +266,6 @@ def count_table_ops(access_ops, mutate_ops):  # access_ops, mutate_ops = list of
     patch_handles = []
     left = np.zeros(len(tables))  # left alignment of data starts at zero
     for i, d in enumerate(data):
-        print(i, d)
         patch_handles.append(ax.barh(y_pos, d,
                                      color=colors[i % len(colors)], align='center',
                                      left=left, label=labels[i]))
@@ -274,14 +275,13 @@ def count_table_ops(access_ops, mutate_ops):  # access_ops, mutate_ops = list of
     # go through all of the bar segments and annotate
     for j in xrange(len(patch_handles)):
         for i, patch in enumerate(patch_handles[j].get_children()):
-            print(patch_handles[j].get_children())
             bl = patch.get_xy()
             x = 0.5 * patch.get_width() + bl[0]
             y = 0.5 * patch.get_height() + bl[1]
             ax.text(x, y, data[j, i], ha='center')
     ax.set_yticks(y_pos)
     ax.set_yticklabels(tables)
-    ax.set_xlabel('Count of Ops')
+    ax.set_xlabel('Op Count')
     ax.set_ylabel('Table ID')
     plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 
@@ -934,22 +934,22 @@ def count_access_lock_ops():
 ### Display Results
 start_time = time.time()
 
-setup_all()
-# setup()
-count_active_threads()
-count_seq_calls()
+# setup_all()
+setup()
+# count_active_threads()
+# count_seq_calls()
 # count_ops_per_tx()
 # count_avg_time_per_tx()
 count_table_ops(["containsKey"], ["put"])
 # count_table_ops_per_tx(["containsKey"], ["put"])
 # count_id_table_ops_per_tx(["containsKey"], ["put"], "7c4f2940-7893-3334-a6cb-7a87bf045c0d")
-count_all_ops()
-count_all_methods()
+# count_all_ops()
+# count_all_methods()
 # count_all_methods_tx()
 # count_all_methods_by_id("7c4f2940-7893-3334-a6cb-7a87bf045c0d")
-count_all_ops_time()
+# count_all_ops_time()
 # count_all_ops_time_by_tx()
-count_reads()
-count_access_lock_ops()
+# count_reads()
+# count_access_lock_ops()
 
 print("Time: ", time.time() - start_time)
