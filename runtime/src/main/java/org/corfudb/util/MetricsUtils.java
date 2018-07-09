@@ -1,6 +1,5 @@
 package org.corfudb.util;
 
-import ch.qos.logback.classic.Logger;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.CsvReporter;
 import com.codahale.metrics.Gauge;
@@ -14,12 +13,12 @@ import com.codahale.metrics.jvm.FileDescriptorRatioGauge;
 import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
 import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
 import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
-import com.codahale.metrics.logback.InstrumentedAppender;
 import com.github.benmanes.caffeine.cache.Cache;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.ILoggerFactory;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
@@ -243,17 +242,14 @@ public class MetricsUtils {
     private static void setupLogAnalysisMetrics(@NonNull MetricRegistry metrics) {
         if (!metricsLogAnalysisEnabled) return;
 
-        final ILoggerFactory iLoggerFactory = LoggerFactory.getILoggerFactory();
-        try {
-            final Logger root = (Logger) iLoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-            final InstrumentedAppender logMetrics = new InstrumentedAppender(metrics);
-            logMetrics.setName("logger.metrics");
-            logMetrics.setContext(root.getLoggerContext());
-            logMetrics.start();
-            root.addAppender(logMetrics);
-        } catch (ClassCastException e) {
-            log.warn("Logger is not logback compatible. Log analysis metrics are not collected.", e);
-        }
+        final Slf4jReporter reporter = Slf4jReporter.forRegistry(metrics)
+                .outputTo(LoggerFactory.getLogger("logger.metrics"))
+                .convertRatesTo(TimeUnit.SECONDS)
+                .convertDurationsTo(TimeUnit.MILLISECONDS)
+                .build();
+
+        //reporter.start(1, TimeUnit.MINUTES);
+        reporter.report();
     }
 
     public static Timer.Context getConditionalContext(@NonNull Timer t) {
