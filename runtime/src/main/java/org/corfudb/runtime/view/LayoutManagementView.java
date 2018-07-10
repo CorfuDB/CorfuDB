@@ -160,8 +160,20 @@ public class LayoutManagementView extends AbstractView {
     public void healNode(Layout currentLayout, String endpoint) throws OutrankedException {
 
         Layout newLayout;
+
+        // It is important to note that the node to be healed is a part of the unresponsive
+        // servers list and is NOT a part of any of the segments. Else, resets can be triggered
+        // while the node is a part of the chain causing correctness issues.
         if (currentLayout.getUnresponsiveServers().contains(endpoint)) {
             sealEpoch(currentLayout);
+
+            // Seal the node to be healed.
+            CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)
+                    .getBaseClient(endpoint).setRemoteEpoch(currentLayout.getEpoch()));
+
+            // Reset the node to be healed.
+            CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)
+                    .getLogUnitClient(endpoint).resetLogUnit(currentLayout.getEpoch()));
 
             LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
             Layout.LayoutSegment latestSegment =
