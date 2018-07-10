@@ -55,7 +55,7 @@ public class AddNodeWorkflow implements IWorkflow {
     final UUID id;
 
     @Getter
-    final List<Action> actions;
+    protected List<Action> actions;
 
     /**
      * Creates a new add node workflow from a request.
