@@ -4,10 +4,10 @@ import os as os
 import time
 from scipy import stats
 
-input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/test/client-1529017385323.log"
-# input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/generator/src/main/java/org/corfudb/generator/profiler/data/client-1524272351029.log"
+input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/test/client-1528755755604.log"
+# input_path = "/Users/vshriya/Documents/CorfuDB/CorfuDB/test/mylog.log"
 # input_directory = "/Users/vshriya/Documents/CorfuDB/CorfuDB/test/maithem_test"
-output_path = "results/shriya/jul9/"
+output_path = "results/shriya/jul10/"
 points = []  # all data points, aka each entry in log files
 all_ops = []  # all operations mentioned in log files
 
@@ -240,7 +240,7 @@ def count_table_ops(access_ops, mutate_ops):  # access_ops, mutate_ops = list of
     '''
     print 5
     # Count number of access/mutate ops for each table
-    counts = {}  # table_id --> [access ops count, mutate ops count]
+    counts = {}  # table_id --> [count of ops]
     labels = access_ops + mutate_ops
     for point in points:
         if "[method]" in point:
@@ -295,52 +295,34 @@ def count_table_ops_per_tx(access_ops, mutate_ops):  # access_ops, mutate_ops = 
     Creates a horizontal stacked bar chart
     '''
     print 6
-    # WIP!!!!!!!
-    counts_access = {}  # thread num --> count of access ops
-    counts_mutate = {}  # thread num --> count of mutate ops
-    num_access_ops = []  # contains total number of access ops in each tx
-    num_mutate_ops = []  # contains total number of mutate ops in each tx
+    # Count number of access/mutate ops for each table within each transaction
+    counts = {}  # thread num --> {table_id --> [count of ops]}
+    table_counts = {}  # table_id --> list of lists, where elem i = list of counts of op i
+    labels = access_ops + mutate_ops
     for point in points:
         if get_event_name(point) == "TXBegin":
-            counts_access[get_thread_ID(point)] = 0
-            counts_mutate[get_thread_ID(point)] = 0
+            counts[get_thread_ID(point)] = {}
         elif get_event_name(point) == "TXEnd":
-            num_access_ops += [counts_access[get_thread_ID(point)]]
-            num_mutate_ops += [counts_mutate[get_thread_ID(point)]]
-            counts_access[get_thread_ID(point)] = 0
-            counts_mutate[get_thread_ID(point)] = 0
-        else:
-            for op in access_ops:
-                if "[method] " + op in point and get_thread_ID(point) in counts_access:
-                    counts_access[get_thread_ID(point)] += 1
-                    break
-            for op in mutate_ops:
-                if "[method] " + op in point and get_thread_ID(point) in counts_mutate:
-                    counts_mutate[get_thread_ID(point)] += 1
-                    break
+            if get_thread_ID(point) in counts:
+                for table in counts[get_thread_ID(point)].keys():
+                    if table not in table_counts:
+                        table_counts[table] = [ counts[get_thread_ID(point)][table][i] for i in range(len(labels)) ]
+                    else:
+                        for i in range(len(labels)):
+                            table_counts[table][i] += counts[get_thread_ID(point)][table][i]
+                del counts[get_thread_ID(point)]
+        elif "[method]" in point and "(tx)" in point:
+            if get_thread_ID(point) in counts and get_table_ID(point) not in counts[get_thread_ID(point)]:
+                counts[get_thread_ID(point)][get_table_ID(point)] = [0 for _ in range(len(labels))]
+            if get_method_name(point) in labels:
+                counts[get_thread_ID(point)][get_table_ID(point)][labels.index(get_method_name(point))] += 1
 
-    # Count number of access/mutate ops for each table
-    counts = {}  # table_id --> [access ops count, mutate ops count]
-    access_ops_counts = []
-    mutate_ops_counts = []
-    for point in points:
-        if get_event_name(point) == "TXBegin":
-            print("hi")
-        if "[method]" in point:
-            if get_table_ID(point) not in counts:
-                counts[get_table_ID(point)] = [0, 0]
-            if get_method_name(point) in access_ops:
-                counts[get_table_ID(point)][0] += 1
-            if get_method_name(point) in mutate_ops:
-                counts[get_table_ID(point)][1] += 1
-
-    # Process dicts to make suitable for bar chart
-    tables = counts.keys()
-    labels = ["access", "mutate"]
-
-    access_ops_counts = np.array([counts[table_id][0] for table_id in counts.keys()])
-    mutate_ops_counts = np.array([counts[table_id][1] for table_id in counts.keys()])
-    data = np.array([access_ops_counts, mutate_ops_counts])
+    # Process counts dict to make suitable for bar chart
+    tables = table_counts.keys()
+    data = []
+    for op in labels:
+        data += [np.array([ np.mean(table_counts[table_id][labels.index(op)]) for table_id in table_counts.keys()]) ]
+    data = np.array(data)
 
     # Create bar chart
     y_pos = np.arange(len(tables))
@@ -348,12 +330,11 @@ def count_table_ops_per_tx(access_ops, mutate_ops):  # access_ops, mutate_ops = 
     ax = fig.add_subplot(111)
 
     colors = plt.cm.Set2(
-        np.array([(i - len(counts) / 16) / (len(counts) * 2.0) for i in range(0, 2 * len(counts), 2)]))
+        np.array([(i - len(table_counts) / 16) / (len(table_counts) * 2.0) for i in range(0, 2 * len(table_counts), 2)]))
 
     patch_handles = []
     left = np.zeros(len(tables))  # left alignment of data starts at zero
     for i, d in enumerate(data):
-        print(i, d)
         patch_handles.append(ax.barh(y_pos, d,
                                      color=colors[i % len(colors)], align='center',
                                      left=left, label=labels[i]))
@@ -363,53 +344,16 @@ def count_table_ops_per_tx(access_ops, mutate_ops):  # access_ops, mutate_ops = 
     # go through all of the bar segments and annotate
     for j in xrange(len(patch_handles)):
         for i, patch in enumerate(patch_handles[j].get_children()):
-            print(patch_handles[j].get_children())
             bl = patch.get_xy()
             x = 0.5 * patch.get_width() + bl[0]
             y = 0.5 * patch.get_height() + bl[1]
             ax.text(x, y, data[j, i], ha='center')
     ax.set_yticks(y_pos)
     ax.set_yticklabels(tables)
-    ax.set_xlabel('Count of Ops')
+    ax.set_xlabel('Op Count')
     ax.set_ylabel('Table ID')
     plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
 
-    plt.savefig(output_path + "count_table_ops.png", bbox_inches='tight')
-    plt.clf()
-
-    # Count frequency of each number of ops
-    num_num_access_ops = {}  # number --> number of times that number appears
-    for n in num_access_ops:
-        if n not in num_num_access_ops:
-            num_num_access_ops[n] = 1
-        else:
-            num_num_access_ops[n] += 1
-
-    num_num_mutate_ops = {}  # number --> number of times that number appears
-    for n in num_mutate_ops:
-        if n not in num_num_mutate_ops:
-            num_num_mutate_ops[n] = 1
-        else:
-            num_num_mutate_ops[n] += 1
-
-    # Create double bar chart
-    x = np.array(list(set(num_num_access_ops.keys()).union(set(num_num_mutate_ops.keys()))))
-    y_access = []
-    y_mutate = []
-    for item in x:
-        if item not in num_num_access_ops:
-            num_num_access_ops[item] = 0
-        if item not in num_num_mutate_ops:
-            num_num_mutate_ops[item] = 0
-        y_access += [num_num_access_ops[item]]
-        y_mutate += [num_num_mutate_ops[item]]
-    width = 0.27
-    plt.bar(x, y_access, width, color="blue", label="accessOps")
-    plt.bar(x + width, y_mutate, width, color="red", label="mutateOps")
-    plt.legend(loc=1)
-    plt.title("Num Ops per Transaction")
-    plt.xlabel("Num Ops")
-    plt.ylabel("Num Txs")
     plt.savefig(output_path + "count_table_ops_per_tx.png", bbox_inches='tight')
     plt.clf()
 
@@ -419,7 +363,7 @@ def count_id_table_ops_per_tx(access_ops, mutate_ops, table_id):
     Answers query: how many read/write table operations are performed on a given table per transaction?
     Creates a double bar graph
     '''
-    print 5
+    print 7
     counts_access = {}  # thread num --> count of access ops
     counts_mutate = {}  # thread num --> count of mutate ops
     num_access_ops = []  # contains total number of access ops in each tx
@@ -485,7 +429,7 @@ def count_all_ops():
     Answers the query: how many times was each operation called w.r.t. the total number of calls?
     Creates a pie chart
     '''
-    print 6
+    print 8
     # Count number of times each operation was called
     counts = {}  # op name --> count
     for point in points:
@@ -528,7 +472,7 @@ def count_all_methods():
     Answers the query: how many times was each method called w.r.t. the total number of calls?
     Creates a pie chart
     '''
-    print 7
+    print 9
     # Count number of times each operation was called
     counts = {}  # op name --> count
     for point in points:
@@ -573,7 +517,7 @@ def count_all_methods_tx():
     Answers the query: how many times was each method called in a transaction w.r.t. the total number of calls?
     Creates a pie chart
     '''
-    print 8
+    print 10
     # Count number of times each operation was called
     counts = {}  # op name --> count
     for point in points:
@@ -618,7 +562,7 @@ def count_all_methods_by_id(table_id):
     Answers the query: how many times was each method called for a given table w.r.t. the total number of calls?
     Creates a pie chart
     '''
-    print 9
+    print 11
     # Count number of times each operation was called
     counts = {}  # op name --> count
     for point in points:
@@ -707,7 +651,7 @@ def count_all_ops_time():
     Answers the query: how much time did a single call of each operation take on average?
     Creates a box plot and bar charts of medians, means, and trimmed means
     '''
-    print 10
+    print 12
     # Count total time taken by each op
     counts = {}  # op name --> list of durations (ms)
     for point in points:
@@ -787,7 +731,7 @@ def count_all_ops_time_by_tx():
     w.r.t. the total runtime of all transactions?
     Creates a pie chart and two bar charts
     '''
-    print 11
+    print 13
     # Count total time taken by each op w/i each tx
     # NOT CORRECT for same reason as above!
     txs = []  # list of lists, txs[i] = np.array of how much time each op takes in tx i
@@ -839,7 +783,7 @@ def count_reads():
     Answers the query: how many reads (both tx and non-tx) are done per millisecond?
     Creates a scatter plot, with both tx reads and non-tx reads
     '''
-    print 12
+    print 14
     # Count tx reads
     counts_tx = {}  # ms interval --> count of tx reads
     for point in points:
@@ -886,7 +830,7 @@ def count_access_lock_ops():
     Answers query: how much time do accessLock/accessLockOps operations take for each table?
     Creates a horizontal stacked bar chart
     '''
-    print 16
+    print 15
     # Count number of access/mutate ops for each table
     counts = {}  # table_id --> list of times
     for point in points:
@@ -941,9 +885,9 @@ setup()
 # count_ops_per_tx()
 # count_avg_time_per_tx()
 count_table_ops(["containsKey"], ["put"])
-# count_table_ops_per_tx(["containsKey"], ["put"])
+count_table_ops_per_tx(["containsKey"], ["put"])
 # count_id_table_ops_per_tx(["containsKey"], ["put"], "7c4f2940-7893-3334-a6cb-7a87bf045c0d")
-# count_all_ops()
+count_all_ops()
 # count_all_methods()
 # count_all_methods_tx()
 # count_all_methods_by_id("7c4f2940-7893-3334-a6cb-7a87bf045c0d")
