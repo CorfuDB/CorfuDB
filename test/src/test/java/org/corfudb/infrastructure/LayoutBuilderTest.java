@@ -26,7 +26,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
     private static final int SERVER_ENTRY_4 = 4;
 
     /**
-     * Tests the Layout Workflow manager by removing nodes.
+     * Tests the Layout Builder by removing nodes.
      *
      * @throws LayoutModificationException Throws error if all layout, sequencer or
      *                                     logunit nodes removed. Invalid removal.
@@ -77,27 +77,23 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
          */
 
         // Deleting all Layout Servers
-        assertThatThrownBy(() ->
-                layoutBuilder.removeLayoutServers(failedNodes).build()
+        assertThatThrownBy(() -> layoutBuilder.removeLayoutServers(failedNodes).build()
         ).isInstanceOf(LayoutModificationException.class);
 
         //Deleting all Sequencer Servers
-        assertThatThrownBy(() ->
-                layoutBuilder.removeSequencerServers(failedNodes).build()
-        ).isInstanceOf(LayoutModificationException.class);
+        assertThatThrownBy(() -> layoutBuilder.removeSequencerServers(failedNodes).build())
+                .isInstanceOf(LayoutModificationException.class);
 
         //Deleting all Log unit Servers
-        assertThatThrownBy(() ->
-                layoutBuilder.removeLogunitServers(failedNodes).build()
-        ).isInstanceOf(LayoutModificationException.class);
+        assertThatThrownBy(() -> layoutBuilder.removeLogunitServers(failedNodes).build())
+                .isInstanceOf(LayoutModificationException.class);
 
         // Deleting all nodes in one stripe
         failedNodes.clear();
         failedNodes.add(allNodes.get(0));
         failedNodes.add(allNodes.get(2));
-        assertThatThrownBy(() ->
-                layoutBuilder.removeLogunitServers(failedNodes).build()
-        ).isInstanceOf(LayoutModificationException.class);
+        assertThatThrownBy(() -> layoutBuilder.removeLogunitServers(failedNodes).build())
+                .isInstanceOf(LayoutModificationException.class);
 
 
         /*
@@ -131,16 +127,12 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
         failedNodes.add(allNodes.get(0));
         failedNodes.add(allNodes.get(SERVER_ENTRY_4));
 
-        Layout actualLayout = layoutBuilder.removeLayoutServers(failedNodes)
+        Layout actualLayout = layoutBuilder
+                .removeLayoutServers(failedNodes)
                 .removeLogunitServers(failedNodes)
                 .removeSequencerServers(failedNodes)
                 .build();
         Assertions.assertThat(actualLayout).isEqualTo(expectedLayout);
-
-
-        /*
-         * Deleting individual nodes
-         */
 
         expectedLayout = new TestLayoutBuilder()
                 .setEpoch(1L)
@@ -159,32 +151,129 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .addToLayout()
                 .build();
 
+        /*
+         * Deleting individual nodes
+         */
+
         // Remove SERVERS.PORT_1 & SERVERS.PORT_2 from layout server
         layoutBuilder.removeLayoutServer(allNodes.get(1));
         layoutBuilder.removeLayoutServer(allNodes.get(2));
+
         // No effect on removing removed node
         layoutBuilder.removeLayoutServer(allNodes.get(2));
+
         // Remove SERVERS.PORT_3 from layout server should throw error.
-        assertThatThrownBy(() ->
-                layoutBuilder.removeLayoutServer(allNodes.get(SERVER_ENTRY_3))
-        ).isInstanceOf(LayoutModificationException.class);
+        assertThatThrownBy(() -> layoutBuilder.removeLayoutServer(allNodes.get(SERVER_ENTRY_3)))
+                .isInstanceOf(LayoutModificationException.class);
+
         // Remove SERVERS.PORT_1 from sequencers
         layoutBuilder.removeSequencerServer(allNodes.get(1));
+
         // No effect on removing removed node
         layoutBuilder.removeSequencerServer(allNodes.get(1));
+
         // Remove SERVERS.PORT_2 from sequencer server should throw error.
-        assertThatThrownBy(() ->
-                layoutBuilder.removeSequencerServer(allNodes.get(2))
-        ).isInstanceOf(LayoutModificationException.class);
+        assertThatThrownBy(() -> layoutBuilder.removeSequencerServer(allNodes.get(2)))
+                .isInstanceOf(LayoutModificationException.class);
+
         // Reject remove if redundancy is lost
-        assertThatThrownBy(() ->
-                layoutBuilder.removeLogunitServer(allNodes.get(1))
-        ).isInstanceOf(LayoutModificationException.class);
+        assertThatThrownBy(() -> layoutBuilder.removeLogunitServer(allNodes.get(1)))
+                .isInstanceOf(LayoutModificationException.class);
+
         // Reject remove if stripe size is one
-        assertThatThrownBy(() ->
-                layoutBuilder.removeLogunitServer(allNodes.get(2))
-        ).isInstanceOf(LayoutModificationException.class);
+        assertThatThrownBy(() -> layoutBuilder.removeLogunitServer(allNodes.get(2)))
+                .isInstanceOf(LayoutModificationException.class);
+
+        // Assert the resulting layout is equal to the expected
         assertThat(layoutBuilder.build()).isEqualTo(expectedLayout);
+    }
+
+
+    @Test
+    public void checkingForNullArgumentsInLayoutBuilder() throws Exception {
+        Layout originalLayout = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addLayoutServer(SERVERS.PORT_3)
+                .addLayoutServer(SERVERS.PORT_4)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_2)
+                .buildSegment()
+                .setReplicationMode(ReplicationMode.QUORUM_REPLICATION)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_2)
+                .addLogUnit(SERVERS.PORT_3)
+                .addToSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.PORT_3)
+                .addLogUnit(SERVERS.PORT_4)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        // Test base layout can not be null
+        assertThatThrownBy(() -> new LayoutBuilder(null))
+                .isInstanceOf(NullPointerException.class);
+
+        // Create a layout builder based on the original layout
+        LayoutBuilder layoutBuilder = new LayoutBuilder(originalLayout);
+
+        // Test all Layout builder APIs do not allow for null arguments
+        assertThatThrownBy(() -> layoutBuilder.addLayoutServer(null))
+                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> layoutBuilder.addLogunitServer(0,
+                                                                0,
+                                                                null))
+                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> layoutBuilder.addLogunitServerToSegment(null,
+                                                                         0,
+                                                                         0))
+                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> layoutBuilder.addSequencerServer(null))
+                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> layoutBuilder.addUnresponsiveServers(null))
+                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> layoutBuilder.assignResponsiveSequencerAsPrimary(null))
+                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> layoutBuilder.removeFromStripe(null,
+                                                                null,
+                                                                0))
+                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> layoutBuilder.removeLayoutServer(null))
+                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> layoutBuilder.removeLayoutServers(null))
+                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> layoutBuilder.removeLogunitServer(null))
+                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> layoutBuilder.removeLogunitServers(null))
+                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> layoutBuilder.removeSequencerServer(null))
+                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> layoutBuilder.removeSequencerServers(null))
+                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> layoutBuilder.removeUnresponsiveServer(null))
+                .isInstanceOf(NullPointerException.class);
+
+        assertThatThrownBy(() -> layoutBuilder.removeUnresponsiveServers(null))
+                .isInstanceOf(NullPointerException.class);
     }
 
     /**
