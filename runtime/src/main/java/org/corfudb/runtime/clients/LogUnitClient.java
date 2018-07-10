@@ -320,7 +320,7 @@ public class LogUnitClient extends AbstractClient {
     /**
      * Send a reset request.
      */
-    public CompletableFuture<Boolean> resetLogUnit() {
-        return sendMessageWithFuture(CorfuMsgType.RESET_LOGUNIT.msg());
+    public CompletableFuture<Boolean> resetLogUnit(long epoch) {
+        return sendMessageWithFuture(CorfuMsgType.RESET_LOGUNIT.payloadMsg(epoch));
     }
 }

@@ -42,33 +42,10 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
 
     @Override
     public List<Action> getActions() {
-        return Arrays.asList(new ResetNode(),
+        return Arrays.asList(
                 new HealNodeToLayout(),
                 new RestoreRedundancyAndMergeSegments());
     }
-
-    /**
-     * Resets the node's data.
-     */
-    class ResetNode extends Action {
-        @Override
-        public String getName() {
-            return "ResetNode";
-        }
-
-        @Override
-        public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
-            runtime.invalidateLayout();
-            Layout layout = new Layout(runtime.getLayoutView().getLayout());
-            if (layout.getUnresponsiveServers().contains(request.getEndpoint())) {
-                runtime.getLayoutView().getRuntimeLayout(layout)
-                        .getLogUnitClient(request.getEndpoint())
-                        .resetLogUnit()
-                        .get();
-            }
-        }
-    }
-
 
     /**
      * This action adds a new node to the layout. If it is also
