@@ -42,7 +42,7 @@ public abstract class WorkflowRequest {
      * @param layout current layout
      * @return a uuid that corresponds to the created workflow
      */
-    protected abstract UUID sendRequest(Layout layout);
+    protected abstract UUID sendRequest(Layout layout) throws TimeoutException;
 
     /**
      * Select an orchestrator and return a client. Orchestrator's that
