@@ -8,6 +8,7 @@ import org.corfudb.runtime.view.Layout;
 import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 
 
 @Slf4j
@@ -24,7 +25,7 @@ public class HealNode extends WorkflowRequest {
     }
 
     @Override
-    protected UUID sendRequest(Layout layout) {
+    protected UUID sendRequest(Layout layout) throws TimeoutException {
         CreateWorkflowResponse resp = getOrchestrator(layout).healNodeRequest(nodeForWorkflow,
                 true, true, true, 0);
         log.info("sendRequest: requested to heal {} on orchestrator {}:{}, layout {}",

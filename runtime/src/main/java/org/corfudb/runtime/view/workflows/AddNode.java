@@ -8,6 +8,7 @@ import org.corfudb.runtime.view.Layout;
 import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 
 /**
  *
@@ -30,7 +31,7 @@ public class AddNode extends WorkflowRequest {
     }
 
     @Override
-    protected UUID sendRequest(@Nonnull Layout layout) {
+    protected UUID sendRequest(@Nonnull Layout layout) throws TimeoutException {
         // Select the current tail node and send an add node request to the orchestrator
         CreateWorkflowResponse resp = getOrchestrator(layout).addNodeRequest(nodeForWorkflow);
         log.info("sendRequest: requested to add {} on orchestrator {}:{}, layout {}",
