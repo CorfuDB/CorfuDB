@@ -8,6 +8,7 @@ import org.corfudb.runtime.view.Layout;
 import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 
 /**
  * A workflow request that makes an orchestrator call to remove a node from
@@ -29,7 +30,7 @@ public class RemoveNode extends WorkflowRequest {
     }
 
     @Override
-    protected UUID sendRequest(@Nonnull Layout layout) {
+    protected UUID sendRequest(@Nonnull Layout layout) throws TimeoutException {
         // Send an remove node request to an orchestrator that is not on the node
         // to be removed
 
