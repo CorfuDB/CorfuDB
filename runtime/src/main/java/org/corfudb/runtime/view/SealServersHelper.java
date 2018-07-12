@@ -48,6 +48,25 @@ public class SealServersHelper {
         return resultMap;
     }
 
+    public static Map<String, CompletableFuture<Boolean>> asyncFlush(
+            RuntimeLayout runtimeLayout) {
+        Layout layout = runtimeLayout.getLayout();
+        Map<String, CompletableFuture<Boolean>> resultMap = new HashMap<>();
+        // Seal layout servers
+        layout.getAllServers().forEach(server -> {
+            CompletableFuture<Boolean> cf = new CompletableFuture<>();
+            try {
+                // Creating router can cause NetworkException which should be handled.
+                cf = runtimeLayout.getBaseClient(server).setRemoteEpoch(layout.getEpoch());
+            } catch (NetworkException ne) {
+                cf.completeExceptionally(ne);
+                log.error("Remote seal SET_EPOCH failed for server {} with {}", server, ne);
+            }
+            resultMap.put(server, cf);
+        });
+        return resultMap;
+    }
+
     /**
      * Wait for a quorum of layout servers to respond to be sealed.
      *

@@ -112,7 +112,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         layout.setEpoch(layout.getEpoch() + 1);
         layout.getLayoutServers().add(endpoint);
         layout.getSegment(0L).getStripes().get(0).getLogServers().remove(endpoint);
-        corfuRuntime.getLayoutView().getRuntimeLayout(layout).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout).sealAndFlushMinSet();
         corfuRuntime.getLayoutView().updateLayout(layout, 1L);
     }
 

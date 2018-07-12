@@ -283,7 +283,7 @@ public class ClusterReconfigIT extends AbstractIT {
         long oldEpoch = corfuRuntime.getLayoutView().getLayout().getEpoch();
         Layout l = new Layout(corfuRuntime.getLayoutView().getLayout());
         l.setEpoch(l.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).sealAndFlushMinSet();
         corfuRuntime.getLayoutView().updateLayout(l, 1L);
         corfuRuntime.invalidateLayout();
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(oldEpoch + 1);

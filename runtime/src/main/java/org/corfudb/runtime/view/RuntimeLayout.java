@@ -61,7 +61,7 @@ public class RuntimeLayout {
      * @throws WrongEpochException        If any server is in a higher epoch.
      * @throws QuorumUnreachableException If enough number of servers cannot be sealed.
      */
-    public void moveServersToEpoch()
+    public void sealAndFlushMinSet()
             throws WrongEpochException, QuorumUnreachableException {
         log.debug("Requested move of servers to new epoch {} servers are {}", layout.getEpoch(),
                 layout.getAllServers());
@@ -76,6 +76,13 @@ public class RuntimeLayout {
         // replication mode.
         for (LayoutSegment layoutSegment : layout.getSegments()) {
             layoutSegment.getReplicationMode().validateSegmentSeal(layoutSegment, resultMap);
+        }
+
+        for (LayoutSegment layoutSegment : layout.getSegments()) {
+            for (String endpoint : layoutSegment.getAllLogServers()) {
+
+            }
+            layoutSegment.getReplicationMode().flush(layoutSegment);
         }
         log.debug("Layout has been sealed successfully.");
     }
