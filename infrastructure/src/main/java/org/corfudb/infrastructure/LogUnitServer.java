@@ -313,6 +313,21 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
+    @ServerHandler(type = CorfuMsgType.SET_EPOCH_WATER_MARK)
+    private synchronized void setEpochWaterMark(CorfuPayloadMsg<Long> msg,
+                                                ChannelHandlerContext ctx, IServerRouter r) {
+        if (msg.getPayload() > serverContext.getLogUnitEpochWaterMark()
+                && msg.getPayload() == serverContext.getServerEpoch()) {
+            serverContext.setLogUnitEpochWaterMark(msg.getPayload());
+            batchWriter.waitForEpochWaterMark(msg.getPayload());
+            log.info("setEpochWaterMark: Epoch water mark set to : {}", msg.getPayload());
+        } else {
+            log.info("setEpochWaterMark: Epoch water mark already set to : {}. Request is a no-op.",
+                    msg.getPayload());
+        }
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
     /**
      * Retrieve the LogUnitEntry from disk, given an address.
      *

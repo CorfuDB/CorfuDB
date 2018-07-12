@@ -43,7 +43,7 @@ public class SealIT extends AbstractIT{
         /* 1 */
         currentLayout.setEpoch(currentLayout.getEpoch() + 1);
         /* 2 */
-        cr1.getLayoutView().getRuntimeLayout(currentLayout).moveServersToEpoch();
+        cr1.getLayoutView().getRuntimeLayout(currentLayout).sealAndFlushMinSet();
         /* 3 */
         cr1.getLayoutView().updateLayout(currentLayout, 0);
 

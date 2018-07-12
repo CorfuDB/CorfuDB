@@ -125,7 +125,7 @@ public class LayoutSealTest extends AbstractViewTest {
         Layout l = runtimeLayout.getLayout();
         l.setEpoch(l.getEpoch() + 1);
         try {
-            runtimeLayout.moveServersToEpoch();
+            runtimeLayout.sealAndFlushMinSet();
         } catch (QuorumUnreachableException e) {
             e.printStackTrace();
         }
@@ -151,7 +151,7 @@ public class LayoutSealTest extends AbstractViewTest {
         addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_4, new TestRule().drop().always());
 
         l.setEpoch(l.getEpoch() + 1);
-        assertThatThrownBy(runtimeLayout::moveServersToEpoch)
+        assertThatThrownBy(runtimeLayout::sealAndFlushMinSet)
                 .isInstanceOf(QuorumUnreachableException.class);
         assertLayoutEpochs(2, 1, 2);
         assertServerRouterEpochs(2, 1, 2, 1, 1);
@@ -168,7 +168,7 @@ public class LayoutSealTest extends AbstractViewTest {
         Layout l = runtimeLayout.getLayout();
         l.setEpoch(l.getEpoch() + 1);
         try {
-            runtimeLayout.moveServersToEpoch();
+            runtimeLayout.sealAndFlushMinSet();
         } catch (QuorumUnreachableException e) {
             e.printStackTrace();
         }
@@ -193,7 +193,7 @@ public class LayoutSealTest extends AbstractViewTest {
                 new TestRule().drop().always());
 
         l.setEpoch(l.getEpoch() + 1);
-        assertThatThrownBy(runtimeLayout::moveServersToEpoch)
+        assertThatThrownBy(runtimeLayout::sealAndFlushMinSet)
                 .isInstanceOf(QuorumUnreachableException.class);
         assertLayoutEpochs(2, 2, 2);
         assertServerRouterEpochs(2, 2, 2, 1, 2);
