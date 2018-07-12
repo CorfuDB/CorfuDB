@@ -1,20 +1,16 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.collect.Sets;
-
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
-import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
 
 import javax.annotation.Nonnull;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Allows us to make modifications to a layout.
@@ -295,13 +291,21 @@ public class LayoutBuilder {
         List<String> modifiedSequencerServers = new ArrayList<>(layout.getSequencers());
         for (int i = 0; i < modifiedSequencerServers.size(); i++) {
             String sequencerServer = modifiedSequencerServers.get(i);
-            if (!endpoints.contains(sequencerServer)) {
+
+            // Add a sequencer server given sequencerServer is not already included in
+            // endpoints AND it is not included in the unresponsive nodes of the layout.
+            if (!endpoints.contains(sequencerServer) &&
+                !layout.getUnresponsiveServers().contains(sequencerServer)) {
                 modifiedSequencerServers.remove(sequencerServer);
                 modifiedSequencerServers.add(0, sequencerServer);
                 layout.setSequencers(modifiedSequencerServers);
                 return this;
             }
         }
+
+        log.warn("Failover to a responsive sequencer server failed. Each of the layout " +
+                 "sequencers:{} is either a failed endpoint or an unresponsive server",
+                 modifiedSequencerServers.toString());
         throw new LayoutModificationException("All sequencers failed.");
     }
 

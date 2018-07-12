@@ -42,7 +42,7 @@ public abstract class WorkflowRequest {
      * @param layout current layout
      * @return a uuid that corresponds to the created workflow
      */
-    protected abstract UUID sendRequest(Layout layout);
+    protected abstract UUID sendRequest(Layout layout) throws TimeoutException;
 
     /**
      * Select an orchestrator and return a client. Orchestrator's that
@@ -116,20 +116,18 @@ public abstract class WorkflowRequest {
                 Layout requestLayout = new Layout(runtime.getLayoutView().getLayout());
                 UUID workflowId = sendRequest(requestLayout);
                 ManagementClient orchestrator = getOrchestrator(requestLayout);
-
                 waitForWorkflow(workflowId, orchestrator, timeout, pollPeriod);
-
-                for (int y = 0; y < runtime.getParameters().getInvalidateRetry(); y++) {
-                    runtime.invalidateLayout();
-                    Layout layoutToVerify = new Layout(runtime.getLayoutView().getLayout());
-                    if (verifyRequest(layoutToVerify)) {
-                        log.info("WorkflowRequest: Successfully completed {}", this);
-                        return;
-                    }
-                }
             } catch (NetworkException | TimeoutException e) {
-                log.warn("WorkflowRequest: Network error while running {} on attempt {}", this, x, e);
-                continue;
+                log.warn("WorkflowRequest: Error while running {} on attempt {}, cause {}", this, x, e);
+            }
+
+            for (int y = 0; y < runtime.getParameters().getInvalidateRetry(); y++) {
+                runtime.invalidateLayout();
+                Layout layoutToVerify = new Layout(runtime.getLayoutView().getLayout());
+                if (verifyRequest(layoutToVerify)) {
+                    log.info("WorkflowRequest: Successfully completed {}", this);
+                    return;
+                }
             }
             log.warn("WorkflowRequest: Retrying {} on attempt {}", this, x);
         }
