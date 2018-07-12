@@ -2,10 +2,9 @@ package org.corfudb.infrastructure.orchestrator.workflows;
 
 import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.HEAL_NODE;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 
-import java.util.Arrays;
-import java.util.List;
 import java.util.Set;
 
 import javax.annotation.Nonnull;
@@ -33,18 +32,13 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
     public HealNodeWorkflow(HealNodeRequest healNodeRequest) {
         super(new AddNodeRequest(healNodeRequest.getEndpoint()));
         this.request = healNodeRequest;
+        this.actions = ImmutableList.of(new HealNodeToLayout(),
+                new RestoreRedundancyAndMergeSegments());
     }
 
     @Override
     public String getName() {
         return HEAL_NODE.toString();
-    }
-
-    @Override
-    public List<Action> getActions() {
-        return Arrays.asList(
-                new HealNodeToLayout(),
-                new RestoreRedundancyAndMergeSegments());
     }
 
     /**
