@@ -9,6 +9,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -120,6 +121,25 @@ public class ObjectsViewTest extends AbstractViewTest {
         assertThat(smrEntry.getSMRMethod()).isEqualTo("put");
         assertThat((String) args[0]).isEqualTo("k");
         assertThat((String) args[1]).isEqualTo("v2");
+    }
+
+    @Test
+    public void incorrectNestingTest() {
+        CorfuRuntime r1 = getDefaultRuntime();
+        CorfuRuntime r2 = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .nettyEventLoop(NETTY_EVENT_LOOP)
+                .build());
+        SMRMap<String, String> map = getDefaultRuntime().getObjectsView()
+                .build()
+                .setStreamName("mapa")
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .open();
+
+        r1.getObjectsView().TXBegin();
+        map.get("key1");
+
+        // Try to start a new nested transaction with a different runtime
+        assertThatThrownBy(() -> r2.getObjectsView().TXBegin()).isInstanceOf(UnrecoverableCorfuError.class);
     }
 
     @Test
