@@ -280,7 +280,7 @@ public class AbstractIT extends AbstractCorfuTest {
     public static class CorfuServerRunner {
 
         private boolean single = true;
-        private String logLevel = "INFO";
+        private String logLevel = "TRACE";
         private String host = DEFAULT_HOST;
         private int port = DEFAULT_PORT;
         private String managementBootstrap = null;
