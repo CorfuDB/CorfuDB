@@ -69,6 +69,10 @@ public class ServerContext implements AutoCloseable {
     private static final String PREFIX_MANAGEMENT = "MANAGEMENT";
     private static final String MANAGEMENT_LAYOUT = "LAYOUT";
 
+    // LogUnit Server
+    private static final String PREFIX_LOGUNIT = "LOGUNIT";
+    private static final String EPOCH_WATER_MARK = "EPOCH_WATER_MARK";
+
     /** The node Id, stored as a base64 string. */
     public static final String NODE_ID = "NODE_ID";
 
@@ -152,13 +156,8 @@ public class ServerContext implements AutoCloseable {
             getNewBossGroup();
 
         // Metrics setup & reporting configuration
-        String mp = "corfu.server.";
-        synchronized (metrics) {
-            if (!isMetricsReportingSetUp(metrics)) {
-//                addJvmMetrics(metrics, mp);
-//                MetricsUtils.addCacheGauges(metrics, mp + "datastore.cache.", dataStore.getCache());
-                MetricsUtils.metricsReportingSetup(metrics);
-            }
+        if (!isMetricsReportingSetUp(metrics)) {
+            MetricsUtils.metricsReportingSetup(metrics);
         }
     }
 
@@ -424,8 +423,41 @@ public class ServerContext implements AutoCloseable {
      *
      * @return The last persisted layout
      */
-    public synchronized Layout getManagementLayout() {
+    public Layout getManagementLayout() {
         return dataStore.get(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT);
+    }
+
+    /**
+     * Sets the log unit epoch water mark.
+     *
+     * @param resetEpoch Epoch at which the reset command was received.
+     */
+    public synchronized void setLogUnitEpochWaterMark(long resetEpoch) {
+        dataStore.put(Long.class, PREFIX_LOGUNIT, EPOCH_WATER_MARK, resetEpoch);
+    }
+
+    /**
+     * Fetches the epoch at which the last epochWaterMark operation was received.
+     *
+     * @return Reset epoch.
+     */
+    public synchronized long getLogUnitEpochWaterMark() {
+        Long resetEpoch = dataStore.get(Long.class, PREFIX_LOGUNIT, EPOCH_WATER_MARK);
+        return resetEpoch == null ? Layout.INVALID_EPOCH : resetEpoch;
+    }
+
+    /**
+     * Fetches and creates a copy of the Management Layout from the local datastore.
+     *
+     * @return Copy of the management layout from the datastore.
+     */
+    public Layout copyManagementLayout() {
+        Layout l = getManagementLayout();
+        if (l != null) {
+            return new Layout(l);
+        } else {
+            return null;
+        }
     }
 
     /** Get a new "boss" group, which services (accepts) incoming connections.

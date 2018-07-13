@@ -7,10 +7,14 @@ package org.corfudb.util;
  * Created by Sam Behnam on 5/8/18.
  */
 public enum CorfuComponent {
-    ASV("corfu.runtime.as-view."),
-    LUC("corfu.runtime.log-unit-client."),
-    CR("corfu.runtime.client-router."),
-    OBJ("corfu.runtime.object.");
+    // Runtime components
+    ADDRESS_SPACE_VIEW("corfu.runtime.as-view."),
+    CLIENT_ROUTER("corfu.runtime.client-router."),
+    LOG_UNIT_CLIENT("corfu.runtime.log-unit-client."),
+    OBJECT("corfu.runtime.object."),
+
+    // Infrastructure components
+    INFRA_MSG_HANDLER("corfu.infrastructure.message-handler.");
 
     CorfuComponent(String value) {
         this.value = value;

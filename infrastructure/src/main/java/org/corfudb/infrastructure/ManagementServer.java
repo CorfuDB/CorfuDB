@@ -100,10 +100,10 @@ public class ManagementServer extends AbstractServer {
         final CorfuRuntime.CorfuRuntimeParameters params =
                 serverContext.getDefaultRuntimeParameters();
         final CorfuRuntime runtime = CorfuRuntime.fromParameters(params);
+        final Layout managementLayout = serverContext.copyManagementLayout();
         // Runtime can be set up either using the layout or the bootstrapEndpoint address.
-        if (serverContext.getManagementLayout() != null) {
-            serverContext.getManagementLayout().getLayoutServers()
-                    .forEach(runtime::addLayoutServer);
+        if (managementLayout != null) {
+            managementLayout.getLayoutServers().forEach(runtime::addLayoutServer);
         } else {
             runtime.addLayoutServer(getBootstrapEndpoint());
         }
@@ -189,7 +189,7 @@ public class ManagementServer extends AbstractServer {
         log.info("handleFailureDetectedMsg: Received DetectorMsg : {}", msg.getPayload());
 
         DetectorMsg detectorMsg = msg.getPayload();
-        Layout layout = new Layout(serverContext.getManagementLayout());
+        Layout layout = serverContext.copyManagementLayout();
 
         // If this message is stamped with an older epoch which indicates the polling was
         // conducted in an old epoch. This message cannot be considered and is discarded.
@@ -236,7 +236,7 @@ public class ManagementServer extends AbstractServer {
         log.info("handleHealingDetectedMsg: Received DetectorMsg : {}", msg.getPayload());
 
         DetectorMsg detectorMsg = msg.getPayload();
-        Layout layout = new Layout(serverContext.getManagementLayout());
+        Layout layout = serverContext.copyManagementLayout();
 
         // If this message is stamped with an older epoch which indicates the polling was
         // conducted in an old epoch. This message cannot be considered and is discarded.

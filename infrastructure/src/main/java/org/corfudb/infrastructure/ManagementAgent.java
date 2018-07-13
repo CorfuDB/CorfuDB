@@ -153,7 +153,6 @@ public class ManagementAgent {
     // Connectivity of any responsive nodes not responding. Updated by FailureDetector.
     private Set<String> unresponsiveNodesPeerView = Collections.emptySet();
 
-
     /**
      * Checks and restores if a layout is present in the local datastore to recover from.
      * Spawns the initialization task which recovers if required, bootstraps sequencer and
@@ -176,8 +175,9 @@ public class ManagementAgent {
         localServerMetrics = new ServerMetrics(NodeLocator.parseString(getLocalEndpoint()),
                 new SequencerMetrics(SequencerStatus.UNKNOWN));
 
+        Layout managementLayout = serverContext.copyManagementLayout();
         // If no state was preserved, there is no layout to recover.
-        if (serverContext.getManagementLayout() == null) {
+        if (managementLayout == null) {
             recovered = true;
         }
 
@@ -190,11 +190,10 @@ public class ManagementAgent {
         // (In case of trailing layout server, the management server's persisted layout helps.)
         serverContext.installSingleNodeLayoutIfAbsent();
         serverContext.saveManagementLayout(serverContext.getCurrentLayout());
-        serverContext.saveManagementLayout(serverContext.getManagementLayout());
+        serverContext.saveManagementLayout(managementLayout);
 
         if (!recovered) {
-            log.info("Attempting to recover. Layout before shutdown: {}",
-                    serverContext.getManagementLayout());
+            log.info("Attempting to recover. Layout before shutdown: {}", managementLayout);
         }
 
         this.failureDetector = serverContext.getFailureDetector();
@@ -313,7 +312,7 @@ public class ManagementAgent {
      */
     private void bootstrapPrimarySequencerServer() {
         try {
-            Layout layout = serverContext.getManagementLayout();
+            Layout layout = serverContext.copyManagementLayout();
             boolean bootstrapResult = getCorfuRuntime().getLayoutView().getRuntimeLayout(layout)
                     .getPrimarySequencerClient()
                     .bootstrap(0L, Collections.emptyMap(), layout.getEpoch(), false)
@@ -353,7 +352,12 @@ public class ManagementAgent {
      * @return True if recovery was successful. False otherwise.
      */
     private boolean runRecoveryReconfiguration() {
-        Layout layout = new Layout(serverContext.getManagementLayout());
+        Layout layout = serverContext.copyManagementLayout();
+        if (layout == null) {
+            log.error("Management layout is null. Cannot recover.");
+            return false;
+        }
+        Layout localRecoveryLayout = new Layout(layout);
         boolean recoveryReconfigurationResult = reconfigurationEventHandler
                 .recoverCluster(layout, getCorfuRuntime());
         log.info("Recovery reconfiguration attempt result: {}", recoveryReconfigurationResult);
@@ -362,12 +366,11 @@ public class ManagementAgent {
         Layout clusterLayout = getCorfuRuntime().getLayoutView().getLayout();
 
         log.info("Recovery layout epoch:{}, Cluster epoch: {}",
-                serverContext.getManagementLayout().getEpoch(), clusterLayout.getEpoch());
+                localRecoveryLayout.getEpoch(), clusterLayout.getEpoch());
         // The cluster has moved ahead. This node should not force any layout. Let the other
         // members detect that this node has healed and include it in the layout.
-        boolean recoveryResult =
-                clusterLayout.getEpoch() > serverContext.getManagementLayout().getEpoch()
-                        || recoveryReconfigurationResult;
+        boolean recoveryResult = clusterLayout.getEpoch() > localRecoveryLayout.getEpoch()
+                || recoveryReconfigurationResult;
 
         if (recoveryResult) {
             sequencerBootstrappedFuture.complete(true);
@@ -385,7 +388,7 @@ public class ManagementAgent {
     private void updateLocalMetrics() {
         // Initializing the status of components
         // No need to poll unless node is bootstrapped.
-        Layout layout = serverContext.getManagementLayout();
+        Layout layout = serverContext.copyManagementLayout();
         if (layout == null) {
             return;
         }
@@ -493,17 +496,14 @@ public class ManagementAgent {
             healingDetectorFuture = detectionTaskWorkers.submit(() -> {
 
                 CorfuRuntime corfuRuntime = getCorfuRuntime();
-                PollReport pollReport =
-                        healingDetector.poll(serverContext.getManagementLayout(), corfuRuntime);
+                Layout layout = serverContext.copyManagementLayout();
+                PollReport pollReport = healingDetector.poll(layout, corfuRuntime);
 
                 responsiveNodesPeerView = pollReport.getHealingNodes();
 
                 if (!pollReport.getHealingNodes().isEmpty()) {
-
-
                     try {
                         log.info("Attempting to heal nodes in poll report: {}", pollReport);
-                        Layout layout = serverContext.getManagementLayout();
                         corfuRuntime.getLayoutView().getRuntimeLayout(layout)
                                 .getManagementClient(getLocalEndpoint())
                                 .handleHealing(pollReport.getPollEpoch(),
@@ -543,8 +543,8 @@ public class ManagementAgent {
 
                 CorfuRuntime corfuRuntime = getCorfuRuntime();
                 // Execute the failure detection poll round.
-                PollReport pollReport =
-                        failureDetector.poll(serverContext.getManagementLayout(), corfuRuntime);
+                PollReport pollReport = failureDetector.poll(serverContext.copyManagementLayout(),
+                        corfuRuntime);
 
                 unresponsiveNodesPeerView = pollReport.getFailingNodes();
 
@@ -573,7 +573,7 @@ public class ManagementAgent {
     private Set<String> getNewFailures(PollReport pollReport) {
         return Sets.difference(
                 pollReport.getFailingNodes(),
-                new HashSet<>(serverContext.getManagementLayout().getUnresponsiveServers()));
+                new HashSet<>(serverContext.copyManagementLayout().getUnresponsiveServers()));
     }
 
     /**
@@ -587,7 +587,7 @@ public class ManagementAgent {
      */
     private boolean isCurrentLayoutSlotUnFilled(PollReport pollReport) {
         boolean result = pollReport.getOutOfPhaseEpochNodes().keySet()
-                .containsAll(serverContext.getManagementLayout().getLayoutServers());
+                .containsAll(serverContext.copyManagementLayout().getLayoutServers());
         if (result) {
             log.info("Current layout slot is empty. Filling slot with current layout.");
         }
@@ -619,7 +619,7 @@ public class ManagementAgent {
 
             // These conditions are mutually exclusive. If there is a failure to be
             // handled, we don't need to explicitly fix the unfilled layout slot. Else we do.
-            Layout layout = serverContext.getManagementLayout();
+            Layout layout = serverContext.copyManagementLayout();
             if (!failedNodes.isEmpty() || isCurrentLayoutSlotUnFilled(pollReport)) {
 
                 log.info("Detected changes in node responsiveness: Failed:{}, pollReport:{}",
@@ -670,7 +670,7 @@ public class ManagementAgent {
         }
 
         try {
-            Layout layout = serverContext.getManagementLayout();
+            Layout layout = serverContext.copyManagementLayout();
             // Query all layout servers to get quorum Layout.
             Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap = new HashMap<>();
             for (String layoutServer : layout.getLayoutServers()) {
@@ -693,7 +693,7 @@ public class ManagementAgent {
 
             // Update local layout copy.
             serverContext.saveManagementLayout(quorumLayout);
-            layout = serverContext.getManagementLayout();
+            layout = serverContext.copyManagementLayout();
 
             // In case of a partial seal, a set of servers can be sealed with a higher epoch.
             // We should be able to detect this and bring the rest of the servers to this epoch.
@@ -752,7 +752,7 @@ public class ManagementAgent {
             Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap) {
 
         // Patch trailing layout servers with latestLayout.
-        Layout latestLayout = serverContext.getManagementLayout();
+        Layout latestLayout = serverContext.copyManagementLayout();
         layoutCompletableFutureMap.keySet().forEach(layoutServer -> {
             Layout layout = null;
             try {

@@ -1,13 +1,12 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
-
-import java.util.Arrays;
-import java.util.List;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
+
+import java.util.Collections;
+import java.util.List;
 
 /**
  * A request to read multiple addresses.
@@ -30,7 +29,7 @@ public class MultipleReadRequest implements ICorfuPayload<MultipleReadRequest> {
     }
 
     public MultipleReadRequest(Long address) {
-        addresses = Arrays.asList(address);
+        addresses = Collections.singletonList(address);
     }
 
     @Override

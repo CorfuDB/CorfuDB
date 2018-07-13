@@ -5,6 +5,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterables;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -66,7 +67,7 @@ public class AddressSpaceView extends AbstractView {
     public AddressSpaceView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
         MetricRegistry metrics = runtime.getMetrics();
-        final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ASV.toString(),
+        final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(),
                                          this.hashCode());
         metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::estimatedSize);
         metrics.register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
@@ -117,14 +118,15 @@ public class AddressSpaceView extends AbstractView {
      * has been adopted, or a WrongEpochException if the
      * token epoch is invalid.
      *
-     * @param token     The token to use for the write.
-     * @param data      The data to write.
+     * @param token        The token to use for the write.
+     * @param data         The data to write.
+     * @param cacheOption  The caching behaviour for this write
      * @throws OverwriteException   If the globalAddress given
      *                              by the token has adopted
      *                              another value.
      * @throws WrongEpochException  If the token epoch is invalid.
      */
-    public void write(IToken token, Object data) throws OverwriteException {
+    public void write(@Nonnull IToken token, @Nonnull Object data, @Nonnull CacheOption cacheOption) {
         final ILogData ld = new LogData(DataType.DATA, data);
 
         layoutHelper(e -> {
@@ -158,9 +160,19 @@ public class AddressSpaceView extends AbstractView {
         }, true);
 
         // Cache the successful write
-        if (!runtime.getParameters().isCacheDisabled()) {
+        if (!runtime.getParameters().isCacheDisabled() && cacheOption == CacheOption.WRITE_THROUGH) {
             readCache.put(token.getTokenValue(), ld);
         }
+    }
+
+    /**
+     * Write the given log data and then add it to the address
+     * space cache (i.e. WRITE_THROUGH option)
+     *
+     * @see AddressSpaceView#write(IToken, Object, CacheOption)
+     */
+    public void write(IToken token, Object data) throws OverwriteException {
+        write(token, data, CacheOption.WRITE_THROUGH);
     }
 
     /** Directly read from the log, returning any
@@ -376,5 +388,10 @@ public class AddressSpaceView extends AbstractView {
                 .getReplicationProtocol(runtime)
                 .read(e, address)
         );
+    }
+
+    @VisibleForTesting
+    LoadingCache<Long, ILogData> getReadCache() {
+        return readCache;
     }
 }
