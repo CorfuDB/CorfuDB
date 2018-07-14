@@ -1,6 +1,7 @@
 package org.corfudb.runtime.clients;
 
 import io.netty.channel.Channel;
+import io.netty.util.AttributeKey;
 import lombok.Data;
 
 import java.util.HashSet;
@@ -13,44 +14,15 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 public class Batcher {
 
-    static Queue<TaskItem> queue = new ConcurrentLinkedQueue<>();
-
-    static volatile boolean processing = false;
-
-    static void flusher() {
-
-        final int batchSize = 5000;
-        int i = 0;
-        Set<Channel> channelSet = new HashSet<>(5);
-        processing = true;
-        while (queue.peek() != null && i++ < batchSize) {
-            TaskItem item = queue.poll();
-            if (item == null) break;
-            item.channel.write(item.message);
-            channelSet.add(item.channel);
-        }
-
-        processing = false;
-
-        if (i == 0) {
-            return;
-        }
-        //System.out.println("Num writes flushed " + i);
-
-        for (Channel channel : channelSet) {
-            channel.flush();
-        }
-    }
+    private static final AttributeKey<BatchingChannel> KEY = AttributeKey.newInstance(BatchingChannel.class.getName());
 
     public static void writeAndFlush(Channel channel, Object message) {
-        queue.add(new TaskItem(channel, message));
-
-            channel.pipeline().lastContext().executor().execute(Batcher::flusher);
-    }
-    
-    @Data
-    static public class TaskItem {
-        final Channel channel;
-        final Object message;
+        BatchingChannel batchingChannel = channel.attr(KEY).get();
+        if (batchingChannel == null) {
+            batchingChannel = new BatchingChannel(channel);
+            channel.attr(KEY).set(batchingChannel);
+        }
+        batchingChannel.getQueue().add(message);
+        channel.pipeline().lastContext().executor().execute(batchingChannel::flush);
     }
 }

@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import com.codahale.metrics.Timer;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
@@ -173,7 +174,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
         connectionFuture = new CompletableFuture<>();
 
-        handlerMap = new ConcurrentHashMap<>();
+        handlerMap = new HashMap<>();
         clientList = new ArrayList<>();
         requestID = new AtomicLong();
         outstandingRequests = new ConcurrentHashMap<>();
@@ -203,6 +204,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         b.handler(getChannelInitializer());
         b.option(ChannelOption.CONNECT_TIMEOUT_MILLIS,
                 (int) parameters.getConnectionTimeout().toMillis());
+        b.option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
 
         // Asynchronously connect, retrying until shut down.
         // Once connected, connectionFuture will be completed.
