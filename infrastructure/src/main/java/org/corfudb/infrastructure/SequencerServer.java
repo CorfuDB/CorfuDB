@@ -157,6 +157,11 @@ public class SequencerServer extends AbstractServer {
         return executor;
     }
 
+    //ExecutorService executorService = Executors.newSingleThreadExecutor();
+
+    volatile long numOpt = 0;
+    volatile long totalTime = 0;
+
     /**
      * Returns a new SequencerServer.
      * @param serverContext context object providing parameters and objects
@@ -190,6 +195,18 @@ public class SequencerServer extends AbstractServer {
                 })
                 .recordStats()
                 .build();
+
+
+/*        executorService.submit(() -> {
+            for(;;) {
+                try {
+                    System.out.println(totalTime/(numOpt * 1.0));
+                    Thread.sleep(1000 * 2);
+                } catch (Exception e) {
+                    System.out.println(e);
+                }
+            }
+        });*/
     }
 
     /**
@@ -425,9 +442,13 @@ public class SequencerServer extends AbstractServer {
         TokenRequest req = msg.getPayload();
 
         // dispatch request handler according to request type
+        long ts1 = System.nanoTime();
         switch (req.getReqType()) {
             case TokenRequest.TK_QUERY:
                 handleTokenQuery(msg, ctx, r);
+                long ts2 = System.nanoTime();
+                totalTime += (ts2 - ts1);
+                numOpt += 1;
                 return;
 
             case TokenRequest.TK_RAW:

@@ -18,6 +18,7 @@ import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.nio.charset.StandardCharsets;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -38,8 +39,8 @@ public interface ICorfuPayload<T> {
         T construct(ByteBuf buf);
     }
 
-    ConcurrentHashMap<Class<?>, PayloadConstructor<?>>
-            constructorMap = new ConcurrentHashMap<>(
+    static Map<Class<?>, PayloadConstructor<?>>
+            constructorMap = new HashMap<>(
                     ImmutableMap.<Class<?>, PayloadConstructor<?>>builder()
                 .put(Byte.class, ByteBuf::readByte)
                 .put(Integer.class, ByteBuf::readInt)

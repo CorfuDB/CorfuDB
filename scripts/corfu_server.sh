@@ -37,8 +37,8 @@ fi
 
 
 # default heap for corfudb
-CORFUDB_HEAP="${CORFUDB_HEAP:-2000}"
-export JVMFLAGS="-Xmx${CORFUDB_HEAP}m $SERVER_JVMFLAGS"
+CORFUDB_HEAP="${CORFUDB_HEAP:-4000}"
+export JVMFLAGS="-Xmx${CORFUDB_HEAP}m -Xms${CORFUDB_HEAP}m $SERVER_JVMFLAGS"
 
 if [[ $* == *--agent* ]]
 then
