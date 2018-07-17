@@ -6,12 +6,11 @@ public class Driver {
 
     public static void main(String[] args) throws Exception {
         String connString = args[0];
-        int numThreads = Integer.valueOf(args[1]);
-        final int numRt = Integer.valueOf(args[2]);
-        final int numProd = Integer.valueOf(args[3]);
-        final int numCons = Integer.valueOf(args[4]);
-        final int numReq = Integer.valueOf(args[5]);
-        final int payloadSize = Integer.valueOf(args[6]);
+        final int numRt = Integer.valueOf(args[1]);
+        final int numProd = Integer.valueOf(args[2]);
+        final int numCons = Integer.valueOf(args[3]);
+        final int numReq = Integer.valueOf(args[4]);
+        final int payloadSize = Integer.valueOf(args[5]);
 
         CorfuRuntime[] rts = new CorfuRuntime[numRt];
 
@@ -22,36 +21,46 @@ public class Driver {
         Thread[] prodThreads = new Thread[numProd];
         Thread[] consThreads = new Thread[numCons];
 
+        byte[] payload = new byte[payloadSize];
+
         // Producer
+        System.out.println("Producer");
+        int[] numWrites = {0};
+        long[] lastAddress = {0};
         for (int x = 0; x < numProd; x++) {
             final CorfuRuntime rt = rts[x%numRt];
             Runnable r = () -> {
-                long avg = 0;
+                long time = 0;
 
                 for (int i = 0; i < numReq; i++) {
-                    long ts1 = System.nanoTime();
+                    long ts1 = System.currentTimeMillis();
 
                     TokenResponse tr = rt.getSequencerView().next();
                     Token t = tr.getToken();
-                    rt.getAddressSpaceView().write(t, new byte[payloadSize]);
+                    rt.getAddressSpaceView().write(t, payload);
+                    numWrites[0] += 1;
 
-                    long ts2 = System.nanoTime();
-                    avg += (ts2 - ts1);
+                    long ts2 = System.currentTimeMillis();
+                    time += (ts2 - ts1);
                 }
+                lastAddress[0] += rt.getSequencerView().next().getTokenValue();
 
-                System.out.println("Producer: Latency [ms/op]: " + ((avg*1.0)/numReq/1000000.0));
+                System.out.println("(Producer) Latency [ms/op]: " + ((time*1.0)/numReq));
+                System.out.println("(Producer) Throughput [ops/ms]: " + (numReq/(time*1.0)));
             };
 
             prodThreads[x] = new Thread(r); // performs lambda fn from above
         }
 
         // Consumer
+        System.out.println("Consumer");
+        int[] numReads = {0};
         for (int x = 0; x < numCons; x++) {
             final CorfuRuntime rt = rts[x%numRt];
             Runnable r = () -> {
                 long localOffset = -1;
 
-                while (true) {
+                while (localOffset < lastAddress[0]) {
                     TokenResponse tr = rt.getSequencerView().query();
                     long globalOffset = tr.getTokenValue();
 
@@ -66,6 +75,7 @@ public class Driver {
                     } else {
                         for (long i = localOffset + 1; i <= globalOffset; i++) {
                             rt.getAddressSpaceView().read(i);
+                            numReads[0] += 1;
                         }
                         localOffset = globalOffset;
                     }
@@ -86,16 +96,18 @@ public class Driver {
         for (int x = 0; x < numProd; x++) {
             prodThreads[x].join();
         }
-        // kill all cons threads
         for (int x = 0; x < numCons; x++) {
-            consThreads[x].stop();
             consThreads[x].join();
         }
 
         long ts2 = System.currentTimeMillis();
 
+        System.out.println("\nOverall");
+        System.out.println(numWrites[0]);
+        System.out.println(numReads[0]);
+
         System.out.println("Total Time [ms]: " + (ts2 - ts1));
-        System.out.println("Num Ops: " + (numThreads * numReq));
-        System.out.println("Throughput: " + ((numThreads * numReq * 1.0) / (ts2 - ts1)));
+        System.out.println("Num Ops: " + (numWrites[0] + numReads[0]));
+        System.out.println("Throughput: " + (((numWrites[0] + numReads[0]) * 1.0) / (ts2 - ts1)));
     }
 }
