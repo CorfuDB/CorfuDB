@@ -382,6 +382,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                     m2.size(); // Just call any accessor
                 } catch (TransactionAbortedException tae) {
                     fail();
+                } finally {
+                    r.getObjectsView().TXEnd();
                 }
 
             } else {
