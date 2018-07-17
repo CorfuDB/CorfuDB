@@ -19,7 +19,7 @@ DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
 if ls "${DIR}"/../target/*.jar > /dev/null 2>&1; then
   # echo "Running from development source"
-  CLASSPATH=("${DIR}"/../debian/target/nsx-corfu-*-shaded.jar)
+  CLASSPATH=("${DIR}"/../infrastructure/target/infrastructure-*-shaded.jar)
 else
   CLASSPATH=("${CORFUDB_PREFIX}"/share/corfu/lib/*.jar)
 fi
@@ -35,24 +35,10 @@ then
     CLASSPATH=`cygpath -wp "$CLASSPATH"`
 fi
 
-# setup the corfudb heap size by taking a partition of total memory
-if [ ! -z $CORFU_HEAP_SIZE_PERCENT ] && [ $CORFU_HEAP_SIZE_PERCENT -gt 0 ] && [ $CORFU_HEAP_SIZE_PERCENT -lt 100 ]; then
-    TOTAL_MEMORY_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
-    TOTAL_MEMORY_MB=$(($TOTAL_MEMORY_KB/1024))
-    CORFUDB_HEAP=$(($TOTAL_MEMORY_MB*$CORFU_HEAP_SIZE_PERCENT/100))
-fi
 
 # default heap for corfudb
 CORFUDB_HEAP="${CORFUDB_HEAP:-2000}"
-CORFUDB_GC_FLAGS="-XX:+PrintGCDetails -XX:+PrintGCTimeStamps -Xloggc:/var/log/corfu.gc.log"
-export JVMFLAGS="-Xmx${CORFUDB_HEAP}m $CORFUDB_GC_FLAGS $SERVER_JVMFLAGS"
-
-# yourkit profiler setup for corfu server
-if [ -f /usr/yourkit/bin/libyjpagent.so ] && [ ! -z $CORFU_ENABLE_PROFILER ]; then
-    PROFILER_AGENT="-agentpath:/usr/yourkit/bin/libyjpagent.so=port=54322,dir=/var/log,snapshot_name_format=corfu-{sessionname}-{datetime}-{pid}"
-else
-    PROFILER_AGENT=""
-fi
+export JVMFLAGS="-Xmx${CORFUDB_HEAP}m $SERVER_JVMFLAGS"
 
 if [[ $* == *--agent* ]]
 then
