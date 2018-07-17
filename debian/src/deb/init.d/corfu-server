@@ -9,73 +9,175 @@
 # Short-Description:    Corfu Infrastructure Server
 ### END INIT INFO
 
+# BEGIN CORFU CONFIG BLOCK
+export CORFU_HEAP_SIZE_PERCENT=20
+# END CORFU CONFIG BLOCK
+
 umask 022
 
 ROLENAME="Corfu Infrastructure Server"
-PIDFILE=/var/run/corfu.pid
-PREFIX=/usr/local/bin
+RUNDIR=/var/run/corfu
+LOGDIR=/var/log/corfu
+DATADIR=/config/corfu
+CORFU_USER=corfu
 PORT=9000
-OPTS="-l /var/corfu $PORT"
-LOGFILE="/var/log/corfu.$PORT.log"
 . /lib/lsb/init-functions
 
 export PATH="${PATH:+$PATH:}/usr/sbin/:usr/bin"
 
-terminate_corfu_process () {
-    # send SIGTERM to each process under corfu-server systemd service.
-    ps awx -eo pid,cgroup | grep corfu-server.service | awk '{print $1}' | xargs -n 1 kill &> /dev/null
+corfu_user_exist=$(id -u $CORFU_USER > /dev/null 2>&1; echo $?)
+
+ensure_dirs () {
+    if [ ! -d $RUNDIR ]; then
+        mkdir -p $RUNDIR
+        chmod 755 $RUNDIR
+    fi
+    if [ ! -d $LOGDIR ]; then
+        mkdir -p $LOGDIR
+    fi
 }
 
+change_ownership () {
+    if [ "$corfu_user_exist" = 0 ]; then
+        chown -R $CORFU_USER:$CORFU_USER $RUNDIR
+        chown -R $CORFU_USER:$CORFU_USER $LOGDIR
+        chown -R $CORFU_USER:$CORFU_USER $DATADIR
+    fi
+}
+
+ensure_profile_port () {
+    op=$1
+    set +e
+    iptables -w -C INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
+    port_stat=$?
+    set -e
+    if [ $op = "profile" ] && [ ${port_stat} -ne 0 ]; then
+        iptables -w -A INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
+    elif [ $op = "stop" ] && [ ${port_stat} -eq 0 ]; then
+        iptables -w -D INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
+    fi
+}
+
+
+#### TRUST GENERATION BEGINS ####
+#   copy pasted from cbm init   #
+#################################
+# modify for entity
+CBM_USER=nsx-cbm
+ENTITY_NAME=corfu
+ENTITY_USER=$CORFU_USER
+PASSWORD_LENGTH=32
+CBM_BASE_DIR=/config/cluster-manager
+
+
+# this is the directory structure
+# /config/cluster-manager, nsx-cbm, 755
+# /config/cluster-manager/entity, nsx-cbm, 755
+# /config/cluster-manager/entity/public, nsx-cbm, 750
+# /config/cluster-manager/entity/private, entity, 700
+generate_key_trust_artifacts () {
+    CBM_ENTITY_DIR=$CBM_BASE_DIR/$ENTITY_NAME
+
+    CBM_ENTITY_PUBLIC_DIR=$CBM_ENTITY_DIR/public
+    CERT_CER=$CBM_ENTITY_PUBLIC_DIR/certificate.cer
+    CERT_PEM=$CBM_ENTITY_PUBLIC_DIR/certificate.pem
+    TRUSTSTORE_PASS=$CBM_ENTITY_PUBLIC_DIR/truststore.password
+    TRUSTSTORE=$CBM_ENTITY_PUBLIC_DIR/truststore.jks
+
+    CBM_ENTITY_PRIVATE_DIR=$CBM_ENTITY_DIR/private
+    KEYSTORE_PASS=$CBM_ENTITY_PRIVATE_DIR/keystore.password
+    KEYSTORE=$CBM_ENTITY_PRIVATE_DIR/keystore.jks
+
+
+
+    log_daemon_msg "Generating keystore/truststore for ENTITY_NAME=$ENTITY_NAME, ENTITY_USER=$ENTITY_USER."
+
+    if [ -e $CERT_PEM ]; then
+        log_daemon_msg "Certificate already exists."
+        return
+    fi
+
+    # create directories
+    mkdir -p $CBM_ENTITY_PUBLIC_DIR
+    mkdir -p $CBM_ENTITY_PRIVATE_DIR
+
+    # generate certificate, keystore, truststore
+    generate_artifacts
+
+    # modify user and permission
+    modify_user_and_permission
+}
+
+modify_user_and_permission () {
+    chmod 755 $CBM_BASE_DIR
+    chown $CBM_USER:$CBM_USER $CBM_BASE_DIR
+
+    chmod 755 $CBM_ENTITY_DIR
+    chown $CBM_USER:$CBM_USER $CBM_ENTITY_DIR
+
+    chmod -R 750 $CBM_ENTITY_PUBLIC_DIR
+    chmod 640 $CERT_CER
+    chmod 640 $CERT_PEM
+    chmod 640 $TRUSTSTORE_PASS
+    chmod 640 $TRUSTSTORE
+    chown -R $CBM_USER:$CBM_USER $CBM_ENTITY_PUBLIC_DIR
+
+    chmod -R 700 $CBM_ENTITY_PRIVATE_DIR
+    chmod 600 $KEYSTORE_PASS
+    chmod 600 $KEYSTORE
+    chown -R $ENTITY_USER:$ENTITY_USER $CBM_ENTITY_PRIVATE_DIR
+}
+
+generate_artifacts () {
+    #generate keystore password
+    KEYSTORE_PASSWORD=`head /dev/urandom | tr -dc A-Za-z0-9 | head -c $PASSWORD_LENGTH ; echo ''`
+    printf $KEYSTORE_PASSWORD > $KEYSTORE_PASS
+
+    #generate keystore
+    keytool -genkey -noprompt -keyalg RSA -alias self -keysize 2048 -validity 36500 -dname "CN=$ENTITY_NAME" \
+    -keystore $KEYSTORE -storepass $KEYSTORE_PASSWORD -keypass $KEYSTORE_PASSWORD
+
+    #export certificate
+    keytool -noprompt -export -alias self -file $CERT_CER \
+    -keystore $KEYSTORE -storepass $KEYSTORE_PASSWORD -keypass $KEYSTORE_PASSWORD
+    openssl x509 -inform der -in $CERT_CER -out $CERT_PEM
+
+    #generate trust store password
+    TRUSTSTORE_PASSWORD=`head /dev/urandom | tr -dc A-Za-z0-9 | head -c $PASSWORD_LENGTH ; echo ''`
+    printf $TRUSTSTORE_PASSWORD > $TRUSTSTORE_PASS
+
+    #generate trust store
+    keytool -noprompt -import -v -alias self -file $CERT_CER \
+    -keystore $TRUSTSTORE -storepass $TRUSTSTORE_PASSWORD
+}
+#### TRUST GENERATION ENDS ####
+
+
+
 case "$1" in
-    start)
+    start|profile)
         log_daemon_msg "Starting $ROLENAME on port $PORT"
-        if start-stop-daemon --start --quiet  --background --make-pidfile --oknodo --pidfile $PIDFILE \
-        --startas /bin/bash -- -c "exec $PREFIX/corfu_server $OPTS >> $LOGFILE 2>&1"; then
-            log_end_msg 0
-        else
-            log_end_msg 1
-        fi
+        ensure_dirs
+        ensure_profile_port $1
+        generate_key_trust_artifacts
+        change_ownership
+        /usr/tanuki/bin/corfu-server-wrapper $1
         ;;
     stop)
         log_daemon_msg "Stopping $ROLENAME on port $PORT"
-        terminate_corfu_process
-        if start-stop-daemon --stop --quiet  --oknodo --pidfile $PIDFILE; then
-            log_end_msg 0
-        else
-            log_end_msg 1
-        fi
+        /usr/tanuki/bin/corfu-server-wrapper $1
+        ensure_profile_port $1
         ;;
     restart)
-        log_daemon_msg "Restarting $ROLENAME on port $PORT"
-        set +e
-        terminate_corfu_process
-        start-stop-daemon --stop --quiet --retry 30 --pidfile $PIDFILE
-        RET="$?"
-        set -e
-        case $RET in
-            0)
-                if start-stop-daemon --start --quiet  --background --make-pidfile --oknodo --pidfile $PIDFILE \
-                --startas /bin/bash -- -c "exec $PREFIX/corfu_server $OPTS >> $LOGFILE 2>&1"; then
-                    log_end_msg 0
-                else
-                    log_end_msg 1
-                fi
-                ;;
-            1)
-                log_progress_msg "(not running)"
-                log_end_msg 0
-                ;;
-            *)
-                log_progress_msg "(failed to stop)"
-                log_end_msg 1
-                ;;
-            esac
+        $0 stop
+        sleep 1
+        $0 start
         ;;
     status)
-        status_of_proc -p $PIDFILE ${JAVA_HOME}/bin/java "Corfu Infrastructure Server" && exit 0 || exit $?
+        /usr/tanuki/bin/corfu-server-wrapper $1
         ;;
     *)
-        log_action_msg "Usage $0 {start|stop|restart|status}"
+        log_action_msg "Usage $0 {start|profile|stop|restart|status}"
         exit 1
         ;;
 esac

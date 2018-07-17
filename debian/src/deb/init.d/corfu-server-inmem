@@ -1,0 +1,82 @@
+#! /usr/bin/env bash
+
+### BEGIN INIT INFO
+# Provides:             corfu_server_inmem
+# Required-Start:       $remote_fs $syslog
+# Required-Stop:        $remote_fs $syslog
+# Default-Start:        2 3 4 5
+# Default-Stop:         0 1 6
+# Short-Description:    Corfu In-Memory Infrastructure Server
+### END INIT INFO
+
+# BEGIN CORFU CONFIG BLOCK
+export CORFU_HEAP_SIZE_PERCENT=1
+# END CORFU CONFIG BLOCK
+
+umask 022
+
+ROLENAME="Corfu In-Memory Infrastructure Server"
+PIDDIR=/var/run/corfu_inmem
+LOGDIR=/var/log/corfu
+CORFU_USER=corfu
+PORT=9001
+. /lib/lsb/init-functions
+
+export PATH="${PATH:+$PATH:}/usr/sbin/:usr/bin"
+
+corfu_user_exist=$(id -u $CORFU_USER > /dev/null 2>&1; echo $?)
+
+ensure_dirs () {
+    if [ ! -d $PIDDIR ]; then
+        mkdir -p $PIDDIR
+        chmod 755 $PIDDIR
+    fi
+    if [ ! -d $LOGDIR ]; then
+        mkdir -p $LOGDIR
+    fi
+    if [ "$corfu_user_exist" = 0 ]; then
+        chown -R $CORFU_USER:$CORFU_USER $PIDDIR
+        chown -R $CORFU_USER:$CORFU_USER $LOGDIR
+    fi
+}
+
+ensure_profile_port () {
+    op=$1
+    set +e
+    iptables -w -C INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
+    port_stat=$?
+    set -e
+    if [ $op = "profile" ] && [ ${port_stat} -ne 0 ]; then
+        iptables -w -A INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
+    elif [ $op = "stop" ] && [ ${port_stat} -eq 0 ]; then
+        iptables -w -D INPUT -i eth0 -p tcp -m tcp --dport 54322 --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT 2> /dev/null
+    fi
+}
+
+case "$1" in
+    start|profile)
+        log_daemon_msg "Starting $ROLENAME on port $PORT"
+        ensure_dirs
+        ensure_profile_port $1
+        /usr/tanuki/bin/corfu-server-inmem-wrapper $1
+        ;;
+    stop)
+        log_daemon_msg "Stopping $ROLENAME on port $PORT"
+        /usr/tanuki/bin/corfu-server-inmem-wrapper $1
+        ensure_profile_port $1
+        ;;
+    restart)
+        $0 stop
+        sleep 1
+        $0 start
+        ;;
+    status)
+        /usr/tanuki/bin/corfu-server-inmem-wrapper $1
+        ;;
+    *)
+        log_action_msg "Usage $0 {start|profile|stop|restart|status}"
+        exit 1
+        ;;
+esac
+
+exit 0

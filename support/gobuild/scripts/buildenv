@@ -1,0 +1,78 @@
+#!/bin/bash
+# This script will checkout and setup buildenv
+
+set -e
+
+usage () {
+    cat <<EOF
+usage: $0 <action> <dist>
+
+Actions:
+  checkout              Checkout buildenv from remote git repo
+  applymeta             Apply .metadata and change ownership to root
+  destroy               Cleanup buildenv and delete
+Options:
+  --help                            Show this help message
+EOF
+}
+
+action=
+case $1 in
+    --help)
+        usage
+        exit 0
+        ;;
+    checkout)
+        action='checkout'
+        ;;
+    applymeta)
+        action='applymeta'
+        ;;
+    destroy)
+        action='destroy'
+        ;;
+    *)
+        echo "$0: invalid argument '$1'"
+        usage
+        exit 1
+        ;;
+esac
+shift
+if test $# != 1; then
+    echo "$0: invalid buildenv dist '$@'"
+    usage
+    exit 1
+fi
+dist=$1
+
+if [ "$action" = "checkout" ]; then
+    git archive --remote=ssh://git@git.eng.vmware.com/nsx-buildenv \
+                --prefix=$dist/image/ --format=tar $dist | tar xf -
+    git archive --remote=ssh://git@git.eng.vmware.com/nsx-buildenv \
+                --prefix=$dist/image/ --format=tar \
+                master gitvm-meta-apply | tar xf -
+elif [ "$action" = "applymeta" ]; then
+    cp /etc/resolv.conf $(pwd)/$dist/image/etc/resolv.conf
+    cp /etc/localtime $(pwd)/$dist/image/etc/localtime
+    set +e
+    echo "export LC_ALL=C" >> $(pwd)/$dist/image/etc/profile
+    perl_path=$(cat $(pwd)/$dist/image/.metadata | grep 'usr/bin/perl -> .*')
+    set -e
+    if [ "$perl_path"x != ""x ]; then
+        cd $(pwd)/$dist/image
+        ln -s $(echo $perl_path | \
+                sed -e 's/.* \(usr\/bin\/perl\) -> \(.*\)/\/\2 \1/')
+        cd -
+    fi
+    sudo chroot $(pwd)/$dist/image /bin/sh -lc '/gitvm-meta-apply < /.metadata'
+    sudo chown -R root:root $(pwd)/$dist/image
+elif [ "$action" = "destroy" ]; then
+    sudo chroot $(pwd)/$dist/image /bin/sh -lc 'umount -a || true'
+    sudo chroot $(pwd)/$dist/image /bin/sh -lc 'umount /proc || true'
+    sudo chown -R $(whoami):$(id -G -n $(whoami)) $(pwd)/$dist/image
+    rm -rf $(pwd)/$dist
+fi
+
+
+
+
