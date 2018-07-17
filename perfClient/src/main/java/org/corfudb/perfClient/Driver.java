@@ -1,3 +1,5 @@
+package org.corfudb.perfClient;
+
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
