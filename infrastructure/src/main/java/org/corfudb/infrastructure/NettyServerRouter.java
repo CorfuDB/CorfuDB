@@ -38,7 +38,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      */
     @Getter
     @Setter
-    long serverEpoch;
+    volatile long serverEpoch;
 
     /** The {@link AbstractServer}s this {@link NettyServerRouter} routes messages for. */
     @Getter
@@ -50,6 +50,8 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      *                  messages for.
      */
     public NettyServerRouter(List<AbstractServer> servers) {
+        // Initialize the router epoch from the persisted server epoch
+        this.serverEpoch = ((BaseServer) servers.get(0)).serverContext.getServerEpoch();
         this.servers = servers;
         handlerMap = new EnumMap<>(CorfuMsgType.class);
         servers.forEach(server -> server.getHandler().getHandledTypes()
