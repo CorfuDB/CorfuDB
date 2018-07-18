@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -16,13 +17,13 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -37,6 +38,7 @@ import org.corfudb.protocols.wireprotocol.ServerMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
 import org.corfudb.util.CFUtils;
@@ -110,12 +112,16 @@ public class ManagementAgent {
     private volatile boolean shutdown = false;
 
     /**
-     * Future which is marked completed if:
-     * If Recovery, recovered successfully
-     * Else, after bootstrapping the primary sequencer successfully.
+     * Future which is marked completed if the node has recovered.
      */
     @Getter
-    private volatile CompletableFuture<Boolean> sequencerBootstrappedFuture;
+    private volatile CompletableFuture<Boolean> recoveryBarrierFuture;
+
+    /**
+     * Future which is reset every time a new task to bootstrap the sequencer is launched by the
+     * ManagementAgent. This is to avoid multiple bootstrap requests.
+     */
+    private volatile CompletableFuture<Boolean> sequencerRecoveryFuture;
 
     /**
      * The management agent attempts to bootstrap a NOT_READY sequencer if the
@@ -170,7 +176,7 @@ public class ManagementAgent {
         bootstrapEndpoint = (opts.get("--management-server") != null)
                 ? opts.get("--management-server").toString() : null;
 
-        sequencerBootstrappedFuture = new CompletableFuture<>();
+        recoveryBarrierFuture = new CompletableFuture<>();
 
         localServerMetrics = new ServerMetrics(NodeLocator.parseString(getLocalEndpoint()),
                 new SequencerMetrics(SequencerStatus.UNKNOWN));
@@ -226,6 +232,8 @@ public class ManagementAgent {
                         .setNameFormat(serverContext.getThreadPrefix() + "LocalMetricsPolling")
                         .build());
 
+        this.sequencerRecoveryFuture = CompletableFuture.completedFuture(true);
+
         // Creating the initialization task thread.
         // This thread pool is utilized to dispatch one time recovery and sequencer bootstrap tasks.
         // One these tasks finish successfully, they initiate the detection tasks.
@@ -239,6 +247,29 @@ public class ManagementAgent {
     }
 
     /**
+     * Triggers a new task to bootstrap the sequencer for the specified layout. If there is already
+     * a task in progress, this is a no-op.
+     *
+     * @param layout Layout to use to bootstrap the primary sequencer.
+     * @return Completable future which completes when the task completes successfully or with a
+     * failure.
+     */
+    public CompletableFuture<Boolean> triggerSequencerBootstrap(@NonNull Layout layout) {
+        if (sequencerRecoveryFuture.isDone()) {
+            this.sequencerRecoveryFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    getCorfuRuntime().getLayoutManagementView()
+                            .reconfigureSequencerServers(layout, layout, true);
+                } catch (Exception e) {
+                    log.error("triggerSequencerBootstrap: Failed with Exception: ", e);
+                }
+                return true;
+            });
+        }
+        return this.sequencerRecoveryFuture;
+    }
+
+    /**
      * Initialization task.
      * Performs recovery if required.
      * Bootstraps the primary sequencer if the server has been bootstrapped.
@@ -247,50 +278,50 @@ public class ManagementAgent {
     private void initializationTask() {
 
         try {
-            while (!shutdown) {
-                if (serverContext.getManagementLayout() == null && bootstrapEndpoint == null) {
-                    log.warn("Management Server waiting to be bootstrapped");
-                    Sleep.MILLISECONDS.sleepRecoverably(policyExecuteInterval);
+            while (!shutdown && serverContext.getManagementLayout() == null
+                    && bootstrapEndpoint == null) {
+                log.warn("Management Server waiting to be bootstrapped");
+                Sleep.MILLISECONDS.sleepRecoverably(policyExecuteInterval);
+            }
+
+            // Recover if flag is false
+            while (!recovered) {
+                recovered = runRecoveryReconfiguration();
+                if (!recovered) {
+                    log.error("detectorTaskScheduler: Recovery failed. Retrying.");
                     continue;
                 }
-
-                // Recover if flag is false
-                while (!recovered) {
-                    recovered = runRecoveryReconfiguration();
-                    if (!recovered) {
-                        log.error("detectorTaskScheduler: Recovery failed. Retrying.");
-                        continue;
-                    }
-                    // If recovery succeeds, reconfiguration was successful.
-                    sequencerBootstrappedFuture.complete(true);
-                    log.info("Recovery completed");
-                }
-                break;
+                // If recovery succeeds, reconfiguration was successful.
+                triggerSequencerBootstrap(serverContext.copyManagementLayout());
+                recoveryBarrierFuture.complete(true);
+                log.info("Recovery completed");
             }
 
-            // Sequencer bootstrap required if this is fresh startup (not recovery).
-            if (!sequencerBootstrappedFuture.isDone()) {
+            // Sequencer bootstrap required if this is fresh startup.
+            if (!recoveryBarrierFuture.isDone()) {
                 bootstrapPrimarySequencerServer();
             }
+            recoveryBarrierFuture.complete(true);
 
             // Initiating periodic task to poll for failures.
-            try {
-                localMetricsPollingService.scheduleAtFixedRate(
-                        this::updateLocalMetrics,
-                        0,
-                        METRICS_POLL_INTERVAL.toMillis(),
-                        TimeUnit.MILLISECONDS);
+            localMetricsPollingService.scheduleAtFixedRate(
+                    this::updateLocalMetrics,
+                    0,
+                    METRICS_POLL_INTERVAL.toMillis(),
+                    TimeUnit.MILLISECONDS);
 
-                detectionTasksScheduler.scheduleAtFixedRate(
-                        this::detectorTaskScheduler,
-                        0,
-                        policyExecuteInterval,
-                        TimeUnit.MILLISECONDS);
-            } catch (RejectedExecutionException err) {
-                log.error("Error scheduling failure detection task, {}", err);
-            }
+            detectionTasksScheduler.scheduleAtFixedRate(
+                    this::detectorTaskScheduler,
+                    0,
+                    policyExecuteInterval,
+                    TimeUnit.MILLISECONDS);
+
         } catch (InterruptedException e) {
+            log.error("initializationTask: InitializationTask interrupted.");
             Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            log.error("initializationTask: Error in initializationTask.", e);
+            throw new UnrecoverableCorfuError(e);
         }
     }
 
@@ -317,7 +348,7 @@ public class ManagementAgent {
                     .getPrimarySequencerClient()
                     .bootstrap(0L, Collections.emptyMap(), layout.getEpoch(), false)
                     .get();
-            sequencerBootstrappedFuture.complete(bootstrapResult);
+            recoveryBarrierFuture.complete(bootstrapResult);
             // If false, the sequencer is already bootstrapped with a higher epoch.
             if (!bootstrapResult) {
                 log.warn("Sequencer already bootstrapped.");
@@ -373,7 +404,7 @@ public class ManagementAgent {
                 || recoveryReconfigurationResult;
 
         if (recoveryResult) {
-            sequencerBootstrappedFuture.complete(true);
+            recoveryBarrierFuture.complete(true);
         }
 
         return recoveryResult;
@@ -645,8 +676,9 @@ public class ManagementAgent {
                     if (sequencerNotReadyCounter.getCounter() >= SEQUENCER_NOT_READY_THRESHOLD) {
                         // Launch task to bootstrap the primary sequencer.
                         log.info("Attempting to bootstrap the primary sequencer.");
-                        getCorfuRuntime().getLayoutManagementView()
-                                .reconfigureSequencerServers(layout, layout, true);
+                        // We do not care about the result of the trigger.
+                        // If it fails, we detect this again and retry in the next polling cycle.
+                        triggerSequencerBootstrap(layout);
                     }
                 }
             }
@@ -800,6 +832,10 @@ public class ManagementAgent {
         try {
             initializationTaskThread.interrupt();
             initializationTaskThread.join(ServerContext.SHUTDOWN_TIMER.toMillis());
+        } catch (InterruptedException ie) {
+            log.error("initializationTask interrupted : {}", ie);
+        }
+        try {
             detectionTasksScheduler.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(),
                     TimeUnit.SECONDS);
             detectionTaskWorkers.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(),

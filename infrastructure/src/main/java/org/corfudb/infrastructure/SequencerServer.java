@@ -400,7 +400,7 @@ public class SequencerServer extends AbstractServer {
 
         log.info("Sequencer reset with token = {}, streamTailToGlobalTailMap = {},"
                         + " bootstrapEpoch = {}",
-                initialToken, streamTailToGlobalTailMap, bootstrapEpoch);
+                globalLogTail.get(), streamTailToGlobalTailMap, bootstrapEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
