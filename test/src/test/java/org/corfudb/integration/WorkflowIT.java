@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.integration.cluster.Harness.Node;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -10,9 +11,11 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.integration.Harness.run;
 
 /**
  * This integration test verifies the behaviour of the add node workflow. In particular, a single node
@@ -272,5 +275,33 @@ public class WorkflowIT extends AbstractIT {
         }
 
         shutdownCorfuServer(p0);
+    }
+
+    @Test
+    public void forceRemoveTwoDeadNodes() throws Exception {
+        // Create a 3 node cluster and attempt to force remove two
+        // dead nodes. This will test the case where the layout doesn't
+        // reflect the set of unresponsive servers and thus needs to rely
+        // on selecting an available orchestrator to force remove the dead nodes.
+        Harness harness = new Harness();
+
+        final int numNodes = 3;
+        List<Node> nodeList = harness.deployCluster(numNodes);
+        Node n0 = nodeList.get(0);
+        Node n1 = nodeList.get(1);
+        Node n2 = nodeList.get(2);
+
+        CorfuRuntime rt = new CorfuRuntime(n2.getClusterAddress()).connect();
+
+        assertThat(rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(numNodes);
+
+        // Shutdown two nodes
+        run(n0.shutdown, n1.shutdown);
+
+        rt.getManagementView().forceRemoveNode(n0.getAddress(), workflowNumRetry, timeout, pollPeriod);
+        rt.getManagementView().forceRemoveNode(n1.getAddress(), workflowNumRetry, timeout, pollPeriod);
+
+        assertThat(rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(1);
+        assertThat(rt.getLayoutView().getLayout().getAllServers()).containsExactly(n2.getAddress());
     }
 }

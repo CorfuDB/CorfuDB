@@ -1,6 +1,8 @@
-package org.corfudb.integration.cluster.Harness;
+package org.corfudb.integration;
 
 import org.corfudb.integration.AbstractIT;
+import org.corfudb.integration.cluster.Harness.Action;
+import org.corfudb.integration.cluster.Harness.Node;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.view.Layout;
 
@@ -44,9 +46,10 @@ public class Harness {
         long epoch = 0;
 
         for (int x = 0; x < n; x++) {
-            layoutServers.add(getAddressForNode(x));
-            sequencer.add(getAddressForNode(x));
-            stripServers.add(getAddressForNode(x));
+            int port = basePort + x;
+            layoutServers.add(getAddressForNode(port));
+            sequencer.add(getAddressForNode(port));
+            stripServers.add(getAddressForNode(port));
         }
 
         Layout.LayoutSegment segment = new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, -1L,
@@ -58,7 +61,8 @@ public class Harness {
     String getClusterConnectionString(int n) {
         String conn = "";
         for (int i = 0; i < n; i++) {
-            conn += getAddressForNode(i) + ",";
+            int port = basePort + i;
+            conn += getAddressForNode(port) + ",";
         }
         return conn.substring(0, conn.length() - 1);
     }
@@ -86,13 +90,14 @@ public class Harness {
         List<Node> nodes = new ArrayList<>(n);
         String conn = getClusterConnectionString(n);
         for (int i = 0; i < n; i++) {
+            int port = basePort + i;
             Process proc = new AbstractIT.CorfuServerRunner()
                     .setHost(localAddress)
-                    .setPort(basePort + i)
-                    .setLogPath(getCorfuServerLogPath(localAddress, basePort + i))
+                    .setPort(port)
+                    .setLogPath(getCorfuServerLogPath(localAddress, port))
                     .setSingle(false)
                     .runServer();
-            nodes.add(new Node(getAddressForNode(i), conn, getCorfuServerLogPath(localAddress, basePort + i)));
+            nodes.add(new Node(getAddressForNode(port), conn, getCorfuServerLogPath(localAddress, port)));
         }
 
         final Layout layout = getLayoutForNodes(n);
