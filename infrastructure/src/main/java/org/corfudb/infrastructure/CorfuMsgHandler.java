@@ -219,7 +219,7 @@ public class CorfuMsgHandler {
         return (msg, ctx, r) -> {
             if (server.isShutdown()) {
                 log.warn("Server received {} but is shutdown.", msg.getMsgType().toString());
-                r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SHUTDOWN_EXCEPTION.msg());
+                r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SERVER_UNAVAILABLE.msg());
                 return;
             }
 

@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
+import org.corfudb.runtime.exceptions.UnavailableServerException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -114,6 +115,8 @@ public abstract class AbstractView {
                             + "invalidate view", we.getCorrectEpoch());
                 } else if (re instanceof NetworkException) {
                     log.warn("layoutHelper: System seems unavailable", re);
+                } else if (re instanceof UnavailableServerException) {
+                    log.warn("layoutHelper: Server unavailable, retrying rpc", re);
                 } else {
                     throw re;
                 }
