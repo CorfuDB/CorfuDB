@@ -97,6 +97,7 @@ public enum CorfuMsgType {
     HEARTBEAT_RESPONSE(76, new TypeToken<CorfuPayloadMsg<NodeView>>(){}, true),
     ORCHESTRATOR_REQUEST(77, new TypeToken<CorfuPayloadMsg<OrchestratorMsg>>() {}, true),
     ORCHESTRATOR_RESPONSE(78, new TypeToken<CorfuPayloadMsg<OrchestratorResponse>>() {}, true),
+    MANAGEMENT_LAYOUT_REQUEST(79, TypeToken.of(CorfuMsg.class), true),
 
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true),
     ERROR_SHUTDOWN_EXCEPTION(201, TypeToken.of(CorfuMsg.class), true),
