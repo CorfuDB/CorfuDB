@@ -1,0 +1,24 @@
+# Review test target config file
+#
+# How to configure:
+#
+# File is in YAML syntax. All keys are optional except the target name.
+#
+# inherit: (inherit all parent directories' configs when true
+#           default: true)
+# targets:
+#     gobuild:
+#         - target_name (list item is a target name, OR
+#                        a dictionary with the following keys)
+#         - target: (target name, required)
+#           repo: (default: current repo)
+#           branch: (default: current branch)
+#           buildtype: (default: beta)
+#           optional: (incidates that this target does not affect Verified score,
+#                      default: false)
+#     jenkins:
+#         - job-name (jenkins job name, required)
+inherit: true
+targets:
+  gobuild:
+  - nsx-corfudb
