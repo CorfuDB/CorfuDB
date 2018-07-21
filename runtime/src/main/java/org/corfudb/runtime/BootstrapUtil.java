@@ -1,9 +1,9 @@
 package org.corfudb.runtime;
 
 import java.time.Duration;
+import java.util.concurrent.ExecutionException;
 
-import javax.annotation.Nonnull;
-
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -14,7 +14,9 @@ import org.corfudb.runtime.clients.LayoutHandler;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 
@@ -35,10 +37,55 @@ public class BootstrapUtil {
      * @param retries      Number of retries to bootstrap each node before giving up.
      * @param retryTimeout Duration between retries.
      */
-    public static void bootstrap(@Nonnull Layout layout,
+    public static void bootstrap(@NonNull Layout layout,
                                  int retries,
-                                 @Nonnull Duration retryTimeout) {
+                                 @NonNull Duration retryTimeout) {
         bootstrap(layout, CorfuRuntimeParameters.builder().build(), retries, retryTimeout);
+    }
+
+    /**
+     * Bootstraps a layout server connected to the specified router.
+     *
+     * @param router Router connected to the node.
+     * @param layout Layout to bootstrap with
+     */
+    private static void bootstrapLayoutServer(IClientRouter router, Layout layout)
+            throws ExecutionException, InterruptedException, AlreadyBootstrappedException {
+        LayoutClient layoutClient = new LayoutClient(router, layout.getEpoch());
+
+        try {
+            CFUtils.getUninterruptibly(layoutClient.bootstrapLayout(layout),
+                    AlreadyBootstrappedException.class);
+        } catch (AlreadyBootstrappedException abe) {
+            if (!layoutClient.getLayout().get().equals(layout)) {
+                log.error("BootstrapUtil: Layout Server {}:{} already bootstrapped with different "
+                        + "layout.", router.getHost(), router.getPort());
+                throw abe;
+            }
+        }
+    }
+
+    /**
+     * Bootstraps a management server connected to the specified router.
+     *
+     * @param router Router connected to the node.
+     * @param layout Layout to bootstrap with
+     */
+    private static void bootstrapManagementServer(IClientRouter router, Layout layout)
+            throws ExecutionException, InterruptedException, AlreadyBootstrappedException {
+        ManagementClient managementClient
+                = new ManagementClient(router, layout.getEpoch());
+
+        try {
+            CFUtils.getUninterruptibly(managementClient.bootstrapManagement(layout),
+                    AlreadyBootstrappedException.class);
+        } catch (AlreadyBootstrappedException abe) {
+            if (!managementClient.getLayout().get().equals(layout)) {
+                log.error("BootstrapUtil: Management Server {}:{} already bootstrapped with "
+                        + "different layout.", router.getHost(), router.getPort());
+                throw abe;
+            }
+        }
     }
 
     /**
@@ -51,10 +98,10 @@ public class BootstrapUtil {
      * @param retries                Number of retries to bootstrap each node before giving up.
      * @param retryTimeout           Duration between retries.
      */
-    public static void bootstrap(@Nonnull Layout layout,
-                                 @Nonnull CorfuRuntimeParameters corfuRuntimeParameters,
+    public static void bootstrap(@NonNull Layout layout,
+                                 @NonNull CorfuRuntimeParameters corfuRuntimeParameters,
                                  int retries,
-                                 @Nonnull Duration retryTimeout) {
+                                 @NonNull Duration retryTimeout) {
         for (String server : layout.getAllServers()) {
             int retry = retries;
             while (retry-- > 0) {
@@ -66,12 +113,15 @@ public class BootstrapUtil {
                             .addClient(new ManagementHandler())
                             .addClient(new BaseHandler());
 
-                    new LayoutClient(router, layout.getEpoch())
-                            .bootstrapLayout(layout).get();
-                    new ManagementClient(router, layout.getEpoch())
-                            .bootstrapManagement(layout).get();
+                    bootstrapLayoutServer(router, layout);
+                    bootstrapManagementServer(router, layout);
+
                     router.stop();
                     break;
+                } catch (AlreadyBootstrappedException abe) {
+                    log.error("Bootstrapping node:{} failed with exception:", server, abe);
+                    log.error("Cannot retry since already bootstrapped.");
+                    throw new RuntimeException(abe);
                 } catch (Exception e) {
                     log.error("Bootstrapping node:{} failed with exception:", server, e);
                     if (retry == 0) {
@@ -82,5 +132,6 @@ public class BootstrapUtil {
                 }
             }
         }
+        log.info("Bootstrapping layout:{} successful.", layout);
     }
 }
