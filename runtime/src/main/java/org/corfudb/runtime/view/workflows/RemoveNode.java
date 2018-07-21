@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.workflows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
 
 import javax.annotation.Nonnull;
@@ -30,14 +31,13 @@ public class RemoveNode extends WorkflowRequest {
     }
 
     @Override
-    protected UUID sendRequest(@Nonnull Layout layout) throws TimeoutException {
+    protected UUID sendRequest(@Nonnull ManagementClient managementClient) throws TimeoutException {
         // Send an remove node request to an orchestrator that is not on the node
         // to be removed
-
-        CreateWorkflowResponse resp = getOrchestrator(layout).removeNode(nodeForWorkflow);
-        log.info("sendRequest: requested to remove {} on orchestrator {}:{}, layout {}",
-                nodeForWorkflow, getOrchestrator(layout).getRouter().getHost(),
-                getOrchestrator(layout).getRouter().getPort(), layout);
+        CreateWorkflowResponse resp = managementClient.removeNode(nodeForWorkflow);
+        log.info("sendRequest: requested to remove {} on orchestrator {}:{}",
+                nodeForWorkflow, managementClient.getRouter().getHost(),
+                managementClient.getRouter().getPort());
         return resp.getWorkflowId();
     }
 
