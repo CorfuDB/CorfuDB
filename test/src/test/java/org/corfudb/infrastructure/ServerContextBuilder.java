@@ -20,6 +20,7 @@ public class ServerContextBuilder {
     boolean memory = true;
     String logPath = null;
     boolean noVerify = false;
+    boolean noSync = false;
 
     boolean tlsEnabled = false;
     boolean tlsMutualAuthEnabled = false;
@@ -67,6 +68,7 @@ public class ServerContextBuilder {
         }
          builder
                  .put("--no-verify", noVerify)
+                 .put("--no-sync", noSync)
                  .put("--address", address)
                  .put("--cache-heap-ratio", cacheSizeHeapRatio)
                  .put("--enable-tls", tlsEnabled)
