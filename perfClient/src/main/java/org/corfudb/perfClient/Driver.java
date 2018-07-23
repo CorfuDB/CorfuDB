@@ -46,7 +46,9 @@ public class Driver {
                     TokenResponse tr = rt.getSequencerView().next();
                     Token t = tr.getToken();
                     rt.getAddressSpaceView().write(t, payload);
+
                     lastAddress[ind] = t.getTokenValue(); // this is the new last address
+                    System.out.println("Written at: " + (t.getTokenValue()));
                     numWrites[ind] += 1;
 
                     long ts2 = System.currentTimeMillis();
@@ -90,18 +92,21 @@ public class Driver {
                     long globalOffset = maxAddress;
                     long delta = globalOffset - localOffset;
 
-                    if (delta == 0) {
-                        try {
-                            Thread.sleep(1000);
-                        } catch (Exception e) {
-                            System.out.println("Error: could not sleep!");
+                    if (maxAddress != 0) {
+                        if (delta == 0) {
+                            try {
+                                Thread.sleep(1000);
+                            } catch (Exception e) {
+                                System.out.println("Error: could not sleep!");
+                            }
+                        } else {
+                            for (long i = localOffset + 1; i <= globalOffset; i++) {
+                                rt.getAddressSpaceView().read(i);
+                                System.out.println("Read from: " + (i));
+                                numReads[ind] += 1;
+                            }
+                            localOffset = globalOffset;
                         }
-                    } else {
-                        for (long i = localOffset + 1; i <= globalOffset; i++) {
-                            rt.getAddressSpaceView().read(i);
-                            numReads[ind] += 1;
-                        }
-                        localOffset = globalOffset;
                     }
 
                     long ts2 = System.currentTimeMillis();
