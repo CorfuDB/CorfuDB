@@ -1,18 +1,22 @@
 package org.corfudb.perfClient;
 
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.AddressSpaceProducer;
+import org.corfudb.runtime.view.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 public class Driver {
-    public static void main(String[] args) throws Exception {
+    public static void runProducerConsumer(String[] args, String prodClass, String consClass) throws Exception {
         String connString = args[0];
         final int numRt = Integer.valueOf(args[1]);
         final int numProd = Integer.valueOf(args[2]);
         final int numCons = Integer.valueOf(args[3]);
         final int numReq = Integer.valueOf(args[4]);
         final int payloadSize = Integer.valueOf(args[5]);
+        final UUID streamID = UUID.randomUUID();
 
         CorfuRuntime[] rts = new CorfuRuntime[numRt];
 
@@ -26,29 +30,28 @@ public class Driver {
         byte[] payload = new byte[payloadSize];
 
         // Producer
-        System.out.println("Producer");
         int[] numWrites = new int[numProd];
-        long[] lastAddress = new long[numProd];
         boolean[] completed = {false};
         for (int x = 0; x < numProd; x++) {
             final CorfuRuntime rt = rts[x%numRt];
             final int ind = x;
             Runnable r = () -> {
-                System.out.println("[p] x: " + (ind)); // should be diff for all threads
+                long startTime = System.currentTimeMillis();
 
-                long time = 0;
-
-                AddressSpaceProducer producer = new AddressSpaceProducer(rt);
-                for (int i = 0; i < numReq; i++) {
-                    long ts1 = System.currentTimeMillis();
-
-                    lastAddress[ind] = producer.send(payload); // this is the new last address
-                    System.out.println("Written at: " + (lastAddress[ind]));
-                    numWrites[ind] += 1;
-
-                    long ts2 = System.currentTimeMillis();
-                    time += (ts2 - ts1);
+                Producer producer = null;
+                if (prodClass.equals("AddressSpaceProducer")) {
+                    producer = new AddressSpaceProducer(rt);
+                } else if (prodClass.equals("StreamsProducer")) {
+                    producer = new StreamsProducer(rt, streamID);
                 }
+
+                for (int i = 0; i < numReq; i++) {
+                    producer.send(payload);
+                    numWrites[ind] += 1;
+                }
+
+                long endTime = System.currentTimeMillis();
+                long time = endTime - startTime;
 
                 System.out.println("(Producer) Latency [ms/op]: " + ((time*1.0)/numReq)
                         + " " + ((time*1.0)/numWrites[ind]));
@@ -61,58 +64,31 @@ public class Driver {
         }
 
         // Consumer
-        System.out.println("Consumer");
         int[] numReads = new int[numCons];
         for (int x = 0; x < numCons; x++) {
             final CorfuRuntime rt = rts[x%numRt];
             final int ind = x;
             Runnable r = () -> {
-                System.out.println("[c] x: " + (ind)); // should be diff for all threads
+                long startTime = System.currentTimeMillis();
 
-                long time = 0;
-                long localOffset = -1;
+                List<ILogData> data = new ArrayList<>();
 
-                boolean lastTime = false;
-
-                while (!completed[0] || lastTime) {
-                    long ts1 = System.currentTimeMillis();
-
-                    long maxAddress = 0;
-                    for (int i = 0; i < numProd; i++) {
-                        if (lastAddress[i] > maxAddress) {
-                            maxAddress = lastAddress[i];
-                        }
-                    }
-
-                    long globalOffset = maxAddress;
-                    long delta = globalOffset - localOffset;
-
-                    if (maxAddress != 0) {
-                        if (delta == 0) {
-                            try {
-                                Thread.sleep(1000);
-                            } catch (Exception e) {
-                                System.out.println("Error: could not sleep!");
-                            }
-                        } else {
-                            for (long i = localOffset + 1; i <= globalOffset; i++) {
-                                rt.getAddressSpaceView().read(i);
-                                System.out.println("Read from: " + (i));
-                                numReads[ind] += 1;
-                            }
-                            localOffset = globalOffset;
-                        }
-                    }
-
-                    long ts2 = System.currentTimeMillis();
-                    time += (ts2 - ts1);
-
-                    if (lastTime) {
-                        lastTime = false;
-                    } else if (completed[0]) {
-                        lastTime = true;
-                    }
+                Consumer consumer = null;
+                if (consClass.equals("AddressSpaceConsumer")) {
+                    consumer = new AddressSpaceConsumer(rt);
+                } else if (consClass.equals("StreamConsumer")) {
+                    consumer = new StreamConsumer(streamID, rt);
                 }
+
+                while (!completed[0]) {
+                    List<ILogData> newData = consumer.poll(1000);
+                    data.addAll(newData);
+                    numReads[ind] += newData.size();
+                }
+                data.addAll(consumer.poll(1000));
+
+                long endTime = System.currentTimeMillis();
+                long time = endTime - startTime;
 
                 System.out.println("(Consumer) Latency [ms/op]: " + ((time*1.0)/numReads[ind]));
                 System.out.println("(Consumer) Throughput [ops/ms]: " + (numReads[ind]/(time*1.0)));
@@ -122,7 +98,7 @@ public class Driver {
             consThreads[x] = new Thread(r); // performs lambda fn from above
         }
 
-        long ts1 = System.currentTimeMillis();
+        long startTime = System.currentTimeMillis();
 
         for (int x = 0; x < numProd; x++) {
             prodThreads[x].start();
@@ -134,14 +110,14 @@ public class Driver {
             prodThreads[x].join();
         }
 
-        // set last address here (do the .query)
         completed[0] = true;
 
         for (int x = 0; x < numCons; x++) {
             consThreads[x].join();
         }
 
-        long ts2 = System.currentTimeMillis();
+        long endTime = System.currentTimeMillis();
+        long time = endTime - startTime;
 
         int totalWrites = 0;
         for (int i = 0; i < numProd; i++) {
@@ -153,11 +129,16 @@ public class Driver {
         }
 
         System.out.println("\nOverall");
-        System.out.println(totalWrites);
-        System.out.println(totalReads);
+        System.out.println("Total Writes: " + (totalWrites));
+        System.out.println("Total Reads: " + (totalReads));
 
-        System.out.println("Total Time [ms]: " + (ts2 - ts1));
+        System.out.println("Total Time [ms]: " + (time));
         System.out.println("Num Ops: " + (totalWrites + totalReads));
-        System.out.println("Throughput: " + (((totalWrites + totalReads)*1.0) / (ts2 - ts1)));
+        System.out.println("Throughput: " + (((totalWrites + totalReads)*1.0) / (time)));
+    }
+
+    public static void main(String[] args) throws Exception {
+        runProducerConsumer(args, "AddressSpaceProducer", "AddressSpaceConsumer");
+        runProducerConsumer(args, "StreamsProducer", "StreamConsumer");
     }
 }
