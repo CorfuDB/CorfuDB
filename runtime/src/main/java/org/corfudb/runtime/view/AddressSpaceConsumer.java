@@ -9,8 +9,7 @@ import java.util.stream.LongStream;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 
-public class AddressSpaceConsumer implements IConsumer {
-
+public class AddressSpaceConsumer implements Consumer {
     final CorfuRuntime rt;
     long lastAddress = -1;
 

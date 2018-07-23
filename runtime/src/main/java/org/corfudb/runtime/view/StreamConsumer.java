@@ -7,8 +7,7 @@ import java.util.UUID;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 
-public class StreamConsumer implements IConsumer {
-
+public class StreamConsumer implements Consumer {
     final UUID streamID;
     final CorfuRuntime rt;
     long lastAddress = -1;
