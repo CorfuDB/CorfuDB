@@ -3,12 +3,10 @@ package org.corfudb.perfClient;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.AddressSpaceProducer;
 
 public class Driver {
-
     public static void main(String[] args) throws Exception {
-        // use cons prod APIs now instead of all this other stuff
-
         String connString = args[0];
         final int numRt = Integer.valueOf(args[1]);
         final int numProd = Integer.valueOf(args[2]);
@@ -40,15 +38,12 @@ public class Driver {
 
                 long time = 0;
 
+                AddressSpaceProducer producer = new AddressSpaceProducer(rt);
                 for (int i = 0; i < numReq; i++) {
                     long ts1 = System.currentTimeMillis();
 
-                    TokenResponse tr = rt.getSequencerView().next();
-                    Token t = tr.getToken();
-                    rt.getAddressSpaceView().write(t, payload);
-
-                    lastAddress[ind] = t.getTokenValue(); // this is the new last address
-                    System.out.println("Written at: " + (t.getTokenValue()));
+                    lastAddress[ind] = producer.send(payload); // this is the new last address
+                    System.out.println("Written at: " + (lastAddress[ind]));
                     numWrites[ind] += 1;
 
                     long ts2 = System.currentTimeMillis();

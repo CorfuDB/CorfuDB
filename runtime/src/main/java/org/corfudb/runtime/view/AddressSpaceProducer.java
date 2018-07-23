@@ -12,7 +12,6 @@ public class AddressSpaceProducer implements Producer {
      }
 
      public long send(Object payload) {
-         // put in a loop that retries until it works - how??
          while(true) {
              try {
                  TokenResponse tr = runtime.getSequencerView().next();
