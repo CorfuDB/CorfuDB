@@ -38,6 +38,8 @@ public class Driver {
             Runnable r = () -> {
                 long startTime = System.currentTimeMillis();
 
+                System.out.println("Inside producer " + (ind));
+
                 Producer producer = null;
                 if (prodClass.equals("AddressSpaceProducer")) {
                     producer = new AddressSpaceProducer(rt);
@@ -48,6 +50,7 @@ public class Driver {
                 for (int i = 0; i < numReq; i++) {
                     producer.send(payload);
                     numWrites[ind] += 1;
+                    System.out.println("Incremented num writes to " + (numWrites[ind]));
                 }
 
                 long endTime = System.currentTimeMillis();
@@ -71,6 +74,8 @@ public class Driver {
             Runnable r = () -> {
                 long startTime = System.currentTimeMillis();
 
+                System.out.println("Inside consumer " + (ind));
+
                 List<ILogData> data = new ArrayList<>();
 
                 Consumer consumer = null;
@@ -85,6 +90,7 @@ public class Driver {
                     newData = consumer.poll(1000);
                     data.addAll(newData);
                     numReads[ind] += newData.size();
+                    System.out.println("Incremented num reads to " + (numWrites[ind]));
                 }
                 newData = consumer.poll(1000);
                 data.addAll(newData);
