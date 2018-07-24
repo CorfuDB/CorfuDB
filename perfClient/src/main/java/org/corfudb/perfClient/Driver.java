@@ -80,12 +80,15 @@ public class Driver {
                     consumer = new StreamConsumer(streamID, rt);
                 }
 
+                List<ILogData> newData;
                 while (!completed[0]) {
-                    List<ILogData> newData = consumer.poll(1000);
+                    newData = consumer.poll(1000);
                     data.addAll(newData);
                     numReads[ind] += newData.size();
                 }
-                data.addAll(consumer.poll(1000));
+                newData = consumer.poll(1000);
+                data.addAll(newData);
+                numReads[ind] += newData.size();
 
                 long endTime = System.currentTimeMillis();
                 long time = endTime - startTime;
@@ -138,7 +141,7 @@ public class Driver {
     }
 
     public static void main(String[] args) throws Exception {
-        runProducerConsumer(args, "AddressSpaceProducer", "AddressSpaceConsumer");
+        //runProducerConsumer(args, "AddressSpaceProducer", "AddressSpaceConsumer");
         runProducerConsumer(args, "StreamsProducer", "StreamConsumer");
     }
 }
