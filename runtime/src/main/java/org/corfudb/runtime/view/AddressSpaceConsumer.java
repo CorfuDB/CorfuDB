@@ -13,6 +13,7 @@ public class AddressSpaceConsumer implements Consumer {
 
     final CorfuRuntime rt;
     long lastAddress = -1;
+    long tempDelta = 0;
 
     public AddressSpaceConsumer(CorfuRuntime runtime) {
         rt = runtime;
@@ -20,25 +21,23 @@ public class AddressSpaceConsumer implements Consumer {
 
     @Override
     public List<ILogData> poll(long timeout) {
-
         List<ILogData> data = new ArrayList<>();
 
         long startTime = System.currentTimeMillis();
 
         while (System.currentTimeMillis() - startTime <= timeout) {
             long globalOffset = rt.getSequencerView().query().getTokenValue();
-
             long delta = globalOffset - lastAddress;
 
             if (delta != 0) {
-                List<Long> range = LongStream.range(lastAddress, globalOffset + 1).boxed().collect(Collectors.toList());
-                Map<Long, ILogData> map = rt.getAddressSpaceView().read(range);
+                for (long i = lastAddress + 1; i <= globalOffset; i++) {
+                    ILogData ld = rt.getAddressSpaceView().read(i);
+                    data.add(ld);
+                }
                 this.lastAddress = globalOffset;
-                data = new ArrayList<>(map.values());
                 break;
             }
         }
-
         return data;
     }
 }

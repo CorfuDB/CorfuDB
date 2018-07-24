@@ -25,15 +25,19 @@ public class StreamConsumer implements Consumer {
         long startTime = System.currentTimeMillis();
 
         while (System.currentTimeMillis() - startTime <= timeout) {
+            long globalOffset = rt.getSequencerView().query(streamID).getToken().getTokenValue();
+            long delta = globalOffset - lastAddress;
 
-            Long globalOffset = rt.getSequencerView().query(streamID).getToken().getTokenValue();
+            if (delta != 0) {
+                List<ILogData> listLD = rt.getStreamsView().get(streamID).remainingUpTo(globalOffset);
+                for (long i = lastAddress + 1; i <= globalOffset; i++) {
+                    data.add(listLD.get((int) i));
+                }
 
-            if (globalOffset - lastAddress > 0) {
-                data.addAll(rt.getStreamsView().get(streamID).remainingUpTo(globalOffset));
+                this.lastAddress = globalOffset;
                 break;
             }
         }
-
         return data;
     }
 }
