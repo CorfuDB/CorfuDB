@@ -233,6 +233,7 @@ public class LogUnitServer extends AbstractServer {
         IServerRouter r) {
         try {
             long address = msg.getPayload().getAddress();
+            log.debug("fillHole: filling address {}, epoch {}", address, msg.getEpoch());
             LogData hole = LogData.getHole(address);
             hole.setEpoch(msg.getEpoch());
             dataCache.put(address, hole);

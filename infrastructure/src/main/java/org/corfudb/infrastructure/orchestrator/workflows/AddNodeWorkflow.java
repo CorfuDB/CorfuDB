@@ -164,10 +164,16 @@ public class AddNodeWorkflow implements IWorkflow {
                 ; chunkStart = chunkStart + CHUNK_SIZE) {
             long chunkEnd = Math.min((chunkStart + CHUNK_SIZE - 1), segment.getEnd() - 1);
 
+            long ts1 = System.currentTimeMillis();
+
             Map<Long, ILogData> dataMap = runtime.getAddressSpaceView()
                     .cacheFetch(ContiguousSet.create(
                             Range.closed(chunkStart, chunkEnd),
                             DiscreteDomain.longs()));
+
+            long ts2 = System.currentTimeMillis();
+
+            log.info("stateTransfer: read {}-{} in {} ms", chunkStart, chunkEnd, (ts2 - ts1));
 
             List<LogData> entries = new ArrayList<>();
             for (long x = chunkStart; x <= chunkEnd; x++) {
@@ -180,9 +186,11 @@ public class AddNodeWorkflow implements IWorkflow {
 
             for (String endpoint : endpoints) {
                 // Write segment chunk to the new logunit
+                ts1 = System.currentTimeMillis();
                 boolean transferSuccess = runtime.getLayoutView().getRuntimeLayout(newLayout)
                         .getLogUnitClient(endpoint)
                         .writeRange(entries).get();
+                ts2 = System.currentTimeMillis();
 
                 if (!transferSuccess) {
                     log.error("stateTransfer: Failed to transfer {}-{} to {}", CHUNK_SIZE,
@@ -190,8 +198,8 @@ public class AddNodeWorkflow implements IWorkflow {
                     throw new IllegalStateException("Failed to transfer!");
                 }
 
-                log.info("stateTransfer: Transferred address chunk [{}, {}] to {}",
-                        chunkStart, chunkEnd, endpoint);
+                log.info("stateTransfer: Transferred address chunk [{}, {}] to {} in {} ms",
+                        chunkStart, chunkEnd, endpoint, (ts2 - ts1));
             }
         }
     }
