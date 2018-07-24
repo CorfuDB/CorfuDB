@@ -2,9 +2,6 @@ package org.corfudb.runtime.view;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-import java.util.stream.LongStream;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
@@ -13,7 +10,6 @@ public class AddressSpaceConsumer implements Consumer {
 
     final CorfuRuntime rt;
     long lastAddress = -1;
-    long tempDelta = 0;
 
     public AddressSpaceConsumer(CorfuRuntime runtime) {
         rt = runtime;
