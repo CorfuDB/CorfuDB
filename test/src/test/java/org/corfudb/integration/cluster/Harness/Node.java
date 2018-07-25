@@ -13,7 +13,7 @@ public class Node {
     final String address;
 
     @Getter
-    final String clusterAddress;
+    String clusterAddress;
 
     @Getter
     final String logPath;
@@ -28,6 +28,10 @@ public class Node {
         this.logPath = logPath;
         this.shutdown = new ShutdownAction(this);
         this.start = new StartAction(this);
+    }
+
+    public Node(String address, String logPath) {
+        this(address, null, logPath);
     }
 
     public String getProcessKillCommand() {

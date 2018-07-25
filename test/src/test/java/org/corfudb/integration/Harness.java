@@ -105,4 +105,22 @@ public class Harness {
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
         return nodes;
     }
+
+    /**
+     * Deploys an unbootstrapped node.
+     *
+     * @param port Port to bind node to.
+     * @return Node instance.
+     * @throws IOException
+     */
+    public Node deployUnbootstrappedNode(int port) throws IOException {
+
+        Process proc = new AbstractIT.CorfuServerRunner()
+                .setHost(localAddress)
+                .setPort(port)
+                .setLogPath(getCorfuServerLogPath(localAddress, port))
+                .setSingle(false)
+                .runServer();
+        return new Node(getAddressForNode(port), getCorfuServerLogPath(localAddress, port));
+    }
 }
