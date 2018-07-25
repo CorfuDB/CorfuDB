@@ -19,12 +19,10 @@ public class Driver {
 
         long putStartTime = System.currentTimeMillis();
 
-        rt.getObjectsView().TXBegin();
         Map<Integer, Integer> map = rt.getObjectsView().build().setStreamID(streamID).setType(SMRMap.class).open();
         for (int i = 0; i < size; i++) {
             map.put(i, i + 1);
         }
-        rt.getObjectsView().TXEnd();
 
         long putEndTime = System.currentTimeMillis();
         long putTime = putEndTime - putStartTime;
