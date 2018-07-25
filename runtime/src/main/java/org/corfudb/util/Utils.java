@@ -2,22 +2,8 @@ package org.corfudb.util;
 
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
+
 import io.netty.buffer.ByteBuf;
-import jdk.internal.org.objectweb.asm.ClassReader;
-import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
-import jdk.internal.org.objectweb.asm.tree.ClassNode;
-import jdk.internal.org.objectweb.asm.tree.InsnList;
-import jdk.internal.org.objectweb.asm.tree.MethodNode;
-import jdk.internal.org.objectweb.asm.util.Printer;
-import jdk.internal.org.objectweb.asm.util.Textifier;
-import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.logprotocol.LogEntry;
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.recovery.FastObjectLoader;
-import org.corfudb.recovery.RecoveryUtils;
-import org.corfudb.runtime.CorfuRuntime;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -29,12 +15,35 @@ import java.io.StringWriter;
 import java.nio.ByteBuffer;
 import java.text.DecimalFormat;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.recovery.FastObjectLoader;
+import org.corfudb.recovery.RecoveryUtils;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.QuorumFuturesFactory;
+
+import jdk.internal.org.objectweb.asm.ClassReader;
+import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
+import jdk.internal.org.objectweb.asm.tree.ClassNode;
+import jdk.internal.org.objectweb.asm.tree.InsnList;
+import jdk.internal.org.objectweb.asm.tree.MethodNode;
+import jdk.internal.org.objectweb.asm.util.Printer;
+import jdk.internal.org.objectweb.asm.util.Textifier;
+import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 
 
 /**
@@ -453,5 +462,48 @@ public class Utils {
             log.warn("printLogAnatomy [logAddress={}] cannot be deserialized ",
                     logData.getGlobalAddress());
         }
+    }
+
+
+    /**
+     * Fetches the max global log tail from the log unit cluster. This depends on the mode of
+     * replication being used.
+     * CHAIN: Block on fetch of global log tail from the head log unit in every stripe.
+     * QUORUM: Block on fetch of global log tail from a majority in every stripe.
+     *
+     * @param layout  Latest layout to get clients to fetch tails.
+     * @return The max global log tail obtained from the log unit servers.
+     */
+    public static long getMaxGlobalTail(Layout layout, CorfuRuntime runtime) {
+        long maxTokenRequested = Address.NON_ADDRESS;
+        Layout.LayoutSegment segment = layout.getLatestSegment();
+
+        // Query the tail of the head log unit in every stripe.
+        if (segment.getReplicationMode().equals(Layout.ReplicationMode.CHAIN_REPLICATION)) {
+            for (Layout.LayoutStripe stripe : segment.getStripes()) {
+                maxTokenRequested = Math.max(maxTokenRequested,
+                        CFUtils.getUninterruptibly(
+                                runtime.getLayoutView().getRuntimeLayout(layout)
+                                        .getLogUnitClient(stripe.getLogServers().get(0))
+                                        .getTail()));
+
+            }
+        } else if (segment.getReplicationMode()
+                .equals(Layout.ReplicationMode.QUORUM_REPLICATION)) {
+            for (Layout.LayoutStripe stripe : segment.getStripes()) {
+                CompletableFuture<Long>[] completableFutures = stripe.getLogServers()
+                        .stream()
+                        .map(s -> runtime.getLayoutView().getRuntimeLayout(layout)
+                                .getLogUnitClient(s).getTail())
+                        .toArray(CompletableFuture[]::new);
+                QuorumFuturesFactory.CompositeFuture<Long> quorumFuture =
+                        QuorumFuturesFactory.getQuorumFuture(Comparator.naturalOrder(),
+                                completableFutures);
+                maxTokenRequested = Math.max(maxTokenRequested,
+                        CFUtils.getUninterruptibly(quorumFuture));
+
+            }
+        }
+        return maxTokenRequested;
     }
 }
