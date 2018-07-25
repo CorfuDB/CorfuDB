@@ -31,7 +31,7 @@
                         <manifest>
                             <addClasspath>true</addClasspath>
                             <classpathPrefix>lib/</classpathPrefix>
-                            <mainClass>org.corfudb.perfClient</mainClass>
+                            <mainClass>org.corfudb.perfClient.Driver</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
