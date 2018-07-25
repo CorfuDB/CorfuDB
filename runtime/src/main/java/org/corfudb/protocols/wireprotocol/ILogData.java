@@ -83,8 +83,7 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
      * Return if there is backpointer for a particular stream.
      */
     default boolean hasBackpointer(UUID streamId) {
-        return getBackpointerMap() != null
-                && getBackpointerMap().containsKey(streamId);
+        return getBackpointerMap() != null && getBackpointerMap().containsKey(streamId);
     }
 
     /**

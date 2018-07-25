@@ -45,8 +45,7 @@ public interface IClientRouter {
      * @return A completable future which will be fulfilled by the reply,
      * or a timeout in the case there is no response.
      */
-    <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx,
-                                                          CorfuMsg message);
+    <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx, CorfuMsg message);
 
     /**
      * Send a message using the router channel handler and

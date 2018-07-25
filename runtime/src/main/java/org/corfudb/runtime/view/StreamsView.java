@@ -76,6 +76,10 @@ public class StreamsView extends AbstractView {
      */
     public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
                        @Nonnull CacheOption cacheOption, @Nonnull UUID ... streamIDs) {
+        if(log.isTraceEnabled()) {
+            log.trace("Append object to streams: {}", Arrays.toString(streamIDs));
+        }
+
         // Go to the sequencer, grab an initial token.
         TokenResponse tokenResponse = conflictInfo == null
                 ? runtime.getSequencerView().next(streamIDs) // Token w/o conflict info

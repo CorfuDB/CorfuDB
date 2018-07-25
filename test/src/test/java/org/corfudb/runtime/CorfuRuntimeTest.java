@@ -165,7 +165,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         rt.invalidateLayout();
 
         // Ensure that we never (never is time_to_wait seconds here) get a new layout.
-        CompletableFuture cf = CFUtils.within(rt.layout, Duration.ofSeconds(TIME_TO_WAIT_FOR_LAYOUT_IN_SEC));
+        CompletableFuture cf = CFUtils.within(rt.getLayout(), Duration.ofSeconds(TIME_TO_WAIT_FOR_LAYOUT_IN_SEC));
         CompletableFuture.supplyAsync(() -> cf);
 
         assertThatThrownBy(() -> cf.get()).isInstanceOf(ExecutionException.class).hasRootCauseInstanceOf(TimeoutException.class);

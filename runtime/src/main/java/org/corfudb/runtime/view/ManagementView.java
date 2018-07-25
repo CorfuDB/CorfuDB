@@ -94,8 +94,7 @@ public class ManagementView extends AbstractView {
      */
     public void addNode(@Nonnull String endpointToAdd, int retry,
                         @Nonnull Duration timeout, @Nonnull Duration pollPeriod) {
-        new AddNode(endpointToAdd, runtime, retry, timeout, pollPeriod)
-                .invoke();
+        new AddNode(endpointToAdd, runtime, retry, timeout, pollPeriod).invoke();
     }
 
     /**

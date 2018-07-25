@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class LayoutHandlerTest extends AbstractClientTest {
 
-    LayoutClient client;
+    private LayoutClient client;
 
     @Override
     Set<AbstractServer> getServersForTest() {

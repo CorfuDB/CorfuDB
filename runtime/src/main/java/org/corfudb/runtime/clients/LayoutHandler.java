@@ -39,8 +39,7 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
      * The handler and handlers which implement this client.
      */
     @Getter
-    public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
-            .generateHandlers(MethodHandles.lookup(), this);
+    public ClientMsgHandler msgHandler = new ClientMsgHandler(this).generateHandlers(MethodHandles.lookup(), this);
 
 
     @ClientHandler(type = CorfuMsgType.LAYOUT_RESPONSE)

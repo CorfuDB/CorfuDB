@@ -108,7 +108,6 @@ public enum CorfuMsgType {
     HANDSHAKE_RESPONSE(81, new TypeToken<CorfuPayloadMsg<HandshakeResponse>>() {}, true)
     ;
 
-
     public final int type;
     public final TypeToken<? extends CorfuMsg> messageType;
     //public final Class<? extends AbstractServer> handler;

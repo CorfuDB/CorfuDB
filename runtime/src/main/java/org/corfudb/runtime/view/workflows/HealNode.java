@@ -18,11 +18,7 @@ public class HealNode extends WorkflowRequest {
     public HealNode(@Nonnull String endpointToHeal, @Nonnull CorfuRuntime runtime,
                     int retry, @Nonnull Duration timeout,
                     @Nonnull Duration pollPeriod) {
-        this.nodeForWorkflow = endpointToHeal;
-        this.runtime = runtime;
-        this.retry = retry;
-        this.timeout = timeout;
-        this.pollPeriod = pollPeriod;
+        super(retry, timeout, pollPeriod, runtime, endpointToHeal);
     }
 
     @Override

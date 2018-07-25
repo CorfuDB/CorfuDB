@@ -107,11 +107,11 @@ public class MetricsUtils {
         metricsJvmCollectionEnabled = Boolean.valueOf(System.getProperty(PROPERTY_JVM_METRICS_COLLECTION));
 
         metricsLogInterval = Long.valueOf(System.getProperty(PROPERTY_LOG_INTERVAL, "0"));
-        metricsSlf4jReportingEnabled = metricsLogInterval > 0 ? true : false;
+        metricsSlf4jReportingEnabled = metricsLogInterval > 0;
 
         metricsCsvInterval = Long.valueOf(System.getProperty(PROPERTY_CSV_INTERVAL, "0"));
         metricsCsvFolder = String.valueOf(System.getProperty(PROPERTY_CSV_FOLDER));
-        metricsCsvReportingEnabled = metricsCsvInterval > 0 ? true : false;
+        metricsCsvReportingEnabled = metricsCsvInterval > 0;
     }
 
     /**

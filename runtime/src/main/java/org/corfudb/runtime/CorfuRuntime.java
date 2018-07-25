@@ -345,7 +345,8 @@ public class CorfuRuntime {
     /**
      * A completable future containing a layout, when completed.
      */
-    public volatile CompletableFuture<Layout> layout;
+    @Getter
+    private volatile CompletableFuture<Layout> layout;
 
     /** The {@link UUID} of the cluster we are currently connected to, or null, if
      *  there is no cluster yet.
@@ -361,7 +362,8 @@ public class CorfuRuntime {
     private volatile boolean isShutdown = false;
 
     @Getter
-    private static MetricRegistry defaultMetrics = new MetricRegistry();
+    private static final MetricRegistry defaultMetrics = new MetricRegistry();
+
     @Getter
     @Setter
     private MetricRegistry metrics = new MetricRegistry();
@@ -397,7 +399,6 @@ public class CorfuRuntime {
         beforeRpcHandler = handler;
         return this;
     }
-
 
     /**
      * When set, overrides the default getRouterFunction. Used by the testing

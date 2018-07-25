@@ -267,7 +267,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
 
     /** The "main" map which contains the primary key-value mappings. */
     private final Map<K,V> mainMap = new HashMap<>();
-    private Set<Index<K, V, ? extends Comparable>> indexSpec = new HashSet<>();
+    private final Set<Index<K, V, ? extends Comparable>> indexSpec = new HashSet<>();
     private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes = new HashMap<>();
 
     @Getter
@@ -399,6 +399,10 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     @Override
     @MutatorAccessor(name = "put", undoFunction = "undoPut", undoRecordFunction = "undoPutRecord")
     public V put(@ConflictParameter K key, V value) {
+        if(log.isTraceEnabled()) {
+            log.trace("Put. Key: {}, value: {}", key, value);
+        }
+
         V previous = mainMap.put(key, value);
         // If we have index functions, update the secondary indexes.
         if (!secondaryIndexes.isEmpty()) {
@@ -746,6 +750,8 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
      */
     @SuppressWarnings("unchecked")
     protected void unmapSecondaryIndexes(K key, V value) {
+        log.trace("unmapSecondaryIndexes");
+
         try {
             if (value != null) {
                 // Map entry into secondary indexes
@@ -787,6 +793,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
      */
     @SuppressWarnings("unchecked")
     protected void mapSecondaryIndexes(K key, V value) {
+        log.trace("mapSecondaryIndexes");
         try {
             if (value != null) {
                 // Map entry into secondary indexes

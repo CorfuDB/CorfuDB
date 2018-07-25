@@ -361,8 +361,7 @@ public interface ICorfuPayload<T> {
         } else if (payload instanceof CheckpointEntry.CheckpointEntryType) {
             buffer.writeByte(((CheckpointEntry.CheckpointEntryType) payload).asByte());
         } else {
-            throw new RuntimeException("Unknown class " + payload.getClass()
-                    + " for serialization");
+            throw new RuntimeException("Unknown class " + payload.getClass() + " for serialization");
         }
     }
 

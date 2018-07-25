@@ -1,12 +1,14 @@
 package org.corfudb.util.serializer;
 
 import io.netty.buffer.ByteBuf;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
 
 /**
  * Created by mwei on 9/29/15.
  */
+@Slf4j
 public class CorfuSerializer implements ISerializer {
 
     private final byte type;
@@ -31,6 +33,7 @@ public class CorfuSerializer implements ISerializer {
      */
     @Override
     public Object deserialize(ByteBuf b, CorfuRuntime rt) {
+        log.trace("Deserialize object");
         if (b.readByte() != corfuPayloadMagic) {
             byte[] bytes = new byte[b.readableBytes()];
             b.readBytes(bytes);

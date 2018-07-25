@@ -45,7 +45,7 @@ public abstract class AbstractView {
     public Layout getCurrentLayout() {
         while (true) {
             try {
-                return runtime.layout.get();
+                return runtime.getLayout().get();
             } catch (Exception ex) {
                 log.warn("Error executing remote call, invalidating view and retrying in {}s",
                         runtime.getParameters().getConnectionRetryRate(), ex);
@@ -95,7 +95,7 @@ public abstract class AbstractView {
         int systemDownTriggerCounter = runtime.getParameters().getSystemDownHandlerTriggerLimit();
         while (true) {
             try {
-                final Layout layout = runtime.layout.get();
+                final Layout layout = runtime.getLayout().get();
                 return function.apply(runtimeLayout.updateAndGet(rLayout -> {
                     if (rLayout == null || rLayout.getLayout().getEpoch() != layout.getEpoch()) {
                         return new RuntimeLayout(layout, runtime);
@@ -104,11 +104,9 @@ public abstract class AbstractView {
                 }));
             } catch (RuntimeException re) {
                 if (re.getCause() instanceof TimeoutException) {
-                    log.warn("Timeout executing remote call, invalidating view and retrying in {}s",
-                            retryRate);
+                    log.warn("Timeout executing remote call, invalidating view and retrying in {}s", retryRate);
                 } else if (re instanceof ServerNotReadyException) {
-                    log.warn("Server still not ready. Waiting for server to start "
-                            + "accepting requests.");
+                    log.warn("Server still not ready. Waiting for server to start accepting requests.");
                 } else if (re instanceof WrongEpochException) {
                     WrongEpochException we = (WrongEpochException) re;
                     log.warn("Got a wrong epoch exception, updating epoch to {} and "

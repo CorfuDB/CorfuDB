@@ -326,6 +326,7 @@ public class TestClientRouter implements IClientRouter {
      * @param cause     The cause to give for the exceptional completion.
      */
     public void completeExceptionally(long requestID, Throwable cause) {
+        log.debug("Complete request exceptionally: {}", requestID);
         CompletableFuture cf;
         if ((cf = outstandingRequests.get(requestID)) != null) {
             cf.completeExceptionally(cause);

@@ -9,12 +9,14 @@ import java.util.UUID;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Created by mwei on 8/8/16.
  */
 @Data
 @AllArgsConstructor
+@Slf4j
 public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
 
     public static byte[] NO_CONFLICT_KEY = new byte[]{};
@@ -68,6 +70,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
 
     @Override
     public void doSerialize(ByteBuf buf) {
+        log.trace("Serialize token");
         ICorfuPayload.serialize(buf, respType);
         ICorfuPayload.serialize(buf, conflictKey);
         ICorfuPayload.serialize(buf, token.getTokenValue());

@@ -26,8 +26,7 @@ public interface IClient {
     IClientRouter getRouter();
 
     default ClientMsgHandler getMsgHandler() {
-        throw new UnsupportedOperationException("Message handler not provided, "
-                + "please override handleMessage!");
+        throw new UnsupportedOperationException("Message handler not provided, please override handleMessage!");
     }
 
     /**
