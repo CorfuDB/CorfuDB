@@ -1,9 +1,12 @@
 package org.corfudb.perfClient;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.*;
 
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 public class Driver {
@@ -144,13 +147,51 @@ public class Driver {
         System.out.println("Throughput: " + (((totalWrites + totalReads)*1.0) / (time)));
     }
 
+    public static void bootstrapCluster() {
+        List<String> hosts = new ArrayList<>();
+        hosts.add("10.33.82.223:9000");
+        hosts.add("10.33.82.253:9001");
+        hosts.add("10.33.82.56:9002");
+        //hosts.add("10.33.83.114:9003");
+
+        List<String> sequencer = new ArrayList<>();
+        List<String> layoutServers = new ArrayList<>();
+
+        long epoch = 1;
+
+        sequencer.add(hosts.get(0));
+        layoutServers.add(hosts.get(1));
+        layoutServers.add(hosts.get(2));
+        //layoutServers.add(hosts.get(3));
+
+        List<Layout.LayoutSegment> segments = new ArrayList<>();
+        List<Layout.LayoutStripe> stripes = new ArrayList<>();
+
+        for (int x = 1; x < hosts.size(); x++) {
+            stripes.add(new Layout.LayoutStripe(Collections.singletonList(hosts.get(x))));
+        }
+
+        Layout.LayoutSegment segment = new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, -1L, stripes);
+        segments.add(segment);
+
+        Duration TIMEOUT_SHORT = Duration.of(5, ChronoUnit.SECONDS);
+        Duration.of(1, ChronoUnit.SECONDS);
+        final int retries = 3;
+        Layout layout = new Layout(layoutServers, sequencer, segments, Collections.EMPTY_LIST, epoch, UUID.randomUUID());
+
+        System.out.println(layout);
+
+        BootstrapUtil.bootstrap(layout, retries, TIMEOUT_SHORT);
+    }
+
+
     public static void runCluster(String[] args, String prodClass) throws Exception {
         String connString = args[0];
         List<String> hosts = new ArrayList<>();
-        hosts.add(connString + ":9000");
-        hosts.add(connString + ":9001");
-        hosts.add(connString + ":9002");
-        hosts.add(connString + ":9003");
+        hosts.add("10.33.82.223:9000");
+        hosts.add("10.33.82.253:9001");
+        hosts.add("10.33.82.56:9002");
+        //hosts.add("10.33.83.114:9003");
 
         final int numProd = Integer.valueOf(args[1]);
         final int numReq = Integer.valueOf(args[2]);
@@ -161,9 +202,13 @@ public class Driver {
 
         byte[] payload = new byte[payloadSize];
 
+        // call bootstrapper
+        bootstrapCluster();
+
         // Producer
         int[] numWrites = new int[numProd];
         for (int x = 0; x < numProd; x++) {
+
             final CorfuRuntime rt = new CorfuRuntime(hosts.get(x % hosts.size())).connect();
             //System.out.println("Connected! " + hosts.get(x % hosts.size()));
             final int ind = x;
