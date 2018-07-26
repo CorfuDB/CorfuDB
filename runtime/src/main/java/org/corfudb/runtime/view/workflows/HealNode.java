@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.workflows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
 
 import javax.annotation.Nonnull;
@@ -25,12 +26,12 @@ public class HealNode extends WorkflowRequest {
     }
 
     @Override
-    protected UUID sendRequest(Layout layout) throws TimeoutException {
-        CreateWorkflowResponse resp = getOrchestrator(layout).healNodeRequest(nodeForWorkflow,
+    protected UUID sendRequest(@Nonnull ManagementClient managementClient) throws TimeoutException {
+        CreateWorkflowResponse resp = managementClient.healNodeRequest(nodeForWorkflow,
                 true, true, true, 0);
-        log.info("sendRequest: requested to heal {} on orchestrator {}:{}, layout {}",
-                nodeForWorkflow, getOrchestrator(layout).getRouter().getHost(),
-                getOrchestrator(layout).getRouter().getPort(), layout);
+        log.info("sendRequest: requested to heal {} on orchestrator {}:{}",
+                nodeForWorkflow, managementClient.getRouter().getHost(),
+                managementClient.getRouter().getPort());
         return resp.getWorkflowId();
     }
 

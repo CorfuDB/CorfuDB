@@ -129,7 +129,9 @@ public class LogUnitServer extends AbstractServer {
             streamLog = new StreamLogFiles(serverContext, (Boolean) opts.get("--no-verify"));
         }
 
-        batchWriter = new BatchWriter(streamLog, serverContext.getLogUnitEpochWaterMark());
+
+        batchWriter = new BatchWriter(streamLog, serverContext.getLogUnitEpochWaterMark(),
+                !((Boolean) opts.get("--no-sync")));
 
         dataCache = Caffeine.<Long, ILogData>newBuilder()
                 .<Long, ILogData>weigher((k, v) -> ((LogData) v).getData() == null ? 1 : (

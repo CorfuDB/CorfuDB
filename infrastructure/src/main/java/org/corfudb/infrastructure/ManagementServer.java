@@ -289,6 +289,24 @@ public class ManagementServer extends AbstractServer {
     }
 
     /**
+     * Handles the Management layout request.
+     *
+     * @param msg corfu message containing MANAGEMENT_LAYOUT_REQUEST
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
+     */
+    @ServerHandler(type = CorfuMsgType.MANAGEMENT_LAYOUT_REQUEST)
+    public void handleLayoutRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        // This server has not been bootstrapped yet, ignore all requests.
+        if (!checkBootstrap(msg, ctx, r)) {
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR));
+            return;
+        }
+        r.sendResponse(ctx, msg,
+                CorfuMsgType.LAYOUT_RESPONSE.payloadMsg(serverContext.getManagementLayout()));
+    }
+
+    /**
      * Management Server shutdown:
      * Shuts down the fault detector service.
      */

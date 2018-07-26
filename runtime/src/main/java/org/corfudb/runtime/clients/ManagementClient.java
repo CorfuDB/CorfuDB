@@ -81,6 +81,15 @@ public class ManagementClient extends AbstractClient {
     }
 
     /**
+     * Requests for the layout persisted by the management server.
+     *
+     * @return A future which returns the layout persisted by the management server on completion.
+     */
+    public CompletableFuture<Layout> getLayout() {
+        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_LAYOUT_REQUEST.msg());
+    }
+
+    /**
      * Send a add node request to an orchestrator
      * @param endpoint the endpoint to add to the cluster
      * @return create workflow response that contains the uuid of the workflow
