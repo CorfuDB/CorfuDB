@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.locks.ReentrantLock;
 
 import javax.annotation.Nonnull;
 
@@ -34,6 +35,10 @@ public class LayoutManagementView extends AbstractView {
 
     private volatile long prepareRank = 1L;
 
+    private final ReentrantLock recoverSequencerLock = new ReentrantLock();
+
+    private volatile long lastKnownSequencerEpoch = Layout.INVALID_EPOCH;
+
     /**
      * On restart, if MANAGEMENT_LAYOUT exists in the local datastore.
      * the Management Server attempts to recover the cluster from that layout.
@@ -43,9 +48,9 @@ public class LayoutManagementView extends AbstractView {
     public void recoverCluster(Layout recoveryLayout)
             throws QuorumUnreachableException, OutrankedException {
 
-        Layout newLayout = new Layout(recoveryLayout);
-        newLayout.setEpoch(recoveryLayout.getEpoch() + 1);
-        runLayoutReconfiguration(recoveryLayout, newLayout, true);
+        Layout layout = new Layout(recoveryLayout);
+        sealEpoch(layout);
+        attemptConsensus(layout);
     }
 
     /**
@@ -290,7 +295,7 @@ public class LayoutManagementView extends AbstractView {
      * Attempts to force commit a new layout to the cluster.
      *
      * @param currentLayout the current layout
-     * @param forceLayout the new layout to force
+     * @param forceLayout   the new layout to force
      * @throws QuorumUnreachableException
      */
     public void forceLayout(@Nonnull Layout currentLayout, @Nonnull Layout forceLayout) {
@@ -434,43 +439,62 @@ public class LayoutManagementView extends AbstractView {
     public void reconfigureSequencerServers(Layout originalLayout, Layout newLayout,
                                             boolean forceReconfigure) {
 
-        long maxTokenRequested = 0L;
-        Map<UUID, Long> streamTails = Collections.emptyMap();
-        boolean bootstrapWithoutTailsUpdate = true;
+        boolean acquiredLocked = recoverSequencerLock.tryLock();
+        if (acquiredLocked) {
+            try {
 
-        // Reconfigure Primary Sequencer if required
-        if (forceReconfigure
-                || !originalLayout.getSequencers().get(0).equals(newLayout.getSequencers()
-                .get(0))) {
-            Layout.LayoutSegment latestSegment = newLayout.getSegments()
-                    .get(newLayout.getSegments().size() - 1);
-            maxTokenRequested = getMaxGlobalTail(newLayout, latestSegment);
+                // Avoids stale bootstrap requests from being processed.
+                if (newLayout.getEpoch() <= lastKnownSequencerEpoch) {
+                    log.warn("reconfigureSequencerServers: Sequencer bootstrap failed. "
+                            + "Already bootstrapped.");
+                    return;
+                }
 
-            FastObjectLoader fastObjectLoader = new FastObjectLoader(runtime);
-            fastObjectLoader.setRecoverSequencerMode(true);
-            fastObjectLoader.setLoadInCache(false);
+                long maxTokenRequested = 0L;
+                Map<UUID, Long> streamTails = Collections.emptyMap();
+                boolean bootstrapWithoutTailsUpdate = true;
 
-            // FastSMRLoader sets the logHead based on trim mark.
-            fastObjectLoader.setLogTail(maxTokenRequested);
-            fastObjectLoader.loadMaps();
-            streamTails = fastObjectLoader.getStreamTails();
-            verifyStreamTailsMap(streamTails);
+                // Reconfigure Primary Sequencer if required
+                if (forceReconfigure
+                        || !originalLayout.getPrimarySequencer()
+                        .equals(newLayout.getPrimarySequencer())) {
+                    Layout.LayoutSegment latestSegment = newLayout.getSegments()
+                            .get(newLayout.getSegments().size() - 1);
+                    maxTokenRequested = getMaxGlobalTail(newLayout, latestSegment);
 
-            // Incrementing the maxTokenRequested value for sequencer reset.
-            maxTokenRequested++;
-            bootstrapWithoutTailsUpdate = false;
-        }
+                    FastObjectLoader fastObjectLoader = new FastObjectLoader(runtime);
+                    fastObjectLoader.setRecoverSequencerMode(true);
+                    fastObjectLoader.setLoadInCache(false);
 
-        // Configuring the new sequencer.
-        boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(
-                runtime.getLayoutView().getRuntimeLayout(newLayout)
-                        .getPrimarySequencerClient()
-                        .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch(),
-                                bootstrapWithoutTailsUpdate));
-        if (sequencerBootstrapResult) {
-            log.info("Sequencer bootstrap successful.");
+                    // FastSMRLoader sets the logHead based on trim mark.
+                    fastObjectLoader.setLogTail(maxTokenRequested);
+                    fastObjectLoader.loadMaps();
+                    streamTails = fastObjectLoader.getStreamTails();
+                    verifyStreamTailsMap(streamTails);
+
+                    // Incrementing the maxTokenRequested value for sequencer reset.
+                    maxTokenRequested++;
+                    bootstrapWithoutTailsUpdate = false;
+                }
+
+                // Configuring the new sequencer.
+                boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(
+                        runtime.getLayoutView().getRuntimeLayout(newLayout)
+                                .getPrimarySequencerClient()
+                                .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch(),
+                                        bootstrapWithoutTailsUpdate));
+                lastKnownSequencerEpoch = newLayout.getEpoch();
+                if (sequencerBootstrapResult) {
+                    log.info("reconfigureSequencerServers: Sequencer bootstrap successful.");
+                } else {
+                    log.warn("reconfigureSequencerServers: Sequencer bootstrap failed. "
+                            + "Already bootstrapped.");
+                }
+            } finally {
+                recoverSequencerLock.unlock();
+            }
         } else {
-            log.warn("Sequencer bootstrap failed. Already bootstrapped.");
+            log.info("reconfigureSequencerServers: Sequencer reconfiguration already in progress.");
         }
     }
 

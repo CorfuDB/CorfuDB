@@ -26,6 +26,7 @@ import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
+import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
@@ -251,9 +252,9 @@ public class ManagementViewTest extends AbstractViewTest {
         // to detect failures to speed up test time.
         CFUtils.within(
                 CompletableFuture.allOf(
-                        getManagementServer(SERVERS.PORT_0).getManagementAgent().getSequencerBootstrappedFuture(),
-                        getManagementServer(SERVERS.PORT_1).getManagementAgent().getSequencerBootstrappedFuture(),
-                        getManagementServer(SERVERS.PORT_2).getManagementAgent().getSequencerBootstrappedFuture()),
+                        getManagementServer(SERVERS.PORT_0).getManagementAgent().getRecoveryBarrierFuture(),
+                        getManagementServer(SERVERS.PORT_1).getManagementAgent().getRecoveryBarrierFuture(),
+                        getManagementServer(SERVERS.PORT_2).getManagementAgent().getRecoveryBarrierFuture()),
                 PARAMETERS.TIMEOUT_NORMAL
         ).join();
 
@@ -377,9 +378,9 @@ public class ManagementViewTest extends AbstractViewTest {
         // to detect failures to speed up test time.
         CFUtils.within(
                 CompletableFuture.allOf(
-                        getManagementServer(SERVERS.PORT_0).getManagementAgent().getSequencerBootstrappedFuture(),
-                        getManagementServer(SERVERS.PORT_1).getManagementAgent().getSequencerBootstrappedFuture(),
-                        getManagementServer(SERVERS.PORT_2).getManagementAgent().getSequencerBootstrappedFuture()),
+                        getManagementServer(SERVERS.PORT_0).getManagementAgent().getRecoveryBarrierFuture(),
+                        getManagementServer(SERVERS.PORT_1).getManagementAgent().getRecoveryBarrierFuture(),
+                        getManagementServer(SERVERS.PORT_2).getManagementAgent().getRecoveryBarrierFuture()),
                 PARAMETERS.TIMEOUT_NORMAL
         ).join();
 
@@ -898,7 +899,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
         CFUtils.within(
                 CompletableFuture.allOf(
-                        getManagementServer(SERVERS.PORT_0).getManagementAgent().getSequencerBootstrappedFuture()),
+                        getManagementServer(SERVERS.PORT_0).getManagementAgent().getRecoveryBarrierFuture()),
                 PARAMETERS.TIMEOUT_NORMAL
         ).join();
 
@@ -1515,5 +1516,153 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.DOWN);
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
         assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
+    }
+
+    /**
+     * Tests that if the cluster gets stuck in a live-lock the systemDownHandler is invoked.
+     * Scenario: Cluster of 2 nodes - Nodes 0 and 1
+     * Some data (10 appends) is written into the cluster.
+     * Then rules are added on both the nodes' management agents so that they cannot reconfigure
+     * the system. Another rule is added to the tail of the chain to drop all READ_RESPONSES.
+     * The epoch is incremented and the new layout is pushed to both the nodes.
+     * NOTE: The sequencer is not bootstrapped for the new epoch.
+     * Now, both the management agents attempt to bootstrap the new sequencer but the
+     * FastObjectLoaders should stall due to the READ_RESPONSE drop rule.
+     * This triggers the systemDownHandler.
+     */
+    @Test
+    public void triggerSystemDownHandlerInDeadlock() throws Exception {
+        // Cluster Setup.
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+
+        Layout layout = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .setClusterId(UUID.randomUUID())
+                .build();
+        bootstrapAllServers(layout);
+        corfuRuntime = getRuntime(layout).connect();
+
+        CorfuRuntime managementRuntime0 = getManagementServer(SERVERS.PORT_0)
+                .getManagementAgent().getCorfuRuntime();
+        CorfuRuntime managementRuntime1 = getManagementServer(SERVERS.PORT_1)
+                .getManagementAgent().getCorfuRuntime();
+
+        // Waiting for management servers to send the bootstrap sequencer request and be ready
+        // to detect failures to speed up test time.
+        CFUtils.within(
+                CompletableFuture.allOf(
+                        getManagementServer(SERVERS.PORT_0).getManagementAgent().getRecoveryBarrierFuture(),
+                        getManagementServer(SERVERS.PORT_1).getManagementAgent().getRecoveryBarrierFuture()),
+                PARAMETERS.TIMEOUT_NORMAL
+        ).join();
+        // Setting aggressive timeouts
+        setAggressiveTimeouts(layout, corfuRuntime, managementRuntime0, managementRuntime1);
+        setAggressiveDetectorTimeouts(SERVERS.PORT_0, SERVERS.PORT_1);
+
+        // Append data.
+        IStreamView streamView = corfuRuntime.getStreamsView()
+                .get(CorfuRuntime.getStreamID("testStream"));
+        final byte[] payload = "test".getBytes();
+        final int num = 10;
+        for (int i = 0; i < num; i++) {
+            streamView.append(payload);
+        }
+
+        // Register custom systemDownHandler to detect live-lock.
+        final Semaphore semaphore = new Semaphore(2);
+        semaphore.acquire(2);
+
+        final int sysDownTriggerLimit = 3;
+        managementRuntime0.getParameters().setSystemDownHandlerTriggerLimit(sysDownTriggerLimit);
+        managementRuntime1.getParameters().setSystemDownHandlerTriggerLimit(sysDownTriggerLimit);
+
+        TestRule testRule = new TestRule()
+                .matches(m -> m.getMsgType().equals(CorfuMsgType.SET_EPOCH))
+                .drop();
+        addClientRule(managementRuntime0, testRule);
+        addClientRule(managementRuntime1, testRule);
+
+        // Add rule to drop all read responses to hang the FastObjectLoaders.
+        addServerRule(SERVERS.PORT_1, new TestRule().matches(m -> {
+            if (m.getMsgType().equals(CorfuMsgType.READ_RESPONSE)) {
+                semaphore.release();
+                return true;
+            }
+            return false;
+        }).drop());
+
+        // Trigger an epoch change to trigger FastObjectLoader to run for sequencer bootstrap.
+        Layout layout1 = new Layout(layout);
+        layout1.setEpoch(layout1.getEpoch() + 1);
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout1).moveServersToEpoch();
+        corfuRuntime.getLayoutView().updateLayout(layout1, 1L);
+
+        assertThat(semaphore
+                .tryAcquire(2, PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS))
+                .isTrue();
+
+        // Create a fault - Epoch instability by just sealing the cluster but not filling the
+        // layout slot.
+        corfuRuntime.invalidateLayout();
+        Layout layout2 = new Layout(corfuRuntime.getLayoutView().getLayout());
+        layout2.setEpoch(layout2.getEpoch() + 1);
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout2).moveServersToEpoch();
+
+        clearClientRules(managementRuntime0);
+        clearClientRules(managementRuntime1);
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            if (corfuRuntime.getLayoutView().getLayout().getEpoch() == layout2.getEpoch()) {
+                break;
+            }
+            corfuRuntime.invalidateLayout();
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+        }
+        // Assert that the DetectionWorker threads are freed from the deadlock and are able to fill
+        // up the layout slot and stabilize the cluster.
+        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch())
+                .isEqualTo(layout2.getEpoch());
+
+        clearServerRules(SERVERS.PORT_1);
+        // Once the rules are cleared, the detectors should resolve the epoch instability,
+        // bootstrap the sequencer and fetch a new token.
+        assertThat(corfuRuntime.getSequencerView().query()).isNotNull();
+    }
+
+    /**
+     * Tests the triggerSequencerReconfiguration method. The READ_RESPONSE messages are blocked by
+     * adding a rule to drop these. The reconfiguration task unblocks with the help of the
+     * systemDownHandler.
+     */
+    @Test
+    public void unblockSequencerRecoveryOnDeadlock() throws Exception {
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+        final Layout layout = corfuRuntime.getLayoutView().getLayout();
+        // Setting aggressive timeouts
+        setAggressiveTimeouts(layout, corfuRuntime,
+                getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
+        setAggressiveDetectorTimeouts(SERVERS.PORT_0);
+
+        final int sysDownTriggerLimit = 3;
+        getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime().getParameters()
+                .setSystemDownHandlerTriggerLimit(sysDownTriggerLimit);
+
+        // Add rule to drop all read responses to hang the FastObjectLoaders.
+        addServerRule(SERVERS.PORT_0, new TestRule().matches(m -> m.getMsgType()
+                .equals(CorfuMsgType.READ_RESPONSE)).drop());
+
+        getManagementServer(SERVERS.PORT_0).getManagementAgent().triggerSequencerBootstrap(layout)
+                .get();
     }
 }
