@@ -28,6 +28,7 @@ import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 
 /**
  * A definition of a workflow that adds a new node to the cluster. This workflow
@@ -127,6 +128,8 @@ public class AddNodeWorkflow implements IWorkflow {
     }
 
     /**
+     * Fetch and propagate the trimMark to the new/healing nodes. Else, a FastLoader reading from
+     * them will have to mark all the already trimmed entries as holes.
      * Transfer an address segment from a cluster to a set of specified nodes.
      * There are no cluster reconfigurations, hence no epoch change side effects.
      *
@@ -138,6 +141,16 @@ public class AddNodeWorkflow implements IWorkflow {
                                  Layout.LayoutSegment segment) throws Exception {
 
         long trimMark = runtime.getAddressSpaceView().getTrimMark();
+        // Send the trimMark to the new/healing nodes.
+        // If this times out or fails, the Action performing the stateTransfer fails and retries.
+        for (String endpoint : endpoints) {
+            // TrimMark is the first address present on the log unit server.
+            // Perform the prefix trim on the preceding address = (trimMark - 1).
+            CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(newLayout)
+                    .getLogUnitClient(endpoint)
+                    .prefixTrim(trimMark - 1));
+        }
+
         if (trimMark > segment.getEnd()) {
             log.info("stateTransfer: Nothing to transfer, trimMark {} greater than end of segment {}",
                     trimMark, segment.getEnd());
