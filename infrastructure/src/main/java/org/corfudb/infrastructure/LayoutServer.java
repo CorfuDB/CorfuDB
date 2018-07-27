@@ -86,8 +86,6 @@ public class LayoutServer extends AbstractServer {
         }
     }
 
-
-
     boolean checkBootstrap(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (getCurrentLayout() == null) {
             log.warn("Received message but not bootstrapped! Message={}", msg);

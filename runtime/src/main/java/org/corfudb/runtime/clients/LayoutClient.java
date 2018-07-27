@@ -43,8 +43,7 @@ public class LayoutClient extends AbstractClient {
      * bootstrap was successful, false otherwise.
      */
     public CompletableFuture<Boolean> bootstrapLayout(Layout l) {
-        return sendMessageWithFuture(CorfuMsgType.LAYOUT_BOOTSTRAP
-                .payloadMsg(new LayoutBootstrapRequest(l)));
+        return sendMessageWithFuture(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(l)));
     }
 
     /**

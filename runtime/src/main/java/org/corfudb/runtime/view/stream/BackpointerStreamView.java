@@ -66,8 +66,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                        Function<TokenResponse, Boolean> acquisitionCallback,
                        Function<TokenResponse, Boolean> deacquisitionCallback) {
         // First, we get a token from the sequencer.
-        TokenResponse tokenResponse = runtime.getSequencerView()
-                .next(id);
+        TokenResponse tokenResponse = runtime.getSequencerView().next(id);
 
         // We loop forever until we are interrupted, since we may have to
         // acquire an address several times until we are successful.
@@ -88,8 +87,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // exception here - any other exception we should pass up
             // to the client.
             try {
-                runtime.getAddressSpaceView()
-                        .write(tokenResponse, object);
+                runtime.getAddressSpaceView().write(tokenResponse, object);
                 // The write completed successfully, so we return this
                 // address to the client.
                 return tokenResponse.getToken().getTokenValue();

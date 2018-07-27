@@ -23,11 +23,7 @@ public class RemoveNode extends WorkflowRequest {
     public RemoveNode(@Nonnull String endpointToRemove, @Nonnull CorfuRuntime runtime,
                       int retry, @Nonnull Duration timeout,
                       @Nonnull Duration pollPeriod) {
-        this.nodeForWorkflow = endpointToRemove;
-        this.runtime = runtime;
-        this.retry = retry;
-        this.timeout = timeout;
-        this.pollPeriod = pollPeriod;
+        super(retry, timeout, pollPeriod, runtime, endpointToRemove);
     }
 
     @Override

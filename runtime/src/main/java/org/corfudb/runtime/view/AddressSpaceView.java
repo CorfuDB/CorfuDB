@@ -67,8 +67,7 @@ public class AddressSpaceView extends AbstractView {
     public AddressSpaceView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
         MetricRegistry metrics = runtime.getMetrics();
-        final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(),
-                                         this.hashCode());
+        final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(), this.hashCode());
         metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::estimatedSize);
         metrics.register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
         metrics.register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
@@ -127,6 +126,7 @@ public class AddressSpaceView extends AbstractView {
      * @throws WrongEpochException  If the token epoch is invalid.
      */
     public void write(@Nonnull IToken token, @Nonnull Object data, @Nonnull CacheOption cacheOption) {
+        log.trace("Write data by token: {}", token);
         final ILogData ld = new LogData(DataType.DATA, data);
 
         layoutHelper(e -> {

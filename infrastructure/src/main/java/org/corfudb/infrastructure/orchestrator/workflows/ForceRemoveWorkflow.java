@@ -1,4 +1,5 @@
 package org.corfudb.infrastructure.orchestrator.workflows;
+
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.orchestrator.Action;
@@ -15,11 +16,10 @@ import java.util.UUID;
 import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.FORCE_REMOVE_NODE;
 
 /**
- *
  * This workflow removes an endpoint from the cluster forcefully by bypassing consensus. It removes
  * the endpoint from the current layout, seals the system and then sends a force layout request
  * to all the endpoints in the new layout.
- *
+ * <p>
  * Created by Maithem on 12/13/17.
  */
 @Slf4j
@@ -35,6 +35,7 @@ public class ForceRemoveWorkflow implements IWorkflow {
 
     @Getter
     final List<Action> actions;
+
     /**
      * Create this workflow from a force remove request.
      */

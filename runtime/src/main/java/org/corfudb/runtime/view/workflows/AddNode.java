@@ -24,11 +24,7 @@ public class AddNode extends WorkflowRequest {
     public AddNode(@Nonnull String endpointToAdd, @Nonnull CorfuRuntime runtime,
                    @Nonnull int retry, @Nonnull Duration timeout,
                    @Nonnull Duration pollPeriod) {
-        this.nodeForWorkflow = endpointToAdd;
-        this.runtime = runtime;
-        this.retry = retry;
-        this.timeout = timeout;
-        this.pollPeriod = pollPeriod;
+        super(retry, timeout, pollPeriod, runtime, endpointToAdd);
     }
 
     @Override

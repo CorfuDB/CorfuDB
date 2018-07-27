@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * Invokes the message handler to handle incoming messages.
@@ -32,7 +33,7 @@ public class ClientMsgHandler {
     /**
      * The handler map.
      */
-    private Map<CorfuMsgType, ClientMsgHandler.Handler> handlerMap;
+    private final ConcurrentMap<CorfuMsgType, Handler> handlerMap;
 
     /**
      * The client.
@@ -70,19 +71,22 @@ public class ClientMsgHandler {
      */
     @SuppressWarnings("unchecked")
     public boolean handle(CorfuMsg message, ChannelHandlerContext ctx) {
-        if (handlerMap.containsKey(message.getMsgType())) {
-            try {
-                Object ret = handlerMap.get(message.getMsgType())
-                        .handle(message, ctx, client.getRouter());
-                if (ret != null) {
-                    client.getRouter().completeRequest(message.getRequestID(), ret);
-                }
-            } catch (Exception ex) {
-                client.getRouter().completeExceptionally(message.getRequestID(), ex);
-            }
-            return true;
+        log.trace("Handle message: {}", message);
+
+        if (!handlerMap.containsKey(message.getMsgType())) {
+            log.warn("Can't handle a message, missing the message handler for a message type: {}", message.getMsgType());
+            return false;
         }
-        return false;
+
+        try {
+            Object ret = handlerMap.get(message.getMsgType()).handle(message, ctx, client.getRouter());
+            if (ret != null) {
+                client.getRouter().completeRequest(message.getRequestID(), ret);
+            }
+        } catch (Exception ex) {
+            client.getRouter().completeExceptionally(message.getRequestID(), ex);
+        }
+        return true;
     }
 
 
@@ -93,21 +97,20 @@ public class ClientMsgHandler {
      * @param o      The object that implements the client.
      * @return Returns a handler to handle incoming messages to clients.
      */
-    public ClientMsgHandler generateHandlers(@NonNull final MethodHandles.Lookup caller,
-                                             @NonNull final Object o) {
+    public ClientMsgHandler generateHandlers(@NonNull final MethodHandles.Lookup caller, @NonNull final Object o) {
+        log.trace("Generate messages handlers");
+
         Arrays.stream(o.getClass().getDeclaredMethods())
                 .filter(x -> x.isAnnotationPresent(ClientHandler.class))
                 .forEach(x -> {
                     ClientHandler a = x.getAnnotation(ClientHandler.class);
-                    if (!x.getParameterTypes()[0]
-                            .isAssignableFrom(a.type().messageType.getRawType())) {
+                    if (!x.getParameterTypes()[0].isAssignableFrom(a.type().messageType.getRawType())) {
                         throw new RuntimeException("Incorrect message type, expected "
                                 + a.type().messageType.getRawType() + " but provided "
                                 + x.getParameterTypes()[0]);
                     }
                     if (handlerMap.containsKey(a.type())) {
-                        throw new RuntimeException("Handler for " + a.type()
-                                + " already registered!");
+                        throw new RuntimeException("Handler for " + a.type() + " already registered!");
                     }
                     // convert the method into a Java8 Lambda for maximum execution speed...
                     try {
@@ -121,8 +124,7 @@ public class ClientMsgHandler {
                                     .getTarget().invokeExact());
                         } else {
                             // instance method, so we need to capture the type.
-                            MethodType mt = MethodType
-                                    .methodType(x.getReturnType(), x.getParameterTypes());
+                            MethodType mt = MethodType.methodType(x.getReturnType(), x.getParameterTypes());
                             MethodHandle mh = caller.findVirtual(o.getClass(), x.getName(), mt);
                             MethodType mtGeneric = mh.type()
                                     .changeParameterType(1, CorfuMsg.class)

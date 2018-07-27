@@ -56,30 +56,36 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
      * Return the payload.
      */
     public Object getPayload(CorfuRuntime runtime) {
+        log.trace("Get payload");
+
         Object value = payload.get();
-        if (value == null) {
-            synchronized (this.payload) {
-                value = this.payload.get();
-                if (value == null) {
-                    if (data == null) {
-                        this.payload.set(null);
-                    } else {
-                        ByteBuf copyBuf = Unpooled.wrappedBuffer(data);
-                        final Object actualValue =
-                                Serializers.CORFU.deserialize(copyBuf, runtime);
-                        // TODO: Remove circular dependency on logentry.
-                        if (actualValue instanceof LogEntry) {
-                            ((LogEntry) actualValue).setEntry(this);
-                            ((LogEntry) actualValue).setRuntime(runtime);
-                        }
-                        value = actualValue == null ? this.payload : actualValue;
-                        this.payload.set(value);
-                        copyBuf.release();
-                        lastKnownSize = data.length;
-                        data = null;
-                    }
-                }
+        if (value != null) {
+            return value;
+        }
+
+        synchronized (this.payload) {
+            value = this.payload.get();
+            if (value != null) {
+                return value;
             }
+
+            if (data == null) {
+                this.payload.set(null);
+                return null;
+            }
+
+            ByteBuf copyBuf = Unpooled.wrappedBuffer(data);
+            final Object actualValue = Serializers.CORFU.deserialize(copyBuf, runtime);
+            // TODO: Remove circular dependency on logentry.
+            if (actualValue instanceof LogEntry) {
+                ((LogEntry) actualValue).setEntry(this);
+                ((LogEntry) actualValue).setRuntime(runtime);
+            }
+            value = actualValue == null ? this.payload : actualValue;
+            this.payload.set(value);
+            copyBuf.release();
+            lastKnownSize = data.length;
+            data = null;
         }
 
         return value;

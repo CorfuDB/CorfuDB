@@ -54,8 +54,7 @@ public class BootstrapUtil {
         LayoutClient layoutClient = new LayoutClient(router, layout.getEpoch());
 
         try {
-            CFUtils.getUninterruptibly(layoutClient.bootstrapLayout(layout),
-                    AlreadyBootstrappedException.class);
+            CFUtils.getUninterruptibly(layoutClient.bootstrapLayout(layout), AlreadyBootstrappedException.class);
         } catch (AlreadyBootstrappedException abe) {
             if (!layoutClient.getLayout().get().equals(layout)) {
                 log.error("BootstrapUtil: Layout Server {}:{} already bootstrapped with different "
@@ -73,8 +72,7 @@ public class BootstrapUtil {
      */
     private static void bootstrapManagementServer(IClientRouter router, Layout layout)
             throws ExecutionException, InterruptedException, AlreadyBootstrappedException {
-        ManagementClient managementClient
-                = new ManagementClient(router, layout.getEpoch());
+        ManagementClient managementClient = new ManagementClient(router, layout.getEpoch());
 
         try {
             CFUtils.getUninterruptibly(managementClient.bootstrapManagement(layout),

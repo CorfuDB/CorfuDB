@@ -15,7 +15,6 @@ import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
@@ -27,16 +26,21 @@ import java.util.stream.Collectors;
 @Slf4j
 public abstract class WorkflowRequest {
 
-    protected int retry;
-
-    protected Duration timeout;
-
-    protected Duration pollPeriod;
-
-    protected CorfuRuntime runtime;
+    protected final int retry;
+    protected final Duration timeout;
+    protected final Duration pollPeriod;
+    protected final CorfuRuntime runtime;
 
     @NonNull
-    protected String nodeForWorkflow;
+    protected final String nodeForWorkflow;
+
+    protected WorkflowRequest(int retry, Duration timeout, Duration pollPeriod, CorfuRuntime runtime, String nodeForWorkflow) {
+        this.retry = retry;
+        this.timeout = timeout;
+        this.pollPeriod = pollPeriod;
+        this.runtime = runtime;
+        this.nodeForWorkflow = nodeForWorkflow;
+    }
 
     /**
      * Send a workflow request
@@ -121,13 +125,12 @@ public abstract class WorkflowRequest {
 
     /**
      * Starts executing the workflow request.
-     *
+     * <p>
      * This method will succeed only if the workflow executed successfully, otherwise
-     * it can throw a WorkflowResultUnknownException when the timeouts are exhauseted
+     * it can throw a WorkflowResultUnknownException when the timeouts are exhausted
      * and the expected side effect cannot be verified.
      *
-     * @throws WorkflowResultUnknownException when the workflow result cannot be
-     * verified.
+     * @throws WorkflowResultUnknownException when the workflow result cannot be verified.
      */
     public void invoke() {
         for (int x = 0; x < retry; x++) {
@@ -152,7 +155,9 @@ public abstract class WorkflowRequest {
             log.warn("WorkflowRequest: Retrying {} on attempt {}", this, x);
         }
 
-        throw new WorkflowResultUnknownException();
+        throw new WorkflowResultUnknownException(
+                String.format("All attempts are exhausted. Number of retries: %d", retry)
+        );
     }
 }
 
