@@ -279,8 +279,9 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
 
-        l.setEpoch(l.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
+        Layout sealLayout = new Layout(l);
+        sealLayout.setEpoch(l.getEpoch() + 1);
+        corfuRuntime.getLayoutView().getRuntimeLayout(sealLayout).moveServersToEpoch();
         corfuRuntime.getLayoutView().updateLayout(newLayout, 1L);
 
         assertThat(getLayoutServer(SERVERS.PORT_0).getCurrentLayout()).isEqualTo(newLayout);

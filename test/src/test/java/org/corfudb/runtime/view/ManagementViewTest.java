@@ -1008,7 +1008,7 @@ public class ManagementViewTest extends AbstractViewTest {
         rt.getStreamsView().get(CorfuRuntime.getStreamID("test"))
                 .append("testPayload".getBytes());
 
-        rt.getLayoutManagementView().addNode(l1, SERVERS.ENDPOINT_1,
+        rt.getLayoutManagementView().addNode(new Layout(l1), SERVERS.ENDPOINT_1,
                 true,
                 true,
                 true,

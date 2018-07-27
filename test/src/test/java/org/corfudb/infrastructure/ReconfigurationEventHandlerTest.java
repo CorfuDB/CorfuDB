@@ -60,7 +60,7 @@ public class ReconfigurationEventHandlerTest extends AbstractViewTest {
         ReconfigurationEventHandler reconfigurationEventHandler = new ReconfigurationEventHandler();
         IReconfigurationHandlerPolicy failureHandlerPolicy = new PurgeFailurePolicy();
         reconfigurationEventHandler.handleFailure(failureHandlerPolicy,
-                        originalLayout,
+                        new Layout(originalLayout),
                         corfuRuntime,
                         failedServers);
 

@@ -293,10 +293,19 @@ public class LayoutServer extends AbstractServer {
             return;
         }
 
-        setCurrentLayout(req.getLayout());
-        serverContext.setServerEpoch(req.getLayout().getEpoch(), r);
-        log.warn("forceLayout: Forcing new layout {}", req.getLayout());
-        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+        // If the layout in the message payload has an epoch equal to the current saved layout,
+        // then the layout is discarded and responded with a NACK.
+        if (getCurrentLayout().getEpoch() < msg.getPayload().getEpoch()) {
+            setCurrentLayout(req.getLayout());
+            serverContext.setServerEpoch(req.getLayout().getEpoch(), r);
+            log.warn("forceLayout: Forcing new layout {}", req.getLayout());
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+        } else {
+            log.info("forceLayout: Force commit message received with layout:{} but current layout "
+                            + "has a greater or equal epoch value:{}",
+                    msg.getPayload(), getCurrentLayout());
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
+        }
     }
 
 
@@ -333,10 +342,19 @@ public class LayoutServer extends AbstractServer {
             return;
         }
 
-        setCurrentLayout(commitLayout);
-        serverContext.setServerEpoch(msg.getPayload().getEpoch(), r);
-        log.info("New layout committed: {}", commitLayout);
-        r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+        // If the layout in the message payload has an epoch equal to the current saved layout,
+        // then the layout is discarded and responded with a NACK.
+        if (getCurrentLayout().getEpoch() < msg.getPayload().getEpoch()) {
+            setCurrentLayout(commitLayout);
+            serverContext.setServerEpoch(msg.getPayload().getEpoch(), r);
+            log.info("handleMessageLayoutCommit: New layout committed: {}", commitLayout);
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+        } else {
+            log.info("handleMessageLayoutCommit: Commit message received with layout:{} but current"
+                            + "layout has a greater or equal epoch value:{}",
+                    msg.getPayload(), getCurrentLayout());
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
+        }
     }
 
 

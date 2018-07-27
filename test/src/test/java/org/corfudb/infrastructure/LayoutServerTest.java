@@ -481,9 +481,6 @@ public class LayoutServerTest extends AbstractServerTest {
         sendCommitted(newEpoch, layout);
         Assertions.assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
 
-        sendCommitted(newEpoch, layout);
-        Assertions.assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
-
         requestLayout(newEpoch);
         Assertions.assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_RESPONSE);
         Assertions.assertThat(((LayoutMsg) getLastMessage()).getLayout()).isEqualTo(layout);
