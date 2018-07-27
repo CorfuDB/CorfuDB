@@ -170,6 +170,7 @@ public class Driver {
         for (int x = 1; x < hosts.size(); x++) {
             stripes.add(new Layout.LayoutStripe(Collections.singletonList(hosts.get(x))));
         }
+        //stripes.add(new Layout.LayoutStripe(hosts));
 
         Layout.LayoutSegment segment = new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, -1L, stripes);
         segments.add(segment);
@@ -205,17 +206,22 @@ public class Driver {
         // call bootstrapper
         bootstrapCluster();
 
+        // create runtimes
+        final CorfuRuntime[] rts = new CorfuRuntime[hosts.size()];
+        for (int i = 0; i < hosts.size(); i++) {
+            rts[i] = new CorfuRuntime(hosts.get(i)).connect();
+        }
+        //final CorfuRuntime rt = new CorfuRuntime(hosts.get(0)).connect();
+
         // Producer
         int[] numWrites = new int[numProd];
         for (int x = 0; x < numProd; x++) {
 
-            final CorfuRuntime rt = new CorfuRuntime(hosts.get(x % hosts.size())).connect();
-            //System.out.println("Connected! " + hosts.get(x % hosts.size()));
+            //final CorfuRuntime rt = new CorfuRuntime(hosts.get(x % hosts.size())).connect();
+            final CorfuRuntime rt = rts[x % rts.length];
+
             final int ind = x;
             Runnable r = () -> {
-                long startTime = System.currentTimeMillis();
-                //System.out.println("Inside producer " + (ind));
-
                 Producer producer = null;
                 if (prodClass.equals("AddressSpaceProducer")) {
                     producer = new AddressSpaceProducer(rt);
@@ -226,17 +232,8 @@ public class Driver {
                 for (int i = 0; i < numReq; i++) {
                     producer.send(payload);
                     numWrites[ind] += 1;
-                    //System.out.println("Incremented num writes to " + (numWrites[ind]));
                 }
 
-                long endTime = System.currentTimeMillis();
-                long time = endTime - startTime;
-
-//                System.out.println("(Producer) Latency [ms/op]: " + ((time*1.0)/numReq)
-//                        + " " + ((time*1.0)/numWrites[ind]));
-//                System.out.println("(Producer) Throughput [ops/ms]: " + (numReq/(time*1.0))
-//                        + " " + (numWrites[ind])/(time*1.0));
-//                System.out.println("Num Writes: " + numWrites[ind]);
             };
 
             prodThreads[x] = new Thread(r); // performs lambda fn from above
