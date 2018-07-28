@@ -1,24 +1,28 @@
 package org.corfudb.runtime.object.transactions;
 
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.ConflictParameterClass;
-import org.corfudb.util.serializer.ICorfuHashable;
-import org.corfudb.util.serializer.ISerializer;
-import org.corfudb.util.serializer.Serializers;
-import org.junit.Test;
-
-import java.nio.ByteBuffer;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
 
+import java.nio.ByteBuffer;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
+
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.ConflictParameterClass;
+import org.corfudb.util.serializer.ICorfuHashable;
+import org.corfudb.util.serializer.Serializers;
+import org.junit.Assert;
+import org.junit.Test;
 
 /**
  * Created by mwei on 11/16/16.
@@ -107,6 +111,129 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         t(2, this::TXEnd)
                 .assertThrows()
                     .isInstanceOf(TransactionAbortedException.class);
+    }
+
+    /**
+     * This test checks if optimistic transactions are aborted in the scenario of slow writers and
+     * fast readers accessing the same stream, i.e., a reader accesses the address already given to
+     * the slow writer before this one gets to actually write into it. This causes the address to
+     * be hole filled and therefore the transaction is aborted after several tries.
+     * The cause of abort of this transaction is reported as OVERWRITE given that the position
+     * was continuously overwritten at the log unit level.
+     */
+    @Test
+    public void checkSlowWriterTxAbortsOnHoleFill() {
+        UUID streamID = UUID.randomUUID();
+        CorfuRuntime rtWriter = getDefaultRuntime();
+        CorfuRuntime rtReader = getDefaultRuntime();
+
+        Map<String, String> map = rtWriter
+                .getObjectsView().build()
+                .setStreamID(streamID)
+                .setType(SMRMap.class)
+                .open();
+        // Add rule to force a read on the assigned token before actually writing to that position
+        TestRule testRule = new TestRule()
+                .matches(m -> {
+                    if (m.getMsgType().equals(CorfuMsgType.WRITE)) {
+                        rtReader.getStreamsView().get(streamID).next();
+                        return true;
+                    } else {
+                        return false;
+                    }
+                });
+        addClientRule(rtWriter, testRule);
+
+        try {
+            OptimisticTXBegin();
+            map.put("k1", "v1");
+            TXEnd();
+            Assert.fail();
+        } catch (TransactionAbortedException tae) {
+            assertThat(tae.getAbortCause()).isEqualTo(AbortCause.OVERWRITE);
+        }
+
+        assertThat(map).doesNotContainKey("k1");
+    }
+
+    /**
+     * This test checks if optimistic transactions abort in the case where different data is already present
+     * in the address given. We force this to happen on all stream layer retries and the transaction
+     * should be aborted.
+     */
+    @Test
+    public void checkSlowWriterTxAbortsOnOverwriteDiffData() {
+        UUID streamID = UUID.randomUUID();
+        CorfuRuntime rtSlowWriter = getDefaultRuntime();
+        CorfuRuntime rtIntersect = new CorfuRuntime(getDefaultConfigurationString()).connect();
+
+        Map<String, String> map = rtSlowWriter
+                .getObjectsView().build()
+                .setStreamID(streamID)
+                .setType(SMRMap.class)
+                .open();
+
+        int[] retry = new int[1];
+        retry[0] = 0;
+        // Add rule to force a read on the assigned token before actually writing to that position
+        TestRule testRule = new TestRule()
+                .matches(m -> {
+                    if (m.getMsgType().equals(CorfuMsgType.WRITE) && retry[0] < rtSlowWriter.getParameters().getWriteRetry()) {
+                        rtIntersect.getAddressSpaceView().write(new Token(retry[0], 0), "hello world".getBytes());
+                        retry[0]++;
+                        return true;
+                    } else {
+                        return false;
+                    }
+                });
+        addClientRule(rtSlowWriter, testRule);
+
+        try {
+            OptimisticTXBegin();
+            map.put("k2", "v2");
+            TXEnd();
+            Assert.fail();
+        } catch (TransactionAbortedException tae) {
+            assertThat(tae.getAbortCause()).isEqualTo(AbortCause.OVERWRITE);
+        }
+
+        assertThat(map).doesNotContainKey("k1");
+    }
+
+    /**
+     * This test checks if optimistic transactions succeed whenever the same data is already present
+     * in the given address. This might happen for the case of chain replication and partial
+     * writes of a slow writer. A fast reader might propagate its write through the chain, and when
+     * attempting to complete the writes find the data already there.
+     */
+    @Test
+    public void checkSlowWriterTxSucceedsOnSameDataOverwrite() {
+        UUID streamID = UUID.randomUUID();
+        CorfuRuntime rtSlowWriter = getDefaultRuntime();
+        CorfuRuntime rtPropagateWrite = new CorfuRuntime(getDefaultConfigurationString()).connect();
+
+        int[] retry = new int[1];
+        retry[0] = 0;
+        // Add rule to force a read on the assigned token before actually writing to that position
+        TestRule testRule = new TestRule()
+                .matches(m -> {
+                    if (m.getMsgType().equals(CorfuMsgType.WRITE)) {
+                        rtPropagateWrite.getAddressSpaceView().write(new Token(0, 0), "hello world".getBytes());
+                        retry[0]++;
+                        return true;
+                    } else {
+                        return false;
+                    }
+                });
+        addClientRule(rtSlowWriter, testRule);
+
+        try {
+            OptimisticTXBegin();
+            rtSlowWriter.getStreamsView().append("hello world".getBytes(), null, streamID);
+            TXEnd();
+        } catch (TransactionAbortedException tae) {
+            Assert.fail();
+        }
     }
 
     /** When using two custom conflict objects which

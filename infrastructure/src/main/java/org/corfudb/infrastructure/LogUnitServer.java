@@ -179,7 +179,7 @@ public class LogUnitServer extends AbstractServer {
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
 
         } catch (OverwriteException ex) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.payloadMsg(ex.getOverWriteCause().getId()));
         } catch (DataOutrankedException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
         } catch (ValueAdoptedException e) {
@@ -240,7 +240,7 @@ public class LogUnitServer extends AbstractServer {
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
 
         } catch (OverwriteException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.payloadMsg(e.getOverWriteCause().getId()));
         } catch (DataOutrankedException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
         } catch (ValueAdoptedException e) {

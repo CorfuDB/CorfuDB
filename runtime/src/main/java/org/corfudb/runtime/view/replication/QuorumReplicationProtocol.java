@@ -6,9 +6,18 @@
 
 package org.corfudb.runtime.view.replication;
 
+import java.time.Duration;
+import java.util.Comparator;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -17,6 +26,7 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
 import org.corfudb.runtime.exceptions.LogUnitException;
+import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -29,14 +39,6 @@ import org.corfudb.util.Holder;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
-
-import java.time.Duration;
-import java.util.Comparator;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 
 /**
  * Created by kspirov on 4/23/17.
@@ -139,7 +141,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
                     return;
                 }
             }
-            throw new OverwriteException();
+            throw new OverwriteException(OverwriteCause.DIFF_DATA);
         }
     }
 

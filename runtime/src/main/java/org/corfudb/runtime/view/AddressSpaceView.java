@@ -7,13 +7,26 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterables;
+
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -22,15 +35,6 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -108,7 +112,7 @@ public class AddressSpaceView extends AbstractView {
         }
 
         if (!logData.equals(ld)){
-            throw new OverwriteException();
+            throw new OverwriteException(OverwriteCause.DIFF_DATA);
         }
     }
 
@@ -148,11 +152,21 @@ public class AddressSpaceView extends AbstractView {
                 l.getReplicationMode(token.getTokenValue())
                         .getReplicationProtocol(runtime)
                         .write(e, ld);
-            } catch (OverwriteException | WriteSizeException ex) {
-                // If we have an Overwrite exception, it is already too late for trying
-                // to validate the state of the write, we know that the write didn't complete.
-                // Large writes are also rejected right away.
-                throw ex;
+            } catch (OverwriteException ex) {
+                if (ex.getOverWriteCause() == OverwriteCause.SAME_DATA){
+                    // If we have an overwrite exception with the SAME_DATA cause, it means that the
+                    // server suspects our data has already been written, in this case we need to
+                    // validate the state of the write.
+                    validateStateOfWrittenEntry(token.getTokenValue(), ld);
+                } else {
+                    // If we have an Overwrite exception with a different cause than SAME_DATA
+                    // we do not need to validate the state of the write, as we know we have been
+                    // certainly overwritten either by other data, by a hole or the address was trimmed.
+                    // Large writes are also rejected right away.
+                    throw ex;
+                }
+            } catch (WriteSizeException we) {
+                throw we;
             } catch (RuntimeException re) {
                 validateStateOfWrittenEntry(token.getTokenValue(), ld);
             }

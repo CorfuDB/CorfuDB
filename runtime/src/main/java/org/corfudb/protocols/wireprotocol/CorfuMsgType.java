@@ -72,7 +72,7 @@ public enum CorfuMsgType {
 
     WRITE_OK(50, TypeToken.of(CorfuMsg.class)),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),
-    ERROR_OVERWRITE(52, TypeToken.of(CorfuMsg.class)),
+    ERROR_OVERWRITE(52, new TypeToken<CorfuPayloadMsg<Integer>>(){}, true),
     ERROR_OOS(53, TypeToken.of(CorfuMsg.class)),
     ERROR_RANK(54, TypeToken.of(CorfuMsg.class)),
     ERROR_NOENTRY(55, TypeToken.of(CorfuMsg.class)),
