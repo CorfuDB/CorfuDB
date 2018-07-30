@@ -1,5 +1,7 @@
 package org.corfudb.perfClient;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
@@ -151,7 +153,7 @@ public class Driver {
         List<String> hosts = new ArrayList<>();
         hosts.add("10.33.82.223:9000");
         hosts.add("10.33.82.253:9001");
-        hosts.add("10.33.82.56:9003");
+        hosts.add("10.33.82.56:9002");
         //hosts.add("10.33.83.114:9003");
 
         List<String> sequencer = new ArrayList<>();
@@ -186,13 +188,67 @@ public class Driver {
         BootstrapUtil.bootstrap(layout, retries, TIMEOUT_SHORT);
     }
 
+    public static Layout deserializeLayout() {
+        String layout = "{\n" +
+                "  \"layoutServers\": [\n" +
+                "    \"10.33.82.253:9001\",\n" +
+                "    \"10.33.82.56:9002\"\n" +
+                "  ],\n" +
+                "  \"sequencers\": [\n" +
+                "    \"10.33.82.223:9000\"\n" +
+                "  ],\n" +
+                "  \"segments\": [\n" +
+                "    {\n" +
+                "      \"replicationMode\": \"CHAIN_REPLICATION\",\n" +
+                "      \"start\": 0,\n" +
+                "      \"end\": -1,\n" +
+                "      \"stripes\": [\n" +
+                "        {\n" +
+                "          \"logServers\": [\n" +
+                "            \"10.33.82.253:9001\"\n" +
+                "          ]\n" +
+                "        },\n" +
+                "        {\n" +
+                "          \"logServers\": [\n" +
+                "            \"10.33.82.56:9002\"\n" +
+                "          ]\n" +
+                "        }\n" +
+                "      ]\n" +
+                "    }\n" +
+                "  ],\n" +
+                "  \"unresponsiveServers\": [],\n" +
+                "  \"epoch\": 0,\n" +
+                "  \"clusterId\": \"2c3f91d4-663f-46e5-9f2d-488f035f29a5\"\n" +
+                "}";
+
+
+        Gson parser = new GsonBuilder()
+                .registerTypeAdapter(Layout.class, new LayoutDeserializer())
+                .create();
+
+        Layout layoutCopy = parser.fromJson(layout, Layout.class);
+        System.out.println(layoutCopy);
+
+        return layoutCopy;
+    }
+
+    public static void bootstrapWithStrings() {
+        Layout layout = deserializeLayout();
+        Duration TIMEOUT_SHORT = Duration.of(5, ChronoUnit.SECONDS);
+        Duration.of(1, ChronoUnit.SECONDS);
+        final int retries = 3;
+
+        BootstrapUtil.bootstrap(layout, retries, TIMEOUT_SHORT);
+    }
+
 
     public static void runCluster(String[] args, String prodClass) throws Exception {
         String connString = args[0];
         List<String> hosts = new ArrayList<>();
+        //hosts.add("localhost:9000");
         hosts.add("10.33.82.223:9000");
         hosts.add("10.33.82.253:9001");
-        hosts.add("10.33.82.56:9003");
+        hosts.add("10.33.82.56:9002");
         //hosts.add("10.33.83.114:9003");
 
         final int numProd = Integer.valueOf(args[1]);
@@ -205,7 +261,8 @@ public class Driver {
         byte[] payload = new byte[payloadSize];
 
         // call bootstrapper
-        bootstrapCluster();
+        //bootstrapCluster();
+        bootstrapWithStrings();
 
         // create runtimes
         final CorfuRuntime[] rts = new CorfuRuntime[hosts.size()];
