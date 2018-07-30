@@ -151,7 +151,7 @@ public class Driver {
         List<String> hosts = new ArrayList<>();
         hosts.add("10.33.82.223:9000");
         hosts.add("10.33.82.253:9001");
-        hosts.add("10.33.82.56:9002");
+        hosts.add("10.33.82.56:9003");
         //hosts.add("10.33.83.114:9003");
 
         List<String> sequencer = new ArrayList<>();
@@ -174,6 +174,7 @@ public class Driver {
 
         Layout.LayoutSegment segment = new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, -1L, stripes);
         segments.add(segment);
+        System.out.println(segment.getNumberOfStripes());
 
         Duration TIMEOUT_SHORT = Duration.of(5, ChronoUnit.SECONDS);
         Duration.of(1, ChronoUnit.SECONDS);
@@ -191,7 +192,7 @@ public class Driver {
         List<String> hosts = new ArrayList<>();
         hosts.add("10.33.82.223:9000");
         hosts.add("10.33.82.253:9001");
-        hosts.add("10.33.82.56:9002");
+        hosts.add("10.33.82.56:9003");
         //hosts.add("10.33.83.114:9003");
 
         final int numProd = Integer.valueOf(args[1]);
