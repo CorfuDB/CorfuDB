@@ -192,7 +192,8 @@ public class Driver {
         String layout = "{\n" +
                 "  \"layoutServers\": [\n" +
                 "    \"10.33.82.253:9001\",\n" +
-                "    \"10.33.82.56:9002\"\n" +
+                "    \"10.33.82.56:9002\",\n" +
+                "    \"10.33.82.165:9003\"\n" +
                 "  ],\n" +
                 "  \"sequencers\": [\n" +
                 "    \"10.33.82.223:9000\"\n" +
@@ -211,6 +212,11 @@ public class Driver {
                 "        {\n" +
                 "          \"logServers\": [\n" +
                 "            \"10.33.82.56:9002\"\n" +
+                "          ]\n" +
+                "        },\n" +
+                "        {\n" +
+                "          \"logServers\": [\n" +
+                "            \"10.33.82.165:9003\"\n" +
                 "          ]\n" +
                 "        }\n" +
                 "      ]\n" +
@@ -249,7 +255,7 @@ public class Driver {
         hosts.add("10.33.82.223:9000");
         hosts.add("10.33.82.253:9001");
         hosts.add("10.33.82.56:9002");
-        //hosts.add("10.33.83.114:9003");
+        hosts.add("10.33.82.165:9003");
 
         final int numProd = Integer.valueOf(args[1]);
         final int numReq = Integer.valueOf(args[2]);
