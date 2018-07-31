@@ -174,7 +174,7 @@ public class CorfuRuntime {
         /**
          * {@link Duration} before requests timeout.
          */
-        @Default Duration requestTimeout = Duration.ofSeconds(5);
+        @Default Duration requestTimeout = Duration.ofSeconds(60);
 
         /**
          * {@link Duration} before connections timeout.

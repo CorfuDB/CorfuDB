@@ -1,9 +1,11 @@
 package org.corfudb.runtime.view;
 
+import lombok.Builder;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 
