@@ -1,11 +1,9 @@
 package org.corfudb.runtime.view;
 
-import lombok.Builder;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
 
-import java.time.Duration;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 
@@ -19,11 +17,11 @@ public class AddressSpaceProducer implements Producer {
      public long send(Object payload) {
          while(true) {
              try {
-                 int numAsync = 100;
+                 int numAsync = 1000;
+                 final RuntimeLayout runtimeLayout = new RuntimeLayout(runtime.getLayoutView().getLayout(), runtime);
 
                  // acquire tokens
-                 final SequencerClient client = new RuntimeLayout(runtime.getLayoutView().getLayout(),
-                         runtime).getPrimarySequencerClient();
+                 final SequencerClient client = runtimeLayout.getPrimarySequencerClient();
                  CompletableFuture[] futures = new CompletableFuture[numAsync];
                  TokenResponse[] trs = new TokenResponse[numAsync];
                  for (int t = 0; t < numAsync; t++) {
@@ -33,13 +31,12 @@ public class AddressSpaceProducer implements Producer {
                      try {
                          trs[t] = (TokenResponse) futures[t].get();
                      } catch (Exception e) {
-                         System.out.println(e);
+                         //System.out.println("o no" + (e));
                          throw new RuntimeException(e);
                      }
                  }
 
                  // perform writes
-                 final RuntimeLayout runtimeLayout = new RuntimeLayout(runtime.getLayoutView().getLayout(), runtime);
                  final ILogData ld = new LogData(DataType.DATA, payload);
                  for (int i = 0; i < numAsync; i++) {
                      runtimeLayout.getLogUnitClient(trs[i].getTokenValue(), 0).write(ld);
