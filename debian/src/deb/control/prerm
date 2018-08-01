@@ -3,3 +3,9 @@
 for filename in /usr/share/corfu/bin/*; do
     rm /usr/local/bin/$(basename "$filename")
 done
+
+if [[ -n $(which systemctl) ]]; then
+    systemctl disable corfu-server
+else
+    update-rc.d corfu-server remove
+fi

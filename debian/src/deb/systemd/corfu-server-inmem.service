@@ -1,6 +1,6 @@
 [Unit]
-Description=Corfu Infrastructure Server
-SourcePath=/etc/init.d/corfu-server
+Description=Corfu In-Memory Infrastructure Server
+SourcePath=/etc/init.d/corfu-server-inmem
 Documentation=https://github.com/corfudb/corfudb
 Before=shutdown.target
 Conflicts=shutdown.target
@@ -14,11 +14,11 @@ Type=forking
 Restart=no
 TimeoutSec=5min
 IgnoreSIGPIPE=no
-KillMode=control-group
+KillMode=process
 GuessMainPID=no
-ExecStart=/etc/init.d/corfu-server start
-ExecStop=/etc/init.d/corfu-server stop
-ExecReload=/etc/init.d/corfu-server restart
+ExecStart=/etc/init.d/corfu-server-inmem start
+ExecStop=/etc/init.d/corfu-server-inmem stop
+ExecReload=/etc/init.d/corfu-server-inmem restart
 
 [Install]
 WantedBy=nsx-custom.target
