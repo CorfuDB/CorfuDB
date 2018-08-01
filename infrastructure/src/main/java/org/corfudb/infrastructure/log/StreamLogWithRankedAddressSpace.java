@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
+import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 
@@ -46,7 +47,7 @@ public interface StreamLogWithRankedAddressSpace extends StreamLog {
         }
         if (newEntry.getRank().getRank() == 0) {
             // data consistency in danger
-            throw new OverwriteException();
+            throw new OverwriteException(OverwriteCause.DIFF_DATA);
         }
         int compare = newEntry.getRank().compareTo(oldEntry.getRank());
         if (compare < 0) {

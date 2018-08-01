@@ -32,7 +32,7 @@ Even though Corfu is a distributed system, you can start working with Corfu usin
 ## So how does Corfu work?
 Corfu is built upon the abstraction of a distributed shared log. The Corfu infrastructure provides this log to clients, which use the log for coordination, communication and storage. The log is a highly available, dynamic and high performance scalable fabric: it is resilient to failures and can be reconfigured at any time.
 
-The Corfu infrastructure consists of three components: a **layout server**, which helps Corfu clients locate the rest of the Corfu infrastructure, a **sequencer server**, which is used to order updates to the log, and a **log server**, which stores updates to the log. At minimum a Corfu infrastructure must have one of each server type, but for scalability and high availability a real-world deployment will have many. An administrator need not worry about installing each role seperately as they are provided as a single monolithic binary.
+The Corfu infrastructure consists of three components: a **layout server**, which helps Corfu clients locate the rest of the Corfu infrastructure, a **sequencer server**, which is used to order updates to the log, and a **log server**, which stores updates to the log. At minimum a Corfu infrastructure must have one of each server type, but for scalability and high availability a real-world deployment will have many. An administrator need not worry about installing each role separately as they are provided as a single monolithic binary.
 
 Corfu clients interact with the infrastructure through the Corfu runtime. The runtime is currently only available in Java, but we plan on providing it in several other languages in the future. Given the address to a layout server in a Corfu infrastructure, the runtime enables clients to access distributed high-level data structures as if they were local data structures. We provide a mechanism to automatically distribute most Java objects as well. 
 
@@ -131,7 +131,7 @@ The Corfu infrastructure is provided by the monolithic binary ```corfu_server```
 $ ./CorfuDB/bin/corfu_server -ms 9000
 ```
 
-This starts a in-memory single node Corfu infrastructure on port 9000. To point clients at this infrastructure, point them at localhost:9000.
+This starts an in-memory single node Corfu infrastructure on port 9000. To point clients at this infrastructure, point them at localhost:9000.
 
 ### How do I make sure it works?
 To test your Corfu infrastructure, you can use the Corfu utilities. One of the first things you might want to do is check is the layout, which described the configuration of servers in the Corfu infrastructure. To run this, try:
@@ -191,7 +191,7 @@ Let's start by adding a layout server. To do that, start a non-provisioned Corfu
 $ ./CorfuDB/bin/corfu_server -m -M localhost:9000 9001
 ```
 
-Now lets add that layout server to the previous deployment:
+Now let's add that layout server to the previous deployment:
 ```
 $ ./CorfuDB/bin/corfu_layouts -c localhost:9000 edit
 ```

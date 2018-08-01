@@ -28,6 +28,7 @@ import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 
 /**
  * A definition of a workflow that adds a new node to the cluster. This workflow
@@ -127,6 +128,8 @@ public class AddNodeWorkflow implements IWorkflow {
     }
 
     /**
+     * Fetch and propagate the trimMark to the new/healing nodes. Else, a FastLoader reading from
+     * them will have to mark all the already trimmed entries as holes.
      * Transfer an address segment from a cluster to a set of specified nodes.
      * There are no cluster reconfigurations, hence no epoch change side effects.
      *
@@ -138,6 +141,16 @@ public class AddNodeWorkflow implements IWorkflow {
                                  Layout.LayoutSegment segment) throws Exception {
 
         long trimMark = runtime.getAddressSpaceView().getTrimMark();
+        // Send the trimMark to the new/healing nodes.
+        // If this times out or fails, the Action performing the stateTransfer fails and retries.
+        for (String endpoint : endpoints) {
+            // TrimMark is the first address present on the log unit server.
+            // Perform the prefix trim on the preceding address = (trimMark - 1).
+            CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(newLayout)
+                    .getLogUnitClient(endpoint)
+                    .prefixTrim(trimMark - 1));
+        }
+
         if (trimMark > segment.getEnd()) {
             log.info("stateTransfer: Nothing to transfer, trimMark {} greater than end of segment {}",
                     trimMark, segment.getEnd());
@@ -151,10 +164,16 @@ public class AddNodeWorkflow implements IWorkflow {
                 ; chunkStart = chunkStart + CHUNK_SIZE) {
             long chunkEnd = Math.min((chunkStart + CHUNK_SIZE - 1), segment.getEnd() - 1);
 
+            long ts1 = System.currentTimeMillis();
+
             Map<Long, ILogData> dataMap = runtime.getAddressSpaceView()
                     .cacheFetch(ContiguousSet.create(
                             Range.closed(chunkStart, chunkEnd),
                             DiscreteDomain.longs()));
+
+            long ts2 = System.currentTimeMillis();
+
+            log.info("stateTransfer: read {}-{} in {} ms", chunkStart, chunkEnd, (ts2 - ts1));
 
             List<LogData> entries = new ArrayList<>();
             for (long x = chunkStart; x <= chunkEnd; x++) {
@@ -167,9 +186,11 @@ public class AddNodeWorkflow implements IWorkflow {
 
             for (String endpoint : endpoints) {
                 // Write segment chunk to the new logunit
+                ts1 = System.currentTimeMillis();
                 boolean transferSuccess = runtime.getLayoutView().getRuntimeLayout(newLayout)
                         .getLogUnitClient(endpoint)
                         .writeRange(entries).get();
+                ts2 = System.currentTimeMillis();
 
                 if (!transferSuccess) {
                     log.error("stateTransfer: Failed to transfer {}-{} to {}", CHUNK_SIZE,
@@ -177,8 +198,8 @@ public class AddNodeWorkflow implements IWorkflow {
                     throw new IllegalStateException("Failed to transfer!");
                 }
 
-                log.info("stateTransfer: Transferred address chunk [{}, {}] to {}",
-                        chunkStart, chunkEnd, endpoint);
+                log.info("stateTransfer: Transferred address chunk [{}, {}] to {} in {} ms",
+                        chunkStart, chunkEnd, endpoint, (ts2 - ts1));
             }
         }
     }

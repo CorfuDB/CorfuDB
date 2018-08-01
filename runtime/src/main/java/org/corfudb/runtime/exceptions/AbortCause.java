@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum AbortCause {
     CONFLICT,
+    OVERWRITE, /** Aborted because of slow writer, i.e., continuously gets overwritten (hole filled by faster reader) */
     NEW_SEQUENCER,
     USER,
     NETWORK,

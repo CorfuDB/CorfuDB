@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.List;
 
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.runtime.exceptions.OverwriteCause;
 
 /**
  * An interface definition that specifies an api to interact with a StreamLog.
@@ -86,4 +87,34 @@ public interface StreamLog {
      * Clears all data and resets all segment handlers.
      */
     void reset();
+
+    /**
+     * Get overwrite cause for a given address.
+     *
+     * @param address global log address
+     * @param entry entry which would cause the overwrite
+     * @return (OverwriteCause) Cause of the overwrite
+     */
+    default OverwriteCause getOverwriteCauseForAddress(long address, LogData entry) {
+        LogData currentEntry = read(address);
+        OverwriteCause cause = OverwriteCause.DIFF_DATA;
+
+        if (currentEntry != null) {
+            if (currentEntry.isHole()) {
+                cause = OverwriteCause.HOLE;
+            } else if (entry.getData() != null && currentEntry.getData() != null &&
+                    currentEntry.getData().length == entry.getData().length) {
+                // If the entry is already present and it is not a hole, the write
+                // might have been propagated by a fast reader from part of the chain.
+                // Compare based on data length. Based on this info client will do an actual
+                // verification on the data
+                cause = OverwriteCause.SAME_DATA;
+            }
+        } else {
+            // No actual entry is found in this address, there is no apparent cause
+            // for the overwrite exception
+            cause = OverwriteCause.NONE;
+        }
+        return cause;
+    }
 }

@@ -7,10 +7,11 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.runtime.exceptions.OverwriteException;
-
 import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.runtime.exceptions.OverwriteCause;
+import org.corfudb.runtime.exceptions.OverwriteException;
 
 /**
  * This class implements the StreamLog interface using a Java hash map.
@@ -51,7 +52,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public synchronized void append(long address, LogData entry) {
         if(isTrimmed(address)) {
-            throw new OverwriteException();
+            throw new OverwriteException(OverwriteCause.TRIM);
         }
 
         if (logCache.containsKey(address)) {
@@ -92,7 +93,9 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
 
     private void throwLogUnitExceptionsIfNecessary(long address, LogData entry) {
         if (entry.getRank() == null) {
-            throw new OverwriteException();
+            OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);
+            log.trace("throwLogUnitExceptionsIfNecessary: overwritten exception for address {}, cause: {}", address, overwriteCause);
+            throw new OverwriteException(overwriteCause);
         } else {
             // the method below might throw DataOutrankedException or ValueAdoptedException
             assertAppendPermittedUnsafe(address, entry);

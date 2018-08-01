@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.log;
 
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
@@ -55,9 +56,8 @@ import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
-
-import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
 
 /**
@@ -1221,7 +1221,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public void append(long address, LogData entry) {
         if(isTrimmed(address)) {
-            throw new OverwriteException();
+            throw new OverwriteException(OverwriteCause.TRIM);
         }
 
         SegmentHandle fh = getSegmentHandleForAddress(address);
@@ -1232,7 +1232,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             if (fh.getKnownAddresses().containsKey(address)
                     || fh.getTrimmedAddresses().contains(address)) {
                 if (entry.getRank() == null) {
-                    throw new OverwriteException();
+                    OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);
+                    log.trace("Disk_write[{}]: overwritten exception, cause: {}", address, overwriteCause);
+                    throw new OverwriteException(overwriteCause);
                 } else {
                     // the method below might throw DataOutrankedException or ValueAdoptedException
                     assertAppendPermittedUnsafe(address, entry);
