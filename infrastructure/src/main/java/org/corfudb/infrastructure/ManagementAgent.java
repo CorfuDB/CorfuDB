@@ -291,8 +291,6 @@ public class ManagementAgent {
                     log.error("detectorTaskScheduler: Recovery failed. Retrying.");
                     continue;
                 }
-                // If recovery succeeds, reconfiguration was successful.
-                triggerSequencerBootstrap(serverContext.copyManagementLayout());
                 recoveryBarrierFuture.complete(true);
                 log.info("Recovery completed");
             }
@@ -395,6 +393,15 @@ public class ManagementAgent {
 
         getCorfuRuntime().invalidateLayout();
         Layout clusterLayout = getCorfuRuntime().getLayoutView().getLayout();
+
+        // Trigger sequencer recovery only if this node was successful in committing the recovery
+        // layout. If not, then we can assume that the sequencer is already bootstrapped.
+        // NOTE: This is an async task and the failure of this task does not affect the recovery.
+        if (recoveryReconfigurationResult) {
+            // Save the latest management layout.
+            serverContext.saveManagementLayout(clusterLayout);
+            triggerSequencerBootstrap(serverContext.copyManagementLayout());
+        }
 
         log.info("Recovery layout epoch:{}, Cluster epoch: {}",
                 localRecoveryLayout.getEpoch(), clusterLayout.getEpoch());
