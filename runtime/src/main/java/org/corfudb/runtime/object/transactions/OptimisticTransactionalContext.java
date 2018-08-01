@@ -1,5 +1,7 @@
 package org.corfudb.runtime.object.transactions;
 
+import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
+
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -20,8 +22,6 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
-
-import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
 /** A Corfu optimistic transaction context.
  *
@@ -304,7 +304,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // We were overwritten (and the original snapshot is now conflicting),
             // which means we must abort.
             throw new TransactionAbortedException(txInfo, null, null,
-                AbortCause.CONFLICT, oe, this);
+                AbortCause.OVERWRITE, oe, this);
         }
 
         log.trace("Commit[{}] Acquire address {}", this, address);
