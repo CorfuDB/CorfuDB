@@ -466,7 +466,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
         cfTimeout.exceptionally(e -> {
             outstandingRequests.remove(thisRequest);
-            log.debug("Remove request {} due to timeout!", thisRequest);
+            log.debug("Remove request {} to {} due to timeout! Message:{}",
+                    thisRequest, node, message);
             return null;
         });
         return cfTimeout;
