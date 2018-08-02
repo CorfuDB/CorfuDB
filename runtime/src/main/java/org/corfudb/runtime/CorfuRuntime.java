@@ -182,6 +182,12 @@ public class CorfuRuntime {
         @Default Duration requestTimeout = Duration.ofSeconds(5);
 
         /**
+         * This timeout (in seconds) is used to detect servers that
+         * shutdown abruptly without terminating the connection properly.
+         */
+        @Default int idleConnectionTimeout = 30;
+
+        /**
          * {@link Duration} before connections timeout.
          */
         @Default Duration connectionTimeout = Duration.ofMillis(500);
