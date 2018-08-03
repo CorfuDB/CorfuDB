@@ -241,8 +241,7 @@ public class TestClientRouter implements IClientRouter {
                                CorfuComponent.CLIENT_ROUTER.toString() +
                                message.getMsgType().name().toLowerCase());
         }
-        return CorfuRuntime.getDefaultMetrics()
-                .timer(timerNameCache.get(message.getMsgType()));
+        return MetricsUtils.metrics.timer(timerNameCache.get(message.getMsgType()));
     }
 
     /**

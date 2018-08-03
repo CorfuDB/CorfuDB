@@ -141,9 +141,6 @@ public class LogUnitServer extends AbstractServer {
                 .writer(batchWriter)
                 .build(this::handleRetrieval);
 
-        MetricRegistry metrics = serverContext.getMetrics();
-//        MetricsUtils.addCacheGauges(metrics, metricsPrefix + "cache.", dataCache);
-
         Runnable task = () -> streamLog.compact();
         compactor = scheduler.scheduleAtFixedRate(task, 10, 45, TimeUnit.MINUTES);
     }

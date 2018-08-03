@@ -431,7 +431,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         }
 
         // Set up the timer and context to measure request
-        final Timer roundTripMsgTimer = CorfuRuntime.getDefaultMetrics()
+        final Timer roundTripMsgTimer =MetricsUtils.metrics
                 .timer(timerNameCache.get(message.getMsgType()));
 
         final Timer.Context roundTripMsgContext = MetricsUtils
