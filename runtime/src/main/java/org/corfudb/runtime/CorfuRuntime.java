@@ -371,18 +371,11 @@ public class CorfuRuntime {
     @Getter
     private volatile boolean isShutdown = false;
 
-    @Getter
-    private static MetricRegistry defaultMetrics = new MetricRegistry();
-    @Getter
-    @Setter
-    private MetricRegistry metrics = new MetricRegistry();
-
-    /** Initialize a default static registry which through that different metrics
-     * can be registered and reported */
+    /**
+     * Initialize a default static registry which through that different metrics can be registered and reported
+     */
     static {
-        synchronized (defaultMetrics) {
-            MetricsUtils.metricsReportingSetup(defaultMetrics);
-        }
+        MetricsUtils.metricsReportingSetup();
     }
 
     /**
@@ -476,9 +469,6 @@ public class CorfuRuntime {
         // Initializing the node router pool.
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
-        synchronized (metrics) {
-            MetricsUtils.metricsReportingSetup(metrics);
-        }
         log.info("Corfu runtime version {} initialized.", getVersionString());
     }
 

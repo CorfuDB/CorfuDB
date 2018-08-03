@@ -1,6 +1,7 @@
 package org.corfudb.runtime;
 
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 import lombok.NonNull;
@@ -37,9 +38,7 @@ public class BootstrapUtil {
      * @param retries      Number of retries to bootstrap each node before giving up.
      * @param retryTimeout Duration between retries.
      */
-    public static void bootstrap(@NonNull Layout layout,
-                                 int retries,
-                                 @NonNull Duration retryTimeout) {
+    public static void bootstrap(@NonNull Layout layout, int retries, @NonNull Duration retryTimeout) {
         bootstrap(layout, CorfuRuntimeParameters.builder().build(), retries, retryTimeout);
     }
 

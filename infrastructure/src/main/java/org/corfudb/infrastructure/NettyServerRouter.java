@@ -24,8 +24,7 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
  */
 @Slf4j
 @ChannelHandler.Sharable
-public class NettyServerRouter extends ChannelInboundHandlerAdapter
-        implements IServerRouter {
+public class NettyServerRouter extends ChannelInboundHandlerAdapter implements IServerRouter {
 
 
     /**
@@ -38,7 +37,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      */
     @Getter
     @Setter
-    volatile long serverEpoch;
+    private volatile long serverEpoch;
 
     /** The {@link AbstractServer}s this {@link NettyServerRouter} routes messages for. */
     @Getter
@@ -54,8 +53,9 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
         this.serverEpoch = ((BaseServer) servers.get(0)).serverContext.getServerEpoch();
         this.servers = servers;
         handlerMap = new EnumMap<>(CorfuMsgType.class);
-        servers.forEach(server -> server.getHandler().getHandledTypes()
-            .forEach(x -> handlerMap.put(x, server)));
+        servers.forEach(server ->
+                server.getHandler().getHandledTypes().forEach(x -> handlerMap.put(x, server))
+        );
     }
 
     /**
@@ -95,10 +95,10 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx) {
         long serverEpoch = getServerEpoch();
         if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != serverEpoch) {
-            sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH,
-                    serverEpoch));
+            sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
-                    msg.getEpoch(), serverEpoch, msg);
+                    msg.getEpoch(), serverEpoch, msg
+            );
             return false;
         }
         return true;

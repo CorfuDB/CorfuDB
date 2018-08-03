@@ -209,8 +209,7 @@ public class CorfuServer {
         final boolean bindToAllInterfaces;
         // Fetch the address if given a network interface.
         if (opts.get("--network-interface") != null) {
-            opts.put("--address",
-                    getAddressFromInterfaceName((String) opts.get("--network-interface")));
+            opts.put("--address", getAddressFromInterfaceName((String) opts.get("--network-interface")));
             bindToAllInterfaces = false;
         } else if (opts.get("--address") == null) {
             // Default the address to localhost and set the bind to all interfaces flag to true,
@@ -227,13 +226,10 @@ public class CorfuServer {
             File serviceDir = new File((String) opts.get("--log-path"));
 
             if (!serviceDir.isDirectory()) {
-                log.error("Service directory {} does not point to a directory. Aborting.",
-                        serviceDir);
+                log.error("Service directory {} does not point to a directory. Aborting.", serviceDir);
                 throw new UnrecoverableCorfuError("Service directory must be a directory!");
             } else {
-                String corfuServiceDirPath = serviceDir.getAbsolutePath()
-                        + File.separator
-                        + "corfu";
+                String corfuServiceDirPath = serviceDir.getAbsolutePath() + File.separator + "corfu";
                 File corfuServiceDir = new File(corfuServiceDirPath);
                 // Update the new path with the dedicated child service directory.
                 opts.put("--log-path", corfuServiceDirPath);

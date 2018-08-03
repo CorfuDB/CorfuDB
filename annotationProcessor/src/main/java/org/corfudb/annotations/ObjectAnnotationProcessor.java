@@ -385,18 +385,14 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                             }
                         } else if (method.getAnnotation(InterfaceOverride.class) != null) {
                             interfacesToAdd.add(ParameterizedTypeName.get(ifaceElement.asType()));
-                            if (overwrite.isPresent()) {
-                                methodSet.remove(overwrite.get());
-                            }
-                            methodSet.add(new SmrMethodInfo(method,
-                                        ifaceElement));
+                            overwrite.ifPresent(methodSet::remove);
+                            methodSet.add(new SmrMethodInfo(method, ifaceElement));
                         } else if (
                                 // if we have a implementation, and we aren't already
                                 // implemented by the object.
                                 method.getModifiers().contains(Modifier.DEFAULT)
                                         &&
-                                methodSet.stream().noneMatch(x -> x.method.toString()
-                                .equals(method.toString()))) {
+                                methodSet.stream().noneMatch(x -> x.method.toString().equals(method.toString()))) {
                             methodSet.add(new SmrMethodInfo(method,
                                             ifaceElement, true));
                         }

@@ -241,6 +241,6 @@ public class CorfuMsgHandler {
                                        aType -> (CorfuComponent.INFRA_MSG_HANDLER +
                                                  aType.name().toLowerCase()));
 
-        return ServerContext.getMetrics().timer(timerNameCache.get(type));
+        return MetricsUtils.metrics.timer(timerNameCache.get(type));
     }
 }

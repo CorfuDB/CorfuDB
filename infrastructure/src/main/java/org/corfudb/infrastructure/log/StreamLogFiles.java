@@ -84,9 +84,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private final boolean noVerify;
     private final ServerContext serverContext;
     private final AtomicLong globalTail = new AtomicLong(0L);
-    private Map<String, SegmentHandle> writeChannels;
-    private Set<FileChannel> channelsToSync;
-    private MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
+    private final Map<String, SegmentHandle> writeChannels;
+    private final Set<FileChannel> channelsToSync;
+    private final MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
     private long lastSegment;
     private volatile long startingAddress;
 
@@ -103,7 +103,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             dir.mkdirs();
         }
 
-        writeChannels = new ConcurrentHashMap();
+        writeChannels = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();
         this.noVerify = noVerify;
         this.serverContext = serverContext;
@@ -386,7 +386,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private void spaseCompact() {
         //TODO(Maithem) Open all segment handlers?
         for (SegmentHandle sh : writeChannels.values()) {
-            Set<Long> pending = new HashSet(sh.getPendingTrims());
+            Set<Long> pending = new HashSet<>(sh.getPendingTrims());
             Set<Long> trimmed = sh.getTrimmedAddresses();
 
             if (sh.getKnownAddresses().size() + trimmed.size() != RECORDS_PER_LOG_FILE) {
@@ -398,8 +398,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
             //what if pending size  == knownaddresses size ?
             if (pending.size() < TRIM_THRESHOLD) {
-                log.trace("Thresh hold not exceeded. Ratio {} threshold {}",
-                            pending.size(), TRIM_THRESHOLD);
+                log.trace("Thresh hold not exceeded. Ratio {} threshold {}", pending.size(), TRIM_THRESHOLD);
                 return; // TODO - should not return if compact on ranked address space is necessary
             }
 
@@ -455,8 +454,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             }
         }
 
-        Files.move(Paths.get(filePath + ".copy"), Paths.get(filePath),
-                StandardCopyOption.ATOMIC_MOVE);
+        Files.move(Paths.get(filePath + ".copy"), Paths.get(filePath), StandardCopyOption.ATOMIC_MOVE);
 
         // Force the reload of the new segment
         writeChannels.remove(filePath);
@@ -911,7 +909,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Deprecated  // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviationaswordinname") // Due to deprecation
     Set<String> getStrUUID(Set<UUID> uuids) {
-        Set<String> strUUIds = new HashSet();
+        Set<String> strUUIds = new HashSet<>();
 
         for (UUID uuid : uuids) {
             strUUIds.add(uuid.toString());
@@ -1278,8 +1276,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         for (SegmentHandle fh : writeChannels.values()) {
             fh.close();
         }
-
-        writeChannels = new HashMap<>();
     }
 
     @Override

@@ -67,9 +67,9 @@ public class ManagementAgent {
      * Detectors to be used to detect failures and healing.
      */
     @Getter
-    private IDetector failureDetector;
+    private final IDetector failureDetector;
     @Getter
-    private IDetector healingDetector;
+    private final IDetector healingDetector;
     /**
      * Failure Handler Dispatcher to launch configuration changes or recovery.
      */
@@ -85,7 +85,7 @@ public class ManagementAgent {
      * To dispatch initialization tasks for recovery and sequencer bootstrap.
      */
     @Getter
-    private Thread initializationTaskThread;
+    private final Thread initializationTaskThread;
     /**
      * Detection Task Scheduler Service
      * This service schedules the following tasks every policyExecuteInterval (1 sec):
@@ -115,7 +115,7 @@ public class ManagementAgent {
      * Future which is marked completed if the node has recovered.
      */
     @Getter
-    private volatile CompletableFuture<Boolean> recoveryBarrierFuture;
+    private final CompletableFuture<Boolean> recoveryBarrierFuture;
 
     /**
      * Future which is reset every time a new task to bootstrap the sequencer is launched by the
@@ -167,8 +167,7 @@ public class ManagementAgent {
      * @param runtimeSingletonResource Singleton resource to fetch runtime.
      * @param serverContext            Server Context.
      */
-    ManagementAgent(SingletonResource<CorfuRuntime> runtimeSingletonResource,
-                    ServerContext serverContext) {
+    ManagementAgent(SingletonResource<CorfuRuntime> runtimeSingletonResource, ServerContext serverContext) {
         this.runtimeSingletonResource = runtimeSingletonResource;
         this.serverContext = serverContext;
         this.opts = serverContext.getServerConfig();

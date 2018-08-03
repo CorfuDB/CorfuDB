@@ -32,6 +32,5 @@ public class BatchWriterOperation {
     private Exception exception;
 
 
-    public static BatchWriterOperation SHUTDOWN = new BatchWriterOperation(Type.SHUTDOWN,
-            null, null, null, null, null);
+    public static BatchWriterOperation SHUTDOWN = new BatchWriterOperation(Type.SHUTDOWN, null, null, null, null, null);
 }

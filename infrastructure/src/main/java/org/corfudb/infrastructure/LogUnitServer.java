@@ -10,6 +10,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -22,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.infrastructure.log.StreamLogCompaction;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
@@ -64,18 +66,6 @@ import org.corfudb.util.Utils;
  */
 @Slf4j
 public class LogUnitServer extends AbstractServer {
-    /**
-     * A scheduler, which is used to schedule periodic tasks like garbage collection.
-     */
-    private final ScheduledExecutorService scheduler =
-            Executors.newScheduledThreadPool(
-                    1,
-                    new ThreadFactoryBuilder()
-                            .setDaemon(true)
-                            .setNameFormat("LogUnit-Maintenance-%d")
-                            .build());
-
-    private ScheduledFuture<?> compactor;
 
     /**
      * The options map.
@@ -103,7 +93,7 @@ public class LogUnitServer extends AbstractServer {
     private final long maxCacheSize;
 
     private final StreamLog streamLog;
-
+    private final StreamLogCompaction logCleaner;
     private final BatchWriter<Long, ILogData> batchWriter;
 
     /**
@@ -130,10 +120,13 @@ public class LogUnitServer extends AbstractServer {
         }
 
 
-        batchWriter = new BatchWriter(streamLog, serverContext.getLogUnitEpochWaterMark(),
-                !((Boolean) opts.get("--no-sync")));
+        batchWriter = new BatchWriter<>(
+                streamLog,
+                serverContext.getLogUnitEpochWaterMark(),
+                !((Boolean) opts.get("--no-sync"))
+        );
 
-        dataCache = Caffeine.<Long, ILogData>newBuilder()
+        dataCache = Caffeine.newBuilder()
                 .<Long, ILogData>weigher((k, v) -> ((LogData) v).getData() == null ? 1 : (
                         (LogData) v).getData().length)
                 .maximumWeight(maxCacheSize)
@@ -141,11 +134,7 @@ public class LogUnitServer extends AbstractServer {
                 .writer(batchWriter)
                 .build(this::handleRetrieval);
 
-        MetricRegistry metrics = serverContext.getMetrics();
-//        MetricsUtils.addCacheGauges(metrics, metricsPrefix + "cache.", dataCache);
-
-        Runnable task = () -> streamLog.compact();
-        compactor = scheduler.scheduleAtFixedRate(task, 10, 45, TimeUnit.MINUTES);
+        logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES);
     }
 
     /**
@@ -358,8 +347,7 @@ public class LogUnitServer extends AbstractServer {
     @Override
     public void shutdown() {
         super.shutdown();
-        compactor.cancel(true);
-        scheduler.shutdownNow();
+        logCleaner.shutdown();
         batchWriter.close();
     }
 

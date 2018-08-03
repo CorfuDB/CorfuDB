@@ -35,6 +35,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
 
 
 /**
@@ -48,7 +49,7 @@ public class AddressSpaceView extends AbstractView {
     /**
      * A cache for read results.
      */
-    final LoadingCache<Long, ILogData> readCache = Caffeine.<Long, ILogData>newBuilder()
+    final LoadingCache<Long, ILogData> readCache = Caffeine.newBuilder()
             .maximumSize(runtime.getParameters().getNumCacheEntries())
             .expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
@@ -70,14 +71,10 @@ public class AddressSpaceView extends AbstractView {
      */
     public AddressSpaceView(@Nonnull final CorfuRuntime runtime) {
         super(runtime);
-        MetricRegistry metrics = runtime.getMetrics();
-        final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(),
-                                         this.hashCode());
-        metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::estimatedSize);
-        metrics.register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
-        metrics.register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
-        metrics.register(pfx + "hits", (Gauge<Long>) () -> readCache.stats().hitCount());
-        metrics.register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
+        final String pfx = String.format(
+                "%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(), this.hashCode()
+        );
+        MetricsUtils.addCacheGauges(pfx, readCache);
     }
 
 
