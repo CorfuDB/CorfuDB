@@ -72,7 +72,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
     @Override
     public void write(@Nonnull K key, @Nonnull V value) {
         try {
-            CompletableFuture<Void> cf = new CompletableFuture();
+            CompletableFuture<Void> cf = new CompletableFuture<>();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.WRITE,
                     (Long) key, (LogData) value, ((LogData) value).getEpoch(), null, cf));
             cf.get();
@@ -88,7 +88,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
 
     public void bulkWrite(List<LogData> entries, long epoch) {
         try {
-            CompletableFuture<Void> cf = new CompletableFuture();
+            CompletableFuture<Void> cf = new CompletableFuture<>();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.RANGE_WRITE,
                     null, null, epoch, entries, cf));
         } catch (Exception e) {
@@ -192,7 +192,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
         try {
             BatchWriterOperation lastOp = null;
             int processed = 0;
-            List<BatchWriterOperation> res = new LinkedList();
+            List<BatchWriterOperation> res = new LinkedList<>();
 
             while (true) {
                 BatchWriterOperation currOp;

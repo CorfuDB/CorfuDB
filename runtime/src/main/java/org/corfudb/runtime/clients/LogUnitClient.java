@@ -1,13 +1,10 @@
 package org.corfudb.runtime.clients;
 
-import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.Range;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import lombok.Getter;
-import lombok.NonNull;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -22,9 +19,9 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.List;
@@ -54,14 +51,6 @@ public class LogUnitClient extends AbstractClient {
         return getRouter().getPort();
     }
 
-    @Getter
-    MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-
-    public LogUnitClient setMetricRegistry(@NonNull MetricRegistry metricRegistry) {
-        this.metricRegistry = metricRegistry;
-        return this;
-    }
-
     int maxWrite;
 
     public LogUnitClient setMaxWrite(int limit) {
@@ -75,7 +64,7 @@ public class LogUnitClient extends AbstractClient {
                 getHost(),
                 getPort().toString(),
                 opName);
-        Timer t = getMetricRegistry().timer(timerName);
+        Timer t = MetricsUtils.metrics.timer(timerName);
         return t.time();
     }
 

@@ -27,7 +27,7 @@ public class CorfuMsg {
      */
     static final int markerField = 0xC0FC0FC0;
     static Map<Byte, CorfuMsgType> typeMap =
-            Arrays.<CorfuMsgType>stream(CorfuMsgType.values())
+            Arrays.stream(CorfuMsgType.values())
                     .collect(Collectors.toMap(CorfuMsgType::asByte, Function.identity()));
     /**
      * The unique id of the client making the request.

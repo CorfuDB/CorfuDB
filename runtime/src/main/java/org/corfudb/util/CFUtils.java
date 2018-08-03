@@ -3,13 +3,7 @@ package org.corfudb.util;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.function.Function;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
@@ -17,14 +11,12 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
  * Created by mwei on 9/15/15.
  */
 public class CFUtils {
+    private static final ThreadFactory THREAD_FACTORY = new ThreadFactoryBuilder()
+            .setDaemon(true)
+            .setNameFormat("failAfter-%d")
+            .build();
 
-    private static final ScheduledExecutorService scheduler =
-            Executors.newScheduledThreadPool(
-                    1,
-                    new ThreadFactoryBuilder()
-                            .setDaemon(true)
-                            .setNameFormat("failAfter-%d")
-                            .build());
+    private static final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1, THREAD_FACTORY);
 
     @SuppressWarnings("unchecked")
     public static <T,
@@ -66,34 +58,28 @@ public class CFUtils {
                                                       Class<B> throwableB,
                                                       Class<C> throwableC)
             throws A, B, C {
-        return getUninterruptibly(future, throwableA, throwableB, throwableC,
-                RuntimeException.class);
+        return getUninterruptibly(future, throwableA, throwableB, throwableC, RuntimeException.class);
     }
 
-    public static <T,
-            A extends Throwable,
-            B extends Throwable> T getUninterruptibly(Future<T> future,
-                                                      Class<A> throwableA,
-                                                      Class<B> throwableB)
-            throws A, B {
-        return getUninterruptibly(future, throwableA, throwableB, RuntimeException.class,
-                RuntimeException.class);
+    public static <T, A extends Throwable, B extends Throwable> T getUninterruptibly(
+            Future<T> future, Class<A> throwableA, Class<B> throwableB) throws A, B {
+        return getUninterruptibly(future, throwableA, throwableB, RuntimeException.class, RuntimeException.class);
     }
 
-    public static <T, A extends Throwable> T getUninterruptibly(Future<T> future,
-                                                                Class<A> throwableA)
-            throws A {
-        return getUninterruptibly(future, throwableA, RuntimeException.class,
-                RuntimeException.class, RuntimeException.class);
+    public static <T, A extends Throwable> T getUninterruptibly(Future<T> future, Class<A> throwableA) throws A {
+        return getUninterruptibly(
+                future, throwableA, RuntimeException.class, RuntimeException.class, RuntimeException.class
+        );
     }
 
     public static <T> T getUninterruptibly(Future<T> future) {
-        return getUninterruptibly(future, RuntimeException.class, RuntimeException.class,
-                RuntimeException.class, RuntimeException.class);
+        return getUninterruptibly(
+                future, RuntimeException.class, RuntimeException.class, RuntimeException.class, RuntimeException.class
+        );
     }
 
     /** A static timeout exception that we complete futures exceptionally with. */
-    static final TimeoutException TIMEOUT_EXCEPTION = new TimeoutException();
+    private static final TimeoutException TIMEOUT_EXCEPTION = new TimeoutException();
 
     /**
      * Generates a completable future which times out.
@@ -105,8 +91,9 @@ public class CFUtils {
      */
     public static <T> CompletableFuture<T> failAfter(Duration duration) {
         final CompletableFuture<T> promise = new CompletableFuture<>();
-        scheduler.schedule(() -> promise.completeExceptionally(TIMEOUT_EXCEPTION),
-                                        duration.toMillis(), TimeUnit.MILLISECONDS);
+        scheduler.schedule(() ->
+                promise.completeExceptionally(TIMEOUT_EXCEPTION), duration.toMillis(), TimeUnit.MILLISECONDS
+        );
         return promise;
     }
 

@@ -38,7 +38,7 @@ class SegmentHandle {
     @NonNull
     String fileName;
 
-    private Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap();
+    private Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap<>();
     private Set<Long> trimmedAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private Set<Long> pendingTrims = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private volatile int refCount = 0;
@@ -57,7 +57,7 @@ class SegmentHandle {
 
     public void close() {
         Set<FileChannel> channels =
-                new HashSet(Arrays.asList(writeChannel, readChannel, trimmedChannel, pendingTrimChannel));
+                new HashSet<>(Arrays.asList(writeChannel, readChannel, trimmedChannel, pendingTrimChannel));
         for (FileChannel channel : channels) {
             try {
                 channel.force(true);

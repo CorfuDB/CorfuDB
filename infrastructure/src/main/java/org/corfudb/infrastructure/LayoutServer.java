@@ -114,16 +114,14 @@ public class LayoutServer extends AbstractServer {
         }
         long epoch = msg.getPayload();
         if (epoch <= serverContext.getServerEpoch()) {
-            r.sendResponse(ctx, msg, new LayoutMsg(getCurrentLayout(), CorfuMsgType
-                    .LAYOUT_RESPONSE));
+            r.sendResponse(ctx, msg, new LayoutMsg(getCurrentLayout(), CorfuMsgType.LAYOUT_RESPONSE));
             return;
         } else {
             // else the client is somehow ahead of the server.
             //TODO figure out a strategy to deal with this situation
             long serverEpoch = serverContext.getServerEpoch();
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
-            log.warn("handleMessageLayoutRequest: Message Epoch {} ahead of Server epoch {}",
-                    epoch, serverEpoch);
+            log.warn("handleMessageLayoutRequest: Message Epoch {} ahead of Server epoch {}", epoch, serverEpoch);
         }
     }
 

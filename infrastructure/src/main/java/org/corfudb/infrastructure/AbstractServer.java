@@ -19,10 +19,10 @@ public abstract class AbstractServer {
     @Setter
     volatile boolean shutdown;
 
-    static final ExecutorService sharedExecutor = Executors
-            .newFixedThreadPool(BatchWriter.BATCH_SIZE + Runtime.getRuntime().availableProcessors(),
-                    new ServerThreadFactory("SharedServerThread-",
-                            new ServerThreadFactory.ExceptionHandler()));
+    private static final ExecutorService sharedExecutor = Executors.newFixedThreadPool(
+            BatchWriter.BATCH_SIZE + Runtime.getRuntime().availableProcessors(),
+            new ServerThreadFactory("SharedServerThread-", new ServerThreadFactory.ExceptionHandler())
+    );
 
     public AbstractServer() {
         shutdown = false;
