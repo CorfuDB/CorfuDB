@@ -16,18 +16,10 @@ import static org.mockito.Mockito.mock;
 
 @Slf4j
 public class StreamLogCompactionTest extends AbstractCorfuTest {
-
-    private String getDirPath() {
-        return PARAMETERS.TEST_TEMP_DIR;
-    }
-
-    private ServerContext getContext() {
-        String path = getDirPath();
-        return new ServerContextBuilder()
-                .setLogPath(path)
-                .setMemory(false)
-                .build();
-    }
+    private final long initialDelay = 10;
+    private final long period = 10;
+    private final long timeout = 35;
+    private final int expectedCompactCounter = 3;
 
     /**
      * Test that task catch all possible exceptions and doesn't break scheduled executor
@@ -40,10 +32,10 @@ public class StreamLogCompactionTest extends AbstractCorfuTest {
 
         StreamLog streamLog = mock(StreamLog.class);
         doThrow(new RuntimeException("err")).when(streamLog).compact();
-        StreamLogCompaction compaction = new StreamLogCompaction(streamLog, 10, 10, TimeUnit.MILLISECONDS);
-        Thread.sleep(35);
+        StreamLogCompaction compaction = new StreamLogCompaction(streamLog, initialDelay, period, TimeUnit.MILLISECONDS);
+        Thread.sleep(timeout);
         compaction.shutdown();
 
-        assertEquals(3, compaction.getGcCounter());
+        assertEquals(expectedCompactCounter, compaction.getGcCounter());
     }
 }
