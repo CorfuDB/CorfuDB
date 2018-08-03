@@ -16,6 +16,7 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.util.concurrent.GlobalEventExecutor;
 import lombok.Getter;
 import lombok.NonNull;
@@ -277,6 +278,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
+                ch.pipeline().addLast(new ReadTimeoutHandler(parameters.getIdleConnectionTimeout()));
                 if (parameters.isTlsEnabled()) {
                     ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
                 }
@@ -466,7 +468,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
         cfTimeout.exceptionally(e -> {
             outstandingRequests.remove(thisRequest);
-            log.debug("Remove request {} due to timeout!", thisRequest);
+            log.debug("Remove request {} to {} due to timeout! Message:{}",
+                    thisRequest, node, message);
             return null;
         });
         return cfTimeout;

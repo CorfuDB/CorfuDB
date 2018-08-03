@@ -30,7 +30,7 @@
     <!-- Control logging levels for individual components here. -->
     <logger name="org.corfudb.runtime.object" level="INFO"/>
     <logger name="org.corfudb.runtime.clients" level="INFO"/>
-    <logger name="org.corfudb.infrastructure" level="trace"/>
+    <logger name="org.corfudb.infrastructure" level="INFO"/>
     <logger name="io.netty.util" level="INFO"/>
     <logger name="io.netty.util.internal" level="INFO"/>
     <logger name="io.netty.buffer" level="INFO"/>
@@ -40,9 +40,9 @@
     </logger>
 
 
-    <root level="trace">
+    <root level="INFO">
         <!--<appender-ref ref="FILE" />-->
-        <appender-ref ref="STDOUT" />
+        <!--<appender-ref ref="STDOUT" />-->
         <!--<appender-ref ref="MetricsRollingFile" />-->
     </root>
 </configuration>
