@@ -17,7 +17,8 @@ public class AddressSpaceProducer implements Producer {
      public long send(Object payload) {
          while(true) {
              try {
-                 int numAsync = 1000;
+                 //System.out.println("entering send");
+                 int numAsync = 100;
                  final RuntimeLayout runtimeLayout = new RuntimeLayout(runtime.getLayoutView().getLayout(), runtime);
 
                  // acquire tokens
@@ -35,11 +36,27 @@ public class AddressSpaceProducer implements Producer {
                          throw new RuntimeException(e);
                      }
                  }
+                 //System.out.println("done acquiring tokens");
 
                  // perform writes
-                 final ILogData ld = new LogData(DataType.DATA, payload);
+                 long globalAddress = -1;
+                 CompletableFuture[] writeFutures = new CompletableFuture[numAsync];
                  for (int i = 0; i < numAsync; i++) {
-                     runtimeLayout.getLogUnitClient(trs[i].getTokenValue(), 0).write(ld);
+                     //System.out.println(i);
+                     ILogData ld = new LogData(DataType.DATA, payload);
+                     ld.useToken(trs[i].getToken());
+                     ld.setId(runtime.getParameters().getClientId());
+                     globalAddress = ld.getGlobalAddress();
+                     //ILogData.SerializationHandle sh = ld.getSerializedForm();
+                     writeFutures[i] = runtimeLayout.getLogUnitClient(globalAddress, 0).write(ld); //.write(sh.getSerialized());
+                 }
+                 for (int t = 0; t < numAsync; t++) {
+                     try {
+                         writeFutures[t].get();
+                     } catch (Exception e) {
+                         //System.out.println("o no 2" + (e) + " global addr: " + (globalAddress));
+                         throw new RuntimeException(e);
+                     }
                  }
 
                  return 0;
