@@ -296,7 +296,7 @@ public class Driver {
 
                 for (int i = 0; i < numReq; i++) {
                     producer.send(payload);
-                    numWrites[ind] += 100;
+                    numWrites[ind] += 1000;
                 }
 
             };
