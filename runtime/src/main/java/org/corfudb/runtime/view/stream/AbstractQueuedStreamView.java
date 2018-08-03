@@ -135,7 +135,7 @@ public abstract class AbstractQueuedStreamView extends
 
         // If maxGlobal is before the checkpoint position, throw a
         // trimmed exception
-        if (maxGlobal < context.checkpointSuccessStartAddr) {
+        if (maxGlobal < context.checkpointSuccessStartAddr && Address.isAddress(maxGlobal)) {
             throw new TrimmedException();
         }
 

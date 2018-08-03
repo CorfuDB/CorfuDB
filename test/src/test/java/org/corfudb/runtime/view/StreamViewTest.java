@@ -1,6 +1,13 @@
 package org.corfudb.runtime.view;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.util.List;
+import java.util.UUID;
+
 import lombok.Getter;
+
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
@@ -8,12 +15,6 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.List;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 1/8/16.
@@ -83,6 +84,19 @@ public class StreamViewTest extends AbstractViewTest {
         txStream = rt2.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID, options);
         entries = txStream.remainingUpTo(Long.MAX_VALUE);
         assertThat(entries.size()).isEqualTo((firstIter / 2));
+    }
+
+    /**
+     * Test Remaining Up To when attempting to access the space of non-existing addresses
+     * (negative space). In this case we expect 0 entries to be retrieved.
+     */
+    @Test
+    public void testRemainingUpToNonExistingSpace() {
+        UUID streamID = UUID.randomUUID();
+        IStreamView testStream = runtime.getStreamsView().get(streamID);
+        final long nonExistingAddress = -10L;
+        List<ILogData> entries = testStream.remainingUpTo(nonExistingAddress);
+        assertThat(entries.size()).isEqualTo(0);
     }
 
     @Test
