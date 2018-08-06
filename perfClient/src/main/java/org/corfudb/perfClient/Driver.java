@@ -196,7 +196,7 @@ public class Driver {
                 "    \"10.33.82.165:9003\"\n" +
                 "  ],\n" +
                 "  \"sequencers\": [\n" +
-                "    \"10.33.82.223:9000\"\n" +
+                "    \"10.33.83.114:9000\"\n" +
                 "  ],\n" +
                 "  \"segments\": [\n" +
                 "    {\n" +
@@ -252,7 +252,8 @@ public class Driver {
         String connString = args[0];
         List<String> hosts = new ArrayList<>();
         //hosts.add("localhost:9000");
-        hosts.add("10.33.82.223:9000");
+        //hosts.add("10.33.82.223:9000");
+        hosts.add("10.33.83.114:9000");
         hosts.add("10.33.82.253:9001");
         hosts.add("10.33.82.56:9002");
         hosts.add("10.33.82.165:9003");
