@@ -271,10 +271,12 @@ public class Driver {
         bootstrapWithStrings();
 
         // create runtimes
-        final CorfuRuntime[] rts = new CorfuRuntime[hosts.size()];
-        for (int i = 0; i < hosts.size(); i++) {
-            rts[i] = new CorfuRuntime(hosts.get(i)).connect();
-            System.out.println("Connected! " + (hosts.get(i)));
+        final int numRuntimes = 8;
+        final CorfuRuntime[] rts = new CorfuRuntime[numRuntimes];
+        for (int i = 0; i < numRuntimes; i++) {
+            rts[i] = new CorfuRuntime(hosts.get(i % hosts.size())).connect();
+            rts[i].setCacheDisabled(true);
+            System.out.println("Connected! " + (hosts.get(i % hosts.size())));
         }
         //final CorfuRuntime rt = new CorfuRuntime(hosts.get(0)).connect();
 

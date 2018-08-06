@@ -17,7 +17,6 @@ public class AddressSpaceProducer implements Producer {
      public long send(Object payload) {
          while(true) {
              try {
-                 //System.out.println("entering send");
                  int numAsync = 1000;
                  final RuntimeLayout runtimeLayout = new RuntimeLayout(runtime.getLayoutView().getLayout(), runtime);
 
@@ -32,17 +31,14 @@ public class AddressSpaceProducer implements Producer {
                      try {
                          trs[t] = (TokenResponse) futures[t].get();
                      } catch (Exception e) {
-                         //System.out.println("o no" + (e));
                          throw new RuntimeException(e);
                      }
                  }
-                 //System.out.println("done acquiring tokens");
 
                  // perform writes
                  long globalAddress = -1;
                  CompletableFuture[] writeFutures = new CompletableFuture[numAsync];
                  for (int i = 0; i < numAsync; i++) {
-                     //System.out.println(i);
                      ILogData ld = new LogData(DataType.DATA, payload);
                      ld.useToken(trs[i].getToken());
                      ld.setId(runtime.getParameters().getClientId());
@@ -54,7 +50,6 @@ public class AddressSpaceProducer implements Producer {
                      try {
                          writeFutures[t].get();
                      } catch (Exception e) {
-                         //System.out.println("o no 2" + (e) + " global addr: " + (globalAddress));
                          throw new RuntimeException(e);
                      }
                  }
