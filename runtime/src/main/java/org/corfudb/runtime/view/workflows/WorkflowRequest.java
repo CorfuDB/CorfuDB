@@ -6,6 +6,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.UnavailableServerException;
 import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.exceptions.WorkflowResultUnknownException;
 import org.corfudb.runtime.view.Layout;
@@ -137,7 +138,7 @@ public abstract class WorkflowRequest {
                 ManagementClient orchestrator = getOrchestrator(requestLayout);
                 UUID workflowId = sendRequest(orchestrator);
                 waitForWorkflow(workflowId, orchestrator, timeout, pollPeriod);
-            } catch (NetworkException | TimeoutException e) {
+            } catch (NetworkException | TimeoutException | UnavailableServerException e) {
                 log.warn("WorkflowRequest: Error while running {} on attempt {}, cause {}", this, x, e);
             }
 
