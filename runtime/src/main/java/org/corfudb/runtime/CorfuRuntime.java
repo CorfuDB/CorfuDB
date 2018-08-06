@@ -371,12 +371,21 @@ public class CorfuRuntime {
     @Getter
     private volatile boolean isShutdown = false;
 
+    @Deprecated
+    @Getter
+    @Setter
+    private MetricRegistry metrics = defaultMetrics;
+
     /**
      * Initialize a default static registry which through that different metrics can be registered and reported
      */
     static {
         MetricsUtils.metricsReportingSetup();
     }
+
+    @Deprecated
+    @Getter
+    private static final MetricRegistry defaultMetrics = MetricsUtils.metrics;
 
     /**
      * These two handlers are provided to give some control on what happen when system is down.
