@@ -100,8 +100,6 @@ public enum CorfuMsgType {
     MANAGEMENT_LAYOUT_REQUEST(79, TypeToken.of(CorfuMsg.class), true),
 
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true),
-    ERROR_SHUTDOWN_EXCEPTION(201, TypeToken.of(CorfuMsg.class), true),
-    ERROR_SERVER_UNAVAILABLE(202, TypeToken.of(CorfuMsg.class), true),
 
     // Handshake Messages
     HANDSHAKE_INITIATE(80, new TypeToken<CorfuPayloadMsg<HandshakeMsg>>() {}, true),
