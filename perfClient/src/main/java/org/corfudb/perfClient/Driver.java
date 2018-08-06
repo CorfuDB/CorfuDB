@@ -271,7 +271,7 @@ public class Driver {
         bootstrapWithStrings();
 
         // create runtimes
-        final int numRuntimes = 8;
+        final int numRuntimes = 16;
         final CorfuRuntime[] rts = new CorfuRuntime[numRuntimes];
         for (int i = 0; i < numRuntimes; i++) {
             rts[i] = new CorfuRuntime(hosts.get(i % hosts.size())).connect();
