@@ -17,7 +17,7 @@ public class AddressSpaceProducer implements Producer {
      public long send(Object payload) {
          while(true) {
              try {
-                 int numAsync = 500;
+                 int numAsync = 100;
                  final RuntimeLayout runtimeLayout = new RuntimeLayout(runtime.getLayoutView().getLayout(), runtime);
 
                  // acquire tokens
