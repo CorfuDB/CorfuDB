@@ -6,6 +6,7 @@ import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 
 import java.io.File;
 import java.io.RandomAccessFile;
@@ -16,7 +17,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import io.netty.buffer.Unpooled;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.format.Types;
@@ -28,6 +28,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -509,7 +510,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     public void testGetGlobalTail() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
 
-        assertThat(log.getGlobalTail()).isEqualTo(0);
+        assertThat(log.getGlobalTail()).isEqualTo(Address.NON_ADDRESS);
 
         // Write to multiple segments
         final int segments = 3;
@@ -678,7 +679,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
                 s -> assertThat(new File(s).length()).isEqualTo(0L));
 
         final int expectedFilesAfterReset = 3;
-        final long globalTailAfterReset = 0L;
+        final long globalTailAfterReset = Address.NON_ADDRESS;
         final long trimMarkAfterReset = 0L;
         assertThat(logsDir.list()).hasSize(expectedFilesAfterReset);
         assertThat(log.getGlobalTail()).isEqualTo(globalTailAfterReset);

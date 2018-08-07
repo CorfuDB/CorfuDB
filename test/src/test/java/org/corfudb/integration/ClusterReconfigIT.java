@@ -274,12 +274,13 @@ public class ClusterReconfigIT extends AbstractIT {
      * @throws Exception
      */
     private Layout incrementClusterEpoch(CorfuRuntime corfuRuntime) throws Exception {
+        long oldEpoch = corfuRuntime.getLayoutView().getLayout().getEpoch();
         Layout l = new Layout(corfuRuntime.getLayoutView().getLayout());
         l.setEpoch(l.getEpoch() + 1);
         corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
         corfuRuntime.getLayoutView().updateLayout(l, 1L);
         corfuRuntime.invalidateLayout();
-        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(1L);
+        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(oldEpoch + 1);
         return l;
     }
 
@@ -762,7 +763,7 @@ public class ClusterReconfigIT extends AbstractIT {
         final Layout layoutAfterFailure = runtime.getLayoutView().getLayout();
 
         final int appendNum = 5;
-        // Write at address 1-5.
+        // Write at address 0-4.
         for (int i = 0; i < appendNum; i++) {
             stream.append(Integer.toString(counter++).getBytes());
         }
@@ -771,9 +772,9 @@ public class ClusterReconfigIT extends AbstractIT {
         corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
         waitForEpochChange(refreshedEpoch -> refreshedEpoch > layoutAfterFailure.getEpoch(), runtime);
 
-        // Write at address 6-10.
-        final long startAddress = 1L;
-        final long endAddress = 10L;
+        // Write at address 5-9.
+        final long startAddress = 0L;
+        final long endAddress = 9L;
         for (int i = 0; i < appendNum; i++) {
             stream.append(Integer.toString(counter++).getBytes());
         }
@@ -836,8 +837,8 @@ public class ClusterReconfigIT extends AbstractIT {
         int counter = 0;
 
         final int appendNum = 3;
-        final long startAddress = 1;
-        // Write at address 1-3.
+        final long startAddress = 0;
+        // Write at address 0-1-2
         for (int i = 0; i < appendNum; i++) {
             stream.append(Integer.toString(counter++).getBytes());
         }
@@ -845,11 +846,11 @@ public class ClusterReconfigIT extends AbstractIT {
         corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
         waitForEpochChange(refreshedEpoch -> refreshedEpoch > layoutAfterHeal1.getEpoch(), runtime);
 
-        // Write at address 4-6.
+        // Write at address 3-4-5
         for (int i = 0; i < appendNum; i++) {
             stream.append(Integer.toString(counter++).getBytes());
         }
-        final long endAddress = 6;
+        final long endAddress = 5;
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             Layout finalLayout = runtime.getLayoutView().getLayout();
