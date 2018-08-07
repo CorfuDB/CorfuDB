@@ -14,7 +14,7 @@ public class StreamsProducer implements Producer {
         streamID = id;
     }
 
-    public long send(Object payload) {
+    public long send(Object payload, int numAsync) {
         while(true) {
             try {
                 return runtime.getStreamsView().append(payload, null, streamID);
