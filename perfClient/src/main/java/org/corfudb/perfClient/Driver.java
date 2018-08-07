@@ -259,7 +259,7 @@ public class Driver {
 
                 for (int i = 0; i < numReq / numAsync; i++) {
                     producer.send(payload, numAsync);
-                    numWrites[ind] += 1;
+                    numWrites[ind] += numAsync;
                 }
             };
 
