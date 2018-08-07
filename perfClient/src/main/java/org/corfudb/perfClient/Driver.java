@@ -202,6 +202,7 @@ public class Driver {
         Duration TIMEOUT_SHORT = Duration.of(5, ChronoUnit.SECONDS);
         Duration.of(1, ChronoUnit.SECONDS);
         final int retries = 3;
+        System.out.println("Layout: " + (layout));
 
         BootstrapUtil.bootstrap(layout, retries, TIMEOUT_SHORT);
     }
@@ -232,6 +233,7 @@ public class Driver {
         if (bootstrap) {
             bootstrapClusterWithStrings(hosts);
         }
+        System.out.println("Bootstrapped!");
 
         // create runtimes
         final CorfuRuntime[] rts = new CorfuRuntime[numRts];
