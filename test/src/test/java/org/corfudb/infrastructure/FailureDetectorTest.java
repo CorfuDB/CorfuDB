@@ -1,5 +1,10 @@
 package org.corfudb.infrastructure;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.HashSet;
+import java.util.Set;
+
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.runtime.CorfuRuntime;
@@ -8,11 +13,6 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.HashSet;
-import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests the FailureDetector.
@@ -54,6 +54,11 @@ public class FailureDetectorTest extends AbstractViewTest {
             corfuRuntime.getRouter(serverEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         });
 
+        // shutdown all management agents to avoid run of the fast object loader and all attempts to modify the layout
+        getManagementServer(SERVERS.PORT_0).getManagementAgent().shutdown();
+        getManagementServer(SERVERS.PORT_1).getManagementAgent().shutdown();
+        getManagementServer(SERVERS.PORT_2).getManagementAgent().shutdown();
+
         failureDetector = new FailureDetector();
         failureDetector.setInitPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         failureDetector.setPeriodDelta(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
@@ -81,7 +86,6 @@ public class FailureDetectorTest extends AbstractViewTest {
      */
     @Test
     public void pollFailures() {
-
         addServerRule(SERVERS.PORT_0, new TestRule().always().drop());
         addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
         addServerRule(SERVERS.PORT_2, new TestRule().always().drop());

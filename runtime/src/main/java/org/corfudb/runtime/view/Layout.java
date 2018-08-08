@@ -270,6 +270,14 @@ public class Layout {
     }
 
     /**
+     * Return latest segment.
+     *
+     */
+    public LayoutSegment getLatestSegment() {
+        return this.getSegments().get(this.getSegments().size() - 1);
+    }
+
+    /**
      * Get the length of a segment at a particular address.
      *
      * @param address The address to check.

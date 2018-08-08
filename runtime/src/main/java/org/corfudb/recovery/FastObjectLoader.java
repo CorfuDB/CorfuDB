@@ -1,6 +1,16 @@
 package org.corfudb.recovery;
 
-import javax.annotation.Nonnull;
+import static org.corfudb.recovery.RecoveryUtils.createObjectIfNotExist;
+import static org.corfudb.recovery.RecoveryUtils.deserializeLogData;
+import static org.corfudb.recovery.RecoveryUtils.getCorfuCompileProxy;
+import static org.corfudb.recovery.RecoveryUtils.getLogData;
+import static org.corfudb.recovery.RecoveryUtils.getSnapShotAddressOfCheckPoint;
+import static org.corfudb.recovery.RecoveryUtils.getStartAddressOfCheckPoint;
+import static org.corfudb.recovery.RecoveryUtils.isCheckPointEntry;
+import static org.corfudb.runtime.view.Address.isAddress;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -14,12 +24,14 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import javax.annotation.Nonnull;
+
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -38,9 +50,6 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
-
-import static org.corfudb.recovery.RecoveryUtils.*;
-import static org.corfudb.runtime.view.Address.isAddress;
 
 /** The FastObjectLoader reconstructs the coalesced state of SMRMaps through sequential log read
  *
@@ -78,13 +87,11 @@ public class FastObjectLoader {
     @Getter
     private boolean loadInCache;
 
-    @Setter
     @Getter
-    private long logHead = -1;
+    private long logHead = Address.NON_EXIST;
 
-    @Setter
     @Getter
-    private long logTail = -1;
+    private long logTail = Address.NON_EXIST;
 
     @Setter
     @Getter
@@ -104,6 +111,12 @@ public class FastObjectLoader {
 
     private boolean whiteList = false;
     private List<UUID> streamsToLoad = new ArrayList<>();
+
+    @VisibleForTesting
+    void setLogHead(long head) { this.logHead = head; }
+
+    @VisibleForTesting
+    void setLogTail(long tail) { this.logTail = tail; }
 
     /**
      * Enable whiteList mode where we only reconstruct
@@ -248,7 +261,7 @@ public class FastObjectLoader {
     }
 
     private void findAndSetLogTail() {
-        logTail = runtime.getSequencerView().query().getTokenValue();
+        logTail = runtime.getAddressSpaceView().getLogTail();
     }
 
     private void resetAddressProcessed() {
@@ -473,11 +486,11 @@ public class FastObjectLoader {
      *
      */
     private void initializeHeadAndTails() {
-        if (logHead < 0) {
+        if (logHead == Address.NON_EXIST) {
             findAndSetLogHead();
         }
 
-        if (logTail < 0) {
+        if (logTail == Address.NON_EXIST) {
             findAndSetLogTail();
         }
 
