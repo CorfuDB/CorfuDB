@@ -31,7 +31,6 @@ public class BaseServerTest extends AbstractServerTest {
     public void shutdownServerDoesNotRespond() {
         getDefaultServer().shutdown();
         sendMessage(new CorfuMsg(CorfuMsgType.PING));
-        Assertions.assertThat(getLastMessage().getMsgType())
-            .isEqualTo(CorfuMsgType.ERROR_SERVER_UNAVAILABLE);
+        Assertions.assertThat(getLastMessage()).isNull();
     }
 }
