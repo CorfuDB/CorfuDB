@@ -3,18 +3,14 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 
 
 /**
@@ -36,12 +32,9 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     /**
      * The epoch of this router. This is managed by the base server implementation.
      */
-    @Getter
-    @Setter
-    volatile long serverEpoch;
+    final ServerContext context;
 
     /** The {@link AbstractServer}s this {@link NettyServerRouter} routes messages for. */
-    @Getter
     final List<AbstractServer> servers;
 
     /** Construct a new {@link NettyServerRouter}.
@@ -51,7 +44,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      */
     public NettyServerRouter(List<AbstractServer> servers) {
         // Initialize the router epoch from the persisted server epoch
-        this.serverEpoch = ((BaseServer) servers.get(0)).serverContext.getServerEpoch();
+        this.context = ((BaseServer) servers.get(0)).serverContext;
         this.servers = servers;
         handlerMap = new EnumMap<>(CorfuMsgType.class);
         servers.forEach(server -> server.getHandler().getHandledTypes()
@@ -153,4 +146,15 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
         ctx.close();
     }
 
+    public void setServerEpoch(long serverEpoch) {
+        // no-op
+    }
+
+    public long getServerEpoch() {
+        return this.context.getServerEpoch();
+    }
+
+    public List<AbstractServer> getServers() {
+        return this.servers;
+    }
 }
