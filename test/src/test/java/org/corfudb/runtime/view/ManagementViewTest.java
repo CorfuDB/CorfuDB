@@ -13,7 +13,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -45,9 +45,9 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
+import org.junit.Assert;
 import org.junit.Test;
 
 /**
@@ -75,6 +75,17 @@ public class ManagementViewTest extends AbstractViewTest {
                 runtime.getRouter(routerEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             }
         });
+    }
+
+    private void waitForSequencerToBootstrap(int primarySequencerPort) {
+        // Waiting for sequencer to be bootstrapped
+        for (int i=0; i<PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            if (getSequencer(primarySequencerPort).getBootstrapEpoch() != Layout.INVALID_EPOCH) {
+                return;
+            }
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+        }
+        Assert.fail();
     }
 
     /**
@@ -246,15 +257,7 @@ public class ManagementViewTest extends AbstractViewTest {
         bootstrapAllServers(l);
         corfuRuntime = getRuntime(l).connect();
 
-        // Waiting for management servers to send the bootstrap sequencer request and be ready
-        // to detect failures to speed up test time.
-        CFUtils.within(
-                CompletableFuture.allOf(
-                        getManagementServer(SERVERS.PORT_0).getManagementAgent().getRecoveryBarrierFuture(),
-                        getManagementServer(SERVERS.PORT_1).getManagementAgent().getRecoveryBarrierFuture(),
-                        getManagementServer(SERVERS.PORT_2).getManagementAgent().getRecoveryBarrierFuture()),
-                PARAMETERS.TIMEOUT_NORMAL
-        ).join();
+        waitForSequencerToBootstrap(SERVERS.PORT_0);
 
         // Setting aggressive timeouts
         setAggressiveTimeouts(l, corfuRuntime,
@@ -372,15 +375,7 @@ public class ManagementViewTest extends AbstractViewTest {
         bootstrapAllServers(l);
         corfuRuntime = getRuntime(l).connect();
 
-        // Waiting for management servers to send the bootstrap sequencer request and be ready
-        // to detect failures to speed up test time.
-        CFUtils.within(
-                CompletableFuture.allOf(
-                        getManagementServer(SERVERS.PORT_0).getManagementAgent().getRecoveryBarrierFuture(),
-                        getManagementServer(SERVERS.PORT_1).getManagementAgent().getRecoveryBarrierFuture(),
-                        getManagementServer(SERVERS.PORT_2).getManagementAgent().getRecoveryBarrierFuture()),
-                PARAMETERS.TIMEOUT_NORMAL
-        ).join();
+        waitForSequencerToBootstrap(SERVERS.PORT_0);
 
         // Setting aggressive timeouts
         setAggressiveTimeouts(l, corfuRuntime,
@@ -898,11 +893,7 @@ public class ManagementViewTest extends AbstractViewTest {
         Layout l = new Layout(corfuRuntime.getLayoutView().getLayout());
         setAggressiveDetectorTimeouts(SERVERS.PORT_0);
 
-        CFUtils.within(
-                CompletableFuture.allOf(
-                        getManagementServer(SERVERS.PORT_0).getManagementAgent().getRecoveryBarrierFuture()),
-                PARAMETERS.TIMEOUT_NORMAL
-        ).join();
+        waitForSequencerToBootstrap(SERVERS.PORT_0);
 
         l.setEpoch(l.getEpoch() + 1);
         corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
@@ -1572,14 +1563,8 @@ public class ManagementViewTest extends AbstractViewTest {
         CorfuRuntime managementRuntime1 = getManagementServer(SERVERS.PORT_1)
                 .getManagementAgent().getCorfuRuntime();
 
-        // Waiting for management servers to send the bootstrap sequencer request and be ready
-        // to detect failures to speed up test time.
-        CFUtils.within(
-                CompletableFuture.allOf(
-                        getManagementServer(SERVERS.PORT_0).getManagementAgent().getRecoveryBarrierFuture(),
-                        getManagementServer(SERVERS.PORT_1).getManagementAgent().getRecoveryBarrierFuture()),
-                PARAMETERS.TIMEOUT_NORMAL
-        ).join();
+        waitForSequencerToBootstrap(SERVERS.PORT_0);
+
         // Setting aggressive timeouts
         setAggressiveTimeouts(layout, corfuRuntime, managementRuntime0, managementRuntime1);
         setAggressiveDetectorTimeouts(SERVERS.PORT_0, SERVERS.PORT_1);
