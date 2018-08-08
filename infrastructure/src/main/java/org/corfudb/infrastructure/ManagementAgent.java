@@ -228,7 +228,7 @@ public class ManagementAgent {
         // Creating the initialization task thread.
         // This thread pool is utilized to dispatch one time recovery and sequencer bootstrap tasks.
         // One these tasks finish successfully, they initiate the detection tasks.
-        this.initializationTaskThread = new Thread(this::initializationTask);
+        this.initializationTaskThread = new Thread(this::initializationTask, "initializationTaskThread");
         this.initializationTaskThread.setUncaughtExceptionHandler(
                 (thread, throwable) -> {
                     log.error("Error in initialization task: {}", throwable);
