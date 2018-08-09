@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure;
 
+import static org.corfudb.protocols.wireprotocol.TokenType.TX_ABORT_NEWSEQ;
 import static org.corfudb.protocols.wireprotocol.TokenType.TX_ABORT_SEQ_OVERFLOW;
-
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -121,11 +121,19 @@ public class SequencerServer extends AbstractServer {
      *
      * {@link SequencerServer::maxConflictWildcard} :
      * a "wildcard" representing the maximal update timestamp of
-     * all the confict keys which were evicted from the cache
+     * all the conflict keys which were evicted from the cache
+     *
+     * * {@link SequencerServer::maxConflictNewSequencer} :
+     * represents the max update timestamp of all the conflict keys
+     * which were evicted from the cache by the time this server is elected
+     * the primary sequencer. This means that any snapshot timestamp below this
+     * actual threshold would abort due to NEW_SEQUENCER cause.
      */
+    private final Cache<String, Long> conflictToGlobalTailCache;
+
     private long maxConflictWildcard = Address.NOT_FOUND;
 
-    private final Cache<String, Long> conflictToGlobalTailCache;
+    private long maxConflictNewSequencer = Address.NOT_FOUND;
 
     /**
      * Handler for this server.
@@ -180,12 +188,11 @@ public class SequencerServer extends AbstractServer {
             cacheSize = Long.parseLong((String) opts.get("--sequencer-cache-size"));
 
         }
-
         conflictToGlobalTailCache = Caffeine.newBuilder()
                 .maximumSize(cacheSize)
                 .removalListener((String k, Long v, RemovalCause cause) -> {
                     if (!RemovalCause.REPLACED.equals(cause)) {
-                        log.trace("Updating maxConflictWildcard. Old value = '{}', new value='{}'"
+                         log.trace("Updating maxConflictWildcard. Old value = '{}', new value='{}'"
                                         + " conflictParam = '{}'. Removal cause = '{}'",
                                 maxConflictWildcard, v, k, cause);
                         maxConflictWildcard = Math.max(v, maxConflictWildcard);
@@ -259,6 +266,21 @@ public class SequencerServer extends AbstractServer {
                         break;
                     }
 
+                    // The maxConflictNewSequencer is modified whenever a server is elected
+                    // as the 'new' sequencer, we immediately set its value to the max timestamp
+                    // evicted from the cache at that time. If a txSnapshotTimestamp falls
+                    // under this threshold we can report that the cause of abort is due to
+                    // a NEW_SEQUENCER (not able to hold these in its cache).
+                    if (txSnapshotTimestamp < maxConflictNewSequencer) {
+                        log.debug("ABORT[{}] snapshot-ts[{}] WILDCARD New Sequencer ts=[{}]",
+                                txInfo, txSnapshotTimestamp, maxConflictNewSequencer);
+                        response.set(TX_ABORT_NEWSEQ);
+                        break;
+                    }
+
+                    // If the txSnapshotTimestamp did not fall under the new sequencer threshold
+                    // but it does fall under the latest evicted timestamp we report the cause of
+                    // abort as SEQUENCER_OVERFLOW
                     if (txSnapshotTimestamp < maxConflictWildcard) {
                         log.debug("ABORT[{}] snapshot-ts[{}] WILDCARD ts=[{}]",
                                 txInfo, txSnapshotTimestamp, maxConflictWildcard);
@@ -392,6 +414,7 @@ public class SequencerServer extends AbstractServer {
         if (!bootstrapWithoutTailsUpdate) {
             globalLogTail.set(initialToken);
             maxConflictWildcard = initialToken - 1;
+            maxConflictNewSequencer = maxConflictWildcard;
             conflictToGlobalTailCache.invalidateAll();
 
             // Clear the existing map as it could have been populated by an earlier reset.

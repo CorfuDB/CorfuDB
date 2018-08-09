@@ -1,12 +1,19 @@
 package org.corfudb.runtime.checkpoint;
 
-import lombok.extern.slf4j.Slf4j;
+import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
+
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import lombok.Getter;
-import org.assertj.core.api.ThrowableAssert;
+import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.AbstractObjectTest;
@@ -15,13 +22,6 @@ import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by dmalkhi on 5/25/17.
@@ -399,6 +399,7 @@ public class CheckpointTest extends AbstractObjectTest {
                     try {
                         localm2A.get(0);
                     } catch (TransactionAbortedException te) {
+                        assertThat(te.getAbortCause()).isEqualTo(AbortCause.TRIM);
                         // this is an expected behavior!
                         trimExceptionFlag.set(true);
                     }
