@@ -210,7 +210,7 @@ public class Driver {
 
     public static void runClusterWrites(String[] args, String prodClass) throws Exception {
         // args: localhost 300 100 100
-        // new args: numHosts, [each host], numRts, numProd, numReq, numAsync, payloadSize, callBootstrapper
+        // new args: numHosts, [each host], numRts, numProd, numReq, numAsync, payloadSize, waitTime (sec), callBootstrapper
 
         final int numHosts = Integer.valueOf(args[0]);
         List<String> hosts = new ArrayList<>();
@@ -222,18 +222,21 @@ public class Driver {
         final int numReq = Integer.valueOf(args[numHosts + 3]);
         final int numAsync = Integer.valueOf(args[numHosts + 4]);
         final int payloadSize = Integer.valueOf(args[numHosts + 5]);
-        final boolean bootstrap = Boolean.valueOf(args[numHosts + 6]);
+        final int waitTime = Integer.valueOf(args[numHosts + 6]);
+        final boolean bootstrap = Boolean.valueOf(args[numHosts + 7]);
         final UUID streamID = UUID.randomUUID();
 
         Thread[] prodThreads = new Thread[numProd];
 
         byte[] payload = new byte[payloadSize];
 
+        long preBootstrap = System.currentTimeMillis();
+
         // call bootstrapper - currently hardcoded values of hosts
         if (bootstrap) {
             bootstrapClusterWithStrings(hosts);
+            System.out.println("Bootstrapped!");
         }
-        System.out.println("Bootstrapped!");
 
         // create runtimes
         final CorfuRuntime[] rts = new CorfuRuntime[numRts];
@@ -244,7 +247,10 @@ public class Driver {
         }
 
         // wait for all drivers to be connected
-        Thread.sleep(20000);
+        long diff = (preBootstrap + waitTime * 1000) - System.currentTimeMillis();
+        if (diff > 0) {
+            Thread.sleep(diff);
+        }
         System.out.println("Done sleeping, awakening now...");
 
         // Producer
