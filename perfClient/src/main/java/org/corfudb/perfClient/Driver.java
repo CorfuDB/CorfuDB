@@ -243,6 +243,10 @@ public class Driver {
             System.out.println("Connected! " + (hosts.get(i % numHosts)));
         }
 
+        // wait for all drivers to be connected
+        Thread.sleep(20000);
+        System.out.println("Done sleeping, awakening now...");
+
         // Producer
         int[] numWrites = new int[numProd];
         for (int x = 0; x < numProd; x++) {
