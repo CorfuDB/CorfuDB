@@ -46,12 +46,6 @@ public class AddNodeWorkflow implements IWorkflow {
 
     protected Layout newLayout;
 
-    /**
-     * The chunk size (i.e. number of address space entries) that
-     * the state transfer operation uses.
-     */
-    public static final long CHUNK_SIZE = 2500;
-
     @Getter
     final UUID id;
 
@@ -140,6 +134,8 @@ public class AddNodeWorkflow implements IWorkflow {
     protected void stateTransfer(Set<String> endpoints, CorfuRuntime runtime,
                                  Layout.LayoutSegment segment) throws Exception {
 
+        int batchSize = runtime.getParameters().getBulkReadSize();
+
         long trimMark = runtime.getAddressSpaceView().getTrimMark();
         // Send the trimMark to the new/healing nodes.
         // If this times out or fails, the Action performing the stateTransfer fails and retries.
@@ -161,8 +157,8 @@ public class AddNodeWorkflow implements IWorkflow {
         long segmentStart = Math.max(trimMark, segment.getStart());
 
         for (long chunkStart = segmentStart; chunkStart < segment.getEnd()
-                ; chunkStart = chunkStart + CHUNK_SIZE) {
-            long chunkEnd = Math.min((chunkStart + CHUNK_SIZE - 1), segment.getEnd() - 1);
+                ; chunkStart = chunkStart + batchSize) {
+            long chunkEnd = Math.min((chunkStart + batchSize - 1), segment.getEnd() - 1);
 
             long ts1 = System.currentTimeMillis();
 
@@ -193,7 +189,7 @@ public class AddNodeWorkflow implements IWorkflow {
                 ts2 = System.currentTimeMillis();
 
                 if (!transferSuccess) {
-                    log.error("stateTransfer: Failed to transfer {}-{} to {}", CHUNK_SIZE,
+                    log.error("stateTransfer: Failed to transfer {}-{} to {}", chunkStart,
                             chunkEnd, endpoint);
                     throw new IllegalStateException("Failed to transfer!");
                 }
