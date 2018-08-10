@@ -14,6 +14,7 @@ from subprocess import check_call, check_output
 import sys
 
 PATTERN = r"<version>([0-9.]+)</version>"
+PATTERN_TANUKI = r"/usr/share/corfu/lib/cmdlets-([0-9.]+)-shaded.jar"
 
 def update_version_number(base_version=None):
     """
@@ -27,7 +28,7 @@ def update_version_number(base_version=None):
     old_version = verify_and_get_version_number()
     if base_version != None:
         assert len(base_version) == 3 and len(filter(lambda x: type(x) == int, base_version)) == 3, \
-                "Base version {} doesn't fit into format [major, minor, patch]".format(base_version)
+            "Base version {} doesn't fit into format [major, minor, patch]".format(base_version)
         new_version = generate_new_version_number(base_version)
     else:
         new_version = generate_new_version_number(old_version)
@@ -42,8 +43,8 @@ def set_version_number(version):
     verify_and_get_version_number()
     new_version_to_check = string_to_version_number(version)
     assert len(new_version_to_check) == 5 and \
-            len(filter(lambda x: type(x) == int, new_version_to_check)) == 5, \
-            "The provided version {} doesn't fit into format a.b.c.d.e".format(new_version_to_check)
+           len(filter(lambda x: type(x) == int, new_version_to_check)) == 5, \
+        "The provided version {} doesn't fit into format a.b.c.d.e".format(new_version_to_check)
     write_version_string_to_pom(version)
     write_version_string_to_tanuki_wrapper(version)
 
@@ -90,7 +91,7 @@ def generate_new_version_number(old_version):
       - random postfix (as int)
     """
     assert len(old_version) == 3 or len(old_version) == 5, \
-            "[ERROR] The parsed version number {} is not 3 or 5 parts!".format(version_number_to_string(old_version))
+        "[ERROR] The parsed version number {} is not 3 or 5 parts!".format(version_number_to_string(old_version))
     timestamp = int(datetime.utcnow().strftime("%Y%m%d%H%M%S"))
     rand = randint(1, 9999)  # exclude 0 which will be trimmed by maven
     new_version = old_version[:]
@@ -152,21 +153,36 @@ def write_version_string_to_tanuki_wrapper(new_version):
     """
     tanuki_files = check_output("find . -name \"corfu-server*.conf\"", shell=True).splitlines()
     for tanuki_file in tanuki_files:
-        check_call("sed -i -e \'s/cmdlets-[0-9.]\+-shaded.jar/cmdlets-" + new_version + "-shaded.jar/\' " + tanuki_file, shell=True)
+        content = []
+        with open(tanuki_file, "r") as pf:
+            content = pf.readlines()
+        with open(tanuki_file, "w") as pf:
+            replaced = False
+            i = 0
+            while i < len(content):
+                line = content[i]
+                if not replaced:
+                    result = re.sub(PATTERN_TANUKI, "/usr/share/corfu/lib/cmdlets-" + new_version + "-shaded.jar", line)
+                    if result != line:
+                        content[i] = result
+                        replaced = True
+                i += 1
+            pf.writelines(content)
+        # check_call("sed -i -e \'s/cmdlets-[0-9.]\+-shaded.jar/cmdlets-" + new_version + "-shaded.jar/\' " + tanuki_file, shell=True)
 
 
 if __name__ == "__main__":
     arg_parser = ArgumentParser()
     arg_parser.add_argument("--major", type=int, required=False,
-            help="Major version number of CorfuDB.")
+                            help="Major version number of CorfuDB.")
     arg_parser.add_argument("--minor", type=int, required=False,
-            help="Minor version number of CorfuDB.")
+                            help="Minor version number of CorfuDB.")
     arg_parser.add_argument("--patch", type=int, required=False,
-            help="Patch version number of CorfuDB.")
+                            help="Patch version number of CorfuDB.")
     arg_parser.add_argument("--print-version", action="store_true", required=False,
-            help="Print the current CorfuDB version.")
+                            help="Print the current CorfuDB version.")
     arg_parser.add_argument("--set-version", type=str, required=False,
-            help="Set the CorfuDB version.")
+                            help="Set the CorfuDB version.")
     args = arg_parser.parse_args()
     if args.print_version:
         print(version_number_to_string(verify_and_get_version_number()))

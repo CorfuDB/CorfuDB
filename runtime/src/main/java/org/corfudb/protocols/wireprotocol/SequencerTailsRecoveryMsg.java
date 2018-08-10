@@ -17,7 +17,7 @@ public class SequencerTailsRecoveryMsg implements ICorfuPayload<SequencerTailsRe
 
     private Long globalTail;
     private Map<UUID, Long> streamTails;
-    private Long readyStateEpoch;
+    private Long sequencerEpoch;
 
     /**
      * Boolean flag to denote whether this bootstrap message is just updating an existing primary
@@ -29,7 +29,7 @@ public class SequencerTailsRecoveryMsg implements ICorfuPayload<SequencerTailsRe
     public SequencerTailsRecoveryMsg(ByteBuf buf) {
         globalTail = ICorfuPayload.fromBuffer(buf, Long.class);
         streamTails = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
-        readyStateEpoch = ICorfuPayload.fromBuffer(buf, Long.class);
+        sequencerEpoch = ICorfuPayload.fromBuffer(buf, Long.class);
         bootstrapWithoutTailsUpdate = ICorfuPayload.fromBuffer(buf, Boolean.class);
     }
 
@@ -38,7 +38,7 @@ public class SequencerTailsRecoveryMsg implements ICorfuPayload<SequencerTailsRe
 
         ICorfuPayload.serialize(buf, globalTail);
         ICorfuPayload.serialize(buf, streamTails);
-        ICorfuPayload.serialize(buf, readyStateEpoch);
+        ICorfuPayload.serialize(buf, sequencerEpoch);
         ICorfuPayload.serialize(buf, bootstrapWithoutTailsUpdate);
     }
 }
