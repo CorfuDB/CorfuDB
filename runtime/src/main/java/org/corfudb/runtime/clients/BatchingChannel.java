@@ -16,7 +16,7 @@ public class BatchingChannel {
     @Getter
     final Queue<Object> queue = new ConcurrentLinkedQueue<>();
 
-    final int batchSize = 100;
+    final int batchSize = 500;
 
     public BatchingChannel(Channel channel) {
         this.channel = channel;
