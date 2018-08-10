@@ -29,7 +29,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 @Slf4j
 public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
 
-    static final int BATCH_SIZE = 50;
+    static final int BATCH_SIZE = 500;
     private StreamLog streamLog;
     private BlockingQueue<BatchWriterOperation> operationsQueue;
     final ExecutorService writerService = Executors
