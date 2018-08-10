@@ -13,8 +13,10 @@ import re
 from subprocess import check_call, check_output
 import sys
 
-PATTERN = r"<version>([0-9.]+)</version>"
+
+PATTERN_POM = r"<version>([0-9.]+)</version>"
 PATTERN_TANUKI = r"/usr/share/corfu/lib/cmdlets-([0-9.]+)-shaded.jar"
+
 
 def update_version_number(base_version=None):
     """
@@ -35,6 +37,7 @@ def update_version_number(base_version=None):
     write_version_string_to_pom(new_version)
     write_version_string_to_tanuki_wrapper(new_version)
 
+
 def set_version_number(version):
     """
     str -> None
@@ -47,6 +50,7 @@ def set_version_number(version):
         "The provided version {} doesn't fit into format a.b.c.d.e".format(new_version_to_check)
     write_version_string_to_pom(version)
     write_version_string_to_tanuki_wrapper(version)
+
 
 def verify_and_get_version_number():
     """
@@ -62,7 +66,7 @@ def verify_and_get_version_number():
     for pom_file in pom_files:
         with open(pom_file, "r") as pf:
             for line in pf:
-                re_match = re.search(PATTERN, line)
+                re_match = re.search(PATTERN_POM, line)
                 if re_match != None:
                     found_version = re_match.group(1)
                     if version == None:
@@ -77,6 +81,7 @@ def verify_and_get_version_number():
         print("[ERROR] Found version numbers {} and {}.".format(version, found_version))
         sys.exit(-1)
     return map(lambda x: int(x), version.split("."))
+
 
 def generate_new_version_number(old_version):
     """
@@ -103,12 +108,14 @@ def generate_new_version_number(old_version):
         new_version[4] = rand
     return version_number_to_string(new_version)
 
+
 def version_number_to_string(version):
     """
     list(int) -> str
     Convert the version number list to string format.
     """
     return ".".join(map(lambda x: str(x), version))
+
 
 def string_to_version_number(s):
     """
@@ -122,6 +129,7 @@ def string_to_version_number(s):
     except ValueError:
         assert False, "[ERROR] Failed to convert to numbers from version string!"
     return v_list
+
 
 def write_version_string_to_pom(new_version):
     """
@@ -139,12 +147,13 @@ def write_version_string_to_pom(new_version):
             while i < len(content):
                 line = content[i]
                 if not replaced:
-                    result = re.sub(PATTERN, "<version>" + new_version + "</version>", line)
+                    result = re.sub(PATTERN_POM, "<version>" + new_version + "</version>", line)
                     if result != line:
                         content[i] = result
                         replaced = True
                 i += 1
             pf.writelines(content)
+
 
 def write_version_string_to_tanuki_wrapper(new_version):
     """
@@ -154,9 +163,9 @@ def write_version_string_to_tanuki_wrapper(new_version):
     tanuki_files = check_output("find . -name \"corfu-server*.conf\"", shell=True).splitlines()
     for tanuki_file in tanuki_files:
         content = []
-        with open(tanuki_file, "r") as pf:
-            content = pf.readlines()
-        with open(tanuki_file, "w") as pf:
+        with open(tanuki_file, "r") as tf:
+            content = tf.readlines()
+        with open(tanuki_file, "w") as tf:
             replaced = False
             i = 0
             while i < len(content):
@@ -167,8 +176,7 @@ def write_version_string_to_tanuki_wrapper(new_version):
                         content[i] = result
                         replaced = True
                 i += 1
-            pf.writelines(content)
-        # check_call("sed -i -e \'s/cmdlets-[0-9.]\+-shaded.jar/cmdlets-" + new_version + "-shaded.jar/\' " + tanuki_file, shell=True)
+            tf.writelines(content)
 
 
 if __name__ == "__main__":
@@ -190,9 +198,9 @@ if __name__ == "__main__":
     if args.set_version:
         set_version_number(args.set_version)
         sys.exit(0)
-    if args.major == None and args.minor == None and args.patch == None:
+    if args.major is None and args.minor is None and args.patch is None:
         update_version_number()
-    elif args.major == None or args.minor == None or args.patch == None:
+    elif args.major is None or args.minor is None or args.patch is None:
         print("[ERROR] All major, minor and patch number should be defined!")
         sys.exit(-1)
     else:
