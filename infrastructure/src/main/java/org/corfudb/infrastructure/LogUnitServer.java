@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -140,9 +139,6 @@ public class LogUnitServer extends AbstractServer {
                 .removalListener(this::handleEviction)
                 .writer(batchWriter)
                 .build(this::handleRetrieval);
-
-        MetricRegistry metrics = serverContext.getMetrics();
-//        MetricsUtils.addCacheGauges(metrics, metricsPrefix + "cache.", dataCache);
 
         Runnable task = () -> streamLog.compact();
         compactor = scheduler.scheduleAtFixedRate(task, 10, 45, TimeUnit.MINUTES);

@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.MetricRegistry;
-
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
 import java.time.Duration;
@@ -122,9 +120,6 @@ public class ServerContext implements AutoCloseable {
     @Setter
     private boolean bindToAllInterfaces = false;
 
-    @Getter
-    public static final MetricRegistry metrics = new MetricRegistry();
-
     /**
      * Returns a new ServerContext.
      *
@@ -134,7 +129,6 @@ public class ServerContext implements AutoCloseable {
         this.serverConfig = serverConfig;
         this.dataStore = new DataStore(serverConfig);
         generateNodeId();
-        this.serverRouter = serverRouter;
         this.failureDetector = new FailureDetector();
         this.healingDetector = new HealingDetector();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
@@ -156,8 +150,8 @@ public class ServerContext implements AutoCloseable {
             getNewBossGroup();
 
         // Metrics setup & reporting configuration
-        if (!isMetricsReportingSetUp(metrics)) {
-            MetricsUtils.metricsReportingSetup(metrics);
+        if (!isMetricsReportingSetUp()) {
+            MetricsUtils.metricsReportingSetup();
         }
     }
 

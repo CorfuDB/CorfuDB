@@ -96,7 +96,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      */
     final Object[] args;
 
-    private final MetricRegistry metrics;
+    private static final MetricRegistry metrics = MetricsUtils.metrics;
     /**
      * Metrics: meter (counter), histogram.
      */
@@ -148,7 +148,6 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 upcallTargetMap, undoRecordTargetMap,
                 undoTargetMap, resetSet);
 
-        metrics = rt.getMetrics() != null ? rt.getMetrics() : CorfuRuntime.getDefaultMetrics();
         mpObj = CorfuComponent.OBJECT.toString();
         timerAccess = metrics.timer(mpObj + "access");
         timerLogWrite = metrics.timer(mpObj + "log-write");
