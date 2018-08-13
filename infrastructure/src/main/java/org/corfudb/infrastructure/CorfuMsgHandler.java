@@ -219,7 +219,6 @@ public class CorfuMsgHandler {
         return (msg, ctx, r) -> {
             if (server.isShutdown()) {
                 log.warn("Server received {} but is shutdown.", msg.getMsgType().toString());
-                r.sendResponse(ctx, msg, CorfuMsgType.ERROR_SERVER_UNAVAILABLE.msg());
                 return;
             }
 
@@ -227,7 +226,6 @@ public class CorfuMsgHandler {
                 r.sendResponse(ctx, msg, CorfuMsgType.NOT_READY.msg());
                 return;
             }
-
 
             try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {
                 handler.handle(msg, ctx, r);

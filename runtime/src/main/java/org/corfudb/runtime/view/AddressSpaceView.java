@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import static org.corfudb.util.Utils.getMaxGlobalTail;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.CacheLoader;
@@ -256,6 +257,14 @@ public class AddressSpaceView extends AbstractView {
                         .map(LogUnitClient::getTrimMark)
                         .map(CFUtils::getUninterruptibly)
                         .max(Comparator.naturalOrder()).get());
+    }
+
+    /**
+     * Get the last address in the address space
+     */
+    public long getLogTail() {
+        return layoutHelper(
+                e -> getMaxGlobalTail(e.getLayout(), runtime));
     }
 
     /**

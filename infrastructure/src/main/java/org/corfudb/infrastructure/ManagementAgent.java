@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -112,12 +111,6 @@ public class ManagementAgent {
     private volatile boolean shutdown = false;
 
     /**
-     * Future which is marked completed if the node has recovered.
-     */
-    @Getter
-    private volatile CompletableFuture<Boolean> recoveryBarrierFuture;
-
-    /**
      * Future which is reset every time a new task to bootstrap the sequencer is launched by the
      * ManagementAgent. This is to avoid multiple bootstrap requests.
      */
@@ -175,8 +168,6 @@ public class ManagementAgent {
 
         bootstrapEndpoint = (opts.get("--management-server") != null)
                 ? opts.get("--management-server").toString() : null;
-
-        recoveryBarrierFuture = new CompletableFuture<>();
 
         localServerMetrics = new ServerMetrics(NodeLocator.parseString(getLocalEndpoint()),
                 new SequencerMetrics(SequencerStatus.UNKNOWN));
@@ -266,6 +257,7 @@ public class ManagementAgent {
                 return true;
             });
         }
+        log.info("triggerSequencerBootstrap: a bootstrap task is already in progress.");
         return this.sequencerRecoveryFuture;
     }
 
@@ -292,16 +284,14 @@ public class ManagementAgent {
                     continue;
                 }
                 // If recovery succeeds, reconfiguration was successful.
-                triggerSequencerBootstrap(serverContext.copyManagementLayout());
-                recoveryBarrierFuture.complete(true);
+                // Save the latest management layout.
+                serverContext.saveManagementLayout(getCorfuRuntime().getLayoutView().getLayout());
+
                 log.info("Recovery completed");
             }
 
-            // Sequencer bootstrap required if this is fresh startup.
-            if (!recoveryBarrierFuture.isDone()) {
-                bootstrapPrimarySequencerServer();
-            }
-            recoveryBarrierFuture.complete(true);
+            // Trigger sequencer bootstrap if in recovery mode or fresh startup
+            triggerSequencerBootstrap(serverContext.copyManagementLayout());
 
             // Initiating periodic task to poll for failures.
             localMetricsPollingService.scheduleAtFixedRate(
@@ -336,28 +326,6 @@ public class ManagementAgent {
      */
     public CorfuRuntime getCorfuRuntime() {
         return runtimeSingletonResource.get();
-    }
-
-    /**
-     * Bootstraps the primary sequencer on a fresh startup (not recovery).
-     */
-    private void bootstrapPrimarySequencerServer() {
-        try {
-            Layout layout = serverContext.copyManagementLayout();
-            boolean bootstrapResult = getCorfuRuntime().getLayoutView().getRuntimeLayout(layout)
-                    .getPrimarySequencerClient()
-                    .bootstrap(0L, Collections.emptyMap(), layout.getEpoch(), false)
-                    .get();
-            recoveryBarrierFuture.complete(bootstrapResult);
-            // If false, the sequencer is already bootstrapped with a higher epoch.
-            if (!bootstrapResult) {
-                log.warn("Sequencer already bootstrapped.");
-            } else {
-                log.info("Bootstrapped sequencer server at epoch:{}", layout.getEpoch());
-            }
-        } catch (InterruptedException | ExecutionException e) {
-            log.error("Bootstrapping sequencer failed: ", e);
-        }
     }
 
     /**
@@ -402,10 +370,6 @@ public class ManagementAgent {
         // members detect that this node has healed and include it in the layout.
         boolean recoveryResult = clusterLayout.getEpoch() > localRecoveryLayout.getEpoch()
                 || recoveryReconfigurationResult;
-
-        if (recoveryResult) {
-            recoveryBarrierFuture.complete(true);
-        }
 
         return recoveryResult;
     }

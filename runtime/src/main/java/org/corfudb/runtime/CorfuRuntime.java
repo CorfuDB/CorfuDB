@@ -46,7 +46,6 @@ import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ShutdownException;
-import org.corfudb.runtime.exceptions.UnavailableServerException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -792,7 +791,7 @@ public class CorfuRuntime {
                             getVersionString(), version.getVersion());
                 }
             }
-        } catch (TimeoutException | NetworkException | ShutdownException | UnavailableServerException e) {
+        } catch (TimeoutException | NetworkException | ShutdownException e) {
             log.error("connect: failed to get version. Couldn't connect to server.", e);
         } catch (Exception ex) {
             // Because checkVersion is just an informational step (log purpose), we don't need to retry

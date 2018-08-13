@@ -57,8 +57,7 @@ public class StreamsView extends AbstractView {
      * @return A view
      */
     public IStreamView get(UUID stream, StreamOptions options) {
-        return runtime.getLayoutView().getLayout().getSegments().get(
-                runtime.getLayoutView().getLayout().getSegments().size() - 1)
+        return runtime.getLayoutView().getLayout().getLatestSegment()
                 .getReplicationMode().getStreamView(runtime, stream, options);
     }
 
