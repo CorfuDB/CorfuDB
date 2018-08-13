@@ -40,16 +40,16 @@ public class MetricsUtils {
     private static final String PROPERTY_LOG_INTERVAL = "corfu.metrics.log.interval";
     private static final String PROPERTY_METRICS_COLLECTION = "corfu.metrics.collection";
 
-    private static final long metricsCsvInterval;
-    private static final long metricsLogInterval;
-    private static final String metricsCsvFolder;
+    private static final long METRICS_CSV_INTERVAL;
+    private static final long METRICS_LOG_INTERVAL;
+    private static final String METRICS_CSV_FOLDER;
     @Getter
     private static final boolean metricsCollectionEnabled;
     private static boolean metricsCsvReportingEnabled;
-    private static final boolean metricsJmxReportingEnabled;
-    private static final boolean metricsJvmCollectionEnabled;
-    private static final boolean metricsSlf4jReportingEnabled;
-    private static final String mpTrigger = "filter-trigger"; // internal use only
+    private static final boolean METRICS_JMX_REPORTING_ENABLED;
+    private static final boolean METRICS_JVM_COLLECTION_ENABLED;
+    private static final boolean METRICS_SLF4J_REPORTING_ENABLED;
+    private static final String FILTER_TRIGGER = "filter-trigger"; // internal use only
 
     private static final String ADDRESS_SPACE_METRIC_PREFIX = "corfu.runtime.as-view";
     private static final MetricFilter ADDRESS_SPACE_FILTER =
@@ -70,21 +70,21 @@ public class MetricsUtils {
      * <ul>
      * <li> metricsCollectionEnabled: Boolean taken from jvm corfu.metrics.collection
      * property to enable the metrics collection.
-     * <li> metricsJmxReportingEnabled: Boolean taken from jvm corfu.metrics.jmxreporting
+     * <li> METRICS_JMX_REPORTING_ENABLED: Boolean taken from jvm corfu.metrics.jmxreporting
      * property to enable jmx reporting of metrics.
-     * <li> metricsJvmCollectionEnabled: Boolean taken from jvm corfu.metrics.jvm
+     * <li> METRICS_JVM_COLLECTION_ENABLED: Boolean taken from jvm corfu.metrics.jvm
      * property for enabling reporting on jmv metrics such as garbage collection, threads,
      * and memory consumption.
      * <li> metricsLogAnalysisEnabled: Boolean taken from jvm corfu.metrics.log.analysis
      * property for enabling reporting on logger statistics.
-     * <li> metricsLogInterval: Integer taken from jvm corfu.metrics.log.interval
+     * <li> METRICS_LOG_INTERVAL: Integer taken from jvm corfu.metrics.log.interval
      * property for enabling and setting the intervals of reporting to log output (in
      * seconds). A positive value indicates the reporting is enabled at provided
      * intervals.
-     * <li> metricsCsvInterval: Integer taken from jvm corfu.metrics.csv.interval
+     * <li> METRICS_CSV_INTERVAL: Integer taken from jvm corfu.metrics.csv.interval
      * property for enabling and setting the intervals of reporting to csv (in seconds).
      * A positive value indicates the reporting is enabled at provided intervals.
-     * <li> metricsCsvFolder: String taken from jvm corfu.metrics.csv.folder
+     * <li> METRICS_CSV_FOLDER: String taken from jvm corfu.metrics.csv.folder
      * property for destination path of csv reporting.
      * </ul>
      *
@@ -104,15 +104,15 @@ public class MetricsUtils {
     static {
         metricsCollectionEnabled = Boolean.valueOf(System.getProperty(PROPERTY_METRICS_COLLECTION));
 
-        metricsJmxReportingEnabled = Boolean.valueOf(System.getProperty(PROPERTY_JMX_REPORTING));
-        metricsJvmCollectionEnabled = Boolean.valueOf(System.getProperty(PROPERTY_JVM_METRICS_COLLECTION));
+        METRICS_JMX_REPORTING_ENABLED = Boolean.valueOf(System.getProperty(PROPERTY_JMX_REPORTING));
+        METRICS_JVM_COLLECTION_ENABLED = Boolean.valueOf(System.getProperty(PROPERTY_JVM_METRICS_COLLECTION));
 
-        metricsLogInterval = Long.valueOf(System.getProperty(PROPERTY_LOG_INTERVAL, "0"));
-        metricsSlf4jReportingEnabled = metricsLogInterval > 0;
+        METRICS_LOG_INTERVAL = Long.valueOf(System.getProperty(PROPERTY_LOG_INTERVAL, "0"));
+        METRICS_SLF4J_REPORTING_ENABLED = METRICS_LOG_INTERVAL > 0;
 
-        metricsCsvInterval = Long.valueOf(System.getProperty(PROPERTY_CSV_INTERVAL, "0"));
-        metricsCsvFolder = String.valueOf(System.getProperty(PROPERTY_CSV_FOLDER));
-        metricsCsvReportingEnabled = metricsCsvInterval > 0;
+        METRICS_CSV_INTERVAL = Long.valueOf(System.getProperty(PROPERTY_CSV_INTERVAL, "0"));
+        METRICS_CSV_FOLDER = String.valueOf(System.getProperty(PROPERTY_CSV_FOLDER));
+        metricsCsvReportingEnabled = METRICS_CSV_INTERVAL > 0;
     }
 
     /**
@@ -122,7 +122,7 @@ public class MetricsUtils {
      * @return True if metricsReportingSetup() function has been called earlier
      */
     public static boolean isMetricsReportingSetUp() {
-        return metrics.getNames().contains(mpTrigger);
+        return metrics.getNames().contains(FILTER_TRIGGER);
     }
 
     /**
@@ -135,7 +135,7 @@ public class MetricsUtils {
     public static void metricsReportingSetup() {
         if (isMetricsReportingSetUp()) return;
 
-        metrics.counter(mpTrigger);
+        metrics.counter(FILTER_TRIGGER);
 
         if (metricsCollectionEnabled) {
             setupCsvReporting();
@@ -150,7 +150,7 @@ public class MetricsUtils {
 
     // If enabled, setup jmx reporting
     private static void setupJmxReporting() {
-        if (!metricsJmxReportingEnabled) return;
+        if (!METRICS_JMX_REPORTING_ENABLED) return;
 
         // This filters noisy addressSpace metrics to have a clean JMX reporting
         JmxReporter jmxReporter = JmxReporter.forRegistry(metrics)
@@ -164,9 +164,9 @@ public class MetricsUtils {
 
     // If enabled, setup slf4j reporting
     private static void setupSlf4jReporting() {
-        if (!metricsSlf4jReportingEnabled) return;
+        if (!METRICS_SLF4J_REPORTING_ENABLED) return;
 
-        MetricFilter mpTriggerFilter = (name, metric) -> !name.equals(mpTrigger);
+        MetricFilter mpTriggerFilter = (name, metric) -> !name.equals(FILTER_TRIGGER);
 
         Slf4jReporter slf4jReporter = Slf4jReporter.forRegistry(metrics)
                 .convertDurationsTo(TimeUnit.MICROSECONDS)
@@ -174,14 +174,14 @@ public class MetricsUtils {
                 .outputTo(LoggerFactory.getLogger("org.corfudb.metricsdata"))
                 .filter(mpTriggerFilter)
                 .build();
-        slf4jReporter.start(metricsLogInterval, TimeUnit.SECONDS);
+        slf4jReporter.start(METRICS_LOG_INTERVAL, TimeUnit.SECONDS);
     }
 
     // If enabled, setup csv reporting
     private static void setupCsvReporting() {
         if (!metricsCsvReportingEnabled) return;
 
-        final File directory = new File(metricsCsvFolder);
+        final File directory = new File(METRICS_CSV_FOLDER);
 
         if (!directory.isDirectory() ||
             !directory.exists() ||
@@ -197,7 +197,7 @@ public class MetricsUtils {
                 .convertRatesTo(TimeUnit.SECONDS)
                 .filter(ADDRESS_SPACE_FILTER)
                 .build(directory);
-        csvReporter.start(metricsCsvInterval, TimeUnit.SECONDS);
+        csvReporter.start(METRICS_CSV_INTERVAL, TimeUnit.SECONDS);
     }
 
     public static void addCacheGauges(@NonNull String name, @NonNull Cache cache) {
@@ -218,7 +218,7 @@ public class MetricsUtils {
     // If enabled, setup reporting of JVM metrics including garbage collection,
     // memory, and thread statistics.
     private static void setupJvmMetrics() {
-        if (!metricsJvmCollectionEnabled) return;
+        if (!METRICS_JVM_COLLECTION_ENABLED) return;
 
         try {
             metrics.register("jvm.gc", metricsJVMGC);
