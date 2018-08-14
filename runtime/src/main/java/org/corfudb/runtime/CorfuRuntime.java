@@ -125,6 +125,9 @@ public class CorfuRuntime {
 
         /** Sets expireAfterAccess and expireAfterWrite in seconds. */
         @Default long cacheExpiryTime = Long.MAX_VALUE;
+
+        /** Sets the period of retrieving the latest trim mark in minutes. */
+        @Default long trimMarkSyncPeriod = 10;
         // endregion
 
         // region Handshake Parameters
@@ -530,6 +533,8 @@ public class CorfuRuntime {
                 log.error("Runtime shutting down. Exception in terminating fetchLayout: {}", e);
             }
         }
+        // Clear the cache and stop running tasks.
+        this.getAddressSpaceView().shutdown();
 
         stop(true);
 

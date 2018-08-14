@@ -127,6 +127,41 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     }
 
     @Test
+    public void testSyncTrimMark() {
+        CorfuRuntime r = getRuntime().connect();
+        AddressSpaceView spaceView = r.getAddressSpaceView();
+        assertThat(spaceView.getTrimMark()).isEqualTo(0);
+
+        final String basicTestPayload = "payload";
+        final long layoutEpoch = r.getLayoutView().getLayout().getEpoch();
+        final int entryNum = 10;
+
+        for (int i = 0; i< entryNum; i++) {
+            String payload = basicTestPayload + String.valueOf(i);
+            spaceView.write(new Token(i, layoutEpoch), payload.getBytes());
+        }
+
+        final int inclusiveTrimAddress = 3;
+        spaceView.prefixTrim(inclusiveTrimAddress);
+        final int trimMark = (int) spaceView.getTrimMark();
+        assertThat(trimMark).isEqualTo(inclusiveTrimAddress + 1);
+        assertThat(spaceView.readCache.asMap().size()).isEqualTo(entryNum);
+
+        // Run TrimMarkSyncTask once.
+        AddressSpaceView.TrimMarkSyncTask trimMarkSyncTask = spaceView.new TrimMarkSyncTask();
+        trimMarkSyncTask.run();
+
+        // Keys less than trimMark should be removed from cache.
+        int expectedCacheSize = entryNum - trimMark;
+        assertThat(spaceView.readCache.asMap().size()).isEqualTo(expectedCacheSize);
+        assertThat(Collections.min(spaceView.readCache.asMap().keySet())).isEqualTo(trimMark);
+
+        // After shutdown, cache has been cleared.
+        spaceView.shutdown();
+        assertThat(spaceView.readCache.asMap().isEmpty()).isTrue();
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     public void ensureStripingReadAllWorks()
             throws Exception {
