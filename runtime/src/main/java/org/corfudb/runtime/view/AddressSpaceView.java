@@ -8,12 +8,15 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterables;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
@@ -45,6 +48,14 @@ import org.corfudb.util.CorfuComponent;
  */
 @Slf4j
 public class AddressSpaceView extends AbstractView {
+
+    /**
+     * Scheduler for periodically retrieving the latest trim mark and flush cache.
+     */
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(
+            new ThreadFactoryBuilder().setDaemon(true)
+                    .setNameFormat("SyncTrimMark")
+                    .build());
 
     /**
      * A cache for read results.
@@ -79,8 +90,24 @@ public class AddressSpaceView extends AbstractView {
         metrics.register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
         metrics.register(pfx + "hits", (Gauge<Long>) () -> readCache.stats().hitCount());
         metrics.register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
+
+        scheduler.scheduleWithFixedDelay(new TrimMarkSyncTask(), runtime.getParameters().getTrimMarkSyncPeriod(),
+                runtime.getParameters().getTrimMarkSyncPeriod(), TimeUnit.MINUTES);
     }
 
+    /**
+     * Shuts down the AddressSpaceView.
+     * Invalidate the whole cache.
+     * Stops periodic task for retrieving the latest trim mark.
+     */
+    public void shutdown() {
+        try {
+            readCache.invalidateAll();
+            scheduler.shutdownNow();
+        } catch (Exception e) {
+            log.error("Failed to shutdown AddressSpaceView.", e);
+        }
+    }
 
     /**
      * Reset all in-memory caches.
@@ -341,6 +368,27 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
+     * Invalidate cache entries of which the keys are less than the specific address.
+     *
+     * @param address Keys less than the input log address will be invalidated.
+     */
+    public void invalidateClientCache(long address) {
+        // TODO: Might need to do some statistics to clear up cache when the amount to
+        // invalidate is huge.
+        readCache.asMap().keySet().forEach(k -> {
+            if (k < address) {
+                try {
+                    readCache.invalidate(k);
+                } catch (RuntimeException e) {
+                    log.error("invalidateClientCache: Error while invalidating cache entry with key={}",
+                            k, e);
+                }
+            }
+        });
+        log.info("invalidateClientCache: Keys less than {} are invalidated in cache.", address);
+    }
+
+    /**
      * Fetch an address for insertion into the cache.
      *
      * @param address An address to read from.
@@ -416,5 +464,26 @@ public class AddressSpaceView extends AbstractView {
     @VisibleForTesting
     LoadingCache<Long, ILogData> getReadCache() {
         return readCache;
+    }
+
+    /**
+     * Running periodically to retrieve the latest trim mark and flush cache.
+     */
+    class TrimMarkSyncTask implements Runnable {
+
+        private long localTrimMark = Address.NON_ADDRESS;
+
+        @Override
+        public void run() {
+            long latestTrimMark = getTrimMark();
+
+            if (localTrimMark < latestTrimMark) {
+                localTrimMark = latestTrimMark;
+                log.info("TrimMarkSyncTask: trim mark is updated from {} to {}.",
+                        localTrimMark, latestTrimMark);
+
+                invalidateClientCache(latestTrimMark);
+            }
+        }
     }
 }
