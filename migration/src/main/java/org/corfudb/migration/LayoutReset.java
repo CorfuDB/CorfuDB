@@ -20,7 +20,7 @@ import java.util.Set;
  * On deletion of these files, the node loses the persisted state of its IP and last seen epoch,
  * allowing a fresh startup of a cluster in cases, where log data deletion is not an option.
  * Usage:
- * java -cp migration-0.2.0-SNAPSHOT-shaded.jar org.corfudb.migration.LayoutReset corfu-dir
+ * java -cp migration-*-SNAPSHOT-shaded.jar org.corfudb.migration.LayoutReset corfu-dir
  */
 public class LayoutReset {
 
