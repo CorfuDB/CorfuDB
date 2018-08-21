@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.log;
 
+import com.codahale.metrics.MetricRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
@@ -8,7 +9,7 @@ import org.junit.Test;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 
@@ -44,6 +45,6 @@ public class StreamLogCompactionTest extends AbstractCorfuTest {
                 .getCount();
 
         final int expectedGcCounter = 2;
-        assertTrue(gcCounter >= expectedGcCounter);
+        assertThat(gcCounter).isGreaterThanOrEqualTo(expectedGcCounter);
     }
 }
