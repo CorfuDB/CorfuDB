@@ -57,7 +57,7 @@ class SegmentHandle {
 
     public void close() {
         Set<FileChannel> channels =
-                new HashSet(Arrays.asList(writeChannel, readChannel, trimmedChannel, pendingTrimChannel));
+                new HashSet<>(Arrays.asList(writeChannel, readChannel, trimmedChannel, pendingTrimChannel));
         for (FileChannel channel : channels) {
             try {
                 channel.force(true);
