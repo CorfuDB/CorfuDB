@@ -1,5 +1,8 @@
 package org.corfudb.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.integration.Harness.run;
+
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.integration.cluster.Harness.Node;
 import org.corfudb.recovery.FastObjectLoader;
@@ -14,10 +17,6 @@ import org.junit.Test;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.integration.Harness.run;
 
 /**
  * This integration test verifies the behaviour of the add node workflow. In particular, a single node
@@ -52,7 +51,7 @@ public class WorkflowIT extends AbstractIT {
     }
 
     @Test
-    public void AddAndRemoveNodeIT() throws Exception {
+    public void addAndRemoveNodeIT() throws Exception {
         final String streamName = "s1";
         final int n1Port = 9000;
         final int numIter = 11_000;
@@ -283,7 +282,7 @@ public class WorkflowIT extends AbstractIT {
         // dead nodes. This will test the case where the layout doesn't
         // reflect the set of unresponsive servers and thus needs to rely
         // on selecting an available orchestrator to force remove the dead nodes.
-        Harness harness = new Harness();
+        Harness harness = Harness.getDefaultHarness();
 
         final int numNodes = 3;
         List<Node> nodeList = harness.deployCluster(numNodes);
@@ -291,7 +290,7 @@ public class WorkflowIT extends AbstractIT {
         Node n1 = nodeList.get(1);
         Node n2 = nodeList.get(2);
 
-        CorfuRuntime rt = new CorfuRuntime(n2.getClusterAddress()).connect();
+        CorfuRuntime rt = harness.createRuntimeForNode(n2);
 
         assertThat(rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(numNodes);
 
@@ -316,7 +315,7 @@ public class WorkflowIT extends AbstractIT {
      */
     @Test
     public void addNodeWithTrim() throws Exception {
-        Harness harness = new Harness();
+        Harness harness = Harness.getDefaultHarness();
 
         final int numNodes = 3;
         final int PORT_1 = 9001;
@@ -326,7 +325,7 @@ public class WorkflowIT extends AbstractIT {
         Node n1 = harness.deployUnbootstrappedNode(PORT_1);
         Node n2 = harness.deployUnbootstrappedNode(PORT_2);
 
-        CorfuRuntime rt = new CorfuRuntime(n0.getClusterAddress()).connect();
+        CorfuRuntime rt = harness.createRuntimeForNode(n0);
         final String streamName = "test";
         CorfuTable<String, Integer> table = rt.getObjectsView()
                 .build()
