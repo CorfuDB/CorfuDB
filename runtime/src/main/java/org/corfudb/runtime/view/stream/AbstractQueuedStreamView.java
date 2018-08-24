@@ -18,7 +18,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
-
+import org.corfudb.runtime.view.ObjectsView;
 
 
 /** The abstract queued stream view implements a stream backed by a read queue.
@@ -61,6 +61,15 @@ public abstract class AbstractQueuedStreamView extends
                                       long globalAddress,
                                       ILogData ld) {
         context.resolvedQueue.add(globalAddress);
+
+        // Trimming the resolvedQueue using the learnt trimMark.
+        long runtimeTrimMark = runtime.matureTrimMark;
+        if (context.resolvedQueue.first() < runtimeTrimMark) {
+            log.info("addToResolvedQueue: Clearing resolvedQueue for stream:{}, trim mark:{}",
+                    id, runtimeTrimMark);
+            context.resolvedQueue.headSet(runtimeTrimMark).clear();
+        }
+
         context.resolvedEstBytes += ld.getSizeEstimate();
 
         if (context.maxResolution < globalAddress) {
