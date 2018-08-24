@@ -6,6 +6,7 @@ import java.lang.invoke.MethodHandles;
 
 import lombok.Getter;
 import lombok.Setter;
+
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -13,6 +14,7 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
+import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
@@ -78,9 +80,9 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      * @throws OverwriteException Throws OverwriteException if address has already been written to.
      */
     @ClientHandler(type = CorfuMsgType.ERROR_OVERWRITE)
-    private static Object handleOverwrite(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)
+    private static Object handleOverwrite(CorfuPayloadMsg<Integer> msg, ChannelHandlerContext ctx, IClientRouter r)
             throws Exception {
-        throw new OverwriteException();
+        throw new OverwriteException(OverwriteCause.fromId(msg.getPayload()));
     }
 
     /**

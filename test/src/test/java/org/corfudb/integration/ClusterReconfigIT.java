@@ -1,7 +1,9 @@
 package org.corfudb.integration;
 
+import static junit.framework.TestCase.fail;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.google.common.collect.Range;
 
@@ -27,10 +29,13 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.clients.*;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.junit.Before;
@@ -53,7 +58,7 @@ public class ClusterReconfigIT extends AbstractIT {
         return new Random(SEED);
     }
 
-    private Layout get3NodeLayout() throws Exception {
+    private Layout get3NodeLayout() {
         return new Layout(
                 new ArrayList<>(
                         Arrays.asList("localhost:9000", "localhost:9001", "localhost:9002")),
@@ -65,6 +70,21 @@ public class ClusterReconfigIT extends AbstractIT {
                         -1L,
                         Collections.singletonList(new Layout.LayoutStripe(
                                 Arrays.asList("localhost:9000", "localhost:9001", "localhost:9002")
+                        )))),
+                0L,
+                UUID.randomUUID());
+    }
+
+    private Layout get1NodeLayout() {
+        return new Layout(
+                new ArrayList<>(Collections.singletonList("localhost:9000")),
+                new ArrayList<>(Collections.singletonList("localhost:9000")),
+                Collections.singletonList(new Layout.LayoutSegment(
+                        Layout.ReplicationMode.CHAIN_REPLICATION,
+                        0L,
+                        -1L,
+                        Collections.singletonList(new Layout.LayoutStripe(
+                                Collections.singletonList("localhost:9000")
                         )))),
                 0L,
                 UUID.randomUUID());
@@ -254,12 +274,13 @@ public class ClusterReconfigIT extends AbstractIT {
      * @throws Exception
      */
     private Layout incrementClusterEpoch(CorfuRuntime corfuRuntime) throws Exception {
+        long oldEpoch = corfuRuntime.getLayoutView().getLayout().getEpoch();
         Layout l = new Layout(corfuRuntime.getLayoutView().getLayout());
         l.setEpoch(l.getEpoch() + 1);
         corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
         corfuRuntime.getLayoutView().updateLayout(l, 1L);
         corfuRuntime.invalidateLayout();
-        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(1L);
+        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(oldEpoch + 1);
         return l;
     }
 
@@ -457,6 +478,113 @@ public class ClusterReconfigIT extends AbstractIT {
         shutdownCorfuServer(corfuServer_3);
     }
 
+    private void retryBootstrapOperation(Runnable bootstrapOperation) {
+        final int retries = 5;
+        int retry = retries;
+        while (retry-- > 0) {
+            try {
+                bootstrapOperation.run();
+                return;
+            } catch (Exception e) {
+                Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            }
+        }
+        fail();
+    }
+
+    /**
+     * Setup a cluster of 1 node. Bootstrap the nodes.
+     * Bootstrap the cluster using the BootstrapUtil. It should assert that the node already
+     * bootstrapped is with the same layout and then bootstrap the cluster.
+     */
+    @Test
+    public void test1NodeBootstrapWithBootstrappedNode() throws Exception {
+
+        // Set up cluster of 1 nodes.
+        final int PORT_0 = 9000;
+        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
+        final Layout layout = get1NodeLayout();
+        final int retries = 5;
+
+        IClientRouter router = new NettyClientRouter(NodeLocator
+                .parseString(corfuSingleNodeHost + ":" + PORT_0),
+                CorfuRuntime.CorfuRuntimeParameters.builder().build());
+        router.addClient(new LayoutHandler()).addClient(new BaseHandler());
+        retryBootstrapOperation(() -> CFUtils.getUninterruptibly(
+                new LayoutClient(router, layout.getEpoch()).bootstrapLayout(layout)));
+        retryBootstrapOperation(() -> CFUtils.getUninterruptibly(
+                new ManagementClient(router, layout.getEpoch()).bootstrapManagement(layout)));
+
+        BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
+
+        CorfuRuntime corfuRuntime = createDefaultRuntime();
+        assertThat(corfuRuntime.getLayoutView().getLayout().equals(layout)).isTrue();
+
+        shutdownCorfuServer(corfuServer_1);
+    }
+
+    /**
+     * Setup a cluster of 1 node. Bootstrap the node with a wrong layout.
+     * Bootstrap the cluster using the BootstrapUtil. It should assert that the node already
+     * bootstrapped is with the wrong layout and then fail with the AlreadyBootstrappedException.
+     */
+    @Test
+    public void test1NodeBootstrapWithWrongBootstrappedLayoutServer() throws Exception {
+
+        // Set up cluster of 1 node.
+        final int PORT_0 = 9000;
+        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
+        final Layout layout = get1NodeLayout();
+        final int retries = 3;
+
+        IClientRouter router = new NettyClientRouter(NodeLocator
+                .parseString(corfuSingleNodeHost + ":" + PORT_0),
+                CorfuRuntime.CorfuRuntimeParameters.builder().build());
+        router.addClient(new LayoutHandler()).addClient(new BaseHandler());
+        Layout wrongLayout = new Layout(layout);
+        wrongLayout.getLayoutServers().add("localhost:9005");
+        retryBootstrapOperation(() -> CFUtils.getUninterruptibly(
+                new LayoutClient(router, layout.getEpoch()).bootstrapLayout(wrongLayout)));
+
+        assertThatThrownBy(() -> BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT))
+                .hasCauseInstanceOf(AlreadyBootstrappedException.class);
+
+        shutdownCorfuServer(corfuServer_1);
+    }
+
+    /**
+     * Setup a cluster of 1 node. Bootstrap the node with a wrong layout.
+     * Bootstrap the cluster using the BootstrapUtil. It should assert that the node already
+     * bootstrapped is with the wrong layout and then fail with the AlreadyBootstrappedException.
+     */
+    @Test
+    public void test1NodeBootstrapWithWrongBootstrappedManagementServer() throws Exception {
+
+        // Set up cluster of 1 node.
+        final int PORT_0 = 9000;
+        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
+        final Layout layout = get1NodeLayout();
+        final int retries = 3;
+
+        IClientRouter router = new NettyClientRouter(NodeLocator
+                .parseString(corfuSingleNodeHost + ":" + PORT_0),
+                CorfuRuntime.CorfuRuntimeParameters.builder().build());
+        router.addClient(new LayoutHandler())
+                .addClient(new ManagementHandler())
+                .addClient(new BaseHandler());
+        Layout wrongLayout = new Layout(layout);
+        final ManagementClient managementClient = new ManagementClient(router, layout.getEpoch());
+        wrongLayout.getLayoutServers().add("localhost:9005");
+        retryBootstrapOperation(() -> CFUtils.getUninterruptibly(
+                managementClient.bootstrapManagement(wrongLayout)));
+
+        assertThatThrownBy(() -> BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT))
+                .hasCauseInstanceOf(AlreadyBootstrappedException.class);
+
+        shutdownCorfuServer(corfuServer_1);
+    }
+
+
     /**
      * Starts with 3 nodes on ports 0, 1 and 2.
      * A daemon thread is started for random writes in the background.
@@ -635,7 +763,7 @@ public class ClusterReconfigIT extends AbstractIT {
         final Layout layoutAfterFailure = runtime.getLayoutView().getLayout();
 
         final int appendNum = 5;
-        // Write at address 1-5.
+        // Write at address 0-4.
         for (int i = 0; i < appendNum; i++) {
             stream.append(Integer.toString(counter++).getBytes());
         }
@@ -644,9 +772,9 @@ public class ClusterReconfigIT extends AbstractIT {
         corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
         waitForEpochChange(refreshedEpoch -> refreshedEpoch > layoutAfterFailure.getEpoch(), runtime);
 
-        // Write at address 6-10.
-        final long startAddress = 1L;
-        final long endAddress = 10L;
+        // Write at address 5-9.
+        final long startAddress = 0L;
+        final long endAddress = 9L;
         for (int i = 0; i < appendNum; i++) {
             stream.append(Integer.toString(counter++).getBytes());
         }
@@ -709,8 +837,8 @@ public class ClusterReconfigIT extends AbstractIT {
         int counter = 0;
 
         final int appendNum = 3;
-        final long startAddress = 1;
-        // Write at address 1-3.
+        final long startAddress = 0;
+        // Write at address 0-1-2
         for (int i = 0; i < appendNum; i++) {
             stream.append(Integer.toString(counter++).getBytes());
         }
@@ -718,11 +846,11 @@ public class ClusterReconfigIT extends AbstractIT {
         corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
         waitForEpochChange(refreshedEpoch -> refreshedEpoch > layoutAfterHeal1.getEpoch(), runtime);
 
-        // Write at address 4-6.
+        // Write at address 3-4-5
         for (int i = 0; i < appendNum; i++) {
             stream.append(Integer.toString(counter++).getBytes());
         }
-        final long endAddress = 6;
+        final long endAddress = 5;
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             Layout finalLayout = runtime.getLayoutView().getLayout();

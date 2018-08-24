@@ -7,10 +7,13 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 
-import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.view.Address;
 
 /**
  * This class implements the StreamLog interface using a Java hash map.
@@ -21,7 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressSpace {
 
-    private final AtomicLong globalTail = new AtomicLong(0L);
+    private final AtomicLong globalTail = new AtomicLong(Address.NON_ADDRESS);
     private Map<Long, LogData> logCache;
     private Set<Long> trimmed;
     private volatile long startingAddress;
@@ -51,7 +54,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public synchronized void append(long address, LogData entry) {
         if(isTrimmed(address)) {
-            throw new OverwriteException();
+            throw new OverwriteException(OverwriteCause.TRIM);
         }
 
         if (logCache.containsKey(address)) {
@@ -92,7 +95,9 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
 
     private void throwLogUnitExceptionsIfNecessary(long address, LogData entry) {
         if (entry.getRank() == null) {
-            throw new OverwriteException();
+            OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);
+            log.trace("throwLogUnitExceptionsIfNecessary: overwritten exception for address {}, cause: {}", address, overwriteCause);
+            throw new OverwriteException(overwriteCause);
         } else {
             // the method below might throw DataOutrankedException or ValueAdoptedException
             assertAppendPermittedUnsafe(address, entry);
@@ -155,7 +160,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public void reset() {
         startingAddress = 0;
-        globalTail.set(0L);
+        globalTail.set(Address.NON_ADDRESS);
         // Clear the trimmed addresses record.
         trimmed.clear();
         // Clearing all data from the cache.

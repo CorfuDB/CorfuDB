@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.workflows;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WorkflowException;
@@ -14,6 +15,7 @@ import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
@@ -39,15 +41,19 @@ public abstract class WorkflowRequest {
     /**
      * Send a workflow request
      *
-     * @param layout current layout
+     * @param client the client to the selected orchestrator
      * @return a uuid that corresponds to the created workflow
      */
-    protected abstract UUID sendRequest(Layout layout);
+    protected abstract UUID sendRequest(ManagementClient client) throws TimeoutException;
 
     /**
      * Select an orchestrator and return a client. Orchestrator's that
      * are on unresponsive nodes and the affected endpoint by the workflow
-     * will not be selected.
+     * will not be selected. The layout might not reflect the state
+     * of responsive servers, so we ping the endpoint before we select it.
+     * An example of this would be a 3 node cluster, with two nodes that
+     * die immediately, the layout won't have those two nodes as unresponsive
+     * because it can't commit to a quorum.
      *
      * @param layout the layout that is used to select an orchestrator
      * @return a management client that is connected to the selected
@@ -63,8 +69,22 @@ public abstract class WorkflowRequest {
             throw new WorkflowException("getOrchestrator: no available orchestrators " + layout);
         }
 
-        return runtime.getLayoutView().getRuntimeLayout(layout)
+        // Select an available orchestrator
+        ManagementClient managementClient = runtime.getLayoutView().getRuntimeLayout(layout)
                 .getManagementClient(activeLayoutServers.get(0));
+
+        for (String endpoint : activeLayoutServers) {
+            BaseClient client = runtime.getLayoutView().getRuntimeLayout(layout)
+                    .getBaseClient(endpoint);
+            if (client.pingSync()) {
+                log.info("getOrchestrator: orchestrator selected {}, layout {}", endpoint, layout);
+                managementClient = runtime.getLayoutView().getRuntimeLayout(layout)
+                        .getManagementClient(endpoint);
+                break;
+            }
+        }
+
+        return managementClient;
     }
 
     /**
@@ -114,22 +134,20 @@ public abstract class WorkflowRequest {
             try {
                 runtime.invalidateLayout();
                 Layout requestLayout = new Layout(runtime.getLayoutView().getLayout());
-                UUID workflowId = sendRequest(requestLayout);
                 ManagementClient orchestrator = getOrchestrator(requestLayout);
-
+                UUID workflowId = sendRequest(orchestrator);
                 waitForWorkflow(workflowId, orchestrator, timeout, pollPeriod);
-
-                for (int y = 0; y < runtime.getParameters().getInvalidateRetry(); y++) {
-                    runtime.invalidateLayout();
-                    Layout layoutToVerify = new Layout(runtime.getLayoutView().getLayout());
-                    if (verifyRequest(layoutToVerify)) {
-                        log.info("WorkflowRequest: Successfully completed {}", this);
-                        return;
-                    }
-                }
             } catch (NetworkException | TimeoutException e) {
-                log.warn("WorkflowRequest: Network error while running {} on attempt {}", this, x, e);
-                continue;
+                log.warn("WorkflowRequest: Error while running {} on attempt {}, cause {}", this, x, e);
+            }
+
+            for (int y = 0; y < runtime.getParameters().getInvalidateRetry(); y++) {
+                runtime.invalidateLayout();
+                Layout layoutToVerify = new Layout(runtime.getLayoutView().getLayout());
+                if (verifyRequest(layoutToVerify)) {
+                    log.info("WorkflowRequest: Successfully completed {}", this);
+                    return;
+                }
             }
             log.warn("WorkflowRequest: Retrying {} on attempt {}", this, x);
         }

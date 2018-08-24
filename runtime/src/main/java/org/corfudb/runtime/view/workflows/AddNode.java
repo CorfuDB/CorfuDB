@@ -3,11 +3,13 @@ package org.corfudb.runtime.view.workflows;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.concurrent.TimeoutException;
 
 /**
  *
@@ -30,12 +32,12 @@ public class AddNode extends WorkflowRequest {
     }
 
     @Override
-    protected UUID sendRequest(@Nonnull Layout layout) {
+    protected UUID sendRequest(@Nonnull ManagementClient managementClient) throws TimeoutException {
         // Select the current tail node and send an add node request to the orchestrator
-        CreateWorkflowResponse resp = getOrchestrator(layout).addNodeRequest(nodeForWorkflow);
-        log.info("sendRequest: requested to add {} on orchestrator {}:{}, layout {}",
-                nodeForWorkflow, getOrchestrator(layout).getRouter().getHost(),
-                getOrchestrator(layout).getRouter().getPort(), layout);
+        CreateWorkflowResponse resp = managementClient.addNodeRequest(nodeForWorkflow);
+        log.info("sendRequest: requested to add {} on orchestrator {}:{}",
+                nodeForWorkflow, managementClient.getRouter().getHost(),
+                managementClient.getRouter().getPort());
         return resp.getWorkflowId();
     }
 
@@ -43,6 +45,7 @@ public class AddNode extends WorkflowRequest {
     protected boolean verifyRequest(@Nonnull Layout layout) {
         // Verify that the node has been added and that the address space isn't
         // segmented
+        log.info("verifyRequest: {} to {}", this, layout);
         return runtime.getLayoutView().getLayout()
                 .getAllServers().contains(nodeForWorkflow)
                 && layout.getSegmentsForEndpoint(nodeForWorkflow).size()

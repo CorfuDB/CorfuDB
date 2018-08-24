@@ -20,6 +20,7 @@ public class ServerContextBuilder {
     boolean memory = true;
     String logPath = null;
     boolean noVerify = false;
+    boolean noSync = false;
 
     boolean tlsEnabled = false;
     boolean tlsMutualAuthEnabled = false;
@@ -37,6 +38,7 @@ public class ServerContextBuilder {
     String address = "test";
     int port = 9000;
     String seqCache = "1000";
+    String batchSize = "100";
     String managementBootstrapEndpoint = null;
     IServerRouter serverRouter;
     String numThreads = "0";
@@ -58,7 +60,8 @@ public class ServerContextBuilder {
                 .put("--memory", memory)
                 .put("--Threads", numThreads)
                 .put("--HandshakeTimeout", handshakeTimeout)
-                .put("--sequencer-cache-size", seqCache);
+                .put("--sequencer-cache-size", seqCache)
+                .put("--batch-size", batchSize);
         if (logPath != null) {
          builder.put("--log-path", logPath);
         }
@@ -67,6 +70,7 @@ public class ServerContextBuilder {
         }
          builder
                  .put("--no-verify", noVerify)
+                 .put("--no-sync", noSync)
                  .put("--address", address)
                  .put("--cache-heap-ratio", cacheSizeHeapRatio)
                  .put("--enable-tls", tlsEnabled)

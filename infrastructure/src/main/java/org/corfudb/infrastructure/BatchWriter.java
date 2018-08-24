@@ -31,8 +31,13 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
 
     static final int BATCH_SIZE = 50;
+
+    final boolean doSync;
+
     private StreamLog streamLog;
+
     private BlockingQueue<BatchWriterOperation> operationsQueue;
+
     final ExecutorService writerService = Executors
             .newSingleThreadExecutor(new ThreadFactoryBuilder()
                     .setDaemon(false)
@@ -53,9 +58,12 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
      * @param streamLog      stream log for writes (can be in memory or file)
      * @param epochWaterMark All operations stamped with epoch less than the epochWaterMark are
      *                       discarded.
+     * @param streamLog stream log for writes (can be in memory or file)
+     * @param doSync    If true, the batch writer will sync writes to secondary storage
      */
-    public BatchWriter(StreamLog streamLog, long epochWaterMark) {
+    public BatchWriter(StreamLog streamLog, long epochWaterMark, boolean doSync) {
         this.epochWaterMark = epochWaterMark;
+        this.doSync = doSync;
         this.streamLog = streamLog;
         operationsQueue = new LinkedBlockingQueue<>();
         writerService.submit(this::batchWriteProcessor);
@@ -176,6 +184,11 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
     }
 
     private void batchWriteProcessor() {
+
+        if (!doSync) {
+            log.warn("batchWriteProcessor: writes configured to not sync with secondary storage");
+        }
+
         try {
             BatchWriterOperation lastOp = null;
             int processed = 0;
@@ -191,7 +204,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
 
                     if (currOp == null || processed == BATCH_SIZE
                             || currOp == BatchWriterOperation.SHUTDOWN) {
-                        streamLog.sync(true);
+                        streamLog.sync(doSync);
                         log.trace("Sync'd {} writes", processed);
 
                         for (BatchWriterOperation operation : res) {

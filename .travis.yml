@@ -11,9 +11,6 @@ script:
 after_success:
 - bash <(curl -s https://codecov.io/bash)
 - ".travis_scripts/javadocs.sh"
-- ".travis_scripts/mvnrepo.sh"
-- ".travis_scripts/push_deb.sh"
-- ".travis_scripts/push_docker.sh"
 before_cache:
 - rm -rf $HOME/.m2/repository/org/corfudb
 cache:

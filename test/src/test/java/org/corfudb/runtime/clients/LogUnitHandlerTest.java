@@ -1,9 +1,27 @@
 package org.corfudb.runtime.clients;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+
+import java.io.File;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+
+import org.assertj.core.api.Condition;
 import org.corfudb.format.Types;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
@@ -19,26 +37,11 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
+import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
-
-import java.io.File;
-import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ExecutionException;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 
 /**
  * Created by mwei on 12/14/15.
@@ -326,9 +329,19 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
 
+        Condition<Throwable> conditionOverwrite = new Condition<>(e -> {
+            if (e.getCause().getClass().equals(OverwriteException.class)) {
+                OverwriteException oe = (OverwriteException) e.getCause();
+                return oe.getOverWriteCause().getId() == OverwriteCause.DIFF_DATA.getId();
+            } else {
+                return false;
+            }
+        }, "Expected overwrite cause to be DIFF_DATA");
+
         assertThatThrownBy(() -> client.fillHole(0).get())
                 .isInstanceOf(ExecutionException.class)
-                .hasCauseInstanceOf(OverwriteException.class);
+                .hasCauseInstanceOf(OverwriteException.class)
+                .has(conditionOverwrite);
     }
 
     @Test

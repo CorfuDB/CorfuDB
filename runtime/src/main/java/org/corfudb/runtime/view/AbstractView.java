@@ -6,12 +6,12 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.Nonnull;
+
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.Sleep;
 
@@ -121,29 +121,33 @@ public abstract class AbstractView {
                     throw new RuntimeException(re);
                 }
 
-                // Invoking the systemDownHandler if the client cannot connect to the server.
-                if (--systemDownTriggerCounter <= 0) {
-                    runtime.systemDownHandler.run();
-                }
-                runtime.invalidateLayout();
-                Sleep.sleepUninterruptibly(retryRate);
-
             } catch (InterruptedException ie) {
                 throw new UnrecoverableCorfuInterruptedError("Interrupted in layoutHelper", ie);
             } catch (ExecutionException ex) {
-                log.warn("Error executing remote call, invalidating view and retrying in {} ms",
-                        retryRate, ex);
-
-                // If SystemUnavailable exception is thrown by the layout.get() completable future,
-                // the exception will materialize as an ExecutionException. In that case, we need to propagate
-                // this exception.
-                if (ex.getCause() instanceof SystemUnavailableError) {
-                    throw (SystemUnavailableError) ex.getCause();
+                // If an error or an unchecked exception is thrown by the layout.get() completable
+                // future, the exception will materialize as an ExecutionException. In that case,
+                // we need to propagate this Error or unchecked exception.
+                if (ex.getCause() instanceof Error) {
+                    log.error("layoutHelper: Encountered error. Aborting layoutHelper", ex);
+                    throw (Error) ex.getCause();
                 }
 
-                runtime.invalidateLayout();
-                Sleep.sleepUninterruptibly(retryRate);
+                if (ex.getCause() instanceof RuntimeException) {
+                    log.error("layoutHelper: Encountered unchecked exception. "
+                            + "Aborting layoutHelper", ex);
+                    throw (RuntimeException) ex.getCause();
+                }
+
+                log.warn("layoutHelper: Error executing remote call, invalidating view and "
+                        + "retrying in {} ms", retryRate, ex);
             }
+
+            // Invoking the systemDownHandler if the client cannot connect to the server.
+            if (--systemDownTriggerCounter <= 0) {
+                runtime.systemDownHandler.run();
+            }
+            runtime.invalidateLayout();
+            Sleep.sleepUninterruptibly(retryRate);
         }
     }
 

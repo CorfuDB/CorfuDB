@@ -3,8 +3,27 @@ package org.corfudb.runtime;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+
+import java.lang.Thread.UncaughtExceptionHandler;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeoutException;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import javax.annotation.Nonnull;
+
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Data;
@@ -13,6 +32,7 @@ import lombok.Setter;
 import lombok.Singular;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.recovery.FastObjectLoader;
@@ -44,22 +64,6 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
-
-import javax.annotation.Nonnull;
-import java.lang.Thread.UncaughtExceptionHandler;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeoutException;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/9/15.
@@ -175,6 +179,12 @@ public class CorfuRuntime {
          * {@link Duration} before requests timeout.
          */
         @Default Duration requestTimeout = Duration.ofSeconds(5);
+
+        /**
+         * This timeout (in seconds) is used to detect servers that
+         * shutdown abruptly without terminating the connection properly.
+         */
+        @Default int idleConnectionTimeout = 30;
 
         /**
          * {@link Duration} before connections timeout.
@@ -783,7 +793,12 @@ public class CorfuRuntime {
                 }
             }
         } catch (TimeoutException | NetworkException | ShutdownException e) {
-            log.error("connect: failed to get version", e);
+            log.error("connect: failed to get version. Couldn't connect to server.", e);
+        } catch (Exception ex) {
+            // Because checkVersion is just an informational step (log purpose), we don't need to retry
+            // and we can actually ignore any exception while trying to fetch the server corfu version.
+            // If at any point we decide to abort upon server mismatch this logic must change.
+            log.error("connect: failed to get version.", ex);
         }
     }
 

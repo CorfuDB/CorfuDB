@@ -129,7 +129,9 @@ public class LogUnitServer extends AbstractServer {
             streamLog = new StreamLogFiles(serverContext, (Boolean) opts.get("--no-verify"));
         }
 
-        batchWriter = new BatchWriter(streamLog, serverContext.getLogUnitEpochWaterMark());
+
+        batchWriter = new BatchWriter(streamLog, serverContext.getLogUnitEpochWaterMark(),
+                !((Boolean) opts.get("--no-sync")));
 
         dataCache = Caffeine.<Long, ILogData>newBuilder()
                 .<Long, ILogData>weigher((k, v) -> ((LogData) v).getData() == null ? 1 : (
@@ -177,7 +179,7 @@ public class LogUnitServer extends AbstractServer {
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
 
         } catch (OverwriteException ex) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.payloadMsg(ex.getOverWriteCause().getId()));
         } catch (DataOutrankedException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
         } catch (ValueAdoptedException e) {
@@ -231,13 +233,14 @@ public class LogUnitServer extends AbstractServer {
         IServerRouter r) {
         try {
             long address = msg.getPayload().getAddress();
+            log.debug("fillHole: filling address {}, epoch {}", address, msg.getEpoch());
             LogData hole = LogData.getHole(address);
             hole.setEpoch(msg.getEpoch());
             dataCache.put(address, hole);
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
 
         } catch (OverwriteException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.msg());
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.payloadMsg(e.getOverWriteCause().getId()));
         } catch (DataOutrankedException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
         } catch (ValueAdoptedException e) {

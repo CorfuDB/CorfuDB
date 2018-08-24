@@ -72,7 +72,7 @@ public enum CorfuMsgType {
 
     WRITE_OK(50, TypeToken.of(CorfuMsg.class)),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),
-    ERROR_OVERWRITE(52, TypeToken.of(CorfuMsg.class)),
+    ERROR_OVERWRITE(52, new TypeToken<CorfuPayloadMsg<Integer>>(){}, true),
     ERROR_OOS(53, TypeToken.of(CorfuMsg.class)),
     ERROR_RANK(54, TypeToken.of(CorfuMsg.class)),
     ERROR_NOENTRY(55, TypeToken.of(CorfuMsg.class)),
@@ -97,9 +97,9 @@ public enum CorfuMsgType {
     HEARTBEAT_RESPONSE(76, new TypeToken<CorfuPayloadMsg<NodeView>>(){}, true),
     ORCHESTRATOR_REQUEST(77, new TypeToken<CorfuPayloadMsg<OrchestratorMsg>>() {}, true),
     ORCHESTRATOR_RESPONSE(78, new TypeToken<CorfuPayloadMsg<OrchestratorResponse>>() {}, true),
+    MANAGEMENT_LAYOUT_REQUEST(79, TypeToken.of(CorfuMsg.class), true),
 
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true),
-    ERROR_SHUTDOWN_EXCEPTION(201, TypeToken.of(CorfuMsg.class), true),
 
     // Handshake Messages
     HANDSHAKE_INITIATE(80, new TypeToken<CorfuPayloadMsg<HandshakeMsg>>() {}, true),

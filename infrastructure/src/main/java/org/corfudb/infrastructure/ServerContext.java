@@ -183,6 +183,7 @@ public class ServerContext implements AutoCloseable {
                 .saslPlainTextEnabled((Boolean) serverConfig.get("--enable-sasl-plain-text-auth"))
                 .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
                 .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
+                .bulkReadSize(Integer.valueOf((String) serverConfig.get("--batch-size")))
                 .build();
     }
 

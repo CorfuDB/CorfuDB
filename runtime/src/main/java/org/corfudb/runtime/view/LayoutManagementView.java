@@ -1,11 +1,12 @@
 package org.corfudb.runtime.view;
 
+import static org.corfudb.util.Utils.getMaxGlobalTail;
+
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.locks.ReentrantLock;
 
 import javax.annotation.Nonnull;
 
@@ -34,6 +35,10 @@ public class LayoutManagementView extends AbstractView {
 
     private volatile long prepareRank = 1L;
 
+    private final ReentrantLock recoverSequencerLock = new ReentrantLock();
+
+    private volatile long lastKnownSequencerEpoch = Layout.INVALID_EPOCH;
+
     /**
      * On restart, if MANAGEMENT_LAYOUT exists in the local datastore.
      * the Management Server attempts to recover the cluster from that layout.
@@ -43,9 +48,9 @@ public class LayoutManagementView extends AbstractView {
     public void recoverCluster(Layout recoveryLayout)
             throws QuorumUnreachableException, OutrankedException {
 
-        Layout newLayout = new Layout(recoveryLayout);
-        newLayout.setEpoch(recoveryLayout.getEpoch() + 1);
-        runLayoutReconfiguration(recoveryLayout, newLayout, true);
+        Layout layout = new Layout(recoveryLayout);
+        sealEpoch(layout);
+        attemptConsensus(layout);
     }
 
     /**
@@ -128,10 +133,8 @@ public class LayoutManagementView extends AbstractView {
                 layoutBuilder.addSequencerServer(endpoint);
             }
             if (isLogUnitServer) {
-                Layout.LayoutSegment latestSegment =
-                        currentLayout.getSegments().get(currentLayout.getSegments().size() - 1);
                 layoutBuilder.addLogunitServer(logUnitStripeIndex,
-                        getMaxGlobalTail(currentLayout, latestSegment),
+                        getMaxGlobalTail(currentLayout, runtime),
                         endpoint);
             }
             if (isUnresponsiveServer) {
@@ -176,10 +179,8 @@ public class LayoutManagementView extends AbstractView {
                     .getLogUnitClient(endpoint).resetLogUnit(currentLayout.getEpoch()));
 
             LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
-            Layout.LayoutSegment latestSegment =
-                    currentLayout.getSegments().get(currentLayout.getSegments().size() - 1);
             layoutBuilder.addLogunitServer(0,
-                    getMaxGlobalTail(currentLayout, latestSegment),
+                    getMaxGlobalTail(currentLayout, runtime),
                     endpoint);
             layoutBuilder.removeUnresponsiveServers(Collections.singleton(endpoint));
             newLayout = layoutBuilder.build();
@@ -290,7 +291,7 @@ public class LayoutManagementView extends AbstractView {
      * Attempts to force commit a new layout to the cluster.
      *
      * @param currentLayout the current layout
-     * @param forceLayout the new layout to force
+     * @param forceLayout   the new layout to force
      * @throws QuorumUnreachableException
      */
     public void forceLayout(@Nonnull Layout currentLayout, @Nonnull Layout forceLayout) {
@@ -380,48 +381,6 @@ public class LayoutManagementView extends AbstractView {
     }
 
     /**
-     * Fetches the max global log tail from the log unit cluster. This depends on the mode of
-     * replication being used.
-     * CHAIN: Block on fetch of global log tail from the head log unitin every stripe.
-     * QUORUM: Block on fetch of global log tail from a majority in every stripe.
-     *
-     * @param layout  Latest layout to get clients to fetch tails.
-     * @param segment Latest layout segment.
-     * @return The max global log tail obtained from the log unit servers.
-     */
-    private long getMaxGlobalTail(Layout layout, Layout.LayoutSegment segment) {
-        long maxTokenRequested = 0;
-
-        // Query the tail of the head log unit in every stripe.
-        if (segment.getReplicationMode().equals(Layout.ReplicationMode.CHAIN_REPLICATION)) {
-            for (Layout.LayoutStripe stripe : segment.getStripes()) {
-                maxTokenRequested = Math.max(maxTokenRequested,
-                        CFUtils.getUninterruptibly(
-                                runtime.getLayoutView().getRuntimeLayout(layout)
-                                        .getLogUnitClient(stripe.getLogServers().get(0))
-                                        .getTail()));
-
-            }
-        } else if (segment.getReplicationMode()
-                .equals(Layout.ReplicationMode.QUORUM_REPLICATION)) {
-            for (Layout.LayoutStripe stripe : segment.getStripes()) {
-                CompletableFuture<Long>[] completableFutures = stripe.getLogServers()
-                        .stream()
-                        .map(s -> runtime.getLayoutView().getRuntimeLayout(layout)
-                                .getLogUnitClient(s).getTail())
-                        .toArray(CompletableFuture[]::new);
-                QuorumFuturesFactory.CompositeFuture<Long> quorumFuture =
-                        QuorumFuturesFactory.getQuorumFuture(Comparator.naturalOrder(),
-                                completableFutures);
-                maxTokenRequested = Math.max(maxTokenRequested,
-                        CFUtils.getUninterruptibly(quorumFuture));
-
-            }
-        }
-        return maxTokenRequested;
-    }
-
-    /**
      * Reconfigures the sequencer.
      * If the primary sequencer has changed in the new layout,
      * the global tail of the log units are queried and used to set
@@ -434,43 +393,59 @@ public class LayoutManagementView extends AbstractView {
     public void reconfigureSequencerServers(Layout originalLayout, Layout newLayout,
                                             boolean forceReconfigure) {
 
-        long maxTokenRequested = 0L;
-        Map<UUID, Long> streamTails = Collections.emptyMap();
-        boolean bootstrapWithoutTailsUpdate = true;
+        boolean acquiredLocked = recoverSequencerLock.tryLock();
+        if (acquiredLocked) {
+            try {
 
-        // Reconfigure Primary Sequencer if required
-        if (forceReconfigure
-                || !originalLayout.getSequencers().get(0).equals(newLayout.getSequencers()
-                .get(0))) {
-            Layout.LayoutSegment latestSegment = newLayout.getSegments()
-                    .get(newLayout.getSegments().size() - 1);
-            maxTokenRequested = getMaxGlobalTail(newLayout, latestSegment);
+                // Avoids stale bootstrap requests from being processed.
+                if (newLayout.getEpoch() <= lastKnownSequencerEpoch) {
+                    log.warn("reconfigureSequencerServers: Sequencer bootstrap failed. "
+                            + "Already bootstrapped.");
+                    return;
+                }
 
-            FastObjectLoader fastObjectLoader = new FastObjectLoader(runtime);
-            fastObjectLoader.setRecoverSequencerMode(true);
-            fastObjectLoader.setLoadInCache(false);
+                long maxTokenRequested = -1L;
+                Map<UUID, Long> streamTails = Collections.emptyMap();
+                boolean bootstrapWithoutTailsUpdate = true;
 
-            // FastSMRLoader sets the logHead based on trim mark.
-            fastObjectLoader.setLogTail(maxTokenRequested);
-            fastObjectLoader.loadMaps();
-            streamTails = fastObjectLoader.getStreamTails();
-            verifyStreamTailsMap(streamTails);
+                // Reconfigure Primary Sequencer if required
+                if (forceReconfigure
+                        || !originalLayout.getPrimarySequencer()
+                        .equals(newLayout.getPrimarySequencer())) {
 
-            // Incrementing the maxTokenRequested value for sequencer reset.
-            maxTokenRequested++;
-            bootstrapWithoutTailsUpdate = false;
-        }
+                    FastObjectLoader fastObjectLoader = new FastObjectLoader(runtime);
+                    fastObjectLoader.setRecoverSequencerMode(true);
+                    fastObjectLoader.setLoadInCache(false);
 
-        // Configuring the new sequencer.
-        boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(
-                runtime.getLayoutView().getRuntimeLayout(newLayout)
-                        .getPrimarySequencerClient()
-                        .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch(),
-                                bootstrapWithoutTailsUpdate));
-        if (sequencerBootstrapResult) {
-            log.info("Sequencer bootstrap successful.");
+                    // FastSMRLoader sets the logHead based on trim mark.
+                    fastObjectLoader.loadMaps();
+                    maxTokenRequested = fastObjectLoader.getLogTail();
+                    streamTails = fastObjectLoader.getStreamTails();
+                    verifyStreamTailsMap(streamTails);
+
+                    // Incrementing the maxTokenRequested value for sequencer reset.
+                    maxTokenRequested++;
+                    bootstrapWithoutTailsUpdate = false;
+                }
+
+                // Configuring the new sequencer.
+                boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(
+                        runtime.getLayoutView().getRuntimeLayout(newLayout)
+                                .getPrimarySequencerClient()
+                                .bootstrap(maxTokenRequested, streamTails, newLayout.getEpoch(),
+                                        bootstrapWithoutTailsUpdate));
+                lastKnownSequencerEpoch = newLayout.getEpoch();
+                if (sequencerBootstrapResult) {
+                    log.info("reconfigureSequencerServers: Sequencer bootstrap successful.");
+                } else {
+                    log.warn("reconfigureSequencerServers: Sequencer bootstrap failed. "
+                            + "Already bootstrapped.");
+                }
+            } finally {
+                recoverSequencerLock.unlock();
+            }
         } else {
-            log.warn("Sequencer bootstrap failed. Already bootstrapped.");
+            log.info("reconfigureSequencerServers: Sequencer reconfiguration already in progress.");
         }
     }
 

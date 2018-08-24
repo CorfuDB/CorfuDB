@@ -140,18 +140,4 @@ public class BaseHandler implements IClient {
                 msg.getPayload().getThrowable());
         throw msg.getPayload().getThrowable();
     }
-
-    /**
-     * Handle a ERROR_SHUTDOWN_EXCEPTION response from the server.
-     *
-     * @param msg The shutdown exception message
-     * @param ctx The context the message was sent under
-     * @param r   A reference to the router
-     * @return none, throw a shutdown exception instead.
-     */
-    @ClientHandler(type = CorfuMsgType.ERROR_SHUTDOWN_EXCEPTION)
-    private static Object handleShutdownException(CorfuMsg msg, ChannelHandlerContext ctx,
-                                                  IClientRouter r) {
-        throw new ShutdownException();
-    }
 }
