@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log;
 import com.codahale.metrics.Counter;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.time.Duration;
@@ -29,7 +30,7 @@ public class StreamLogCompaction {
     /**
      * How many times log compaction executed
      */
-    private final Counter gcCounter = CorfuRuntime.getDefaultMetrics().counter(STREAM_COMPACT_METRIC);
+    private final Counter gcCounter = ServerContext.metrics.counter(STREAM_COMPACT_METRIC);
 
     /**
      * A scheduler, which is used to schedule periodic garbage collection.

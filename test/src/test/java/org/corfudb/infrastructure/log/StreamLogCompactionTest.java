@@ -1,8 +1,8 @@
 package org.corfudb.infrastructure.log;
 
-import com.codahale.metrics.MetricRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
@@ -39,12 +39,12 @@ public class StreamLogCompactionTest extends AbstractCorfuTest {
         TimeUnit.MILLISECONDS.sleep(timeout);
         compaction.shutdown();
 
-        long gcCounter = CorfuRuntime.getDefaultMetrics()
+        long gcCounter = ServerContext.getMetrics()
                 .getCounters()
                 .get(StreamLogCompaction.STREAM_COMPACT_METRIC)
                 .getCount();
 
-        final int expectedGcCounter = 2;
+        final long expectedGcCounter = 2;
         assertThat(gcCounter).isGreaterThanOrEqualTo(expectedGcCounter);
     }
 }
