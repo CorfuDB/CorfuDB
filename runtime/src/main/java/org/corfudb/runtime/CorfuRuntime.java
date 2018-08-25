@@ -356,6 +356,7 @@ public class CorfuRuntime {
     /**
      * A list of known layout servers.
      */
+    @Getter
     private List<String> layoutServers;
 
     /**

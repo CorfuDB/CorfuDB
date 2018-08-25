@@ -25,6 +25,11 @@ public class ClusterStatusReport {
         UP,
 
         /**
+         * Node is reachable but does not have complete data redundancy.
+         */
+        DB_SYNCING,
+
+        /**
          * Node is not reachable.
          */
         DOWN
