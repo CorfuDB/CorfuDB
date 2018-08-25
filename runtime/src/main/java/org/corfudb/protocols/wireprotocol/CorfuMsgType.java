@@ -1,20 +1,18 @@
 package org.corfudb.protocols.wireprotocol;
 
 import com.google.common.reflect.TypeToken;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
+import org.corfudb.runtime.view.Layout;
 
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
-
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-
-import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
-import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
-import org.corfudb.runtime.view.Layout;
 
 /**
  * Created by mwei on 8/8/16.
@@ -109,7 +107,6 @@ public enum CorfuMsgType {
 
     public final int type;
     public final TypeToken<? extends CorfuMsg> messageType;
-    //public final Class<? extends AbstractServer> handler;
     public Boolean ignoreEpoch = false;
 
     public <T> CorfuPayloadMsg<T> payloadMsg(T payload) {
