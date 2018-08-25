@@ -11,6 +11,7 @@ import java.lang.Thread.UncaughtExceptionHandler;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -24,12 +25,15 @@ import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Data;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.Singular;
+import lombok.ToString;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
@@ -49,6 +53,7 @@ import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutManagementView;
@@ -125,6 +130,13 @@ public class CorfuRuntime {
 
         /** Sets expireAfterAccess and expireAfterWrite in seconds. */
         @Default long cacheExpiryTime = Long.MAX_VALUE;
+
+        /** Sets the period of retrieving the latest trim mark in minutes. */
+        @Default Duration trimMarkSyncPeriod = Duration.ofMinutes(10);
+
+        /** Sets the period of trimming the resolvedQueues in minutes. **/
+        // FIXME: Remove this with the Stream Layer refactor.
+        @Default Duration resolvedStreamTrimTimeout = Duration.ofMinutes(120);
         // endregion
 
         // region Handshake Parameters
@@ -344,6 +356,7 @@ public class CorfuRuntime {
     /**
      * A list of known layout servers.
      */
+    @Getter
     private List<String> layoutServers;
 
     /**
@@ -351,6 +364,42 @@ public class CorfuRuntime {
      */
     @Getter
     private NodeRouterPool nodeRouterPool;
+
+    /**
+     * Trim Snapshot contains the address at which the log was trimmed and the timestamp at which
+     * the runtime learnt the trim.
+     * FIXME: This would be deprecated with the introduction of the Stream Layer refactoring.
+     */
+    @ToString
+    @AllArgsConstructor
+    public class TrimSnapshot {
+        public final long trimMark;
+        public final long trimTimestamp;
+    }
+
+    /**
+     * A linked list to keep a record of the trim snapshots learnt by the runtime.
+     * These snapshots are cleared when they expire after
+     * {@link CorfuRuntimeParameters#resolvedStreamTrimTimeout}
+     */
+    @Getter
+    private final LinkedList<TrimSnapshot> trimSnapshotList = new LinkedList<>();
+
+    /**
+     * Adds the trim snapshot to the linked list.
+     *
+     * @param trimMark  Address at which the log was trimmed.
+     * @param timestamp Timestamp at which the trim was learnt.
+     */
+    public void addTrimSnapshot(@NonNull long trimMark, @NonNull long timestamp) {
+        trimSnapshotList.addLast(new TrimSnapshot(trimMark, timestamp));
+    }
+
+    /**
+     * Trim snapshot which was recorded more than {@link CorfuRuntimeParameters#resolvedStreamTrimTimeout}
+     * duration ago and can now be used the trim the resolvedQueue safely.
+     */
+    public volatile long matureTrimMark = Address.NON_ADDRESS;
 
     /**
      * A completable future containing a layout, when completed.
@@ -530,6 +579,8 @@ public class CorfuRuntime {
                 log.error("Runtime shutting down. Exception in terminating fetchLayout: {}", e);
             }
         }
+        // Clear the cache and stop running tasks.
+        this.getAddressSpaceView().shutdown();
 
         stop(true);
 
