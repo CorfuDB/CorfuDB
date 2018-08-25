@@ -80,8 +80,7 @@ public class WorkflowIT extends AbstractIT {
             table.put(String.valueOf(x), String.valueOf(x));
         }
 
-        n1Rt.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
-                timeout, pollPeriod);
+        n1Rt.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry, timeout, pollPeriod);
 
         n1Rt.invalidateLayout();
         final int clusterSizeN2 = 2;

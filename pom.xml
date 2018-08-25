@@ -11,6 +11,7 @@
         <module>runtime</module>
         <module>format</module>
         <module>cmdlets</module>
+        <module>integtest</module>
         <module>test</module>
         <module>annotationProcessor</module>
         <module>annotations</module>
