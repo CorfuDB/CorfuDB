@@ -130,7 +130,7 @@ modify_user_and_permission () {
 
 generate_artifacts () {
     #generate keystore password
-    KEYSTORE_PASSWORD=`head /dev/urandom | tr -dc A-Za-z0-9 | head -c $PASSWORD_LENGTH ; echo ''`
+    KEYSTORE_PASSWORD=`openssl rand -base64 $PASSWORD_LENGTH`
     printf $KEYSTORE_PASSWORD > $KEYSTORE_PASS
 
     #generate keystore
@@ -143,7 +143,7 @@ generate_artifacts () {
     openssl x509 -inform der -in $CERT_CER -out $CERT_PEM
 
     #generate trust store password
-    TRUSTSTORE_PASSWORD=`head /dev/urandom | tr -dc A-Za-z0-9 | head -c $PASSWORD_LENGTH ; echo ''`
+    TRUSTSTORE_PASSWORD=`openssl rand -base64 $PASSWORD_LENGTH`
     printf $TRUSTSTORE_PASSWORD > $TRUSTSTORE_PASS
 
     #generate trust store
