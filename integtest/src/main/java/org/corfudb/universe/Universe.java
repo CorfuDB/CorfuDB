@@ -37,7 +37,7 @@ public class Universe {
                 .build();
     }
 
-    public VmCluster deployVmCluster(ClusterParams clusterParams){
+    public VmCluster buildVmCluster(ClusterParams clusterParams){
         throw new UnsupportedOperationException();
     }
 
