@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -21,11 +22,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NetworkMetrics;
 import org.corfudb.protocols.wireprotocol.NodeView;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.exceptions.WorkflowResultUnknownException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.workflows.AddNode;
 import org.corfudb.runtime.view.workflows.ForceRemoveNode;
 import org.corfudb.runtime.view.workflows.HealNode;
@@ -162,13 +168,21 @@ public class ManagementView extends AbstractView {
      */
     private ClusterStatus getLogUnitServersClusterHealth(Layout layout,
                                                          Set<String> peerResponsiveNodes) {
+        // logUnitRedundancyStatus marks the cluster as degraded if any of the nodes is performing
+        // stateTransfer and is in process of achieving full redundancy.
+        ClusterStatus logUnitRedundancyStatus = peerResponsiveNodes.stream()
+                .anyMatch(s -> getLogUnitNodeStatusInLayout(layout, s) == NodeStatus.DB_SYNCING)
+                ? ClusterStatus.DEGRADED : ClusterStatus.STABLE;
         // Check the availability of the log servers in all segments as reads to all addresses
         // should be accessible.
-        return layout.getSegments().stream()
+        ClusterStatus logunitClusterStatus = layout.getSegments().stream()
                 .map(segment -> segment.getReplicationMode()
                         .getClusterHealthForSegment(segment, peerResponsiveNodes))
                 .max(Comparator.comparingInt(ClusterStatus::getHealthValue))
                 .get();
+        // Gets max of cluster status and logUnitRedundancyStatus.
+        return Stream.of(logunitClusterStatus, logUnitRedundancyStatus)
+                .max(Comparator.comparingInt(ClusterStatus::getHealthValue)).get();
     }
 
     /**
@@ -222,6 +236,106 @@ public class ManagementView extends AbstractView {
     }
 
     /**
+     * Attempts to fetch the layout with the highest epoch.
+     * This does not consume the corfu runtime layout as that can get stuck in an infinite retry
+     * loop.
+     *
+     * @param layoutServers Layout Servers to fetch the layout from.
+     * @return Latest layout from the servers or null if none of them responded with a layout.
+     */
+    private Layout getHighestEpochLayout(List<String> layoutServers) {
+        Layout layout = null;
+        Map<String, CompletableFuture<Layout>> layoutFuturesMap = new HashMap<>();
+        // Get layout futures for layout requests to all layout servers.
+        for (String server : layoutServers) {
+            try {
+                // Router creation can throw a NetworkException.
+                IClientRouter router = runtime.getRouter(server);
+                layoutFuturesMap.put(server,
+                        new LayoutClient(router, Layout.INVALID_EPOCH).getLayout());
+            } catch (NetworkException e) {
+                log.error("getClusterStatus: Exception encountered connecting to {}. ",
+                        server, e);
+                CompletableFuture<Layout> cf = new CompletableFuture<>();
+                cf.completeExceptionally(e);
+                layoutFuturesMap.put(server, cf);
+            }
+        }
+
+        // Wait on the Completable futures and retain the layout with the highest epoch.
+        for (Entry<String, CompletableFuture<Layout>> entry : layoutFuturesMap.entrySet()) {
+            try {
+                Layout nodeLayout = entry.getValue().get();
+                log.debug("Server:{} responded with: {}", entry.getKey(), nodeLayout);
+
+                if (layout == null || nodeLayout.getEpoch() > layout.getEpoch()) {
+                    layout = nodeLayout;
+                }
+            } catch (InterruptedException ie) {
+                throw new UnrecoverableCorfuInterruptedError(ie);
+            } catch (ExecutionException ee) {
+                log.error("getClusterStatus: Error while fetching layout from {}.",
+                        entry.getKey(), ee);
+            }
+        }
+        log.info("getHighestEpochLayout: Layout for cluster status query: {}", layout);
+        return layout;
+    }
+
+    /**
+     * Returns a LogUnit Server's status in the layout. It is marked as:
+     * UP if it is present in all segments or none of the segments and not in the unresponsive list,
+     * NOTE: A node is UP if its not in any of the segments as it might not be a LogUnit component
+     * but has only the Layout or the Sequencer (or both) component(s) active.
+     * DB_SYNCING if it is present in some but not all or none of the segments,
+     * DOWN if it is present in the unresponsive servers list.
+     *
+     * @param layout Layout to check.
+     * @param server LogUnit Server endpoint.
+     * @return NodeStatus with respect to the layout specified.
+     */
+    private NodeStatus getLogUnitNodeStatusInLayout(Layout layout, String server) {
+        if (layout.getUnresponsiveServers().contains(server)) {
+            return NodeStatus.DOWN;
+        }
+        final int segmentsCount = layout.getSegments().size();
+        int nodeInSegments = 0;
+        for (LayoutSegment layoutSegment : layout.getSegments()) {
+            if (layoutSegment.getAllLogServers().contains(server)) {
+                nodeInSegments++;
+            }
+        }
+        return nodeInSegments == segmentsCount || nodeInSegments == 0
+                ? NodeStatus.UP : NodeStatus.DB_SYNCING;
+    }
+
+    /**
+     * Create node status map.
+     * Assigns a node status to all the nodes in the layout.
+     * UP: If the node is responsive and present in all the segments OR present in none (for cases
+     * where a node is a Layout or Sequencer Server only and does not possess a LogUnit component.)
+     * DB_SYNCING: If the node is present in a few segments but not all. This node is syncing data.
+     * DOWN: If the node is unresponsive.
+     *
+     * @param layout            Layout used to compute cluster status
+     * @param responsiveServers Set of responsive servers excluding unresponsive Servers list.
+     * @param allServers        All servers in the layout.
+     * @return Map of nodes mapped to their status.
+     */
+    private Map<String, NodeStatus> createNodeStatusMap(Layout layout,
+                                                        Set<String> responsiveServers,
+                                                        Set<String> allServers) {
+        Map<String, NodeStatus> nodeStatusMap = new HashMap<>();
+        for (String server : allServers) {
+            nodeStatusMap.put(server, NodeStatus.DOWN);
+            if (responsiveServers.contains(server)) {
+                nodeStatusMap.put(server, getLogUnitNodeStatusInLayout(layout, server));
+            }
+        }
+        return nodeStatusMap;
+    }
+
+    /**
      * Gets the cluster status by pinging each node.
      * These pings are then compared to the layout to decide whether the cluster is:
      * STABLE, DEGRADED OR UNAVAILABLE.
@@ -233,9 +347,22 @@ public class ManagementView extends AbstractView {
      * @return ClusterStatusReport
      */
     public ClusterStatusReport getClusterStatus() {
-        RuntimeLayout runtimeLayout =
-                new RuntimeLayout(runtime.getLayoutView().getLayout(), runtime);
-        Layout layout = runtimeLayout.getLayout();
+
+        List<String> layoutServers
+                = new ArrayList<>(runtime.getLayoutServers());
+        Layout layout = getHighestEpochLayout(layoutServers);
+
+        // If layout is null, none of the existing layout servers have a layout.
+        if (layout == null) {
+            return new ClusterStatusReport(null,
+                    layoutServers.stream().collect(Collectors.toMap(
+                            endpoint -> endpoint,
+                            node -> NodeStatus.DOWN)),
+                    ClusterStatus.UNAVAILABLE);
+        }
+
+        RuntimeLayout runtimeLayout = new RuntimeLayout(layout, runtime);
+
         // All configured nodes.
         Set<String> allNodes = new HashSet<>(layout.getAllServers());
 
@@ -295,9 +422,9 @@ public class ManagementView extends AbstractView {
                 .map(Entry::getKey)
                 .collect(Collectors.toSet());
 
-        return new ClusterStatusReport(layout, allNodes.stream()
-                .collect(Collectors.toMap(o -> o,
-                        t -> responsiveEndpoints.contains(t) ? NodeStatus.UP : NodeStatus.DOWN)),
-                clusterStatus);
+        Map<String, NodeStatus> nodeStatusMap
+                = createNodeStatusMap(layout, responsiveEndpoints, allNodes);
+
+        return new ClusterStatusReport(layout, nodeStatusMap, clusterStatus);
     }
 }
