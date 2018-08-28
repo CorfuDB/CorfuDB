@@ -424,7 +424,7 @@ public class CorfuRuntime {
     private volatile boolean isShutdown = false;
 
     @Getter
-    private static MetricRegistry defaultMetrics = new MetricRegistry();
+    private static final MetricRegistry defaultMetrics = new MetricRegistry();
     @Getter
     @Setter
     private MetricRegistry metrics = new MetricRegistry();
