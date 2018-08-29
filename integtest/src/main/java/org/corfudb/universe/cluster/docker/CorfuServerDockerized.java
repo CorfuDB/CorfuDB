@@ -83,6 +83,7 @@ public class CorfuServerDockerized implements CorfuServer {
             try {
                 docker.stopContainer(id, (int) timeout.getSeconds());
             } catch (DockerException | InterruptedException e) {
+                Thread.currentThread().interrupt();
                 throw new NodeException("Can't stop Corfu server", e);
             }
         });
@@ -102,6 +103,7 @@ public class CorfuServerDockerized implements CorfuServer {
             try {
                 docker.killContainer(id);
             } catch (DockerException | InterruptedException ex) {
+                Thread.currentThread().interrupt();
                 throw new NodeException("Can't kill Corfu server", ex);
             }
         });
@@ -123,6 +125,7 @@ public class CorfuServerDockerized implements CorfuServer {
 
             docker.startContainer(id);
         } catch (InterruptedException | DockerException e) {
+            Thread.currentThread().interrupt();
             throw new NodeException("Can't start a container", e);
         }
 

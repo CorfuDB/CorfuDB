@@ -16,8 +16,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.cluster.Cluster.ClusterParams;
-import static org.corfudb.universe.node.CorfuServer.Persistence;
 import static org.corfudb.universe.node.CorfuServer.Mode;
+import static org.corfudb.universe.node.CorfuServer.Persistence;
 import static org.corfudb.universe.node.CorfuServer.ServerParams;
 import static org.corfudb.universe.service.Service.ServiceParams;
 

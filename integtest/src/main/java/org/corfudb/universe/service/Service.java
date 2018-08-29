@@ -8,8 +8,8 @@ import org.corfudb.universe.node.Node;
 
 import java.time.Duration;
 
+import static org.corfudb.universe.node.CorfuServer.ServerParams;
 import static org.corfudb.universe.node.Node.NodeParams;
-import static org.corfudb.universe.node.CorfuServer.*;
 
 /**
  * This provides an interface as an abstraction for a logical service that groups a list of {@link Node}s of the same

@@ -17,7 +17,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import static lombok.Builder.Default;
 
@@ -106,6 +105,7 @@ public class DockerCluster implements Cluster {
             try {
                 docker.createNetwork(networkConfig);
             } catch (DockerException | InterruptedException e) {
+                Thread.currentThread().interrupt();
                 throw new ClusterException("Cannot setup docker network.", e);
             }
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -127,6 +127,7 @@ public class DockerCluster implements Cluster {
             try {
                 docker.removeNetwork(clusterParams.getNetworkName());
             } catch (DockerException | InterruptedException e) {
+                Thread.currentThread().interrupt();
                 throw new ClusterException(
                         String.format("Cannot shutdown docker network: %s.", clusterParams.getNetworkName()),
                         e

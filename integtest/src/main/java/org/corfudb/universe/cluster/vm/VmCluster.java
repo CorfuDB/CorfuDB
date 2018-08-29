@@ -3,7 +3,6 @@ package org.corfudb.universe.cluster.vm;
 import com.google.common.collect.ImmutableList;
 import org.corfudb.universe.cluster.Cluster;
 import org.corfudb.universe.cluster.ClusterException;
-import org.corfudb.universe.node.Node;
 import org.corfudb.universe.service.Service;
 
 /**

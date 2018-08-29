@@ -5,8 +5,8 @@ import com.spotify.docker.client.DockerClient;
 import lombok.Builder;
 import lombok.Getter;
 import org.corfudb.universe.cluster.docker.CorfuServerDockerized;
-import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.CorfuServer;
+import org.corfudb.universe.node.Node;
 
 import java.time.Duration;
 import java.util.ArrayList;

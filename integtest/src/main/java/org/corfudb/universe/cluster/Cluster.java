@@ -69,8 +69,6 @@ public interface Cluster {
         @Default
         private final Duration timeout = Duration.ofSeconds(TIMEOUT_IN_SECONDS);
 
-        private final int port;
-
         /**
          * Returns the configuration of a particular service at given index
          *

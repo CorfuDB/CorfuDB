@@ -1,9 +1,9 @@
 package org.corfudb.universe;
 
 import com.spotify.docker.client.DockerClient;
+import org.corfudb.universe.cluster.docker.DockerCluster;
 import org.corfudb.universe.cluster.process.ProcessCluster;
 import org.corfudb.universe.cluster.vm.VmCluster;
-import org.corfudb.universe.cluster.docker.DockerCluster;
 
 import static org.corfudb.universe.cluster.Cluster.ClusterParams;
 
