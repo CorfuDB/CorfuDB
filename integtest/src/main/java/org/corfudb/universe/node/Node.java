@@ -12,7 +12,6 @@ public interface Node {
      * a new immutable instance of the node.
      *
      * @return a new instance of node with the new state.
-     *
      * @throws NodeException thrown when can not deploy {@link Node}
      */
     Node deploy() throws NodeException;

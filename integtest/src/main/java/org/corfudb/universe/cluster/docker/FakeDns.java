@@ -57,8 +57,8 @@ public class FakeDns {
     /**
      * Install the fake DNS resolver into the Java runtime.
      */
-    public synchronized void install() {
-        if (installed) return;
+    public synchronized FakeDns install() {
+        if (installed) return this;
         try {
             try {
                 // Override the NameService in Java 9 or later.
@@ -100,6 +100,8 @@ public class FakeDns {
             throw new RuntimeException(e);
         }
         installed = true;
+
+        return this;
     }
 
     /**

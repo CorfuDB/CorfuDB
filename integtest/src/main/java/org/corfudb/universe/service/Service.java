@@ -3,6 +3,7 @@ package org.corfudb.universe.service;
 import com.google.common.collect.ImmutableList;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import org.corfudb.universe.node.Node;
 
@@ -14,14 +15,13 @@ import static org.corfudb.universe.node.Node.NodeParams;
 /**
  * This provides an interface as an abstraction for a logical service that groups a list of {@link Node}s of the same
  * type.
- *
+ * <p>
  * The followings are the main functionalities provided by this class: *
- *
+ * <p>
  * DEPLOY: deploys a service representing a collection nodes using the provided configuration in {@link ServiceParams}
  * STOP: stops a service gracefully within the provided timeout
  * KILL: kills a service immediately
  * UNLINK: unlinks a node from the service by removing it from the collection of nodes
- *
  */
 public interface Service {
 
@@ -48,6 +48,7 @@ public interface Service {
 
     /**
      * Unlink the node from the service by removing the node.
+     *
      * @param node
      */
     void unlink(Node node);
@@ -64,11 +65,12 @@ public interface Service {
      *
      * @return an {@link ImmutableList} of {@link Node}s.
      */
-    ImmutableList<Node> nodes();
+    <T extends Node> ImmutableList<T> nodes();
 
     @AllArgsConstructor
     @Getter
     @Builder
+    @EqualsAndHashCode
     class ServiceParams<T extends NodeParams> {
         private final String name;
         private final ImmutableList<T> nodes;

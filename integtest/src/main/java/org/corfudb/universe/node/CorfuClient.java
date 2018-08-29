@@ -1,6 +1,7 @@
 package org.corfudb.universe.node;
 
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
 /**
@@ -11,10 +12,8 @@ public interface CorfuClient extends Node {
 
     @Builder
     @Getter
+    @EqualsAndHashCode
     class ClientParams implements NodeParams {
         private final String host;
-        public String getHost() {
-            return this.host;
-        }
     }
 }

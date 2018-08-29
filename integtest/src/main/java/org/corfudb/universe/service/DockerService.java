@@ -67,7 +67,7 @@ public class DockerService implements Service {
     }
 
     @Override
-    public ImmutableList<Node> nodes() {
+    public ImmutableList<? extends Node> nodes() {
         return nodes;
     }
 }

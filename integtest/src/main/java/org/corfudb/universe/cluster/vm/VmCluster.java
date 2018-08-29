@@ -1,6 +1,6 @@
 package org.corfudb.universe.cluster.vm;
 
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import org.corfudb.universe.cluster.Cluster;
 import org.corfudb.universe.cluster.ClusterException;
 import org.corfudb.universe.service.Service;
@@ -27,7 +27,12 @@ public class VmCluster implements Cluster {
     }
 
     @Override
-    public ImmutableList<Service> getServices() {
+    public ImmutableMap<String, Service> services() {
+        throw new UnsupportedOperationException("Not implemented");
+    }
+
+    @Override
+    public Service getService(String serviceName) {
         throw new UnsupportedOperationException("Not implemented");
     }
 }

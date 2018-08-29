@@ -2,8 +2,16 @@ package org.corfudb.universe.node;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.ToString;
+import org.corfudb.runtime.view.Layout;
 import org.slf4j.event.Level;
+
+import java.time.Duration;
+import java.util.Optional;
+
+import static lombok.EqualsAndHashCode.Exclude;
 
 /**
  * Represent a Corfu server implementation of {@link Node} used in the {@link org.corfudb.universe.cluster.Cluster}.
@@ -13,6 +21,16 @@ public interface CorfuServer extends Node {
     @Override
     CorfuServer deploy() throws NodeException;
 
+    boolean addNode(CorfuServer server);
+
+    boolean removeNode(CorfuServer server);
+
+    ServerParams getParams();
+
+    Optional<Layout> getLayout();
+
+    void connectCorfuRuntime();
+
     enum Mode {
         SINGLE, CLUSTER
     }
@@ -21,25 +39,32 @@ public interface CorfuServer extends Node {
         DISK, MEMORY
     }
 
-    ServerParams getParams();
-
     @Builder
     @Getter
     @AllArgsConstructor
+    @EqualsAndHashCode
+    @ToString
     class ServerParams implements NodeParams {
-
+        @Exclude
         private final String logDir;
         private final int port;
         private final Mode mode;
         private final Persistence persistence;
+        @Exclude
         private final Level logLevel;
-        private final String host;
+
+        @Exclude
+        private final int workflowNumRetry;
+        @Exclude
+        private final Duration timeout;
+        @Exclude
+        private final Duration pollPeriod;
 
         public String getGenericName() {
             return "node" + port;
         }
 
-        public String getEndpoint(){
+        public String getEndpoint() {
             return getGenericName() + ":" + port;
         }
     }
