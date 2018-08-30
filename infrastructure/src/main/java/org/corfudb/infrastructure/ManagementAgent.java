@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -84,7 +85,7 @@ public class ManagementAgent {
      * To dispatch initialization tasks for recovery and sequencer bootstrap.
      */
     @Getter
-    private Thread initializationTaskThread;
+    private final Thread initializationTaskThread;
     /**
      * Detection Task Scheduler Service
      * This service schedules the following tasks every policyExecuteInterval (1 sec):
@@ -97,7 +98,7 @@ public class ManagementAgent {
      * To dispatch tasks for failure or healed nodes detection.
      */
     @Getter
-    private ExecutorService detectionTaskWorkers;
+    private final ExecutorService detectionTaskWorkers;
     /**
      * Future for periodic failure and healed nodes detection task.
      */
@@ -113,8 +114,10 @@ public class ManagementAgent {
     /**
      * Future which is reset every time a new task to bootstrap the sequencer is launched by the
      * ManagementAgent. This is to avoid multiple bootstrap requests.
+     * Using AtomicReference here to avoid multiple sequencer recovery tasks being triggered.
      */
-    private volatile CompletableFuture<Boolean> sequencerRecoveryFuture;
+    private final AtomicReference<Future<Boolean>> sequencerRecoveryFuture
+            = new AtomicReference<>(CompletableFuture.completedFuture(true));
 
     /**
      * The management agent attempts to bootstrap a NOT_READY sequencer if the
@@ -198,7 +201,7 @@ public class ManagementAgent {
         this.reconfigurationEventHandler = new ReconfigurationEventHandler();
 
         final int managementServiceCount = 1;
-        final int detectionWorkersCount = 2;
+        final int detectionWorkersCount = 3;
 
         this.detectionTasksScheduler = Executors.newScheduledThreadPool(
                 managementServiceCount,
@@ -223,8 +226,6 @@ public class ManagementAgent {
                         .setNameFormat(serverContext.getThreadPrefix() + "LocalMetricsPolling")
                         .build());
 
-        this.sequencerRecoveryFuture = CompletableFuture.completedFuture(true);
-
         // Creating the initialization task thread.
         // This thread pool is utilized to dispatch one time recovery and sequencer bootstrap tasks.
         // One these tasks finish successfully, they initiate the detection tasks.
@@ -242,23 +243,26 @@ public class ManagementAgent {
      * a task in progress, this is a no-op.
      *
      * @param layout Layout to use to bootstrap the primary sequencer.
-     * @return Completable future which completes when the task completes successfully or with a
-     * failure.
+     * @return Future which completes when the task completes successfully or with a failure.
      */
-    public CompletableFuture<Boolean> triggerSequencerBootstrap(@NonNull Layout layout) {
-        if (sequencerRecoveryFuture.isDone()) {
-            this.sequencerRecoveryFuture = CompletableFuture.supplyAsync(() -> {
-                try {
-                    getCorfuRuntime().getLayoutManagementView()
-                            .reconfigureSequencerServers(layout, layout, true);
-                } catch (Exception e) {
-                    log.error("triggerSequencerBootstrap: Failed with Exception: ", e);
-                }
-                return true;
-            });
-        }
-        log.info("triggerSequencerBootstrap: a bootstrap task is already in progress.");
-        return this.sequencerRecoveryFuture;
+    public Future<Boolean> triggerSequencerBootstrap(@NonNull Layout layout) {
+        return sequencerRecoveryFuture.updateAndGet(sequencerRecovery -> {
+            if (sequencerRecovery.isDone()) {
+                return detectionTaskWorkers.submit(() -> {
+                    log.info("triggerSequencerBootstrap: a bootstrap task is triggered.");
+                    try {
+                        getCorfuRuntime().getLayoutManagementView()
+                                .reconfigureSequencerServers(layout, layout, true);
+                    } catch (Exception e) {
+                        log.error("triggerSequencerBootstrap: Failed with Exception: ", e);
+                    }
+                    return true;
+                });
+            }
+
+            log.info("triggerSequencerBootstrap: a bootstrap task is already in progress.");
+            return sequencerRecovery;
+        });
     }
 
     /**
@@ -591,7 +595,9 @@ public class ManagementAgent {
 
     private SequencerStatus getPrimarySequencerStatus(Layout layout, PollReport pollReport) {
         String primarySequencer = layout.getSequencers().get(0);
-        NodeView nodeView = pollReport.getNodeViewMap().get(primarySequencer);
+        // Fetches nodeView from map or creates a default NodeView object.
+        NodeView nodeView = pollReport.getNodeViewMap().getOrDefault(primarySequencer,
+                NodeView.getDefaultNodeView(NodeLocator.parseString(primarySequencer)));
         // If we have a stale poll report, we should discard this and continue polling.
         if (layout.getEpoch() > pollReport.getPollEpoch()) {
             log.warn("getPrimarySequencerStatus: Received poll report for epoch {} but currently "
@@ -756,7 +762,8 @@ public class ManagementAgent {
             } catch (InterruptedException | ExecutionException e) {
                 // Expected wrong epoch exception if layout server fell behind and has stale
                 // layout and server epoch.
-                log.warn("updateTrailingLayoutServers: layout fetch failed: {}", e);
+                log.warn("updateTrailingLayoutServers: layout fetch from {} failed: {}",
+                        layoutServer, e);
             }
 
             // Do nothing if this layout server is updated with the latestLayout.

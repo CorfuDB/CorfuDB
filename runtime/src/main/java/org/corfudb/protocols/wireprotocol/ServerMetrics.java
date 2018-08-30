@@ -40,4 +40,14 @@ public class ServerMetrics implements ICorfuPayload<ServerMetrics> {
         ICorfuPayload.serialize(buf, endpoint.toString());
         ICorfuPayload.serialize(buf, sequencerMetrics);
     }
+
+    /**
+     * Gets a default ServerMetrics object with default SequencerMetrics.
+     *
+     * @param endpoint Endpoint for the ServerMetrics.
+     * @return Default ServerMetrics.
+     */
+    public static ServerMetrics getDefaultServerMetrics(NodeLocator endpoint) {
+        return new ServerMetrics(endpoint, SequencerMetrics.getDefaultSequencerMetrics());
+    }
 }

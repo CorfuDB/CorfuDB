@@ -49,7 +49,7 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
 
-    static public Properties PROPERTIES;
+    public static final Properties PROPERTIES = new Properties();
 
     public static final String TEST_SEQUENCE_LOG_PATH = CORFU_LOG_PATH + File.separator + "testSequenceLog";
 
@@ -57,7 +57,7 @@ public class AbstractIT extends AbstractCorfuTest {
         CorfuRuntime.overrideGetRouterFunction = null;
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         InputStream input = classLoader.getResourceAsStream("CorfuDB.properties");
-        PROPERTIES = new Properties();
+
         try {
             PROPERTIES.load(input);
         } catch (IOException e) {
@@ -274,18 +274,34 @@ public class AbstractIT extends AbstractCorfuTest {
         }
     }
 
+    /**
+     * This is a helper class for setting up the properties of a CorfuServer and
+     * creating an instance of a Corfu Server accordingly.
+     */
     @Getter
     @Setter
     @Accessors(chain = true)
     public static class CorfuServerRunner {
 
-        private boolean single = true;
-        private String logLevel = "INFO";
         private String host = DEFAULT_HOST;
         private int port = DEFAULT_PORT;
-        private String managementBootstrap = null;
-        private String logPath = null;
 
+        private boolean single = true;
+        private boolean tlsEnabled = false;
+        private String keyStore = null;
+        private String keyStorePassword = null;
+        private String logLevel = "INFO";
+        private String logPath = null;
+        private String managementBootstrap = null;
+        private String trustStore = null;
+        private String trustStorePassword = null;
+
+
+        /**
+         * Create a command line string according to the properties set for a Corfu Server
+         * Instance
+         * @return command line including options that captures the properties of Corfu Server instance
+         */
         public String getOptionsString() {
             StringBuilder command = new StringBuilder();
             command.append("-a ").append(host);
@@ -300,11 +316,33 @@ public class AbstractIT extends AbstractCorfuTest {
             if (managementBootstrap != null) {
                 command.append(" -M ").append(managementBootstrap);
             }
+            if (tlsEnabled) {
+                command.append(" -e");
+                if (keyStore != null) {
+                    command.append(" -u ").append(keyStore);
+                }
+                if (keyStorePassword != null) {
+                    command.append(" -f ").append(keyStorePassword);
+                }
+                if (trustStore != null) {
+                    command.append(" -r ").append(trustStore);
+                }
+                if (trustStorePassword != null) {
+                    command.append(" -w ").append(trustStorePassword);
+                }
+            }
             command.append(" -d ").append(logLevel).append(" ")
                     .append(port);
             return command.toString();
         }
 
+        /**
+         * Creates a server with the options set according to the properties of this Corfu server instance
+         *
+         * @return a {@link Process} running a Corfu server as it is setup through the properties of
+         *         the instance on which this method is called.
+         * @throws IOException
+         */
         public Process runServer() throws IOException {
             final String serverConsoleLogPath = CORFU_LOG_PATH + File.separator + host + "_" + port + "_consolelog";
 

@@ -5,7 +5,7 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.2.0.20180811054615.9716</version>
+        <version>0.2.2.20180830044352.4117</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -97,6 +97,11 @@
             <groupId>io.dropwizard.metrics</groupId>
             <artifactId>metrics-jvm</artifactId>
             <version>3.1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.ehcache</groupId>
+            <artifactId>sizeof</artifactId>
+            <version>0.3.0</version>
         </dependency>
     </dependencies>
 

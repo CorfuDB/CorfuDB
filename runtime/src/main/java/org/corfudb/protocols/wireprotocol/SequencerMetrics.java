@@ -38,4 +38,13 @@ public class SequencerMetrics implements ICorfuPayload<SequencerMetrics> {
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, sequencerStatus.toString());
     }
+
+    /**
+     * Creates and returns default SequencerMetrics with status UNKNOWN.
+     *
+     * @return Default SequencerMetrics.
+     */
+    public static SequencerMetrics getDefaultSequencerMetrics() {
+        return new SequencerMetrics(SequencerStatus.UNKNOWN);
+    }
 }
