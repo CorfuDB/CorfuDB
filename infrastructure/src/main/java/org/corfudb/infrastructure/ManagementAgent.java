@@ -595,7 +595,9 @@ public class ManagementAgent {
 
     private SequencerStatus getPrimarySequencerStatus(Layout layout, PollReport pollReport) {
         String primarySequencer = layout.getSequencers().get(0);
-        NodeView nodeView = pollReport.getNodeViewMap().get(primarySequencer);
+        // Fetches nodeView from map or creates a default NodeView object.
+        NodeView nodeView = pollReport.getNodeViewMap().getOrDefault(primarySequencer,
+                NodeView.getDefaultNodeView(NodeLocator.parseString(primarySequencer)));
         // If we have a stale poll report, we should discard this and continue polling.
         if (layout.getEpoch() > pollReport.getPollEpoch()) {
             log.warn("getPrimarySequencerStatus: Received poll report for epoch {} but currently "
@@ -760,7 +762,8 @@ public class ManagementAgent {
             } catch (InterruptedException | ExecutionException e) {
                 // Expected wrong epoch exception if layout server fell behind and has stale
                 // layout and server epoch.
-                log.warn("updateTrailingLayoutServers: layout fetch failed: {}", e);
+                log.warn("updateTrailingLayoutServers: layout fetch from {} failed: {}",
+                        layoutServer, e);
             }
 
             // Do nothing if this layout server is updated with the latestLayout.

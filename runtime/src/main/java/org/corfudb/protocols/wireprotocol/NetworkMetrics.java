@@ -2,8 +2,10 @@ package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
 
+import java.util.Collections;
 import java.util.Map;
 
+import org.corfudb.runtime.view.Layout;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -37,5 +39,15 @@ public class NetworkMetrics implements ICorfuPayload<NetworkMetrics> {
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, epoch);
         ICorfuPayload.serialize(buf, peerConnectivityView);
+    }
+
+    /**
+     * Creates and returns a default instance of the NetworkMetrics with an invalid epoch and an
+     * empty peerConnectivityView map.
+     *
+     * @return Default NetworkMetrics.
+     */
+    public static NetworkMetrics getDefaultNetworkMetrics() {
+        return new NetworkMetrics(Layout.INVALID_EPOCH, Collections.emptyMap());
     }
 }
