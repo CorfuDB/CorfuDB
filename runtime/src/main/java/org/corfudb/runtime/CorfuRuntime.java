@@ -131,9 +131,13 @@ public class CorfuRuntime {
         // region Address Space Parameters
         /**
          * Number of times to attempt to read before hole filling.
-         */
-        @Default
-        int holeFillRetry = 10;
+         * @deprecated This is a no-op. Use holeFillWait
+         * */
+        @Deprecated
+        @Default int holeFillRetry = 10;
+
+        /** Time to wait between read requests reattempts before hole filling. */
+        @Default Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
 
         /**
          * Whether or not to disable the cache.
@@ -237,6 +241,7 @@ public class CorfuRuntime {
         //region Connection parameters
         /**
          * {@link Duration} before requests timeout.
+         * This is the duration after which the reader hole fills the address.
          */
         @Default
         Duration requestTimeout = Duration.ofSeconds(5);
