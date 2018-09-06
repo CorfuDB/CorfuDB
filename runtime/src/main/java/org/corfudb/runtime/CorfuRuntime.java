@@ -696,7 +696,17 @@ public class CorfuRuntime {
             // Don't create a new request for a layout if there is one pending.
             return;
         }
-        layout = fetchLayout(CFUtils.getUninterruptibly(layout).getLayoutServers());
+        List<String> lastKnownLayoutServers = layoutServers;
+        try {
+            if (layout != null) {
+                // Layout fetch can result in an exception if the systemDownHandler was invoked and
+                // the completable future was completed exceptionally.
+                lastKnownLayoutServers = CFUtils.getUninterruptibly(layout).getLayoutServers();
+            }
+        } catch (Throwable th) {
+            log.error("invalidateLayout: Layout CompletableFuture throws Throwable: ", th);
+        }
+        layout = fetchLayout(lastKnownLayoutServers);
     }
 
     /** Check if the cluster Id of the layout matches the client cluster Id.
@@ -753,8 +763,19 @@ public class CorfuRuntime {
      */
     private CompletableFuture<Layout> fetchLayout(List<String> layoutServers) {
 
+        // Layout fetch can result in an exception if the systemDownHandler was invoked and the
+        // completable future was completed exceptionally.
+        Layout lastKnownLayout;
+        try {
+            lastKnownLayout = layout != null ? CFUtils.getUninterruptibly(layout) : null;
+        } catch (Throwable th) {
+            // Catching Throwable as the systemDownHandler can throw an error or
+            // unchecked exception.
+            log.error("fetchLayout: Previous layout fetch failed. Trying again.", th);
+            lastKnownLayout = null;
+        }
         // Last obtained layout with the highest epoch seen.
-        final Layout latestLayout = layout != null ? CFUtils.getUninterruptibly(layout) : null;
+        final Layout latestLayout = lastKnownLayout;
         return CompletableFuture.supplyAsync(() -> {
 
             List<String> layoutServersCopy = new ArrayList<>(layoutServers);

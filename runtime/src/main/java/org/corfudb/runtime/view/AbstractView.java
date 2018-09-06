@@ -124,6 +124,8 @@ public abstract class AbstractView {
             } catch (InterruptedException ie) {
                 throw new UnrecoverableCorfuInterruptedError("Interrupted in layoutHelper", ie);
             } catch (ExecutionException ex) {
+                // Invalidate layout since the layout completable future now contains an exception.
+                runtime.invalidateLayout();
                 // If an error or an unchecked exception is thrown by the layout.get() completable
                 // future, the exception will materialize as an ExecutionException. In that case,
                 // we need to propagate this Error or unchecked exception.
