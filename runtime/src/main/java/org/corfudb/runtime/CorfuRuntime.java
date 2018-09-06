@@ -423,6 +423,11 @@ public class CorfuRuntime {
     @Getter
     private volatile boolean isShutdown = false;
 
+    /**
+     * Latest layout seen by the runtime.
+     */
+    private volatile Layout latestLayout = null;
+
     @Getter
     private static final MetricRegistry defaultMetrics = new MetricRegistry();
     @Getter
@@ -701,7 +706,8 @@ public class CorfuRuntime {
             // Don't create a new request for a layout if there is one pending.
             return;
         }
-        layout = fetchLayout(CFUtils.getUninterruptibly(layout).getLayoutServers());
+        layout = fetchLayout(latestLayout == null
+                ? layoutServers : latestLayout.getLayoutServers());
     }
 
     /** Check if the cluster Id of the layout matches the client cluster Id.
@@ -758,8 +764,6 @@ public class CorfuRuntime {
      */
     private CompletableFuture<Layout> fetchLayout(List<String> layoutServers) {
 
-        // Last obtained layout with the highest epoch seen.
-        final Layout latestLayout = layout != null ? CFUtils.getUninterruptibly(layout) : null;
         return CompletableFuture.supplyAsync(() -> {
 
             List<String> layoutServersCopy = new ArrayList<>(layoutServers);
@@ -794,6 +798,7 @@ public class CorfuRuntime {
                         checkClusterId(l);
 
                         layout = layoutFuture;
+                        latestLayout = l;
                         log.debug("Layout server {} responded with layout {}", s, l);
 
                         // Prune away removed node routers from the nodeRouterPool.
