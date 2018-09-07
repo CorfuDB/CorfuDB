@@ -67,6 +67,10 @@ public interface Service {
      */
     <T extends Node> ImmutableList<T> nodes();
 
+    default <T extends Node> ImmutableList<T> nodes(Class<T> nodeType){
+        return nodes();
+    }
+
     @AllArgsConstructor
     @Getter
     @Builder

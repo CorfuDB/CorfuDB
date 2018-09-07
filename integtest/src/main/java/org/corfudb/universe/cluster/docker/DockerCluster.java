@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 
 import static org.corfudb.universe.node.CorfuServer.ServerParams;
 
@@ -89,6 +90,12 @@ public class DockerCluster implements Cluster {
         return cluster;
     }
 
+    public DockerCluster serviceManagmenet(String sericeNAme, Function<Service, Service> serviceFunction){
+        Service service = serviceFunction.apply(getService(sericeNAme));
+        services.put(service.getParams().getName(), service);
+        return DockerCluster.builder().services(services).build();
+    }
+
     @Override
     public void shutdown() throws ClusterException {
         log.info("Shutdown docker cluster: {}", clusterId);
@@ -109,7 +116,7 @@ public class DockerCluster implements Cluster {
             serviceParams.getNodes().forEach(serverParams -> {
                 try {
                     docker.killContainer(serverParams.getGenericName());
-                } catch (DockerException | InterruptedException e) {
+                } catch (Exception e) {
                     log.debug("Can't kill container. In general it should be killed already. Container: {}",
                             serverParams.getGenericName());
                 }
@@ -174,7 +181,7 @@ public class DockerCluster implements Cluster {
 
             try {
                 docker.createNetwork(networkConfig);
-            } catch (DockerException | InterruptedException e) {
+            } catch (Exception e) {
                 throw new ClusterException("Cannot setup docker network.", e);
             }
         }
@@ -188,12 +195,9 @@ public class DockerCluster implements Cluster {
             log.info("Shutdown network: {}", clusterParams.getNetworkName());
             try {
                 docker.removeNetwork(clusterParams.getNetworkName());
-            } catch (DockerException | InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new ClusterException(
-                        String.format("Cannot shutdown docker network: %s.", clusterParams.getNetworkName()),
-                        e
-                );
+            } catch (Exception e) {
+                final String err = String.format("Cannot shutdown docker network: %s.", clusterParams.getNetworkName());
+                throw new ClusterException(err, e);
             }
         }
     }

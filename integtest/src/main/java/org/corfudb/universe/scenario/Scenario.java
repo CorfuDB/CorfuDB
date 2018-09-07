@@ -1,12 +1,25 @@
 package org.corfudb.universe.scenario;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.universe.scenario.action.Action;
+import org.corfudb.universe.scenario.action.Action.AbstractAction;
+import org.corfudb.universe.scenario.spec.Spec;
 
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
-import static org.corfudb.universe.scenario.Scenario.Fixture;
+import org.corfudb.universe.scenario.fixture.Fixture;
 
+/**
+ * Scenario is testing Api. It uses {@link Fixture}-s and provides {@link ScenarioTestCase}-s to
+ * run unit tests.
+ * A scenario provides a factory method which creates TestCase.
+ * The TestCase represents a group of tests, each test contains one action and one spec.
+ * Scenario executes all test cases and all tests included in test cases.
+ *
+ * @param <Data> data provided by a fixture
+ * @param <T>    fixture type
+ */
 public class Scenario<Data, T extends Fixture<Data>> {
     private final T fixture;
 
@@ -14,37 +27,35 @@ public class Scenario<Data, T extends Fixture<Data>> {
         this.fixture = fixture;
     }
 
+    /**
+     * Create a new scenario base on a fixture
+     *
+     * @param fixture a scenario fixture
+     * @param <Data>  data provided by the fixture
+     * @param <T>     fixture type
+     * @return new scenario with particular fixture
+     */
     public static <Data, T extends Fixture<Data>> Scenario<Data, T> with(T fixture) {
         return new Scenario<>(fixture);
     }
 
-    public Scenario<Data, T> describe(BiConsumer<T, ScenarioTestCase<Data>> test) {
+    /**
+     * Create a new {@link ScenarioTestCase}
+     *
+     * @param testCaseFunction provides testCase api for underlying tests
+     * @return scenario object
+     */
+    public Scenario<Data, T> describe(BiConsumer<T, ScenarioTestCase<Data>> testCaseFunction) {
         ScenarioTestCase<Data> testCase = new ScenarioTestCase<>(fixture.data());
-        test.accept(fixture, testCase);
+        testCaseFunction.accept(fixture, testCase);
         return this;
     }
 
-    @FunctionalInterface
-    public interface Fixture<T> {
-        T data();
-    }
-
     /**
-     * Provides an interface for executable actions used in scenarios. Actions can be either Tasks or Faults.
-     * <p>
-     * Task: a command that changes the state of test framework elements
-     * Fault: a command that is state change representing a faulty state of test framework elements
+     * ScenarioTestCase is a ScenarioTest-s factory, represents a group of tests. It provides api for creating new tests
+     *
+     * @param <T> input data
      */
-    @FunctionalInterface
-    public interface Action<T, R> {
-        R execute(T data);
-    }
-
-    @FunctionalInterface
-    public interface Spec<T, R> {
-        void check(T input, R result);
-    }
-
     @Slf4j
     public static class ScenarioTestCase<T> {
         private final T data;
@@ -53,29 +64,53 @@ public class Scenario<Data, T extends Fixture<Data>> {
             this.data = data;
         }
 
+        /**
+         * Factory method for creating scenario tests
+         * @param description  test description
+         * @param actionResult describes the action result type, prevents type erasure for action result <R>
+         * @param test         provides test api for underlying code
+         * @param <R>          action result type
+         * @return new test
+         */
         public <R> ScenarioTest<T, R> it(String description, Class<R> actionResult, Consumer<ScenarioTest<T, R>> test) {
             log.info("Test: {}, action result: {}", description, actionResult.getSimpleName());
-            ScenarioTest<T, R> scenarioTest = new ScenarioTest<>(data, null);
+            ScenarioTest<T, R> scenarioTest = new ScenarioTest<>(data, null, description);
             test.accept(scenarioTest);
             return scenarioTest;
         }
     }
 
+    /**
+     * Scenario test execute an action and then check the result by a spec.
+     * @param <T> fixture data
+     * @param <R> action result
+     */
     public static class ScenarioTest<T, R> {
+        private final String description;
         private final T data;
-        private final Action<T, R> action;
+        private final Action<R> action;
 
-        public ScenarioTest(T data, Action<T, R> action) {
+        public ScenarioTest(T data, Action<R> action, String description) {
             this.data = data;
             this.action = action;
+            this.description = description;
         }
 
-        public ScenarioTest<T, R> action(Action<T, R> action) {
-            return new ScenarioTest<>(data, action);
+        public ScenarioTest<T, R> action(Action<R> action) {
+            return new ScenarioTest<>(data, action, description);
         }
 
-        public void check(Spec<T, R> spec) {
-            spec.check(data, action.execute(data));
+        public ScenarioTest<T, R> action(AbstractAction<R> action) {
+            return new ScenarioTest<>(data, action, description);
+        }
+
+        /**
+         * Check action result
+         * @param spec specification, checks action result
+         */
+        public ScenarioTest<T, R> check(Spec<T, R> spec) {
+            spec.check(data, action.execute());
+            return this;
         }
     }
 }

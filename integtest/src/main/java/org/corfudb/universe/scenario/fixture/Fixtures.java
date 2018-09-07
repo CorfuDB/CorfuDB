@@ -1,10 +1,9 @@
-package org.corfudb.universe.scenario;
+package org.corfudb.universe.scenario.fixture;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import lombok.Builder;
 import lombok.Getter;
-import org.corfudb.universe.scenario.Scenario.Fixture;
 import org.corfudb.universe.service.Service.ServiceParams;
 import org.slf4j.event.Level;
 
@@ -18,6 +17,9 @@ import static org.corfudb.universe.node.CorfuServer.Mode;
 import static org.corfudb.universe.node.CorfuServer.Persistence;
 import static org.corfudb.universe.node.CorfuServer.ServerParams;
 
+/**
+ * Fixture factory provides predefined fixtures
+ */
 public interface Fixtures {
 
     @Builder
@@ -98,6 +100,39 @@ public interface Fixtures {
             ServiceParams<ServerParams> serviceParams = service.data();
             return ClusterParams.builder()
                     .services(ImmutableMap.of(serviceParams.getName(), serviceParams))
+                    .build();
+        }
+    }
+
+    @Builder
+    @Getter
+    class SingleClusterFixture implements Fixture<ClusterParams> {
+        @Default
+        private final CorfuSingleServiceFixture service = CorfuSingleServiceFixture.builder().build();
+
+        @Override
+        public ClusterParams data() {
+            ServiceParams<ServerParams> serviceParams = service.data();
+            return ClusterParams.builder()
+                    .services(ImmutableMap.of(serviceParams.getName(), serviceParams))
+                    .build();
+        }
+    }
+
+    @Builder
+    @Getter
+    class CorfuSingleServiceFixture implements Fixture<ServiceParams<ServerParams>> {
+
+        @Default
+        private final SingleServerFixture servers = SingleServerFixture.builder().build();
+        @Default
+        private final String serviceName = "corfuServer";
+
+        @Override
+        public ServiceParams<ServerParams> data() {
+            return ServiceParams.<ServerParams>builder()
+                    .name(serviceName)
+                    .nodes(ImmutableList.of(servers.data()))
                     .build();
         }
     }

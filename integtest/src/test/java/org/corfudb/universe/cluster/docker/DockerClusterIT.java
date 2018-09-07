@@ -4,7 +4,8 @@ import com.spotify.docker.client.DefaultDockerClient;
 import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.messages.ContainerInfo;
 import org.corfudb.universe.Universe;
-import org.corfudb.universe.scenario.Fixtures;
+import org.corfudb.universe.scenario.fixture.Fixtures;
+import org.corfudb.universe.scenario.fixture.Fixtures.ClusterFixture;
 import org.junit.After;
 import org.junit.Test;
 
@@ -32,7 +33,7 @@ public class DockerClusterIT {
     public void deploySingleServiceSingleNodeTest() throws Exception {
         Fixtures.MultipleServersFixture serversFixture = Fixtures.MultipleServersFixture.builder().numNodes(1).build();
         Fixtures.CorfuServiceFixture serviceFixture = Fixtures.CorfuServiceFixture.builder().servers(serversFixture).build();
-        Fixtures.ClusterFixture clusterFixture = Fixtures.ClusterFixture.builder().service(serviceFixture).build();
+        ClusterFixture clusterFixture = ClusterFixture.builder().service(serviceFixture).build();
 
         ClusterParams clusterParams = clusterFixture.data();
         dockerCluster = UNIVERSE
@@ -52,7 +53,7 @@ public class DockerClusterIT {
 
     @Test
     public void deploySingleServiceMultipleNodesTest() throws Exception {
-        Fixtures.ClusterFixture clusterFixture = Fixtures.ClusterFixture.builder().build();
+        ClusterFixture clusterFixture = ClusterFixture.builder().build();
 
         //setup
         final ClusterParams clusterParams = clusterFixture.data();
