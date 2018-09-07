@@ -18,7 +18,7 @@
         <module>debian</module>
         <module>generator</module>
         <module>migration</module>
-        <module>integtest</module>
+        <module>it</module>
 
     </modules>
 
