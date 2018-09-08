@@ -40,7 +40,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 import static org.fusesource.jansi.Ansi.Color.BLUE;
@@ -185,6 +184,8 @@ public class CorfuServer {
     private static volatile Thread corfuServerThread;
     private static volatile Thread shutdownThread;
 
+    private static final int EXIT_ERROR_CODE = 100;
+
     /**
      * Main program entry point.
      *
@@ -288,7 +289,7 @@ public class CorfuServer {
                     port).channel().closeFuture().syncUninterruptibly();
         } catch (Exception e) {
             log.error("CorfuServer: Server exiting due to unrecoverable error: ", e);
-            throw new UnrecoverableCorfuError(e);
+            System.exit(EXIT_ERROR_CODE);
         }
     }
 
