@@ -693,12 +693,12 @@ public class ClusterReconfigIT extends AbstractIT {
                 .layoutServer(NodeLocator.parseString("localhost:9000"))
                 .cacheDisabled(true)
                 .systemDownHandlerTriggerLimit(1)
+                // Register the system down handler to throw a RuntimeException.
+                .systemDownHandler(() ->
+                        assertThatCode(semaphore::release).doesNotThrowAnyException())
                 .build();
 
-        CorfuRuntime runtime = CorfuRuntime.fromParameters(corfuRuntimeParameters)
-                .registerSystemDownHandler(() ->
-                        assertThatCode(semaphore::release).doesNotThrowAnyException())
-                .connect();
+        CorfuRuntime runtime = CorfuRuntime.fromParameters(corfuRuntimeParameters).connect();
 
         CorfuTable table = runtime.getObjectsView()
                 .build()
@@ -910,11 +910,11 @@ public class ClusterReconfigIT extends AbstractIT {
         CorfuRuntime runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
                 .layoutServer(NodeLocator.parseString(DEFAULT_ENDPOINT))
                 .systemDownHandlerTriggerLimit(systemDownHandlerLimit)
+                // Register the system down handler to throw a RuntimeException.
+                .systemDownHandler(() -> {
+                    throw new RuntimeException("SystemDownHandler");
+                })
                 .build()).connect();
-        // Register the system down handler to throw a RuntimeException.
-        runtime.registerSystemDownHandler(() -> {
-            throw new RuntimeException("SystemDownHandler");
-        });
 
         UUID streamId = CorfuRuntime.getStreamID("testStream");
         IStreamView stream = runtime.getStreamsView().get(streamId);
