@@ -306,6 +306,30 @@ public class CorfuRuntime {
          * with provided filters. If filters are null, no filter handler will be added to Netty's pipeline.
          */
         @Default List<MsgHandlingFilter> nettyClientInboundMsgFilters = null;
+
+        // Register handlers region
+
+        // These two handlers are provided to give some control on what happen when system is down.
+        // For applications that want to have specific behaviour when a the system appears
+        // unavailable, they can register their own handler for both before the rpc request and
+        // upon cluster unreachability.
+        // An example of how to use these handlers implementing timeout is given in
+        // test/src/test/java/org/corfudb/runtime/CorfuRuntimeTest.java
+
+        /**
+         * SystemDownHandler is invoked at any point when the Corfu client attempts to make an RPC
+         * request to the Corfu cluster but is unable to complete this.
+         * NOTE: This will also be invoked during connect if the cluster is unreachable.
+         */
+        @Default
+        volatile Runnable systemDownHandler = () -> { };
+
+        /**
+         * BeforeRPCHandler callback is invoked every time before an RPC call.
+         */
+        @Default
+        volatile Runnable beforeRpcHandler = () -> { };
+        //endregion
     }
 
     /**
@@ -443,26 +467,28 @@ public class CorfuRuntime {
     }
 
     /**
-     * These two handlers are provided to give some control on what happen when system is down.
+     * Register SystemDownHandler.
+     * Please use CorfuRuntimeParameters builder to register this.
      *
-     * For applications that want to have specific behaviour when a the system appears unavailable, they can
-     * register their own handler for both before the rpc request and upon network exception.
-     *
-     * An example of how to use these handlers implementing timeout is given in
-     * test/src/test/java/org/corfudb/runtime/CorfuRuntimeTest.java
-     *
+     * @param handler Handler to invoke in case of system Down.
+     * @return CorfuRuntime instance.
      */
-    public Runnable beforeRpcHandler = () -> {};
-    public Runnable systemDownHandler = () -> {};
-
-
+    @Deprecated
     public CorfuRuntime registerSystemDownHandler(Runnable handler) {
-        systemDownHandler = handler;
+        this.getParameters().setSystemDownHandler(handler);
         return this;
     }
 
+    /**
+     * Register BeforeRPCHandler.
+     * Please use CorfuRuntimeParameters builder to register this.
+     *
+     * @param handler Handler to invoke before every RPC.
+     * @return CorfuRuntime instance.
+     */
+    @Deprecated
     public CorfuRuntime registerBeforeRpcHandler(Runnable handler) {
-        beforeRpcHandler = handler;
+        this.getParameters().setBeforeRpcHandler(handler);
         return this;
     }
 
@@ -767,8 +793,8 @@ public class CorfuRuntime {
         return CompletableFuture.supplyAsync(() -> {
 
             List<String> layoutServersCopy = new ArrayList<>(layoutServers);
-            beforeRpcHandler.run();
-            int systemDownTriggerCounter = getParameters().getSystemDownHandlerTriggerLimit();
+            parameters.getBeforeRpcHandler().run();
+            int systemDownTriggerCounter = 0;
 
             while (true) {
 
@@ -813,11 +839,14 @@ public class CorfuRuntime {
                     }
                 }
 
-                log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}",
-                        parameters.connectionRetryRate);
+                log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}, "
+                                + "Retried {} times, systemDownHandlerTriggerLimit = {}",
+                        parameters.connectionRetryRate, systemDownTriggerCounter,
+                        parameters.getSystemDownHandlerTriggerLimit());
 
-                if (--systemDownTriggerCounter <= 0) {
-                    systemDownHandler.run();
+                if (++systemDownTriggerCounter >= parameters.getSystemDownHandlerTriggerLimit()) {
+                    log.info("fetchLayout: Invoking the systemDownHandler.");
+                    parameters.getSystemDownHandler().run();
                 }
 
                 Sleep.sleepUninterruptibly(parameters.connectionRetryRate);

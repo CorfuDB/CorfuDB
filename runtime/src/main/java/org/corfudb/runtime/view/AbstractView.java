@@ -122,9 +122,9 @@ public abstract class AbstractView {
                                                                function,
                                                        boolean rethrowAllExceptions)
             throws A, B, C, D {
-        runtime.beforeRpcHandler.run();
+        runtime.getParameters().getBeforeRpcHandler().run();
         final Duration retryRate = runtime.getParameters().getConnectionRetryRate();
-        int systemDownTriggerCounter = runtime.getParameters().getSystemDownHandlerTriggerLimit();
+        int systemDownTriggerCounter = 0;
         while (true) {
 
             final Layout layout = getLayoutUninterruptibly();
@@ -157,10 +157,17 @@ public abstract class AbstractView {
                 }
             }
 
+            log.info("layoutHelper: Retried {} times, SystemDownHandlerTriggerLimit = {}",
+                    systemDownTriggerCounter, systemDownTriggerCounter,
+                    runtime.getParameters().getSystemDownHandlerTriggerLimit());
+
             // Invoking the systemDownHandler if the client cannot connect to the server.
-            if (--systemDownTriggerCounter <= 0) {
-                runtime.systemDownHandler.run();
+            if (++systemDownTriggerCounter
+                    >= runtime.getParameters().getSystemDownHandlerTriggerLimit()) {
+                log.info("layoutHelper: Invoking the systemDownHandler.");
+                runtime.getParameters().getSystemDownHandler().run();
             }
+
             runtime.invalidateLayout();
             Sleep.sleepUninterruptibly(retryRate);
         }

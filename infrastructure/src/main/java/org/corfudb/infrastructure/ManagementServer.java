@@ -133,7 +133,7 @@ public class ManagementServer extends AbstractServer {
         }
         runtime.connect();
         log.info("getCorfuRuntime: Corfu Runtime connected successfully");
-        runtime.registerSystemDownHandler(runtimeSystemDownHandler);
+        params.setSystemDownHandler(runtimeSystemDownHandler);
         return runtime;
     }
 
