@@ -21,6 +21,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -586,8 +587,10 @@ public class ManagementAgent {
     }
 
     /**
-     * All Layout servers have been sealed but there is no client to take this forward and fill the
-     * slot by proposing a new layout.
+     * All active Layout servers have been sealed but there is no client to take this forward and
+     * fill the slot by proposing a new layout. This is determined by the outOfPhaseEpochNodes map.
+     * This map contains a map of nodes and their server router epochs iff that server responded
+     * with a WrongEpochException to the heartbeat message.
      * In this case we can pass an empty set to propose the same layout again and fill the layout
      * slot to un-block the data plane operations.
      *
@@ -595,8 +598,14 @@ public class ManagementAgent {
      * @return True if latest layout slot is vacant. Else False.
      */
     private boolean isCurrentLayoutSlotUnFilled(PollReport pollReport) {
+        final Layout layout = serverContext.copyManagementLayout();
+        // Check if all active layout servers are present in the outOfPhaseEpochNodes map.
         boolean result = pollReport.getOutOfPhaseEpochNodes().keySet()
-                .containsAll(serverContext.copyManagementLayout().getLayoutServers());
+                .containsAll(layout.getLayoutServers().stream()
+                        // Unresponsive servers are excluded as they do not respond with a
+                        // WrongEpochException.
+                        .filter(s -> !layout.getUnresponsiveServers().contains(s))
+                        .collect(Collectors.toList()));
         if (result) {
             log.info("Current layout slot is empty. Filling slot with current layout.");
         }
