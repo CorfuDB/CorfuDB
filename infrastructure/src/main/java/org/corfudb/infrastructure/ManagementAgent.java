@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure;
 
+import static org.corfudb.util.LambdaUtils.runSansThrow;
+
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -299,13 +301,13 @@ public class ManagementAgent {
 
             // Initiating periodic task to poll for failures.
             localMetricsPollingService.scheduleAtFixedRate(
-                    this::updateLocalMetrics,
+                    () -> runSansThrow(this::updateLocalMetrics),
                     0,
                     METRICS_POLL_INTERVAL.toMillis(),
                     TimeUnit.MILLISECONDS);
 
             detectionTasksScheduler.scheduleAtFixedRate(
-                    this::detectorTaskScheduler,
+                    () -> runSansThrow(this::detectorTaskScheduler),
                     0,
                     policyExecuteInterval,
                     TimeUnit.MILLISECONDS);
@@ -372,27 +374,18 @@ public class ManagementAgent {
                 localRecoveryLayout.getEpoch(), clusterLayout.getEpoch());
         // The cluster has moved ahead. This node should not force any layout. Let the other
         // members detect that this node has healed and include it in the layout.
-        boolean recoveryResult = clusterLayout.getEpoch() > localRecoveryLayout.getEpoch()
+        return clusterLayout.getEpoch() > localRecoveryLayout.getEpoch()
                 || recoveryReconfigurationResult;
-
-        return recoveryResult;
     }
 
     /**
-     * Task to collect local node metrics.
-     * This task collects the following:
-     * Boolean Status of layout, sequencer and logunit servers.
-     * These metrics are then composed into ServerMetrics model and stored locally.
+     * Queries the local Sequencer Server for SequencerMetrics. This returns UNKNOWN if unable
+     * to fetch the status.
+     *
+     * @param layout Current Management layout.
+     * @return Sequencer Metrics.
      */
-    private void updateLocalMetrics() {
-        // Initializing the status of components
-        // No need to poll unless node is bootstrapped.
-        Layout layout = serverContext.copyManagementLayout();
-        if (layout == null) {
-            return;
-        }
-
-        // Build and replace existing locally stored nodeMetrics
+    private SequencerMetrics queryLocalSequencerMetrics(Layout layout) {
         SequencerMetrics sequencerMetrics;
         // This is an optimization. If this node is not the primary sequencer for the current
         // layout, there is no reason to request metrics from this sequencer.
@@ -412,9 +405,27 @@ public class ManagementAgent {
         } else {
             sequencerMetrics = new SequencerMetrics(SequencerStatus.UNKNOWN);
         }
+        return sequencerMetrics;
+    }
 
-        localServerMetrics =
-                new ServerMetrics(NodeLocator.parseString(getLocalEndpoint()), sequencerMetrics);
+    /**
+     * Task to collect local node metrics.
+     * This task collects the following:
+     * Boolean Status of layout, sequencer and logunit servers.
+     * These metrics are then composed into ServerMetrics model and stored locally.
+     */
+    private void updateLocalMetrics() {
+
+        // Initializing the status of components
+        // No need to poll unless node is bootstrapped.
+        Layout layout = serverContext.copyManagementLayout();
+        if (layout == null) {
+            return;
+        }
+
+        // Build and replace existing locally stored nodeMetrics
+        localServerMetrics = new ServerMetrics(NodeLocator.parseString(getLocalEndpoint()),
+                queryLocalSequencerMetrics(layout));
     }
 
     /**
@@ -434,7 +445,6 @@ public class ManagementAgent {
         }
 
         runFailureDetectorTask();
-
         runHealingDetectorTask();
     }
 

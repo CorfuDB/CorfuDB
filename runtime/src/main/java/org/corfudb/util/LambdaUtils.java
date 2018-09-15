@@ -47,9 +47,12 @@ import java.util.function.ToLongBiFunction;
 import java.util.function.ToLongFunction;
 import java.util.function.UnaryOperator;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * Created by mwei on 3/24/16.
  */
+@Slf4j
 public class LambdaUtils {
 
     private static final Map<Class<Object>,
@@ -153,5 +156,19 @@ public class LambdaUtils {
     @FunctionalInterface
     interface LambdaResolver<T> {
         Object resolve(T resolver, Object[] args);
+    }
+
+    /**
+     * Suppresses all exceptions. This is used for scheduling tasks to ScheduledExecutorService.
+     * ScheduledExecutorService crashes in case a scheduled thread throws an Exception.
+     *
+     * @param runnable Task whose exceptions are to be suppressed.
+     */
+    public static void runSansThrow(Runnable runnable) {
+        try {
+            runnable.run();
+        } catch (Exception e) {
+            log.error("runSansThrow: Suppressing exception while executing runnable: ", e);
+        }
     }
 }

@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import static org.corfudb.util.LambdaUtils.runSansThrow;
 import static org.corfudb.util.Utils.getMaxGlobalTail;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
@@ -91,7 +92,7 @@ public class AddressSpaceView extends AbstractView {
         metrics.register(pfx + "hits", (Gauge<Long>) () -> readCache.stats().hitCount());
         metrics.register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
 
-        scheduler.scheduleWithFixedDelay(new TrimMarkSyncTask(),
+        scheduler.scheduleWithFixedDelay(() -> runSansThrow(TrimMarkSyncTask::new),
                 runtime.getParameters().getTrimMarkSyncPeriod().toMillis(),
                 runtime.getParameters().getTrimMarkSyncPeriod().toMillis(), TimeUnit.MILLISECONDS);
     }

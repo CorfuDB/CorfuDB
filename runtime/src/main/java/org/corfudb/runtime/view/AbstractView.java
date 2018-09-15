@@ -158,7 +158,7 @@ public abstract class AbstractView {
             }
 
             log.info("layoutHelper: Retried {} times, SystemDownHandlerTriggerLimit = {}",
-                    systemDownTriggerCounter, systemDownTriggerCounter,
+                    systemDownTriggerCounter,
                     runtime.getParameters().getSystemDownHandlerTriggerLimit());
 
             // Invoking the systemDownHandler if the client cannot connect to the server.
