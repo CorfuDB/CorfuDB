@@ -6,6 +6,8 @@ import com.spotify.docker.client.messages.ContainerInfo;
 import org.corfudb.universe.Universe;
 import org.corfudb.universe.scenario.fixture.Fixtures;
 import org.corfudb.universe.scenario.fixture.Fixtures.ClusterFixture;
+import org.corfudb.universe.scenario.fixture.Fixtures.CorfuServiceFixture;
+import org.corfudb.universe.scenario.fixture.Fixtures.MultipleServersFixture;
 import org.junit.After;
 import org.junit.Test;
 
@@ -24,15 +26,22 @@ public class DockerClusterIT {
         this.docker = DefaultDockerClient.fromEnv().build();
     }
 
+    /**
+     * Shutdown the cluster after test completion
+     */
     @After
     public void tearDown() {
         dockerCluster.shutdown();
     }
 
+    /**
+     * Deploy a single service then deploy a single corfu server and add the server into the service
+     * @throws Exception an error
+     */
     @Test
     public void deploySingleServiceSingleNodeTest() throws Exception {
-        Fixtures.MultipleServersFixture serversFixture = Fixtures.MultipleServersFixture.builder().numNodes(1).build();
-        Fixtures.CorfuServiceFixture serviceFixture = Fixtures.CorfuServiceFixture.builder().servers(serversFixture).build();
+        MultipleServersFixture serversFixture = MultipleServersFixture.builder().numNodes(1).build();
+        CorfuServiceFixture serviceFixture = CorfuServiceFixture.builder().servers(serversFixture).build();
         ClusterFixture clusterFixture = ClusterFixture.builder().service(serviceFixture).build();
 
         ClusterParams clusterParams = clusterFixture.data();
@@ -41,16 +50,21 @@ public class DockerClusterIT {
                 .deploy();
 
         ServerParams serverParam = clusterParams
-                .getService(serviceFixture.getServiceName(), ServerParams.class)
-                .getNodes()
+                .getServiceParams(serviceFixture.getServiceName(), ServerParams.class)
+                .getNodeParams()
                 .get(0);
 
-        ContainerInfo container = docker.inspectContainer(serverParam.getGenericName());
+        ContainerInfo container = docker.inspectContainer(serverParam.getName());
         assertThat(container.state().running()).isTrue();
-        assertThat(container.name()).isEqualTo("/" + serverParam.getGenericName());
+        assertThat(container.name()).isEqualTo("/" + serverParam.getName());
         assertThat(container.networkSettings().networks().get(clusterParams.getNetworkName())).isNotNull();
     }
 
+    /**
+     * Deploy a service then deploy three corfu server nodes then add all of them into the service.
+     *
+     * @throws Exception an error
+     */
     @Test
     public void deploySingleServiceMultipleNodesTest() throws Exception {
         ClusterFixture clusterFixture = ClusterFixture.builder().build();
@@ -62,12 +76,12 @@ public class DockerClusterIT {
                 .deploy();
 
         ServiceParams<ServerParams> serviceParams = clusterParams
-                .getService(clusterFixture.getService().getServiceName(), ServerParams.class);
+                .getServiceParams(clusterFixture.getService().getServiceName(), ServerParams.class);
 
-        for (ServerParams serverParams : serviceParams.getNodes()) {
-            ContainerInfo container = docker.inspectContainer(serverParams.getGenericName());
+        for (ServerParams serverParams : serviceParams.getNodeParams()) {
+            ContainerInfo container = docker.inspectContainer(serverParams.getName());
             assertThat(container.state().running()).isTrue();
-            assertThat(container.name()).isEqualTo("/" + serverParams.getGenericName());
+            assertThat(container.name()).isEqualTo("/" + serverParams.getName());
             assertThat(container.networkSettings().networks().get(clusterParams.getNetworkName())).isNotNull();
         }
     }

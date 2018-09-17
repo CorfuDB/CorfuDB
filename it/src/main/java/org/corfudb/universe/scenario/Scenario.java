@@ -16,10 +16,10 @@ import java.util.function.Consumer;
  * The TestCase represents a group of tests, each test contains one action and one spec.
  * Scenario executes all test cases and all tests included in test cases.
  *
- * @param <Data> data provided by a fixture
+ * @param <D> data provided by a fixture
  * @param <T>    fixture type
  */
-public class Scenario<Data, T extends Fixture<Data>> {
+public class Scenario<D, T extends Fixture<D>> {
     private final T fixture;
 
     private Scenario(T fixture) {
@@ -30,11 +30,11 @@ public class Scenario<Data, T extends Fixture<Data>> {
      * Create a new scenario base on a fixture
      *
      * @param fixture a scenario fixture
-     * @param <Data>  data provided by the fixture
+     * @param <D>  data provided by the fixture
      * @param <T>     fixture type
      * @return new scenario with particular fixture
      */
-    public static <Data, T extends Fixture<Data>> Scenario<Data, T> with(T fixture) {
+    public static <D, T extends Fixture<D>> Scenario<D, T> with(T fixture) {
         return new Scenario<>(fixture);
     }
 
@@ -44,8 +44,8 @@ public class Scenario<Data, T extends Fixture<Data>> {
      * @param testCaseFunction provides testCase api for underlying tests
      * @return scenario object
      */
-    public Scenario<Data, T> describe(BiConsumer<T, ScenarioTestCase<Data>> testCaseFunction) {
-        ScenarioTestCase<Data> testCase = new ScenarioTestCase<>(fixture.data());
+    public Scenario<D, T> describe(BiConsumer<T, ScenarioTestCase<D>> testCaseFunction) {
+        ScenarioTestCase<D> testCase = new ScenarioTestCase<>(fixture.data());
         testCaseFunction.accept(fixture, testCase);
         return this;
     }

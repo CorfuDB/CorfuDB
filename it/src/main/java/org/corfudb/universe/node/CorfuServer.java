@@ -27,7 +27,7 @@ public interface CorfuServer extends Node {
 
     ServerParams getParams();
 
-    Optional<Layout> getLayout();
+    Layout getLayout();
 
     void connectCorfuRuntime();
 
@@ -59,13 +59,14 @@ public interface CorfuServer extends Node {
         private final Duration timeout;
         @Exclude
         private final Duration pollPeriod;
+        private final NodeType nodeType = NodeType.CORFU_SERVER;
 
-        public String getGenericName() {
+        public String getName() {
             return "node" + port;
         }
 
         public String getEndpoint() {
-            return getGenericName() + ":" + port;
+            return getName() + ":" + port;
         }
     }
 }

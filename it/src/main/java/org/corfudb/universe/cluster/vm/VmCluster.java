@@ -2,11 +2,11 @@ package org.corfudb.universe.cluster.vm;
 
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.universe.cluster.Cluster;
+import org.corfudb.universe.node.Node;
 import org.corfudb.universe.service.Service;
 
 /**
- * This implementation provides a Cluster servers each of which a VM machine.
- * Deploy is going to deploy a list of servers
+ * This implementation provides a cluster, where each server is represented as a virtual machine.
  */
 public class VmCluster implements Cluster {
     private static final UnsupportedOperationException NOT_IMPLEMETED = new UnsupportedOperationException("Not implemented");
@@ -18,6 +18,11 @@ public class VmCluster implements Cluster {
 
     @Override
     public void shutdown() {
+        throw NOT_IMPLEMETED;
+    }
+
+    @Override
+    public <T extends Service.ServiceParams<?>> Cluster add(T serviceParams) {
         throw NOT_IMPLEMETED;
     }
 
@@ -35,4 +40,6 @@ public class VmCluster implements Cluster {
     public Service getService(String serviceName) {
         throw NOT_IMPLEMETED;
     }
+
+
 }

@@ -4,6 +4,7 @@ import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.exceptions.DockerException;
 import com.spotify.docker.client.messages.ContainerConfig;
 import com.spotify.docker.client.messages.ContainerCreation;
+import com.spotify.docker.client.messages.ContainerInfo;
 import com.spotify.docker.client.messages.HostConfig;
 import com.spotify.docker.client.messages.PortBinding;
 import lombok.Builder;
@@ -14,6 +15,7 @@ import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.cluster.ClusterException;
 import org.corfudb.universe.node.CorfuServer;
@@ -29,6 +31,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static lombok.Builder.Default;
 import static org.corfudb.runtime.CorfuRuntime.fromParameters;
@@ -41,75 +44,66 @@ import static org.corfudb.universe.cluster.Cluster.ClusterParams;
 @Builder
 public class CorfuServerDockerized implements CorfuServer {
     private static final String IMAGE_NAME = "corfu-server:" + getAppVersion();
+    public static final String ALL_NETWORK_INTERFACES = "0.0.0.0";
 
     @Getter
     private final ServerParams params;
     private final DockerClient docker;
     private final ClusterParams clusterParams;
     @Default
-    private final Optional<String> containerId = Optional.empty();
-    @Default
-    private final Optional<CorfuManagementServer> runtime = Optional.empty();
+    private CorfuManagementServer runtime;
 
     /**
      * Deploys a Corfu server / docker container
      */
     @Override
     public CorfuServerDockerized deploy() {
-        log.info("Deploying the Corfu server. {}", params.getGenericName());
+        log.info("Deploying the Corfu server. {}", params.getName());
 
-        if (containerId.isPresent()) {
-            throw new IllegalStateException("Corfu server already started. Parameters: " + params);
-        }
+        deployContainer();
+        runtime = new CorfuManagementServer(params);
 
-        String id = deployContainer();
-
-        return CorfuServerDockerized.builder()
-                .clusterParams(clusterParams)
-                .params(params)
-                .docker(docker)
-                .containerId(Optional.of(id))
-                .runtime(Optional.of(new CorfuManagementServer(params)))
-                .build();
+        return this;
     }
 
     @Override
     public boolean addNode(CorfuServer server) {
-        return runtime.map(rt -> rt.add(server)).orElse(false);
+        return runtime.add(server);
     }
 
     @Override
     public boolean removeNode(CorfuServer server) {
-        return runtime.map(rt -> rt.remove(server)).orElse(false);
+        return runtime.remove(server);
     }
 
 
     @Override
-    public Optional<Layout> getLayout() {
-        return runtime.map(CorfuManagementServer::getLayout);
+    public Layout getLayout() {
+        return runtime.getLayout();
     }
 
     @Override
     public void connectCorfuRuntime() {
-        runtime.ifPresent(CorfuManagementServer::connect);
+        runtime.connect();
     }
 
     /**
      * This method attempts to gracefully stop the Corfu server. After timeout, it will kill the Corfu server.
      *
      * @param timeout a duration after which the stop will kill the server
-     * @throws NodeException this exception will be thrown if the server can not be stopped.
+     * @throws NodeException this exception will be thrown if the server cannot be stopped.
      */
     @Override
     public void stop(Duration timeout) {
-        log.info("Stopping the Corfu server. {}", params.getGenericName());
+        log.info("Stopping the Corfu server. {}", params.getName());
 
         try {
-            if (!docker.inspectContainer(params.getGenericName()).state().running()) {
-                log.debug("The container already stopped");
+            ContainerInfo container = docker.inspectContainer(params.getName());
+            if (!container.state().running()) {
+                log.debug("The container `{}` is already stopped", container.name());
                 return;
             }
-            docker.stopContainer(params.getGenericName(), (int) timeout.getSeconds());
+            docker.stopContainer(params.getName(), (int) timeout.getSeconds());
         } catch (DockerException | InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new NodeException("Can't stop Corfu server", e);
@@ -123,13 +117,18 @@ public class CorfuServerDockerized implements CorfuServer {
      */
     @Override
     public void kill() {
-        log.info("Killing the Corfu server. {}", params.getGenericName());
+        log.info("Killing the Corfu server. {}", params.getName());
 
         try {
-            docker.killContainer(params.getGenericName());
+            ContainerInfo container = docker.inspectContainer(params.getName());
+            if (!container.state().running()) {
+                log.debug("The container `{}` is not running", container.name());
+                return;
+            }
+            docker.killContainer(params.getName());
         } catch (DockerException | InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new NodeException("Can't kill Corfu server", ex);
+            throw new NodeException("Can't kill Corfu server " + params.getName(), ex);
         }
     }
 
@@ -143,8 +142,8 @@ public class CorfuServerDockerized implements CorfuServer {
 
         String id;
         try {
-            ContainerCreation creation = docker.createContainer(containerConfig, params.getGenericName());
-            id = creation.id();
+            ContainerCreation container = docker.createContainer(containerConfig, params.getName());
+            id = container.id();
 
             addShutdownHook();
 
@@ -165,7 +164,7 @@ public class CorfuServerDockerized implements CorfuServer {
         Map<String, List<PortBinding>> portBindings = new HashMap<>();
         for (String port : ports) {
             List<PortBinding> hostPorts = new ArrayList<>();
-            hostPorts.add(PortBinding.of("0.0.0.0", port));
+            hostPorts.add(PortBinding.of(ALL_NETWORK_INTERFACES, port));
             portBindings.put(port, hostPorts);
         }
 
@@ -183,19 +182,19 @@ public class CorfuServerDockerized implements CorfuServer {
         return ContainerConfig.builder()
                 .hostConfig(hostConfig)
                 .image(IMAGE_NAME)
-                .hostname(params.getGenericName())
+                .hostname(params.getName())
                 .exposedPorts(ports)
                 .cmd("sh", "-c", cmdLine)
                 .build();
     }
 
     private void addShutdownHook() {
-        // Just in case if a test failed and didn't kill the container
+        // Just in case a test failed and didn't kill the container
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             try {
                 kill();
             } catch (Exception e) {
-                log.debug("Corfu server shutdown hook. Can't kill container: {}", params.getGenericName());
+                log.debug("Corfu server shutdown hook. Can't kill container: {}", params.getName());
             }
         }));
     }
@@ -218,7 +217,7 @@ public class CorfuServerDockerized implements CorfuServer {
      */
     private String getCommandLineParams() {
         StringBuilder cmd = new StringBuilder();
-        cmd.append("-a ").append("0.0.0.0");
+        cmd.append("-a ").append(ALL_NETWORK_INTERFACES);
 
         switch (params.getPersistence()) {
             case DISK:
@@ -253,11 +252,11 @@ public class CorfuServerDockerized implements CorfuServer {
             NodeLocator node = NodeLocator
                     .builder()
                     .protocol(NodeLocator.Protocol.TCP)
-                    .host(params.getGenericName())
+                    .host(params.getName())
                     .port(params.getPort())
                     .build();
 
-            CorfuRuntime.CorfuRuntimeParameters runtimeParams = CorfuRuntime.CorfuRuntimeParameters
+            CorfuRuntimeParameters runtimeParams = CorfuRuntimeParameters
                     .builder()
                     .layoutServers(Collections.singletonList(node))
                     .build();
@@ -268,6 +267,7 @@ public class CorfuServerDockerized implements CorfuServer {
         public boolean add(CorfuServer server) {
             log.debug("Add node: {}", server.getParams());
 
+            //FIXME fix it corfu runtime and remove this code then
             if (params.equals(server.getParams())) {
                 log.warn("Can't add itself into the corfu cluster");
                 return false;

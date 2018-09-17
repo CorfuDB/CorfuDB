@@ -1,16 +1,18 @@
 package org.corfudb.universe.service;
 
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.spotify.docker.client.DockerClient;
 import lombok.Builder;
 import lombok.Getter;
 import org.corfudb.universe.cluster.docker.CorfuServerDockerized;
 import org.corfudb.universe.node.CorfuServer;
 import org.corfudb.universe.node.Node;
+import org.corfudb.universe.node.Node.NodeParams;
+import org.corfudb.universe.util.ClassUtils;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import static lombok.Builder.Default;
 import static org.corfudb.universe.cluster.Cluster.ClusterParams;
@@ -21,53 +23,66 @@ import static org.corfudb.universe.node.CorfuServer.ServerParams;
  */
 @Builder
 public class DockerService implements Service {
+
     @Default
-    private final ImmutableList<Node> nodes = ImmutableList.of();
+    private final ConcurrentMap<String, Node> nodes = new ConcurrentHashMap<>();
     private final DockerClient docker;
     @Getter
-    private final ServiceParams<ServerParams> params;
+    private final ServiceParams<? extends NodeParams> params;
     private final ClusterParams clusterParams;
 
     @Override
     public DockerService deploy() {
-        List<Node> nodesSnapshot = new ArrayList<>();
-        for (ServerParams serverParam : params.getNodes()) {
-            CorfuServer node = CorfuServerDockerized.builder()
-                    .clusterParams(clusterParams)
-                    .params(serverParam)
-                    .docker(docker)
-                    .build();
-
-            node = node.deploy();
-            nodesSnapshot.add(node);
+        for (NodeParams nodeParams : params.getNodeParams()) {
+            deployNode(nodeParams);
         }
 
-        return DockerService
-                .builder()
-                .clusterParams(clusterParams)
-                .params(params)
-                .nodes(ImmutableList.copyOf(nodesSnapshot))
-                .docker(docker)
-                .build();
+        return this;
+    }
+
+    private <P extends NodeParams> void deployNode(P nodeParams) {
+        switch (nodeParams.getNodeType()){
+            case CORFU_SERVER:
+                CorfuServer node = CorfuServerDockerized.builder()
+                        .clusterParams(clusterParams)
+                        .params(ClassUtils.cast(nodeParams, ServerParams.class))
+                        .docker(docker)
+                        .build();
+
+                node.deploy();
+                nodes.put(node.getParams().getName(), node);
+                break;
+            case CORFU_CLIENT:
+                throw new IllegalStateException("Corfu client not implemented");
+            default:
+                throw new IllegalStateException("Corfu client not implemented");
+        }
     }
 
     @Override
     public void stop(Duration timeout) {
-        nodes.forEach(n -> n.stop(timeout));
+        nodes.values().forEach(node -> node.stop(timeout));
     }
 
     @Override
     public void kill() {
-        nodes.forEach(Node::kill);
+        nodes.values().forEach(Node::kill);
     }
 
     @Override
-    public void unlink(Node node) {
-        throw new UnsupportedOperationException("Not implemented yet");
+    public <T extends NodeParams> Service add(T nodeParams) {
+        deployNode(nodeParams);
+        params.add(nodeParams);
+        return this;
     }
 
     @Override
-    public ImmutableList<? extends Node> nodes() {
-        return nodes;
+    public <T extends Node> T getNode(String nodeName) {
+        return ClassUtils.cast(nodes.get(nodeName));
+    }
+
+    @Override
+    public ImmutableMap<String, ? extends Node> nodes() {
+        return ImmutableMap.copyOf(nodes);
     }
 }

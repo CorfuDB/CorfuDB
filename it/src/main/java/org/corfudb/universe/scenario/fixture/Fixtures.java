@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import lombok.Builder;
 import lombok.Getter;
+import org.corfudb.universe.node.Node;
 import org.corfudb.universe.service.Service.ServiceParams;
 import org.slf4j.event.Level;
 
@@ -84,6 +85,7 @@ public interface Fixtures {
         public ServiceParams<ServerParams> data() {
             return ServiceParams.<ServerParams>builder()
                     .name(serviceName)
+                    .nodeType(Node.NodeType.CORFU_SERVER)
                     .nodes(ImmutableList.copyOf(servers.data()))
                     .build();
         }
@@ -99,41 +101,8 @@ public interface Fixtures {
         public ClusterParams data() {
             ServiceParams<ServerParams> serviceParams = service.data();
             return ClusterParams.builder()
-                    .services(ImmutableMap.of(serviceParams.getName(), serviceParams))
-                    .build();
-        }
-    }
-
-    @Builder
-    @Getter
-    class SingleClusterFixture implements Fixture<ClusterParams> {
-        @Default
-        private final CorfuSingleServiceFixture service = CorfuSingleServiceFixture.builder().build();
-
-        @Override
-        public ClusterParams data() {
-            ServiceParams<ServerParams> serviceParams = service.data();
-            return ClusterParams.builder()
-                    .services(ImmutableMap.of(serviceParams.getName(), serviceParams))
-                    .build();
-        }
-    }
-
-    @Builder
-    @Getter
-    class CorfuSingleServiceFixture implements Fixture<ServiceParams<ServerParams>> {
-
-        @Default
-        private final SingleServerFixture servers = SingleServerFixture.builder().build();
-        @Default
-        private final String serviceName = "corfuServer";
-
-        @Override
-        public ServiceParams<ServerParams> data() {
-            return ServiceParams.<ServerParams>builder()
-                    .name(serviceName)
-                    .nodes(ImmutableList.of(servers.data()))
-                    .build();
+                    .build()
+                    .add(serviceParams);
         }
     }
 }

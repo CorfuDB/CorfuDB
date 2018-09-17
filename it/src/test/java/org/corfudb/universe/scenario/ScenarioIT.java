@@ -3,6 +3,7 @@ package org.corfudb.universe.scenario;
 import com.spotify.docker.client.DefaultDockerClient;
 import com.spotify.docker.client.DockerClient;
 import org.corfudb.universe.Universe;
+import org.corfudb.universe.cluster.Cluster;
 import org.corfudb.universe.cluster.Cluster.ClusterParams;
 import org.corfudb.universe.cluster.docker.DockerCluster;
 import org.corfudb.universe.scenario.config.ScenarioConfig;
@@ -17,7 +18,7 @@ public class ScenarioIT {
     private static final Universe UNIVERSE = Universe.getInstance();
 
 
-    private DockerCluster dockerCluster;
+    private Cluster dockerCluster;
     private final DockerClient docker;
 
     public ScenarioIT() throws Exception {

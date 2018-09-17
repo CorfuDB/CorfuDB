@@ -15,5 +15,7 @@ public interface CorfuClient extends Node {
     @EqualsAndHashCode
     class ClientParams implements NodeParams {
         private final String host;
+        private final String name;
+        private final NodeType nodeType = NodeType.CORFU_CLIENT;
     }
 }

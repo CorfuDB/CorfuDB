@@ -31,9 +31,17 @@ public interface Node {
      */
     void kill();
 
+    NodeParams getParams();
+
     /**
      * Common interface for the configurations of different implementation of {@link Node}.
      */
     interface NodeParams {
+        String getName();
+        NodeType getNodeType();
+    }
+
+    enum NodeType {
+        CORFU_SERVER, CORFU_CLIENT
     }
 }

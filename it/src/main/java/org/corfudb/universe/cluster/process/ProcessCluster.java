@@ -19,6 +19,11 @@ public class ProcessCluster implements Cluster {
     }
 
     @Override
+    public <T extends Service.ServiceParams<?>> Cluster add(T serviceParams) {
+        throw NOT_IMPLEMENTED;
+    }
+
+    @Override
     public ClusterParams getClusterParams() {
         throw NOT_IMPLEMENTED;
     }

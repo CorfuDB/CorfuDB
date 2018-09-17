@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableMap;
 import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.messages.NetworkConfig;
 import lombok.Builder;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.cluster.Cluster;
 import org.corfudb.universe.cluster.ClusterException;
@@ -17,9 +16,11 @@ import org.slf4j.LoggerFactory;
 import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
-import java.util.function.Function;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.corfudb.universe.node.CorfuServer.ServerParams;
 
@@ -28,28 +29,29 @@ import static org.corfudb.universe.node.CorfuServer.ServerParams;
  */
 @Slf4j
 public class DockerCluster implements Cluster {
+    /**
+     * Docker parameter --network=host doesn't work in mac machines,
+     * FakeDns is used to solve the issue, it resolves a dns record (which is a node name) to loopback interface always.
+     * See Readme.md
+     */
     private static final FakeDns FAKE_DNS = FakeDns.getInstance().install();
 
-    @Getter
-    private final ClusterParams clusterParams;
+    private final AtomicReference<ClusterParams> clusterParams = new AtomicReference<>();
 
     private final DockerClient docker;
     private final DockerNetwork network = new DockerNetwork();
 
-    private final ImmutableMap<String, Service> services;
-    private final Optional<String> clusterId;
-    private final Thread shutdownHook;
+    private final ConcurrentMap<String, Service> services = new ConcurrentHashMap<>();
+    private final String clusterId;
+    private final AtomicBoolean initialized = new AtomicBoolean();
 
     @Builder
-    public DockerCluster(ClusterParams clusterParams, DockerClient docker, ImmutableMap<String, Service> services,
-                         Optional<String> clusterId) {
-        this.clusterParams = clusterParams;
+    public DockerCluster(ClusterParams clusterParams, DockerClient docker) {
+        this.clusterParams.set(clusterParams);
         this.docker = docker;
-        this.services = services;
-        this.clusterId = clusterId;
+        this.clusterId = UUID.randomUUID().toString();
 
-        shutdownHook = new Thread(this::shutdown);
-        Runtime.getRuntime().addShutdownHook(shutdownHook);
+        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
     }
 
 
@@ -66,27 +68,15 @@ public class DockerCluster implements Cluster {
     public DockerCluster deploy() {
         log.info("Deploying cluster");
 
-        if (!clusterId.isPresent()) {
+        if (!initialized.get()) {
             network.setup();
+            initialized.set(true);
         }
 
         Map<String, Service> servicesSnapshot = createAndDeployServices();
+        services.putAll(servicesSnapshot);
 
-        Optional<String> newClusterId = clusterId;
-        if (!newClusterId.isPresent()) {
-            newClusterId = Optional.of(UUID.randomUUID().toString());
-        }
-
-        DockerCluster cluster = DockerCluster.builder()
-                .clusterParams(clusterParams)
-                .docker(docker)
-                .services(ImmutableMap.copyOf(servicesSnapshot))
-                .clusterId(newClusterId)
-                .build();
-
-        Runtime.getRuntime().removeShutdownHook(shutdownHook);
-
-        return cluster;
+        return this;
     }
 
     @Override
@@ -96,22 +86,24 @@ public class DockerCluster implements Cluster {
         // gracefully stop all services
         services.values().forEach(service -> {
             try {
-                service.stop(clusterParams.getTimeout());
+                service.stop(clusterParams.get().getTimeout());
             } catch (Exception ex) {
                 log.info("Can't stop service: {}", service.getParams().getName());
             }
         });
 
         // Kill all docker containers
-        clusterParams.getServices().keySet().forEach(serviceName -> {
-            ServiceParams<ServerParams> serviceParams = clusterParams.getService(serviceName);
+        clusterParams.get().getServices().keySet().forEach(serviceName -> {
+            ServiceParams<ServerParams> serviceParams = clusterParams.get().getServiceParams(serviceName);
 
-            serviceParams.getNodes().forEach(serverParams -> {
+            serviceParams.getNodeParams().forEach(serverParams -> {
                 try {
-                    docker.killContainer(serverParams.getGenericName());
+                    docker.killContainer(serverParams.getName());
                 } catch (Exception e) {
-                    log.debug("Can't kill container. In general it should be killed already. Container: {}",
-                            serverParams.getGenericName());
+                    log.debug(
+                            "Can't kill container. In general it should be killed already. Container: {}",
+                            serverParams.getName()
+                    );
                 }
             });
 
@@ -120,14 +112,27 @@ public class DockerCluster implements Cluster {
         try {
             network.shutdown();
         } catch (ClusterException e) {
-            log.debug("Can't stop docker network. Already stopped");
+            log.debug("Can't stop docker network. Network name: {}", clusterParams.get().getNetworkName());
         }
     }
 
     @Override
-    public ImmutableMap<String, Service> services() {
-        return services;
+    public <T extends ServiceParams<?>> Cluster add(T serviceParams) {
+        clusterParams.get().add(serviceParams);
+        deployDockerService(serviceParams);
+        return this;
     }
+
+    @Override
+    public ClusterParams getClusterParams() {
+        return clusterParams.get();
+    }
+
+    @Override
+    public ImmutableMap<String, Service> services() {
+        return ImmutableMap.copyOf(services);
+    }
+
 
     @Override
     public Service getService(String serviceName) {
@@ -137,23 +142,36 @@ public class DockerCluster implements Cluster {
     private Map<String, Service> createAndDeployServices() {
         Map<String, Service> servicesSnapshot = new HashMap<>();
 
-        for (String serviceName : clusterParams.getServices().keySet()) {
-            DockerService service = DockerService.builder()
-                    .clusterParams(clusterParams)
-                    .params(clusterParams.getService(serviceName))
-                    .docker(docker)
-                    .build();
-
-            service.getParams().getNodes().forEach(node ->
-                    FAKE_DNS.addForwardResolution(node.getGenericName(), InetAddress.getLoopbackAddress())
-            );
-
-            service = service.deploy();
+        ClusterParams clusterConfig = clusterParams.get();
+        for (String serviceName : clusterConfig.getServices().keySet()) {
+            DockerService service = deployDockerService(clusterConfig.getServiceParams(serviceName));
 
             servicesSnapshot.put(serviceName, service);
         }
 
         return servicesSnapshot;
+    }
+
+    private DockerService deployDockerService(ServiceParams<?> serviceParams) {
+        switch (serviceParams.getNodeType()) {
+            case CORFU_SERVER:
+                serviceParams.getNodeParams().forEach(node ->
+                        FAKE_DNS.addForwardResolution(node.getName(), InetAddress.getLoopbackAddress())
+                );
+
+                DockerService service = DockerService.builder()
+                        .clusterParams(clusterParams.get())
+                        .params(serviceParams)
+                        .docker(docker)
+                        .build();
+
+                service.deploy();
+                return service;
+            case CORFU_CLIENT:
+                throw new ClusterException("Not implemented corfu client. Service config: " + serviceParams);
+            default:
+                throw new ClusterException("Unknown node type");
+        }
     }
 
     private class DockerNetwork {
@@ -165,11 +183,12 @@ public class DockerCluster implements Cluster {
          * @throws ClusterException will be thrown if cannot set up a docker network
          */
         void setup() {
-            log.info("Setup network: {}", clusterParams.getNetworkName());
+            String networkName = clusterParams.get().getNetworkName();
+            log.info("Setup network: {}", networkName);
             NetworkConfig networkConfig = NetworkConfig.builder()
                     .checkDuplicate(true)
                     .attachable(true)
-                    .name(clusterParams.getNetworkName())
+                    .name(networkName)
                     .build();
 
             try {
@@ -185,11 +204,12 @@ public class DockerCluster implements Cluster {
          * @throws ClusterException will be thrown if cannot shut up a docker network
          */
         void shutdown() {
-            log.info("Shutdown network: {}", clusterParams.getNetworkName());
+            String networkName = clusterParams.get().getNetworkName();
+            log.info("Shutdown network: {}", networkName);
             try {
-                docker.removeNetwork(clusterParams.getNetworkName());
+                docker.removeNetwork(networkName);
             } catch (Exception e) {
-                final String err = String.format("Cannot shutdown docker network: %s.", clusterParams.getNetworkName());
+                final String err = String.format("Cannot shutdown docker network: %s.", networkName);
                 throw new ClusterException(err, e);
             }
         }

@@ -1,13 +1,22 @@
 package org.corfudb.universe.service;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import org.corfudb.universe.cluster.Cluster;
 import org.corfudb.universe.node.Node;
+import org.corfudb.universe.node.Node.NodeType;
+import org.corfudb.universe.util.ClassUtils;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.corfudb.universe.node.CorfuServer.ServerParams;
 import static org.corfudb.universe.node.Node.NodeParams;
@@ -16,12 +25,11 @@ import static org.corfudb.universe.node.Node.NodeParams;
  * This provides an interface as an abstraction for a logical service that groups a list of {@link Node}s of the same
  * type.
  * <p>
- * The followings are the main functionalities provided by this class: *
+ * The following are the main functionalities provided by this class: *
  * <p>
  * DEPLOY: deploys a service representing a collection nodes using the provided configuration in {@link ServiceParams}
  * STOP: stops a service gracefully within the provided timeout
  * KILL: kills a service immediately
- * UNLINK: unlinks a node from the service by removing it from the collection of nodes
  */
 public interface Service {
 
@@ -46,37 +54,42 @@ public interface Service {
      */
     void kill();
 
-    /**
-     * Unlink the node from the service by removing the node.
-     *
-     * @param node
-     */
-    void unlink(Node node);
+    <T extends NodeParams> Service add(T nodeParams);
 
     /**
      * Provides {@link ServiceParams} used for configuring a {@link Service}
      *
      * @return a Service parameters
      */
-    ServiceParams<ServerParams> getParams();
+    <T extends NodeParams> ServiceParams<T> getParams();
 
     /**
      * Provide the nodes that the {@link Service} is composed of.
      *
      * @return an {@link ImmutableList} of {@link Node}s.
      */
-    <T extends Node> ImmutableList<T> nodes();
+    ImmutableMap<String, ? extends Node> nodes();
 
-    default <T extends Node> ImmutableList<T> nodes(Class<T> nodeType) {
-        return nodes();
-    }
+    <T extends Node> T getNode(String nodeName);
 
     @AllArgsConstructor
-    @Getter
     @Builder
     @EqualsAndHashCode
     class ServiceParams<T extends NodeParams> {
+        @Getter
         private final String name;
-        private final ImmutableList<T> nodes;
+        @Default
+        private final List<T> nodes = new ArrayList<>();
+        @Getter
+        private final NodeType nodeType;
+
+        public ImmutableList<T> getNodeParams(){
+            return ImmutableList.copyOf(nodes);
+        }
+
+        public synchronized <R extends NodeParams> ServiceParams<T> add(R nodeParams){
+            nodes.add(ClassUtils.cast(nodeParams));
+            return this;
+        }
     }
 }

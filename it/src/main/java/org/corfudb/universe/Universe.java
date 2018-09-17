@@ -37,8 +37,6 @@ public class Universe {
         return DockerCluster.builder()
                 .clusterParams(clusterParams)
                 .docker(docker)
-                .clusterId(Optional.empty())
-                .services(ImmutableMap.of())
                 .build();
     }
 

@@ -1,11 +1,12 @@
 package org.corfudb.universe.scenario.action;
 
-import com.google.common.collect.ImmutableList;
 import lombok.Data;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.node.CorfuServer;
 import org.corfudb.universe.scenario.action.Action.AbstractAction;
 import org.corfudb.universe.service.Service;
+
+import java.util.Optional;
 
 /**
  * Add a corfu server into the corfu cluster
@@ -13,21 +14,18 @@ import org.corfudb.universe.service.Service;
 @Data
 public class AddNodeAction extends AbstractAction<Layout> {
     private String serviceName;
-    private Integer candidateIndex;
+    private String mainServerName;
+    private String nodeName;
 
     @Override
     public Layout execute() {
         Service service = cluster.getService(serviceName);
-        ImmutableList<CorfuServer> nodes = service.nodes(CorfuServer.class);
-        CorfuServer mainServer = nodes.get(0);
+        CorfuServer mainServer = service.getNode(mainServerName);
         mainServer.connectCorfuRuntime();
-        CorfuServer candidate = service.nodes(CorfuServer.class).get(candidateIndex);
 
+        CorfuServer candidate = service.getNode(nodeName);
         mainServer.addNode(candidate);
-        if(mainServer.getLayout().isPresent()) {
-            return mainServer.getLayout().get();
-        } else {
-            throw new IllegalStateException("Can't get layout");
-        }
+
+        return mainServer.getLayout();
     }
 }
