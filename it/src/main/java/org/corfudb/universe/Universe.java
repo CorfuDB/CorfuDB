@@ -1,12 +1,9 @@
 package org.corfudb.universe;
 
-import com.google.common.collect.ImmutableMap;
 import com.spotify.docker.client.DockerClient;
 import org.corfudb.universe.cluster.docker.DockerCluster;
 import org.corfudb.universe.cluster.process.ProcessCluster;
 import org.corfudb.universe.cluster.vm.VmCluster;
-
-import java.util.Optional;
 
 import static org.corfudb.universe.cluster.Cluster.ClusterParams;
 

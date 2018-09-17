@@ -1,7 +1,6 @@
 package org.corfudb.universe.scenario.fixture;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import lombok.Builder;
 import lombok.Getter;
 import org.corfudb.universe.node.Node;

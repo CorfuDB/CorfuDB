@@ -5,7 +5,6 @@ import com.spotify.docker.client.DockerClient;
 import org.corfudb.universe.Universe;
 import org.corfudb.universe.cluster.Cluster;
 import org.corfudb.universe.cluster.Cluster.ClusterParams;
-import org.corfudb.universe.cluster.docker.DockerCluster;
 import org.corfudb.universe.scenario.config.ScenarioConfig;
 import org.corfudb.universe.scenario.config.ScenarioConfigParser;
 import org.corfudb.universe.scenario.fixture.Fixtures.ClusterFixture;

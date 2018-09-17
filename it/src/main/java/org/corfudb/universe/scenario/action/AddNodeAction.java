@@ -6,8 +6,6 @@ import org.corfudb.universe.node.CorfuServer;
 import org.corfudb.universe.scenario.action.Action.AbstractAction;
 import org.corfudb.universe.service.Service;
 
-import java.util.Optional;
-
 /**
  * Add a corfu server into the corfu cluster
  */

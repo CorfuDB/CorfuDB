@@ -4,7 +4,6 @@ import com.spotify.docker.client.DefaultDockerClient;
 import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.messages.ContainerInfo;
 import org.corfudb.universe.Universe;
-import org.corfudb.universe.scenario.fixture.Fixtures;
 import org.corfudb.universe.scenario.fixture.Fixtures.ClusterFixture;
 import org.corfudb.universe.scenario.fixture.Fixtures.CorfuServiceFixture;
 import org.corfudb.universe.scenario.fixture.Fixtures.MultipleServersFixture;

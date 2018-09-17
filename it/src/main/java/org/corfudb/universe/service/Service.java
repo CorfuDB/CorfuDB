@@ -7,18 +7,14 @@ import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import org.corfudb.universe.cluster.Cluster;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.util.ClassUtils;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-import static org.corfudb.universe.node.CorfuServer.ServerParams;
 import static org.corfudb.universe.node.Node.NodeParams;
 
 /**

@@ -2,7 +2,6 @@ package org.corfudb.universe.cluster.vm;
 
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.universe.cluster.Cluster;
-import org.corfudb.universe.node.Node;
 import org.corfudb.universe.service.Service;
 
 /**

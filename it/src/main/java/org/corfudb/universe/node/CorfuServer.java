@@ -9,7 +9,6 @@ import org.corfudb.runtime.view.Layout;
 import org.slf4j.event.Level;
 
 import java.time.Duration;
-import java.util.Optional;
 
 import static lombok.EqualsAndHashCode.Exclude;
 

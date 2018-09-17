@@ -12,8 +12,6 @@ import org.corfudb.universe.service.Service.ServiceParams;
 import org.corfudb.universe.util.ClassUtils;
 
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
