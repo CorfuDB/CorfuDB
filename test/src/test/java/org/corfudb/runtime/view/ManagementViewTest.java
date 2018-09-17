@@ -1914,4 +1914,44 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(corfuRuntime.getSequencerView().query().getTokenValue())
                 .isEqualTo(expectedTokenValue);
     }
+
+    /**
+     * Tests that a degraded cluster heals a sealed cluster.
+     * NOTE: A sealed cluster without a layout causes the system to halt as none of the clients can
+     * perform data operations until the new epoch is filled in with a layout.
+     * Scenario: 3 nodes - PORT_0, PORT_1 and PORT_2.
+     * A server rule is added to simulate PORT_2 as unresponsive.
+     * First, the degraded cluster moves from epoch 1 to epoch 2 to mark PORT_2 unresponsive.
+     * Now, PORT_0 and PORT_1 are sealed to epoch 3.
+     * The fault detectors detect this and fills the epoch 3 with a layout.
+     */
+    @Test
+    public void testSealedDegradedClusterHealing() {
+        get3NodeLayout();
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+
+        addServerRule(SERVERS.PORT_2, new TestRule().always().drop());
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            corfuRuntime.invalidateLayout();
+            if (!corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers().isEmpty()) {
+                break;
+            }
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+        }
+
+        Layout layout = new Layout(corfuRuntime.getLayoutView().getLayout());
+        layout.setEpoch(layout.getEpoch() + 1);
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout).moveServersToEpoch();
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            corfuRuntime.invalidateLayout();
+            if (corfuRuntime.getLayoutView().getLayout().getEpoch() == layout.getEpoch()) {
+                break;
+            }
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+        }
+
+        assertThat(corfuRuntime.getLayoutView().getLayout()).isEqualTo(layout);
+    }
 }
