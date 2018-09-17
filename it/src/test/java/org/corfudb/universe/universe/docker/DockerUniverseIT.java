@@ -3,7 +3,7 @@ package org.corfudb.universe.cluster.docker;
 import com.spotify.docker.client.DefaultDockerClient;
 import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.messages.ContainerInfo;
-import org.corfudb.universe.Universe;
+import org.corfudb.universe.UniverseFactory;
 import org.corfudb.universe.scenario.fixture.Fixtures.ClusterFixture;
 import org.corfudb.universe.scenario.fixture.Fixtures.CorfuServiceFixture;
 import org.corfudb.universe.scenario.fixture.Fixtures.MultipleServersFixture;
@@ -13,10 +13,10 @@ import org.junit.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.cluster.Cluster.ClusterParams;
 import static org.corfudb.universe.node.CorfuServer.ServerParams;
-import static org.corfudb.universe.service.Service.ServiceParams;
+import static org.corfudb.universe.service.Group.GroupParams;
 
 public class DockerClusterIT {
-    private static final Universe UNIVERSE = Universe.getInstance();
+    private static final UniverseFactory UNIVERSE_FACTORY = UniverseFactory.getInstance();
 
     private final DockerClient docker;
     private DockerCluster dockerCluster;
@@ -44,7 +44,7 @@ public class DockerClusterIT {
         ClusterFixture clusterFixture = ClusterFixture.builder().service(serviceFixture).build();
 
         ClusterParams clusterParams = clusterFixture.data();
-        dockerCluster = UNIVERSE
+        dockerCluster = UNIVERSE_FACTORY
                 .buildDockerCluster(clusterParams, docker)
                 .deploy();
 
@@ -70,14 +70,14 @@ public class DockerClusterIT {
 
         //setup
         final ClusterParams clusterParams = clusterFixture.data();
-        dockerCluster = UNIVERSE
+        dockerCluster = UNIVERSE_FACTORY
                 .buildDockerCluster(clusterParams, docker)
                 .deploy();
 
-        ServiceParams<ServerParams> serviceParams = clusterParams
+        GroupParams<ServerParams> groupParams = clusterParams
                 .getServiceParams(clusterFixture.getService().getServiceName(), ServerParams.class);
 
-        for (ServerParams serverParams : serviceParams.getNodeParams()) {
+        for (ServerParams serverParams : groupParams.getNodeParams()) {
             ContainerInfo container = docker.inspectContainer(serverParams.getName());
             assertThat(container.state().running()).isTrue();
             assertThat(container.name()).isEqualTo("/" + serverParams.getName());

@@ -19,20 +19,20 @@ import static org.corfudb.universe.cluster.Cluster.ClusterParams;
 import static org.corfudb.universe.node.CorfuServer.ServerParams;
 
 /**
- * Provides Docker implementation of {@link Service}.
+ * Provides Docker implementation of {@link Group}.
  */
 @Builder
-public class DockerService implements Service {
+public class DockerGroup implements Group {
 
     @Default
     private final ConcurrentMap<String, Node> nodes = new ConcurrentHashMap<>();
     private final DockerClient docker;
     @Getter
-    private final ServiceParams<? extends NodeParams> params;
+    private final GroupParams<? extends NodeParams> params;
     private final ClusterParams clusterParams;
 
     @Override
-    public DockerService deploy() {
+    public DockerGroup deploy() {
         for (NodeParams nodeParams : params.getNodeParams()) {
             deployNode(nodeParams);
         }
@@ -70,7 +70,7 @@ public class DockerService implements Service {
     }
 
     @Override
-    public <T extends NodeParams> Service add(T nodeParams) {
+    public <T extends NodeParams> Group add(T nodeParams) {
         deployNode(nodeParams);
         params.add(nodeParams);
         return this;

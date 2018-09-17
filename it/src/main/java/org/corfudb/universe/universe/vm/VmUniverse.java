@@ -2,7 +2,7 @@ package org.corfudb.universe.cluster.vm;
 
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.universe.cluster.Cluster;
-import org.corfudb.universe.service.Service;
+import org.corfudb.universe.service.Group;
 
 /**
  * This implementation provides a cluster, where each server is represented as a virtual machine.
@@ -21,7 +21,7 @@ public class VmCluster implements Cluster {
     }
 
     @Override
-    public <T extends Service.ServiceParams<?>> Cluster add(T serviceParams) {
+    public <T extends Group.GroupParams<?>> Cluster add(T serviceParams) {
         throw NOT_IMPLEMETED;
     }
 
@@ -31,12 +31,12 @@ public class VmCluster implements Cluster {
     }
 
     @Override
-    public ImmutableMap<String, Service> services() {
+    public ImmutableMap<String, Group> services() {
         throw NOT_IMPLEMETED;
     }
 
     @Override
-    public Service getService(String serviceName) {
+    public Group getService(String serviceName) {
         throw NOT_IMPLEMETED;
     }
 

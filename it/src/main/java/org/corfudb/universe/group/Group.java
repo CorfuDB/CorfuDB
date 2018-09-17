@@ -23,44 +23,43 @@ import static org.corfudb.universe.node.Node.NodeParams;
  * <p>
  * The following are the main functionalities provided by this class: *
  * <p>
- * DEPLOY: deploys a service representing a collection nodes using the provided configuration in {@link ServiceParams}
- * STOP: stops a service gracefully within the provided timeout
- * KILL: kills a service immediately
+ * DEPLOY: deploys a group representing a collection nodes using the provided configuration in {@link GroupParams}
+ * STOP: stops a group gracefully within the provided timeout
+ * KILL: kills a group immediately
  */
-public interface Service {
+public interface Group {
 
     /**
-     * Deploy the service into cluster. Note that deploy creates a new immutable instance of service. In other words,
-     * changing the state of service will lead to creation of a new instance of {@link Service}
+     * Deploy the group into cluster.
      *
      * @return new instance of deployed service
      */
-    Service deploy();
+    Group deploy();
 
     /**
-     * Stop the service by stopping all individual nodes of the service. The must happend within within the limit of
+     * Stop the group by stopping all individual nodes of the group. The must happened within within the limit of
      * provided timeout.
      *
-     * @param timeout allowed time to gracefully stop the service
+     * @param timeout allowed time to gracefully stop the group
      */
     void stop(Duration timeout);
 
     /**
-     * Kill the service immediately by killing all the nodes of the service.
+     * Kill the group immediately by killing all the nodes of the group.
      */
     void kill();
 
-    <T extends NodeParams> Service add(T nodeParams);
+    <T extends NodeParams> Group add(T nodeParams);
 
     /**
-     * Provides {@link ServiceParams} used for configuring a {@link Service}
+     * Provides {@link GroupParams} used for configuring a {@link Group}
      *
-     * @return a Service parameters
+     * @return a Group parameters
      */
-    <T extends NodeParams> ServiceParams<T> getParams();
+    <T extends NodeParams> GroupParams<T> getParams();
 
     /**
-     * Provide the nodes that the {@link Service} is composed of.
+     * Provide the nodes that the {@link Group} is composed of.
      *
      * @return an {@link ImmutableList} of {@link Node}s.
      */
@@ -71,7 +70,7 @@ public interface Service {
     @AllArgsConstructor
     @Builder
     @EqualsAndHashCode
-    class ServiceParams<T extends NodeParams> {
+    class GroupParams<T extends NodeParams> {
         @Getter
         private final String name;
         @Default
@@ -83,7 +82,7 @@ public interface Service {
             return ImmutableList.copyOf(nodes);
         }
 
-        public synchronized <R extends NodeParams> ServiceParams<T> add(R nodeParams){
+        public synchronized <R extends NodeParams> GroupParams<T> add(R nodeParams){
             nodes.add(ClassUtils.cast(nodeParams));
             return this;
         }

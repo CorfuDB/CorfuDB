@@ -7,8 +7,8 @@ import lombok.Getter;
 import org.corfudb.universe.node.CorfuClient;
 import org.corfudb.universe.node.CorfuServer;
 import org.corfudb.universe.node.Node;
-import org.corfudb.universe.service.Service;
-import org.corfudb.universe.service.Service.ServiceParams;
+import org.corfudb.universe.service.Group;
+import org.corfudb.universe.service.Group.GroupParams;
 import org.corfudb.universe.util.ClassUtils;
 
 import java.time.Duration;
@@ -22,7 +22,7 @@ import static org.corfudb.universe.node.Node.NodeParams;
 
 /**
  * A Cluster represents a common notion of a cluster of nodes. The architecture of a cluster is composed of collections
- * of {@link Service}s and {@link Node}s.
+ * of {@link Group}s and {@link Node}s.
  * Each instance of service in the cluster is composed of a collection of {@link Node}s which are a subset of the
  * entire nodes included in the cluster.
  * Cluster configuration is provided by an instance of {@link ClusterParams}.
@@ -49,7 +49,7 @@ public interface Cluster {
      */
     void shutdown();
 
-    <T extends ServiceParams<?>> Cluster add(T serviceParams);
+    <T extends GroupParams<?>> Cluster add(T serviceParams);
 
     /**
      * Returns an instance of {@link ClusterParams} representing the configuration for the cluster.
@@ -59,13 +59,13 @@ public interface Cluster {
     ClusterParams getClusterParams();
 
     /**
-     * Returns an {@link ImmutableMap} of {@link Service}s contained in the cluster.
+     * Returns an {@link ImmutableMap} of {@link Group}s contained in the cluster.
      *
      * @return services in the cluster
      */
-    ImmutableMap<String, Service> services();
+    ImmutableMap<String, Group> services();
 
-    Service getService(String serviceName);
+    Group getService(String serviceName);
 
     @Builder(toBuilder = true)
     @EqualsAndHashCode
@@ -77,7 +77,7 @@ public interface Cluster {
         @Default
         private final String networkName = NETWORK_PREFIX + UUID.randomUUID().toString();
         @Default
-        private final ConcurrentMap<String, ServiceParams<? extends NodeParams>> services = new ConcurrentHashMap<>();
+        private final ConcurrentMap<String, GroupParams<? extends NodeParams>> services = new ConcurrentHashMap<>();
 
         /**
          * Cluster timeout to wait until an action is completed.
@@ -93,23 +93,23 @@ public interface Cluster {
          *
          * @param name service name
          * @param <T>  node type: {@link CorfuServer} / {@link CorfuClient}
-         * @return an instance of {@link ServiceParams} representing particular type of service
+         * @return an instance of {@link GroupParams} representing particular type of service
          */
-        public <T extends NodeParams> ServiceParams<T> getServiceParams(String name, Class<T> nodeType) {
+        public <T extends NodeParams> GroupParams<T> getServiceParams(String name, Class<T> nodeType) {
             return getServiceParams(name);
         }
 
-        public <T extends NodeParams> ServiceParams<T> getServiceParams(String name) {
-            ServiceParams<?> p = services.get(name);
+        public <T extends NodeParams> GroupParams<T> getServiceParams(String name) {
+            GroupParams<?> p = services.get(name);
             return ClassUtils.cast(p);
         }
 
-        public ClusterParams add(ServiceParams<? extends NodeParams> serviceParams){
-            services.put(serviceParams.getName(), serviceParams);
+        public ClusterParams add(GroupParams<? extends NodeParams> groupParams){
+            services.put(groupParams.getName(), groupParams);
             return this;
         }
 
-        public ImmutableMap<String, ServiceParams<? extends NodeParams>> getServices() {
+        public ImmutableMap<String, GroupParams<? extends NodeParams>> getServices() {
             return ImmutableMap.copyOf(services);
         }
     }

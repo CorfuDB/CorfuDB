@@ -5,7 +5,7 @@ import com.spotify.docker.client.DockerClient;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.universe.Universe;
+import org.corfudb.universe.UniverseFactory;
 import org.corfudb.universe.cluster.Cluster;
 import org.corfudb.universe.node.CorfuServer;
 import org.corfudb.universe.node.Node;
@@ -23,14 +23,14 @@ import static org.corfudb.universe.scenario.fixture.Fixtures.ClusterFixture;
 import static org.corfudb.universe.scenario.fixture.Fixtures.CorfuServiceFixture;
 import static org.corfudb.universe.scenario.fixture.Fixtures.MultipleServersFixture;
 
-public class DockerServiceIT {
-    private static final Universe UNIVERSE = Universe.getInstance();
+public class DockerGroupIT {
+    private static final UniverseFactory UNIVERSE_FACTORY = UniverseFactory.getInstance();
     private static final String STREAM_NAME = "stream";
 
     private final DockerClient docker;
     private Cluster cluster;
 
-    public DockerServiceIT() throws Exception {
+    public DockerGroupIT() throws Exception {
         this.docker = DefaultDockerClient.fromEnv().build();
     }
 
@@ -47,7 +47,7 @@ public class DockerServiceIT {
         CorfuServiceFixture serviceFixture = CorfuServiceFixture.builder().servers(serversFixture).build();
         ClusterFixture clusterFixture = ClusterFixture.builder().service(serviceFixture).build();
 
-        cluster = UNIVERSE
+        cluster = UNIVERSE_FACTORY
                 .buildDockerCluster(clusterFixture.data(), docker)
                 .deploy();
 
@@ -78,7 +78,7 @@ public class DockerServiceIT {
     public void addAndRemoveCorfuServerIntoTheClusterTest() throws Exception {
         ClusterFixture clusterFixture = ClusterFixture.builder().build();
 
-        cluster = UNIVERSE
+        cluster = UNIVERSE_FACTORY
                 .buildDockerCluster(clusterFixture.data(), docker)
                 .deploy();
 
@@ -93,19 +93,19 @@ public class DockerServiceIT {
                     .get(0)
                     .getName();
 
-            Service service = cluster.getService(serviceName);
+            Group group = cluster.getService(serviceName);
 
             testCase.it("check cluster size", Integer.class, test -> test
-                    .action(() -> service.nodes().size())
+                    .action(() -> group.nodes().size())
                     .check((data, corfuServers) ->
                             assertThat(corfuServers).isEqualTo(fixture.getService().getServers().getNumNodes())
                     )
             );
 
-            final int clusterSize = service.getParams().getNodeParams().size();
+            final int clusterSize = group.getParams().getNodeParams().size();
             testCase.it("should add node", Layout.class, test -> {
                         int index = 0;
-                        for (Node node : service.nodes().values()) {
+                        for (Node node : group.nodes().values()) {
                             CorfuServer corfuServer = ClassUtils.cast(node);
 
                             if (corfuServer.getParams().getMode() == CorfuServer.Mode.SINGLE) {
@@ -131,8 +131,8 @@ public class DockerServiceIT {
 
             /*testCase.it("should remove node from cluster", Layout.class, test -> test
                     .action(() -> {
-                        CorfuServer mainServer = service.getNode("node9000");
-                        CorfuServer secondServer = service.getNode("node9001");
+                        CorfuServer mainServer = group.getNode("node9000");
+                        CorfuServer secondServer = group.getNode("node9001");
                         mainServer.removeNode(secondServer);
                         return mainServer.getLayout().get();
                     }).check((data, layout) -> {

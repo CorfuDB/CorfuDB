@@ -7,9 +7,9 @@ import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.cluster.Cluster;
 import org.corfudb.universe.cluster.ClusterException;
-import org.corfudb.universe.service.DockerService;
-import org.corfudb.universe.service.Service;
-import org.corfudb.universe.service.Service.ServiceParams;
+import org.corfudb.universe.service.DockerGroup;
+import org.corfudb.universe.service.Group;
+import org.corfudb.universe.service.Group.GroupParams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +41,7 @@ public class DockerCluster implements Cluster {
     private final DockerClient docker;
     private final DockerNetwork network = new DockerNetwork();
 
-    private final ConcurrentMap<String, Service> services = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Group> services = new ConcurrentHashMap<>();
     private final String clusterId;
     private final AtomicBoolean initialized = new AtomicBoolean();
 
@@ -73,7 +73,7 @@ public class DockerCluster implements Cluster {
             initialized.set(true);
         }
 
-        Map<String, Service> servicesSnapshot = createAndDeployServices();
+        Map<String, Group> servicesSnapshot = createAndDeployServices();
         services.putAll(servicesSnapshot);
 
         return this;
@@ -94,9 +94,9 @@ public class DockerCluster implements Cluster {
 
         // Kill all docker containers
         clusterParams.get().getServices().keySet().forEach(serviceName -> {
-            ServiceParams<ServerParams> serviceParams = clusterParams.get().getServiceParams(serviceName);
+            GroupParams<ServerParams> groupParams = clusterParams.get().getServiceParams(serviceName);
 
-            serviceParams.getNodeParams().forEach(serverParams -> {
+            groupParams.getNodeParams().forEach(serverParams -> {
                 try {
                     docker.killContainer(serverParams.getName());
                 } catch (Exception e) {
@@ -117,7 +117,7 @@ public class DockerCluster implements Cluster {
     }
 
     @Override
-    public <T extends ServiceParams<?>> Cluster add(T serviceParams) {
+    public <T extends GroupParams<?>> Cluster add(T serviceParams) {
         clusterParams.get().add(serviceParams);
         deployDockerService(serviceParams);
         return this;
@@ -129,22 +129,22 @@ public class DockerCluster implements Cluster {
     }
 
     @Override
-    public ImmutableMap<String, Service> services() {
+    public ImmutableMap<String, Group> services() {
         return ImmutableMap.copyOf(services);
     }
 
 
     @Override
-    public Service getService(String serviceName) {
+    public Group getService(String serviceName) {
         return services.get(serviceName);
     }
 
-    private Map<String, Service> createAndDeployServices() {
-        Map<String, Service> servicesSnapshot = new HashMap<>();
+    private Map<String, Group> createAndDeployServices() {
+        Map<String, Group> servicesSnapshot = new HashMap<>();
 
         ClusterParams clusterConfig = clusterParams.get();
         for (String serviceName : clusterConfig.getServices().keySet()) {
-            DockerService service = deployDockerService(clusterConfig.getServiceParams(serviceName));
+            DockerGroup service = deployDockerService(clusterConfig.getServiceParams(serviceName));
 
             servicesSnapshot.put(serviceName, service);
         }
@@ -152,23 +152,23 @@ public class DockerCluster implements Cluster {
         return servicesSnapshot;
     }
 
-    private DockerService deployDockerService(ServiceParams<?> serviceParams) {
-        switch (serviceParams.getNodeType()) {
+    private DockerGroup deployDockerService(GroupParams<?> groupParams) {
+        switch (groupParams.getNodeType()) {
             case CORFU_SERVER:
-                serviceParams.getNodeParams().forEach(node ->
+                groupParams.getNodeParams().forEach(node ->
                         FAKE_DNS.addForwardResolution(node.getName(), InetAddress.getLoopbackAddress())
                 );
 
-                DockerService service = DockerService.builder()
+                DockerGroup service = DockerGroup.builder()
                         .clusterParams(clusterParams.get())
-                        .params(serviceParams)
+                        .params(groupParams)
                         .docker(docker)
                         .build();
 
                 service.deploy();
                 return service;
             case CORFU_CLIENT:
-                throw new ClusterException("Not implemented corfu client. Service config: " + serviceParams);
+                throw new ClusterException("Not implemented corfu client. Group config: " + groupParams);
             default:
                 throw new ClusterException("Unknown node type");
         }

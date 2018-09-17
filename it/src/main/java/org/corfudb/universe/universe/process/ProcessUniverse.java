@@ -2,7 +2,8 @@ package org.corfudb.universe.cluster.process;
 
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.universe.cluster.Cluster;
-import org.corfudb.universe.service.Service;
+import org.corfudb.universe.service.Group;
+import org.corfudb.universe.service.Group.GroupParams;
 
 public class ProcessCluster implements Cluster {
     private static final UnsupportedOperationException NOT_IMPLEMENTED =
@@ -19,7 +20,7 @@ public class ProcessCluster implements Cluster {
     }
 
     @Override
-    public <T extends Service.ServiceParams<?>> Cluster add(T serviceParams) {
+    public <T extends GroupParams<?>> Cluster add(T serviceParams) {
         throw NOT_IMPLEMENTED;
     }
 
@@ -29,12 +30,12 @@ public class ProcessCluster implements Cluster {
     }
 
     @Override
-    public ImmutableMap<String, Service> services() {
+    public ImmutableMap<String, Group> services() {
         throw NOT_IMPLEMENTED;
     }
 
     @Override
-    public Service getService(String serviceName) {
+    public Group getService(String serviceName) {
         throw NOT_IMPLEMENTED;
     }
 }
