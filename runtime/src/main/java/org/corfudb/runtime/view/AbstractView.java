@@ -68,6 +68,39 @@ public abstract class AbstractView {
     private AtomicReference<RuntimeLayout> runtimeLayout = new AtomicReference<>();
 
     /**
+     * Fetches the layout uninterruptibly and rethrows any systemDownHandlerExceptions or Errors
+     * encountered.
+     *
+     * @return Fetched layout
+     */
+    private Layout getLayoutUninterruptibly() {
+        try {
+            return runtime.layout.get();
+        } catch (InterruptedException ie) {
+            throw new UnrecoverableCorfuInterruptedError("Interrupted in layoutHelper", ie);
+        } catch (ExecutionException ex) {
+            // Invalidate layout since the layout completable future now contains an exception.
+            runtime.invalidateLayout();
+            // If an error or an unchecked exception is thrown by the layout.get() completable
+            // future, the exception will materialize as an ExecutionException. In that case,
+            // we need to propagate this Error or unchecked exception.
+            if (ex.getCause() instanceof Error) {
+                log.error("getLayoutUninterruptibly: Encountered error. Aborting layoutHelper", ex);
+                throw (Error) ex.getCause();
+            }
+
+            if (ex.getCause() instanceof RuntimeException) {
+                log.error("getLayoutUninterruptibly: Encountered unchecked exception. "
+                        + "Aborting layoutHelper", ex);
+                throw (RuntimeException) ex.getCause();
+            }
+
+            log.error("getLayoutUninterruptibly: Encountered exception while fetching layout");
+            throw new RuntimeException(ex);
+        }
+    }
+
+    /**
      * Helper function for view to retrieve layouts.
      * This function will retry the given function indefinitely,
      * invalidating the view if there was a exception contacting the endpoint.
@@ -75,26 +108,28 @@ public abstract class AbstractView {
      * There is a flag to set if we want the caller to handle Runtime Exceptions. For some
      * special cases (like writes), we need to do a bit more work upon a Runtime Exception than just retry.
      *
-     * @param function The function to execute.
-     * @param <T>      The return type of the function.
-     * @param <A>      Any exception the function may throw.
-     * @param <B>      Any exception the function may throw.
-     * @param <C>      Any exception the function may throw.
-     * @param <D>      Any exception the function may throw.
+     * @param function             The function to execute.
+     * @param <T>                  The return type of the function.
+     * @param <A>                  Any exception the function may throw.
+     * @param <B>                  Any exception the function may throw.
+     * @param <C>                  Any exception the function may throw.
+     * @param <D>                  Any exception the function may throw.
      * @param rethrowAllExceptions if all exceptions are rethrown to caller.
      * @return The return value of the function.
      */
     public <T, A extends RuntimeException, B extends RuntimeException, C extends RuntimeException,
             D extends RuntimeException> T layoutHelper(LayoutFunction<Layout, T, A, B, C, D>
-                                                                          function,
+                                                               function,
                                                        boolean rethrowAllExceptions)
             throws A, B, C, D {
-        runtime.beforeRpcHandler.run();
+        runtime.getParameters().getBeforeRpcHandler().run();
         final Duration retryRate = runtime.getParameters().getConnectionRetryRate();
-        int systemDownTriggerCounter = runtime.getParameters().getSystemDownHandlerTriggerLimit();
+        int systemDownTriggerCounter = 0;
         while (true) {
+
+            final Layout layout = getLayoutUninterruptibly();
+
             try {
-                final Layout layout = runtime.layout.get();
                 return function.apply(runtimeLayout.updateAndGet(rLayout -> {
                     if (rLayout == null || rLayout.getLayout().getEpoch() != layout.getEpoch()) {
                         return new RuntimeLayout(layout, runtime);
@@ -103,8 +138,8 @@ public abstract class AbstractView {
                 }));
             } catch (RuntimeException re) {
                 if (re.getCause() instanceof TimeoutException) {
-                    log.warn("Timeout executing remote call, invalidating view and retrying in {}s",
-                            retryRate);
+                    log.warn("Timeout executing remote call, invalidating view and retrying "
+                            + "in {}s", retryRate);
                 } else if (re instanceof ServerNotReadyException) {
                     log.warn("Server still not ready. Waiting for server to start "
                             + "accepting requests.");
@@ -120,32 +155,19 @@ public abstract class AbstractView {
                 if (rethrowAllExceptions) {
                     throw new RuntimeException(re);
                 }
-
-            } catch (InterruptedException ie) {
-                throw new UnrecoverableCorfuInterruptedError("Interrupted in layoutHelper", ie);
-            } catch (ExecutionException ex) {
-                // If an error or an unchecked exception is thrown by the layout.get() completable
-                // future, the exception will materialize as an ExecutionException. In that case,
-                // we need to propagate this Error or unchecked exception.
-                if (ex.getCause() instanceof Error) {
-                    log.error("layoutHelper: Encountered error. Aborting layoutHelper", ex);
-                    throw (Error) ex.getCause();
-                }
-
-                if (ex.getCause() instanceof RuntimeException) {
-                    log.error("layoutHelper: Encountered unchecked exception. "
-                            + "Aborting layoutHelper", ex);
-                    throw (RuntimeException) ex.getCause();
-                }
-
-                log.warn("layoutHelper: Error executing remote call, invalidating view and "
-                        + "retrying in {} ms", retryRate, ex);
             }
+
+            log.info("layoutHelper: Retried {} times, SystemDownHandlerTriggerLimit = {}",
+                    systemDownTriggerCounter,
+                    runtime.getParameters().getSystemDownHandlerTriggerLimit());
 
             // Invoking the systemDownHandler if the client cannot connect to the server.
-            if (--systemDownTriggerCounter <= 0) {
-                runtime.systemDownHandler.run();
+            if (++systemDownTriggerCounter
+                    >= runtime.getParameters().getSystemDownHandlerTriggerLimit()) {
+                log.info("layoutHelper: Invoking the systemDownHandler.");
+                runtime.getParameters().getSystemDownHandler().run();
             }
+
             runtime.invalidateLayout();
             Sleep.sleepUninterruptibly(retryRate);
         }
