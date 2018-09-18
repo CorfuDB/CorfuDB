@@ -2,22 +2,22 @@ package org.corfudb.universe.scenario;
 
 import com.spotify.docker.client.DefaultDockerClient;
 import com.spotify.docker.client.DockerClient;
-import org.corfudb.universe.Universe;
-import org.corfudb.universe.cluster.Cluster;
-import org.corfudb.universe.cluster.Cluster.ClusterParams;
+import org.corfudb.universe.UniverseFactory;
 import org.corfudb.universe.scenario.config.ScenarioConfig;
 import org.corfudb.universe.scenario.config.ScenarioConfigParser;
-import org.corfudb.universe.scenario.fixture.Fixtures.ClusterFixture;
+import org.corfudb.universe.scenario.fixture.Fixtures.UniverseFixture;
+import org.corfudb.universe.universe.Universe;
+import org.corfudb.universe.universe.Universe.UniverseParams;
 import org.junit.After;
 import org.junit.Test;
 
 import java.util.List;
 
 public class ScenarioIT {
-    private static final Universe UNIVERSE = Universe.getInstance();
+    private static final UniverseFactory UNIVERSE_FACTORY = UniverseFactory.getInstance();
 
 
-    private Cluster dockerCluster;
+    private Universe dockerUniverse;
     private final DockerClient docker;
 
     public ScenarioIT() throws Exception {
@@ -26,26 +26,26 @@ public class ScenarioIT {
 
     @After
     public void tearDown() {
-        if (dockerCluster != null) {
-            dockerCluster.shutdown();
+        if (dockerUniverse != null) {
+            dockerUniverse.shutdown();
         }
     }
 
     @Test
     public void scenarioTest() throws Exception {
-        ClusterFixture clusterFixture = ClusterFixture.builder().build();
+        UniverseFixture universeFixture = UniverseFixture.builder().build();
 
-        dockerCluster = UNIVERSE
-                .buildDockerCluster(clusterFixture.data(), docker)
+        dockerUniverse = UNIVERSE_FACTORY
+                .buildDockerCluster(universeFixture.data(), docker)
                 .deploy();
 
         List<ScenarioConfig> scenarios = ScenarioConfigParser.getInstance().load("scenarios");
 
         scenarios.forEach(scenarioCfg -> {
             scenarioCfg.getScenario().forEach(test -> {
-                test.getAction().cluster = dockerCluster;
+                test.getAction().universe = dockerUniverse;
 
-                Scenario<ClusterParams, ClusterFixture> scenario = Scenario.with(clusterFixture);
+                Scenario<UniverseParams, UniverseFixture> scenario = Scenario.with(universeFixture);
                 scenario.describe((fixture, testCase) -> {
                     testCase.it(test.getDescription(), Object.class, scenarioTest -> {
                         scenarioTest.action(test.getAction()).check(test.getSpec());

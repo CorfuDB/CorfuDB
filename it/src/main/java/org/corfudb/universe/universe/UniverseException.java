@@ -1,27 +1,27 @@
-package org.corfudb.universe.cluster;
+package org.corfudb.universe.universe;
 
 /**
- * This class represents common {@link Cluster} exception wrapping the problems that prevented a successful operation
- * on {@link Cluster}
+ * This class represents common {@link Universe} exception wrapping the problems that prevented a successful operation
+ * on {@link Universe}
  */
-public class ClusterException extends RuntimeException {
-    public ClusterException() {
+public class UniverseException extends RuntimeException {
+    public UniverseException() {
         super();
     }
 
-    public ClusterException(String message) {
+    public UniverseException(String message) {
         super(message);
     }
 
-    public ClusterException(String message, Throwable cause) {
+    public UniverseException(String message, Throwable cause) {
         super(message, cause);
     }
 
-    public ClusterException(Throwable cause) {
+    public UniverseException(Throwable cause) {
         super(cause);
     }
 
-    protected ClusterException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+    protected UniverseException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
         super(message, cause, enableSuppression, writableStackTrace);
     }
 }

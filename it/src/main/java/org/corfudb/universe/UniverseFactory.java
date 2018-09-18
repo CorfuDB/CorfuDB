@@ -1,47 +1,48 @@
 package org.corfudb.universe;
 
 import com.spotify.docker.client.DockerClient;
-import org.corfudb.universe.cluster.docker.DockerCluster;
-import org.corfudb.universe.cluster.process.ProcessCluster;
-import org.corfudb.universe.cluster.vm.VmCluster;
+import org.corfudb.universe.universe.Universe;
+import org.corfudb.universe.universe.docker.DockerUniverse;
+import org.corfudb.universe.universe.process.ProcessUniverse;
+import org.corfudb.universe.universe.vm.VmUniverse;
 
-import static org.corfudb.universe.cluster.Cluster.ClusterParams;
+import static org.corfudb.universe.universe.Universe.UniverseParams;
 
 /**
- * Universe is a factory for creating different types of {@link org.corfudb.universe.cluster.Cluster}s including:
+ * {@link UniverseFactory} is a factory for creating different types of {@link Universe}s including:
  * Docker, VM, and Process clusters.
  */
-public class Universe {
-    private static final Universe SINGLETON = new Universe();
+public class UniverseFactory {
+    private static final UniverseFactory SINGLETON = new UniverseFactory();
 
-    private Universe() {
+    private UniverseFactory() {
         // To prevent instantiation.
     }
 
-    public static Universe getInstance() {
+    public static UniverseFactory getInstance() {
         return SINGLETON;
     }
 
     /**
-     * Build a docker {@link org.corfudb.universe.cluster.Cluster} based on provided {@link ClusterParams} and
+     * Build a docker {@link Universe} based on provided {@link UniverseParams} and
      * {@link DockerClient}.
      *
-     * @param clusterParams cluster parameters
+     * @param universeParams {@link Universe parameters
      * @param docker        docker client.
-     * @return a instance of {@link DockerCluster}
+     * @return a instance of {@link DockerUniverse}
      */
-    public DockerCluster buildDockerCluster(ClusterParams clusterParams, DockerClient docker) {
-        return DockerCluster.builder()
-                .clusterParams(clusterParams)
+    public DockerUniverse buildDockerCluster(UniverseParams universeParams, DockerClient docker) {
+        return DockerUniverse.builder()
+                .universeParams(universeParams)
                 .docker(docker)
                 .build();
     }
 
-    public VmCluster buildVmCluster(ClusterParams clusterParams) {
+    public VmUniverse buildVmCluster(UniverseParams universeParams) {
         throw new UnsupportedOperationException();
     }
 
-    public ProcessCluster buildProcessCluster(ClusterParams clusterParams) {
+    public ProcessUniverse buildProcessCluster(UniverseParams universeParams) {
         throw new UnsupportedOperationException();
     }
 

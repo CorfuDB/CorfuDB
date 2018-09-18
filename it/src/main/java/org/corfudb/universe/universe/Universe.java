@@ -1,15 +1,12 @@
-package org.corfudb.universe.cluster;
+package org.corfudb.universe.universe;
 
 import com.google.common.collect.ImmutableMap;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import org.corfudb.universe.node.CorfuClient;
-import org.corfudb.universe.node.CorfuServer;
+import org.corfudb.universe.group.Group;
+import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.node.Node;
-import org.corfudb.universe.service.Group;
-import org.corfudb.universe.service.Group.GroupParams;
-import org.corfudb.universe.util.ClassUtils;
 
 import java.time.Duration;
 import java.util.UUID;
@@ -18,58 +15,57 @@ import java.util.concurrent.ConcurrentMap;
 
 import static lombok.Builder.Default;
 import static lombok.EqualsAndHashCode.Exclude;
-import static org.corfudb.universe.node.Node.NodeParams;
 
 /**
- * A Cluster represents a common notion of a cluster of nodes. The architecture of a cluster is composed of collections
+ * A Universe represents a common notion of a universe of nodes. The architecture of a universe is composed of collections
  * of {@link Group}s and {@link Node}s.
- * Each instance of service in the cluster is composed of a collection of {@link Node}s which are a subset of the
- * entire nodes included in the cluster.
- * Cluster configuration is provided by an instance of {@link ClusterParams}.
+ * Each instance of service in the universe is composed of a collection of {@link Node}s which are a subset of the
+ * entire nodes included in the universe.
+ * {@link Universe} configuration is provided by an instance of {@link UniverseParams}.
  * <p>
  * The following are the main functionalities provided by this class:
- * DEPLOY: create a cluster according to cluster parameters.
- * SHUTDOWN: shutdown a cluster.
- * Depending on the underlying deployment this might translate into stopping the nodes and/or shutting down the network.
+ * DEPLOY: create a {@link Universe} according to the {@link Universe} parameters.
+ * SHUTDOWN: shutdown a {@link Universe}.
+ * Depending on the underlying deployment this might translate into stopping the {@link Node}-s and/or shutting down the network.
  */
-public interface Cluster {
+public interface Universe {
 
     /**
-     * Create a cluster according to the desired state mentioned by {@link ClusterParams}
+     * Create a {@link Universe} according to the desired state mentioned by {@link UniverseParams}
      *
-     * @return an immutable instance of applied change in cluster
-     * @throws ClusterException
+     * @return an instance of applied change in the {@link Universe}
+     * @throws UniverseException
      */
-    Cluster deploy();
+    Universe deploy();
 
     /**
-     * Shutdown the entire cluster by shutting down all the services in cluster
+     * Shutdown the entire {@link Universe} by shutting down all the {@link Group}s in {@link Universe}
      *
-     * @throws ClusterException
+     * @throws UniverseException
      */
     void shutdown();
 
-    <T extends GroupParams<?>> Cluster add(T serviceParams);
+    Universe add(GroupParams groupParams);
 
     /**
-     * Returns an instance of {@link ClusterParams} representing the configuration for the cluster.
+     * Returns an instance of {@link UniverseParams} representing the configuration for the {@link Universe}.
      *
-     * @return an instance of {@link ClusterParams}
+     * @return an instance of {@link UniverseParams}
      */
-    ClusterParams getClusterParams();
+    UniverseParams getUniverseParams();
 
     /**
-     * Returns an {@link ImmutableMap} of {@link Group}s contained in the cluster.
+     * Returns an {@link ImmutableMap} of {@link Group}s contained in the {@link Universe}.
      *
-     * @return services in the cluster
+     * @return {@link Group}s in the {@link Universe}
      */
-    ImmutableMap<String, Group> services();
+    ImmutableMap<String, Group> groups();
 
-    Group getService(String serviceName);
+    <T extends Group> T getGroup(String groupName);
 
     @Builder(toBuilder = true)
     @EqualsAndHashCode
-    class ClusterParams {
+    class UniverseParams {
         private static final int TIMEOUT_IN_SECONDS = 5;
         private static final String NETWORK_PREFIX = "CorfuNet";
 
@@ -77,11 +73,11 @@ public interface Cluster {
         @Default
         private final String networkName = NETWORK_PREFIX + UUID.randomUUID().toString();
         @Default
-        private final ConcurrentMap<String, GroupParams<? extends NodeParams>> services = new ConcurrentHashMap<>();
+        private final ConcurrentMap<String, GroupParams> groups = new ConcurrentHashMap<>();
 
         /**
-         * Cluster timeout to wait until an action is completed.
-         * For instance: stop a service, stop a node, shutdown cluster
+         * {@link Universe} timeout to wait until an action is completed.
+         * For instance: stop a service, stop a node, shutdown {@link Universe}
          */
         @Getter
         @Exclude
@@ -91,26 +87,20 @@ public interface Cluster {
         /**
          * Returns the configuration of a particular service by the name
          *
-         * @param name service name
-         * @param <T>  node type: {@link CorfuServer} / {@link CorfuClient}
-         * @return an instance of {@link GroupParams} representing particular type of service
+         * @param name group name
+         * @return an instance of {@link GroupParams} representing particular type of a group
          */
-        public <T extends NodeParams> GroupParams<T> getServiceParams(String name, Class<T> nodeType) {
-            return getServiceParams(name);
+        public <T extends GroupParams> T getGroupParams(String name, Class<T> groupType) {
+            return groupType.cast(groups.get(name));
         }
 
-        public <T extends NodeParams> GroupParams<T> getServiceParams(String name) {
-            GroupParams<?> p = services.get(name);
-            return ClassUtils.cast(p);
-        }
-
-        public ClusterParams add(GroupParams<? extends NodeParams> groupParams){
-            services.put(groupParams.getName(), groupParams);
+        public UniverseParams add(GroupParams groupParams){
+            groups.put(groupParams.getName(), groupParams);
             return this;
         }
 
-        public ImmutableMap<String, GroupParams<? extends NodeParams>> getServices() {
-            return ImmutableMap.copyOf(services);
+        public ImmutableMap<String, GroupParams> getGroups() {
+            return ImmutableMap.copyOf(groups);
         }
     }
 }

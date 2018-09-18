@@ -6,6 +6,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.universe.universe.Universe;
 import org.slf4j.event.Level;
 
 import java.time.Duration;
@@ -13,7 +14,7 @@ import java.time.Duration;
 import static lombok.EqualsAndHashCode.Exclude;
 
 /**
- * Represent a Corfu server implementation of {@link Node} used in the {@link org.corfudb.universe.cluster.Cluster}.
+ * Represent a Corfu server implementation of {@link Node} used in the {@link Universe}.
  */
 public interface CorfuServer extends Node {
 

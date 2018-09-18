@@ -47,7 +47,7 @@ public class ScenarioConfigParser {
                     try {
                         return objectMapper.readValue(scenario, ScenarioConfig.class);
                     } catch (IOException e) {
-                        throw new IllegalStateException("Can't load scenario: " + scenario.getPath());
+                        throw new IllegalStateException("Can't load scenario: " + scenario.getPath(), e);
                     }
                 })
                 .collect(Collectors.toList());

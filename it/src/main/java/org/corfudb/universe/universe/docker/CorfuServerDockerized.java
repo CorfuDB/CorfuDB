@@ -1,4 +1,4 @@
-package org.corfudb.universe.cluster.docker;
+package org.corfudb.universe.universe.docker;
 
 import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.exceptions.DockerException;
@@ -17,9 +17,9 @@ import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.universe.cluster.ClusterException;
 import org.corfudb.universe.node.CorfuServer;
 import org.corfudb.universe.node.NodeException;
+import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.util.NodeLocator;
 
 import java.io.FileReader;
@@ -33,10 +33,10 @@ import java.util.Map;
 
 import static lombok.Builder.Default;
 import static org.corfudb.runtime.CorfuRuntime.fromParameters;
-import static org.corfudb.universe.cluster.Cluster.ClusterParams;
+import static org.corfudb.universe.universe.Universe.UniverseParams;
 
 /**
- * Implements a docker instance representing a Corfu CorfuServer.
+ * Implements a docker instance representing a {@link CorfuServer}.
  */
 @Slf4j
 @Builder
@@ -47,7 +47,7 @@ public class CorfuServerDockerized implements CorfuServer {
     @Getter
     private final ServerParams params;
     private final DockerClient docker;
-    private final ClusterParams clusterParams;
+    private final UniverseParams universeParams;
     @Default
     private CorfuManagementServer runtime;
 
@@ -145,7 +145,7 @@ public class CorfuServerDockerized implements CorfuServer {
 
             addShutdownHook();
 
-            docker.connectToNetwork(id, docker.inspectNetwork(clusterParams.getNetworkName()).id());
+            docker.connectToNetwork(id, docker.inspectNetwork(universeParams.getNetworkName()).id());
 
             docker.startContainer(id);
         } catch (InterruptedException | DockerException e) {
@@ -220,7 +220,7 @@ public class CorfuServerDockerized implements CorfuServer {
         switch (params.getPersistence()) {
             case DISK:
                 if (StringUtils.isEmpty(params.getLogDir())) {
-                    throw new ClusterException("Invalid log dir in disk persistence mode");
+                    throw new UniverseException("Invalid log dir in disk persistence mode");
                 }
                 cmd.append(" -l ").append(params.getLogDir());
                 break;

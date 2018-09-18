@@ -1,17 +1,19 @@
 package org.corfudb.universe.node;
 
+import org.corfudb.universe.group.Group;
+import org.corfudb.universe.universe.Universe;
+
 import java.time.Duration;
 
 /**
- * Represent nodes within {@link org.corfudb.universe.service.Service}s of {@link org.corfudb.universe.cluster.Cluster}
+ * Represent nodes within {@link Group}s of {@link Universe}
  */
 public interface Node {
 
     /**
-     * Deploys a specific node into the cluster. Note that Node is immutable and changes to state will lead to returning
-     * a new immutable instance of the node.
+     * Deploys a specific node into the {@link Universe}.
      *
-     * @return a new instance of node with the new state.
+     * @return current instance of the {@link Node} with the new state.
      * @throws NodeException thrown when can not deploy {@link Node}
      */
     Node deploy();
@@ -19,7 +21,7 @@ public interface Node {
     /**
      * Stops a {@link Node} gracefully within the timeout provided to this method.
      *
-     * @param timeout a limit within which the method attempts to gracefully stop the node.
+     * @param timeout a limit within which the method attempts to gracefully stop the {@link Node}.
      * @throws NodeException thrown in case of unsuccessful stop.
      */
     void stop(Duration timeout);

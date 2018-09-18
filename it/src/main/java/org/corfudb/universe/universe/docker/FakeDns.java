@@ -1,4 +1,4 @@
-package org.corfudb.universe.cluster.docker;
+package org.corfudb.universe.universe.docker;
 
 import com.google.common.base.Throwables;
 import com.google.common.net.InetAddresses;

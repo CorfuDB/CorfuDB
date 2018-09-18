@@ -1,43 +1,44 @@
-package org.corfudb.universe.cluster.vm;
+package org.corfudb.universe.universe.vm;
 
 import com.google.common.collect.ImmutableMap;
-import org.corfudb.universe.cluster.Cluster;
-import org.corfudb.universe.service.Group;
+import org.corfudb.universe.group.Group;
+import org.corfudb.universe.group.Group.GroupParams;
+import org.corfudb.universe.universe.Universe;
 
 /**
- * This implementation provides a cluster, where each server is represented as a virtual machine.
+ * This implementation provides a universe, where each server is represented as a virtual machine.
  */
-public class VmCluster implements Cluster {
-    private static final UnsupportedOperationException NOT_IMPLEMETED = new UnsupportedOperationException("Not implemented");
+public class VmUniverse implements Universe {
+    private static final UnsupportedOperationException NOT_IMPLEMENTED = new UnsupportedOperationException("Not implemented");
 
     @Override
-    public Cluster deploy() {
-        throw NOT_IMPLEMETED;
+    public Universe deploy() {
+        throw NOT_IMPLEMENTED;
     }
 
     @Override
     public void shutdown() {
-        throw NOT_IMPLEMETED;
+        throw NOT_IMPLEMENTED;
     }
 
     @Override
-    public <T extends Group.GroupParams<?>> Cluster add(T serviceParams) {
-        throw NOT_IMPLEMETED;
+    public Universe add(GroupParams groupParams) {
+        throw NOT_IMPLEMENTED;
     }
 
     @Override
-    public ClusterParams getClusterParams() {
-        throw NOT_IMPLEMETED;
+    public UniverseParams getUniverseParams() {
+        throw NOT_IMPLEMENTED;
     }
 
     @Override
-    public ImmutableMap<String, Group> services() {
-        throw NOT_IMPLEMETED;
+    public ImmutableMap<String, Group> groups() {
+        throw NOT_IMPLEMENTED;
     }
 
     @Override
-    public Group getService(String serviceName) {
-        throw NOT_IMPLEMETED;
+    public Group getGroup(String groupName) {
+        throw NOT_IMPLEMENTED;
     }
 
 

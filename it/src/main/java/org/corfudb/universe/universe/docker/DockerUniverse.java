@@ -1,53 +1,50 @@
-package org.corfudb.universe.cluster.docker;
+package org.corfudb.universe.universe.docker;
 
 import com.google.common.collect.ImmutableMap;
 import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.messages.NetworkConfig;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.universe.cluster.Cluster;
-import org.corfudb.universe.cluster.ClusterException;
-import org.corfudb.universe.service.DockerGroup;
-import org.corfudb.universe.service.Group;
-import org.corfudb.universe.service.Group.GroupParams;
+import org.corfudb.universe.group.DockerCorfuCluster;
+import org.corfudb.universe.group.Group;
+import org.corfudb.universe.group.Group.GroupParams;
+import org.corfudb.universe.universe.Universe;
+import org.corfudb.universe.universe.UniverseException;
+import org.corfudb.universe.util.ClassUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetAddress;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.corfudb.universe.node.CorfuServer.ServerParams;
-
 /**
- * Represents Docker implementation of a {@link Cluster}.
+ * Represents Docker implementation of a {@link Universe}.
  */
 @Slf4j
-public class DockerCluster implements Cluster {
+public class DockerUniverse implements Universe {
     /**
      * Docker parameter --network=host doesn't work in mac machines,
-     * FakeDns is used to solve the issue, it resolves a dns record (which is a node name) to loopback interface always.
+     * FakeDns is used to solve the issue, it resolves a dns record (which is a node name) to loopback address always.
      * See Readme.md
      */
     private static final FakeDns FAKE_DNS = FakeDns.getInstance().install();
 
-    private final AtomicReference<ClusterParams> clusterParams = new AtomicReference<>();
+    private final AtomicReference<UniverseParams> universeParams = new AtomicReference<>();
 
     private final DockerClient docker;
     private final DockerNetwork network = new DockerNetwork();
 
-    private final ConcurrentMap<String, Group> services = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Group> groups = new ConcurrentHashMap<>();
     private final String clusterId;
     private final AtomicBoolean initialized = new AtomicBoolean();
 
     @Builder
-    public DockerCluster(ClusterParams clusterParams, DockerClient docker) {
-        this.clusterParams.set(clusterParams);
+    public DockerUniverse(UniverseParams universeParams, DockerClient docker) {
+        this.universeParams.set(universeParams);
         this.docker = docker;
         this.clusterId = UUID.randomUUID().toString();
 
@@ -56,47 +53,45 @@ public class DockerCluster implements Cluster {
 
 
     /**
-     * Deploy a cluster according to provided cluster parameter, docker client, docker network, and other cluster
-     * components.
+     * Deploy a {@link Universe} according to provided parameter, docker client, docker network, and other components.
      * The instances of this class are immutable. In other word, when the state of an instance is changed a new
      * immutable instance is provided.
      *
-     * @return New immutable instance of docker cluster would be returned.
-     * @throws ClusterException this exception will be thrown if deploying a cluster is not successful
+     * @return Current instance of a docker {@link Universe} would be returned.
+     * @throws UniverseException this exception will be thrown if deploying a {@link Universe} is not successful
      */
     @Override
-    public DockerCluster deploy() {
-        log.info("Deploying cluster");
+    public DockerUniverse deploy() {
+        log.info("Deploying universe: {}", universeParams);
 
         if (!initialized.get()) {
             network.setup();
             initialized.set(true);
         }
 
-        Map<String, Group> servicesSnapshot = createAndDeployServices();
-        services.putAll(servicesSnapshot);
+        createAndDeployGroups();
 
         return this;
     }
 
     @Override
     public void shutdown() {
-        log.info("Shutdown docker cluster: {}", clusterId);
+        log.info("Shutdown docker universe: {}", clusterId);
 
-        // gracefully stop all services
-        services.values().forEach(service -> {
+        // gracefully stop all groups
+        groups.values().forEach(group -> {
             try {
-                service.stop(clusterParams.get().getTimeout());
+                group.stop(universeParams.get().getTimeout());
             } catch (Exception ex) {
-                log.info("Can't stop service: {}", service.getParams().getName());
+                log.info("Can't stop group: {}", group.getParams().getName());
             }
         });
 
         // Kill all docker containers
-        clusterParams.get().getServices().keySet().forEach(serviceName -> {
-            GroupParams<ServerParams> groupParams = clusterParams.get().getServiceParams(serviceName);
+        universeParams.get().getGroups().keySet().forEach(groupName -> {
+            GroupParams groupParams = universeParams.get().getGroupParams(groupName, GroupParams.class);
 
-            groupParams.getNodeParams().forEach(serverParams -> {
+            groupParams.getNodesParams().forEach(serverParams -> {
                 try {
                     docker.killContainer(serverParams.getName());
                 } catch (Exception e) {
@@ -111,66 +106,61 @@ public class DockerCluster implements Cluster {
 
         try {
             network.shutdown();
-        } catch (ClusterException e) {
-            log.debug("Can't stop docker network. Network name: {}", clusterParams.get().getNetworkName());
+        } catch (UniverseException e) {
+            log.debug("Can't stop docker network. Network name: {}", universeParams.get().getNetworkName());
         }
     }
 
     @Override
-    public <T extends GroupParams<?>> Cluster add(T serviceParams) {
-        clusterParams.get().add(serviceParams);
-        deployDockerService(serviceParams);
+    public Universe add(GroupParams groupParams) {
+        universeParams.get().add(groupParams);
+        deployDockerCluster(groupParams);
         return this;
     }
 
     @Override
-    public ClusterParams getClusterParams() {
-        return clusterParams.get();
+    public UniverseParams getUniverseParams() {
+        return universeParams.get();
     }
 
     @Override
-    public ImmutableMap<String, Group> services() {
-        return ImmutableMap.copyOf(services);
+    public ImmutableMap<String, Group> groups() {
+        return ImmutableMap.copyOf(groups);
     }
-
 
     @Override
-    public Group getService(String serviceName) {
-        return services.get(serviceName);
+    public <T extends Group> T getGroup(String groupName) {
+        return ClassUtils.cast(groups.get(groupName));
     }
 
-    private Map<String, Group> createAndDeployServices() {
-        Map<String, Group> servicesSnapshot = new HashMap<>();
-
-        ClusterParams clusterConfig = clusterParams.get();
-        for (String serviceName : clusterConfig.getServices().keySet()) {
-            DockerGroup service = deployDockerService(clusterConfig.getServiceParams(serviceName));
-
-            servicesSnapshot.put(serviceName, service);
+    private void createAndDeployGroups() {
+        UniverseParams clusterConfig = universeParams.get();
+        for (String groupName : clusterConfig.getGroups().keySet()) {
+            deployDockerCluster(clusterConfig.getGroupParams(groupName, GroupParams.class));
         }
-
-        return servicesSnapshot;
     }
 
-    private DockerGroup deployDockerService(GroupParams<?> groupParams) {
+    private void deployDockerCluster(GroupParams groupParams) {
         switch (groupParams.getNodeType()) {
             case CORFU_SERVER:
-                groupParams.getNodeParams().forEach(node ->
+                groupParams.getNodesParams().forEach(node ->
                         FAKE_DNS.addForwardResolution(node.getName(), InetAddress.getLoopbackAddress())
                 );
 
-                DockerGroup service = DockerGroup.builder()
-                        .clusterParams(clusterParams.get())
-                        .params(groupParams)
+                DockerCorfuCluster cluster = DockerCorfuCluster.builder()
+                        .universeParams(universeParams.get())
+                        .params(ClassUtils.cast(groupParams))
                         .docker(docker)
                         .build();
 
-                service.deploy();
-                return service;
+                cluster.deploy();
+
+                groups.put(groupParams.getName(), cluster);
+                break;
             case CORFU_CLIENT:
-                throw new ClusterException("Not implemented corfu client. Group config: " + groupParams);
+                throw new UniverseException("Not implemented corfu client. Group config: " + groupParams);
             default:
-                throw new ClusterException("Unknown node type");
+                throw new UniverseException("Unknown node type");
         }
     }
 
@@ -180,10 +170,10 @@ public class DockerCluster implements Cluster {
         /**
          * Sets up a docker network.
          *
-         * @throws ClusterException will be thrown if cannot set up a docker network
+         * @throws UniverseException will be thrown if cannot set up a docker network
          */
         void setup() {
-            String networkName = clusterParams.get().getNetworkName();
+            String networkName = universeParams.get().getNetworkName();
             log.info("Setup network: {}", networkName);
             NetworkConfig networkConfig = NetworkConfig.builder()
                     .checkDuplicate(true)
@@ -194,23 +184,23 @@ public class DockerCluster implements Cluster {
             try {
                 docker.createNetwork(networkConfig);
             } catch (Exception e) {
-                throw new ClusterException("Cannot setup docker network.", e);
+                throw new UniverseException("Cannot setup docker network.", e);
             }
         }
 
         /**
          * Shuts down a docker network.
          *
-         * @throws ClusterException will be thrown if cannot shut up a docker network
+         * @throws UniverseException will be thrown if cannot shut up a docker network
          */
         void shutdown() {
-            String networkName = clusterParams.get().getNetworkName();
+            String networkName = universeParams.get().getNetworkName();
             log.info("Shutdown network: {}", networkName);
             try {
                 docker.removeNetwork(networkName);
             } catch (Exception e) {
                 final String err = String.format("Cannot shutdown docker network: %s.", networkName);
-                throw new ClusterException(err, e);
+                throw new UniverseException(err, e);
             }
         }
     }

@@ -1,10 +1,10 @@
 # Integration testing in CorfuDB
 
 Integration testing is often a difficult venture, especially when it comes to distributed systems.
-This testing framework helps to speed up this process by making it easier to link together services in a cluster.
+This testing framework helps to speed up this process by making it easier to link together services in a universe.
 
 ### The idea
-Provide an abstraction of `cluster` that enables us to work with distributed applications as logical services and manage them. 
+Provide an abstraction of `universe` that enables us to work with distributed applications as logical services and manage them. 
 Provide API to write complex testing scenarios for distributed applications, checking correctness of the application state. 
 
 ### Design:
@@ -12,22 +12,17 @@ Provide API to write complex testing scenarios for distributed applications, che
  - running tests by `mvn clean integration-test`
 
 ### Concepts:
- Universe framework provides the API objects to describe your cluster’s desired state: what services and applications 
+ Universe framework provides the API objects to describe your universe’s desired state: what services and applications 
  you want to run and manage, scaling parameters and more.
  - `Universe` - a Factory which builds different types of Clusters for you: Vm, Docker, Process.
- - `Cluster` - represents a cluster as a group of services (and eventually a collection of nodes). 
-    Cluster provides methods to start and stop the cluster, configure, add and remove services. 
-    Cluster Configured by `ClusterParams`.
- - `Service` is an abstraction which defines a logical unit that provides some service - sometimes called a micro-service. 
-    Service is represented by a set of nodes.
-    Services provide important features that are standardized across the cluster, it could be: 
+ - `Cluster` is an abstraction which defines a logical unit that provides some group. 
+    Cluster is represented by a set of nodes.
+    Clusters provide important features that are standardized across the universe, it could be: 
     load-balancing, service discovery mechanism, and features to support zero-downtime application deployments (not implemented yet).
- - Node represents an application in a cluster. A node could be a docker container or just a JVM process running inside a VM.
+ - Node represents an process in a group. A node could be a docker container or just a JVM process running inside a VM.
    Managing a node means to manage a particular application: start, stop, remove etc.  
- - `Params` - ClusterParams, ServiceParams, NodeParams and so on, configures the desired state of the cluster. 
-   Applying params to the cluster makes the cluster’s current state match the desired state.
-
-![Design diagram](doc/testing-framework-design.png)
+ - `Params` - UniverseParams, GroupParams, NodeParams and so on, configures the desired state of the universe. 
+   Applying params to the universe makes the universe’s current state match the desired state.
  
 ### Lifecycle:
  #### maven `mvn clean integration-test`:
@@ -42,12 +37,12 @@ Provide API to write complex testing scenarios for distributed applications, che
  - check test result
  - delete network, kill container, remove container
 
-#### === The idea of docker cluster implementation ===
+#### === The idea of docker universe implementation ===
  - Build a docker image of a corfu server.
  - Use spotify docker-client to declare the needed infrastructure for each test case.
  - Start up the infrastructure with docker-client and execute tests.
  
-### Docker cluster advantages:
+### Docker universe advantages:
  - Completely isolated environment for each db instance.
  - Full programmatic control on the container in tests during execution time. 
    Rich docker API allows to manage any part of container lifecycle out of the box.
@@ -58,9 +53,9 @@ Provide API to write complex testing scenarios for distributed applications, che
  - Allows to bring any needed infrastructure services in the test for additional analytics, for instance it could be ELK or Grafana, 
    which makes post analytics easier.
  
-### Docker cluster Issues/workarounds:
+### Docker universe Issues/workarounds:
  - `--network=host` parameter not supported in MacOS, workaround is use fake dns on host
  
-### Docker cluster design:
+### Docker universe design:
 
 ![Alt text](https://goo.gl/kMFBtd)

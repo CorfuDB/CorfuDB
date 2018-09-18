@@ -3,7 +3,7 @@ package org.corfudb.universe.scenario.action;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
-import org.corfudb.universe.cluster.Cluster;
+import org.corfudb.universe.universe.Universe;
 
 /**
  * Provides an interface for executable actions used in scenarios.
@@ -20,9 +20,9 @@ public interface Action<R> {
     R execute();
 
     /**
-     * Actions do some work and often it changes cluster state,
-     * in most cases an action needs to have a cluster as a dependency.
-     * Developer must extend {@link AbstractAction} and provide a cluster object.
+     * Actions do some work and often it changes {@link Universe} state,
+     * in most cases an action needs to have a {@link Universe} as a dependency.
+     * Developer must extend {@link AbstractAction} and provide a {@link Universe} object.
      *
      * @param <R> action result
      */
@@ -30,6 +30,6 @@ public interface Action<R> {
     abstract class AbstractAction<R> implements Action<R> {
         protected String description;
         @JsonIgnore
-        public Cluster cluster;
+        public Universe universe;
     }
 }

@@ -1,32 +1,33 @@
-package org.corfudb.universe.cluster.docker;
+package org.corfudb.universe.universe.docker;
 
 import com.spotify.docker.client.DefaultDockerClient;
 import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.messages.ContainerInfo;
 import org.corfudb.universe.UniverseFactory;
-import org.corfudb.universe.scenario.fixture.Fixtures.ClusterFixture;
-import org.corfudb.universe.scenario.fixture.Fixtures.CorfuServiceFixture;
+import org.corfudb.universe.group.CorfuCluster.CorfuClusterParams;
+import org.corfudb.universe.scenario.fixture.Fixtures.CorfuGroupFixture;
 import org.corfudb.universe.scenario.fixture.Fixtures.MultipleServersFixture;
+import org.corfudb.universe.scenario.fixture.Fixtures.UniverseFixture;
 import org.junit.After;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.universe.cluster.Cluster.ClusterParams;
+import static org.corfudb.universe.group.Group.GroupParams;
 import static org.corfudb.universe.node.CorfuServer.ServerParams;
-import static org.corfudb.universe.service.Group.GroupParams;
+import static org.corfudb.universe.universe.Universe.UniverseParams;
 
-public class DockerClusterIT {
+public class DockerUniverseIT {
     private static final UniverseFactory UNIVERSE_FACTORY = UniverseFactory.getInstance();
 
     private final DockerClient docker;
-    private DockerCluster dockerCluster;
+    private DockerUniverse dockerCluster;
 
-    public DockerClusterIT() throws Exception {
+    public DockerUniverseIT() throws Exception {
         this.docker = DefaultDockerClient.fromEnv().build();
     }
 
     /**
-     * Shutdown the cluster after test completion
+     * Shutdown the {@link org.corfudb.universe.universe.Universe} after test completion
      */
     @After
     public void tearDown() {
@@ -38,25 +39,25 @@ public class DockerClusterIT {
      * @throws Exception an error
      */
     @Test
-    public void deploySingleServiceSingleNodeTest() throws Exception {
+    public void deploySingleGroupSingleNodeTest() throws Exception {
         MultipleServersFixture serversFixture = MultipleServersFixture.builder().numNodes(1).build();
-        CorfuServiceFixture serviceFixture = CorfuServiceFixture.builder().servers(serversFixture).build();
-        ClusterFixture clusterFixture = ClusterFixture.builder().service(serviceFixture).build();
+        CorfuGroupFixture groupFixture = CorfuGroupFixture.builder().servers(serversFixture).build();
+        UniverseFixture universeFixture = UniverseFixture.builder().group(groupFixture).build();
 
-        ClusterParams clusterParams = clusterFixture.data();
+        UniverseParams universeParams = universeFixture.data();
         dockerCluster = UNIVERSE_FACTORY
-                .buildDockerCluster(clusterParams, docker)
+                .buildDockerCluster(universeParams, docker)
                 .deploy();
 
-        ServerParams serverParam = clusterParams
-                .getServiceParams(serviceFixture.getServiceName(), ServerParams.class)
-                .getNodeParams()
+        ServerParams serverParam = universeParams
+                .getGroupParams(groupFixture.getGroupName(), CorfuClusterParams.class)
+                .getNodesParams()
                 .get(0);
 
         ContainerInfo container = docker.inspectContainer(serverParam.getName());
         assertThat(container.state().running()).isTrue();
         assertThat(container.name()).isEqualTo("/" + serverParam.getName());
-        assertThat(container.networkSettings().networks().get(clusterParams.getNetworkName())).isNotNull();
+        assertThat(container.networkSettings().networks().get(universeParams.getNetworkName())).isNotNull();
     }
 
     /**
@@ -65,23 +66,23 @@ public class DockerClusterIT {
      * @throws Exception an error
      */
     @Test
-    public void deploySingleServiceMultipleNodesTest() throws Exception {
-        ClusterFixture clusterFixture = ClusterFixture.builder().build();
+    public void deploySingleGroupMultipleNodesTest() throws Exception {
+        UniverseFixture universeFixture = UniverseFixture.builder().build();
 
         //setup
-        final ClusterParams clusterParams = clusterFixture.data();
+        final UniverseParams universeParams = universeFixture.data();
         dockerCluster = UNIVERSE_FACTORY
-                .buildDockerCluster(clusterParams, docker)
+                .buildDockerCluster(universeParams, docker)
                 .deploy();
 
-        GroupParams<ServerParams> groupParams = clusterParams
-                .getServiceParams(clusterFixture.getService().getServiceName(), ServerParams.class);
+        GroupParams groupParams = universeParams
+                .getGroupParams(universeFixture.getGroup().getGroupName(), CorfuClusterParams.class);
 
-        for (ServerParams serverParams : groupParams.getNodeParams()) {
+        for (ServerParams serverParams : groupParams.<ServerParams>getNodesParams()) {
             ContainerInfo container = docker.inspectContainer(serverParams.getName());
             assertThat(container.state().running()).isTrue();
             assertThat(container.name()).isEqualTo("/" + serverParams.getName());
-            assertThat(container.networkSettings().networks().get(clusterParams.getNetworkName())).isNotNull();
+            assertThat(container.networkSettings().networks().get(universeParams.getNetworkName())).isNotNull();
         }
     }
 }

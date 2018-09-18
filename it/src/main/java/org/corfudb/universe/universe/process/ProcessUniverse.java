@@ -1,16 +1,16 @@
-package org.corfudb.universe.cluster.process;
+package org.corfudb.universe.universe.process;
 
 import com.google.common.collect.ImmutableMap;
-import org.corfudb.universe.cluster.Cluster;
-import org.corfudb.universe.service.Group;
-import org.corfudb.universe.service.Group.GroupParams;
+import org.corfudb.universe.group.Group;
+import org.corfudb.universe.group.Group.GroupParams;
+import org.corfudb.universe.universe.Universe;
 
-public class ProcessCluster implements Cluster {
+public class ProcessUniverse implements Universe {
     private static final UnsupportedOperationException NOT_IMPLEMENTED =
             new UnsupportedOperationException("Not implemented");
 
     @Override
-    public Cluster deploy() {
+    public Universe deploy() {
         throw NOT_IMPLEMENTED;
     }
 
@@ -20,22 +20,22 @@ public class ProcessCluster implements Cluster {
     }
 
     @Override
-    public <T extends GroupParams<?>> Cluster add(T serviceParams) {
+    public Universe add(GroupParams groupParams) {
         throw NOT_IMPLEMENTED;
     }
 
     @Override
-    public ClusterParams getClusterParams() {
+    public UniverseParams getUniverseParams() {
         throw NOT_IMPLEMENTED;
     }
 
     @Override
-    public ImmutableMap<String, Group> services() {
+    public ImmutableMap<String, Group> groups() {
         throw NOT_IMPLEMENTED;
     }
 
     @Override
-    public Group getService(String serviceName) {
+    public Group getGroup(String groupName) {
         throw NOT_IMPLEMENTED;
     }
 }
