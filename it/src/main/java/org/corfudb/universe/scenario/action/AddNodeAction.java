@@ -4,6 +4,7 @@ import lombok.Data;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.group.Group;
 import org.corfudb.universe.node.CorfuServer;
+import org.corfudb.universe.node.LocalCorfuClient;
 import org.corfudb.universe.scenario.action.Action.AbstractAction;
 import org.corfudb.universe.universe.Universe;
 
@@ -20,11 +21,15 @@ public class AddNodeAction extends AbstractAction<Layout> {
     public Layout execute() {
         Group group = universe.getGroup(groupName);
         CorfuServer mainServer = group.getNode(mainServerName);
-        mainServer.connectCorfuRuntime();
+
+        LocalCorfuClient corfuClient = LocalCorfuClient.builder()
+                .serverParams(mainServer.getParams())
+                .build()
+                .deploy();
 
         CorfuServer candidate = group.getNode(nodeName);
-        mainServer.addNode(candidate);
+        corfuClient.add(candidate);
 
-        return mainServer.getLayout();
+        return corfuClient.getLayout();
     }
 }

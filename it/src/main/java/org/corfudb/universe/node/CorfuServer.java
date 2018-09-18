@@ -21,15 +21,7 @@ public interface CorfuServer extends Node {
     @Override
     CorfuServer deploy();
 
-    boolean addNode(CorfuServer server);
-
-    boolean removeNode(CorfuServer server);
-
     ServerParams getParams();
-
-    Layout getLayout();
-
-    void connectCorfuRuntime();
 
     enum Mode {
         SINGLE, CLUSTER

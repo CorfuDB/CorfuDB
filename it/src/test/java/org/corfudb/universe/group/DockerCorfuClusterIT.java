@@ -7,6 +7,7 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.UniverseFactory;
 import org.corfudb.universe.node.CorfuServer;
+import org.corfudb.universe.node.LocalCorfuClient;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.scenario.Scenario;
 import org.corfudb.universe.scenario.action.AddNodeAction;
@@ -44,9 +45,7 @@ public class DockerCorfuClusterIT {
 
     @Test
     public void testAddNode() {
-        MultipleServersFixture serversFixture = MultipleServersFixture.builder().numNodes(1).build();
-        CorfuGroupFixture groupFixture = CorfuGroupFixture.builder().servers(serversFixture).build();
-        UniverseFixture universeFixture = UniverseFixture.builder().group(groupFixture).build();
+        UniverseFixture universeFixture = UniverseFixture.builder().build();
 
         universe = UNIVERSE_FACTORY
                 .buildDockerCluster(universeFixture.data(), docker)
@@ -54,19 +53,23 @@ public class DockerCorfuClusterIT {
 
         SingleServerFixture node9001 = SingleServerFixture.builder()
                 .mode(CorfuServer.Mode.CLUSTER)
-                .port(9001)
+                .port(9003)
                 .build();
 
-        CorfuCluster corfuCluster = universe.getGroup(groupFixture.getGroupName());
+        CorfuCluster corfuCluster = universe.getGroup(universeFixture.getGroup().getGroupName());
         Node node = corfuCluster.add(node9001.data());
 
         CorfuServer mainServer = corfuCluster.getNode("node9000");
-        mainServer.connectCorfuRuntime();
 
-        mainServer.addNode(ClassUtils.cast(node));
-        Layout layout = mainServer.getLayout();
+        LocalCorfuClient corfuClient = LocalCorfuClient.builder()
+                .serverParams(mainServer.getParams())
+                .build()
+                .deploy();
 
-        assertThat(layout.getAllActiveServers().size()).isEqualTo(2);
+        corfuClient.add(ClassUtils.cast(node));
+        Layout layout = corfuClient.getLayout();
+
+        assertThat(layout.getAllActiveServers().size()).isEqualTo(4);
     }
 
     @Test
@@ -160,8 +163,13 @@ public class DockerCorfuClusterIT {
                     .action(() -> {
                         CorfuServer mainServer = group.getNode("node9000");
                         CorfuServer secondServer = group.getNode("node9001");
-                        mainServer.removeNode(secondServer);
-                        return mainServer.getLayout();
+
+                        LocalCorfuClient corfuClient = LocalCorfuClient.builder()
+                                .serverParams(mainServer.getParams())
+                                .build()
+                                .deploy();
+                        corfuClient.remove(secondServer);
+                        return corfuClient.getLayout();
                     }).check((data, layout) -> {
                         assertThat(layout.getAllActiveServers().size()).isEqualTo(clusterSize - 1);
                     })

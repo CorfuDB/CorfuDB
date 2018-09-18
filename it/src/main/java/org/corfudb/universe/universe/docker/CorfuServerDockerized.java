@@ -48,8 +48,6 @@ public class CorfuServerDockerized implements CorfuServer {
     private final ServerParams params;
     private final DockerClient docker;
     private final UniverseParams universeParams;
-    @Default
-    private CorfuManagementServer runtime;
 
     /**
      * Deploys a Corfu server / docker container
@@ -59,30 +57,8 @@ public class CorfuServerDockerized implements CorfuServer {
         log.info("Deploying the Corfu server. {}", params.getName());
 
         deployContainer();
-        runtime = new CorfuManagementServer(params);
 
         return this;
-    }
-
-    @Override
-    public boolean addNode(CorfuServer server) {
-        return runtime.add(server);
-    }
-
-    @Override
-    public boolean removeNode(CorfuServer server) {
-        return runtime.remove(server);
-    }
-
-
-    @Override
-    public Layout getLayout() {
-        return runtime.getLayout();
-    }
-
-    @Override
-    public void connectCorfuRuntime() {
-        runtime.connect();
     }
 
     /**
@@ -241,72 +217,5 @@ public class CorfuServerDockerized implements CorfuServer {
         log.trace("Command line parameters: {}", cmdLineParams);
 
         return cmdLineParams;
-    }
-
-    public class CorfuManagementServer {
-        private final CorfuRuntime runtime;
-
-        public CorfuManagementServer(ServerParams params) {
-            NodeLocator node = NodeLocator
-                    .builder()
-                    .protocol(NodeLocator.Protocol.TCP)
-                    .host(params.getName())
-                    .port(params.getPort())
-                    .build();
-
-            CorfuRuntimeParameters runtimeParams = CorfuRuntimeParameters
-                    .builder()
-                    .layoutServers(Collections.singletonList(node))
-                    .build();
-
-            runtime = fromParameters(runtimeParams);
-        }
-
-        public boolean add(CorfuServer server) {
-            log.debug("Add node: {}", server.getParams());
-
-            //FIXME fix it corfu runtime and remove this code then
-            if (params.equals(server.getParams())) {
-                log.warn("Can't add itself into the corfu cluster");
-                return false;
-            }
-
-            ServerParams serverParams = server.getParams();
-            runtime.getManagementView().addNode(
-                    serverParams.getEndpoint(),
-                    serverParams.getWorkflowNumRetry(),
-                    serverParams.getTimeout(),
-                    serverParams.getPollPeriod()
-            );
-
-            return true;
-        }
-
-        public Layout getLayout() {
-            return runtime.getLayoutView().getLayout();
-        }
-
-        public void connect() {
-            runtime.connect();
-        }
-
-        public boolean remove(CorfuServer server) {
-            log.debug("Remove node: {}", server.getParams());
-
-            if (params.equals(server.getParams())) {
-                log.warn("Can't add itself into the corfu cluster");
-                return false;
-            }
-
-            ServerParams serverParams = server.getParams();
-            runtime.getManagementView().removeNode(
-                    serverParams.getEndpoint(),
-                    serverParams.getWorkflowNumRetry(),
-                    serverParams.getTimeout(),
-                    serverParams.getPollPeriod()
-            );
-
-            return true;
-        }
     }
 }

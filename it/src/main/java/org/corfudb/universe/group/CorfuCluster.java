@@ -31,7 +31,7 @@ public interface CorfuCluster extends Cluster {
         private final int bootStrapRetries = 3;
         @Default
         @Getter
-        private final Duration retryTimeout = Duration.ofSeconds(10);
+        private final Duration retryTimeout = Duration.ofSeconds(1);
 
         @Override
         public ImmutableList<ServerParams> getNodesParams() {
