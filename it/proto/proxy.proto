@@ -1,0 +1,81 @@
+option java_package = "org.corfudb.universe.corfuproxy";
+
+// Proxy request message
+message ProxyRequestMsg {
+    required string clientId = 1;
+    required string messageId = 2;
+    required MethodType methodType = 3;
+
+    oneof proxyRequest {
+        StopRequest stopRequest = 10;
+        AddNodeRequest addNodeRequest = 11;
+        RemoveNodeRequest removeNodeRequest = 12;
+        ForceRemoveNodeRequest forceRemoveNodeRequest = 13;
+        AddLayoutServerRequest addLayoutServerRequest = 14;
+    }
+}
+
+// Proxy response message
+message ProxyResponseMsg {
+    required string messageId = 1;
+    optional string errorMsg = 2;
+    optional string stackTrace = 3;
+
+    oneof proxyResponse {
+        GetAllServersResponse getAllServersResponse = 30;
+        GetAllActiveServersResponse getAllActiveServersResponse = 31;
+    }
+}
+
+// Make sure method type name matches the actual
+// method name for reflective method invocation
+enum MethodType {
+    Connect = 0;
+    Stop = 1;
+    Shutdown = 2;
+    AddNode = 3;
+    RemoveNode = 4;
+    ForceRemoveNode = 5;
+    AddLayoutServer = 6;
+    GetAllServers = 7;
+    GetAllActiveServers = 8;
+    InvalidateLayout = 9;
+}
+
+// request and response parameters
+message StopRequest {
+    optional bool shutdown = 1;
+}
+
+message AddLayoutServerRequest {
+    required string endpoint = 1;
+}
+
+message AddNodeRequest {
+    required string endpoint = 1;
+    required int32 retry = 2;
+    required string timeout = 3;
+    required string pollPeriod = 4;
+}
+
+message RemoveNodeRequest {
+    required string endpoint = 1;
+    required int32 retry = 2;
+    required string timeout = 3;
+    required string pollPeriod = 4;
+}
+
+message ForceRemoveNodeRequest {
+    required string endpoint = 1;
+    required int32 retry = 2;
+    required string timeout = 3;
+    required string pollPeriod = 4;
+}
+
+message GetAllServersResponse {
+    repeated string servers = 1;
+}
+
+message GetAllActiveServersResponse {
+    repeated string servers = 1;
+}

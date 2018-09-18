@@ -49,6 +49,11 @@
             <artifactId>maven-model</artifactId>
             <version>3.3.9</version>
         </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>3.1.0</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -92,6 +97,28 @@
                         <CORFU_JAR>infrastructure-${project.version}-shaded.jar</CORFU_JAR>
                     </buildArgs>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>com.github.os72</groupId>
+                <artifactId>protoc-jar-maven-plugin</artifactId>
+                <version>3.1.0.2</version>
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <protocVersion>3.1.0</protocVersion>
+                            <inputDirectories>
+                                <include>proto</include>
+                            </inputDirectories>
+                            <outputDirectory>
+                                target/generated-sources
+                            </outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
