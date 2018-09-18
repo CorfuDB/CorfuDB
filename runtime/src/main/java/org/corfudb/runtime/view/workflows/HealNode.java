@@ -38,7 +38,7 @@ public class HealNode extends WorkflowRequest {
     @Override
     protected boolean verifyRequest(@NonNull Layout layout) {
         log.info("verifyRequest: {} in {}", this, layout);
-        return runtime.getLayoutView().getLayout().getAllServers().contains(nodeForWorkflow)
+        return layout.getAllServers().contains(nodeForWorkflow)
                 && layout.getSegmentsForEndpoint(nodeForWorkflow).size() == 1;
     }
 
