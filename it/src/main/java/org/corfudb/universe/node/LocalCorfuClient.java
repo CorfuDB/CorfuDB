@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.ManagementView;
+import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.universe.node.CorfuServer.ServerParams;
 import org.corfudb.util.NodeLocator;
 
@@ -90,6 +92,10 @@ public class LocalCorfuClient implements CorfuClient {
         return runtime.getLayoutView().getLayout();
     }
 
+    public ObjectsView getObjectsView(){
+        return runtime.getObjectsView();
+    }
+
     private void connect() {
         runtime.connect();
     }
@@ -102,5 +108,13 @@ public class LocalCorfuClient implements CorfuClient {
     @Override
     public void kill() {
         //Nothing to kill
+    }
+
+    public ManagementView getManagementView() {
+        return runtime.getManagementView();
+    }
+
+    public void invalidateLayout() {
+        runtime.invalidateLayout();
     }
 }

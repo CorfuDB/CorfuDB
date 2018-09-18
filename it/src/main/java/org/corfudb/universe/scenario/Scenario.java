@@ -78,6 +78,12 @@ public class Scenario<D, T extends Fixture<D>> {
             test.accept(scenarioTest);
             return scenarioTest;
         }
+
+        public ScenarioTestCase<T> it(String description, Consumer<T> specification) {
+            log.info("Execute test: {}", description);
+            specification.accept(data);
+            return this;
+        }
     }
 
     /**
