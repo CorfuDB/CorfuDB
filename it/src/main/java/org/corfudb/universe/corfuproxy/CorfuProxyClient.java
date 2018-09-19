@@ -13,6 +13,9 @@ import io.netty.handler.codec.protobuf.ProtobufVarint32LengthFieldPrepender;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.universe.corfuproxy.Proxy.*;
 
 import java.time.Duration;
@@ -23,16 +26,31 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @RequiredArgsConstructor
 public class CorfuProxyClient {
+    /**
+     * Proxy server address to connect
+     */
     @NonNull
     private String host;
 
+    /**
+     * Proxy server port to connect
+     */
     @NonNull
     private Integer port;
 
+    /**
+     * Netty {@link Bootstrap} to bootstrap client channel
+     */
     private Bootstrap bootstrap;
 
+    /**
+     * Unique client ID which maps to a CorfuRuntime in proxy server
+     */
     private String clientId = "clientId-" + UUID.randomUUID();
 
+    /**
+     * Message ID to callback map, each client operation provides a callback
+     */
     private final Map<String, RpcCallback<ProxyResponseMsg>> callbackMap = new ConcurrentHashMap<>();
 
     private class CorfuClientHandler extends SimpleChannelInboundHandler<ProxyResponseMsg> {
@@ -56,6 +74,12 @@ public class CorfuProxyClient {
         }
     }
 
+    /**
+     * Setup a corfu proxy client.
+     * When this function returns, the client is ready to perform operations.
+     *
+     * @return CorfuProxyClient object
+     */
     public CorfuProxyClient setup() {
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         bootstrap = new Bootstrap();
@@ -80,8 +104,12 @@ public class CorfuProxyClient {
         return this;
     }
 
+    /**
+     * Close the client.
+     * When this function returns, the client cannot perform any operations any more.
+     */
     public void close() {
-       bootstrap = null;
+        bootstrap = null;
     }
 
     private Channel connectToProxy() {
@@ -99,6 +127,11 @@ public class CorfuProxyClient {
         return UUID.randomUUID().toString();
     }
 
+    /**
+     * {@link CorfuRuntime#connect()}
+     *
+     * @param callback a callback to run after getting response from proxy server
+     */
     public void connect(RpcCallback<ProxyResponseMsg> callback) {
         Channel channel = connectToProxy();
         String requestId = generateRequestId();
@@ -113,6 +146,11 @@ public class CorfuProxyClient {
         channel.writeAndFlush(request);
     }
 
+    /**
+     * {@link CorfuRuntime#stop()}
+     *
+     * @param callback a callback to run after getting response from proxy server
+     */
     public void stop(RpcCallback<ProxyResponseMsg> callback) {
         Channel channel = connectToProxy();
         String requestId = generateRequestId();
@@ -127,6 +165,11 @@ public class CorfuProxyClient {
         channel.writeAndFlush(request);
     }
 
+    /**
+     * {@link CorfuRuntime#stop(boolean)}
+     *
+     * @param callback a callback to run after getting response from proxy server
+     */
     public void stop(boolean shutdown, RpcCallback<ProxyResponseMsg> callback) {
         Channel channel = connectToProxy();
         String requestId = generateRequestId();
@@ -145,6 +188,11 @@ public class CorfuProxyClient {
         channel.writeAndFlush(request);
     }
 
+    /**
+     * {@link CorfuRuntime#shutdown()}
+     *
+     * @param callback a callback to run after getting response from proxy server
+     */
     public void shutdown(RpcCallback<ProxyResponseMsg> callback) {
         Channel channel = connectToProxy();
         String requestId = generateRequestId();
@@ -159,6 +207,11 @@ public class CorfuProxyClient {
         channel.writeAndFlush(request);
     }
 
+    /**
+     * {@link ManagementView#addNode(String, int, Duration, Duration)}
+     *
+     * @param callback a callback to run after getting response from proxy server
+     */
     public void addNode(String endpoint, int retry, Duration timeout, Duration pollPeriod,
                         RpcCallback<ProxyResponseMsg> callback) {
         Channel channel = connectToProxy();
@@ -181,6 +234,11 @@ public class CorfuProxyClient {
         channel.writeAndFlush(request);
     }
 
+    /**
+     * {@link ManagementView#removeNode(String, int, Duration, Duration)}
+     *
+     * @param callback a callback to run after getting response from proxy server
+     */
     public void removeNode(String endpoint, int retry, Duration timeout, Duration pollPeriod,
                            RpcCallback<ProxyResponseMsg> callback) {
         Channel channel = connectToProxy();
@@ -203,8 +261,13 @@ public class CorfuProxyClient {
         channel.writeAndFlush(request);
     }
 
+    /**
+     * {@link ManagementView#forceRemoveNode(String, int, Duration, Duration)}
+     *
+     * @param callback a callback to run after getting response from proxy server
+     */
     public void forceRemoveNode(String endpoint, int retry, Duration timeout, Duration pollPeriod,
-                                 RpcCallback<ProxyResponseMsg> callback) {
+                                RpcCallback<ProxyResponseMsg> callback) {
         Channel channel = connectToProxy();
         String requestId = generateRequestId();
 
@@ -225,6 +288,11 @@ public class CorfuProxyClient {
         channel.writeAndFlush(request);
     }
 
+    /**
+     * {@link CorfuRuntime#addLayoutServer(String)}
+     *
+     * @param callback a callback to run after getting response from proxy server
+     */
     public void addLayoutServer(String endpoint, RpcCallback<ProxyResponseMsg> callback) {
         Channel channel = connectToProxy();
         String requestId = generateRequestId();
@@ -243,6 +311,11 @@ public class CorfuProxyClient {
         channel.writeAndFlush(request);
     }
 
+    /**
+     * {@link Layout#getAllServers()}
+     *
+     * @param callback a callback to run after getting response from proxy server
+     */
     public void getAllServers(RpcCallback<ProxyResponseMsg> callback) {
         Channel channel = connectToProxy();
         String requestId = generateRequestId();
@@ -257,6 +330,11 @@ public class CorfuProxyClient {
         channel.writeAndFlush(request);
     }
 
+    /**
+     * {@link Layout#getAllActiveServers()}
+     *
+     * @param callback a callback to run after getting response from proxy server
+     */
     public void getAllActiveServers(RpcCallback<ProxyResponseMsg> callback) {
         Channel channel = connectToProxy();
         String requestId = generateRequestId();
@@ -271,6 +349,11 @@ public class CorfuProxyClient {
         channel.writeAndFlush(request);
     }
 
+    /**
+     * {@link CorfuRuntime#invalidateLayout()}
+     *
+     * @param callback a callback to run after getting response from proxy server
+     */
     public void invalidateLayout(RpcCallback<ProxyResponseMsg> callback) {
         Channel channel = connectToProxy();
         String requestId = generateRequestId();
