@@ -31,15 +31,26 @@ WRAPPER_CMD="./wrapper"
 WRAPPER_CONF="../conf/corfu-server-wrapper.conf"
 
 ADDITIONAL_MULTIROLE_CONF="../conf/corfu-server-wrapper_multirole.conf"
+ADDITIONAL_CONVERGED_APP_CONF="../conf/corfu-server-wrapper_converged_app.conf"
 NODE_TYPE=`grep node-type /etc/nsx_issue | cut -d\  --fields=2-3`
 
-# When deployed with manager role, use multirole setting to allocate 18% memory
+# When deployed with policy role, use multirole setting to allocate 18% memory
 # Else remove the multirole related configuration to use 20% memory
 if [ "$NODE_TYPE" != "nsx-manager" ] && [ "$NODE_TYPE" != "nsx-manager nsx-policy-manager" ] && [ "$NODE_TYPE" != "nsx-policy-manager nsx-manager" ]; then
     # Determine the absolute path to delete the multirole conf file
     SCRIPTPATH=$(readlink -f $0)
     SCRIPTBASE=$(dirname $SCRIPTPATH)
     rm -f "$SCRIPTBASE/$ADDITIONAL_MULTIROLE_CONF"
+fi
+
+# If it's not a converged appliance (manager, policy manager, and controller) appliance then remove the
+# converged appliance related configuration
+if [ "$NODE_TYPE" != "nsx-manager nsx-policy-manager nsx-controller" ]; then
+    # Determine the absolute path to successfully
+    # delete the converged appliance conf file
+    SCRIPTPATH=$(readlink -f $0)
+    SCRIPTBASE=`dirname $SCRIPTPATH`
+    rm -f "$SCRIPTBASE/$ADDITIONAL_CONVERGED_APP_CONF"
 fi
 
 # Changes to enable profile mode
