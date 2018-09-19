@@ -13,6 +13,9 @@
 export CORFU_HEAP_SIZE_PERCENT=20
 # END CORFU CONFIG BLOCK
 
+set -eE
+trap 'echo "Error occurred on line number: $LINENO, in function: $FUNCNAME."' ERR
+
 umask 022
 
 ROLENAME="Corfu Infrastructure Server"
