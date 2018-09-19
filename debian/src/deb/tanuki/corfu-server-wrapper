@@ -32,7 +32,7 @@ WRAPPER_CONF="../conf/corfu-server-wrapper.conf"
 
 ADDITIONAL_MULTIROLE_CONF="../conf/corfu-server-wrapper_multirole.conf"
 ADDITIONAL_CONVERGED_APP_CONF="../conf/corfu-server-wrapper_converged_app.conf"
-NODE_TYPE=`grep node-type /etc/nsx_issue | cut -d\  --fields=2-3`
+NODE_TYPE=`grep node-type /etc/nsx_issue | cut -d\  --fields=2-4`
 
 # When deployed with policy role, use multirole setting to allocate 18% memory
 # Else remove the multirole related configuration to use 20% memory
