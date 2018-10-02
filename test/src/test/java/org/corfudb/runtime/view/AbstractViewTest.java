@@ -1,13 +1,8 @@
 package org.corfudb.runtime.view;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
-
-import javax.annotation.Nonnull;
 import lombok.Data;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
@@ -37,12 +32,15 @@ import org.corfudb.util.NodeLocator;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 
+import javax.annotation.Nonnull;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
-import org.junit.BeforeClass;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * This class serves as a base class for most higher-level Corfu unit tests
@@ -93,6 +91,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         CorfuRuntime.overrideGetRouterFunction = this::getRouterFunction;
         runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
             .nettyEventLoop(NETTY_EVENT_LOOP)
+//                .cacheDisabled(true)
             .build());
         // Default number of times to read before hole filling to 0
         // (most aggressive, to surface concurrency issues).

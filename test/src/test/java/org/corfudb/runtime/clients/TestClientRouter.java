@@ -209,6 +209,8 @@ public class TestClientRouter implements IClientRouter {
         // Generate a future and put it in the completion table.
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequest, cf);
+
+//        Sleep.MILLISECONDS.sleepUninterruptibly(50L);
         // Evaluate rules.
         if (rules.stream()
                 .map(x -> x.evaluate(message, this))

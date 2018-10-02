@@ -1,0 +1,3 @@
+src/test/resources/replayerWorkloads/exp-long-recording1.list
+src/test/resources/replayerWorkloads/exp-long-recording2.list
+src/test/resources/replayerWorkloads/exp-long-recording3.list

@@ -1,14 +1,15 @@
 package org.corfudb;
 
+import static java.time.temporal.ChronoUnit.HOURS;
+import static java.time.temporal.ChronoUnit.MILLIS;
+import static java.time.temporal.ChronoUnit.MINUTES;
+import static java.time.temporal.ChronoUnit.SECONDS;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Comparator;
-
-import static java.time.temporal.ChronoUnit.MILLIS;
-import static java.time.temporal.ChronoUnit.MINUTES;
-import static java.time.temporal.ChronoUnit.SECONDS;
 
 
 /** This class contains automatically calculated parameters used for timeouts
@@ -80,6 +81,9 @@ public class CorfuTestParameters {
     /** Whether or not the build was started on Travis-CI. */
     public final boolean TRAVIS_BUILD;
 
+    /** Whether or not the parameters need to be adjusted for performance experiments. */
+    public final boolean PERFORMANCE_BUILD;
+
     /** Used to indicate when determinstic seeding is to be used
      */
     public final long SEED;
@@ -91,21 +95,29 @@ public class CorfuTestParameters {
         TRAVIS_BUILD = System.getProperty("test.travisBuild")
                 != null && System.getProperty("test.travisBuild").toLowerCase()
                 .equals("true");
-        
+
+        PERFORMANCE_BUILD = Boolean.parseBoolean(System.getProperty("test.performanceBuild"));
+
+        // Timeouts
         if (TRAVIS_BUILD) {
             System.out.println("Building on travis, increased timeouts, "
-                   + "shorter tests and reduced concurrency will be used.");
+                    + "shorter tests and reduced concurrency will be used.");
+            TIMEOUT_VERY_SHORT = Duration.of(1, SECONDS);
+            TIMEOUT_SHORT = Duration.of(5, SECONDS);
+            TIMEOUT_NORMAL = Duration.of(20, SECONDS);
+            TIMEOUT_LONG = Duration.of(2, MINUTES);
+        } else if (PERFORMANCE_BUILD) {
+            System.out.println("Building for performance experiments, increased timeouts.");
+            TIMEOUT_VERY_SHORT = Duration.of(30, SECONDS);
+            TIMEOUT_SHORT = Duration.of(150, SECONDS);
+            TIMEOUT_NORMAL = Duration.of(10, MINUTES);
+            TIMEOUT_LONG = Duration.of(1, HOURS);
+        } else {
+            TIMEOUT_VERY_SHORT = Duration.of(100, MILLIS);
+            TIMEOUT_SHORT = Duration.of(1, SECONDS);
+            TIMEOUT_NORMAL = Duration.of(10, SECONDS);
+            TIMEOUT_LONG = Duration.of(1, MINUTES);
         }
-        
-        // Timeouts
-        TIMEOUT_VERY_SHORT = TRAVIS_BUILD ? Duration.of(1, SECONDS) :
-                                            Duration.of(100, MILLIS);
-        TIMEOUT_SHORT = TRAVIS_BUILD ? Duration.of(5, SECONDS) :
-                                        Duration.of(1, SECONDS);
-        TIMEOUT_NORMAL = TRAVIS_BUILD ? Duration.of(20, SECONDS) :
-                                        Duration.of(10, SECONDS);
-        TIMEOUT_LONG = TRAVIS_BUILD ? Duration.of(2, MINUTES):
-                                        Duration.of(1, MINUTES);
 
         // Iterations
         NUM_ITERATIONS_VERY_LOW = TRAVIS_BUILD ? 1 : 10;
