@@ -10,6 +10,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.util.NodeLocator;
 
 /**
  * Pool of client routers.
@@ -20,7 +21,7 @@ import org.corfudb.runtime.clients.IClientRouter;
 public class NodeRouterPool {
 
     @Getter(AccessLevel.PROTECTED)
-    private final Map<String, IClientRouter> nodeRouters = new ConcurrentHashMap<>();
+    private final Map<NodeLocator, IClientRouter> nodeRouters = new ConcurrentHashMap<>();
 
     /**
      * A function to handle getting routers. Used by test framework to inject
@@ -31,19 +32,20 @@ public class NodeRouterPool {
     @Setter
     private Function<String, IClientRouter> createRouterFunction;
 
-    public NodeRouterPool(Function<String, IClientRouter> createRouterFunction) {
+    NodeRouterPool(Function<String, IClientRouter> createRouterFunction) {
         this.createRouterFunction = createRouterFunction;
     }
 
     /**
      * Fetches a router from the pool if already present. Else creates a new router using the
-     * provided funtion and adds it to the pool.
+     * provided function and adds it to the pool.
      *
      * @param endpoint Endpoint to connect the router.
      * @return IClientRouter.
      */
-    public IClientRouter getRouter(String endpoint) {
-        return nodeRouters.computeIfAbsent(endpoint, s -> createRouterFunction.apply(s));
+    public IClientRouter getRouter(NodeLocator endpoint) {
+        return nodeRouters.computeIfAbsent(endpoint,
+                s -> createRouterFunction.apply(NodeLocator.getLegacyEndpoint(s)));
     }
 
     /**
