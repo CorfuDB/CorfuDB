@@ -5,12 +5,13 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
 
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.UUID;
+
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * The ClientHandshakeHandler initiates the handshake upon socket connection.
@@ -92,7 +93,8 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
                     READ_TIMEOUT_HANDLER);
             // Remove the handler from the pipeline. Also remove the reference of the context from
             // the handler so that it does not disconnect the channel.
-            ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);
+            ctx.pipeline().remove(READ_TIMEOUT_HANDLER);
+                    //.handlerRemoved(ctx);
         } catch (ClassCastException e) {
             log.warn("channelRead: Non-handshake message received by handshake handler. " +
                     "Send upstream only if handshake succeeded.");
