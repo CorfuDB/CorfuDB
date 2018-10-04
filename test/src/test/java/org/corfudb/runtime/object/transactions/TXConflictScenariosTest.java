@@ -1,16 +1,17 @@
 package org.corfudb.runtime.object.transactions;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
+
+import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicIntegerArray;
+
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSharedCounter;
 import org.junit.Test;
-
-import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicIntegerArray;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by dalia on 12/29/16.
@@ -85,7 +86,7 @@ public abstract class TXConflictScenariosTest extends AbstractTransactionContext
                     .isEqualTo(OVERWRITE_TWICE);
         });
 
-        // SM step 8: all tasks try to commit their transacstion.
+        // SM step 8: all tasks try to commit their transaction.
         // Task k aborts if, and only if, counter k+1 was modified after it read it and transaction k+1 already committed.
         addTestStep((task_num) -> {
             try {
