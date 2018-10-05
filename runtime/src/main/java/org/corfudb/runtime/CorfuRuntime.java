@@ -718,7 +718,7 @@ public class CorfuRuntime {
      * @return The router.
      */
     public IClientRouter getRouter(String address) {
-        return nodeRouterPool.getRouter(address);
+        return nodeRouterPool.getRouter(NodeLocator.parseString(address));
     }
 
     /**
@@ -768,7 +768,11 @@ public class CorfuRuntime {
      */
     private void pruneRemovedRouters(@Nonnull Layout layout) {
         nodeRouterPool.getNodeRouters().keySet().stream()
-                .filter(endpoint -> !layout.getAllServers().contains(endpoint))
+                // Check if endpoint is present in the layout.
+                .filter(endpoint -> !layout.getAllServers()
+                        // Converting to legacy endpoint format as the layout only contains
+                        // legacy format - host:port.
+                        .contains(NodeLocator.getLegacyEndpoint(endpoint)))
                 .forEach(endpoint -> {
                     try {
                         nodeRouterPool.getNodeRouters().get(endpoint).stop();
