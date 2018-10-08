@@ -1,0 +1,59 @@
+@startuml
+box "host"
+ participant client
+ participant port9000
+ participant port9001
+ participant port9002
+ participant fakeDns
+end box
+
+participant docker
+box "docker sandbox"
+ participant node9000
+ participant node9001
+ participant node9002
+end box
+
+client -> docker : create corfu network (bridge)
+
+client -> docker : start node9000
+docker -> node9000 : create
+node9000 --> port9000: mapping
+docker --> client: node9000 created
+
+client -> docker : start node9001
+docker -> node9001 : create
+node9001 --> port9001: mapping
+docker --> client: node9001 created
+
+client -> docker : start node9002
+docker -> node9002 : create
+node9002 --> port9002: mapping
+docker --> client: node9002 created
+
+
+note left of port9002
+ Mac os limitation
+ can't use --network=host parameter
+ need fake dns
+end note
+
+client -> fakeDns : route node9000 to port9000
+client -> fakeDns : route node9001 to port9001
+client -> fakeDns : route node9002 to port9002
+
+== build universe ==
+client -> fakeDns: get node9000 ip address
+fakeDns --> client: 127.0.0.1
+client -> port9000: add corfu node: node9001
+port9000 -> node9000: add corfu node: node9001
+node9000 <-> node9001: sync
+node9000 --> client: added
+
+client -> fakeDns: get node9002 ip address
+fakeDns --> client: 127.0.0.1
+client -> port9000: add corfu node: node9002
+port9000 -> node9000: add corfu node: node9002
+node9000 <-> node9002: sync
+node9000 --> client: added
+@enduml
