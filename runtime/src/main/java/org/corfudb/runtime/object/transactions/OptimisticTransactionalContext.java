@@ -409,10 +409,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         } else {
             // Otherwise, fetch a read token from the sequencer the linearize
             // ourselves against.
-            long currentTail = builder.runtime
-                    .getSequencerView().query().getToken().getTokenValue();
-            log.trace("SnapshotTimestamp[{}] {}", this, currentTail);
-            return currentTail;
+            return super.obtainSnapshotTimestamp();
         }
     }
 }
