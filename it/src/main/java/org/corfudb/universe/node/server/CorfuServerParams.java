@@ -7,7 +7,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
-import org.corfudb.universe.node.Node;
+import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.node.server.CorfuServer.Mode;
 import org.corfudb.universe.node.server.CorfuServer.Persistence;
@@ -21,7 +21,7 @@ import java.time.Duration;
 @EqualsAndHashCode(exclude = {"streamLogDir", "logLevel", "stopTimeout"})
 @ToString
 public
-class CorfuServerParams implements Node.NodeParams {
+class CorfuServerParams implements NodeParams {
     @Default
     @NonNull
     private final String streamLogDir = "/tmp/";

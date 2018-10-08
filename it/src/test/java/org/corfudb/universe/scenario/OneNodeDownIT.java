@@ -31,7 +31,7 @@ public class OneNodeDownIT extends GenericIntegrationTest {
      * 5) Verify layout, cluster status and data path again
      */
     @Test(timeout = 300000)
-    public void OneNodeDownTest() {
+    public void oneNodeDownTest() {
 
         getScenario().describe((fixture, testCase) -> {
             CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());

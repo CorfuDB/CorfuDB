@@ -31,7 +31,7 @@ public class TwoNodesDownIT extends GenericIntegrationTest {
      * 5) Verify layout, cluster status and data path again
      */
     @Test(timeout = 300000)
-    public void TwoNodesDownTest() {
+    public void twoNodesDownTest() {
         getScenario().describe((fixture, testCase) -> {
             CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
 

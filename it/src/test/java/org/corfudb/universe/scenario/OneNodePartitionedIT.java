@@ -13,6 +13,7 @@ import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class OneNodePartitionedIT extends GenericIntegrationTest {
@@ -27,8 +28,9 @@ public class OneNodePartitionedIT extends GenericIntegrationTest {
      * 4) Recover cluster by reconnecting the partitioned node
      * 5) Verify layout, cluster status and data path again
      */
+    @Ignore("Fix disconnect method in DockerCorfuServer. Wrong cluster status (UNAVAILABLE) on VM")
     @Test(timeout = 300000)
-    public void OneNodeSymmetricPartitionTest() {
+    public void oneNodeSymmetricPartitionTest() {
         getScenario().describe((fixture, testCase) -> {
             CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
 

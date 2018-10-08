@@ -3,6 +3,7 @@ package org.corfudb.universe.group;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.universe.node.Node;
+import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.universe.Universe;
 
 import java.time.Duration;
@@ -72,6 +73,6 @@ public interface Group {
 
         <T extends NodeParams> ImmutableList<T> getNodesParams();
 
-        Node.NodeType getNodeType();
+        NodeType getNodeType();
     }
 }

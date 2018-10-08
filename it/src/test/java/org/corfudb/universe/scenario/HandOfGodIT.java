@@ -26,7 +26,7 @@ public class HandOfGodIT extends GenericIntegrationTest {
      * 4) Verify layout, cluster status and data path
      */
     @Test(timeout = 300000)
-    public void HandOfGodTest() {
+    public void handOfGodTest() {
         getScenario().describe((fixture, testCase) -> {
             ClientParams clientFixture = fixture.getClient();
             CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());

@@ -54,7 +54,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
      */
     @Override
     public CorfuServer deploy() {
-        executeOnVm("mkdir -p ./" + params.getName());
+        executeCommand("mkdir -p ./" + params.getName());
 
         commandHelper.copyFile(
                 ipAddress,
@@ -92,7 +92,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         log.info("Pausing the Corfu server: {}", params.getName());
 
         String cmd = "ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -STOP";
-        executeOnVm(cmd);
+        executeCommand(cmd);
     }
 
     /**
@@ -106,7 +106,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         cmdLine.append(getCommandLineParams());
         cmdLine.append(" > /tmp/corfu.log 2>&1 &'");
 
-        executeOnVm(cmdLine.toString());
+        executeCommand(cmdLine.toString());
     }
 
     /**
@@ -137,13 +137,13 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         log.info("Resuming the corfu server: {}", params.getName());
 
         String cmd = "ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -CONT";
-        executeOnVm(cmd);
+        executeCommand(cmd);
     }
 
     /**
      * Executes a certain command on the VM.
      */
-    private void executeOnVm(String cmdLine) {
+    private void executeCommand(String cmdLine) {
         String ipAddress = getIpAddress();
 
         commandHelper.executeCommand(ipAddress,
@@ -166,7 +166,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
                     "sudo " + cmdLine
             );
         } catch (JSchException | IOException e) {
-            throw new NodeException("Can't executo sudo command: " + cmdLine, e);
+            throw new NodeException("Can't execute sudo command: " + cmdLine, e);
         }
     }
 
@@ -187,7 +187,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         log.info("Stop corfu server on vm: {}, params: {}", params.getVmName(), params);
 
         try {
-            executeOnVm("ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -15");
+            executeCommand("ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -15");
         } catch (Exception e) {
             String err = String.format("Can't STOP corfu: %s. Process not found on vm: %s, ip: %s",
                     params.getName(), params.getVmName(), ipAddress
@@ -203,7 +203,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     public void kill() {
         log.info("Kill the corfu server. Params: {}", params);
         try {
-            executeOnVm("ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -9");
+            executeCommand("ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -9");
         } catch (Exception e) {
             String err = String.format("Can't KILL corfu: %s. Process not found on vm: %s, ip: %s",
                     params.getName(), params.getVmName(), ipAddress
@@ -237,7 +237,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
 
     private void removeDbDir() {
         Path dbPath = Paths.get(params.getStreamLogDir(), "corfu");
-        executeOnVm(String.format("rm -rf %s", dbPath.toString()));
+        executeCommand(String.format("rm -rf %s", dbPath.toString()));
     }
 
     /**
@@ -246,7 +246,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
      * so on, whatever used by the application.
      */
     private void removeAppDir() {
-        executeOnVm(String.format("rm -rf ./%s", params.getName()));
+        executeCommand(String.format("rm -rf ./%s", params.getName()));
     }
 
     @Override

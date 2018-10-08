@@ -9,6 +9,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.Group;
 import org.corfudb.universe.node.Node;
+import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.node.NodeException;
 import org.corfudb.universe.node.client.LocalCorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
@@ -130,7 +131,7 @@ public abstract class AbstractCorfuCluster<P extends CorfuClusterParams, U exten
     }
 
     @Override
-    public Node add(Node.NodeParams nodeParams) {
+    public Node add(NodeParams nodeParams) {
         CorfuServerParams corfuServerParams = ClassUtils.cast(nodeParams);
         params.add(corfuServerParams);
 

@@ -30,7 +30,7 @@ public class OneNodePausedIT extends GenericIntegrationTest {
      * 5) Verify layout, cluster status and data path again
      */
     @Test(timeout = 300000)
-    public void OneNodePausedTest() {
+    public void oneNodePausedTest() {
         getScenario().describe((fixture, testCase) -> {
             CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
 

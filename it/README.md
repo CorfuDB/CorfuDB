@@ -26,11 +26,11 @@ Provide API to write complex testing scenarios for distributed applications, che
    match the desired state.
  
 ### Lifecycle:
- #### maven `mvn clean integration-test`:
+ #### maven `mvn -pl it clean verify`:
  - build a corfu `infrastructure` shaded jar (corfu server).
  - deploy corfu server. It could be:
      - build docker image based on `infrastructure` jar
-     - copy `infrastrucutre` jar into a Vm
+     - copy `infrastructure` jar into a Vm
  - run corfu server
  
  #### Basic integration test:

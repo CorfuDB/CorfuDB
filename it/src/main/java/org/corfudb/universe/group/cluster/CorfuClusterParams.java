@@ -2,12 +2,13 @@ package org.corfudb.universe.group.cluster;
 
 import com.google.common.collect.ImmutableList;
 import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.corfudb.universe.group.Group;
+import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.util.ClassUtils;
@@ -22,23 +23,23 @@ import java.util.stream.Collectors;
 @EqualsAndHashCode
 @ToString
 public
-class CorfuClusterParams implements Group.GroupParams {
+class CorfuClusterParams implements GroupParams {
     @Getter
-    @Builder.Default
+    @Default
     @NonNull
     private String name = RandomStringUtils.randomAlphabetic(6).toLowerCase();
-    @Builder.Default
+    @Default
     @NonNull
     private final List<CorfuServerParams> nodes = new ArrayList<>();
     @Getter
-    @Builder.Default
+    @Default
     @NonNull
     private NodeType nodeType = NodeType.CORFU_SERVER;
-    @Builder.Default
+    @Default
     @Getter
     @NonNull
     private final int bootStrapRetries = 20;
-    @Builder.Default
+    @Default
     @Getter
     @NonNull
     private final Duration retryTimeout = Duration.ofSeconds(3);

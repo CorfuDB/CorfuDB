@@ -1,16 +1,21 @@
 package org.corfudb.universe.node.server.docker;
 
-import static com.spotify.docker.client.DockerClient.LogsParam;
-
 import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.DockerClient.ExecCreateParam;
 import com.spotify.docker.client.LogStream;
 import com.spotify.docker.client.exceptions.DockerException;
-import com.spotify.docker.client.messages.*;
+import com.spotify.docker.client.messages.ContainerConfig;
+import com.spotify.docker.client.messages.ContainerCreation;
+import com.spotify.docker.client.messages.ContainerInfo;
+import com.spotify.docker.client.messages.ExecCreation;
+import com.spotify.docker.client.messages.HostConfig;
+import com.spotify.docker.client.messages.IpamConfig;
+import com.spotify.docker.client.messages.PortBinding;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
+import org.corfudb.universe.group.cluster.CorfuClusterParams;
 import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.NodeException;
@@ -34,6 +39,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static com.spotify.docker.client.DockerClient.LogsParam;
+
 /**
  * Implements a docker instance representing a {@link CorfuServer}.
  */
@@ -46,15 +53,18 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     private final DockerClient docker;
     @NonNull
     private final LoggingParams loggingParams;
+    @NonNull
+    private final CorfuClusterParams clusterParams;
     private final AtomicReference<String> ipAddress = new AtomicReference<>();
     private final AtomicBoolean destroyed = new AtomicBoolean();
 
     @Builder
     public DockerCorfuServer(DockerClient docker, CorfuServerParams params, UniverseParams universeParams,
-                             LoggingParams loggingParams) {
+                             CorfuClusterParams clusterParams, LoggingParams loggingParams) {
         super(params, universeParams);
         this.docker = docker;
         this.loggingParams = loggingParams;
+        this.clusterParams = clusterParams;
     }
 
     /**
@@ -157,23 +167,35 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     public void disconnect() {
         log.info("Disconnecting the server from docker network. Docker container: {}", params.getName());
 
-        try {
-            String networkName = universeParams.getNetworkName();
-            IpamConfig ipamConfig = docker.inspectNetwork(networkName).ipam().config().get(0);
-            String subnet = ipamConfig.subnet();
-            String gateway = ipamConfig.gateway();
+        clusterParams.getNodesParams().forEach(neighbourServer -> {
+            if (neighbourServer.equals(params)){
+                return;
+            }
 
-            // iptables -A INPUT -s $gateway -j ACCEPT
-            execCommand("iptables", "-A", "INPUT", "-s", gateway, "-j", "ACCEPT");
-            // iptables -A INPUT -s $subnet -j DROP
-            execCommand("iptables", "-A", "INPUT", "-s", subnet, "-j", "DROP");
-            // iptables -A OUTPUT -d $gateway -j ACCEPT
-            execCommand("iptables", "-A", "OUTPUT", "-d", gateway, "-j", "ACCEPT");
-            // iptables -A OUTPUT -d $subnet -j DROP
-            execCommand("iptables", "-A", "OUTPUT", "-d", subnet, "-j", "DROP");
-        } catch (DockerException | InterruptedException ex) {
-            throw new NodeException("Can't disconnect container from docker network " + params.getName(), ex);
-        }
+            try {
+                String networkName = universeParams.getNetworkName();
+                IpamConfig ipamConfig = docker.inspectNetwork(networkName).ipam().config().get(0);
+                String gateway = ipamConfig.gateway();
+
+                ContainerInfo server = docker.inspectContainer(neighbourServer.getName());
+                String neighbourhoodIp = server.networkSettings().networks().values().asList().get(0).ipAddress();
+
+                if (StringUtils.isEmpty(neighbourhoodIp)){
+                    throw new NodeException("Empty ip address. Container: " + neighbourServer.getName());
+                }
+
+                // iptables -A INPUT -s $gateway -j ACCEPT
+                execCommand("iptables", "-A", "INPUT", "-s", gateway, "-j", "ACCEPT");
+                // iptables -A INPUT -s $subnet -j DROP
+                execCommand("iptables", "-A", "INPUT", "-s", neighbourhoodIp, "-j", "DROP");
+                // iptables -A OUTPUT -d $gateway -j ACCEPT
+                execCommand("iptables", "-A", "OUTPUT", "-d", gateway, "-j", "ACCEPT");
+                // iptables -A OUTPUT -d $subnet -j DROP
+                execCommand("iptables", "-A", "OUTPUT", "-d", neighbourhoodIp, "-j", "DROP");
+            } catch (DockerException | InterruptedException ex) {
+                throw new NodeException("Can't disconnect container from docker network " + params.getName(), ex);
+            }
+        });
     }
 
     /**
@@ -302,7 +324,16 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
 
             docker.startContainer(id);
 
-            ipAddress.set(docker.inspectContainer(id).networkSettings().ipAddress());
+            String ipAddr = docker.inspectContainer(id)
+                    .networkSettings().networks()
+                    .values().asList().get(0)
+                    .ipAddress();
+
+            if (StringUtils.isEmpty(ipAddr)){
+                throw new NodeException("Empty Ip address for container: " + params.getName());
+            }
+
+            ipAddress.set(ipAddr);
         } catch (InterruptedException | DockerException e) {
             throw new NodeException("Can't start a container", e);
         }
@@ -357,12 +388,14 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     private void execCommand(String... command) throws DockerException, InterruptedException {
         log.info("Executing docker command: {}", String.join(" ", command));
 
-        docker.execCreate(
+        ExecCreation execCreation = docker.execCreate(
                 params.getName(),
                 command,
                 ExecCreateParam.attachStdout(),
                 ExecCreateParam.attachStderr()
         );
+
+        docker.execStart(execCreation.id());
     }
 
     /**

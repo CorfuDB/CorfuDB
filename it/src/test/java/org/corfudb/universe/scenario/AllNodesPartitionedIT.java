@@ -6,6 +6,7 @@ import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,8 +26,9 @@ public class AllNodesPartitionedIT extends GenericIntegrationTest {
      * 4) Recover cluster by reconnecting the partitioned node
      * 5) Verify layout, cluster status and data path again
      */
+    @Ignore("Fix iptables for travis")
     @Test(timeout = 300000)
-    public void AllNodesPartitionedTest() {
+    public void allNodesPartitionedTest() {
         getScenario().describe((fixture, testCase) -> {
             CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
 

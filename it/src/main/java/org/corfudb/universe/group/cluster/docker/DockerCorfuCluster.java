@@ -45,6 +45,7 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams,
 
         return DockerCorfuServer.builder()
                 .universeParams(universeParams)
+                .clusterParams(params)
                 .params(nodeParams)
                 .loggingParams(loggingParams)
                 .docker(docker)
