@@ -113,9 +113,6 @@ public class ServerContext implements AutoCloseable {
     private final EventLoopGroup clientGroup;
 
     @Getter
-    private final EventLoopGroup bossGroup;
-
-    @Getter
     private final EventLoopGroup workerGroup;
 
     @Getter
@@ -151,9 +148,6 @@ public class ServerContext implements AutoCloseable {
         workerGroup = providedEventLoops
             ? getServerConfig(EventLoopGroup.class, "worker") :
             getNewWorkerGroup();
-        bossGroup = providedEventLoops
-            ? getServerConfig(EventLoopGroup.class, "boss") :
-            getNewBossGroup();
 
         // Metrics setup & reporting configuration
         if (!isMetricsReportingSetUp(metrics)) {
@@ -460,21 +454,7 @@ public class ServerContext implements AutoCloseable {
             return null;
         }
     }
-
-    /** Get a new "boss" group, which services (accepts) incoming connections.
-     *
-     * @return              A boss group.
-     */
-    private EventLoopGroup getNewBossGroup() {
-        final ThreadFactory threadFactory = new ThreadFactoryBuilder()
-                .setNameFormat(getThreadPrefix() + "accept-%d")
-                .build();
-        EventLoopGroup group = getChannelImplementation().getGenerator()
-                .generate(1, threadFactory);
-        log.info("getBossGroup: Type {}", group.getClass().getSimpleName());
-        return group;
-    }
-
+    
     /** Get a new "worker" group, which services incoming requests.
      *
      * @return          A worker group.
@@ -543,7 +523,6 @@ public class ServerContext implements AutoCloseable {
         // Shutdown the active event loops unless they were provided to us
         if (!getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
             clientGroup.shutdownGracefully();
-            bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
         }
     }

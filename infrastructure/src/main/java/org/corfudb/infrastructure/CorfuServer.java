@@ -280,8 +280,7 @@ public class CorfuServer {
             shutdownThread.setName("ShutdownThread");
             Runtime.getRuntime().addShutdownHook(shutdownThread);
 
-            startAndListen(serverContext.getBossGroup(),
-                    serverContext.getWorkerGroup(),
+            startAndListen(serverContext.getWorkerGroup(),
                     b -> configureBootstrapOptions(serverContext, b),
                     serverContext,
                     router,
@@ -310,8 +309,6 @@ public class CorfuServer {
      * {@link EventLoopGroup}s. For implementations which listen on multiple ports,
      * {@link EventLoopGroup}s may be reused.
      *
-     * @param bossGroup             The "boss" {@link EventLoopGroup} which services incoming
-     *                              connections.
      * @param workerGroup           The "worker" {@link EventLoopGroup} which services incoming
      *                              requests.
      * @param bootstrapConfigurer   A {@link BootstrapConfigurer} which will receive the
@@ -325,8 +322,7 @@ public class CorfuServer {
      *                              to be shutdown.
      */
     public static
-            ChannelFuture startAndListen(@Nonnull EventLoopGroup bossGroup,
-                          @Nonnull EventLoopGroup workerGroup,
+            ChannelFuture startAndListen(@Nonnull EventLoopGroup workerGroup,
                           @Nonnull BootstrapConfigurer bootstrapConfigurer,
                           @Nonnull ServerContext context,
                           @Nonnull NettyServerRouter router,
@@ -334,7 +330,7 @@ public class CorfuServer {
                           int port) {
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
-            bootstrap.group(bossGroup, workerGroup)
+            bootstrap.group(workerGroup)
                 .channel(context.getChannelImplementation().getServerChannelClass());
             bootstrapConfigurer.configure(bootstrap);
 
