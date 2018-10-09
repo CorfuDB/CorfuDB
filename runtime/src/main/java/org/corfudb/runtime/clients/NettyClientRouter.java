@@ -4,6 +4,7 @@ import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
@@ -184,7 +185,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
         connectionFuture = new CompletableFuture<>();
 
-        handlerMap = new ConcurrentHashMap<>();
+        handlerMap = new HashMap<>();
         clientList = new ArrayList<>();
         requestID = new AtomicLong();
         outstandingRequests = new ConcurrentHashMap<>();
@@ -214,6 +215,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         b.handler(getChannelInitializer());
         b.option(ChannelOption.CONNECT_TIMEOUT_MILLIS,
                 (int) parameters.getConnectionTimeout().toMillis());
+        b.option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
 
         // Asynchronously connect, retrying until shut down.
         // Once connected, connectionFuture will be completed.
@@ -456,9 +458,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
         // Write the message out to the channel.
         if (ctx == null) {
-            channel.writeAndFlush(message, channel.voidPromise());
+            Batcher.writeAndFlush(channel, message);
+            //channel.writeAndFlush(message, channel.voidPromise());
         } else {
-            ctx.writeAndFlush(message, ctx.voidPromise());
+            Batcher.writeAndFlush(ctx.channel(), message);
+            //ctx.writeAndFlush(message, ctx.voidPromise());
         }
         log.trace("Sent message: {}", message);
 
@@ -508,7 +512,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     public void sendResponseToServer(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
-        ctx.writeAndFlush(outMsg, ctx.voidPromise());
+        //ctx.writeAndFlush(outMsg, ctx.voidPromise());
+        Batcher.writeAndFlush(ctx.channel(), outMsg);
         log.trace("Sent response: {}", outMsg);
     }
 

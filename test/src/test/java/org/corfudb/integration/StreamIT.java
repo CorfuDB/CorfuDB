@@ -11,40 +11,57 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * A set integration tests that exercise the stream API.
  */
 
-public class StreamIT extends AbstractIT {
+public class StreamIT{
 
     @Test
     public void largeStreamWrite() throws Exception {
-        final String host = "localhost";
-        final String streamName = "s1";
-        final int port = 9000;
 
-        // Start node one and populate it with data
-        Process server_1 = new CorfuServerRunner()
-                .setHost(host)
-                .setPort(port)
-                .setSingle(true)
-                .runServer();
+        String connString = "localhost:9000";
+        int numThreads = 128;
+        final int numOps = 100_000;
+        final int numRt = 3;
 
-        final int maxWriteSize = 100;
+        CorfuRuntime[] rts = new CorfuRuntime[numRt];
 
-        // Configure a client with a max write limit
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
-                .builder()
-                .maxWriteSize(maxWriteSize)
-                .build();
+        for (int x = 0; x < numRt; x++) {
+            rts[x] = new CorfuRuntime(connString).connect();
+        }
 
-        CorfuRuntime rt = CorfuRuntime.fromParameters(params);
-        rt.parseConfigurationString(host + ":" + port);
-        rt.connect();
+        Thread[] threads = new Thread[numThreads];
 
-        final int bufSize = maxWriteSize * 2;
+        for (int x = 0; x < numThreads; x++) {
+            final CorfuRuntime rt = rts[x%numRt];
+            Runnable r = () -> {
+                long avg = 0;
+                for (int y = 0; y < numOps; y++) {
+                    long ts1 = System.nanoTime();
+                    rt.getSequencerView().query();
+                    long ts2 = System.nanoTime();
+                    avg += (ts2 - ts1);
+                }
 
-        // Attempt to write a payload that is greater than the configured limit.
-        assertThatThrownBy(() -> rt.getStreamsView()
-                .get(CorfuRuntime.getStreamID(streamName))
-                .append(new byte[bufSize]))
-                .isInstanceOf(WriteSizeException.class);
-        shutdownCorfuServer(server_1);
+                System.out.println("latency ms/op " + ((avg*1.0)/numOps/1000000));
+            };
+
+            threads[x] = new Thread(r);
+        }
+
+
+        long ts1 = System.currentTimeMillis();
+
+        for (int x = 0; x < numThreads; x++) {
+            threads[x].start();
+        }
+
+        for (int x = 0; x < numThreads; x++) {
+            threads[x].join();
+        }
+
+
+        long ts2 = System.currentTimeMillis();
+
+        System.out.println("Total time: " + (ts2 - ts1));
+        System.out.println("Num Ops: " + (numThreads * numOps));
+        System.out.println("Throughput: " + ((numThreads * numOps) / (ts2 - ts1)));
     }
 }
