@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.runtime.clients.Batcher;
 
 
 /**
@@ -79,7 +80,8 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
      */
     public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
-        ctx.writeAndFlush(outMsg, ctx.voidPromise());
+        //ctx.writeAndFlush(outMsg, ctx.voidPromise());
+        Batcher.writeAndFlush(ctx.channel(), outMsg);
         log.trace("Sent response: {}", outMsg);
     }
 

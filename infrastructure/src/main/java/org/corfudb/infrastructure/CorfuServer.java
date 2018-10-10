@@ -105,7 +105,7 @@ public class CorfuServer {
                     + "              The name of the network interface.\n"
                     + " -i <channel-implementation>, --implementation <channel-implementation>   "
                     + "              The type of channel to use (auto, nio, epoll, kqueue)"
-                    + "[default: nio].\n"
+                    + "[default: epoll].\n"
                     + " -m, --memory                                                             "
                     + "              Run the unit in-memory (non-persistent).\n"
                     + "                                                                          "
