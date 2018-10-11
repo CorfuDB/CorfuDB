@@ -23,9 +23,9 @@ public class VmCorfuServerParams extends CorfuServerParams {
     private final String vmName;
 
     @Builder
-    public VmCorfuServerParams(String vmName, String streamLogDir, int port, Mode mode, Persistence persistence,
+    public VmCorfuServerParams(String vmName, int port, Mode mode, Persistence persistence,
                                Level logLevel, String clusterName, Duration stopTimeout) {
-        super(streamLogDir, port, mode, persistence, logLevel, clusterName, stopTimeout);
+        super(port, mode, persistence, logLevel, clusterName, stopTimeout);
         this.vmName = vmName;
     }
 }

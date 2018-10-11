@@ -142,7 +142,6 @@ public interface Fixtures {
                         .clusterName(clusterName)
                         .vmName(vmNamePrefix + (i + 1))
                         .mode(CorfuServer.Mode.CLUSTER)
-                        .streamLogDir("/tmp/")
                         .logLevel(Level.TRACE)
                         .persistence(CorfuServer.Persistence.DISK)
                         .port(port)

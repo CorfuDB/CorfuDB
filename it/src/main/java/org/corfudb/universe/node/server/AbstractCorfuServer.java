@@ -41,9 +41,6 @@ public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends
 
         switch (params.getPersistence()) {
             case DISK:
-                if (StringUtils.isEmpty(params.getStreamLogDir())) {
-                    throw new UniverseException("Invalid log dir in disk persistence mode");
-                }
                 cmd.append(" -l ").append(params.getStreamLogDir());
                 break;
             case MEMORY:

@@ -224,7 +224,6 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         try {
             executeSudoCommand(IpTablesUtil.cleanAll());
             removeAppDir();
-            removeDbDir();
         } catch (Exception e) {
             throw new NodeException("Can't clean corfu directories", e);
         }
@@ -233,11 +232,6 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     @Override
     public Stress getStress() {
         return stress;
-    }
-
-    private void removeDbDir() {
-        Path dbPath = Paths.get(params.getStreamLogDir(), "corfu");
-        executeCommand(String.format("rm -rf %s", dbPath.toString()));
     }
 
     /**

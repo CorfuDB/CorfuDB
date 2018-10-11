@@ -16,28 +16,30 @@ import org.slf4j.event.Level;
 import java.time.Duration;
 
 @Builder(builderMethodName = "serverParamsBuilder")
-@Getter
 @AllArgsConstructor
-@EqualsAndHashCode(exclude = {"streamLogDir", "logLevel", "stopTimeout"})
+@EqualsAndHashCode(exclude = {"logLevel", "stopTimeout"})
 @ToString
 public
 class CorfuServerParams implements NodeParams {
-    @Default
     @NonNull
-    private final String streamLogDir = "/tmp/";
+    private final String streamLogDir = "db";
     @Default
-    @NonNull
+    @Getter
     private final int port = 9000;
     @Default
     @NonNull
+    @Getter
     private final Mode mode = Mode.CLUSTER;
     @Default
     @NonNull
+    @Getter
     private final Persistence persistence = Persistence.DISK;
     @Default
     @NonNull
+    @Getter
     private final Level logLevel = Level.DEBUG;
     @NonNull
+    @Getter
     private final NodeType nodeType = NodeType.CORFU_SERVER;
     /**
      * A name of the Corfu cluster
@@ -53,5 +55,9 @@ class CorfuServerParams implements NodeParams {
     @Override
     public String getName() {
         return clusterName + "-corfu-node" + port;
+    }
+
+    public String getStreamLogDir(){
+        return getName() + streamLogDir;
     }
 }
