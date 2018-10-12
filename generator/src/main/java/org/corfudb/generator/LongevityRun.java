@@ -101,6 +101,6 @@ public class LongevityRun {
         }
 
         LongevityApp la = new LongevityApp(longevity, 10, configurationString, checkPoint);
-        la.runLongevityTest();
+        la.runLongevityTestAndExit();
     }
 }

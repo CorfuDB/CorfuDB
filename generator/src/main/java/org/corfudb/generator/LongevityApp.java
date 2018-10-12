@@ -107,8 +107,12 @@ public class LongevityApp {
      * If the application is hung (which can happen when something goes wrong) we do a hard exit. If any thread
      * is not playing nice with Interrupted exceptions (which can be a bug as well), this is the only way to
      * be sure we terminate.
+     *
+     * @return System exit status code
      */
-    private void waitForAppToFinish() {
+    private int waitForAppToFinish() {
+        boolean checkpointHasFinished = false;
+
         workers.shutdown();
         try {
             boolean finishedInTime = workers.
@@ -118,7 +122,7 @@ public class LongevityApp {
 
             Correctness.recordOperation("Liveness, " + livenessState, false);
             if (!finishedInTime) {
-                System.exit(1);
+                return 1;
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -126,18 +130,14 @@ public class LongevityApp {
             taskProducer.shutdownNow();
             checkpointer.shutdownNow();
 
-            boolean checkpointHasFinished = false;
-            int exitStatus;
             try {
                 checkpointHasFinished = checkpointer.awaitTermination(APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                exitStatus = 1;
             }
-
-            exitStatus = checkpointHasFinished ? 0 : 1;
-            System.exit(exitStatus);
         }
+
+        return checkpointHasFinished ? 0 : 1;
     }
 
     /**
@@ -225,7 +225,20 @@ public class LongevityApp {
     }
 
 
-    public void runLongevityTest() {
+    /**
+     * Run longevity test and terminate JVM
+     */
+    public void runLongevityTestAndExit() {
+        int exitStatus = runLongevityTestAndGetResult();
+        System.exit(exitStatus);
+    }
+
+    /**
+     * Run longevity test and return the status code
+     *
+     * @return Status code which indicates success or abnormality
+     */
+    public int runLongevityTestAndGetResult() {
         startTime = System.currentTimeMillis();
 
         if (checkPoint) {
@@ -235,6 +248,6 @@ public class LongevityApp {
         runTaskProducer();
         runTaskConsumers();
 
-        waitForAppToFinish();
+        return waitForAppToFinish();
     }
 }
