@@ -357,10 +357,12 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
                 .build();
 
         // Compose command line for starting Corfu
-        String cmdLine = String.format(
-                "java -cp *.jar org.corfudb.infrastructure.CorfuServer %s",
-                getCommandLineParams()
-        );
+        String cmdLine = new StringBuilder()
+                .append("mkdir -p " + params.getStreamLogDir())
+                .append(" && ")
+                .append("java -cp *.jar org.corfudb.infrastructure.CorfuServer ")
+                .append(getCommandLineParams())
+                .toString();
 
         return ContainerConfig.builder()
                 .hostConfig(hostConfig)

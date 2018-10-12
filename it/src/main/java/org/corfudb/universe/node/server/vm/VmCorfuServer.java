@@ -55,6 +55,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     @Override
     public CorfuServer deploy() {
         executeCommand("mkdir -p ./" + params.getName());
+        executeCommand("mkdir -p ./" + params.getStreamLogDir());
 
         commandHelper.copyFile(
                 ipAddress,

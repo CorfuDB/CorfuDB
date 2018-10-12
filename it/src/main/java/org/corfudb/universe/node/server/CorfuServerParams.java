@@ -58,6 +58,6 @@ class CorfuServerParams implements NodeParams {
     }
 
     public String getStreamLogDir(){
-        return getName() + streamLogDir;
+        return getName() + "/" + streamLogDir;
     }
 }
