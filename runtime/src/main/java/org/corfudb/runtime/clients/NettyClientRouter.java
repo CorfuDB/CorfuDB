@@ -16,7 +16,9 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
-import io.netty.handler.timeout.ReadTimeoutHandler;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
+import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.concurrent.GlobalEventExecutor;
 import lombok.Getter;
 import lombok.NonNull;
@@ -149,7 +151,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     @Getter
     volatile CompletableFuture<Void> connectionFuture;
 
-
     private SslContext sslContext;
     private final Map<CorfuMsgType, String> timerNameCache;
 
@@ -277,7 +278,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
-                ch.pipeline().addLast(new ReadTimeoutHandler(parameters.getIdleConnectionTimeout()));
+                ch.pipeline().addLast(new IdleStateHandler(parameters.getIdleConnectionTimeout(),
+                        parameters.getKeepAlivePeriod(), 0));
                 if (parameters.isTlsEnabled()) {
                     ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
                 }
@@ -591,6 +593,20 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         ctx.close();
     }
 
+    /**
+     * Sends a ping to the server so that the pong response will keep
+     * the channel active in order to avoid a ReadTimeout exception that will
+     * close the channel.
+     */
+    private void keepAlive() {
+        if (!channel.isOpen()) {
+            log.warn("keepAlive: channel not open, skipping ping. ");
+            return;
+        }
+        sendMessageAndGetCompletable(null, new CorfuMsg(CorfuMsgType.PING));
+        log.trace("keepAlive: sending ping to {}", this.channel.remoteAddress());
+    }
+
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt.equals(ClientHandshakeEvent.CONNECTED)) {
@@ -603,6 +619,15 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             // create a new one to unset it, causing future requests
             // to wait.
             connectionFuture = new CompletableFuture<>();
+        } else if (evt instanceof IdleStateEvent) {
+            IdleStateEvent e = (IdleStateEvent) evt;
+            if (e.state() == IdleState.READER_IDLE) {
+                ctx.close();
+            } else if (e.state() == IdleState.WRITER_IDLE) {
+                keepAlive();
+            }
+        } else {
+            log.warn("userEventTriggered: unhandled event {}", evt);
         }
     }
 
