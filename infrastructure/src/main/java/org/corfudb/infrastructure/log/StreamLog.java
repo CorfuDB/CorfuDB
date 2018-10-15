@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteCause;
+import org.corfudb.runtime.view.Tails;
 
 /**
  * An interface definition that specifies an api to interact with a StreamLog.
@@ -55,9 +56,9 @@ public interface StreamLog {
     void compact();
 
     /**
-     * Get the last global address that was written.
+     * Get the global tail and stream tails.
      */
-    long getGlobalTail();
+    Tails getTails();
 
     /**
      * Get the first untrimmed address in the address space.

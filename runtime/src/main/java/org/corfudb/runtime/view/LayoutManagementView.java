@@ -1,6 +1,6 @@
 package org.corfudb.runtime.view;
 
-import static org.corfudb.util.Utils.getMaxGlobalTail;
+import static org.corfudb.util.Utils.getTails;
 
 import java.util.Collections;
 import java.util.Map;
@@ -13,7 +13,6 @@ import javax.annotation.Nonnull;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -134,7 +133,7 @@ public class LayoutManagementView extends AbstractView {
             }
             if (isLogUnitServer) {
                 layoutBuilder.addLogunitServer(logUnitStripeIndex,
-                        getMaxGlobalTail(currentLayout, runtime).getSequence(),
+                        getTails(currentLayout, runtime).getLogTail(),
                         endpoint);
             }
             if (isUnresponsiveServer) {
@@ -180,7 +179,7 @@ public class LayoutManagementView extends AbstractView {
 
             LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
             layoutBuilder.addLogunitServer(0,
-                    getMaxGlobalTail(currentLayout, runtime).getSequence(),
+                    getTails(currentLayout, runtime).getLogTail(),
                     endpoint);
             layoutBuilder.removeUnresponsiveServers(Collections.singleton(endpoint));
             newLayout = layoutBuilder.build();
@@ -413,14 +412,12 @@ public class LayoutManagementView extends AbstractView {
                         || !originalLayout.getPrimarySequencer()
                         .equals(newLayout.getPrimarySequencer())) {
 
-                    FastObjectLoader fastObjectLoader = new FastObjectLoader(runtime);
-                    fastObjectLoader.setRecoverSequencerMode(true);
-                    fastObjectLoader.setLoadInCache(false);
+                    //TODO(Maithem) why isn't this getting the tails
+                    // from utils?
+                    Tails tails = runtime.getAddressSpaceView().getAllTails();
 
-                    // FastSMRLoader sets the logHead based on trim mark.
-                    fastObjectLoader.loadMaps();
-                    maxTokenRequested = fastObjectLoader.getLogTail();
-                    streamTails = fastObjectLoader.getStreamTails();
+                    maxTokenRequested = tails.getLogTail();
+                    streamTails = tails.getStreamTails();
                     verifyStreamTailsMap(streamTails);
 
                     // Incrementing the maxTokenRequested value for sequencer reset.

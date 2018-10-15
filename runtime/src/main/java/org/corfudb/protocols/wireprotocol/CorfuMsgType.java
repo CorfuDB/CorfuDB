@@ -61,7 +61,7 @@ public enum CorfuMsgType {
     FILL_HOLE(34, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
     PREFIX_TRIM(38, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
     TAIL_REQUEST(41, TypeToken.of(CorfuMsg.class)),
-    TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<Long>>(){}),
+    TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<TailsResponse>>(){}),
     COMPACT_REQUEST(43, TypeToken.of(CorfuMsg.class), true),
     FLUSH_CACHE(44, TypeToken.of(CorfuMsg.class), true),
     TRIM_MARK_REQUEST(45, TypeToken.of(CorfuMsg.class)),

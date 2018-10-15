@@ -19,6 +19,7 @@ import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
@@ -215,7 +216,7 @@ public class LogUnitClient extends AbstractClient {
      * @return A CompletableFuture which will complete with the globalTail once
      * received.
      */
-    public CompletableFuture<Long> getTail() {
+    public CompletableFuture<TailsResponse> getTail() {
         return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.msg());
     }
 

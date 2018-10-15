@@ -361,10 +361,7 @@ public class WorkflowIT extends AbstractIT {
                 .isEqualTo(prefixTrimAddress + 1);
         assertThat(rt.getLayoutView().getRuntimeLayout().getLogUnitClient("localhost:9002").getTrimMark().get())
                 .isEqualTo(prefixTrimAddress + 1);
-        FastObjectLoader fastObjectLoader = new FastObjectLoader(rt);
-        fastObjectLoader.setRecoverSequencerMode(true);
-        fastObjectLoader.loadMaps();
-        assertThat(fastObjectLoader.getStreamTails().get(CorfuRuntime.getStreamID(streamName)))
+        assertThat(rt.getAddressSpaceView().getAllTails().getStreamTails().get(CorfuRuntime.getStreamID(streamName)))
                 .isEqualTo(streamTail);
 
         // Shutdown two nodes

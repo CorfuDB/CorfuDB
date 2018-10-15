@@ -57,6 +57,9 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
+import org.corfudb.runtime.view.Tails;
+
+
 
 /**
  * This class implements the StreamLog by persisting the stream log as records in multiple files.
@@ -81,12 +84,19 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     public final String logDir;
     private final boolean noVerify;
     private final ServerContext serverContext;
-    private final AtomicLong globalTail = new AtomicLong(Address.NON_ADDRESS);
     private Map<String, SegmentHandle> writeChannels;
     private Set<FileChannel> channelsToSync;
     private MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
+
+    //=================Log Metadata=================
+    // TODO(Maithem) this should effectively be final, but it is used
+    // by a reset API that clears the state of this class, on reset
+    // a new instance of this class should be created after deleting
+    // the files of the old instance
+    private LogMetadata logMetadata;
     private long lastSegment;
     private volatile long startingAddress;
+
 
     /**
      * Returns a file-based stream log object.
@@ -108,14 +118,51 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         verifyLogs();
         // Starting address initialization should happen before
         // initializing the tail segment (i.e. initializeMaxGlobalAddress)
-        initializeStartingAddress();
-        initializeMaxGlobalAddress();
+        startingAddress = serverContext.getStartingAddress();
+        long firstSegment = startingAddress / RECORDS_PER_LOG_FILE;
+        lastSegment = serverContext.getTailSegment();
+        logMetadata = initializeLogMetadata(firstSegment, lastSegment);
 
         // This can happen if a prefix trim happens on
         // addresses that haven't been written
-        if (Math.max(getGlobalTail(), 0L) < getTrimMark()) {
+        if (Math.max(logMetadata.getGlobalTail(), 0L) < getTrimMark()) {
             syncTailSegment(getTrimMark() - 1);
         }
+    }
+
+    /**
+     * This method will scan the log (i.e. read all log segment files)
+     * on this LU and create a map of stream offsets and the global
+     * addresses seen.
+     * @param startSegment first segment in the log to be scanned
+     * @param endSegment the last segment to be scanned
+     * @return LogMetadata constructed from all the addresses in the
+     * consecutive segments from [startSegment, endSegment]
+     */
+    private LogMetadata initializeLogMetadata(long startSegment, long endSegment) {
+        LogMetadata metadata = new LogMetadata();
+        long start = System.currentTimeMillis();
+        for (long currentSegment = startSegment; currentSegment <= endSegment; currentSegment++) {
+            // TODO(Maithem): factor out getSegmentHandleForAddress to allow getting
+            // segments by segment number
+            SegmentHandle sh = getSegmentHandleForAddress(currentSegment * RECORDS_PER_LOG_FILE + 1);
+            try {
+                for (Map.Entry<Long, AddressMetaData> record : sh.getKnownAddresses().entrySet()) {
+                    // skip trimmed entries
+                    if (record.getKey() < startingAddress) continue;
+                    LogData logEntry = read(record.getKey());
+                    metadata.update(logEntry);
+                }
+            } finally {
+                sh.close();
+            }
+        }
+
+        // Open segment will add entries to the writeChannels map, therefore we need to clear it
+        writeChannels.clear();
+        long end = System.currentTimeMillis();
+        log.info("initializeStreamTails: took {} ms to load {}", end - start, metadata);
+        return metadata;
     }
 
     public static String getPendingTrimsFilePath(String segmentPath) {
@@ -200,15 +247,20 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public long getGlobalTail() {
-        return globalTail.get();
+    public Tails getTails() {
+        Map<UUID, Long> tails = new HashMap<>(logMetadata.getStreamTails().size());
+
+        for (Map.Entry<UUID, Long> entry : logMetadata.getStreamTails().entrySet()) {
+            tails.put(entry.getKey(), new Long(entry.getValue()));
+        }
+        return new Tails(logMetadata.getGlobalTail(), tails);
     }
 
     private void syncTailSegment(long address) {
         // TODO(Maithem) since writing a record and setting the tail segment is not
         // an atomic operation, it is possible to set an incorrect tail segment. In
         // that case we will need to scan more than one segment
-        globalTail.getAndUpdate(maxTail -> address > maxTail ? address : maxTail);
+        logMetadata.updateGlobalTail(address);
         long segment = address / RECORDS_PER_LOG_FILE;
         if (lastSegment < segment) {
             serverContext.setTailSegment(segment);
@@ -238,29 +290,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             return true;
         }
         return false;
-    }
-
-    private void initializeStartingAddress() {
-        startingAddress = serverContext.getStartingAddress();
-    }
-
-    private void initializeMaxGlobalAddress() {
-        long tailSegment = serverContext.getTailSegment();
-        long addressInTailSegment = (tailSegment * RECORDS_PER_LOG_FILE) + 1;
-        SegmentHandle sh = getSegmentHandleForAddress(addressInTailSegment);
-
-        try {
-
-            for (long address : sh.getKnownAddresses().keySet()) {
-                globalTail.getAndUpdate(maxTail -> address > maxTail
-                        ? address : maxTail);
-            }
-
-        } finally {
-            sh.release();
-        }
-
-        lastSegment = tailSegment;
     }
 
     private void verifyLogs() {
@@ -1037,7 +1066,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             allRecordsBuf.flip();
             safeWrite(sh.getWriteChannel(), allRecordsBuf);
             channelsToSync.add(sh.getWriteChannel());
+            // Sync the global and stream tail(s)
+            // TODO(Maithem): on ioexceptions the StreamLogFiles needs to be reinitialized
             syncTailSegment(entries.get(entries.size() - 1).getGlobalAddress());
+            logMetadata.update(entries);
         }
 
         return recordsMap;
@@ -1062,11 +1094,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             // can overwrite the failed write.
 
             // Note that after rewinding the channel pointer, it is important to truncate
-            // any bytes that were written. This is required to avoid an ambigous case
+            // any bytes that were written. This is required to avoid an ambiguous case
             // where a subsequent write (after a failed write) succeeds but writes less
             // bytes than the partially written buffer. In that case, the log unit can't
-            // determine if the bytes correspund to a partially written buffer that needs
-            // to be ignored, or if the bytes corrrespond to a corrupted metadata field.
+            // determine if the bytes correspond to a partially written buffer that needs
+            // to be ignored, or if the bytes correspond to a corrupted metadata field.
             channel.position(prev);
             channel.truncate(prev);
             channel.force(true);
@@ -1096,6 +1128,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             safeWrite(fh.getWriteChannel(), record);
             channelsToSync.add(fh.getWriteChannel());
             syncTailSegment(address);
+            logMetadata.update(entry);
         }
 
         return new AddressMetaData(metadata.getPayloadChecksum(), metadata.getLength(), channelOffset);
@@ -1336,6 +1369,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     /**
+     * TODO(Maithem) remove this method. Obtaining a new instance should happen
+     * through instantiation not by clearing this class' state
+     *
      * Resets the Stream log.
      * Clears all data and resets the handlers.
      * Usage: To heal a recovering node, we require to wipe off existing data.
@@ -1343,8 +1379,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public void reset() {
         // Trim all segments
-        long endSegment = (Math.max(globalTail.get(), 0L) / RECORDS_PER_LOG_FILE);
-        log.warn("Global Tail:{}, endSegment={}", globalTail.get(), endSegment);
+        long endSegment = (Math.max(logMetadata.getGlobalTail(), 0L) / RECORDS_PER_LOG_FILE);
+        log.warn("Global Tail:{}, endSegment={}", logMetadata.getGlobalTail(), endSegment);
 
         // Close segments before deleting their corresponding log files
         closeSegmentHandlers(endSegment);
@@ -1361,10 +1397,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         serverContext.setStartingAddress(0L);
         serverContext.setTailSegment(0L);
-        globalTail.set(Address.NON_ADDRESS);
-        initializeStartingAddress();
-        initializeMaxGlobalAddress();
-
+        startingAddress = 0L;
+        lastSegment = 0L;
+        logMetadata = new LogMetadata();
+        writeChannels.clear();
         log.info("reset: Completed, end segment {}", endSegment);
     }
 

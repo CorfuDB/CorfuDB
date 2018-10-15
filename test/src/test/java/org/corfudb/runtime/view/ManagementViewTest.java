@@ -1696,9 +1696,10 @@ public class ManagementViewTest extends AbstractViewTest {
         addClientRule(managementRuntime0, testRule);
         addClientRule(managementRuntime1, testRule);
 
-        // Add rule to drop all read responses to hang the FastObjectLoaders.
-        addServerRule(SERVERS.PORT_1, new TestRule().matches(m -> {
-            if (m.getMsgType().equals(CorfuMsgType.READ_RESPONSE)) {
+        // Since the fast loader will retrieve the tails from the head node,
+        // we need to drop all tail requests to hang the FastObjectLoaders
+        addServerRule(SERVERS.PORT_0, new TestRule().matches(m -> {
+            if (m.getMsgType().equals(CorfuMsgType.TAIL_RESPONSE)) {
                 semaphore.release();
                 return true;
             }
@@ -1737,7 +1738,7 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch())
                 .isEqualTo(layout2.getEpoch());
 
-        clearServerRules(SERVERS.PORT_1);
+        clearServerRules(SERVERS.PORT_0);
         // Once the rules are cleared, the detectors should resolve the epoch instability,
         // bootstrap the sequencer and fetch a new token.
         assertThat(corfuRuntime.getSequencerView().query()).isNotNull();

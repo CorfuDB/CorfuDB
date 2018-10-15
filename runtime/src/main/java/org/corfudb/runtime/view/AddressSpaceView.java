@@ -1,7 +1,7 @@
 package org.corfudb.runtime.view;
 
 import static org.corfudb.util.LambdaUtils.runSansThrow;
-import static org.corfudb.util.Utils.getMaxGlobalTail;
+import static org.corfudb.util.Utils.getTails;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.CacheLoader;
@@ -299,9 +299,9 @@ public class AddressSpaceView extends AbstractView {
     /**
      * Get the last address in the address space
      */
-    public Token getLogTail() {
+    public Tails getAllTails() {
         return layoutHelper(
-                e -> getMaxGlobalTail(e.getLayout(), runtime));
+                e -> getTails(e.getLayout(), runtime));
     }
 
     /**

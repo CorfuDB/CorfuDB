@@ -20,7 +20,8 @@ public class BatchWriterOperation {
         TRIM,
         PREFIX_TRIM,
         EPOCH_WATER_MARK,
-        RESET
+        RESET,
+        TAILS_QUERY
     }
 
     private final Type type;

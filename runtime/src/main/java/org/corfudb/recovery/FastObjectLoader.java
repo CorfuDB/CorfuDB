@@ -7,7 +7,6 @@ import static org.corfudb.recovery.RecoveryUtils.getLogData;
 import static org.corfudb.recovery.RecoveryUtils.getSnapShotAddressOfCheckPoint;
 import static org.corfudb.recovery.RecoveryUtils.getStartAddressOfCheckPoint;
 import static org.corfudb.recovery.RecoveryUtils.isCheckPointEntry;
-import static org.corfudb.runtime.view.Address.isAddress;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -103,10 +102,6 @@ public class FastObjectLoader {
 
     @Setter
     @Getter
-    private boolean recoverSequencerMode;
-
-    @Setter
-    @Getter
     private boolean logHasNoCheckPoint = false;
 
     private boolean whiteList = false;
@@ -185,9 +180,6 @@ public class FastObjectLoader {
 
     private Map<UUID, StreamMetaData> streamsMetaData;
 
-    @Getter
-    private Map<UUID, Long> streamTails = new HashMap<>();
-
     @Setter
     @Getter
     private int numberOfAttempt = NUMBER_OF_ATTEMPT;
@@ -261,32 +253,12 @@ public class FastObjectLoader {
     }
 
     private void findAndSetLogTail() {
-        logTail = runtime.getAddressSpaceView().getLogTail().getSequence();
+        // TODO(Maithem): change this to a token
+        logTail = runtime.getAddressSpaceView().getAllTails().getLogTail();
     }
 
     private void resetAddressProcessed() {
         addressProcessed = logHead - 1;
-    }
-
-    /**
-     * Book keeping of the the stream tails
-     *
-     * @param logData
-     */
-    public void updateStreamTails(long address, ILogData logData) {
-        // On checkpoint, we also need to track the stream tail of the checkpoint
-        if (isCheckPointEntry(logData)) {
-            if (logData.getCheckpointType() == CheckpointEntry.CheckpointEntryType.END &&
-                    isAddress(getStartAddressOfCheckPoint(logData))) {
-                streamTails.compute(logData.getCheckpointedStreamId(),
-                        (uuid, value) -> (value == null) ? getStartAddressOfCheckPoint(logData)
-                            : Math.max(value, getStartAddressOfCheckPoint(logData)));
-            }
-        }
-        for (UUID streamId : logData.getStreams()) {
-            streamTails.compute(streamId,
-                    (uuid, value) -> (value == null) ? address : Math.max(value, address));
-        }
     }
 
     /**
@@ -500,7 +472,6 @@ public class FastObjectLoader {
     private void cleanUpForRetry() {
         runtime.getAddressSpaceView().invalidateClientCache();
         runtime.getObjectsView().getObjectCache().clear();
-        streamTails.clear();
         nextRead = logHead;
         resetAddressProcessed();
 
@@ -661,15 +632,6 @@ public class FastObjectLoader {
     }
 
     /**
-     * This method will only resurrect the stream tails. It is used
-     * to recover a sequencer.
-     */
-    private void recoverSequencer() {
-        log.info("recoverSequencer: Resurrecting the stream tails");
-        applyForEachAddress(this::updateStreamTails);
-    }
-
-    /**
      * This method will use the checkpoints and the entries
      * after checkpoints to resurrect the SMRMaps
      */
@@ -699,13 +661,7 @@ public class FastObjectLoader {
     public void loadMaps() {
         log.info("loadMaps: Starting to resurrect maps");
         initializeHeadAndTails();
-
-        if(recoverSequencerMode) {
-            recoverSequencer();
-        }
-        else {
-            recoverRuntime();
-        }
+        recoverRuntime();
 
         log.info("loadMaps[startAddress: {}, stopAddress (included): {}, addressProcessed: {}]",
                 logHead, logTail, addressProcessed);

@@ -411,16 +411,16 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         file.getChannel().read(metaDataBuf);
         metaDataBuf.flip();
 
+        LogUnitServer server2 = new LogUnitServer(serverContext);
+        serverRouter.reset();
+        serverRouter.addServer(server2);
+
         Types.Metadata metadata = Types.Metadata.parseFrom(metaDataBuf.array());
         final int fileOffset = Integer.BYTES + METADATA_SIZE + metadata.getLength() + 20;
         final int CORRUPT_BYTES = 0xFFFF;
         file.seek(fileOffset); // Skip file header
         file.writeInt(CORRUPT_BYTES);
         file.close();
-
-        LogUnitServer server2 = new LogUnitServer(serverContext);
-        serverRouter.reset();
-        serverRouter.addServer(server2);
 
         // Try to read a corrupted log entry
         assertThatThrownBy(() -> client.read(0).get())
