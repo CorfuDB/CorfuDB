@@ -15,13 +15,12 @@ import java.io.StringWriter;
 import java.nio.ByteBuffer;
 import java.text.DecimalFormat;
 import java.util.Collections;
-import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 import lombok.extern.slf4j.Slf4j;
@@ -29,13 +28,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.recovery.RecoveryUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.QuorumFuturesFactory;
 
 import jdk.internal.org.objectweb.asm.ClassReader;
 import jdk.internal.org.objectweb.asm.tree.AbstractInsnNode;
@@ -467,6 +465,28 @@ public class Utils {
 
 
     /**
+     * Given a set of request tails, we aggregate them and maintain
+     * the greatest address per stream and the greatest tail over
+     * all responses.
+     * @param responses a set of tail responses
+     * @return An max-aggregation of all tails
+     */
+    static TailsResponse getTails(Set<TailsResponse> responses) {
+        long globalTail = Address.NON_ADDRESS;
+        Map<UUID, Long> globalStreamTails = new HashMap<>();
+
+        for (TailsResponse res : responses) {
+            globalTail = Math.max(globalTail, res.getLogTail());
+
+            for (Map.Entry<UUID, Long> stream : res.getStreamTails().entrySet()) {
+                long streamTail = globalStreamTails.getOrDefault(stream.getKey(), Address.NON_ADDRESS);
+                globalStreamTails.put(stream.getKey(), Math.max(streamTail, stream.getValue()));
+            }
+        }
+        return new TailsResponse(globalTail, globalStreamTails);
+    }
+
+    /**
      * Fetches the max global log tail from the log unit cluster. This depends on the mode of
      * replication being used.
      * CHAIN: Block on fetch of global log tail from the head log unit in every stripe.
@@ -475,36 +495,27 @@ public class Utils {
      * @param layout  Latest layout to get clients to fetch tails.
      * @return The max global log tail obtained from the log unit servers.
      */
-    public static Token getMaxGlobalTail(Layout layout, CorfuRuntime runtime) {
-        long maxTokenRequested = Address.NON_ADDRESS;
+
+    public static TailsResponse getTails(Layout layout, CorfuRuntime runtime) {
+        Set<TailsResponse> luResponses = new HashSet<>();
+
         Layout.LayoutSegment segment = layout.getLatestSegment();
 
         // Query the tail of the head log unit in every stripe.
         if (segment.getReplicationMode().equals(Layout.ReplicationMode.CHAIN_REPLICATION)) {
             for (Layout.LayoutStripe stripe : segment.getStripes()) {
-                maxTokenRequested = Math.max(maxTokenRequested,
-                        CFUtils.getUninterruptibly(
-                                runtime.getLayoutView().getRuntimeLayout(layout)
-                                        .getLogUnitClient(stripe.getLogServers().get(0))
-                                        .getTail()));
 
+                TailsResponse res = CFUtils.getUninterruptibly(
+                        runtime.getLayoutView().getRuntimeLayout(layout)
+                                .getLogUnitClient(stripe.getLogServers().get(0))
+                                .getTail());
+                luResponses.add(res);
             }
         } else if (segment.getReplicationMode()
                 .equals(Layout.ReplicationMode.QUORUM_REPLICATION)) {
-            for (Layout.LayoutStripe stripe : segment.getStripes()) {
-                CompletableFuture<Long>[] completableFutures = stripe.getLogServers()
-                        .stream()
-                        .map(s -> runtime.getLayoutView().getRuntimeLayout(layout)
-                                .getLogUnitClient(s).getTail())
-                        .toArray(CompletableFuture[]::new);
-                QuorumFuturesFactory.CompositeFuture<Long> quorumFuture =
-                        QuorumFuturesFactory.getQuorumFuture(Comparator.naturalOrder(),
-                                completableFutures);
-                maxTokenRequested = Math.max(maxTokenRequested,
-                        CFUtils.getUninterruptibly(quorumFuture));
-
-            }
+            throw new UnsupportedOperationException();
         }
-        return new Token(layout.getEpoch(), maxTokenRequested);
+
+        return getTails(luResponses);
     }
 }

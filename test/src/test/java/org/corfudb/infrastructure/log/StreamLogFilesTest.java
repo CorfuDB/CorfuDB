@@ -510,30 +510,30 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     public void testGetGlobalTail() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
 
-        assertThat(log.getGlobalTail()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(log.getTails().getLogTail()).isEqualTo(Address.NON_ADDRESS);
 
         // Write to multiple segments
         final int segments = 3;
         long lastAddress = segments * StreamLogFiles.RECORDS_PER_LOG_FILE;
         for (long x = 0; x <= lastAddress; x++){
             writeToLog(log, x);
-            assertThat(log.getGlobalTail()).isEqualTo(x);
+            assertThat(log.getTails().getLogTail()).isEqualTo(x);
         }
 
         // Restart and try to retrieve the global tail
         log = new StreamLogFiles(getContext(), false);
-        assertThat(log.getGlobalTail()).isEqualTo(lastAddress);
+        assertThat(log.getTails().getLogTail()).isEqualTo(lastAddress);
 
         // Advance the tail some more
         final long tailDelta = 5;
         for (long x = lastAddress + 1; x <= lastAddress + tailDelta; x++){
             writeToLog(log, x);
-            assertThat(log.getGlobalTail()).isEqualTo(x);
+            assertThat(log.getTails().getLogTail()).isEqualTo(x);
         }
 
         // Restart and try to retrieve the global tail one last time
         log = new StreamLogFiles(getContext(), false);
-        assertThat(log.getGlobalTail()).isEqualTo(lastAddress + tailDelta);
+        assertThat(log.getTails().getLogTail()).isEqualTo(lastAddress + tailDelta);
     }
 
     @Test
@@ -620,7 +620,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.compact();
         log = new StreamLogFiles(getContext(), false);
 
-        assertThat(log.getGlobalTail()).isEqualTo(midSegmentAddress);
+        assertThat(log.getTails().getLogTail()).isEqualTo(midSegmentAddress);
         assertThat(log.getTrimMark()).isEqualTo(midSegmentAddress + 1);
     }
 
@@ -669,20 +669,16 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         final long globalTailBeforeReset = (RECORDS_PER_LOG_FILE * numSegments) - 1;
         final long trimMarkBeforeReset = (RECORDS_PER_LOG_FILE * (filesToBeTrimmed + 1)) + 1;
         assertThat(logsDir.list()).hasSize(expectedFilesBeforeReset);
-        assertThat(log.getGlobalTail()).isEqualTo(globalTailBeforeReset);
+        assertThat(log.getTails().getLogTail()).isEqualTo(globalTailBeforeReset);
         assertThat(log.getTrimMark()).isEqualTo(trimMarkBeforeReset);
 
         log.reset();
 
-        // Files have been deleted and new 0.log files are created due to reset.
-        Arrays.stream(logsDir.list()).forEach(
-                s -> assertThat(new File(s).length()).isEqualTo(0L));
-
-        final int expectedFilesAfterReset = 3;
+        final int expectedFilesAfterReset = 0;
         final long globalTailAfterReset = Address.NON_ADDRESS;
         final long trimMarkAfterReset = 0L;
         assertThat(logsDir.list()).hasSize(expectedFilesAfterReset);
-        assertThat(log.getGlobalTail()).isEqualTo(globalTailAfterReset);
+        assertThat(log.getTails().getLogTail()).isEqualTo(globalTailAfterReset);
         assertThat(log.getTrimMark()).isEqualTo(trimMarkAfterReset);
     }
 
