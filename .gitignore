@@ -220,3 +220,5 @@ pip-log.txt
 .idea
 target
 *.dat
+
+/it/src/test/resources/vm.properties
