@@ -1,15 +1,16 @@
 package org.corfudb.runtime.object.transactions;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.ISMRMap;
-import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.junit.Test;
 
 import java.util.concurrent.Semaphore;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.ISMRMap;
+import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.junit.Test;
 
 /**
  * Created by dalia on 1/6/17.
@@ -98,6 +99,7 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             } catch (TransactionAbortedException te) {
+                assertThat(te.getAbortCause()).isEqualTo(AbortCause.CONFLICT);
                 isAbort = true;
             }
 
@@ -214,7 +216,7 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
             // release thread1 to complete
             sem1.release();
 
-            // expect to abort
+            // expect not to abort
             assertThat(isAbort)
                     .isFalse();
 

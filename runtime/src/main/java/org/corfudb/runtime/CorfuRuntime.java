@@ -196,6 +196,13 @@ public class CorfuRuntime {
         @Default int idleConnectionTimeout = 30;
 
         /**
+         * The period at which the client sends keep-alive messages to the
+         * server (a message is only send there is no write activity on the channel
+         * for the whole period.
+         */
+        @Default int keepAlivePeriod = 10;
+
+        /**
          * {@link Duration} before connections timeout.
          */
         @Default Duration connectionTimeout = Duration.ofMillis(500);
@@ -718,7 +725,7 @@ public class CorfuRuntime {
      * @return The router.
      */
     public IClientRouter getRouter(String address) {
-        return nodeRouterPool.getRouter(address);
+        return nodeRouterPool.getRouter(NodeLocator.parseString(address));
     }
 
     /**
@@ -768,7 +775,11 @@ public class CorfuRuntime {
      */
     private void pruneRemovedRouters(@Nonnull Layout layout) {
         nodeRouterPool.getNodeRouters().keySet().stream()
-                .filter(endpoint -> !layout.getAllServers().contains(endpoint))
+                // Check if endpoint is present in the layout.
+                .filter(endpoint -> !layout.getAllServers()
+                        // Converting to legacy endpoint format as the layout only contains
+                        // legacy format - host:port.
+                        .contains(NodeLocator.getLegacyEndpoint(endpoint)))
                 .forEach(endpoint -> {
                     try {
                         nodeRouterPool.getNodeRouters().get(endpoint).stop();

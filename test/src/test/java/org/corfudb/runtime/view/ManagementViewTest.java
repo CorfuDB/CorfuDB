@@ -35,6 +35,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -620,11 +621,12 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
     /**
-     * check that transcation conflict resolution works properly in face of sequencer failover
+     * Check that transaction conflict resolution works properly in face of sequencer failover
      */
     @Test
     public void ckSequencerFailoverTXResolution()
             throws Exception {
+        // setup 3-Corfu node cluster
         getManagementTestLayout();
 
         Map<Integer, String> map = getMap();
@@ -657,13 +659,14 @@ public class ManagementViewTest extends AbstractViewTest {
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
+                assertThat(ta.getAbortCause()).isEqualTo(AbortCause.NEW_SEQUENCER);
                 commit = false;
             }
             assertThat(commit)
                     .isFalse();
         });
 
-        // now, check that the same scenario, starting anew, can succeed
+        // now, check that the same scenario, starting a new, can succeed
         t(0, () -> {
             TXBegin();
             map.get(0);
@@ -701,7 +704,6 @@ public class ManagementViewTest extends AbstractViewTest {
         final String payload = "hello";
         final int nUpdates = 5;
 
-
         for (int i = 0; i < nUpdates; i++)
             map.put(i, payload);
 
@@ -731,6 +733,7 @@ public class ManagementViewTest extends AbstractViewTest {
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
+                assertThat(ta.getAbortCause()).isEqualTo(AbortCause.NEW_SEQUENCER);
                 commit = false;
             }
             assertThat(commit)
@@ -945,7 +948,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * The other 2 nodes PORT_0 and PORT_1 will detect this failure and mark it as unresponsive.
      * The rule is then removed simulating a normal functioning PORT_2. The other nodes will now
      * be able to successfully ping PORT_2. They then remove the node PORT_2 from the unresponsive
-     * servers list and mark as active.å
+     * servers list and mark as active.
      *
      * @throws Exception
      */
