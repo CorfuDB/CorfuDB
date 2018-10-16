@@ -1,19 +1,33 @@
 package org.corfudb.infrastructure.log;
 
-import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
+import org.corfudb.format.Types;
+import org.corfudb.format.Types.LogEntry;
+import org.corfudb.format.Types.LogHeader;
+import org.corfudb.format.Types.Metadata;
+import org.corfudb.format.Types.TrimEntry;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.corfudb.runtime.exceptions.OverwriteCause;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.view.Address;
 
+import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileFilter;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,25 +55,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import javax.annotation.Nullable;
-
-import lombok.extern.slf4j.Slf4j;
-
-import org.apache.commons.io.FileUtils;
-import org.corfudb.format.Types;
-import org.corfudb.format.Types.LogEntry;
-import org.corfudb.format.Types.LogHeader;
-import org.corfudb.format.Types.Metadata;
-import org.corfudb.format.Types.TrimEntry;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.corfudb.runtime.exceptions.OverwriteCause;
-import org.corfudb.runtime.exceptions.OverwriteException;
-
-import org.corfudb.runtime.view.Address;
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
 
 /**
@@ -275,32 +271,29 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             Collection<File> files = FileUtils.listFiles(dir, extension, true);
 
             for (File file : files) {
-                try (FileInputStream fsIn = new FileInputStream(file)) {
-                    FileChannel fc = fsIn.getChannel();
-                    LogHeader header = parseHeader(fc);
-                    fc.close();
-                    fsIn.close();
+                LogHeader header;
 
-                    if (header == null) {
-                        log.warn("verifyLogs: Ignoring partially written header in {}", file.getAbsoluteFile());
-                        continue;
-                    }
-
-                    if (header.getVersion() != VERSION) {
-                        String msg = String.format("Log version %s for %s should match "
-                                + "the logunit log version %s",
-                                header.getVersion(), file.getAbsoluteFile(), VERSION);
-                        throw new RuntimeException(msg);
-                    }
-
-                    if (!noVerify && !header.getVerifyChecksum()) {
-                        String msg = String.format("Log file %s not generated with "
-                                + "checksums, can't verify!", file.getAbsoluteFile());
-                        throw new RuntimeException(msg);
-                    }
-
+                try (FileChannel fc = FileChannel.open(file.toPath())) {
+                    header = parseHeader(fc);
                 } catch (IOException e) {
                     throw new RuntimeException(e.getMessage(), e);
+                }
+
+                if (header == null) {
+                    log.warn("verifyLogs: Ignoring partially written header in {}", file.getAbsoluteFile());
+                    continue;
+                }
+
+                if (header.getVersion() != VERSION) {
+                    String msg = String.format("Log version %s for %s should match the logunit log version %s",
+                            header.getVersion(), file.getAbsoluteFile(), VERSION);
+                    throw new RuntimeException(msg);
+                }
+
+                if (!noVerify && !header.getVerifyChecksum()) {
+                    String msg = String.format("Log file %s not generated with checksums, can't verify!",
+                            file.getAbsoluteFile());
+                    throw new RuntimeException(msg);
                 }
             }
         }
@@ -415,9 +408,13 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     private void trimLogFile(String filePath, Set<Long> pendingTrim) throws IOException {
-        try (FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath + ".copy"),
-                EnumSet.of(StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE,
-                        StandardOpenOption.CREATE, StandardOpenOption.SPARSE))) {
+        EnumSet<StandardOpenOption> options = EnumSet.of(
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.SPARSE
+        );
+        try (FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath + ".copy"), options)) {
 
             CompactedEntry log = getCompactedEntries(filePath, pendingTrim);
 
@@ -464,25 +461,25 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         writeChannels.remove(filePath);
     }
 
-    private CompactedEntry getCompactedEntries(String filePath,
-                                               Set<Long> pendingTrim) throws IOException {
+    private CompactedEntry getCompactedEntries(String filePath, Set<Long> pendingTrim) throws IOException {
 
-        FileChannel fc = getChannel(filePath, true);
+        ByteBuffer o;
+        ByteBuffer headerBuf;
+        try (FileChannel fc = getChannel(filePath, true)) {
+            // Skip the header
+            ByteBuffer headerMetadataBuf = ByteBuffer.allocate(METADATA_SIZE);
+            fc.read(headerMetadataBuf);
+            headerMetadataBuf.flip();
 
-        // Skip the header
-        ByteBuffer headerMetadataBuf = ByteBuffer.allocate(METADATA_SIZE);
-        fc.read(headerMetadataBuf);
-        headerMetadataBuf.flip();
+            Metadata headerMetadata = Metadata.parseFrom(headerMetadataBuf.array());
+            headerBuf = ByteBuffer.allocate(headerMetadata.getLength());
+            fc.read(headerBuf);
+            headerBuf.flip();
 
-        Metadata headerMetadata = Metadata.parseFrom(headerMetadataBuf.array());
-        ByteBuffer headerBuf = ByteBuffer.allocate(headerMetadata.getLength());
-        fc.read(headerBuf);
-        headerBuf.flip();
-
-        ByteBuffer o = ByteBuffer.allocate((int) fc.size() - (int) fc.position());
-        fc.read(o);
-        fc.close();
-        o.flip();
+            o = ByteBuffer.allocate((int) fc.size() - (int) fc.position());
+            fc.read(o);
+            o.flip();
+        }
 
         LinkedHashMap<Long, LogEntry> compacted = new LinkedHashMap<>();
 
@@ -502,7 +499,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 if (!noVerify) {
                     if (metadata.getPayloadChecksum() != getChecksum(entry.toByteArray())) {
                         log.error("Checksum mismatch detected while trying to read address {}",
-                                    entry.getGlobalAddress());
+                                entry.getGlobalAddress());
                         throw new DataCorruptionException();
                     }
                 }
@@ -787,9 +784,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             } else {
 
                 try {
-                    FileChannel channel = FileChannel.open(FileSystems.getDefault().getPath(filePath),
-                            EnumSet.of(StandardOpenOption.READ, StandardOpenOption.WRITE,
-                                    StandardOpenOption.CREATE_NEW, StandardOpenOption.SPARSE));
+                    EnumSet<StandardOpenOption> options = EnumSet.of(
+                            StandardOpenOption.READ, StandardOpenOption.WRITE,
+                            StandardOpenOption.CREATE_NEW, StandardOpenOption.SPARSE
+                    );
+                    FileChannel channel = FileChannel.open(FileSystems.getDefault().getPath(filePath), options);
 
                     // First time creating this segment file, need to sync the parent directory
                     File segFile = new File(filePath);
@@ -822,16 +821,21 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         filePath += ".log";
 
         SegmentHandle handle = writeChannels.computeIfAbsent(filePath, a -> {
+            FileChannel writeCh = null;
+            FileChannel readCh = null;
+            FileChannel trimmedCh = null;
+            FileChannel pendingTrimmedCh = null;
+
             try {
                 boolean verify = true;
                 if (noVerify) {
                     verify = false;
                 }
 
-                FileChannel writeCh = getChannel(a, false);
-                FileChannel readCh = getChannel(a, true);
-                FileChannel trimmedCh = getChannel(getTrimmedFilePath(a), false);
-                FileChannel pendingTrimmedCh = getChannel(getPendingTrimsFilePath(a), false);
+                writeCh = getChannel(a, false);
+                readCh = getChannel(a, true);
+                trimmedCh = getChannel(getTrimmedFilePath(a), false);
+                pendingTrimmedCh = getChannel(getPendingTrimsFilePath(a), false);
 
                 SegmentHandle sh = new SegmentHandle(segment, writeCh, readCh, trimmedCh, pendingTrimmedCh, a);
                 // The first time we open a file we should read to the end, to load the
@@ -842,6 +846,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 return sh;
             } catch (IOException e) {
                 log.error("Error opening file {}", a, e);
+                IOUtils.closeQuietly(writeCh);
+                IOUtils.closeQuietly(readCh);
+                IOUtils.closeQuietly(trimmedCh);
+                IOUtils.closeQuietly(pendingTrimmedCh);
                 throw new RuntimeException(e);
             }
         });
@@ -868,23 +876,19 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                     TrimEntry trimEntry = TrimEntry.parseDelimitedFrom(inputStream);
                     sh.getTrimmedAddresses().add(trimEntry.getAddress());
                 }
+            } catch (FileNotFoundException fe) {
+                return;
+            }
+        }
 
-                inputStream.close();
-                fcTrimmed.close();
+        try (FileChannel fcPending = getChannel(getPendingTrimsFilePath(sh.getFileName()), true)) {
+            try (InputStream pendingInputStream = Channels.newInputStream(fcPending)) {
 
-                try (FileChannel fcPending =
-                             getChannel(getPendingTrimsFilePath(sh.getFileName()), true)) {
-                    try (InputStream pendingInputStream = Channels.newInputStream(fcPending)) {
-
-                        while (fcPending.position() < pendingTrimSize) {
-                            TrimEntry trimEntry = TrimEntry.parseDelimitedFrom(pendingInputStream);
-                            sh.getPendingTrims().add(trimEntry.getAddress());
-                        }
-                    }
+                while (fcPending.position() < pendingTrimSize) {
+                    TrimEntry trimEntry = TrimEntry.parseDelimitedFrom(pendingInputStream);
+                    sh.getPendingTrims().add(trimEntry.getAddress());
                 }
             }
-        } catch (FileNotFoundException fe) {
-            return;
         }
     }
 
