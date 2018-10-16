@@ -6,7 +6,7 @@
     <appender name="file" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_DIRECTORY}/corfu.9000.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
-            <fileNamePattern>${LOG_DIRECTORY}/corfu.9000.%i.log.zip</fileNamePattern>
+            <fileNamePattern>${LOG_DIRECTORY}/corfu.9000.%i.log.tar.gz</fileNamePattern>
             <minIndex>1</minIndex>
             <maxIndex>20</maxIndex>
         </rollingPolicy>
