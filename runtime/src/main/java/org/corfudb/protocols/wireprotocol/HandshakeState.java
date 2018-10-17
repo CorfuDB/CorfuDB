@@ -38,7 +38,7 @@ public class HandshakeState {
      * @return true, if failed
      *         false, otherwise.
      */
-    public boolean failed(){
+    public boolean failed() {
         return this.handshakeFailed.get();
     }
 
@@ -47,7 +47,7 @@ public class HandshakeState {
      * @return true, if handshake completed.
      *         false, if handshake never concluded.
      */
-    public boolean completed(){
+    public boolean completed() {
         return this.handshakeComplete.get();
     }
 }
