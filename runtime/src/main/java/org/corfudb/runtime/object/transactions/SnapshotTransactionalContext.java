@@ -13,6 +13,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+import org.corfudb.runtime.view.Address;
 
 /**
  * A snapshot transactional context.
@@ -91,7 +92,11 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
 
     @Override
     public long obtainSnapshotTimestamp() {
-        return getBuilder().getSnapshot();
+        if (getBuilder().getSnapshot() == Address.NON_ADDRESS) {
+            return super.obtainSnapshotTimestamp();
+        } else {
+            return getBuilder().getSnapshot();
+        }
     }
 
 
