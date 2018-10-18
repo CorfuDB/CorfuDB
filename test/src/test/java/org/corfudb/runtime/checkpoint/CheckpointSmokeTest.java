@@ -376,8 +376,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 final long thisAddress = globalAddr;
                 try {
                     r.getObjectsView().TXBuild()
-                            .setType(TransactionType.SNAPSHOT)
-                            .setSnapshot(thisAddress)
+                            .type(TransactionType.SNAPSHOT)
+                            .snapshot(thisAddress)
+                            .build()
                             .begin();
                     m2.size(); // Just call any accessor
                 } catch (TransactionAbortedException tae) {
@@ -388,8 +389,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
             } else {
                 r.getObjectsView().TXBuild()
-                        .setType(TransactionType.SNAPSHOT)
-                        .setSnapshot(globalAddr)
+                        .type(TransactionType.SNAPSHOT)
+                        .snapshot(globalAddr)
+                        .build()
                         .begin();
 
                 assertThat(m2.entrySet())

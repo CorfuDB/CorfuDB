@@ -120,7 +120,7 @@ public abstract class BaseCorfuAppUtils {
      * Can be overriden by classes that require non-default transaction type.
      */
     protected void TXBegin() {
-        getCorfuRuntime().getObjectsView().TXBuild()
+        getCorfuRuntime().getObjectsView().TXBuild().build()
                 .begin();
     }
 

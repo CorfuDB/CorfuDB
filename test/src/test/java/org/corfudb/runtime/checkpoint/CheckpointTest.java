@@ -391,8 +391,9 @@ public class CheckpointTest extends AbstractObjectTest {
 
                     // start a snapshot TX at position snapshotPosition
                     getMyRuntime().getObjectsView().TXBuild()
-                            .setType(TransactionType.SNAPSHOT)
-                            .setSnapshot(snapshotPosition - 1)
+                            .type(TransactionType.SNAPSHOT)
+                            .snapshot(snapshotPosition - 1)
+                            .build()
                             .begin();
 
                     // finally, instantiate the map for the snapshot and assert is has the right state
@@ -454,9 +455,9 @@ public class CheckpointTest extends AbstractObjectTest {
         t(1, () -> {
             // start a snapshot TX at position snapshotPosition
             getMyRuntime().getObjectsView().TXBuild()
-                    .setType(TransactionType.SNAPSHOT)
-//                    .setForceSnapshot(false) // force snapshot when nesting
-                    .setSnapshot(mapSize - 1)
+                    .type(TransactionType.SNAPSHOT)
+                    .snapshot(mapSize - 1)
+                    .build()
                     .begin();
                 }
         );
@@ -552,8 +553,9 @@ public class CheckpointTest extends AbstractObjectTest {
 
         // TX1: Move object to 1
         getRuntime().getObjectsView().TXBuild()
-                .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(1)
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(1)
+                .build()
                 .begin();
 
         testMap.get("a");

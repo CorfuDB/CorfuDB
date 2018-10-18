@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.view.Address;
 
 /** A class which allows access to transactional contexts, which manage
  * transactions. The static methods of this class provide access to the
@@ -78,9 +79,16 @@ public class TransactionalContext {
     public static AbstractTransactionalContext newContext(AbstractTransactionalContext context) {
         log.debug("TX begin[{}]", context);
         AbstractTransactionalContext parent = getTransactionStack().peekFirst();
-        if (parent != null && parent.getBuilder().getRuntime() != context.getBuilder().getRuntime()) {
-            throw new UnrecoverableCorfuError("Can't nest transactions from different clients!");
+        if (parent != null) {
+            if (parent.getTransaction().getRuntime() != context.getTransaction().getRuntime()) {
+                throw new UnrecoverableCorfuError("Can't nest transactions from different clients!");
+            } else if (context.getTransaction().getSnapshot() != parent.getTransaction().getSnapshot()) {
+                // If a transaction has a parent context, then we disallow setting the
+                // the timestamp explicitly because it will be inherited on evaluation
+                throw new IllegalArgumentException("Can't set snapshot on a nested transaction");
+            }
         }
+
         getTransactionStack().addFirst(context);
         return context;
     }

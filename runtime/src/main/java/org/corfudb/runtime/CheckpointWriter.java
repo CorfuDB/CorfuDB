@@ -316,8 +316,9 @@ public class CheckpointWriter<T extends Map> {
                 rt.getSequencerView().query();
         long globalTail = tokenResponse.getToken().getTokenValue();
         rt.getObjectsView().TXBuild()
-                .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(globalTail)
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(globalTail)
+                .build()
                 .begin();
         AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
         return context.getSnapshotTimestamp();

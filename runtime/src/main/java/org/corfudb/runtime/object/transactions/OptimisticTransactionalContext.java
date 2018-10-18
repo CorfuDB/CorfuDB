@@ -54,8 +54,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             new HashSet<>();
 
 
-    OptimisticTransactionalContext(TransactionBuilder builder) {
-        super(builder);
+    OptimisticTransactionalContext(Transaction transaction) {
+        super(transaction);
     }
 
     /**
@@ -270,7 +270,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // Write to the transaction stream if transaction logging is enabled
         Set<UUID> affectedStreamsIds = new HashSet<>(getWriteSetInfo().getWriteSet().getEntryMap().keySet());
 
-        if (this.builder.runtime.getObjectsView().isTransactionLogging()) {
+        if (this.transaction.getRuntime().getObjectsView().isTransactionLogging()) {
             affectedStreamsIds.add(TRANSACTION_STREAM_ID);
         }
 
@@ -292,7 +292,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 getWriteSetInfo().getHashedConflictSet());
 
         try {
-            address = this.builder.runtime.getStreamsView()
+            address = this.transaction.getRuntime().getStreamsView()
                 .append(
                     // a MultiObjectSMREntry that contains the update(s) to objects
                     collectWriteSetEntries(),
@@ -322,7 +322,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // First, get the committed entry
         // in order to get the backpointers
         // and the underlying SMREntries.
-        ILogData committedEntry = this.builder.getRuntime()
+        ILogData committedEntry = this.transaction.getRuntime()
                 .getAddressSpaceView().read(commitAddress);
 
         updateAllProxies(x -> {
@@ -341,7 +341,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     getWriteSetEntryList(x.getStreamID());
             List<SMREntry> entryWrites =
                     ((ISMRConsumable) committedEntry
-                            .getPayload(this.getBuilder().runtime))
+                            .getPayload(this.getTransaction().getRuntime()))
                     .getSMRUpdates(x.getStreamID());
             if (committedWrites.size()
                     == entryWrites.size()) {
@@ -392,24 +392,5 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     + "transactional context types");
         }
         return (OptimisticTransactionalContext)atc;
-    }
-
-    /**
-     * Get the first timestamp for this transaction.
-     *
-     * @return The first timestamp to be used for this transaction.
-     */
-    @Override
-    public synchronized long obtainSnapshotTimestamp() {
-        final AbstractTransactionalContext atc = getRootContext();
-        if (atc != null && atc != this) {
-            // If we're in a nested transaction, the first read timestamp
-            // needs to come from the root.
-            return atc.getSnapshotTimestamp();
-        } else {
-            // Otherwise, fetch a read token from the sequencer the linearize
-            // ourselves against.
-            return super.obtainSnapshotTimestamp();
-        }
     }
 }

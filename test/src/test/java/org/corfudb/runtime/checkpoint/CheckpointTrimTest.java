@@ -92,8 +92,9 @@ public class CheckpointTrimTest extends AbstractViewTest {
         // try to get a snapshot inside the gap
         getRuntime().getObjectsView()
                 .TXBuild()
-                .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(checkpointAddress-1)
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(checkpointAddress-1)
+                .build()
                 .begin();
 
         // Reading an entry from scratch should be ok
@@ -123,8 +124,9 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
         // Play the new view up to "b" only
         getRuntime().getObjectsView().TXBuild()
-                .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(1)
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(1)
+                .build()
                 .begin();
 
         assertThat(newTestMap)

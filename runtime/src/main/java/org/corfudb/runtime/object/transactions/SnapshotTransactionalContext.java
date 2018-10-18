@@ -32,7 +32,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     @Getter
     private Set<ICorfuSMRProxyInternal> modifiedProxies = ImmutableSet.of();
 
-    public SnapshotTransactionalContext(TransactionBuilder builder) {
+    public SnapshotTransactionalContext(Transaction builder) {
         super(builder);
     }
 
@@ -89,15 +89,4 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     public void addTransaction(AbstractTransactionalContext tc) {
         throw new UnsupportedOperationException("Can't merge into a readonly txn (yet)");
     }
-
-    @Override
-    public long obtainSnapshotTimestamp() {
-        if (getBuilder().getSnapshot() == Address.NON_ADDRESS) {
-            return super.obtainSnapshotTimestamp();
-        } else {
-            return getBuilder().getSnapshot();
-        }
-    }
-
-
 }

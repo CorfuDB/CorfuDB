@@ -220,7 +220,11 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         Map<String, String> map1Prime = Helpers.createMap("Map0", rt2, CorfuTable.class);
 
-        rt2.getObjectsView().TXBuild().setType(TransactionType.SNAPSHOT).setSnapshot(0).begin();
+        rt2.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(0)
+                .build()
+                .begin();
         assertThat(map1Prime.get("key0")).isEqualTo("value0");
         assertThat(map1Prime.get("key1")).isNull();
         rt2.getObjectsView().TXEnd();

@@ -52,7 +52,8 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
     @Override
     protected void TXBegin() {
         getCorfuRuntime().getObjectsView().TXBuild()
-                .setType(TransactionType.WRITE_AFTER_WRITE)
+                .type(TransactionType.WRITE_AFTER_WRITE)
+                .build()
                 .begin();
     }
 
@@ -62,8 +63,9 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
      */
     protected void TXBegin(long snapTime) {
         getCorfuRuntime().getObjectsView().TXBuild()
-                .setSnapshot(snapTime)
-                .setType(TransactionType.WRITE_AFTER_WRITE)
+                .snapshot(snapTime)
+                .type(TransactionType.WRITE_AFTER_WRITE)
+                .build()
                 .begin();
     }
 

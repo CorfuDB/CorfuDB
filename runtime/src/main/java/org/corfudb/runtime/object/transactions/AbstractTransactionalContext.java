@@ -91,7 +91,7 @@ public abstract class AbstractTransactionalContext implements
      * The builder used to create this transaction.
      */
     @Getter
-    public final TransactionBuilder builder;
+    public final Transaction transaction;
 
     /**
      * The start time of the context.
@@ -137,12 +137,12 @@ public abstract class AbstractTransactionalContext implements
     @Getter
     private final Map<UUID, Long> knownStreamPosition = new HashMap<>();
 
-    AbstractTransactionalContext(TransactionBuilder builder) {
+    AbstractTransactionalContext(Transaction transaction) {
         transactionID = UUID.randomUUID();
-        this.builder = builder;
+        this.transaction = transaction;
 
         startTime = System.currentTimeMillis();
-
+        // TODO(Maithem) set snapshot from parent if it exists
         parentContext = TransactionalContext.getCurrentContext();
 
         AbstractTransactionalContext.log.debug("TXBegin[{}]", this);
@@ -180,7 +180,7 @@ public abstract class AbstractTransactionalContext implements
                                     long snapshotTimestamp,
                                     ICorfuSMRProxyInternal proxy,
                                     @Nullable Consumer<VersionLockedObject> optimisticStreamSetter) {
-        for (int x = 0; x < this.builder.getRuntime().getParameters().getTrimRetry(); x++) {
+        for (int x = 0; x < this.transaction.getRuntime().getParameters().getTrimRetry(); x++) {
             try {
                 if (optimisticStreamSetter != null) {
                     // Swap ourselves to be the active optimistic stream.
@@ -196,7 +196,7 @@ public abstract class AbstractTransactionalContext implements
                 // If a trim is encountered, we must reset the object
                 vlo.resetUnsafe();
                 if (!te.isRetriable()
-                        || x == this.builder.getRuntime().getParameters().getTrimRetry() - 1) {
+                        || x == this.transaction.getRuntime().getParameters().getTrimRetry() - 1) {
                     // abort the transaction
                     TransactionAbortedException tae =
                             new TransactionAbortedException(
@@ -252,14 +252,20 @@ public abstract class AbstractTransactionalContext implements
     }
 
     /**
-     * Retrieves the current timestamp from the sequencer.
+     * If this is a nested transaction, the parent timestamp
+     * is inherited, otherwise we contact the sequencer to
+     * retrieve the tail as a snapshot
      * @return the current global tail
      */
-    public long obtainSnapshotTimestamp() {
-        long timestamp = builder.runtime
-                .getSequencerView().query().getToken().getTokenValue();
-        log.trace("obtainSnapshotTimestamp: SnapshotTimestamp[{}] {}", this, timestamp);
-        return timestamp;
+    private long obtainSnapshotTimestamp() {
+        if (parentContext != null) {
+            return parentContext.getSnapshotTimestamp();
+        } else {
+            long timestamp = transaction.getRuntime()
+                    .getSequencerView().query().getToken().getTokenValue();
+            log.trace("obtainSnapshotTimestamp: SnapshotTimestamp[{}] {}", this, timestamp);
+            return timestamp;
+        }
     }
 
     /**

@@ -114,15 +114,17 @@ public class State {
     public void startSnapshotTx(long snapshot) {
         runtime.getObjectsView()
                 .TXBuild()
-                .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(snapshot)
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(snapshot)
+                .build()
                 .begin();
     }
 
     public void startWriteAfterWriteTx() {
         runtime.getObjectsView()
                 .TXBuild()
-                .setType(TransactionType.WRITE_AFTER_WRITE)
+                .type(TransactionType.WRITE_AFTER_WRITE)
+                .build()
                 .begin();
     }
 
