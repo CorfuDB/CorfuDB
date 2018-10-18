@@ -49,7 +49,7 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
 
-    static final Properties PROPERTIES = new Properties();
+    public static final Properties PROPERTIES = new Properties();
 
     public static final String TEST_SEQUENCE_LOG_PATH = CORFU_LOG_PATH + File.separator + "testSequenceLog";
 

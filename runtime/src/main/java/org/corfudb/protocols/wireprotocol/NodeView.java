@@ -53,4 +53,17 @@ public class NodeView implements ICorfuPayload<NodeView> {
         ICorfuPayload.serialize(buf, serverMetrics);
         ICorfuPayload.serialize(buf, networkMetrics);
     }
+
+    /**
+     * Creates a default NodeView for the given endpoint.
+     * This contains default ServerMetrics and default NetworkMetrics.
+     *
+     * @param endpoint Endpoint for the NodeView.
+     * @return Default NodeView.
+     */
+    public static NodeView getDefaultNodeView(NodeLocator endpoint) {
+        return new NodeView(endpoint,
+                ServerMetrics.getDefaultServerMetrics(endpoint),
+                NetworkMetrics.getDefaultNetworkMetrics());
+    }
 }

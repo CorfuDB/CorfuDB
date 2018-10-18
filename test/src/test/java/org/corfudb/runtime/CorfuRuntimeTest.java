@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
 
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
@@ -138,7 +139,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
         rt.getLayoutView().updateLayout(currentLayout, 0);
 
-        assertThat(getLayoutServer(SERVERS.PORT_2).getCurrentLayout().getEpoch() == 1);
+        assertThat(getLayoutServer(SERVERS.PORT_2).getCurrentLayout().getEpoch()).isEqualTo(1);
 
         // Timeout for this server is 1ms, so it will fail fast
         rt.getRouter(SERVERS.ENDPOINT_2).setTimeoutResponse(1);
@@ -237,11 +238,9 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
         CorfuRuntime runtime = getDefaultRuntime();
         TimeoutHandler th = new TimeoutHandler(runtime, TIMEOUT_CORFU_RUNTIME_IN_MS);
-
-        runtime
-                .registerBeforeRpcHandler(() -> th.startTimeout())
-                .registerSystemDownHandler(() -> th.checkIfTimeout())
-                .connect();
+        runtime.getParameters().setBeforeRpcHandler(th::startTimeout);
+        runtime.getParameters().setSystemDownHandler(th::checkIfTimeout);
+        runtime.connect();
 
         IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
         sv.append("testPayload".getBytes());

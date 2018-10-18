@@ -9,8 +9,10 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
 import lombok.Builder;
 import lombok.Data;
+import lombok.NonNull;
 import lombok.Singular;
 
 /** {@link NodeLocator}s represent locators for Corfu nodes.
@@ -121,5 +123,15 @@ public class NodeLocator implements Serializable {
         }
 
         return sb.toString();
+    }
+
+    /**
+     * Creates and returns the endpoint address in the legacy format host:port.
+     *
+     * @param nodeLocator Nodelocator to convert to legacy format.
+     * @return Returns the endpoint address.
+     */
+    public static String getLegacyEndpoint(@NonNull NodeLocator nodeLocator) {
+        return nodeLocator.getHost() + ":" + nodeLocator.getPort();
     }
 }

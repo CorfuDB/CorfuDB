@@ -313,8 +313,8 @@ public class LayoutView extends AbstractView {
                     throw  e;
                 }
                 log.warn("committed: Error while force committing", e);
-                responses++;
             } catch (TimeoutException | NetworkException e) {
+                log.warn("committed: Error while committing", e);
                 timeouts++;
             }
             responses++;

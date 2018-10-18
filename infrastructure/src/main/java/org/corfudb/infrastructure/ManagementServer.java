@@ -133,7 +133,7 @@ public class ManagementServer extends AbstractServer {
         }
         runtime.connect();
         log.info("getCorfuRuntime: Corfu Runtime connected successfully");
-        runtime.registerSystemDownHandler(runtimeSystemDownHandler);
+        params.setSystemDownHandler(runtimeSystemDownHandler);
         return runtime;
     }
 
@@ -306,9 +306,13 @@ public class ManagementServer extends AbstractServer {
                 .endpoint(NodeLocator.parseString(getLocalEndpoint()))
                 // Fetch the node's view of the cluster.
                 .networkMetrics(managementAgent.getConnectivityView());
-        if (localServerMetrics != null) {
-            nodeViewBuilder.serverMetrics(getManagementAgent().getLocalServerMetrics());
-        }
+
+        // NodeViewBuilder fetches the localServerMetrics if available else it passes an empty
+        // server metrics object with SequencerMetrics defaulted to Status.UNKNOWN.
+        nodeViewBuilder.serverMetrics(localServerMetrics != null
+                ? getManagementAgent().getLocalServerMetrics()
+                : ServerMetrics.getDefaultServerMetrics(NodeLocator.parseString(getLocalEndpoint())));
+
         r.sendResponse(ctx, msg, CorfuMsgType.HEARTBEAT_RESPONSE
                 .payloadMsg(nodeViewBuilder.build()));
     }

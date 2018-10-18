@@ -17,9 +17,11 @@ import com.github.benmanes.caffeine.cache.Cache;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.ehcache.sizeof.SizeOf;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.lang.ref.WeakReference;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -39,10 +41,10 @@ public class MetricsUtils {
     private static final String CORFU_METRICS = "corfu.metrics";
 
     // JVM flags used for configuration of collection and reporting of metrics
-    private static final String PROPERTY_JVM_METRICS_COLLECTION = "corfu.metrics.jvm";
-    private static final String PROPERTY_CSV_INTERVAL = "corfu.metrics.csv.interval";
     private static final String PROPERTY_CSV_FOLDER = "corfu.metrics.csv.folder";
+    private static final String PROPERTY_CSV_INTERVAL = "corfu.metrics.csv.interval";
     private static final String PROPERTY_JMX_REPORTING = "corfu.metrics.jmxreporting";
+    private static final String PROPERTY_JVM_METRICS_COLLECTION = "corfu.metrics.jvm";
     private static final String PROPERTY_LOG_INTERVAL = "corfu.metrics.log.interval";
     private static final String PROPERTY_METRICS_COLLECTION = "corfu.metrics.collection";
 
@@ -61,6 +63,7 @@ public class MetricsUtils {
     private static boolean metricsSlf4jReportingEnabled = false;
     private static String mpTrigger = "filter-trigger"; // internal use only
 
+    private static final SizeOf sizeOf = SizeOf.newInstance();
 
     /**
      * Load metrics properties.
@@ -203,20 +206,6 @@ public class MetricsUtils {
         csvReporter.start(metricsCsvInterval, TimeUnit.SECONDS);
     }
 
-    public static void addCacheGauges(@NonNull MetricRegistry metrics,
-                                      @NonNull String name,
-                                      @NonNull Cache cache) {
-        try {
-            metrics.register(name + "cache-size", (Gauge<Long>) () -> cache.estimatedSize());
-            metrics.register(name + "evictions", (Gauge<Long>) () -> cache.stats().evictionCount());
-            metrics.register(name + "hit-rate", (Gauge<Double>) () -> cache.stats().hitRate());
-            metrics.register(name + "hits", (Gauge<Long>) () -> cache.stats().hitCount());
-            metrics.register(name + "misses", (Gauge<Long>) () -> cache.stats().missCount());
-        } catch (IllegalArgumentException e) {
-            // Re-registering metrics during test runs, not a problem
-        }
-    }
-
     // If enabled, setup reporting of JVM metrics including garbage collection,
     // memory, and thread statistics.
     private static void setupJvmMetrics(@NonNull MetricRegistry metrics) {
@@ -249,6 +238,87 @@ public class MetricsUtils {
     public static void incConditionalCounter(boolean enabled, @NonNull Counter counter, long amount) {
         if (enabled) {
             counter.inc(amount);
+        }
+    }
+
+    /**
+     * This method creates object size gauge and registers it to the metrics registry. The
+     * method guarantees that no strong reference to the provided object will be retained.
+     * Hence it does not prevent garbage collection if the client does not hold a strong
+     * reference to the object being measured.
+     *
+     * @param metrics the metrics registry to which the size gauge will be registered.
+     * @param object the object which its size will be measured with a corresponding
+     *               gauge*
+     *
+     * @return a gauge that provides an estimate of deep size for the provided object
+     *         as long as there exist a strong reference to that object.
+     */
+    public static Gauge<Long> addMemoryMeasurerFor(@NonNull MetricRegistry metrics,
+                                                   Object object) {
+        String simpleClassName = object == null ?
+                "Object" :
+                object.getClass().getSimpleName();
+
+        return  metrics.register(String.format("deep-sizeof.%s@%04x",
+                                               simpleClassName,
+                                               System.identityHashCode(object)),
+                                 getSizeGauge(object));
+    }
+
+    /**
+     * This method creates a gauge that returned the deep size estimation of an object
+     * while there is a reference to it in the code. Otherwise it will return 0 as the
+     * object can be claimed by Garbage collection. Note that this gauge guarantees
+     * that it will not hold any strong reference to the object that it measures.
+     *
+     * @param object an object to which its size will be estimated using the return
+     *               gauge
+     * @return a gauge that provides an estimate of deep size for the provided object
+     *         as long as there exist a strong reference to that object.
+     */
+    private static Gauge<Long> getSizeGauge(Object object) {
+        WeakReference<Object> toBeMeasuredObject = new WeakReference<>(object);
+
+        return new Gauge<Long>() {
+            @Override
+            public Long getValue() {
+                final Object objectOfInterest = toBeMeasuredObject.get();
+                return (objectOfInterest != null) ?
+                        sizeOf.deepSizeOf(objectOfInterest) :
+                        0L;
+            }
+        };
+    }
+
+    /**
+     * This method adds different properties of provided instance of {@link Cache} to the
+     * indicated metrics registry. The added properties of cache are:
+     *
+     * cache.object-counts: estemated size of cache.
+     * cache.evictions : number of cache evictions
+     * cache.hit-rate : hit rate of cache.
+     * cache.hits :
+     * cache.misses :
+     *
+     *
+     * @param metrics
+     * @param cache
+     */
+    public static void addCacheMeasurerFor(@NonNull MetricRegistry metrics, Cache cache) {
+        try {
+            metrics.register("cache.object-counts." + cache.toString(),
+                             (Gauge<Long>) cache::estimatedSize);
+            metrics.register("cache.evictions." + cache.toString(),
+                             (Gauge<Long>) cache.stats()::evictionCount);
+            metrics.register("cache.hit-rate." + cache.toString(),
+                             (Gauge<Double>) cache.stats()::hitRate);
+            metrics.register("cache.hits." + cache.toString(),
+                             (Gauge<Long>) cache.stats()::hitCount);
+            metrics.register("cache.misses." + cache.toString(),
+                             (Gauge<Long>) cache.stats()::missCount);
+        } catch (IllegalArgumentException e) {
+            // Re-registering metrics during test runs, not a problem
         }
     }
 }

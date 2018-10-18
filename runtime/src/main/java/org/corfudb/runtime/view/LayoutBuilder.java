@@ -1,19 +1,20 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.collect.Sets;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
 
-import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 /**
- * Allows us to make modifications to a layout.
+ * A builder that allows us to make modifications to a layout and construct
+ * the modified layout.
  *
  * <p>Created by zlokhandwala on 10/12/16.
  */
@@ -32,9 +33,9 @@ public class LayoutBuilder {
     /**
      * Copies the attributes of the layout to make modifications.
      *
-     * @param layout Base layout to be modified.
+     * @param layout a non null base layout to be modified.
      */
-    public LayoutBuilder(Layout layout) {
+    public LayoutBuilder(@NonNull Layout layout) {
         this.layout = new Layout(layout);
         this.epoch = layout.getEpoch();
     }
@@ -50,9 +51,9 @@ public class LayoutBuilder {
     }
 
     /**
-     * Clears the existing unrsponsive servers.
+     * Clears the existing unresponsive servers.
      *
-     * @return
+     * @return this builder
      */
     public LayoutBuilder clearUnResponsiveServers() {
         layout.getUnresponsiveServers().clear();
@@ -62,10 +63,12 @@ public class LayoutBuilder {
     /**
      * Adds unresponsive servers in the list.
      *
-     * @param endpoints Endpoints to be added.
-     * @return updated LayoutBuilder including unresponsive servers
+     * @param endpoints a non null set of Strings representing endpoints to
+     *                  be added to the list of loyout's unresponsive servers.
+     *
+     * @return this builder
      */
-    public LayoutBuilder addUnresponsiveServers(Set<String> endpoints) {
+    public LayoutBuilder addUnresponsiveServers(@NonNull Set<String> endpoints) {
         List<String> unresponsiveServers = layout.getUnresponsiveServers();
         unresponsiveServers.addAll(endpoints);
         return this;
@@ -74,78 +77,97 @@ public class LayoutBuilder {
     /**
      * Removes unresponsive servers.
      *
-     * @return
+     * @param endpoints a non null set of endpoints to be removed from the layout's
+     *                  list of unresponsive servers.
+     *
+     * @return this builder
      */
-    public LayoutBuilder removeUnresponsiveServers(Set<String> endpoints) {
+    public LayoutBuilder removeUnresponsiveServers(@NonNull Set<String> endpoints) {
         layout.getUnresponsiveServers().removeAll(endpoints);
         return this;
     }
 
     /**
-     * Removes an unresponsive server
-     * @param endpoint the endpoint of the server to remove
+     * Removes a server from layout's list of unresponsive servers.
+     *
+     * @param endpoint the endpoint of the unresponsive server to be removed
+     *
      * @return this builder
      */
-    public LayoutBuilder removeUnresponsiveServer(@Nonnull String endpoint) {
+    public LayoutBuilder removeUnresponsiveServer(@NonNull String endpoint) {
         layout.getUnresponsiveServers().remove(endpoint);
         return this;
     }
 
     /**
-     * Removes the Layout Server passed
+     * Removes the Layout Server passed. If the layout does not include the endpoint
+     * no action will take place.
      *
-     * @param endpoint Endpoint to be removed
-     * @return Workflow manager
+     * @param endpoint a non null string representing the Layout Server endpoint
+     *                 that needs to be removed
+     * @return this builder
+     *
+     * @throws LayoutModificationException is thrown if the provided endpoint is the last remaining
+     *         Layout Server
      */
-    public LayoutBuilder removeLayoutServer(String endpoint) {
+    public LayoutBuilder removeLayoutServer(@NonNull String endpoint) {
 
-        List<String> layoutServers = layout.getLayoutServers();
-        for (int i = 0; i < layoutServers.size(); i++) {
-            if (layoutServers.get(i).equals(endpoint)) {
-                if (layoutServers.size() == 1) {
-                    throw new LayoutModificationException(
-                            "Attempting to remove all layout servers.");
-                }
-                layoutServers.remove(i);
-                return this;
-            }
+        // Only remove the endpoint if it does not attempt to remove the last remaining layout server
+        if (layout.getLayoutServers().size() == 1 &&
+            layout.getLayoutServers().get(0).equals(endpoint)) {
+            log.warn("Skipped removing layout server as {} is the last remaining layout servers.",
+                    endpoint);
+            throw new LayoutModificationException(
+                    "Attempting to remove all layout servers.");
+        } else {
+            layout.getLayoutServers().remove(endpoint);
         }
+
         return this;
     }
 
     /**
-     * Removes all the endpoints present in the set passed.
+     * Removes all the Layout Server endpoints present in the set passed. This method
+     * first checks that removing the provided endpoints does not remove all the Layout
+     * Servers in the layout. In case that at least one layout server remains after the
+     * removal. It proceeds with removing Layout Server endpoints provided while
+     * silently dismissing any of provided endpoints which are not included as one of the
+     * Layout Servers in the layout.
      *
-     * @param endpoints Layout server endpoints to be removed from the layout.
-     * @return Workflow manager
+     * @param endpoints a non null set of Strings representing Layout server endpoints
+     *                  to be removed from the layout.
+     *
+     * @return this builder
+     *
+     * @throws LayoutModificationException is thrown if removing the provided set of
+     *         endpoints result in removing all the remaining Layout Servers in
+     *         the layout.
      */
-    public LayoutBuilder removeLayoutServers(Set<String> endpoints) {
+    public LayoutBuilder removeLayoutServers(@NonNull Set<String> endpoints) {
 
-        // Not making changes in the original list in case of exceptions.
-        // Copy the list so that we can have an atomic result and no partial removals
-        List<String> modifiedLayoutServers = new ArrayList<>(layout.getLayoutServers());
-        for (int i = 0; i < modifiedLayoutServers.size(); ) {
-            if (endpoints.contains(modifiedLayoutServers.get(i))) {
-                if (modifiedLayoutServers.size() == 1) {
-                    throw new LayoutModificationException(
-                            "Attempting to remove all layout servers.");
-                }
-                modifiedLayoutServers.remove(i);
-            } else {
-                i++;
-            }
+        // Only remove the endpoints if it does not attempt to remove all layout's layout servers
+        if(endpoints.containsAll(layout.getLayoutServers())) {
+            log.warn("Skipped removing layout servers as remove request of {} would remove all " +
+                     "layout servers {}.",
+                     endpoints.toString(),
+                     layout.getLayoutServers());
+            throw new LayoutModificationException("Attempting to remove all layout servers.");
+        } else {
+            layout.getLayoutServers().removeAll(endpoints);
         }
-        layout.getLayoutServers().retainAll(modifiedLayoutServers);
+
         return this;
     }
 
     /**
      * Adds a new layout server.
      *
-     * @param endpoint Endpoint to be added.
-     * @return this.
+     * @param endpoint a non null String representing the Layout Server endpoint
+     *                 to be added.
+     *
+     * @return this builder
      */
-    public LayoutBuilder addLayoutServer(String endpoint) {
+    public LayoutBuilder addLayoutServer(@NonNull String endpoint) {
         layout.getLayoutServers().add(endpoint);
         return this;
     }
@@ -153,10 +175,12 @@ public class LayoutBuilder {
     /**
      * Adds a new sequencer server.
      *
-     * @param endpoint Endpoint to be added.
-     * @return this.
+     * @param endpoint a non null String representing the Sequencer Server endpoint
+     *                 to be added.
+     *
+     * @return this builder
      */
-    public LayoutBuilder addSequencerServer(String endpoint) {
+    public LayoutBuilder addSequencerServer(@NonNull String endpoint) {
         layout.getSequencers().add(endpoint);
         return this;
     }
@@ -172,11 +196,11 @@ public class LayoutBuilder {
      *
      * @param stripeIndex        stripe index where new endpoint should be added.
      * @param globalLogTail      Global log tail to split segment.
-     * @param newLogunitEndpoint Endpoint to be added.
-     * @return this.
+     * @param newLogunitEndpoint a non null String representing Logunit endpoint to be added.
+     * @return this builder
      */
     public LayoutBuilder addLogunitServer(int stripeIndex, long globalLogTail,
-                                          String newLogunitEndpoint) {
+                                          @NonNull String newLogunitEndpoint) {
         List<LayoutSegment> layoutSegmentList = layout.getSegments();
         LayoutSegment segmentToSplit = layoutSegmentList.remove(layoutSegmentList.size() - 1);
 
@@ -211,12 +235,13 @@ public class LayoutBuilder {
     /**
      * Add a log unit server to a specific stripe in a specific segment.
      *
-     * @param endpoint     Endpoint to add to the log unit list.
+     * @param endpoint     a non null endpoint to add to the log unit list.
      * @param segmentIndex Segment to which the log unit is to be added.
      * @param stripeIndex  Stripe to which the log unit is to be added.
-     * @return this.
+     *
+     * @return this builder
      */
-    public LayoutBuilder addLogunitServerToSegment(String endpoint,
+    public LayoutBuilder addLogunitServerToSegment(@NonNull String endpoint,
                                                    int segmentIndex,
                                                    int stripeIndex) {
         LayoutStripe stripe = layout.getSegments().get(segmentIndex).getStripes().get(stripeIndex);
@@ -232,7 +257,8 @@ public class LayoutBuilder {
      * Only 1 log unit server addition/removal allowed between segments.
      *
      * @param segmentIndex Segment to merge.
-     * @return this.
+     *
+     * @return this builder
      */
     public LayoutBuilder mergePreviousSegment(int segmentIndex) {
         if (segmentIndex < 1) {
@@ -283,10 +309,15 @@ public class LayoutBuilder {
      * Moves a responsive server to the top of the sequencer server list.
      * If all have failed, throws exception.
      *
-     * @param endpoints Failed endpoints.
-     * @return LayoutBuilder
+     * @param endpoints a non null set of Strings representing failed endpoints
+     *
+     * @return this builder
+     *
+     * @throws LayoutModificationException is thrown if none of the sequencers in layout
+     *         can be moved to the top of sequencer server list due to being unresponsive
+     *         or a failed endpoint.
      */
-    public LayoutBuilder assignResponsiveSequencerAsPrimary(Set<String> endpoints) {
+    public LayoutBuilder assignResponsiveSequencerAsPrimary(@NonNull Set<String> endpoints) {
 
         List<String> modifiedSequencerServers = new ArrayList<>(layout.getSequencers());
         for (int i = 0; i < modifiedSequencerServers.size(); i++) {
@@ -310,61 +341,76 @@ public class LayoutBuilder {
     }
 
     /**
-     * Removes sequencer endpoint from the layout
+     * Removes the Sequencer Server passed. If the layout does not include the endpoint
+     * no action will take place.
      *
-     * @param endpoint Sequencer server to be removed
-     * @return Workflow manager
+     * @param endpoint a non null string representing the sequencer server endpoint
+     *                 which needs to be removed
+     * @return this builder
+     *
+     * @throws LayoutModificationException is thrown if the provided endpoint is the last remaining
+     *         Sequencer Server
      */
-    public LayoutBuilder removeSequencerServer(String endpoint) {
+    public LayoutBuilder removeSequencerServer(@NonNull String endpoint) {
 
-        List<String> sequencerServers = layout.getSequencers();
-        for (int i = 0; i < sequencerServers.size(); i++) {
-            if (sequencerServers.get(i).equals(endpoint)) {
-                if (sequencerServers.size() == 1) {
-                    throw new LayoutModificationException("Attempting to remove all sequencers.");
-                }
-                sequencerServers.remove(i);
-                return this;
-            }
+        // Only remove the endpoint if it does not attempt to remove the last remaining sequencer
+        if (layout.getSequencers().size() == 1 &&
+            layout.getSequencers().get(0).equals(endpoint)) {
+            log.warn("Skipped removing sequencer as {} is the last remaining sequencer.",
+                    endpoint);
+            throw new LayoutModificationException(
+                    "Attempting to remove all sequencers.");
+        } else {
+            layout.getSequencers().remove(endpoint);
         }
+
         return this;
     }
 
     /**
-     * Removes sequencer endpoints from the layout
+     * Removes all the Sequencer Server endpoints present in the set passed. This method
+     * first checks that removing the provided endpoints does not remove all the Sequencer
+     * Servers in the layout. In case that at least one sequencer server remains after the
+     * removal. It proceeds with removing Sequencer Server endpoints provided while
+     * silently dismissing any of provided endpoints which are not included as one of the
+     * Sequencer Servers in the layout.
      *
-     * @param endpoints Set of sequencer servers to be removed
-     * @return Workflow manager
+     * @param endpoints a non null set of Strings representing sequencer server endpoints
+     *                  to be removed from the layout.
+     *
+     * @return this builder
+     *
+     * @throws LayoutModificationException is thrown if removing the provided set of
+     *         endpoints result in removing all the remaining Sequencer Servers in
+     *         the layout.
      */
-    public LayoutBuilder removeSequencerServers(Set<String> endpoints) {
+    public LayoutBuilder removeSequencerServers(@NonNull Set<String> endpoints) {
 
-        // Not making changes in the original list in case of exceptions.
-        // Copy the list so that we can have an atomic result and no partial removals
-        List<String> modifiedSequencerServers = new ArrayList<>(layout.getSequencers());
-        for (int i = 0; i < modifiedSequencerServers.size(); ) {
-            String sequencerServer = modifiedSequencerServers.get(i);
-            if (endpoints.contains(sequencerServer)) {
-                if (modifiedSequencerServers.size() == 1) {
-                    throw new LayoutModificationException("Attempting to remove all sequencers.");
-                }
-                modifiedSequencerServers.remove(i);
-            } else {
-                i++;
-            }
+        // Only remove the endpoints if it does not attempt to remove all layout's sequencers
+        if (endpoints.containsAll(layout.getSequencers())) {
+            log.warn("Skipped removing sequencers as remove request of {} would remove all " +
+                     "sequencers {}.",
+                     endpoints.toString(),
+                     layout.getSequencers());
+            throw new LayoutModificationException("Attempting to remove all sequencers.");
+        } else {
+            layout.getSequencers().removeAll(endpoints);
         }
-        layout.getSequencers().retainAll(modifiedSequencerServers);
+
         return this;
     }
 
     /**
      * Remove an endpoint from a segment.
      *
-     * @param endpoint             The endpoint to remove
-     * @param layoutStripe         the stripe to remove the endpoint from
+     * @param endpoint             A non null String representing the endpoint to
+     *                             be removed
+     * @param layoutStripe         A non null stripe to remove the endpoint from
      * @param minReplicationFactor The least number of nodes needed to
      *                             maintain redundancy
      */
-    public void removeFromStripe(String endpoint, LayoutStripe layoutStripe,
+    public void removeFromStripe(@NonNull String endpoint,
+                                 @NonNull LayoutStripe layoutStripe,
                                  int minReplicationFactor) {
         if (layoutStripe.getLogServers().remove(endpoint)) {
             if (layoutStripe.getLogServers().isEmpty()) {
@@ -381,12 +427,13 @@ public class LayoutBuilder {
     }
 
     /**
-     * Removes the logunit endpoint from the layout.
+     * Removes the Log unit endpoint from the layout.
      *
-     * @param endpoint Log unit server to be removed
-     * @return Workflow manager
+     * @param endpoint a non null Log unit server to be removed
+     *
+     * @return this builder
      */
-    public LayoutBuilder removeLogunitServer(String endpoint) {
+    public LayoutBuilder removeLogunitServer(@NonNull String endpoint) {
 
         Layout tempLayout = new Layout(layout);
 
@@ -403,12 +450,14 @@ public class LayoutBuilder {
     }
 
     /**
-     * Removes the logunit endpoints from the layout.
+     * Removes the Log unit endpoints from the layout.
      *
-     * @param endpoints Log unit servers to be removed
-     * @return Workflow manager
+     * @param endpoints a non null set of Strings representing Log unit servers
+     *                  to be removed
+     *
+     * @return this builder
      */
-    public LayoutBuilder removeLogunitServers(Set<String> endpoints) {
+    public LayoutBuilder removeLogunitServers(@NonNull Set<String> endpoints) {
 
         Layout tempLayout = new Layout(layout);
 
@@ -440,5 +489,4 @@ public class LayoutBuilder {
                 this.epoch,
                 layout.getClusterId());
     }
-
 }

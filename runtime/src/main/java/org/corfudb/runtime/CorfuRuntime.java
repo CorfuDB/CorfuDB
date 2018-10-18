@@ -3,28 +3,8 @@ package org.corfudb.runtime;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
-
-import java.lang.Thread.UncaughtExceptionHandler;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeoutException;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
@@ -36,8 +16,8 @@ import lombok.Singular;
 import lombok.ToString;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.clients.BaseClient;
@@ -69,6 +49,23 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
+
+import javax.annotation.Nonnull;
+import java.lang.Thread.UncaughtExceptionHandler;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeoutException;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/9/15.
@@ -199,6 +196,13 @@ public class CorfuRuntime {
         @Default int idleConnectionTimeout = 30;
 
         /**
+         * The period at which the client sends keep-alive messages to the
+         * server (a message is only send there is no write activity on the channel
+         * for the whole period.
+         */
+        @Default int keepAlivePeriod = 10;
+
+        /**
          * {@link Duration} before connections timeout.
          */
         @Default Duration connectionTimeout = Duration.ofMillis(500);
@@ -302,6 +306,37 @@ public class CorfuRuntime {
          * The number of times to retry invalidate when a layout change is expected.
          */
         @Default int invalidateRetry = 5;
+
+        /**
+         * Represents filtering logic to be applied on the inbound messages received by Netty Client
+         * Router. If filters are not null, Netty Client Router add a filter handler and configures it
+         * with provided filters. If filters are null, no filter handler will be added to Netty's pipeline.
+         */
+        @Default List<MsgHandlingFilter> nettyClientInboundMsgFilters = null;
+
+        // Register handlers region
+
+        // These two handlers are provided to give some control on what happen when system is down.
+        // For applications that want to have specific behaviour when a the system appears
+        // unavailable, they can register their own handler for both before the rpc request and
+        // upon cluster unreachability.
+        // An example of how to use these handlers implementing timeout is given in
+        // test/src/test/java/org/corfudb/runtime/CorfuRuntimeTest.java
+
+        /**
+         * SystemDownHandler is invoked at any point when the Corfu client attempts to make an RPC
+         * request to the Corfu cluster but is unable to complete this.
+         * NOTE: This will also be invoked during connect if the cluster is unreachable.
+         */
+        @Default
+        volatile Runnable systemDownHandler = () -> { };
+
+        /**
+         * BeforeRPCHandler callback is invoked every time before an RPC call.
+         */
+        @Default
+        volatile Runnable beforeRpcHandler = () -> { };
+        //endregion
     }
 
     /**
@@ -419,8 +454,13 @@ public class CorfuRuntime {
     @Getter
     private volatile boolean isShutdown = false;
 
+    /**
+     * Latest layout seen by the runtime.
+     */
+    private volatile Layout latestLayout = null;
+
     @Getter
-    private static MetricRegistry defaultMetrics = new MetricRegistry();
+    private static final MetricRegistry defaultMetrics = new MetricRegistry();
     @Getter
     @Setter
     private MetricRegistry metrics = new MetricRegistry();
@@ -434,26 +474,28 @@ public class CorfuRuntime {
     }
 
     /**
-     * These two handlers are provided to give some control on what happen when system is down.
+     * Register SystemDownHandler.
+     * Please use CorfuRuntimeParameters builder to register this.
      *
-     * For applications that want to have specific behaviour when a the system appears unavailable, they can
-     * register their own handler for both before the rpc request and upon network exception.
-     *
-     * An example of how to use these handlers implementing timeout is given in
-     * test/src/test/java/org/corfudb/runtime/CorfuRuntimeTest.java
-     *
+     * @param handler Handler to invoke in case of system Down.
+     * @return CorfuRuntime instance.
      */
-    public Runnable beforeRpcHandler = () -> {};
-    public Runnable systemDownHandler = () -> {};
-
-
+    @Deprecated
     public CorfuRuntime registerSystemDownHandler(Runnable handler) {
-        systemDownHandler = handler;
+        this.getParameters().setSystemDownHandler(handler);
         return this;
     }
 
+    /**
+     * Register BeforeRPCHandler.
+     * Please use CorfuRuntimeParameters builder to register this.
+     *
+     * @param handler Handler to invoke before every RPC.
+     * @return CorfuRuntime instance.
+     */
+    @Deprecated
     public CorfuRuntime registerBeforeRpcHandler(Runnable handler) {
-        beforeRpcHandler = handler;
+        this.getParameters().setBeforeRpcHandler(handler);
         return this;
     }
 
@@ -683,7 +725,7 @@ public class CorfuRuntime {
      * @return The router.
      */
     public IClientRouter getRouter(String address) {
-        return nodeRouterPool.getRouter(address);
+        return nodeRouterPool.getRouter(NodeLocator.parseString(address));
     }
 
     /**
@@ -697,7 +739,8 @@ public class CorfuRuntime {
             // Don't create a new request for a layout if there is one pending.
             return;
         }
-        layout = fetchLayout(CFUtils.getUninterruptibly(layout).getLayoutServers());
+        layout = fetchLayout(latestLayout == null
+                ? layoutServers : latestLayout.getLayoutServers());
     }
 
     /** Check if the cluster Id of the layout matches the client cluster Id.
@@ -732,7 +775,11 @@ public class CorfuRuntime {
      */
     private void pruneRemovedRouters(@Nonnull Layout layout) {
         nodeRouterPool.getNodeRouters().keySet().stream()
-                .filter(endpoint -> !layout.getAllServers().contains(endpoint))
+                // Check if endpoint is present in the layout.
+                .filter(endpoint -> !layout.getAllServers()
+                        // Converting to legacy endpoint format as the layout only contains
+                        // legacy format - host:port.
+                        .contains(NodeLocator.getLegacyEndpoint(endpoint)))
                 .forEach(endpoint -> {
                     try {
                         nodeRouterPool.getNodeRouters().get(endpoint).stop();
@@ -754,13 +801,11 @@ public class CorfuRuntime {
      */
     private CompletableFuture<Layout> fetchLayout(List<String> layoutServers) {
 
-        // Last obtained layout with the highest epoch seen.
-        final Layout latestLayout = layout != null ? CFUtils.getUninterruptibly(layout) : null;
         return CompletableFuture.supplyAsync(() -> {
 
             List<String> layoutServersCopy = new ArrayList<>(layoutServers);
-            beforeRpcHandler.run();
-            int systemDownTriggerCounter = getParameters().getSystemDownHandlerTriggerLimit();
+            parameters.getBeforeRpcHandler().run();
+            int systemDownTriggerCounter = 0;
 
             while (true) {
 
@@ -790,6 +835,7 @@ public class CorfuRuntime {
                         checkClusterId(l);
 
                         layout = layoutFuture;
+                        latestLayout = l;
                         log.debug("Layout server {} responded with layout {}", s, l);
 
                         // Prune away removed node routers from the nodeRouterPool.
@@ -804,11 +850,14 @@ public class CorfuRuntime {
                     }
                 }
 
-                log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}",
-                        parameters.connectionRetryRate);
+                log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}, "
+                                + "Retried {} times, systemDownHandlerTriggerLimit = {}",
+                        parameters.connectionRetryRate, systemDownTriggerCounter,
+                        parameters.getSystemDownHandlerTriggerLimit());
 
-                if (--systemDownTriggerCounter <= 0) {
-                    systemDownHandler.run();
+                if (++systemDownTriggerCounter >= parameters.getSystemDownHandlerTriggerLimit()) {
+                    log.info("fetchLayout: Invoking the systemDownHandler.");
+                    parameters.getSystemDownHandler().run();
                 }
 
                 Sleep.sleepUninterruptibly(parameters.connectionRetryRate);

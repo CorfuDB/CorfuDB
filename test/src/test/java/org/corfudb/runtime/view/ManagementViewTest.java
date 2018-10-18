@@ -35,6 +35,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -620,11 +621,12 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
     /**
-     * check that transcation conflict resolution works properly in face of sequencer failover
+     * Check that transaction conflict resolution works properly in face of sequencer failover
      */
     @Test
     public void ckSequencerFailoverTXResolution()
             throws Exception {
+        // setup 3-Corfu node cluster
         getManagementTestLayout();
 
         Map<Integer, String> map = getMap();
@@ -657,13 +659,14 @@ public class ManagementViewTest extends AbstractViewTest {
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
+                assertThat(ta.getAbortCause()).isEqualTo(AbortCause.NEW_SEQUENCER);
                 commit = false;
             }
             assertThat(commit)
                     .isFalse();
         });
 
-        // now, check that the same scenario, starting anew, can succeed
+        // now, check that the same scenario, starting a new, can succeed
         t(0, () -> {
             TXBegin();
             map.get(0);
@@ -701,7 +704,6 @@ public class ManagementViewTest extends AbstractViewTest {
         final String payload = "hello";
         final int nUpdates = 5;
 
-
         for (int i = 0; i < nUpdates; i++)
             map.put(i, payload);
 
@@ -731,6 +733,7 @@ public class ManagementViewTest extends AbstractViewTest {
             try {
                 TXEnd();
             } catch (TransactionAbortedException ta) {
+                assertThat(ta.getAbortCause()).isEqualTo(AbortCause.NEW_SEQUENCER);
                 commit = false;
             }
             assertThat(commit)
@@ -945,7 +948,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * The other 2 nodes PORT_0 and PORT_1 will detect this failure and mark it as unresponsive.
      * The rule is then removed simulating a normal functioning PORT_2. The other nodes will now
      * be able to successfully ping PORT_2. They then remove the node PORT_2 from the unresponsive
-     * servers list and mark as active.å
+     * servers list and mark as active.
      *
      * @throws Exception
      */
@@ -1913,5 +1916,45 @@ public class ManagementViewTest extends AbstractViewTest {
         final long expectedTokenValue = 19L;
         assertThat(corfuRuntime.getSequencerView().query().getTokenValue())
                 .isEqualTo(expectedTokenValue);
+    }
+
+    /**
+     * Tests that a degraded cluster heals a sealed cluster.
+     * NOTE: A sealed cluster without a layout causes the system to halt as none of the clients can
+     * perform data operations until the new epoch is filled in with a layout.
+     * Scenario: 3 nodes - PORT_0, PORT_1 and PORT_2.
+     * A server rule is added to simulate PORT_2 as unresponsive.
+     * First, the degraded cluster moves from epoch 1 to epoch 2 to mark PORT_2 unresponsive.
+     * Now, PORT_0 and PORT_1 are sealed to epoch 3.
+     * The fault detectors detect this and fills the epoch 3 with a layout.
+     */
+    @Test
+    public void testSealedDegradedClusterHealing() {
+        get3NodeLayout();
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+
+        addServerRule(SERVERS.PORT_2, new TestRule().always().drop());
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            corfuRuntime.invalidateLayout();
+            if (!corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers().isEmpty()) {
+                break;
+            }
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+        }
+
+        Layout layout = new Layout(corfuRuntime.getLayoutView().getLayout());
+        layout.setEpoch(layout.getEpoch() + 1);
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout).moveServersToEpoch();
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            corfuRuntime.invalidateLayout();
+            if (corfuRuntime.getLayoutView().getLayout().getEpoch() == layout.getEpoch()) {
+                break;
+            }
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+        }
+
+        assertThat(corfuRuntime.getLayoutView().getLayout()).isEqualTo(layout);
     }
 }

@@ -3,7 +3,9 @@ package org.corfudb.infrastructure.log;
 import lombok.Data;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
 
+import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
 import java.util.Collections;
@@ -38,9 +40,9 @@ class SegmentHandle {
     @NonNull
     String fileName;
 
-    private Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap();
-    private Set<Long> trimmedAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private Set<Long> pendingTrims = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap<>();
+    private final Set<Long> trimmedAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final Set<Long> pendingTrims = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private volatile int refCount = 0;
 
 
@@ -56,20 +58,18 @@ class SegmentHandle {
     }
 
     public void close() {
-        Set<FileChannel> channels =
-                new HashSet(Arrays.asList(writeChannel, readChannel, trimmedChannel, pendingTrimChannel));
+        Set<FileChannel> channels = new HashSet<>(
+                Arrays.asList(writeChannel, readChannel, trimmedChannel, pendingTrimChannel)
+        );
+
         for (FileChannel channel : channels) {
             try {
                 channel.force(true);
-                channel.close();
-                channel = null;
-            } catch (Exception e) {
-                log.warn("Error closing channel {}: {}", channel.toString(), e.toString());
+            } catch (IOException e) {
+                log.debug("Can't force updates in the channel", e.getMessage());
+            } finally {
+                IOUtils.closeQuietly(channel);
             }
         }
-
-        knownAddresses = null;
-        trimmedAddresses = null;
-        pendingTrims = null;
     }
 }

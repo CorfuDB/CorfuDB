@@ -29,7 +29,13 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
-import org.corfudb.runtime.clients.*;
+import org.corfudb.runtime.clients.BaseHandler;
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.LayoutHandler;
+import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.clients.ManagementHandler;
+import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -687,12 +693,12 @@ public class ClusterReconfigIT extends AbstractIT {
                 .layoutServer(NodeLocator.parseString("localhost:9000"))
                 .cacheDisabled(true)
                 .systemDownHandlerTriggerLimit(1)
+                // Register the system down handler to throw a RuntimeException.
+                .systemDownHandler(() ->
+                        assertThatCode(semaphore::release).doesNotThrowAnyException())
                 .build();
 
-        CorfuRuntime runtime = CorfuRuntime.fromParameters(corfuRuntimeParameters)
-                .registerSystemDownHandler(() ->
-                        assertThatCode(semaphore::release).doesNotThrowAnyException())
-                .connect();
+        CorfuRuntime runtime = CorfuRuntime.fromParameters(corfuRuntimeParameters).connect();
 
         CorfuTable table = runtime.getObjectsView()
                 .build()
@@ -873,6 +879,94 @@ public class ClusterReconfigIT extends AbstractIT {
                 .getAddresses().values()) {
             assertThat(logData.getPayload(runtime))
                     .isEqualTo(Integer.toString(verificationCounter++).getBytes());
+        }
+
+        shutdownCorfuServer(corfuServer_1);
+        shutdownCorfuServer(corfuServer_2);
+        shutdownCorfuServer(corfuServer_3);
+    }
+
+    /**
+     * Test that a disconnected CorfuRuntime using a systemDownHandler reconnects itself once the
+     * cluster is back online. The client disconnection is simulated by taking 2 servers
+     * 9000 and 9002 offline by shutting them down. They are then restarted and the date is
+     * validated.
+     */
+    @Test
+    public void reconnectDisconnectedClient() throws Exception {
+        // Set up cluster of 3 nodes.
+        final int PORT_0 = 9000;
+        final int PORT_1 = 9001;
+        final int PORT_2 = 9002;
+        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
+        Process corfuServer_2 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_1);
+        Process corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
+        final Layout layout = get3NodeLayout();
+
+        final int retries = 3;
+        BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
+
+        final int systemDownHandlerLimit = 10;
+        CorfuRuntime runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
+                .layoutServer(NodeLocator.parseString(DEFAULT_ENDPOINT))
+                .systemDownHandlerTriggerLimit(systemDownHandlerLimit)
+                // Register the system down handler to throw a RuntimeException.
+                .systemDownHandler(() -> {
+                    throw new RuntimeException("SystemDownHandler");
+                })
+                .build()).connect();
+
+        UUID streamId = CorfuRuntime.getStreamID("testStream");
+        IStreamView stream = runtime.getStreamsView().get(streamId);
+
+        final int appendNum = 3;
+        int counter = 0;
+        // Preliminary writes.
+        for (int i = 0; i < appendNum; i++) {
+            stream.append(Integer.toString(counter++).getBytes());
+        }
+
+        // Shutdown the servers 9000 and 9002.
+        shutdownCorfuServer(corfuServer_1);
+        shutdownCorfuServer(corfuServer_3);
+
+        final Semaphore latch = new Semaphore(1);
+        latch.acquire();
+
+        // Invalidate the layout so that there are no cached layouts.
+        runtime.invalidateLayout();
+
+        // Spawn a thread which tries to append to the stream. This should initially get stuck and
+        // trigger the systemDownHandler.
+        // This would start the server and finally wait for the append to complete.
+        Thread t = new Thread(() -> {
+            final int counterValue = 3;
+            while (true) {
+                try {
+                    stream.append(Integer.toString(counterValue).getBytes());
+                    break;
+                } catch (RuntimeException sue) {
+                    // Release latch and try again..
+                    latch.release();
+                }
+            }
+        });
+        t.start();
+
+        assertThat(latch.tryAcquire(PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS))
+                .isTrue();
+        // Restart both the servers.
+        corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
+        corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
+
+        t.join(PARAMETERS.TIMEOUT_LONG.toMillis());
+
+        // Verify data
+        final int startAddress = 0;
+        final int endAddress = 3;
+        for (int i = startAddress; i <= endAddress; i++) {
+            assertThat(runtime.getAddressSpaceView().read(i).getPayload(runtime))
+                    .isEqualTo(Integer.toString(i).getBytes());
         }
 
         shutdownCorfuServer(corfuServer_1);

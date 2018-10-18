@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure;
 
+import static org.corfudb.util.LambdaUtils.runSansThrow;
+
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -19,6 +21,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -299,13 +302,13 @@ public class ManagementAgent {
 
             // Initiating periodic task to poll for failures.
             localMetricsPollingService.scheduleAtFixedRate(
-                    this::updateLocalMetrics,
+                    () -> runSansThrow(this::updateLocalMetrics),
                     0,
                     METRICS_POLL_INTERVAL.toMillis(),
                     TimeUnit.MILLISECONDS);
 
             detectionTasksScheduler.scheduleAtFixedRate(
-                    this::detectorTaskScheduler,
+                    () -> runSansThrow(this::detectorTaskScheduler),
                     0,
                     policyExecuteInterval,
                     TimeUnit.MILLISECONDS);
@@ -372,27 +375,18 @@ public class ManagementAgent {
                 localRecoveryLayout.getEpoch(), clusterLayout.getEpoch());
         // The cluster has moved ahead. This node should not force any layout. Let the other
         // members detect that this node has healed and include it in the layout.
-        boolean recoveryResult = clusterLayout.getEpoch() > localRecoveryLayout.getEpoch()
+        return clusterLayout.getEpoch() > localRecoveryLayout.getEpoch()
                 || recoveryReconfigurationResult;
-
-        return recoveryResult;
     }
 
     /**
-     * Task to collect local node metrics.
-     * This task collects the following:
-     * Boolean Status of layout, sequencer and logunit servers.
-     * These metrics are then composed into ServerMetrics model and stored locally.
+     * Queries the local Sequencer Server for SequencerMetrics. This returns UNKNOWN if unable
+     * to fetch the status.
+     *
+     * @param layout Current Management layout.
+     * @return Sequencer Metrics.
      */
-    private void updateLocalMetrics() {
-        // Initializing the status of components
-        // No need to poll unless node is bootstrapped.
-        Layout layout = serverContext.copyManagementLayout();
-        if (layout == null) {
-            return;
-        }
-
-        // Build and replace existing locally stored nodeMetrics
+    private SequencerMetrics queryLocalSequencerMetrics(Layout layout) {
         SequencerMetrics sequencerMetrics;
         // This is an optimization. If this node is not the primary sequencer for the current
         // layout, there is no reason to request metrics from this sequencer.
@@ -412,9 +406,27 @@ public class ManagementAgent {
         } else {
             sequencerMetrics = new SequencerMetrics(SequencerStatus.UNKNOWN);
         }
+        return sequencerMetrics;
+    }
 
-        localServerMetrics =
-                new ServerMetrics(NodeLocator.parseString(getLocalEndpoint()), sequencerMetrics);
+    /**
+     * Task to collect local node metrics.
+     * This task collects the following:
+     * Boolean Status of layout, sequencer and logunit servers.
+     * These metrics are then composed into ServerMetrics model and stored locally.
+     */
+    private void updateLocalMetrics() {
+
+        // Initializing the status of components
+        // No need to poll unless node is bootstrapped.
+        Layout layout = serverContext.copyManagementLayout();
+        if (layout == null) {
+            return;
+        }
+
+        // Build and replace existing locally stored nodeMetrics
+        localServerMetrics = new ServerMetrics(NodeLocator.parseString(getLocalEndpoint()),
+                queryLocalSequencerMetrics(layout));
     }
 
     /**
@@ -434,7 +446,6 @@ public class ManagementAgent {
         }
 
         runFailureDetectorTask();
-
         runHealingDetectorTask();
     }
 
@@ -576,8 +587,10 @@ public class ManagementAgent {
     }
 
     /**
-     * All Layout servers have been sealed but there is no client to take this forward and fill the
-     * slot by proposing a new layout.
+     * All active Layout servers have been sealed but there is no client to take this forward and
+     * fill the slot by proposing a new layout. This is determined by the outOfPhaseEpochNodes map.
+     * This map contains a map of nodes and their server router epochs iff that server responded
+     * with a WrongEpochException to the heartbeat message.
      * In this case we can pass an empty set to propose the same layout again and fill the layout
      * slot to un-block the data plane operations.
      *
@@ -585,8 +598,14 @@ public class ManagementAgent {
      * @return True if latest layout slot is vacant. Else False.
      */
     private boolean isCurrentLayoutSlotUnFilled(PollReport pollReport) {
+        final Layout layout = serverContext.copyManagementLayout();
+        // Check if all active layout servers are present in the outOfPhaseEpochNodes map.
         boolean result = pollReport.getOutOfPhaseEpochNodes().keySet()
-                .containsAll(serverContext.copyManagementLayout().getLayoutServers());
+                .containsAll(layout.getLayoutServers().stream()
+                        // Unresponsive servers are excluded as they do not respond with a
+                        // WrongEpochException.
+                        .filter(s -> !layout.getUnresponsiveServers().contains(s))
+                        .collect(Collectors.toList()));
         if (result) {
             log.info("Current layout slot is empty. Filling slot with current layout.");
         }
@@ -595,7 +614,9 @@ public class ManagementAgent {
 
     private SequencerStatus getPrimarySequencerStatus(Layout layout, PollReport pollReport) {
         String primarySequencer = layout.getSequencers().get(0);
-        NodeView nodeView = pollReport.getNodeViewMap().get(primarySequencer);
+        // Fetches nodeView from map or creates a default NodeView object.
+        NodeView nodeView = pollReport.getNodeViewMap().getOrDefault(primarySequencer,
+                NodeView.getDefaultNodeView(NodeLocator.parseString(primarySequencer)));
         // If we have a stale poll report, we should discard this and continue polling.
         if (layout.getEpoch() > pollReport.getPollEpoch()) {
             log.warn("getPrimarySequencerStatus: Received poll report for epoch {} but currently "
@@ -760,7 +781,8 @@ public class ManagementAgent {
             } catch (InterruptedException | ExecutionException e) {
                 // Expected wrong epoch exception if layout server fell behind and has stale
                 // layout and server epoch.
-                log.warn("updateTrailingLayoutServers: layout fetch failed: {}", e);
+                log.warn("updateTrailingLayoutServers: layout fetch from {} failed: {}",
+                        layoutServer, e);
             }
 
             // Do nothing if this layout server is updated with the latestLayout.

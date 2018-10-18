@@ -76,7 +76,9 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
             handshake = (CorfuPayloadMsg<HandshakeMsg>) m;
             log.debug("channelRead: Handshake Message received. Removing {} from pipeline.",
                     READ_TIMEOUT_HANDLER);
-            ctx.pipeline().remove(READ_TIMEOUT_HANDLER);
+            // Remove the handler from the pipeline. Also remove the reference of the context from
+            // the handler so that it does not disconnect the channel.
+            ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);
         } catch (ClassCastException e) {
             log.warn("channelRead: Non-handshake message received by handshake handler." +
                     " Send upstream only if handshake succeeded.");
@@ -181,7 +183,6 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
             if (!this.state.completed()) {
                 log.error("exceptionCaught: Handshake timeout checker: timed out. Close Connection.");
                 this.state.set(true, false);
-                ctx.channel().close();
             } else {
                 log.debug("exceptionCaught: Handshake timeout " +
                         "checker: discarded (handshake OK)");

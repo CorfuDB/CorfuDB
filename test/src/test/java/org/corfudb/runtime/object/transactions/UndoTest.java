@@ -1,14 +1,15 @@
 package org.corfudb.runtime.object.transactions;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.junit.Test;
 
 /**
  * Created by dalia on 3/6/17.
@@ -333,6 +334,7 @@ public class UndoTest extends AbstractTransactionsTest {
             try {
                 TXEnd();
             } catch (TransactionAbortedException te) {
+                assertThat(te.getAbortCause()).isEqualTo(AbortCause.CONFLICT);
                 aborted = true;
             }
             assertThat(aborted);
