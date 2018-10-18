@@ -18,6 +18,7 @@
         <module>debian</module>
         <module>generator</module>
         <module>migration</module>
+        <module>it</module>
 
     </modules>
 

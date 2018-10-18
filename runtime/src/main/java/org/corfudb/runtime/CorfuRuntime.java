@@ -196,6 +196,13 @@ public class CorfuRuntime {
         @Default int idleConnectionTimeout = 30;
 
         /**
+         * The period at which the client sends keep-alive messages to the
+         * server (a message is only send there is no write activity on the channel
+         * for the whole period.
+         */
+        @Default int keepAlivePeriod = 10;
+
+        /**
          * {@link Duration} before connections timeout.
          */
         @Default Duration connectionTimeout = Duration.ofMillis(500);
