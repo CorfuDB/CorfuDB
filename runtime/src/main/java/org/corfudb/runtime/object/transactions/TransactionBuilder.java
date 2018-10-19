@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
 
 /** Helper class to build transactional contexts.
  *
@@ -17,17 +18,17 @@ public class TransactionBuilder {
     /** The runtime for the context.
      *
      */
-    public CorfuRuntime runtime;
+    CorfuRuntime runtime;
 
     /** The type of context to build.
      *
      */
-    public TransactionType type = TransactionType.OPTIMISTIC;
+    TransactionType type = TransactionType.OPTIMISTIC;
 
     /** For snapshot transactions, the address the
      * snapshot will start at.
      */
-    public long snapshot = -1L;
+    long snapshot = Address.NON_ADDRESS;
 
     public TransactionBuilder(CorfuRuntime runtime) {
         this.runtime = runtime;

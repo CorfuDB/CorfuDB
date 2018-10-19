@@ -183,7 +183,6 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
             if (!this.state.completed()) {
                 log.error("exceptionCaught: Handshake timeout checker: timed out. Close Connection.");
                 this.state.set(true, false);
-                ctx.channel().close();
             } else {
                 log.debug("exceptionCaught: Handshake timeout " +
                         "checker: discarded (handshake OK)");

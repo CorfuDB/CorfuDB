@@ -251,7 +251,16 @@ public abstract class AbstractTransactionalContext implements
                 .completeExceptionally(ae);
     }
 
-    public abstract long obtainSnapshotTimestamp();
+    /**
+     * Retrieves the current timestamp from the sequencer.
+     * @return the current global tail
+     */
+    public long obtainSnapshotTimestamp() {
+        long timestamp = builder.runtime
+                .getSequencerView().query().getToken().getTokenValue();
+        log.trace("obtainSnapshotTimestamp: SnapshotTimestamp[{}] {}", this, timestamp);
+        return timestamp;
+    }
 
     /**
      * Add the proxy and conflict-params information to our read set.
