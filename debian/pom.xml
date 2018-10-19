@@ -76,6 +76,14 @@
                                         <prefix>/usr/share/corfu/lib</prefix>
                                     </mapper>
                                 </data>
+                                <data>
+                                    <src>${session.executionRootDirectory}/infrastructure/src/main/resources/logback.prod.xml</src>
+                                    <type>file</type>
+                                    <mapper>
+                                        <type>perm</type>
+                                        <prefix>/usr/share/corfu/conf</prefix>
+                                    </mapper>
+                                </data>
                                 <!-- general shell scripts -->
                                 <data>
                                     <src>${session.executionRootDirectory}/bin</src>
