@@ -35,7 +35,7 @@ import org.corfudb.runtime.object.VersionLockedObject;
  * <p>(2) Opacity:
  *  Read in a transaction observe the state of the system ("snapshot") as of the time of the
  *      first read which occurs in the transaction ("first read
- *      timestamp"), except in case (1) above where they observe the own tranasction's writes.
+ *      timestamp"), except in case (1) above where they observe the own transaction's writes.
  *
  * <p>(3) Atomicity:
  *  Writes in a transaction are guaranteed to commit atomically,
