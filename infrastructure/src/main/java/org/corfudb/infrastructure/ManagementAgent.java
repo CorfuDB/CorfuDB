@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import static org.corfudb.util.LambdaUtils.runSansThrow;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -14,6 +15,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,6 +37,7 @@ import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.protocols.wireprotocol.NetworkMetrics;
 import org.corfudb.protocols.wireprotocol.NodeView;
+import org.corfudb.protocols.wireprotocol.PeerView;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.ServerMetrics;
@@ -42,6 +45,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
 import org.corfudb.util.CFUtils;
@@ -83,7 +87,7 @@ public class ManagementAgent {
      * In milliseconds.
      */
     @Getter
-    private final long policyExecuteInterval = 1000;
+    private static final long POLICY_EXECUTE_INTERVAL = 1000;
     /**
      * To dispatch initialization tasks for recovery and sequencer bootstrap.
      */
@@ -91,7 +95,7 @@ public class ManagementAgent {
     private final Thread initializationTaskThread;
     /**
      * Detection Task Scheduler Service
-     * This service schedules the following tasks every policyExecuteInterval (1 sec):
+     * This service schedules the following tasks every POLICY_EXECUTE_INTERVAL (1 sec):
      * - Detection of failed nodes.
      * - Detection of healed nodes.
      */
@@ -157,6 +161,8 @@ public class ManagementAgent {
     private Set<String> responsiveNodesPeerView = Collections.emptySet();
     // Connectivity of any responsive nodes not responding. Updated by FailureDetector.
     private Set<String> unresponsiveNodesPeerView = Collections.emptySet();
+    // Cluster View compiled by aggregating latest peer views from heartbeat responses.
+    private final ConcurrentHashMap<String, PeerView> clusterView = new ConcurrentHashMap<>();
 
     /**
      * Checks and restores if a layout is present in the local datastore to recover from.
@@ -280,7 +286,7 @@ public class ManagementAgent {
             while (!shutdown && serverContext.getManagementLayout() == null
                     && bootstrapEndpoint == null) {
                 log.warn("Management Server waiting to be bootstrapped");
-                Sleep.MILLISECONDS.sleepRecoverably(policyExecuteInterval);
+                Sleep.MILLISECONDS.sleepRecoverably(POLICY_EXECUTE_INTERVAL);
             }
 
             // Recover if flag is false
@@ -310,7 +316,7 @@ public class ManagementAgent {
             detectionTasksScheduler.scheduleAtFixedRate(
                     () -> runSansThrow(this::detectorTaskScheduler),
                     0,
-                    policyExecuteInterval,
+                    POLICY_EXECUTE_INTERVAL,
                     TimeUnit.MILLISECONDS);
 
         } catch (InterruptedException e) {
@@ -484,7 +490,29 @@ public class ManagementAgent {
         // If the management server is not bootstrapped, stamp with INVALID_EPOCH.
         long peerConnectivitySnapshotEpoch = serverContext.getManagementLayout() != null
                 ? serverContext.getManagementLayout().getEpoch() : Layout.INVALID_EPOCH;
-        return new NetworkMetrics(peerConnectivitySnapshotEpoch, peerConnectivityDeltaMap);
+        return new NetworkMetrics(peerConnectivitySnapshotEpoch, ImmutableMap.copyOf(clusterView));
+    }
+
+    /**
+     * Updates the cluster view of this management agent.
+     * From the union of the peer views received in the poll report and the existing peer views
+     * recorded earlier in the cluster view, we retain the latest peer views by comparing the
+     * heartbeat counters.
+     *
+     * @param pollReport Poll Report to update the current cluster view.
+     */
+    private void updatePeerConnectivityMap(PollReport pollReport) {
+        pollReport.getNodeViewMap().values().stream()
+                .map(nodeView -> nodeView.getNetworkMetrics().getPeerConnectivityView())
+                .flatMap(stringPeerViewMap -> stringPeerViewMap.entrySet().stream())
+                .forEach(stringPeerViewEntry -> clusterView
+                        .compute(stringPeerViewEntry.getKey(), (s, peerView)
+                                -> (peerView == null
+                                // If peer view is not null, then keep the latest copy of the
+                                // peer view - either the poll report or from the cluster view.
+                                || peerView.getHeartbeatCounter() < stringPeerViewEntry.getValue()
+                                .getHeartbeatCounter())
+                                ? stringPeerViewEntry.getValue() : peerView));
     }
 
     /**
@@ -510,6 +538,7 @@ public class ManagementAgent {
                 PollReport pollReport = healingDetector.poll(layout, corfuRuntime);
 
                 responsiveNodesPeerView = pollReport.getHealingNodes();
+                updatePeerConnectivityMap(pollReport);
 
                 if (!pollReport.getHealingNodes().isEmpty()) {
                     try {
@@ -520,8 +549,11 @@ public class ManagementAgent {
                                         pollReport.getHealingNodes())
                                 .get();
                         log.info("Healing nodes successful: {}", pollReport);
-                    } catch (InterruptedException | ExecutionException e) {
-                        log.error("Healing nodes failed: ", e);
+                    } catch (ExecutionException ee) {
+                        log.error("Healing nodes failed: ", ee);
+                    } catch (InterruptedException ie) {
+                        log.error("Healing nodes interrupted: ", ie);
+                        Thread.currentThread().interrupt();
                     }
                 }
 
@@ -557,6 +589,7 @@ public class ManagementAgent {
                         corfuRuntime);
 
                 unresponsiveNodesPeerView = pollReport.getFailingNodes();
+                updatePeerConnectivityMap(pollReport);
 
                 // Corrects out of phase epoch issues if present in the report. This method
                 // performs re-sealing of all nodes if required and catchup of a layout server to
@@ -742,8 +775,7 @@ public class ManagementAgent {
      * @return quorum agreed layout.
      * @throws QuorumUnreachableException If unable to receive consensus on layout.
      */
-    private Layout fetchQuorumLayout(CompletableFuture<Layout>[] completableFutures)
-            throws QuorumUnreachableException {
+    private Layout fetchQuorumLayout(CompletableFuture<Layout>[] completableFutures) {
 
         QuorumFuturesFactory.CompositeFuture<Layout> quorumFuture = QuorumFuturesFactory
                 .getQuorumFuture(
@@ -751,15 +783,19 @@ public class ManagementAgent {
                         completableFutures);
         try {
             return quorumFuture.get();
-        } catch (ExecutionException | InterruptedException e) {
-            if (e.getCause() instanceof QuorumUnreachableException) {
-                throw (QuorumUnreachableException) e.getCause();
+        } catch (ExecutionException ee) {
+            if (ee.getCause() instanceof QuorumUnreachableException) {
+                throw (QuorumUnreachableException) ee.getCause();
             }
 
             int reachableServers = (int) Arrays.stream(completableFutures)
                     .filter(booleanCompletableFuture -> !booleanCompletableFuture
                             .isCompletedExceptionally()).count();
             throw new QuorumUnreachableException(reachableServers, completableFutures.length);
+        } catch (InterruptedException ie) {
+            log.error("fetchQuorumLayout: Interrupted Exception.");
+            Thread.currentThread().interrupt();
+            throw new UnrecoverableCorfuInterruptedError(ie);
         }
     }
 

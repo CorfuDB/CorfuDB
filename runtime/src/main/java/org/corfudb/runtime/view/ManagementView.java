@@ -1,5 +1,7 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.Sets;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -19,8 +21,8 @@ import javax.annotation.Nonnull;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.NetworkMetrics;
 import org.corfudb.protocols.wireprotocol.NodeView;
+import org.corfudb.protocols.wireprotocol.PeerView;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -221,16 +223,18 @@ public class ManagementView extends AbstractView {
 
         // Using the peer views from the nodes to determine health of the cluster.
         Set<String> peerResponsiveNodes = new HashSet<>(layout.getAllServers());
-        nodeViewMap.values().stream()
-                .map(NodeView::getNetworkMetrics)
-                // Get all peer connectivity maps from all node views.
-                .map(NetworkMetrics::getPeerConnectivityView)
-                .flatMap(stringBooleanMap -> stringBooleanMap.entrySet().stream())
+        // Truncates all nodes which did not respond to the Heartbeat request.
+        peerResponsiveNodes.retainAll(nodeViewMap.keySet());
+        // Filter out all nodes which are not reachable by the cluster nodes.
+        nodeViewMap.forEach((endpoint, nodeView) -> nodeView.getNetworkMetrics()
+                .getPeerConnectivityView().getOrDefault(endpoint, PeerView.getDefaultPeerView())
+                .getPeerViewMap().entrySet().stream()
                 // Filter out all unresponsive nodes from all the fault detectors.
                 .filter(entry -> !entry.getValue())
                 .map(Entry::getKey)
                 // Remove the unresponsive nodes from the set of all nodes.
-                .forEach(peerResponsiveNodes::remove);
+                .forEach(peerResponsiveNodes::remove));
+        // Filter out the unresponsive servers in the layout.
         layout.getUnresponsiveServers().forEach(peerResponsiveNodes::remove);
         return peerResponsiveNodes;
     }
@@ -410,10 +414,6 @@ public class ManagementView extends AbstractView {
         // Using the peer views from the nodes to determine health of the cluster.
         Set<String> peerResponsiveNodes = filterResponsiveNodes(layout, nodeViewMap);
 
-        // Analyzes the responsive nodes as seen by the fault detectors to determine the health
-        // of the cluster.
-        ClusterStatus clusterStatus = getClusterHealth(layout, peerResponsiveNodes);
-
         // Set of all nodes which are responsive to this client.
         // Client connectivity to the cluster.
         Set<String> responsiveEndpoints = counters.entrySet().stream()
@@ -421,6 +421,14 @@ public class ManagementView extends AbstractView {
                 .filter(entry -> entry.getValue() > 0)
                 .map(Entry::getKey)
                 .collect(Collectors.toSet());
+
+        // Analyzes the responsive nodes as seen by the fault detectors to determine the health
+        // of the cluster.
+        ClusterStatus clusterStatus = getClusterHealth(layout,
+                // We need to consider the intersection of how the clients view the cluster and
+                // how the server nodes perceive each other. Together we determine the cluster
+                // status.
+                Sets.intersection(peerResponsiveNodes, responsiveEndpoints));
 
         Map<String, NodeStatus> nodeStatusMap
                 = createNodeStatusMap(layout, responsiveEndpoints, allNodes);

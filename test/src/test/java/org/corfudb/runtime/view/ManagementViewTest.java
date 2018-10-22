@@ -1478,7 +1478,8 @@ public class ManagementViewTest extends AbstractViewTest {
      *
      * STEP 2: In this step the client is partitioned from the 2 nodes in the cluster.
      * The cluster however is healthy. Status query:
-     * PORT_0 and PORT_1 are DOWN. Cluster status: STABLE
+     * PORT_0 and PORT_1 are DOWN. Cluster status: UNAVAILABLE
+     * (Since the client cannot reach all healthy servers)
      *
      * A few entries are appended on a Stream. This data is written to PORT_0, PORT_1 and PORT_2.
      *
@@ -1524,7 +1525,7 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.DOWN);
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.DOWN);
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
-        assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
+        assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
 
         // Write 10 entries. 0-9.
         IStreamView streamView = getCorfuRuntime().getStreamsView()

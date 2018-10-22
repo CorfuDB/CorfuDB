@@ -28,11 +28,11 @@ public class NetworkMetrics implements ICorfuPayload<NetworkMetrics> {
     /**
      * Peer connectivity view.
      */
-    private final Map<String, Boolean> peerConnectivityView;
+    private final Map<String, PeerView> peerConnectivityView;
 
     public NetworkMetrics(ByteBuf buf) {
         epoch = ICorfuPayload.fromBuffer(buf, Long.class);
-        peerConnectivityView = ICorfuPayload.mapFromBuffer(buf, String.class, Boolean.class);
+        peerConnectivityView = ICorfuPayload.mapFromBuffer(buf, String.class, PeerView.class);
     }
 
     @Override
