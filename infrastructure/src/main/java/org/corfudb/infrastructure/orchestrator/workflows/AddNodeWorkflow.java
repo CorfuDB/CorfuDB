@@ -1,25 +1,11 @@
 package org.corfudb.infrastructure.orchestrator.workflows;
 
-import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.ADD_NODE;
-
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Range;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-
-import javax.annotation.Nonnull;
-import javax.annotation.concurrent.NotThreadSafe;
-
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.orchestrator.IWorkflow;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -27,8 +13,21 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
+import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
+
+import javax.annotation.Nonnull;
+import javax.annotation.concurrent.NotThreadSafe;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.ADD_NODE;
 
 /**
  * A definition of a workflow that adds a new node to the cluster. This workflow
@@ -44,13 +43,13 @@ public class AddNodeWorkflow implements IWorkflow {
 
     private final AddNodeRequest request;
 
-    protected Layout newLayout;
+    Layout newLayout;
 
     @Getter
     final UUID id;
 
     @Getter
-    protected List<Action> actions;
+    List<Action> actions;
 
     /**
      * Creates a new add node workflow from a request.
@@ -132,7 +131,7 @@ public class AddNodeWorkflow implements IWorkflow {
      * @param segment   segment to transfer
      */
     protected void stateTransfer(Set<String> endpoints, CorfuRuntime runtime,
-                                 Layout.LayoutSegment segment) throws Exception {
+                                 Layout.LayoutSegment segment) throws ExecutionException, InterruptedException {
 
         int batchSize = runtime.getParameters().getBulkReadSize();
 
@@ -213,7 +212,9 @@ public class AddNodeWorkflow implements IWorkflow {
         }
 
         @Override
-        public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
+        public void impl(@Nonnull CorfuRuntime runtime) throws OutrankedException,
+                                                               ExecutionException,
+                                                               InterruptedException {
             runtime.invalidateLayout();
             newLayout = runtime.getLayoutView().getLayout();
 
@@ -243,7 +244,7 @@ public class AddNodeWorkflow implements IWorkflow {
                 runtime.invalidateLayout();
                 newLayout = runtime.getLayoutView().getLayout();
             } else {
-                throw new RuntimeException("RestoreRedundancy: "
+                throw new IllegalStateException("RestoreRedundancy: "
                         + "Node to be added marked unresponsive.");
             }
         }

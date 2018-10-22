@@ -1,12 +1,12 @@
 package org.corfudb.runtime.view.workflows;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
 
-import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
@@ -15,9 +15,9 @@ import java.util.concurrent.TimeoutException;
 @Slf4j
 public class HealNode extends WorkflowRequest {
 
-    public HealNode(@Nonnull String endpointToHeal, @Nonnull CorfuRuntime runtime,
-                    int retry, @Nonnull Duration timeout,
-                    @Nonnull Duration pollPeriod) {
+    public HealNode(@NonNull String endpointToHeal, @NonNull CorfuRuntime runtime,
+                    int retry, @NonNull Duration timeout,
+                    @NonNull Duration pollPeriod) {
         this.nodeForWorkflow = endpointToHeal;
         this.runtime = runtime;
         this.retry = retry;
@@ -26,7 +26,7 @@ public class HealNode extends WorkflowRequest {
     }
 
     @Override
-    protected UUID sendRequest(@Nonnull ManagementClient managementClient) throws TimeoutException {
+    protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {
         CreateWorkflowResponse resp = managementClient.healNodeRequest(nodeForWorkflow,
                 true, true, true, 0);
         log.info("sendRequest: requested to heal {} on orchestrator {}:{}",
@@ -36,7 +36,7 @@ public class HealNode extends WorkflowRequest {
     }
 
     @Override
-    protected boolean verifyRequest(Layout layout) {
+    protected boolean verifyRequest(@NonNull Layout layout) {
         log.info("verifyRequest: {} in {}", this, layout);
         return runtime.getLayoutView().getLayout().getAllServers().contains(nodeForWorkflow)
                 && layout.getSegmentsForEndpoint(nodeForWorkflow).size() == 1;
