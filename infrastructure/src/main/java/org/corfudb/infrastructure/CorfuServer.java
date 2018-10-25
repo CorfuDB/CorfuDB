@@ -79,7 +79,7 @@ public class CorfuServer {
                     + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w "
                     + "<truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] [-H <seconds>] "
-                    + "[-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] [-P <prefix>]"
+                    + "[-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] [-P <prefix>] [-R <retention>]"
                     + " [--agent] <port>\n"
                     + "\n"
                     + "Options:\n"
@@ -120,7 +120,7 @@ public class CorfuServer {
                     + "              If there is no log, then this will be the size of the log unit"
                     + "\n                                                                        "
                     + "                evicted entries will be auto-trimmed. [default: 0.5].\n"
-                    + " -H <seconds>, --HandshakeTimeout=<sceonds>                               "
+                    + " -H <seconds>, --HandshakeTimeout=<seconds>                               "
                     + "              Handshake timeout in seconds [default: 10].\n               "
                     + " -t <token>, --initial-token=<token>                                      "
                     + "              The first token the sequencer will issue, or -1 to recover\n"
@@ -129,8 +129,11 @@ public class CorfuServer {
                     + "                                                                          "
                     + " -k <seqcache>, --sequencer-cache-size=<seqcache>                         "
                     + "               The size of the sequencer's cache. [default: 250000].\n    "
-                    + " -B <size> --batch-size=<size>"
+                    + " -B <size> --batch-size=<size>                                            "
                     + "              The read/write batch size used for data transfer operations [default: 100].\n"
+                    + " -R <retention>, --metadata-retention=<retention>                         "
+                    + "              Maximum number of system reconfigurations (i.e. layouts)    "
+                    + "retained for debugging purposes [default: 100].\n"
                     + " -p <seconds>, --compact=<seconds>                                        "
                     + "              The rate the log unit should compact entries (find the,\n"
                     + "                                                                          "
@@ -143,7 +146,7 @@ public class CorfuServer {
                     + "              Layout endpoint to seed Management Server\n"
                     + " -n, --no-verify                                                          "
                     + "              Disable checksum computation and verification.\n"
-                    + " -N, --no-sync                                                          "
+                    + " -N, --no-sync                                                            "
                     + "              Disable syncing writes to secondary storage.\n"
                     + " -e, --enable-tls                                                         "
                     + "              Enable TLS.\n"
@@ -244,6 +247,11 @@ public class CorfuServer {
                     log.info("Created new service directory at {}.", corfuServiceDir);
                 }
             }
+        }
+
+        // Check the specified number of datastore files to retain
+        if (Integer.parseInt((String) opts.get("--metadata-retention")) < 1) {
+            throw new IllegalArgumentException("Max number of metadata files to retain must be greater than 0.");
         }
 
         corfuServerThread = new Thread(() -> startServer(opts, bindToAllInterfaces));

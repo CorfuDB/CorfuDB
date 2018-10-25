@@ -44,6 +44,7 @@ public class ServerContextBuilder {
     String numThreads = "0";
     String handshakeTimeout = "10";
     String prefix = "";
+    String retention = "100";
 
     String clusterId = "auto";
     boolean isTest = true;
@@ -61,7 +62,8 @@ public class ServerContextBuilder {
                 .put("--Threads", numThreads)
                 .put("--HandshakeTimeout", handshakeTimeout)
                 .put("--sequencer-cache-size", seqCache)
-                .put("--batch-size", batchSize);
+                .put("--batch-size", batchSize)
+                .put("--metadata-retention", retention);
         if (logPath != null) {
          builder.put("--log-path", logPath);
         }

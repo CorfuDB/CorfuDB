@@ -6,7 +6,6 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
@@ -16,12 +15,15 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
+
+import lombok.extern.slf4j.Slf4j;
 import lombok.Getter;
 
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -40,6 +42,7 @@ import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
  * In this scheme, the key for each value is also the name of the file where the value is stored.
  * The key is determined as (prefix + "_" + key).
  * The cache here serves mostly for easily managed synchronization of in-memory/file.
+ * Some on-disk files will be deleted when their number exceed user specified limit.
  *
  * <p>If 'opts' either has '--memory=true' or a log-path for storing files is not provided,
  * the store is just an in memory cache.
@@ -47,32 +50,40 @@ import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
  * <p>Created by mdhawan on 7/27/16.
  */
 
+@Slf4j
 public class DataStore implements IDataStore {
 
     static String EXTENSION = ".ds";
 
     @Getter
     private final Cache<String, Object> cache;
-    private final String logDir;
+    private final String logDirPath;
 
     @Getter
     private final long dsCacheSize = 1_000; // size bound for in-memory cache for dataStore
 
     private final boolean inMem;
 
+    private Consumer<String> cleanupTask;
+
     /**
      * Return a new DataStore object.
-     * @param opts  map of option strings
+     *
+     * @param opts map of option strings
+     * @param cleanupTask method to cleanup DataStore files
      */
-    public DataStore(Map<String, Object> opts) {
+    public DataStore(@Nonnull Map<String, Object> opts,
+                     @Nonnull Consumer<String> cleanupTask) {
 
         if ((opts.get("--memory") != null && (Boolean) opts.get("--memory"))
                 || opts.get("--log-path") == null) {
-            this.logDir = null;
+            this.logDirPath = null;
+            this.cleanupTask = fileName -> { };
             cache = buildMemoryDs();
             inMem = true;
         } else {
-            this.logDir = (String) opts.get("--log-path");
+            this.logDirPath = (String) opts.get("--log-path");
+            this.cleanupTask = cleanupTask;
             cache = buildPersistentDs();
             inMem = false;
         }
@@ -80,7 +91,8 @@ public class DataStore implements IDataStore {
 
     /**
      * obtain an in-memory cache, no content loader, no writer, no size limit.
-     * @return  new LoadingCache for the DataStore
+     *
+     * @return new LoadingCache for the DataStore
      */
     private Cache<String, Object> buildMemoryDs() {
         return Caffeine.newBuilder().build(k -> null);
@@ -98,7 +110,7 @@ public class DataStore implements IDataStore {
 
     /**
      * obtain a {@link LoadingCache}.
-     * The cache is backed up by file-per-key uner {@link DataStore::logDir}.
+     * The cache is backed up by file-per-key under {@link DataStore::logDirPath}.
      * The cache size is bounded by {@link DataStore::dsCacheSize}.
      *
      * @return the cache object
@@ -115,8 +127,9 @@ public class DataStore implements IDataStore {
                         }
 
                         try {
-                            Path path = Paths.get(logDir + File.separator + key + EXTENSION);
-                            Path tmpPath = Paths.get(logDir + File.separator + key + EXTENSION + ".tmp");
+                            String dsFileName = key + EXTENSION;
+                            Path path = Paths.get(logDirPath, dsFileName);
+                            Path tmpPath = Paths.get(logDirPath, dsFileName + ".tmp");
 
                             String jsonPayload = JsonUtils.parser.toJson(value, value.getClass());
                             byte[] bytes = jsonPayload.getBytes();
@@ -129,7 +142,10 @@ public class DataStore implements IDataStore {
                                     StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
                             Files.move(tmpPath, path, StandardCopyOption.REPLACE_EXISTING,
                                     StandardCopyOption.ATOMIC_MOVE);
-                            syncDirectory(logDir);
+                            syncDirectory(logDirPath);
+                            // Invoking the cleanup on each disk file write is fine for performance
+                            // since DataStore files are not supposed to change too frequently
+                            cleanupTask.accept(dsFileName);
                         } catch (IOException e) {
                             throw new RuntimeException(e);
                         }
@@ -140,7 +156,7 @@ public class DataStore implements IDataStore {
                                                     @Nullable Object value,
                                                     @Nonnull RemovalCause cause) {
                         try {
-                            Path path = Paths.get(logDir + File.separator + key);
+                            Path path = Paths.get(logDirPath, key);
                             Files.deleteIfExists(path);
                         } catch (IOException e) {
                             throw new RuntimeException(e);
@@ -152,13 +168,13 @@ public class DataStore implements IDataStore {
     }
 
     @Override
-    public synchronized  <T> void put(Class<T> tclass, String prefix, String key, T value) {
+    public synchronized <T> void put(Class<T> tclass, String prefix, String key, T value) {
         cache.put(getKey(prefix, key), value);
     }
 
     private <T> T load(Class<T> tClass, String key) {
         try {
-            Path path = Paths.get(logDir + File.separator + key + EXTENSION);
+            Path path = Paths.get(logDirPath, key + EXTENSION);
             if (Files.notExists(path)) {
                 return null;
             }
@@ -201,7 +217,7 @@ public class DataStore implements IDataStore {
             // were empty. This is required to prevent loading an empty key more than once, which is expensive.
             return NullValue.NULL_VALUE;
         });
-        
+
         return val == NullValue.NULL_VALUE ? null : (T) val;
     }
 
