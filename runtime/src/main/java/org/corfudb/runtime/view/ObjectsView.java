@@ -1,6 +1,13 @@
 package org.corfudb.runtime.view;
 
 import com.codahale.metrics.Timer;
+
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+import javax.annotation.Nonnull;
+
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
@@ -22,11 +29,6 @@ import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
-
-import javax.annotation.Nonnull;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -172,7 +174,6 @@ public class ObjectsView extends AbstractView {
             }
             TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
                     snapshotTimestamp);
-
             AbortCause cause = AbortCause.UNDEFINED;
             if (e instanceof NetworkException) {
                 log.warn("TXEnd[{}] Network Exception {}", context, e);
@@ -183,7 +184,7 @@ public class ObjectsView extends AbstractView {
             }
 
             TransactionAbortedException tae = new TransactionAbortedException(txInfo,
-                    null, null, cause, e, context);
+                    null, null, null, cause, e, context);
             context.abortTransaction(tae);
             throw tae;
 
@@ -192,7 +193,7 @@ public class ObjectsView extends AbstractView {
             TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
                     Token.UNINITIALIZED);
             TransactionAbortedException tae = new TransactionAbortedException(txInfo,
-                    null, null, AbortCause.UNDEFINED, e, context);
+                    null, null, null, AbortCause.UNDEFINED, e, context);
             context.abortTransaction(tae);
             throw new UnrecoverableCorfuError("Unexpected exception during commit", e);
         } finally {

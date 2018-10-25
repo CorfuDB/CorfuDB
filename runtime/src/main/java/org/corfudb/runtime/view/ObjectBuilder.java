@@ -14,7 +14,6 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
@@ -100,14 +99,14 @@ public class ObjectBuilder<T> implements IObjectBuilder<T> {
 
         try {
             if (options.contains(ObjectOpenOptions.NO_CACHE)) {
-                return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamID,
+                return CorfuCompileWrapperBuilder.getWrapper(type, runtime, streamName,
                         arguments, serializer);
             } else {
                 ObjectsView.ObjectID<T> oid = new ObjectsView.ObjectID(streamID, type);
                 return (T) runtime.getObjectsView().objectCache.computeIfAbsent(oid, x -> {
                             try {
                                 T result = CorfuCompileWrapperBuilder.getWrapper(type, runtime,
-                                        streamID, arguments, serializer);
+                                        streamName, arguments, serializer);
 
                                 // Get object serializer to check if we didn't attempt to set another serializer
                                 // to an already existing map

@@ -216,7 +216,7 @@ public abstract class AbstractTransactionalContext implements
                             new TransactionAbortedException(
                                     new TxResolutionInfo(getTransactionID(),
                                             snapshotTimestamp), null,
-                                    proxy.getStreamID(),
+                                    proxy.getStreamID(), proxy.getStreamName(),
                                     AbortCause.TRIM, te, this);
                     abortTransaction(tae);
                     throw tae;

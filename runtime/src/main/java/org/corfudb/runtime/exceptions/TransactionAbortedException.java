@@ -39,18 +39,19 @@ public class TransactionAbortedException extends RuntimeException {
     public TransactionAbortedException(
             TxResolutionInfo txResolutionInfo,
             byte[] conflictKey, AbortCause abortCause, AbstractTransactionalContext context) {
-        this(txResolutionInfo, conflictKey, null, abortCause, null, context);
+        this(txResolutionInfo, conflictKey, null, null, abortCause, null, context);
     }
 
     public TransactionAbortedException(
             TxResolutionInfo txResolutionInfo,
-            byte[] conflictKey, UUID conflictStream,
+            byte[] conflictKey, UUID conflictStream, String conflictStreamName,
             AbortCause abortCause, Throwable cause, AbstractTransactionalContext context) {
         super("TX ABORT "
                 + " | Snapshot Time = " + txResolutionInfo.getSnapshotTimestamp()
                 + " | Transaction ID = " + txResolutionInfo.getTXid()
-                + " | Conflict Key = " + Utils.bytesToHex(conflictKey)
-                + " | Conflict Stream = " + conflictStream
+                + (conflictKey == null ? "" : " | Conflict Key = " + Utils.bytesToHex(conflictKey))
+                + (conflictStream == null ? "" : " | Conflict Stream UUID = " + conflictStream)
+                + (conflictStreamName == null ? "" : " | Conflict Stream Name = " + conflictStreamName)
                 + " | Cause = " + abortCause
                 + " | Time = " + (context == null ? "Unknown" :
                 System.currentTimeMillis() -
@@ -63,5 +64,4 @@ public class TransactionAbortedException extends RuntimeException {
         this.conflictStream = conflictStream;
         this.context = context;
     }
-
 }

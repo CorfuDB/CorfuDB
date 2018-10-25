@@ -54,6 +54,12 @@ public interface ICorfuSMRProxy<T> {
      */
     UUID getStreamID();
 
+    /** Get the name of the stream this proxy is subscribed to.
+     *
+     * @return  The name of the stream this proxy is subscribed to.
+     */
+    String getStreamName();
+
     /** Run in a transactional context.
      *
      * @param txFunction    The function to run in a transactional context.

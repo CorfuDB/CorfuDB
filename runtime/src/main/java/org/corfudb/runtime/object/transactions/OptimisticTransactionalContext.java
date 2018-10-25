@@ -304,7 +304,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         } catch (AppendException oe) {
             // We were overwritten (and the original snapshot is now conflicting),
             // which means we must abort.
-            throw new TransactionAbortedException(txInfo, null, null,
+            throw new TransactionAbortedException(txInfo, null, null, null,
                 AbortCause.OVERWRITE, oe, this);
         }
 

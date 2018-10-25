@@ -3,6 +3,8 @@ package org.corfudb.runtime.object;
 import java.lang.reflect.Constructor;
 import java.util.UUID;
 
+import javax.annotation.Nonnull;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -30,7 +32,7 @@ public class CorfuCompileWrapperBuilder {
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
     public static <T> T getWrapper(Class<T> type, CorfuRuntime rt,
-                                   UUID streamID, Object[] args,
+                                   @Nonnull String streamName, Object[] args,
                                    ISerializer serializer)
             throws ClassNotFoundException, IllegalAccessException,
             InstantiationException {
@@ -59,7 +61,7 @@ public class CorfuCompileWrapperBuilder {
 
         // Now we create the proxy, which actually manages
         // instances of this object. The wrapper delegates calls to the proxy.
-        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamID,
+        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamName,
                 type, args, serializer,
                 wrapperObject.getCorfuSMRUpcallMap(),
                 wrapperObject.getCorfuUndoMap(),
