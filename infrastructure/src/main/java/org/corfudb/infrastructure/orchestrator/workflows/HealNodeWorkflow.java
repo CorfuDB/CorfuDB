@@ -1,20 +1,20 @@
 package org.corfudb.infrastructure.orchestrator.workflows;
 
-import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.HEAL_NODE;
-
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
-
-import java.util.Set;
-
-import javax.annotation.Nonnull;
-
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
-import lombok.extern.slf4j.Slf4j;
+
+import javax.annotation.Nonnull;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+
+import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.HEAL_NODE;
 
 /**
  * A definition of a workflow that heals an existing unresponsive node back to the cluster.
@@ -75,7 +75,9 @@ public class HealNodeWorkflow extends AddNodeWorkflow {
         }
 
         @Override
-        public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
+        public void impl(@Nonnull CorfuRuntime runtime) throws OutrankedException,
+                                                               ExecutionException,
+                                                               InterruptedException {
             // Catchup all servers across all segments.
             while (newLayout.getSegments().size() > 1) {
 

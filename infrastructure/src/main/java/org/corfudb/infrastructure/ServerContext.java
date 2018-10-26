@@ -2,12 +2,18 @@ package org.corfudb.infrastructure;
 
 import com.codahale.metrics.MetricRegistry;
 
+import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
+
+import java.io.File;
+import java.nio.file.Files;
 import java.time.Duration;
 import java.util.*;
 
 import java.util.concurrent.ThreadFactory;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.Setter;
@@ -125,6 +131,10 @@ public class ServerContext implements AutoCloseable {
     @Getter
     public static final MetricRegistry metrics = new MetricRegistry();
 
+    @Getter
+    private final Set<String> dsFilePrefixesForCleanup =
+            Sets.newHashSet(PREFIX_PHASE_1, PREFIX_PHASE_2, PREFIX_LAYOUTS);
+
     /**
      * Returns a new ServerContext.
      *
@@ -132,9 +142,8 @@ public class ServerContext implements AutoCloseable {
      */
     public ServerContext(Map<String, Object> serverConfig) {
         this.serverConfig = serverConfig;
-        this.dataStore = new DataStore(serverConfig);
+        this.dataStore = new DataStore(serverConfig, this::dataStoreFileCleanup);
         generateNodeId();
-        this.serverRouter = serverRouter;
         this.failureDetector = new FailureDetector();
         this.healingDetector = new HealingDetector();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
@@ -159,6 +168,49 @@ public class ServerContext implements AutoCloseable {
         if (!isMetricsReportingSetUp(metrics)) {
             MetricsUtils.metricsReportingSetup(metrics);
         }
+    }
+
+    /**
+     * Cleanup the DataStore files with names that are prefixes of the specified
+     * fileName when so that the number of these files don't exceed the user-defined
+     * retention limit. Cleanup is always done on files with lower epochs.
+     */
+     void dataStoreFileCleanup(String fileName) {
+        String logDirPath = getServerConfig(String.class, "--log-path");
+        if (logDirPath == null) {
+            return;
+        }
+
+        File logDir = new File(logDirPath);
+        Set<String> prefixesToClean = getDsFilePrefixesForCleanup();
+        int numRetention = Integer.parseInt(getServerConfig(String.class, "--metadata-retention"));
+
+        prefixesToClean.stream()
+                .filter(fileName::startsWith)
+                .forEach(prefix -> {
+                    File[] foundFiles = logDir.listFiles((dir, name) -> name.startsWith(prefix));
+                    if (foundFiles == null || foundFiles.length <= numRetention) {
+                        log.debug("DataStore cleanup not started for prefix: {}.", prefix);
+                        return;
+                    }
+                    log.debug("Start cleaning up DataStore files with prefix: {}.", prefix);
+                    Arrays.stream(foundFiles)
+                            .sorted(Comparator.comparingInt(file -> {
+                                // Extract epoch number from file name and cast to int for comparision
+                                Matcher matcher = Pattern.compile("\\d+").matcher(file.getName());
+                                return matcher.find(prefix.length()) ? Integer.parseInt(matcher.group()) : 0;
+                            }))
+                            .limit(foundFiles.length - numRetention)
+                            .forEach(file -> {
+                                try {
+                                    if (Files.deleteIfExists(file.toPath())) {
+                                        log.info("Removed DataStore file: {}", file.getName());
+                                    }
+                                } catch (Exception e) {
+                                    log.error("Error when cleaning up DataStore files", e);
+                                }
+                            });
+                });
     }
 
     /** Get the {@link ChannelImplementation}to use.

@@ -5,14 +5,13 @@ import com.google.common.collect.ImmutableMap;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.junit.Test;
-
-import javax.xml.crypto.Data;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,12 +21,25 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class DataStoreTest extends AbstractCorfuTest {
 
+    private DataStore createPersistDataStore(String serviceDir, String numRetention,
+                                             Consumer<String> cleanupTask) {
+        return new DataStore(new ImmutableMap.Builder<String, Object>()
+                .put("--log-path", serviceDir)
+                .put("--metadata-retention", numRetention)
+                .build(), cleanupTask);
+    }
+
+    private DataStore createInMemoryDataStore() {
+        return new DataStore(new ImmutableMap.Builder<String, Object>()
+                .put("--memory", true)
+                .build(), fn -> { });
+    }
+
     @Test
     public void testPutGet() {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        DataStore dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .build());
+        final String numRetention = "10";
+        final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+        DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
         String value = UUID.randomUUID().toString();
         dataStore.put(String.class, "test", "key", value);
         assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);
@@ -38,41 +50,35 @@ public class DataStoreTest extends AbstractCorfuTest {
 
     @Test
     public void testDataCorruption() throws IOException {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        DataStore dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .build());
+        final String numRetention = "10";
+        final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+        DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
         String value = UUID.randomUUID().toString();
         dataStore.put(String.class, "test", "key", value);
 
         String fileName = PARAMETERS.TEST_TEMP_DIR + File.separator + "test_key" + DataStore.EXTENSION;
-        RandomAccessFile file1 = new RandomAccessFile(fileName , "rw");
+        RandomAccessFile dsFile = new RandomAccessFile(fileName, "rw");
 
-        file1.seek(value.length() / 2);
-        file1.writeShort(0);
-        file1.close();
+        dsFile.seek(value.length() / 2);
+        dsFile.writeShort(0);
+        dsFile.close();
 
-        //Simulate a restart of data store
-        final DataStore dataStore2 = new DataStore(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .build());
+        // Simulate a restart of data store
+        final DataStore dataStore2 = createPersistDataStore(serviceDir, numRetention, fn -> { });
         assertThatThrownBy(() -> dataStore2.get(String.class, "test", "key"))
                 .isInstanceOf(DataCorruptionException.class);
     }
 
     @Test
     public void testPutGetWithRestart() {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        DataStore dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .build());
+        final String numRetention = "10";
+        final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+        DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
         String value = UUID.randomUUID().toString();
         dataStore.put(String.class, "test", "key", value);
 
-        //Simulate a restart of data store
-        dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .build());
+        // Simulate a restart of data store
+        dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
         assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);
 
         dataStore.put(String.class, "test", "key", "NEW_VALUE");
@@ -80,20 +86,17 @@ public class DataStoreTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void testDatastoreEviction() {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        DataStore dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
-                .put("--log-path", serviceDir)
-                .build());
+    public void testDataStoreEviction() {
+        final String numRetention = "10";
+        final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+        DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
 
         for (int i = 0; i < dataStore.getDsCacheSize() * 2; i++) {
             String value = UUID.randomUUID().toString();
             dataStore.put(String.class, "test", "key", value);
 
-            //Simulate a restart of data store
-            dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
-                    .put("--log-path", serviceDir)
-                    .build());
+            // Simulate a restart of data store
+            dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
             assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);
             dataStore.put(String.class, "test", "key", "NEW_VALUE");
             assertThat(dataStore.get(String.class, "test", "key")).isEqualTo("NEW_VALUE");
@@ -101,11 +104,48 @@ public class DataStoreTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void testInmemoryPutGet() {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        DataStore dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
-                .put("--memory", true)
-                .build());
+    public void testDataStoreCleanup() {
+        final int numRetention = 10;
+        final String serviceDirPath = PARAMETERS.TEST_TEMP_DIR;
+        File serviceDir = new File(serviceDirPath);
+
+        ServerContext serverContext = new ServerContextBuilder()
+                .setMemory(false)
+                .setLogPath(serviceDirPath)
+                .setRetention(String.valueOf(numRetention))
+                .build();
+        DataStore dataStore = serverContext.getDataStore();
+        Set<String> prefixesToClean = serverContext.getDsFilePrefixesForCleanup();
+
+        for (int i = 1; i < numRetention + 2; i++) {
+            final int epoch = i;
+            prefixesToClean.forEach(prefix -> {
+                String key = epoch + "KEY";
+                String value = UUID.randomUUID().toString();
+                dataStore.put(String.class, prefix, key, value);
+            });
+
+            prefixesToClean.forEach(prefix -> {
+                // Cleanup should not be invoked for the first numRetention files,
+                // but start to delete files with smaller epochs after that
+                File[] foundFiles = serviceDir.listFiles((dir, name) -> name.startsWith(prefix));
+                if (epoch > numRetention) {
+                    assertThat(foundFiles).hasSize(numRetention);
+                    // Check the numRetention files with larger epochs are not deleted
+                    for (int j = epoch; j > epoch - numRetention; j--) {
+                        String fileName = prefix + "_" + epoch + "KEY" + DataStore.EXTENSION;
+                        assertThat(new File(serviceDir, fileName).exists()).isTrue();
+                    }
+                } else {
+                    assertThat(foundFiles).hasSize(epoch);
+                }
+            });
+        }
+    }
+
+    @Test
+    public void testInMemoryPutGet() {
+        DataStore dataStore = createInMemoryDataStore();
         String value = UUID.randomUUID().toString();
         dataStore.put(String.class, "test", "key", value);
         assertThat(dataStore.get(String.class, "test", "key")).isEqualTo(value);
@@ -116,11 +156,8 @@ public class DataStoreTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void testInmemoryEviction() {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        DataStore dataStore = new DataStore(new ImmutableMap.Builder<String, Object>()
-                .put("--memory", true)
-                .build());
+    public void testInMemoryEviction() {
+        DataStore dataStore = createInMemoryDataStore();
 
         for (int i = 0; i < dataStore.getDsCacheSize() * 2; i++) {
             String value = UUID.randomUUID().toString();
