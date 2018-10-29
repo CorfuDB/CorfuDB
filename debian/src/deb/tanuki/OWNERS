@@ -1,0 +1,10 @@
+matchers:
+- suffix: .conf
+  owners:
+  - group/Tanuki Owners
+- exact: /corfu-server-inmem-wrapper
+  owners:
+  - group/Tanuki Owners
+- exact: /corfu-server-wrapper
+  owners:
+  - group/Tanuki Owners
