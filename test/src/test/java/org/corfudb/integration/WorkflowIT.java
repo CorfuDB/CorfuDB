@@ -276,34 +276,6 @@ public class WorkflowIT extends AbstractIT {
         shutdownCorfuServer(p0);
     }
 
-    @Test
-    public void forceRemoveTwoDeadNodes() throws Exception {
-        // Create a 3 node cluster and attempt to force remove two
-        // dead nodes. This will test the case where the layout doesn't
-        // reflect the set of unresponsive servers and thus needs to rely
-        // on selecting an available orchestrator to force remove the dead nodes.
-        Harness harness = Harness.getDefaultHarness();
-
-        final int numNodes = 3;
-        List<Node> nodeList = harness.deployCluster(numNodes);
-        Node n0 = nodeList.get(0);
-        Node n1 = nodeList.get(1);
-        Node n2 = nodeList.get(2);
-
-        CorfuRuntime rt = harness.createRuntimeForNode(n2);
-
-        assertThat(rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(numNodes);
-
-        // Shutdown two nodes
-        run(n0.shutdown, n1.shutdown);
-
-        rt.getManagementView().forceRemoveNode(n0.getAddress(), workflowNumRetry, timeout, pollPeriod);
-        rt.getManagementView().forceRemoveNode(n1.getAddress(), workflowNumRetry, timeout, pollPeriod);
-
-        assertThat(rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(1);
-        assertThat(rt.getLayoutView().getLayout().getAllServers()).containsExactly(n2.getAddress());
-    }
-
     /**
      * Tests whether the trimMark is transferred during stateTransfer.
      * Scenario: Setup a cluster of 1 node.
