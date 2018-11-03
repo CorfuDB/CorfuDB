@@ -36,12 +36,11 @@ public class ManagementHandlerTest extends AbstractClientTest {
 
     @Override
     Set<AbstractServer> getServersForTest() {
-        ServerContext serverContext = new ServerContextBuilder()
+        ServerContext serverContext = new ServerContextBuilder(SERVERS.ENDPOINT_0)
                 .setInitialToken(0)
                 .setMemory(true)
                 .setSingle(true)
                 .setServerRouter(serverRouter)
-                .setPort(SERVERS.PORT_0)
                 .build();
         server = new ManagementServer(serverContext);
         return new ImmutableSet.Builder<AbstractServer>()
@@ -83,7 +82,7 @@ public class ManagementHandlerTest extends AbstractClientTest {
             throws Exception {
         // Since the servers are started as single nodes thus already bootstrapped.
         assertThatThrownBy(() ->
-                client.bootstrapManagement(TestLayoutBuilder.single(SERVERS.PORT_0)).get())
+                client.bootstrapManagement(TestLayoutBuilder.single(SERVERS.ENDPOINT_0)).get())
                 .isInstanceOf(ExecutionException.class);
     }
 

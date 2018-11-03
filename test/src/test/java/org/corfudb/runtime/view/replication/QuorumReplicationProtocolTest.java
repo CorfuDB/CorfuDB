@@ -49,26 +49,26 @@ public class QuorumReplicationProtocolTest extends AbstractReplicationProtocolTe
     /** {@inheritDoc} */
     @Override
     void setupNodes() {
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
+        addServer(SERVERS.ENDPOINT_0);
+        addServer(SERVERS.ENDPOINT_1);
+        addServer(SERVERS.ENDPOINT_2);
 
         bootstrapAllServers(new TestLayoutBuilder()
-                .addLayoutServer(SERVERS.PORT_0)
-                .addSequencer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_0)
+                .addSequencer(SERVERS.ENDPOINT_0)
                 .buildSegment()
                 .setReplicationMode(Layout.ReplicationMode.QUORUM_REPLICATION)
                 .buildStripe()
-                .addLogUnit(SERVERS.PORT_0)
-                .addLogUnit(SERVERS.PORT_1)
-                .addLogUnit(SERVERS.PORT_2)
+                .addLogUnit(SERVERS.ENDPOINT_0)
+                .addLogUnit(SERVERS.ENDPOINT_1)
+                .addLogUnit(SERVERS.ENDPOINT_2)
                 .addToSegment()
                 .addToLayout()
                 .build());
         getRuntime().setCacheDisabled(true);
-        getManagementServer(SERVERS.PORT_0).shutdown();
-        getManagementServer(SERVERS.PORT_1).shutdown();
-        getManagementServer(SERVERS.PORT_2).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_0).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_1).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_2).shutdown();
     }
 
 

@@ -6,6 +6,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -21,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 public class StreamViewTest extends AbstractViewTest {
 
     @Getter
-    final String defaultConfigurationString = getDefaultEndpoint();
+    final NodeLocator defaultConfigurationString = getDefaultEndpoint();
 
     public CorfuRuntime r;
 

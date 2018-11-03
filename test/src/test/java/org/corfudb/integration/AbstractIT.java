@@ -7,9 +7,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.view.RuntimeLayout;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
@@ -38,7 +40,10 @@ import java.util.concurrent.Executors;
 public class AbstractIT extends AbstractCorfuTest {
     static final String DEFAULT_HOST = "localhost";
     static final int DEFAULT_PORT = 9000;
-    static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
+    static final NodeLocator DEFAULT_ENDPOINT = NodeLocator.builder()
+            .host(DEFAULT_HOST)
+            .port(DEFAULT_PORT)
+            .build();
 
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
     static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
@@ -52,6 +57,20 @@ public class AbstractIT extends AbstractCorfuTest {
     public static final Properties PROPERTIES = new Properties();
 
     public static final String TEST_SEQUENCE_LOG_PATH = CORFU_LOG_PATH + File.separator + "testSequenceLog";
+
+    private static final int PORT_9000 = 9000;
+    private static final int PORT_9001 = 9001;
+    private static final int PORT_9002 = 9002;
+    private static final int PORT_9003 = 9003;
+    private static final int PORT_9004 = 9004;
+    private static final int PORT_9005 = 9005;
+
+    protected final NodeLocator node9000 = NodeLocator.builder().host(DEFAULT_HOST).port(PORT_9000).build();
+    protected final NodeLocator node9001 = NodeLocator.builder().host(DEFAULT_HOST).port(PORT_9001).build();
+    protected final NodeLocator node9002 = NodeLocator.builder().host(DEFAULT_HOST).port(PORT_9002).build();
+    protected final NodeLocator node9003 = NodeLocator.builder().host(DEFAULT_HOST).port(PORT_9003).build();
+    protected final NodeLocator node9004 = NodeLocator.builder().host(DEFAULT_HOST).port(PORT_9004).build();
+    protected final NodeLocator node9005 = NodeLocator.builder().host(DEFAULT_HOST).port(PORT_9005).build();
 
     public AbstractIT() {
         CorfuRuntime.overrideGetRouterFunction = null;
@@ -139,7 +158,7 @@ public class AbstractIT extends AbstractCorfuTest {
         }
     }
 
-    public void restartServer(CorfuRuntime corfuRuntime, String endpoint) {
+    public void restartServer(CorfuRuntime corfuRuntime, NodeLocator endpoint) {
         corfuRuntime.invalidateLayout();
         RuntimeLayout runtimeLayout = corfuRuntime.getLayoutView().getRuntimeLayout();
         try {
@@ -229,10 +248,13 @@ public class AbstractIT extends AbstractCorfuTest {
         return createRuntime(DEFAULT_ENDPOINT);
     }
 
-    public static CorfuRuntime createRuntime(String endpoint) {
-        CorfuRuntime rt = new CorfuRuntime(endpoint)
-                .setCacheDisabled(true)
-                .connect();
+    public static CorfuRuntime createRuntime(NodeLocator endpoint) {
+        CorfuRuntimeParameters params = CorfuRuntimeParameters.builder()
+                .cacheDisabled(true)
+                .layoutServer(endpoint)
+                .build();
+        CorfuRuntime rt = CorfuRuntime.fromParameters(params);
+        rt.connect();
         return rt;
     }
 

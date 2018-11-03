@@ -2,11 +2,13 @@ package org.corfudb.runtime.clients;
 
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.CorfuTestServers;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.NodeLocator;
 import org.junit.After;
 import org.junit.Before;
 
@@ -50,8 +52,7 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
     /**
      * A map of maps to endpoint->routers, mapped for each runtime instance captured
      */
-    final Map<CorfuRuntime, Map<String, TestClientRouter>>
-            runtimeRouterMap = new ConcurrentHashMap<>();
+    final Map<CorfuRuntime, Map<NodeLocator, TestClientRouter>> runtimeRouterMap = new ConcurrentHashMap<>();
 
     /**
      * Function for obtaining a router, given a runtime and an endpoint.
@@ -60,11 +61,9 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
      * @param endpoint An endpoint string for the router.
      * @return
      */
-    private IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
+    private IClientRouter getRouterFunction(CorfuRuntime runtime, NodeLocator endpoint) {
         runtimeRouterMap.putIfAbsent(runtime, new ConcurrentHashMap<>());
-        if (!endpoint.startsWith("test:")) {
-            throw new RuntimeException("Unsupported endpoint in test: " + endpoint);
-        }
+        CorfuTestServers.checkTestEndpoint(endpoint);
         return runtimeRouterMap.get(runtime).computeIfAbsent(endpoint,
                 x -> {
                     TestClientRouter tcn =
@@ -84,7 +83,7 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
     abstract Set<IClient> getClientsForTest();
 
     public ServerContext defaultServerContext() {
-        return new ServerContextBuilder()
+        return new ServerContextBuilder(serverRouter.getNode())
                 .setInitialToken(0)
                 .setMemory(true)
                 .setSingle(false)

@@ -81,7 +81,7 @@ public class StreamTest extends AbstractTransactionsTest {
         final String key = "key";
         final String val = "val";
         LogUnitClient lu = getRuntime().getLayoutView().getRuntimeLayout()
-                .getLogUnitClient(getDefaultConfigurationString());
+                .getLogUnitClient(getDefaultConfiguration());
         lu.prefixTrim(trimMark).get();
         TXBegin();
         map.put(key, val);

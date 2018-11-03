@@ -1,6 +1,7 @@
 package org.corfudb.runtime.clients;
 
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.CorfuTestServers;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
@@ -24,7 +25,7 @@ public class TestClientRouterTest extends AbstractCorfuTest {
     @Before
     public void setupRouter() {
         TestServerRouter tsr = new TestServerRouter();
-        BaseServer bs = new BaseServer(ServerContextBuilder.defaultTestContext(0));
+        BaseServer bs = new BaseServer(ServerContextBuilder.defaultTestContext(SERVERS.ENDPOINT_0));
         tsr.addServer(bs);
         tcr = new TestClientRouter(tsr);
         BaseHandler baseHandler = new BaseHandler();

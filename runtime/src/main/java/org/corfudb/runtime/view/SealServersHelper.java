@@ -15,6 +15,7 @@ import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
 
 /**
  * Helper class to seal requested servers.
@@ -32,12 +33,12 @@ public class SealServersHelper {
      * @param runtimeLayout RuntimeLayout stamped with the layout to be sealed.
      * @return A map of completableFutures for every remoteSetEpoch call.
      */
-    public static Map<String, CompletableFuture<Boolean>> asyncSealServers(
+    public static Map<NodeLocator, CompletableFuture<Boolean>> asyncSealServers(
             RuntimeLayout runtimeLayout) {
         Layout layout = runtimeLayout.getLayout();
-        Map<String, CompletableFuture<Boolean>> resultMap = new HashMap<>();
+        Map<NodeLocator, CompletableFuture<Boolean>> resultMap = new HashMap<>();
         // Seal all servers
-        layout.getAllServers().forEach(server -> {
+        layout.getAllServersNodes().forEach(server -> {
             CompletableFuture<Boolean> cf = new CompletableFuture<>();
             try {
                 // Creating router can cause NetworkException which should be handled.
@@ -60,11 +61,12 @@ public class SealServersHelper {
      * @throws QuorumUnreachableException Thrown if responses not received from a majority of
      *                                    layout servers.
      */
-    public static void waitForLayoutSeal(List<String> layoutServers, Map<String,
-            CompletableFuture<Boolean>> completableFutureMap)
-            throws QuorumUnreachableException {
-        CompletableFuture<Boolean>[] completableFutures =
-                filterFutureMapAndGetArray(completableFutureMap, layoutServers::contains);
+    public static void waitForLayoutSeal(List<NodeLocator> layoutServers,
+                                         Map<NodeLocator, CompletableFuture<Boolean>> completableFutureMap) {
+        CompletableFuture<Boolean>[] completableFutures = filterFutureMapAndGetArray(
+                completableFutureMap,
+                layoutServers::contains
+        );
         waitForQuorum(completableFutures);
     }
 
@@ -76,12 +78,11 @@ public class SealServersHelper {
      * @throws QuorumUnreachableException Thrown if responses not received from all the
      *                                    log unit servers.
      */
-    public static void waitForChainSegmentSeal(Layout.LayoutSegment layoutSegment, Map<String,
-            CompletableFuture<Boolean>> completableFutureMap)
-            throws QuorumUnreachableException {
+    public static void waitForChainSegmentSeal(Layout.LayoutSegment layoutSegment,
+                                               Map<NodeLocator, CompletableFuture<Boolean>> completableFutureMap) {
         for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {
             CompletableFuture<Boolean>[] completableFutures =
-                    filterFutureMapAndGetArray(completableFutureMap, layoutStripe.getLogServers()::contains);
+                    filterFutureMapAndGetArray(completableFutureMap, layoutStripe.getLogServersNodes()::contains);
             QuorumFuturesFactory.CompositeFuture<Boolean> quorumFuture =
                     QuorumFuturesFactory.getFirstWinsFuture(Boolean::compareTo, completableFutures);
 
@@ -115,12 +116,12 @@ public class SealServersHelper {
      * @throws QuorumUnreachableException Thrown if responses not received from all the
      *                                    log unit servers.
      */
-    public static void waitForQuorumSegmentSeal(Layout.LayoutSegment layoutSegment, Map<String,
-            CompletableFuture<Boolean>> completableFutureMap)
+    public static void waitForQuorumSegmentSeal(Layout.LayoutSegment layoutSegment,
+                                                Map<NodeLocator, CompletableFuture<Boolean>> completableFutureMap)
             throws QuorumUnreachableException {
         for (Layout.LayoutStripe layoutStripe : layoutSegment.getStripes()) {
             CompletableFuture<Boolean>[] completableFutures =
-                    filterFutureMapAndGetArray(completableFutureMap, layoutStripe.getLogServers()::contains);
+                    filterFutureMapAndGetArray(completableFutureMap, layoutStripe.getLogServersNodes()::contains);
             waitForQuorum(completableFutures);
         }
     }
@@ -160,8 +161,8 @@ public class SealServersHelper {
 
     @SuppressWarnings("unchecked")
     private static CompletableFuture<Boolean>[] filterFutureMapAndGetArray(
-            Map<String, CompletableFuture<Boolean>> completableFutureMap,
-            Predicate<String> filterPredicate) {
+            Map<NodeLocator, CompletableFuture<Boolean>> completableFutureMap,
+            Predicate<NodeLocator> filterPredicate) {
         return completableFutureMap.entrySet().stream()
                 .filter(pair -> filterPredicate.test(pair.getKey()))
                 .map(Map.Entry::getValue)

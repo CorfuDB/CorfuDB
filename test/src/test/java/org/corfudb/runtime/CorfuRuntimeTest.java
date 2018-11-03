@@ -1,5 +1,6 @@
 package org.corfudb.runtime;
 
+import org.corfudb.CorfuTestServers;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 
 import org.corfudb.runtime.clients.LogUnitClient;
@@ -29,8 +30,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 public class CorfuRuntimeTest extends AbstractViewTest {
     static final int TIME_TO_WAIT_FOR_LAYOUT_IN_SEC = 5;
     static final long TIMEOUT_CORFU_RUNTIME_IN_MS = 500;
-
-
 
     /**
      * Resets the router function to the default function for AbstractViewTest.
@@ -65,7 +64,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
     @Test
     public void canInstantiateRuntimeWithoutTestRef() throws Exception {
 
-        addSingleServer(SERVERS.PORT_0);
+        addSingleServer(SERVERS.ENDPOINT_0);
 
         CorfuRuntime rt = getNewRuntime(getDefaultNode());
         rt.connect();
@@ -80,22 +79,22 @@ public class CorfuRuntimeTest extends AbstractViewTest {
      * @throws Exception
      */
     private Layout get3NodeLayout() throws Exception {
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
+        addServer(SERVERS.ENDPOINT_0);
+        addServer(SERVERS.ENDPOINT_1);
+        addServer(SERVERS.ENDPOINT_2);
         Layout l = new TestLayoutBuilder()
                 .setEpoch(1L)
-                .addLayoutServer(SERVERS.PORT_0)
-                .addLayoutServer(SERVERS.PORT_1)
-                .addLayoutServer(SERVERS.PORT_2)
-                .addSequencer(SERVERS.PORT_0)
-                .addSequencer(SERVERS.PORT_1)
-                .addSequencer(SERVERS.PORT_2)
+                .addLayoutServer(SERVERS.ENDPOINT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_1)
+                .addLayoutServer(SERVERS.ENDPOINT_2)
+                .addSequencer(SERVERS.ENDPOINT_0)
+                .addSequencer(SERVERS.ENDPOINT_1)
+                .addSequencer(SERVERS.ENDPOINT_2)
                 .buildSegment()
                 .buildStripe()
-                .addLogUnit(SERVERS.PORT_0)
-                .addLogUnit(SERVERS.PORT_1)
-                .addLogUnit(SERVERS.PORT_2)
+                .addLogUnit(SERVERS.ENDPOINT_0)
+                .addLogUnit(SERVERS.ENDPOINT_1)
+                .addLogUnit(SERVERS.ENDPOINT_2)
                 .addToSegment()
                 .addToLayout()
                 .build();
@@ -103,9 +102,9 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         bootstrapAllServers(l);
 
         // Shutdown management server (they interfere)
-        getManagementServer(SERVERS.PORT_0).shutdown();
-        getManagementServer(SERVERS.PORT_1).shutdown();
-        getManagementServer(SERVERS.PORT_2).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_0).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_1).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_2).shutdown();
 
         return l;
     }
@@ -132,13 +131,12 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         rt.getLayoutView().getRuntimeLayout(currentLayout).sealMinServerSet();
 
         // Server2 is sealed but will not be able to commit the layout.
-        addClientRule(rt, SERVERS.ENDPOINT_2,
-                new TestRule().always().drop());
+        addClientRule(rt, SERVERS.ENDPOINT_2, new TestRule().always().drop());
 
 
         rt.getLayoutView().updateLayout(currentLayout, 0);
 
-        assertThat(getLayoutServer(SERVERS.PORT_2).getCurrentLayout().getEpoch()).isEqualTo(1);
+        assertThat(getLayoutServer(SERVERS.ENDPOINT_2).getCurrentLayout().getEpoch()).isEqualTo(1);
 
         // Timeout for this server is 1ms, so it will fail fast
         rt.getRouter(SERVERS.ENDPOINT_2).setTimeoutResponse(1);
@@ -176,7 +174,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
     public void doesNotAllowReadsAfterSealAndBeforeNewLayout() throws Exception {
         CorfuRuntime runtime = getDefaultRuntime().setCacheDisabled(true).connect();
 
-        Layout l = TestLayoutBuilder.single(0);
+        Layout l = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         bootstrapAllServers(l);
 
         IStreamView sv = runtime.getStreamsView().get(CorfuRuntime.getStreamID("test"));
@@ -233,7 +231,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
             }
         }
 
-        addSingleServer(SERVERS.PORT_0);
+        addSingleServer(SERVERS.ENDPOINT_0);
 
         CorfuRuntime runtime = getDefaultRuntime();
         TimeoutHandler th = new TimeoutHandler(runtime, TIMEOUT_CORFU_RUNTIME_IN_MS);

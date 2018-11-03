@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -51,7 +52,7 @@ public class SealIT extends AbstractIT {
         cr1.getLayoutView().getLayout();
 
         cr1.getLayoutView().getRuntimeLayout()
-                .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort)
+                .getSequencerClient(NodeLocator.parseString(corfuSingleNodeHost + ":" + corfuSingleNodePort))
                 .bootstrap(1L, Collections.emptyMap(), currentLayout.getEpoch(), true)
                 .get();
 

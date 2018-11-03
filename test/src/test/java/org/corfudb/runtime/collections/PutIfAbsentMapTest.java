@@ -5,6 +5,7 @@ import org.corfudb.annotations.Accessor;
 import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.MutatorAccessor;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.util.NodeLocator;
 import org.junit.Test;
 
 import java.util.HashMap;
@@ -19,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class PutIfAbsentMapTest extends AbstractViewTest {
 
     @Getter
-    final String defaultConfigurationString = getDefaultEndpoint();
+    final NodeLocator defaultConfigurationString = getDefaultEndpoint();
 
     @Test
     public void putIfAbsentTest() {

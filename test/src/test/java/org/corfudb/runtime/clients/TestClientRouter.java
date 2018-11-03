@@ -120,7 +120,7 @@ public class TestClientRouter implements IClientRouter {
         rules = new ArrayList<>();
         this.serverRouter = serverRouter;
         channelContext = new TestChannelContext(this::handleMessage);
-        port = serverRouter.getPort();
+        port = serverRouter.getNode().getPort();
     }
 
     private void handleMessage(Object o) {
@@ -190,10 +190,12 @@ public class TestClientRouter implements IClientRouter {
         boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         // Simulate a "disconnected endpoint"
         if (!connected) {
-            log.trace("Disconnected endpoint " + host + ":" + port);
-            throw new NetworkException("Disconnected endpoint", NodeLocator.builder()
-                                                                    .host(host)
-                                                                    .port(port).build());
+            NodeLocator endpoint = NodeLocator.builder()
+                    .host(host)
+                    .port(port)
+                    .build();
+            log.trace("Disconnected endpoint " + endpoint.toEndpointUrl());
+            throw new NetworkException("Disconnected endpoint", endpoint);
         }
 
         // Set up the timer and context to measure request

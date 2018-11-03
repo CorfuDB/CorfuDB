@@ -1,12 +1,11 @@
 package org.corfudb.runtime.clients;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.CorfuTestServers;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.CorfuServer;
 import org.corfudb.infrastructure.NettyServerRouter;
@@ -26,6 +25,8 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.Collections;
 import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 3/28/16.
@@ -52,12 +53,8 @@ public class NettyCommTest extends AbstractCorfuTest {
     @Test
     public void nettyServerClientPingable() throws Exception {
         runWithBaseServer(
-            (port) -> {
-                return new NettyServerData(ServerContextBuilder.defaultContext(port));
-            },
-            (port) -> {
-                return new NettyClientRouter("localhost", port);
-            },
+            port -> new NettyServerData(ServerContextBuilder.defaultContext(CorfuTestServers.buildTestEndpoint(port))),
+            port -> new NettyClientRouter("localhost", port),
             (r, d) -> {
                 assertThat(getBaseClient(r).pingSync())
                     .isTrue();
@@ -67,12 +64,8 @@ public class NettyCommTest extends AbstractCorfuTest {
     @Test
     public void nettyServerClientPingableAfterFailure() throws Exception {
         runWithBaseServer(
-            (port) -> {
-                return new NettyServerData(ServerContextBuilder.defaultContext(port));
-            },
-            (port) -> {
-                return new NettyClientRouter("localhost", port);
-            },
+            port -> new NettyServerData(ServerContextBuilder.defaultContext(CorfuTestServers.buildTestEndpoint(port))),
+            port -> new NettyClientRouter("localhost", port),
             (r, d) -> {
                 assertThat(getBaseClient(r).pingSync())
                         .isTrue();
@@ -87,8 +80,10 @@ public class NettyCommTest extends AbstractCorfuTest {
     public void nettyTlsNoMutualAuth() throws Exception {
         runWithBaseServer(
             (port) -> {
+                NodeLocator testEndpoint = CorfuTestServers.buildTestEndpoint(port);
+
                 NettyServerData d = new NettyServerData(
-                    new ServerContextBuilder()
+                    new ServerContextBuilder(testEndpoint)
                         .setTlsEnabled(true)
                         .setImplementation("auto")
                         .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
@@ -97,7 +92,6 @@ public class NettyCommTest extends AbstractCorfuTest {
                         .setKeystorePasswordFile("src/test/resources/security/storepass")
                         .setTruststore("src/test/resources/security/s1.jks")
                         .setTruststorePasswordFile("src/test/resources/security/storepass")
-                        .setPort(port)
                         .build()
                 );
                 return d;
@@ -122,7 +116,9 @@ public class NettyCommTest extends AbstractCorfuTest {
     public void nettyTlsMutualAuth() throws Exception {
         runWithBaseServer(
             (port) -> {
-            NettyServerData d = new NettyServerData(new ServerContextBuilder()
+                NodeLocator testEndpoint = CorfuTestServers.buildTestEndpoint(port);
+
+                NettyServerData d = new NettyServerData(new ServerContextBuilder(testEndpoint)
                     .setImplementation("auto")
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
@@ -132,7 +128,6 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust1.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setTlsMutualAuthEnabled(true)
-                    .setPort(port)
                     .build());
                 return d;
             },
@@ -157,7 +152,9 @@ public class NettyCommTest extends AbstractCorfuTest {
     public void nettyTlsUnknownServer() throws Exception {
         runWithBaseServer(
             (port) -> {
-                NettyServerData d = new NettyServerData(new ServerContextBuilder()
+                NodeLocator testEndpoint = CorfuTestServers.buildTestEndpoint(port);
+
+                NettyServerData d = new NettyServerData(new ServerContextBuilder(testEndpoint)
                     .setImplementation("auto")
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
@@ -167,7 +164,6 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust1.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setSaslPlainTextAuth(false)
-                    .setPort(port)
                     .build());
                 return d;
             },
@@ -192,7 +188,8 @@ public class NettyCommTest extends AbstractCorfuTest {
     public void nettyTlsUnknownClient() throws Exception {
         runWithBaseServer(
             (port) -> {
-                NettyServerData d = new NettyServerData(new ServerContextBuilder()
+                NodeLocator testEndpoint = CorfuTestServers.buildTestEndpoint(port);
+                NettyServerData d = new NettyServerData(new ServerContextBuilder(testEndpoint)
                     .setImplementation("auto")
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
@@ -202,7 +199,6 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust2.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setTlsMutualAuthEnabled(true)
-                    .setPort(port)
                     .build());
                 return d;
             },
@@ -227,7 +223,8 @@ public class NettyCommTest extends AbstractCorfuTest {
     public void nettyTlsUnknownClientNoMutualAuth() throws Exception {
         runWithBaseServer(
             (port) -> {
-                NettyServerData d = new NettyServerData(new ServerContextBuilder()
+                NodeLocator testEndpoint = CorfuTestServers.buildTestEndpoint(port);
+                NettyServerData d = new NettyServerData(new ServerContextBuilder(testEndpoint)
                     .setImplementation("auto")
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
@@ -236,7 +233,6 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setKeystorePasswordFile("src/test/resources/security/storepass")
                     .setTruststore("src/test/resources/security/trust2.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
-                    .setPort(port)
                     .build());
                 return d;
             },
@@ -263,7 +259,8 @@ public class NettyCommTest extends AbstractCorfuTest {
             (port) -> {
                 System.setProperty("java.security.auth.login.config",
                     "src/test/resources/security/corfudb_jaas.config");
-                NettyServerData d = new NettyServerData(new ServerContextBuilder()
+                NodeLocator testEndpoint = CorfuTestServers.buildTestEndpoint(port);
+                NettyServerData d = new NettyServerData(new ServerContextBuilder(testEndpoint)
                     .setImplementation("auto")
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
@@ -273,7 +270,6 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust1.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setSaslPlainTextAuth(true)
-                    .setPort(port)
                     .build());
                 return d;
             },
@@ -301,7 +297,8 @@ public class NettyCommTest extends AbstractCorfuTest {
     public void nettyServerClientHandshakeDefaultId() throws Exception {
         runWithBaseServer(
                 (port) -> {
-                    return new NettyServerData(ServerContextBuilder.defaultContext(port));
+                    NodeLocator testEndpoint = CorfuTestServers.buildTestEndpoint(port);
+                    return new NettyServerData(ServerContextBuilder.defaultContext(testEndpoint));
                 },
                 (port) -> {
                     NodeLocator nl = NodeLocator.builder()
@@ -323,8 +320,8 @@ public class NettyCommTest extends AbstractCorfuTest {
     public void nettyServerClientHandshakeMatchIds() throws Exception {
         runWithBaseServer(
                 (port) -> {
-                    ServerContext sc = ServerContextBuilder
-                            .defaultContext(port);
+                    NodeLocator testEndpoint = CorfuTestServers.buildTestEndpoint(port);
+                    ServerContext sc = ServerContextBuilder.defaultContext(testEndpoint);
                     nodeId = sc.getNodeId();
                     return new NettyServerData(sc);
                 },
@@ -346,7 +343,8 @@ public class NettyCommTest extends AbstractCorfuTest {
     public void nettyServerClientHandshakeMismatchId() throws Exception {
         runWithBaseServer(
                 (port) -> {
-                    return new NettyServerData(ServerContextBuilder.defaultContext(port));
+                    NodeLocator testEndpoint = CorfuTestServers.buildTestEndpoint(port);
+                    return new NettyServerData(ServerContextBuilder.defaultContext(testEndpoint));
                 },
                 (port) -> {
                     NodeLocator nl = NodeLocator.builder()
@@ -365,10 +363,11 @@ public class NettyCommTest extends AbstractCorfuTest {
     @Test
     public void nettySaslWrongPassword() throws Exception {
         runWithBaseServer(
-            (port) -> {
+            port -> {
                 System.setProperty("java.security.auth.login.config",
                     "src/test/resources/security/corfudb_jaas.config");
-                NettyServerData d = new NettyServerData(new ServerContextBuilder()
+                NodeLocator testEndpoint = CorfuTestServers.buildTestEndpoint(port);
+                NettyServerData d = new NettyServerData(new ServerContextBuilder(testEndpoint)
                     .setImplementation("auto")
                     .setTlsEnabled(true)
                     .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
@@ -378,11 +377,10 @@ public class NettyCommTest extends AbstractCorfuTest {
                     .setTruststore("src/test/resources/security/trust1.jks")
                     .setTruststorePasswordFile("src/test/resources/security/storepass")
                     .setSaslPlainTextAuth(true)
-                    .setPort(port)
                     .build());
                 return d;
             },
-            (port) -> {
+            port -> {
                 return new NettyClientRouter(
                     NodeLocator.builder().host("localhost").port(port).build(),
                     CorfuRuntimeParameters.builder()
@@ -438,7 +436,7 @@ public class NettyCommTest extends AbstractCorfuTest {
 
 
         NettyServerData serverData = new NettyServerData(
-            new ServerContextBuilder()
+            new ServerContextBuilder(CorfuTestServers.buildTestEndpoint(port))
                 .setImplementation("auto")
                 .setTlsEnabled(true)
                 .setTlsCiphers("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256")
@@ -448,7 +446,6 @@ public class NettyCommTest extends AbstractCorfuTest {
                 .setTruststore(serverTrustFile.getAbsolutePath())
                 .setTruststorePasswordFile("src/test/resources/security/reload/password")
                 .setTlsMutualAuthEnabled(true)
-                .setPort(port)
                 .build()
         );
         serverData.bootstrapServer();
@@ -545,17 +542,16 @@ public class NettyCommTest extends AbstractCorfuTest {
         }
 
         void bootstrapServer() throws Exception {
-            NettyServerRouter nsr =
-                new NettyServerRouter(Collections.singletonList(new BaseServer(serverContext)));
+            NettyServerRouter nsr = new NettyServerRouter(Collections.singletonList(new BaseServer(serverContext)));
+
             f = CorfuServer.startAndListen(serverContext.getBossGroup(),
-                                            serverContext.getWorkerGroup(),
-                                            b -> CorfuServer.configureBootstrapOptions(
-                                                serverContext, b),
-                                            serverContext,
-                                            nsr,
-                                            address,
-                                            serverContext.getServerConfig(Integer.class,
-                                                "<port>"));
+                    serverContext.getWorkerGroup(),
+                    b -> CorfuServer.configureBootstrapOptions(serverContext, b),
+                    serverContext,
+                    nsr,
+                    address,
+                    serverContext.getServerConfig(Integer.class, "<port>")
+            );
         }
 
         public void shutdownServer() {

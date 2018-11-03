@@ -23,15 +23,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 public class LogUnitSealTest extends AbstractViewTest {
 
     private RuntimeLayout getRuntimeLayout(long epoch) {
-        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.ENDPOINT_0);
 
         Layout l = new TestLayoutBuilder()
                 .setEpoch(epoch)
-                .addLayoutServer(SERVERS.PORT_0)
-                .addSequencer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_0)
+                .addSequencer(SERVERS.ENDPOINT_0)
                 .buildSegment()
                 .buildStripe()
-                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.ENDPOINT_0)
                 .addToSegment()
                 .addToLayout()
                 .build();
@@ -40,7 +40,7 @@ public class LogUnitSealTest extends AbstractViewTest {
         CorfuRuntime corfuRuntime = getRuntime(l).connect();
         RuntimeLayout runtimeLayout = corfuRuntime.getLayoutView().getRuntimeLayout(l);
 
-        getManagementServer(SERVERS.PORT_0).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_0).shutdown();
 
         return runtimeLayout;
     }
@@ -74,7 +74,7 @@ public class LogUnitSealTest extends AbstractViewTest {
         runtimeLayout.sealMinServerSet();
 
         // Intentionally reset router epoch to bypass epoch check on router
-        getLayoutServer(SERVERS.PORT_0).getServerContext().getServerRouter().setServerEpoch(epoch);
+        getLayoutServer(SERVERS.ENDPOINT_0).getServerContext().getServerRouter().setServerEpoch(epoch);
 
         // Still using the old client to send messages stamped with old epoch
         for (int i = 0; i < numOp; i++) {
@@ -83,7 +83,7 @@ public class LogUnitSealTest extends AbstractViewTest {
         }
 
         // Set the router epoch to new epoch and get the new client
-        getLayoutServer(SERVERS.PORT_0).getServerContext().getServerRouter().setServerEpoch(layout.getEpoch());
+        getLayoutServer(SERVERS.ENDPOINT_0).getServerContext().getServerRouter().setServerEpoch(layout.getEpoch());
         runtimeLayout = new RuntimeLayout(layout, getRuntime(layout));
         client = runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0);
 

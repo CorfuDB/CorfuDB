@@ -3,12 +3,10 @@ package org.corfudb.universe.node.server;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.StringUtils;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.corfudb.universe.node.NodeException;
-import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.universe.universe.UniverseParams;
 
 import java.io.FileReader;

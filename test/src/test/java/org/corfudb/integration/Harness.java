@@ -11,6 +11,7 @@ import org.corfudb.integration.cluster.Harness.Node;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.NodeLocator;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -109,8 +110,8 @@ public class Harness {
         return Paths.get(PROPERTIES.getProperty(pathProperty)).toAbsolutePath().toString();
     }
 
-    private String getAddressForNode(int port) {
-        return corfuHost + ":" + port;
+    private NodeLocator getAddressForNode(int port) {
+        return NodeLocator.parseString(corfuHost + ":" + port);
     }
 
     /**
@@ -130,9 +131,9 @@ public class Harness {
 
         for (int x = 0; x < nodeCount; x++) {
             int port = corfuPort + x;
-            layoutServers.add(getAddressForNode(port));
-            sequencer.add(getAddressForNode(port));
-            stripServers.add(getAddressForNode(port));
+            layoutServers.add(getAddressForNode(port).toEndpointUrl());
+            sequencer.add(getAddressForNode(port).toEndpointUrl());
+            stripServers.add(getAddressForNode(port).toEndpointUrl());
         }
 
         Layout.LayoutSegment segment = new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION, 0L, -1L,
@@ -146,10 +147,8 @@ public class Harness {
 
         for (int i = 0; i < n; i++) {
             int port = corfuPort + i;
-            conn.append(corfuHost)
-                .append(":")
-                .append(port)
-                .append(",");
+            String endpoint = NodeLocator.builder().host(corfuHost).port(port).build().toEndpointUrl();
+            conn.append(endpoint).append(",");
         }
 
         // return final connection string without tailing comma

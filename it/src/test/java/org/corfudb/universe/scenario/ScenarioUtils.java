@@ -30,7 +30,7 @@ public class ScenarioUtils {
         Layout refreshedLayout = corfuClient.getLayout();
 
         for (int i = 0; i < TestFixtureConst.DEFAULT_WAIT_POLL_ITER; i++) {
-            if (verifier.test(refreshedLayout.getUnresponsiveServers().size())) {
+            if (verifier.test(refreshedLayout.getUnresponsiveServersNodes().size())) {
                 break;
             }
             corfuClient.invalidateLayout();
@@ -38,7 +38,7 @@ public class ScenarioUtils {
             Sleep.sleepUninterruptibly(Duration.ofSeconds(DEFAULT_WAIT_TIME));
         }
 
-        assertThat(verifier.test(refreshedLayout.getUnresponsiveServers().size())).isTrue();
+        assertThat(verifier.test(refreshedLayout.getUnresponsiveServersNodes().size())).isTrue();
     }
 
     /**

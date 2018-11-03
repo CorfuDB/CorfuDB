@@ -27,20 +27,20 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
 
     @Before
     public void setRuntime() {
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
+        addServer(SERVERS.ENDPOINT_0);
+        addServer(SERVERS.ENDPOINT_1);
+        addServer(SERVERS.ENDPOINT_2);
         Layout layout = new TestLayoutBuilder()
                 .setEpoch(1L)
-                .addLayoutServer(SERVERS.PORT_0)
-                .addLayoutServer(SERVERS.PORT_1)
-                .addLayoutServer(SERVERS.PORT_2)
-                .addSequencer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_1)
+                .addLayoutServer(SERVERS.ENDPOINT_2)
+                .addSequencer(SERVERS.ENDPOINT_0)
                 .buildSegment()
                 .buildStripe()
-                .addLogUnit(SERVERS.PORT_0)
-                .addLogUnit(SERVERS.PORT_1)
-                .addLogUnit(SERVERS.PORT_2)
+                .addLogUnit(SERVERS.ENDPOINT_0)
+                .addLogUnit(SERVERS.ENDPOINT_1)
+                .addLogUnit(SERVERS.ENDPOINT_2)
                 .addToSegment()
                 .addToLayout()
                 .build();

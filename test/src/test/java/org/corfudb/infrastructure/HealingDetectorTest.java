@@ -4,12 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.corfudb.infrastructure.management.HealingDetector;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -27,23 +29,23 @@ public class HealingDetectorTest extends AbstractViewTest {
     @Before
     public void pollingEnvironmentSetup() {
 
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
+        addServer(SERVERS.ENDPOINT_0);
+        addServer(SERVERS.ENDPOINT_1);
+        addServer(SERVERS.ENDPOINT_2);
 
         layout = new TestLayoutBuilder()
                 .setEpoch(1L)
-                .addLayoutServer(SERVERS.PORT_0)
-                .addLayoutServer(SERVERS.PORT_1)
-                .addLayoutServer(SERVERS.PORT_2)
-                .addSequencer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_1)
+                .addLayoutServer(SERVERS.ENDPOINT_2)
+                .addSequencer(SERVERS.ENDPOINT_0)
                 .buildSegment()
                 .buildStripe()
-                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.ENDPOINT_0)
                 .addToSegment()
                 .addToLayout()
-                .addUnresponsiveServer(SERVERS.PORT_1)
-                .addUnresponsiveServer(SERVERS.PORT_2)
+                .addUnresponsiveServer(SERVERS.ENDPOINT_1)
+                .addUnresponsiveServer(SERVERS.ENDPOINT_2)
                 .build();
         bootstrapAllServers(layout);
 
@@ -55,20 +57,20 @@ public class HealingDetectorTest extends AbstractViewTest {
     }
 
     /**
-     * We start off with SERVERS.PORT_1 and SERVERS.PORT_2 as unresponsive.
-     * SERVERS.PORT_1 continues to remain unresponsive and SERVERS.PORT_2 has been healed.
+     * We start off with SERVERS.ENDPOINT_1 and SERVERS.ENDPOINT_2 as unresponsive.
+     * SERVERS.ENDPOINT_1 continues to remain unresponsive and SERVERS.ENDPOINT_2 has been healed.
      * Polls the 2 failed servers.
-     * Returns healed status for SERVERS.PORT_2.
+     * Returns healed status for SERVERS.ENDPOINT_2.
      */
     @Test
     public void pollHealedNodes() {
 
-        addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
+        addServerRule(SERVERS.ENDPOINT_1, new TestRule().always().drop());
 
-        Set<String> expectedResult = new HashSet<>();
-        expectedResult.add(getEndpoint(SERVERS.PORT_2));
+        Set<NodeLocator> expectedResult = new HashSet<>();
+        expectedResult.add(SERVERS.ENDPOINT_2);
 
-        assertThat(healingDetector.poll(layout, corfuRuntime).getHealingNodes())
-                .isEqualTo(expectedResult);
+        Set<NodeLocator> result = healingDetector.poll(layout, corfuRuntime).getHealingNodesEndpoints();
+        assertThat(result).isEqualTo(expectedResult);
     }
 }

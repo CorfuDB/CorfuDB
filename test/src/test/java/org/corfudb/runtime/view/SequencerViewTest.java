@@ -3,6 +3,7 @@ package org.corfudb.runtime.view;
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.NodeLocator;
 import org.junit.Test;
 
 import java.util.UUID;
@@ -15,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class SequencerViewTest extends AbstractViewTest {
 
     @Getter
-    final String defaultConfigurationString = getDefaultEndpoint();
+    final NodeLocator defaultConfigurationString = getDefaultEndpoint();
 
     @Test
     public void canAcquireFirstToken() {

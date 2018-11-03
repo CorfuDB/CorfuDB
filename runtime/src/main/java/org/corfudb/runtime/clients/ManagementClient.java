@@ -22,6 +22,7 @@ import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
 
 /**
  * A client to the Management Server.
@@ -66,8 +67,10 @@ public class ManagementClient extends AbstractClient {
      * @return A future which will be return TRUE if completed successfully else returns FALSE.
      */
     public CompletableFuture<Boolean> handleHealing(long detectorEpoch, Set<String> healedNodes) {
-        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_HEALING_DETECTED
-                .payloadMsg(new DetectorMsg(detectorEpoch, Collections.emptySet(), healedNodes)));
+        return sendMessageWithFuture(
+                CorfuMsgType.MANAGEMENT_HEALING_DETECTED
+                .payloadMsg(new DetectorMsg(detectorEpoch, Collections.emptySet(), healedNodes))
+        );
     }
 
     /**

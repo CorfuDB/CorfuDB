@@ -20,6 +20,7 @@ import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
@@ -86,18 +87,18 @@ public class LayoutManagementView extends AbstractView {
      * @param endpoint New node endpoint.
      */
     public void bootstrapNewNode(String endpoint) {
-
+        NodeLocator node = NodeLocator.parseString(endpoint);
         // Bootstrap the to-be added node with the old layout.
         Layout layout = new Layout(runtime.getLayoutView().getLayout());
         // Ignoring call result as the call returns ACK or throws an exception.
         CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(layout)
-                .getLayoutClient(endpoint)
+                .getLayoutClient(node)
                 .bootstrapLayout(layout));
         CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(layout)
-                .getManagementClient(endpoint)
+                .getManagementClient(node)
                 .bootstrapManagement(layout));
 
-        log.info("bootstrapNewNode: New node {} bootstrapped.", endpoint);
+        log.info("bootstrapNewNode: New node {} bootstrapped.", node.toEndpointUrl());
     }
 
     /**
@@ -121,21 +122,20 @@ public class LayoutManagementView extends AbstractView {
                         int logUnitStripeIndex)
             throws OutrankedException {
         Layout newLayout;
-        if (!currentLayout.getAllServers().contains(endpoint)) {
 
+        NodeLocator node = NodeLocator.parseString(endpoint);
+        if (!currentLayout.getAllServersNodes().contains(node)) {
             sealEpoch(currentLayout);
 
             LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
             if (isLayoutServer) {
-                layoutBuilder.addLayoutServer(endpoint);
+                layoutBuilder.addLayoutServer(node);
             }
             if (isSequencerServer) {
-                layoutBuilder.addSequencerServer(endpoint);
+                layoutBuilder.addSequencerServer(node);
             }
             if (isLogUnitServer) {
-                layoutBuilder.addLogunitServer(logUnitStripeIndex,
-                        getMaxGlobalTail(currentLayout, runtime).getSequence(),
-                        endpoint);
+                layoutBuilder.addLogunitServer(logUnitStripeIndex, getMaxGlobalTail(currentLayout, runtime).getSequence(), node);
             }
             if (isUnresponsiveServer) {
                 layoutBuilder.addUnresponsiveServers(Collections.singleton(endpoint));
@@ -164,24 +164,25 @@ public class LayoutManagementView extends AbstractView {
 
         Layout newLayout;
 
+        NodeLocator node = NodeLocator.parseString(endpoint);
         // It is important to note that the node to be healed is a part of the unresponsive
         // servers list and is NOT a part of any of the segments. Else, resets can be triggered
         // while the node is a part of the chain causing correctness issues.
-        if (currentLayout.getUnresponsiveServers().contains(endpoint)) {
+        if (currentLayout.getUnresponsiveServersNodes().contains(node)) {
             sealEpoch(currentLayout);
 
             // Seal the node to be healed.
             CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)
-                    .getBaseClient(endpoint).setRemoteEpoch(currentLayout.getEpoch()));
+                    .getBaseClient(node).setRemoteEpoch(currentLayout.getEpoch()));
 
             // Reset the node to be healed.
             CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)
-                    .getLogUnitClient(endpoint).resetLogUnit(currentLayout.getEpoch()));
+                    .getLogUnitClient(node).resetLogUnit(currentLayout.getEpoch()));
 
             LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
             layoutBuilder.addLogunitServer(0,
                     getMaxGlobalTail(currentLayout, runtime).getSequence(),
-                    endpoint);
+                    node);
             layoutBuilder.removeUnresponsiveServers(Collections.singleton(endpoint));
             newLayout = layoutBuilder.build();
 
@@ -237,9 +238,11 @@ public class LayoutManagementView extends AbstractView {
     public void addLogUnitReplica(@Nonnull Layout currentLayout,
                                   @Nonnull String endpoint,
                                   int stripeIndex) throws OutrankedException {
+        NodeLocator node = NodeLocator.parseString(endpoint);
+
         boolean isTaskDone = currentLayout.getSegments().stream()
                 .map(layoutSegment -> layoutSegment.getStripes().get(stripeIndex))
-                .allMatch(layoutStripe -> layoutStripe.getLogServers().contains(endpoint));
+                .allMatch(layoutStripe -> layoutStripe.getLogServersNodes().contains(node));
 
         if (!isTaskDone) {
             LayoutBuilder builder = new LayoutBuilder(currentLayout);
@@ -263,10 +266,11 @@ public class LayoutManagementView extends AbstractView {
     public void removeNode(@Nonnull Layout currentLayout,
                            @Nonnull String endpoint) throws OutrankedException {
 
+        NodeLocator node = NodeLocator.parseString(endpoint);
         Layout newLayout;
-        if (currentLayout.getAllServers().contains(endpoint)) {
+        if (currentLayout.getAllServersNodes().contains(node)) {
             LayoutBuilder builder = new LayoutBuilder(currentLayout);
-            newLayout = builder.removeLayoutServer(endpoint)
+            newLayout = builder.removeLayoutServer(node)
                     .removeSequencerServer(endpoint)
                     .removeLogunitServer(endpoint)
                     .removeUnresponsiveServer(endpoint)

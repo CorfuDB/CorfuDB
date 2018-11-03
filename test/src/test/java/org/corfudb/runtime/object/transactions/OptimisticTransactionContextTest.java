@@ -14,6 +14,7 @@ import lombok.Data;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -165,7 +166,8 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     public void checkSlowWriterTxAbortsOnOverwriteDiffData() {
         UUID streamID = UUID.randomUUID();
         CorfuRuntime rtSlowWriter = getDefaultRuntime();
-        CorfuRuntime rtIntersect = new CorfuRuntime(getDefaultConfigurationString()).connect();
+        CorfuRuntimeParameters params = CorfuRuntimeParameters.builder().layoutServer(SERVERS.ENDPOINT_0).build();
+        CorfuRuntime rtIntersect = CorfuRuntime.fromParameters(params).connect();
 
         Map<String, String> map = rtSlowWriter
                 .getObjectsView().build()
@@ -210,7 +212,8 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     public void checkSlowWriterTxSucceedsOnSameDataOverwrite() {
         UUID streamID = UUID.randomUUID();
         CorfuRuntime rtSlowWriter = getDefaultRuntime();
-        CorfuRuntime rtPropagateWrite = new CorfuRuntime(getDefaultConfigurationString()).connect();
+        CorfuRuntimeParameters params = CorfuRuntimeParameters.builder().layoutServer(SERVERS.ENDPOINT_0).build();
+        CorfuRuntime rtPropagateWrite = CorfuRuntime.fromParameters(params).connect();
 
         int[] retry = new int[1];
         retry[0] = 0;

@@ -45,7 +45,7 @@ public class SequencerCacheTest extends AbstractObjectTest {
             getRuntime().getObjectsView().TXEnd();
         }
 
-        SequencerServer sequencerServer = getSequencer(0);
+        SequencerServer sequencerServer = getSequencer(SERVERS.ENDPOINT_0);
         Cache<String, Long> cache = sequencerServer.getConflictToGlobalTailCache();
         assertThat(cache.asMap().size()).isEqualTo(numTxn);
         getDefaultRuntime().getAddressSpaceView().prefixTrim(trimAddress);

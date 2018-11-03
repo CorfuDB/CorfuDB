@@ -34,14 +34,14 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     @Override
     public AbstractServer getDefaultServer() {
-        return new LogUnitServer(new ServerContextBuilder().build());
+        return new LogUnitServer(new ServerContextBuilder(router.getNode()).build());
     }
 
     @Test
     public void checkOverwritesFail() throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder(router.getNode())
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -87,7 +87,7 @@ public class LogUnitServerTest extends AbstractServerTest {
             throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder(router.getNode())
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -112,7 +112,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         s1.shutdown();
 
-        LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder(router.getNode())
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -148,7 +148,7 @@ public class LogUnitServerTest extends AbstractServerTest {
             throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder(router.getNode())
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -174,7 +174,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         s1.shutdown();
 
-        LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder(router.getNode())
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -205,7 +205,7 @@ public class LogUnitServerTest extends AbstractServerTest {
                                     (low_payload+i)
                             .getBytes());
 
-        LogUnitServer s3 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s3 = new LogUnitServer(new ServerContextBuilder(router.getNode())
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -239,7 +239,7 @@ public class LogUnitServerTest extends AbstractServerTest {
     public void checkUnCachedWrites() {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder(router.getNode())
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -263,7 +263,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         m.setBackpointerMap(uuidLongMap);
         sendMessage(CorfuMsgType.WRITE.payloadMsg(m));
 
-        s1 = new LogUnitServer(new ServerContextBuilder()
+        s1 = new LogUnitServer(new ServerContextBuilder(router.getNode())
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -301,7 +301,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         createLogFile(tempDir, StreamLogFiles.VERSION + 1, false);
 
         // Start a new logging version
-        ServerContextBuilder builder = new ServerContextBuilder();
+        ServerContextBuilder builder = new ServerContextBuilder(router.getNode());
         builder.setMemory(false);
         builder.setLogPath(tempDir);
         ServerContext context = builder.build();
@@ -317,7 +317,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         createLogFile(tempDir, StreamLogFiles.VERSION + 1, noVerify);
 
         // Start a new logging version
-        ServerContextBuilder builder = new ServerContextBuilder();
+        ServerContextBuilder builder = new ServerContextBuilder(router.getNode());
         builder.setMemory(false);
         builder.setLogPath(tempDir);
         builder.setNoVerify(!noVerify);
@@ -330,7 +330,7 @@ public class LogUnitServerTest extends AbstractServerTest {
     public void checkOverwriteExceptionIsNotThrownWhenTheRankIsHigher() throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder(router.getNode())
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -391,7 +391,7 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .matchesDataAtAddress(ADDRESS_0, "1".getBytes());
 
         // and now without the local cache
-        LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder(router.getNode())
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
@@ -411,7 +411,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         Random r = new Random(System.currentTimeMillis());
         double randomCacheRatio = minHeapRatio + (maxHeapRatio - minHeapRatio) * r.nextDouble();
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder(router.getNode())
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .setCacheSizeHeapRatio(String.valueOf(randomCacheRatio))

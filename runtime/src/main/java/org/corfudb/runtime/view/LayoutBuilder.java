@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
+import org.corfudb.util.NodeLocator;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -69,8 +70,9 @@ public class LayoutBuilder {
      * @return this builder
      */
     public LayoutBuilder addUnresponsiveServers(@NonNull Set<String> endpoints) {
-        List<String> unresponsiveServers = layout.getUnresponsiveServers();
-        unresponsiveServers.addAll(endpoints);
+        endpoints.stream()
+                .map(NodeLocator::parseString)
+                .forEach(layout::addUnresponsiveServer);
         return this;
     }
 
@@ -83,7 +85,7 @@ public class LayoutBuilder {
      * @return this builder
      */
     public LayoutBuilder removeUnresponsiveServers(@NonNull Set<String> endpoints) {
-        layout.getUnresponsiveServers().removeAll(endpoints);
+        endpoints.forEach(this::removeUnresponsiveServer);
         return this;
     }
 
@@ -110,17 +112,16 @@ public class LayoutBuilder {
      * @throws LayoutModificationException is thrown if the provided endpoint is the last remaining
      *         Layout Server
      */
-    public LayoutBuilder removeLayoutServer(@NonNull String endpoint) {
+    public LayoutBuilder removeLayoutServer(@NonNull NodeLocator endpoint) {
 
         // Only remove the endpoint if it does not attempt to remove the last remaining layout server
-        if (layout.getLayoutServers().size() == 1 &&
-            layout.getLayoutServers().get(0).equals(endpoint)) {
-            log.warn("Skipped removing layout server as {} is the last remaining layout servers.",
-                    endpoint);
-            throw new LayoutModificationException(
-                    "Attempting to remove all layout servers.");
+        List<NodeLocator> layoutServers = layout.getLayoutServersNodes();
+        String endpointUrl = endpoint.toEndpointUrl();
+        if (layoutServers.size() == 1 && layoutServers.get(0).equals(endpoint)) {
+            log.warn("Skipped removing layout server as {} is the last remaining layout servers.", endpointUrl);
+            throw new LayoutModificationException("Attempting to remove all layout servers.");
         } else {
-            layout.getLayoutServers().remove(endpoint);
+            layout.removeLayoutServer(endpoint);
         }
 
         return this;
@@ -147,8 +148,7 @@ public class LayoutBuilder {
 
         // Only remove the endpoints if it does not attempt to remove all layout's layout servers
         if(endpoints.containsAll(layout.getLayoutServers())) {
-            log.warn("Skipped removing layout servers as remove request of {} would remove all " +
-                     "layout servers {}.",
+            log.warn("Skipped removing layout servers as remove request of {} would remove all layout servers {}.",
                      endpoints.toString(),
                      layout.getLayoutServers());
             throw new LayoutModificationException("Attempting to remove all layout servers.");
@@ -162,26 +162,41 @@ public class LayoutBuilder {
     /**
      * Adds a new layout server.
      *
+     * @deprecated Use {@link this#addLayoutServer(NodeLocator)}
+     *
      * @param endpoint a non null String representing the Layout Server endpoint
      *                 to be added.
      *
      * @return this builder
      */
+    @Deprecated
     public LayoutBuilder addLayoutServer(@NonNull String endpoint) {
-        layout.getLayoutServers().add(endpoint);
+        layout.getLayoutServers().add(NodeLocator.parseString(endpoint).toEndpointUrl());
+        return this;
+    }
+
+    public LayoutBuilder addLayoutServer(@NonNull NodeLocator endpoint) {
+        layout.getLayoutServers().add(endpoint.toEndpointUrl());
         return this;
     }
 
     /**
      * Adds a new sequencer server.
      *
+     * @deprecated Use {@link this#addSequencerServer(NodeLocator)}
      * @param endpoint a non null String representing the Sequencer Server endpoint
      *                 to be added.
      *
      * @return this builder
      */
+    @Deprecated
     public LayoutBuilder addSequencerServer(@NonNull String endpoint) {
-        layout.getSequencers().add(endpoint);
+        layout.getSequencers().add(NodeLocator.parseString(endpoint).toEndpointUrl());
+        return this;
+    }
+
+    public LayoutBuilder addSequencerServer(@NonNull NodeLocator endpoint) {
+        layout.getSequencers().add(endpoint.toEndpointUrl());
         return this;
     }
 
@@ -194,13 +209,14 @@ public class LayoutBuilder {
      * ends at infinity. This new segment contains the new logunit server to be added in the
      * specified stripe.
      *
+     * @deprecated Use {@link this#addLogunitServer(int, long, NodeLocator)}
      * @param stripeIndex        stripe index where new endpoint should be added.
      * @param globalLogTail      Global log tail to split segment.
      * @param newLogunitEndpoint a non null String representing Logunit endpoint to be added.
      * @return this builder
      */
-    public LayoutBuilder addLogunitServer(int stripeIndex, long globalLogTail,
-                                          @NonNull String newLogunitEndpoint) {
+    @Deprecated
+    public LayoutBuilder addLogunitServer(int stripeIndex, long globalLogTail, @NonNull String newLogunitEndpoint) {
         List<LayoutSegment> layoutSegmentList = layout.getSegments();
         LayoutSegment segmentToSplit = layoutSegmentList.remove(layoutSegmentList.size() - 1);
 
@@ -210,16 +226,18 @@ public class LayoutBuilder {
                 globalLogTail + 1,
                 segmentToSplit.getStripes());
 
-        List<String> logunitServerList = new ArrayList<>();
-        logunitServerList.addAll(segmentToSplit.getStripes()
+        NodeLocator newLogUnitNode = NodeLocator.parseString(newLogunitEndpoint);
+
+        List<NodeLocator> logunitServerList = new ArrayList<>(segmentToSplit.getStripes()
                 .get(stripeIndex)
-                .getLogServers());
-        logunitServerList.add(newLogunitEndpoint);
+                .getLogServersNodes()
+        );
+        logunitServerList.add(newLogUnitNode);
 
         // Create new stripe list with the new logunit server added.
-        LayoutStripe newStripe = new LayoutStripe(logunitServerList);
-        List<LayoutStripe> newStripeList = new ArrayList<>();
-        newStripeList.addAll(segmentToSplit.getStripes());
+        LayoutStripe newStripe = LayoutStripe.build(logunitServerList);
+
+        List<LayoutStripe> newStripeList = new ArrayList<>(segmentToSplit.getStripes());
         newStripeList.remove(stripeIndex);
         newStripeList.add(stripeIndex, newStripe);
 
@@ -230,6 +248,11 @@ public class LayoutBuilder {
         layoutSegmentList.add(layoutSegmentList.size(), closedSegment);
         layoutSegmentList.add(layoutSegmentList.size(), openSegment);
         return this;
+    }
+
+    public LayoutBuilder addLogunitServer(int stripeIndex, long globalLogTail,
+                                          @NonNull NodeLocator newLogunitEndpoint) {
+        return addLogunitServer(stripeIndex, globalLogTail, newLogunitEndpoint.toEndpointUrl());
     }
 
     /**
@@ -245,8 +268,9 @@ public class LayoutBuilder {
                                                    int segmentIndex,
                                                    int stripeIndex) {
         LayoutStripe stripe = layout.getSegments().get(segmentIndex).getStripes().get(stripeIndex);
-        if (!stripe.getLogServers().contains(endpoint)) {
-            stripe.getLogServers().add(endpoint);
+        NodeLocator node = NodeLocator.parseString(endpoint);
+        if (!stripe.getLogServersNodes().contains(node)) {
+            stripe.addNode(node);
         }
         return this;
     }
@@ -280,17 +304,14 @@ public class LayoutBuilder {
             throw new LayoutModificationException("Stripe addition/deletion not allowed.");
         }
         for (int i = 0; i < oldSegmentStripeList.size(); i++) {
-            Set<String> oldSegmentStripe =
-                    new HashSet<>(oldSegmentStripeList.get(i).getLogServers());
-            Set<String> newSegmentStripe =
-                    new HashSet<>(newSegmentStripeList.get(i).getLogServers());
-            Set<String> differences = Sets.difference(
+            Set<NodeLocator> oldSegmentStripe = new HashSet<>(oldSegmentStripeList.get(i).getLogServersNodes());
+            Set<NodeLocator> newSegmentStripe = new HashSet<>(newSegmentStripeList.get(i).getLogServersNodes());
+            Set<NodeLocator> differences = Sets.difference(
                     Sets.union(oldSegmentStripe, newSegmentStripe),
                     Sets.intersection(oldSegmentStripe, newSegmentStripe));
             allowedUpdates = allowedUpdates - differences.size();
             if (allowedUpdates < 0) {
-                throw new LayoutModificationException(
-                        "At most " + allowedUpdates + " log unit server update allowed.");
+                throw new LayoutModificationException("At most " + allowedUpdates + " log unit server update allowed.");
             }
         }
 
@@ -319,17 +340,17 @@ public class LayoutBuilder {
      */
     public LayoutBuilder assignResponsiveSequencerAsPrimary(@NonNull Set<String> endpoints) {
 
-        List<String> modifiedSequencerServers = new ArrayList<>(layout.getSequencers());
+        List<NodeLocator> modifiedSequencerServers = new ArrayList<>(layout.getSequencersNodes());
         for (int i = 0; i < modifiedSequencerServers.size(); i++) {
-            String sequencerServer = modifiedSequencerServers.get(i);
+            NodeLocator sequencerServer = modifiedSequencerServers.get(i);
 
             // Add a sequencer server given sequencerServer is not already included in
             // endpoints AND it is not included in the unresponsive nodes of the layout.
-            if (!endpoints.contains(sequencerServer) &&
-                !layout.getUnresponsiveServers().contains(sequencerServer)) {
+            if (!endpoints.contains(sequencerServer.toEndpointUrl()) &&
+                !layout.getUnresponsiveServersNodes().contains(sequencerServer)) {
                 modifiedSequencerServers.remove(sequencerServer);
                 modifiedSequencerServers.add(0, sequencerServer);
-                layout.setSequencers(modifiedSequencerServers);
+                layout.setSequencers(new ArrayList<>(NodeLocator.transformToStringsList(modifiedSequencerServers)));
                 return this;
             }
         }
@@ -344,6 +365,7 @@ public class LayoutBuilder {
      * Removes the Sequencer Server passed. If the layout does not include the endpoint
      * no action will take place.
      *
+     *
      * @param endpoint a non null string representing the sequencer server endpoint
      *                 which needs to be removed
      * @return this builder
@@ -354,12 +376,11 @@ public class LayoutBuilder {
     public LayoutBuilder removeSequencerServer(@NonNull String endpoint) {
 
         // Only remove the endpoint if it does not attempt to remove the last remaining sequencer
-        if (layout.getSequencers().size() == 1 &&
-            layout.getSequencers().get(0).equals(endpoint)) {
-            log.warn("Skipped removing sequencer as {} is the last remaining sequencer.",
-                    endpoint);
-            throw new LayoutModificationException(
-                    "Attempting to remove all sequencers.");
+        NodeLocator node = NodeLocator.parseString(endpoint);
+        if (layout.getSequencersNodes().size() == 1 &&
+            layout.getPrimarySequencerNode().equals(node)) {
+            log.warn("Skipped removing sequencer as {} is the last remaining sequencer.", node.toEndpointUrl());
+            throw new LayoutModificationException("Attempting to remove all sequencers.");
         } else {
             layout.getSequencers().remove(endpoint);
         }
@@ -387,11 +408,12 @@ public class LayoutBuilder {
     public LayoutBuilder removeSequencerServers(@NonNull Set<String> endpoints) {
 
         // Only remove the endpoints if it does not attempt to remove all layout's sequencers
-        if (endpoints.containsAll(layout.getSequencers())) {
+        final List<String> sequencers = layout.getSequencers();
+        if (endpoints.containsAll(sequencers)) {
             log.warn("Skipped removing sequencers as remove request of {} would remove all " +
                      "sequencers {}.",
                      endpoints.toString(),
-                     layout.getSequencers());
+                     sequencers);
             throw new LayoutModificationException("Attempting to remove all sequencers.");
         } else {
             layout.getSequencers().removeAll(endpoints);
@@ -409,19 +431,18 @@ public class LayoutBuilder {
      * @param minReplicationFactor The least number of nodes needed to
      *                             maintain redundancy
      */
-    public void removeFromStripe(@NonNull String endpoint,
-                                 @NonNull LayoutStripe layoutStripe,
+    public void removeFromStripe(@NonNull String endpoint, @NonNull LayoutStripe layoutStripe,
                                  int minReplicationFactor) {
-        if (layoutStripe.getLogServers().remove(endpoint)) {
-            if (layoutStripe.getLogServers().isEmpty()) {
+        NodeLocator node = NodeLocator.parseString(endpoint);
+
+        if (layoutStripe.removeLogServer(node)) {
+            if (layoutStripe.isEmpty()) {
                 throw new LayoutModificationException(
-                        "Attempting to remove all logunit in stripe. "
-                                + "No replicas available.");
+                        "Attempting to remove all logunit in stripe. No replicas available.");
             }
 
             if (layoutStripe.getLogServers().size() < minReplicationFactor) {
-                throw new LayoutModificationException(
-                        "Change will cause redundancy loss!");
+                throw new LayoutModificationException("Change will cause redundancy loss!");
             }
         }
     }

@@ -30,9 +30,9 @@ public class NodeRouterPool {
      */
     @Getter
     @Setter
-    private Function<String, IClientRouter> createRouterFunction;
+    private Function<NodeLocator, IClientRouter> createRouterFunction;
 
-    NodeRouterPool(Function<String, IClientRouter> createRouterFunction) {
+    NodeRouterPool(Function<NodeLocator, IClientRouter> createRouterFunction) {
         this.createRouterFunction = createRouterFunction;
     }
 
@@ -44,8 +44,7 @@ public class NodeRouterPool {
      * @return IClientRouter.
      */
     public IClientRouter getRouter(NodeLocator endpoint) {
-        return nodeRouters.computeIfAbsent(endpoint,
-                s -> createRouterFunction.apply(NodeLocator.getLegacyEndpoint(s)));
+        return nodeRouters.computeIfAbsent(endpoint, s -> createRouterFunction.apply(endpoint));
     }
 
     /**

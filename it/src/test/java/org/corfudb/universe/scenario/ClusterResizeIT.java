@@ -10,7 +10,6 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
@@ -53,7 +52,7 @@ public class ClusterResizeIT extends GenericIntegrationTest {
                 // Sequentially remove two nodes from cluster
                 for (CorfuServer candidate: servers) {
                     corfuClient.getManagementView().removeNode(
-                            candidate.getEndpoint(),
+                            candidate.getEndpoint().toEndpointUrl(),
                             clientFixture.getNumRetry(),
                             clientFixture.getTimeout(),
                             clientFixture.getPollPeriod()
@@ -62,7 +61,7 @@ public class ClusterResizeIT extends GenericIntegrationTest {
 
                 // Verify layout contains only the node that is not removed
                 corfuClient.invalidateLayout();
-                assertThat(corfuClient.getLayout().getAllServers()).containsExactly(server0.getEndpoint());
+                assertThat(corfuClient.getLayout().getAllServersNodes()).containsExactly(server0.getEndpoint());
 
                 // Verify data path working fine
                 for (int x = 0; x < TestFixtureConst.DEFAULT_TABLE_ITER; x++) {
@@ -75,7 +74,7 @@ public class ClusterResizeIT extends GenericIntegrationTest {
                 // Sequentially add two nodes back into cluster
                 for (CorfuServer candidate: servers) {
                     corfuClient.getManagementView().addNode(
-                            candidate.getEndpoint(),
+                            candidate.getEndpoint().toEndpointUrl(),
                             clientFixture.getNumRetry(),
                             clientFixture.getTimeout(),
                             clientFixture.getPollPeriod()

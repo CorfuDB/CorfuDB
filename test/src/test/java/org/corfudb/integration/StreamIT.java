@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WriteSizeException;
+import org.corfudb.util.NodeLocator;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,10 +33,10 @@ public class StreamIT extends AbstractIT {
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
                 .maxWriteSize(maxWriteSize)
+                .layoutServer(NodeLocator.parseString(host + ":" + port))
                 .build();
 
         CorfuRuntime rt = CorfuRuntime.fromParameters(params);
-        rt.parseConfigurationString(host + ":" + port);
         rt.connect();
 
         final int bufSize = maxWriteSize * 2;

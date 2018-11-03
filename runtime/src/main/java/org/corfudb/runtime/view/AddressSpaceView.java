@@ -286,7 +286,7 @@ public class AddressSpaceView extends AbstractView {
                 e -> {
                     long trimMark = e.getLayout().segments.stream()
                             .flatMap(seg -> seg.getStripes().stream())
-                            .flatMap(stripe -> stripe.getLogServers().stream())
+                            .flatMap(stripe -> stripe.getLogServersNodes().stream())
                             .map(e::getLogUnitClient)
                             .map(LogUnitClient::getTrimMark)
                             .map(CFUtils::getUninterruptibly)
@@ -320,7 +320,7 @@ public class AddressSpaceView extends AbstractView {
             layoutHelper(e -> {
                         e.getLayout().getPrefixSegments(address).stream()
                                 .flatMap(seg -> seg.getStripes().stream())
-                                .flatMap(stripe -> stripe.getLogServers().stream())
+                                .flatMap(stripe -> stripe.getLogServersNodes().stream())
                                 .map(e::getLogUnitClient)
                                 .map(client -> client.prefixTrim(address))
                                 .forEach(CFUtils::getUninterruptibly);
@@ -346,7 +346,7 @@ public class AddressSpaceView extends AbstractView {
         layoutHelper(e -> {
             e.getLayout().segments.stream()
                     .flatMap(seg -> seg.getStripes().stream())
-                    .flatMap(stripe -> stripe.getLogServers().stream())
+                    .flatMap(stripe -> stripe.getLogServersNodes().stream())
                     .map(e::getLogUnitClient)
                     .map(LogUnitClient::compact)
                     .forEach(CFUtils::getUninterruptibly);
@@ -361,7 +361,7 @@ public class AddressSpaceView extends AbstractView {
         layoutHelper(e -> {
             e.getLayout().segments.stream()
                     .flatMap(seg -> seg.getStripes().stream())
-                    .flatMap(stripe -> stripe.getLogServers().stream())
+                    .flatMap(stripe -> stripe.getLogServersNodes().stream())
                     .map(e::getLogUnitClient)
                     .map(LogUnitClient::flushCache)
                     .forEach(CFUtils::getUninterruptibly);

@@ -4,6 +4,7 @@ import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.util.NodeLocator;
 import org.junit.Test;
 
 import java.util.Map;
@@ -17,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class FGMapTest extends AbstractViewTest {
 
     @Getter
-    final String defaultConfigurationString = getDefaultEndpoint();
+    final NodeLocator defaultConfigurationString = getDefaultEndpoint();
 
     @Test
     @SuppressWarnings("unchecked")

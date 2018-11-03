@@ -6,6 +6,8 @@ import org.corfudb.infrastructure.orchestrator.IWorkflow;
 import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.Layout.LayoutStripe;
+import org.corfudb.util.NodeLocator;
 
 import javax.annotation.Nonnull;
 import java.util.Collections;
@@ -68,18 +70,18 @@ public class ForceRemoveWorkflow implements IWorkflow {
 
             newLayout.setEpoch(newLayout.getEpoch() + 1);
 
-            newLayout.getLayoutServers().remove(request.getEndpoint());
-            newLayout.getSequencers().remove(request.getEndpoint());
-            newLayout.getUnresponsiveServers().remove(request.getEndpoint());
+            NodeLocator endpoint = request.getEndpointNode();
+            newLayout.removeLayoutServer(endpoint);
+            newLayout.removeSequencer(endpoint);
+            newLayout.removeUnresponsiveServer(endpoint);
 
             for (Layout.LayoutSegment segment : newLayout.getSegments()) {
-                for (Layout.LayoutStripe stripe : segment.getStripes()) {
-                    stripe.getLogServers().remove(request.getEndpoint());
+                for (LayoutStripe stripe : segment.getStripes()) {
+                    stripe.removeLogServer(endpoint);
                 }
             }
 
-            log.info("force removed {} from {},  new layout {}", request.getEndpoint(),
-                    currentLayout, newLayout);
+            log.info("force removed {} from {},  new layout {}", endpoint.toEndpointUrl(), currentLayout, newLayout);
 
             runtime.getLayoutManagementView().forceLayout(currentLayout, newLayout);
         }

@@ -109,7 +109,7 @@ public class DataStoreTest extends AbstractCorfuTest {
         final String serviceDirPath = PARAMETERS.TEST_TEMP_DIR;
         File serviceDir = new File(serviceDirPath);
 
-        ServerContext serverContext = new ServerContextBuilder()
+        ServerContext serverContext = new ServerContextBuilder(SERVERS.ENDPOINT_0)
                 .setMemory(false)
                 .setLogPath(serviceDirPath)
                 .setRetention(String.valueOf(numRetention))

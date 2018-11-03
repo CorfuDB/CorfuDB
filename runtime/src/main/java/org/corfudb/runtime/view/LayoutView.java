@@ -20,6 +20,7 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
 
 /**
  * Created by mwei on 12/10/15.
@@ -53,7 +54,7 @@ public class LayoutView extends AbstractView {
      * @return The number of nodes required for a quorum.
      */
     public int getQuorumNumber() {
-        return (getLayout().getLayoutServers().size() / 2) + 1;
+        return (getLayout().getLayoutServersNodes().size() / 2) + 1;
     }
 
     /**
@@ -111,13 +112,13 @@ public class LayoutView extends AbstractView {
     public Layout prepare(long epoch, long rank)
             throws QuorumUnreachableException, OutrankedException, WrongEpochException {
 
-        CompletableFuture<LayoutPrepareResponse>[] prepareList = getLayout().getLayoutServers()
+        CompletableFuture<LayoutPrepareResponse>[] prepareList = getLayout().getLayoutServersNodes()
                 .stream()
-                .map(x -> {
+                .map(endpoint -> {
                     CompletableFuture<LayoutPrepareResponse> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
-                        cf = getRuntimeLayout().getLayoutClient(x).prepare(epoch, rank);
+                        cf = getRuntimeLayout().getLayoutClient(endpoint).prepare(epoch, rank);
                     } catch (Exception e) {
                         cf.completeExceptionally(e);
                     }
@@ -201,12 +202,14 @@ public class LayoutView extends AbstractView {
     @SuppressWarnings("unchecked")
     public Layout propose(long epoch, long rank, Layout layout)
             throws QuorumUnreachableException, OutrankedException {
-        CompletableFuture<Boolean>[] proposeList = getLayout().getLayoutServers().stream()
-                .map(x -> {
+        CompletableFuture<Boolean>[] proposeList = getLayout().getLayoutServersNodes().stream()
+                .map(endpoint -> {
                     CompletableFuture<Boolean> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
-                        cf = getRuntimeLayout().getLayoutClient(x).propose(epoch, rank, layout);
+                        cf = getRuntimeLayout()
+                                .getLayoutClient(endpoint)
+                                .propose(epoch, rank, layout);
                     } catch (NetworkException e) {
                         cf.completeExceptionally(e);
                     }
@@ -284,15 +287,15 @@ public class LayoutView extends AbstractView {
     @SuppressWarnings("unchecked")
     public void committed(long epoch, Layout layout, boolean force)
             throws WrongEpochException {
-        CompletableFuture<Boolean>[] commitList = layout.getLayoutServers().stream()
-                .map(x -> {
+        CompletableFuture<Boolean>[] commitList = layout.getLayoutServersNodes().stream()
+                .map(endpoint -> {
                     CompletableFuture<Boolean> cf = new CompletableFuture<>();
                     try {
                         // Connection to router can cause network exception too.
                         if (force) {
-                            cf = getRuntimeLayout(layout).getLayoutClient(x).force(layout);
+                            cf = getRuntimeLayout(layout).getLayoutClient(endpoint).force(layout);
                         } else {
-                            cf = getRuntimeLayout(layout).getLayoutClient(x).committed(epoch, layout);
+                            cf = getRuntimeLayout(layout).getLayoutClient(endpoint).committed(epoch, layout);
                         }
                     } catch (NetworkException e) {
                         cf.completeExceptionally(e);

@@ -25,11 +25,11 @@ import lombok.Getter;
 import lombok.ToString;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
@@ -39,7 +39,7 @@ import org.junit.Test;
  */
 public class CorfuMapTest extends AbstractViewTest {
     @Getter
-    final String defaultConfigurationString = getDefaultEndpoint();
+    final NodeLocator defaultConfigurationString = getDefaultEndpoint();
 
     public CorfuRuntime r;
 

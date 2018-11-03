@@ -34,7 +34,7 @@ public class RemoveNode extends WorkflowRequest {
     protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {
         // Send an remove node request to an orchestrator that is not on the node
         // to be removed
-        CreateWorkflowResponse resp = managementClient.removeNode(nodeForWorkflow);
+        CreateWorkflowResponse resp = managementClient.removeNode(getNodeForWorkflow().toEndpointUrl());
         log.info("sendRequest: requested to remove {} on orchestrator {}:{}",
                 nodeForWorkflow, managementClient.getRouter().getHost(),
                 managementClient.getRouter().getPort());
@@ -45,11 +45,11 @@ public class RemoveNode extends WorkflowRequest {
     protected boolean verifyRequest(@NonNull Layout layout) {
         log.info("verifyRequest: {} from {}", this, layout);
         // Verify that the new layout doesn't include the removed node
-        return !layout.getAllServers().contains(nodeForWorkflow);
+        return !layout.getAllServersNodes().contains(getNodeForWorkflow());
     }
 
     @Override
     public String toString() {
-        return this.getClass().getSimpleName() + " " + nodeForWorkflow;
+        return this.getClass().getSimpleName() + " " + getNodeForWorkflow().toEndpointUrl();
     }
 }

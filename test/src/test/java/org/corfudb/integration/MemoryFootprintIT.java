@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -26,7 +27,7 @@ public class MemoryFootprintIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;
     private static int corfuStringNodePort;
-    private static String singleNodeEndpoint;
+    private static NodeLocator singleNodeEndpoint;
 
     /* A helper method that takes host and port specification, start a single server and
      *  returns a process. */
@@ -44,9 +45,7 @@ public class MemoryFootprintIT extends AbstractIT {
     public void loadProperties() {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
         corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty("corfuSingleNodePort"));
-        singleNodeEndpoint = String.format("%s:%d",
-                corfuSingleNodeHost,
-                corfuStringNodePort);
+        singleNodeEndpoint = NodeLocator.builder().host(corfuSingleNodeHost).port(corfuStringNodePort).build();
     }
 
     /**

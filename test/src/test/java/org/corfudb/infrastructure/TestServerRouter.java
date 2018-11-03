@@ -4,13 +4,16 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.CorfuTestServers;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.clients.TestChannelContext;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.util.NodeLocator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,15 +45,17 @@ public class TestServerRouter implements IServerRouter {
     long serverEpoch;
 
     @Getter
-    int port = 0;
+    @NonNull
+    private final NodeLocator node;
 
     public TestServerRouter() {
+        node = new CorfuTestServers().ENDPOINT_0;
         reset();
     }
 
-    public TestServerRouter(int port) {
+    public TestServerRouter(NodeLocator node) {
         reset();
-        this.port = port;
+        this.node = node;
     }
 
     public void reset() {

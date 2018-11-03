@@ -9,6 +9,7 @@ import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.exceptions.WorkflowResultUnknownException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 
 import java.time.Duration;
@@ -59,9 +60,9 @@ public abstract class WorkflowRequest {
      * orchestrator
      */
     protected ManagementClient getOrchestrator(@NonNull Layout layout) {
-        List<String> activeLayoutServers = layout.getLayoutServers().stream()
-                .filter(s -> !layout.getUnresponsiveServers().contains(s)
-                        && !s.equals(nodeForWorkflow))
+        List<NodeLocator> activeLayoutServers = layout.getLayoutServersNodes().stream()
+                .filter(s -> !layout.getUnresponsiveServersNodes().contains(s) &&
+                        !s.equals(getNodeForWorkflow()))
                 .collect(Collectors.toList());
 
         if (activeLayoutServers.isEmpty()) {
@@ -72,9 +73,8 @@ public abstract class WorkflowRequest {
         ManagementClient managementClient = runtime.getLayoutView().getRuntimeLayout(layout)
                 .getManagementClient(activeLayoutServers.get(0));
 
-        for (String endpoint : activeLayoutServers) {
-            BaseClient client = runtime.getLayoutView().getRuntimeLayout(layout)
-                    .getBaseClient(endpoint);
+        for (NodeLocator endpoint : activeLayoutServers) {
+            BaseClient client = runtime.getLayoutView().getRuntimeLayout(layout).getBaseClient(endpoint);
             if (client.pingSync()) {
                 log.info("getOrchestrator: orchestrator selected {}, layout {}", endpoint, layout);
                 managementClient = runtime.getLayoutView().getRuntimeLayout(layout)
@@ -152,6 +152,10 @@ public abstract class WorkflowRequest {
         }
 
         throw new WorkflowResultUnknownException();
+    }
+
+    protected NodeLocator getNodeForWorkflow(){
+        return NodeLocator.parseString(nodeForWorkflow);
     }
 }
 

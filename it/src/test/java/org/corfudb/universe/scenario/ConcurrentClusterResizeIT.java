@@ -61,7 +61,7 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
 
                 servers.forEach(node -> {
                     Runnable removeNodeAction = () -> corfuClient.getManagementView().removeNode(
-                            node.getEndpoint(),
+                            node.getEndpoint().toEndpointUrl(),
                             clientFixture.getNumRetry(),
                             clientFixture.getTimeout(),
                             clientFixture.getPollPeriod()
@@ -75,7 +75,7 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
 
                 // Verify layout contains only one node
                 corfuClient.invalidateLayout();
-                assertThat(corfuClient.getLayout().getAllServers()).containsExactly(server0.getEndpoint());
+                assertThat(corfuClient.getLayout().getAllServersNodes()).containsExactly(server0.getEndpoint());
 
                 // Verify data path working fine
                 for (int x = 0; x < TestFixtureConst.DEFAULT_TABLE_ITER; x++) {
@@ -87,7 +87,7 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
                 // Concurrently add four nodes back into cluster and wait for cluster to stabilize
                 ExecutorService executor = Executors.newFixedThreadPool(numNodes - 1);
                 servers.forEach(node -> executor.submit(() -> corfuClient.getManagementView().addNode(
-                        node.getEndpoint(),
+                        node.getEndpoint().toEndpointUrl(),
                         clientFixture.getNumRetry(),
                         clientFixture.getTimeout(),
                         clientFixture.getPollPeriod())

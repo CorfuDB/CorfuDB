@@ -48,15 +48,9 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
      * @param clientId Current Client Identifier.
      * @param serverId Remote Server Identifier to connect to.
      */
-    public ClientHandshakeHandler(@NonNull UUID clientId, UUID serverId, int handshakeTimeout) {
+    public ClientHandshakeHandler(@NonNull UUID clientId, @NonNull UUID serverId, int handshakeTimeout) {
         this.clientId = clientId;
-        if (serverId == null) {
-            // A null identifier, indicates node ID matching is not required. Send a default
-            // (all 0's) UUID to Server, to ignore matching stage during handshake
-            this.nodeId = UUID.fromString("00000000-0000-0000-0000-000000000000");
-        } else {
-            this.nodeId = serverId;
-        }
+        this.nodeId = serverId;
         this.handshakeTimeout = handshakeTimeout;
         this.handshakeState = new HandshakeState();
     }

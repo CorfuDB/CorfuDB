@@ -30,8 +30,7 @@ public class NodeLocatorTest extends AbstractViewTest {
         assertThat(locator.getPort())
             .isEqualTo(PORT_NUM);
 
-        assertThat(locator.getNodeId())
-            .isNull();
+        assertThat(locator.getNodeId()).isEqualTo(NodeLocator.DEFAULT_NODE_ID);
 
         assertThat(locator.getProtocol())
             .isEqualTo(Protocol.TCP);
@@ -49,11 +48,9 @@ public class NodeLocatorTest extends AbstractViewTest {
                                         .build();
         NodeLocator parsed = NodeLocator.parseString(locator.toString());
 
-        assertThat(locator)
-            .isEqualTo(parsed);
+        assertThat(locator).isEqualTo(parsed);
 
-        assertThat(locator)
-            .isEqualToComparingFieldByField(parsed);
+        assertThat(locator).isEqualToComparingFieldByField(parsed);
     }
 
     @Test
@@ -61,7 +58,6 @@ public class NodeLocatorTest extends AbstractViewTest {
         NodeLocator locator = NodeLocator.builder()
             .host("localhost")
             .port(1)
-            .nodeId(null)
             .option("test1", "test2")
             .option("test2", "test3")
             .protocol(Protocol.TCP)
@@ -69,11 +65,9 @@ public class NodeLocatorTest extends AbstractViewTest {
 
         NodeLocator parsed = NodeLocator.parseString(locator.toString());
 
-        assertThat(locator)
-            .isEqualTo(parsed);
+        assertThat(locator).isEqualTo(parsed);
 
-        assertThat(locator)
-            .isEqualToComparingFieldByField(parsed);
+        assertThat(locator).isEqualToComparingFieldByField(parsed);
     }
 
 }

@@ -15,6 +15,7 @@ import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -575,7 +576,7 @@ public class ServerRestartIT extends AbstractIT {
 
             SequencerClient sequencerClient = corfuRuntime
                     .getLayoutView().getRuntimeLayout()
-                    .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
+                    .getSequencerClient(NodeLocator.parseString(corfuSingleNodeHost + ":" + corfuSingleNodePort));
 
             TokenResponse expectedTokenResponseA = sequencerClient
                     .nextToken(Collections.singletonList(streamNameA), 0)
@@ -599,7 +600,7 @@ public class ServerRestartIT extends AbstractIT {
 
             sequencerClient = corfuRuntime
                     .getLayoutView().getRuntimeLayout()
-                    .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
+                    .getSequencerClient(NodeLocator.parseString(corfuSingleNodeHost + ":" + corfuSingleNodePort));
 
             // check tail recovery after restart
             TokenResponse tokenResponseA = sequencerClient
@@ -685,7 +686,7 @@ public class ServerRestartIT extends AbstractIT {
         Process corfuProcess = runCorfuServer();
 
         // Write 1000 entries.
-        CorfuRuntime rt1 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        CorfuRuntime rt1 = new CorfuRuntime(DEFAULT_ENDPOINT.toEndpointUrl()).connect();
         CorfuTable<String, String> corfuTable1 = createTable(rt1, new StringIndexer());
         final int num = 1000;
         for (int i = 0; i < num; i++) {
@@ -710,7 +711,7 @@ public class ServerRestartIT extends AbstractIT {
         corfuProcess = runCorfuServer();
 
         // Start a new client and verify the index.
-        CorfuRuntime rt2 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        CorfuRuntime rt2 = new CorfuRuntime(DEFAULT_ENDPOINT.toEndpointUrl()).connect();
         CorfuTable<String, String> corfuTable2 = createTable(rt2, new StringIndexer());
         Collection<Map.Entry<String, String>> c2 =
                 corfuTable2.getByIndex(StringIndexer.BY_FIRST_LETTER, "9");
@@ -718,7 +719,7 @@ public class ServerRestartIT extends AbstractIT {
         assertThat(c1a.containsAll(c2)).isTrue();
 
         // Start a new client with cache disabled and fast object loading disabled.
-        CorfuRuntime rt3 = new CorfuRuntime(DEFAULT_ENDPOINT)
+        CorfuRuntime rt3 = new CorfuRuntime(DEFAULT_ENDPOINT.toEndpointUrl())
                 .setLoadSmrMapsAtConnect(false)
                 .setCacheDisabled(true)
                 .connect();
@@ -748,7 +749,7 @@ public class ServerRestartIT extends AbstractIT {
         Process corfuProcess = runCorfuServer();
 
         // Write 1000 entries
-        CorfuRuntime runtime1 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        CorfuRuntime runtime1 = new CorfuRuntime(DEFAULT_ENDPOINT.toEndpointUrl()).connect();
         CorfuTable<String, String> corfuTable1 = createTable(runtime1, new StringMultiIndexer());
 
         final int numEntries = 1000;
@@ -780,7 +781,7 @@ public class ServerRestartIT extends AbstractIT {
         corfuProcess = runCorfuServer();
 
         // Start a new client and verify the multi index.
-        CorfuRuntime runtime2 = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
+        CorfuRuntime runtime2 = new CorfuRuntime(DEFAULT_ENDPOINT.toEndpointUrl()).connect();
         CorfuTable<String, String> corfuTable2 = createTable(runtime2, new StringMultiIndexer());
         Collection<Map.Entry<String, String>> resultAfterRestart =
                 corfuTable2.getByIndex(StringMultiIndexer.BY_EACH_WORD, "tag666");
@@ -788,7 +789,7 @@ public class ServerRestartIT extends AbstractIT {
         assertThat(resultAfterRestart.containsAll(resultInitial)).isTrue();
 
         // Start a new client with cache and fast object loading disabled and verify multi index.
-        CorfuRuntime runtime3 = new CorfuRuntime(DEFAULT_ENDPOINT)
+        CorfuRuntime runtime3 = new CorfuRuntime(DEFAULT_ENDPOINT.toEndpointUrl())
                 .setLoadSmrMapsAtConnect(false)
                 .setCacheDisabled(true)
                 .connect();

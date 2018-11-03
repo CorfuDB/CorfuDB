@@ -30,8 +30,10 @@ import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.HealingDetector;
 import org.corfudb.infrastructure.management.IDetector;
+import org.corfudb.runtime.view.Layout.LayoutStripe;
 import org.corfudb.runtime.view.SequencerHealingPolicy;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.UuidUtils;
 
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
@@ -317,8 +319,13 @@ public class ServerContext implements AutoCloseable {
         }
         log.info("getNewSingleNodeLayout: Bootstrapping with cluster Id {} [{}]",
             clusterId, UuidUtils.asBase64(clusterId));
-        String localAddress = getServerConfig().get("--address") + ":"
-            + getServerConfig().get("<port>");
+
+        String host = getServerConfig().get("--address").toString();
+        int port = Integer.parseInt(getServerConfig().get("<port>").toString());
+
+        NodeLocator endpoint = NodeLocator.builder().host(host).port(port).build();
+        String localAddress = endpoint.toEndpointUrl();
+
         return new Layout(
             Collections.singletonList(localAddress),
             Collections.singletonList(localAddress),
@@ -327,9 +334,7 @@ public class ServerContext implements AutoCloseable {
                 0L,
                 -1L,
                 Collections.singletonList(
-                    new Layout.LayoutStripe(
-                        Collections.singletonList(localAddress)
-                    )
+                    LayoutStripe.build(Collections.singletonList(endpoint))
                 )
             )),
             0L,

@@ -11,6 +11,7 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutBuilder;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.junit.Test;
 
@@ -35,7 +36,7 @@ public class WorkflowIT extends AbstractIT {
     final String host = "localhost";
 
     String getConnectionString(int port) {
-        return host + ":" + port;
+        return NodeLocator.builder().host(host).port(port).build().toEndpointUrl();
     }
 
     final Duration timeout = Duration.ofMinutes(5);
@@ -110,7 +111,7 @@ public class WorkflowIT extends AbstractIT {
         Layout n3Layout = new Layout(n1Rt.getLayoutView().getLayout());
 
         Layout expectedLayout = new LayoutBuilder(n3Layout)
-                .removeLayoutServer(getConnectionString(n2Port))
+                .removeLayoutServer(NodeLocator.parseString(getConnectionString(n2Port)))
                 .removeSequencerServer(getConnectionString(n2Port))
                 .removeLogunitServer(getConnectionString(n2Port))
                 .removeUnresponsiveServer(getConnectionString(n2Port))
@@ -336,13 +337,13 @@ public class WorkflowIT extends AbstractIT {
         final int retries = 3;
         final Duration timeout = PARAMETERS.TIMEOUT_LONG;
         final Duration pollPeriod = PARAMETERS.TIMEOUT_VERY_SHORT;
-        rt.getManagementView().addNode("localhost:9001", retries, timeout, pollPeriod);
-        rt.getManagementView().addNode("localhost:9002", retries, timeout, pollPeriod);
+        rt.getManagementView().addNode(node9001.toEndpointUrl(), retries, timeout, pollPeriod);
+        rt.getManagementView().addNode(node9002.toEndpointUrl(), retries, timeout, pollPeriod);
 
         rt.invalidateLayout();
         Layout layoutAfterAdds = rt.getLayoutView().getLayout();
         assertThat(layoutAfterAdds.getSegments().stream()
-                .allMatch(s -> s.getAllLogServers().size() == numNodes)).isTrue();
+                .allMatch(s -> s.getAllLogServersNodes().size() == numNodes)).isTrue();
 
         run(n0.shutdown);
 
@@ -357,9 +358,9 @@ public class WorkflowIT extends AbstractIT {
         }
 
         // Assert that the new nodes should have the correct trimMark.
-        assertThat(rt.getLayoutView().getRuntimeLayout().getLogUnitClient("localhost:9001").getTrimMark().get())
+        assertThat(rt.getLayoutView().getRuntimeLayout().getLogUnitClient(node9001).getTrimMark().get())
                 .isEqualTo(prefixTrimAddress + 1);
-        assertThat(rt.getLayoutView().getRuntimeLayout().getLogUnitClient("localhost:9002").getTrimMark().get())
+        assertThat(rt.getLayoutView().getRuntimeLayout().getLogUnitClient(node9002).getTrimMark().get())
                 .isEqualTo(prefixTrimAddress + 1);
         FastObjectLoader fastObjectLoader = new FastObjectLoader(rt);
         fastObjectLoader.setRecoverSequencerMode(true);

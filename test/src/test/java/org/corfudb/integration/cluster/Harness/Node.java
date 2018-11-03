@@ -1,6 +1,7 @@
 package org.corfudb.integration.cluster.Harness;
 
 import lombok.Getter;
+import org.corfudb.util.NodeLocator;
 
 /**
  * An abstraction for a corfu server/node.
@@ -10,7 +11,7 @@ import lombok.Getter;
 public class Node {
 
     @Getter
-    final String address;
+    final NodeLocator address;
 
     @Getter
     String clusterAddress;
@@ -22,7 +23,7 @@ public class Node {
 
     final public Action start;
 
-    public Node(String address, String clusterAddress, String logPath) {
+    public Node(NodeLocator address, String clusterAddress, String logPath) {
         this.address = address;
         this.clusterAddress = clusterAddress;
         this.logPath = logPath;
@@ -30,12 +31,12 @@ public class Node {
         this.start = new StartAction(this);
     }
 
-    public Node(String address, String logPath) {
+    public Node(NodeLocator address, String logPath) {
         this(address, null, logPath);
     }
 
     public String getProcessKillCommand() {
-        String port = address.split(":")[1];
+        int port = address.getPort();
         return "ps aux | grep CorfuServer | grep "+ port +" |awk '{print $2}'| xargs kill -9";
     }
 }

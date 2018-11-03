@@ -1,11 +1,5 @@
 package org.corfudb.universe.scenario;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
-
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.Layout;
@@ -15,6 +9,12 @@ import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.junit.Ignore;
 import org.junit.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 
 public class OneNodePartitionedIT extends GenericIntegrationTest {
 
@@ -50,7 +50,7 @@ public class OneNodePartitionedIT extends GenericIntegrationTest {
 
                 // Verify layout, unresponsive servers should contain only one node
                 Layout layout = corfuClient.getLayout();
-                assertThat(layout.getUnresponsiveServers()).containsExactly(server1.getEndpoint());
+                assertThat(layout.getUnresponsiveServersNodes()).containsExactly(server1.getEndpoint());
 
                 // Verify cluster status is DEGRADED with all nodes UP
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();

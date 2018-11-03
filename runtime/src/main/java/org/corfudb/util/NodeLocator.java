@@ -1,19 +1,26 @@
 package org.corfudb.util;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.Data;
+import lombok.NonNull;
+import lombok.Singular;
+
 import java.io.Serializable;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-
-import lombok.Builder;
-import lombok.Data;
-import lombok.NonNull;
-import lombok.Singular;
 
 /** {@link NodeLocator}s represent locators for Corfu nodes.
  *
@@ -23,42 +30,55 @@ import lombok.Singular;
 @Data
 @Builder
 public class NodeLocator implements Serializable {
-
     private static final long serialVersionUID = 1L;
 
-    /** Represents protocols for Corfu nodes. */
+    public static final UUID DEFAULT_NODE_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
+
+    /**
+     * Represents protocols for Corfu nodes.
+     */
     public enum Protocol {
-        TCP     /** Default TCP-based protocol. */
+        /**
+         * Default TCP-based protocol.
+         */
+        TCP
     }
 
     /** The protocol to use. */
-    @Builder.Default private Protocol protocol = Protocol.TCP;
+    @Default
+    @NonNull
+    private Protocol protocol = Protocol.TCP;
 
     /** The host the node is located on. */
-    final String host;
+    @NonNull
+    private final String host;
 
     /** The port number on the host the node is located on. */
-    final int port;
+    private final int port;
 
     /** The ID of the node. Can be null if node id matching is not requested. */
-    @Builder.Default private UUID nodeId = null;
+    @Default
+    @NonNull
+    private final UUID nodeId = DEFAULT_NODE_ID;
 
     /** A map of options. */
-    @Singular final ImmutableMap<String, String> options;
+    @Singular
+    final ImmutableMap<String, String> options;
 
-    /** Parse a node locator string.
+    /**
+     * Parse a node locator string.
      *
-     * @param toParse   The string to parse.
+     * @param connectionString   The string to parse.
      * @return          A {@link NodeLocator} which represents the string.
      */
-    public static NodeLocator parseString(String toParse) {
+    public static NodeLocator parseString(String connectionString) {
         try {
             // Fix a "legacy" node locator, which doesn't have a protocol.
-            if (!toParse.contains("://")) {
-                toParse = "tcp://" + toParse;
+            if (!connectionString.contains("://")) {
+                connectionString = "tcp://" + connectionString;
             }
 
-            final URI url = new URI(toParse);
+            final URI url = new URI(connectionString);
 
             // Get the protocol from the enum
             Protocol proto = Protocol.valueOf(url.getScheme().toUpperCase());
@@ -68,11 +88,8 @@ public class NodeLocator implements Serializable {
             int port = url.getPort();
 
             // Node ID is from the path, if present.
-            UUID nodeId;
-            if (url.getPath().equals("") || url.getPath().equals("/")) {
-                // No path, so nodeId is null
-                nodeId = null;
-            } else {
+            UUID nodeId = NodeLocator.DEFAULT_NODE_ID;
+            if (!url.getPath().equals("") && !url.getPath().equals("/")) {
                 nodeId = UuidUtils.fromBase64(url.getPath().replaceFirst("/", ""));
             }
 
@@ -100,9 +117,27 @@ public class NodeLocator implements Serializable {
         }
     }
 
+    public static ImmutableList<String> transformToStringsList(Collection<NodeLocator> nodes) {
+        List<String> result = nodes.stream().map(NodeLocator::toEndpointUrl).collect(Collectors.toList());
+        return ImmutableList.copyOf(result);
+    }
 
-    @Override
-    public String toString() {
+    public static ImmutableSet<String> transformToStringsSet(Collection<NodeLocator> nodes) {
+        List<String> result = nodes.stream().map(NodeLocator::toEndpointUrl).collect(Collectors.toList());
+        return ImmutableSet.copyOf(result);
+    }
+
+    public static ImmutableList<NodeLocator> transformToList(Collection<String> nodes) {
+        List<NodeLocator> result = nodes.stream().map(NodeLocator::parseString).collect(Collectors.toList());
+        return ImmutableList.copyOf(result);
+    }
+
+    public static ImmutableSet<NodeLocator> transformToSet(Collection<String> nodes) {
+        Set<NodeLocator> result = nodes.stream().map(NodeLocator::parseString).collect(Collectors.toSet());
+        return ImmutableSet.copyOf(result);
+    }
+
+    public String toEndpointUrl(){
         StringBuilder sb = new StringBuilder()
                 .append(protocol.toString().toLowerCase())
                 .append("://")
@@ -111,9 +146,14 @@ public class NodeLocator implements Serializable {
                 .append(port)
                 .append("/");
 
-        if (nodeId != null) {
-            sb.append(UuidUtils.asBase64(nodeId));
-        }
+        return sb.toString();
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder(toEndpointUrl());
+
+        sb.append(UuidUtils.asBase64(nodeId));
 
         if (!options.isEmpty()) {
             sb.append("?");
@@ -125,13 +165,19 @@ public class NodeLocator implements Serializable {
         return sb.toString();
     }
 
-    /**
-     * Creates and returns the endpoint address in the legacy format host:port.
-     *
-     * @param nodeLocator Nodelocator to convert to legacy format.
-     * @return Returns the endpoint address.
-     */
-    public static String getLegacyEndpoint(@NonNull NodeLocator nodeLocator) {
-        return nodeLocator.getHost() + ":" + nodeLocator.getPort();
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        NodeLocator that = (NodeLocator) o;
+        return port == that.port &&
+                protocol == that.protocol &&
+                Objects.equals(host, that.host) &&
+                Objects.equals(nodeId, that.nodeId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(protocol, host, port, nodeId);
     }
 }

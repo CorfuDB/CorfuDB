@@ -23,24 +23,24 @@ public class LayoutManagementViewTest extends AbstractViewTest{
         // Set up a 3 node cluster, remove node 2 and then attempt
         // to remove the 3rd node from a cluster that only has two
         // nodes
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
+        addServer(SERVERS.ENDPOINT_0);
+        addServer(SERVERS.ENDPOINT_1);
+        addServer(SERVERS.ENDPOINT_2);
 
         Layout l = new TestLayoutBuilder()
                 .setEpoch(1L)
-                .addLayoutServer(SERVERS.PORT_0)
-                .addLayoutServer(SERVERS.PORT_1)
-                .addLayoutServer(SERVERS.PORT_2)
-                .addSequencer(SERVERS.PORT_0)
-                .addSequencer(SERVERS.PORT_1)
-                .addSequencer(SERVERS.PORT_2)
+                .addLayoutServer(SERVERS.ENDPOINT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_1)
+                .addLayoutServer(SERVERS.ENDPOINT_2)
+                .addSequencer(SERVERS.ENDPOINT_0)
+                .addSequencer(SERVERS.ENDPOINT_1)
+                .addSequencer(SERVERS.ENDPOINT_2)
                 .buildSegment()
                 .setReplicationMode(ReplicationMode.QUORUM_REPLICATION)
                 .buildStripe()
-                .addLogUnit(SERVERS.PORT_0)
-                .addLogUnit(SERVERS.PORT_1)
-                .addLogUnit(SERVERS.PORT_2)
+                .addLogUnit(SERVERS.ENDPOINT_0)
+                .addLogUnit(SERVERS.ENDPOINT_1)
+                .addLogUnit(SERVERS.ENDPOINT_2)
                 .addToSegment()
                 .addToLayout()
                 .build();
@@ -52,16 +52,16 @@ public class LayoutManagementViewTest extends AbstractViewTest{
         r.invalidateLayout();
         Layout layout = new Layout(r.getLayoutView().getLayout());
         Layout expectedLayout = new LayoutBuilder(layout)
-                .removeLayoutServer(getEndpoint(SERVERS.PORT_2))
-                .removeSequencerServer(getEndpoint(SERVERS.PORT_2))
-                .removeLogunitServer(getEndpoint(SERVERS.PORT_2))
-                .removeUnresponsiveServer(getEndpoint(SERVERS.PORT_2))
+                .removeLayoutServer(SERVERS.ENDPOINT_2)
+                .removeSequencerServer(SERVERS.ENDPOINT_2.toEndpointUrl())
+                .removeLogunitServer(SERVERS.ENDPOINT_2.toEndpointUrl())
+                .removeUnresponsiveServer(SERVERS.ENDPOINT_2.toEndpointUrl())
                 .setEpoch(layout.getEpoch() + 1)
                 .build();
 
         for (int x = 0; x < runtime.getParameters().getInvalidateRetry(); x++) {
             try {
-                r.getLayoutManagementView().removeNode(layout, getEndpoint(SERVERS.PORT_2));
+                r.getLayoutManagementView().removeNode(layout, SERVERS.ENDPOINT_2.toEndpointUrl());
                 r.invalidateLayout();
                 break;
             } catch (WrongEpochException e) {
@@ -80,11 +80,8 @@ public class LayoutManagementViewTest extends AbstractViewTest{
         // Attempt to remove a node from a two node cluster and verify that remove fails
         // due to an invalid modification (i.e. the remove results in a cluster that doesn't
         // meet the least number of nodes required to maintain redundancy).
-        assertThatThrownBy(() -> {
-                    r.getLayoutManagementView().removeNode(l2,
-                            getEndpoint(SERVERS.PORT_1));
-                }
-        ).isInstanceOf(LayoutModificationException.class);
+        assertThatThrownBy(() -> r.getLayoutManagementView().removeNode(l2, SERVERS.ENDPOINT_1.toEndpointUrl()))
+                .isInstanceOf(LayoutModificationException.class);
 
         // Verify that the epoch hasn't changed
         assertThat(r.getLayoutView().getLayout().getEpoch()).isEqualTo(epoch);

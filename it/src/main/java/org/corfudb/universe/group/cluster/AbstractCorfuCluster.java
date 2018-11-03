@@ -1,8 +1,5 @@
 package org.corfudb.universe.group.cluster;
 
-import static lombok.Builder.Default;
-
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import lombok.Getter;
@@ -18,6 +15,7 @@ import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.universe.universe.UniverseParams;
 import org.corfudb.universe.util.ClassUtils;
+import org.corfudb.util.NodeLocator;
 
 import java.time.Duration;
 import java.util.List;
@@ -27,6 +25,8 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+
+import static lombok.Builder.Default;
 
 @Slf4j
 public abstract class AbstractCorfuCluster<P extends CorfuClusterParams, U extends UniverseParams>
@@ -168,5 +168,5 @@ public abstract class AbstractCorfuCluster<P extends CorfuClusterParams, U exten
                 .deploy();
     }
 
-    protected abstract ImmutableSortedSet<String> getClusterLayoutServers();
+    protected abstract ImmutableSortedSet<NodeLocator> getClusterLayoutServers();
 }

@@ -15,8 +15,8 @@ public class StartAction extends Action {
 
     public void run() throws Exception {
         new AbstractIT.CorfuServerRunner()
-                .setHost(node.getAddress().split(":")[0])
-                .setPort(Integer.valueOf(node.getAddress().split(":")[1]))
+                .setHost(node.getAddress().getHost())
+                .setPort(node.getAddress().getPort())
                 .setLogPath(node.getLogPath())
                 .setSingle(false)
                 .runServer();

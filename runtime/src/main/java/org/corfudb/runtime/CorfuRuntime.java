@@ -1,6 +1,7 @@
 package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
@@ -10,7 +11,6 @@ import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Data;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Setter;
 import lombok.Singular;
 import lombok.ToString;
@@ -426,7 +426,7 @@ public class CorfuRuntime {
      * @param trimMark  Address at which the log was trimmed.
      * @param timestamp Timestamp at which the trim was learnt.
      */
-    public void addTrimSnapshot(@NonNull long trimMark, @NonNull long timestamp) {
+    public void addTrimSnapshot(long trimMark, long timestamp) {
         trimSnapshotList.addLast(new TrimSnapshot(trimMark, timestamp));
     }
 
@@ -504,7 +504,7 @@ public class CorfuRuntime {
      * When set, overrides the default getRouterFunction. Used by the testing
      * framework to ensure the default routers used are for testing.
      */
-    public static BiFunction<CorfuRuntime, String, IClientRouter> overrideGetRouterFunction = null;
+    public static BiFunction<CorfuRuntime, NodeLocator, IClientRouter> overrideGetRouterFunction = null;
 
     /**
      * A function to handle getting routers. Used by test framework to inject
@@ -512,26 +512,31 @@ public class CorfuRuntime {
      * a router.
      */
     @Getter
-    private final Function<String, IClientRouter> getRouterFunction =
-            overrideGetRouterFunction != null ? (address) ->
-                    overrideGetRouterFunction.apply(this, address) : (address) -> {
-                NodeLocator node = NodeLocator.parseString(address);
-                // Generate a new router, start it and add it to the table.
-                NettyClientRouter newRouter = new NettyClientRouter(node,
-                        getNettyEventLoop(),
-                        getParameters());
-                log.debug("Connecting to new router {}", node);
-                try {
-                    newRouter.addClient(new LayoutHandler())
-                            .addClient(new SequencerHandler())
-                            .addClient(new LogUnitHandler())
-                            .addClient(new ManagementHandler());
-                } catch (Exception e) {
-                    log.warn("Error connecting to router", e);
-                    throw e;
-                }
-                return newRouter;
-            };
+    private final Function<NodeLocator, IClientRouter> getRouterFunction = getOrBuildRouterFunction();
+
+    private Function<NodeLocator, IClientRouter> getOrBuildRouterFunction() {
+        if (overrideGetRouterFunction != null) {
+            return node -> overrideGetRouterFunction.apply(this, node);
+        }
+
+        return node -> {
+            // Generate a new router, start it and add it to the table.
+            NettyClientRouter newRouter = new NettyClientRouter(node,
+                    getNettyEventLoop(),
+                    getParameters());
+            log.debug("Connecting to new router {}", node);
+            try {
+                newRouter.addClient(new LayoutHandler())
+                        .addClient(new SequencerHandler())
+                        .addClient(new LogUnitHandler())
+                        .addClient(new ManagementHandler());
+            } catch (Exception e) {
+                log.warn("Error connecting to router", e);
+                throw e;
+            }
+            return newRouter;
+        };
+    }
 
     /** Factory method for generating new {@link CorfuRuntime}s given a set of
      *  {@link CorfuRuntimeParameters} to configure the runtime with.
@@ -552,9 +557,7 @@ public class CorfuRuntime {
         this.parameters = parameters;
 
         // Populate the initial set of layout servers
-        layoutServers = parameters.getLayoutServers().stream()
-                                .map(NodeLocator::toString)
-                                .collect(Collectors.toList());
+        layoutServers = new ArrayList<>(NodeLocator.transformToStringsSet(parameters.getLayoutServers()));
 
         // Set the initial cluster Id
         clusterId = parameters.getClusterId();
@@ -703,8 +706,20 @@ public class CorfuRuntime {
         layoutServers = Pattern.compile(",")
                 .splitAsStream(configurationString)
                 .map(String::trim)
+                .map(NodeLocator::parseString)
+                .map(NodeLocator::toEndpointUrl)
                 .collect(Collectors.toList());
         return this;
+    }
+
+    /**
+     * Use {@link this#addLayoutServer#(NodeLocator)}
+     * @param layoutServer layout server
+     * @return this instance
+     */
+    @Deprecated
+    public CorfuRuntime addLayoutServer(String layoutServer) {
+        return addLayoutServer(NodeLocator.parseString(layoutServer));
     }
 
     /**
@@ -713,9 +728,21 @@ public class CorfuRuntime {
      * @param layoutServer A layout server to use.
      * @return A CorfuRuntime, to support the builder pattern.
      */
-    public CorfuRuntime addLayoutServer(String layoutServer) {
-        layoutServers.add(layoutServer);
+    public CorfuRuntime addLayoutServer(NodeLocator layoutServer) {
+        layoutServers.add(layoutServer.toEndpointUrl());
         return this;
+    }
+
+    /**
+     * Get a router, given the address.
+     *
+     * @deprecated Use {@link this#getRouter(NodeLocator)}
+     * @param address The address of the router to get.
+     * @return The router.
+     */
+    @Deprecated
+    public IClientRouter getRouter(String address) {
+        return nodeRouterPool.getRouter(NodeLocator.parseString(address));
     }
 
     /**
@@ -724,8 +751,8 @@ public class CorfuRuntime {
      * @param address The address of the router to get.
      * @return The router.
      */
-    public IClientRouter getRouter(String address) {
-        return nodeRouterPool.getRouter(NodeLocator.parseString(address));
+    public IClientRouter getRouter(NodeLocator address) {
+        return nodeRouterPool.getRouter(address);
     }
 
     /**
@@ -734,13 +761,23 @@ public class CorfuRuntime {
      * this function does nothing.
      */
     public synchronized void invalidateLayout() {
-        // Is there a pending request to retrieve the layout?
+        log.debug("Invalidate layout. Cluster: {}", clusterId);
+
         if (!layout.isDone()) {
-            // Don't create a new request for a layout if there is one pending.
             return;
         }
-        layout = fetchLayout(latestLayout == null
-                ? layoutServers : latestLayout.getLayoutServers());
+
+        List<NodeLocator> servers;
+        if (latestLayout == null) {
+            servers = new ArrayList<>(getLayoutServersNodes());
+        } else {
+            servers = latestLayout.getLayoutServersNodes();
+        }
+        layout = fetchLayout(servers);
+    }
+
+    public ImmutableList<NodeLocator> getLayoutServersNodes(){
+        return NodeLocator.transformToList(layoutServers);
     }
 
     /** Check if the cluster Id of the layout matches the client cluster Id.
@@ -776,10 +813,7 @@ public class CorfuRuntime {
     private void pruneRemovedRouters(@Nonnull Layout layout) {
         nodeRouterPool.getNodeRouters().keySet().stream()
                 // Check if endpoint is present in the layout.
-                .filter(endpoint -> !layout.getAllServers()
-                        // Converting to legacy endpoint format as the layout only contains
-                        // legacy format - host:port.
-                        .contains(NodeLocator.getLegacyEndpoint(endpoint)))
+                .filter(endpoint -> !layout.getAllServersNodes().contains(endpoint))
                 .forEach(endpoint -> {
                     try {
                         nodeRouterPool.getNodeRouters().get(endpoint).stop();
@@ -799,11 +833,11 @@ public class CorfuRuntime {
      * @param layoutServers Layout servers to fetch the layout from.
      * @return A completable future containing a layout.
      */
-    private CompletableFuture<Layout> fetchLayout(List<String> layoutServers) {
+    private CompletableFuture<Layout> fetchLayout(List<NodeLocator> layoutServers) {
 
         return CompletableFuture.supplyAsync(() -> {
 
-            List<String> layoutServersCopy = new ArrayList<>(layoutServers);
+            List<NodeLocator> layoutServersCopy = new ArrayList<>(layoutServers);
             parameters.getBeforeRpcHandler().run();
             int systemDownTriggerCounter = 0;
 
@@ -811,10 +845,10 @@ public class CorfuRuntime {
 
                 Collections.shuffle(layoutServersCopy);
                 // Iterate through the layout servers, attempting to connect to one
-                for (String s : layoutServersCopy) {
-                    log.debug("Trying connection to layout server {}", s);
+                for (NodeLocator endpoint : layoutServersCopy) {
+                    log.debug("Trying connection to layout server {}", endpoint.toEndpointUrl());
                     try {
-                        IClientRouter router = getRouter(s);
+                        IClientRouter router = getRouter(endpoint);
                         // Try to get a layout.
                         CompletableFuture<Layout> layoutFuture =
                                 new LayoutClient(router, Layout.INVALID_EPOCH).getLayout();
@@ -836,7 +870,7 @@ public class CorfuRuntime {
 
                         layout = layoutFuture;
                         latestLayout = l;
-                        log.debug("Layout server {} responded with layout {}", s, l);
+                        log.debug("Layout server {} responded with layout {}", endpoint.toEndpointUrl(), l);
 
                         // Prune away removed node routers from the nodeRouterPool.
                         pruneRemovedRouters(l);
@@ -846,7 +880,7 @@ public class CorfuRuntime {
                         throw new UnrecoverableCorfuInterruptedError(
                             "Interrupted during layout fetch", ie);
                     } catch (Exception e) {
-                        log.warn("Tried to get layout from {} but failed with exception:", s, e);
+                        log.warn("Tried to get layout from {} but failed with exception:", endpoint.toEndpointUrl(), e);
                     }
                 }
 
@@ -873,7 +907,7 @@ public class CorfuRuntime {
         try {
             Layout currentLayout = CFUtils.getUninterruptibly(layout);
             List<CompletableFuture<VersionInfo>> versions =
-                    currentLayout.getLayoutServers()
+                    currentLayout.getLayoutServersNodes()
                         .stream().map(s -> getLayoutView().getRuntimeLayout().getBaseClient(s))
                         .map(BaseClient::getVersionInfo)
                         .collect(Collectors.toList());
@@ -910,7 +944,7 @@ public class CorfuRuntime {
         if (layout == null) {
             log.info("Connecting to Corfu server instance, layout servers={}", layoutServers);
             // Fetch the current layout and save the future.
-            layout = fetchLayout(layoutServers);
+            layout = fetchLayout(getLayoutServersNodes());
             try {
                 layout.get();
             } catch (Exception e) {

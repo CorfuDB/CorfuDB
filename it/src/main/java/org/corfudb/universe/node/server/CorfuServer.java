@@ -3,6 +3,7 @@ package org.corfudb.universe.node.server;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.NodeException;
 import org.corfudb.universe.universe.Universe;
+import org.corfudb.util.NodeLocator;
 
 /**
  * Represent a Corfu server implementation of {@link Node} used in the {@link Universe}.
@@ -60,8 +61,11 @@ public interface CorfuServer extends Node, Comparable<CorfuServer> {
 
     String getNetworkInterface();
 
-    default String getEndpoint() {
-        return getNetworkInterface() + ":" + getParams().getPort();
+    default NodeLocator getEndpoint() {
+        return NodeLocator.builder()
+                .host(getNetworkInterface())
+                .port(getParams().getPort())
+                .build();
     }
 
     enum Mode {

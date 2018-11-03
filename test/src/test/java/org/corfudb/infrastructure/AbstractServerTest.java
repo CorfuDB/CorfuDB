@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import lombok.Getter;
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.CorfuTestServers;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.CorfuRuntime;
@@ -13,6 +14,7 @@ import org.corfudb.runtime.clients.LogUnitHandler;
 import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.TestClientRouter;
+import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 
 import java.util.List;
@@ -88,8 +90,7 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
     /**
      * A map of maps to endpoint->routers, mapped for each runtime instance captured
      */
-    final Map<CorfuRuntime, Map<String, TestClientRouter>>
-            runtimeRouterMap = new ConcurrentHashMap<>();
+    final Map<CorfuRuntime, Map<NodeLocator, TestClientRouter>> runtimeRouterMap = new ConcurrentHashMap<>();
 
     /**
      * Function for obtaining a router, given a runtime and an endpoint.
@@ -98,15 +99,12 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
      * @param endpoint An endpoint string for the router.
      * @return
      */
-    private IClientRouter getRouterFunction(CorfuRuntime runtime, String endpoint) {
+    private IClientRouter getRouterFunction(CorfuRuntime runtime, NodeLocator endpoint) {
         runtimeRouterMap.putIfAbsent(runtime, new ConcurrentHashMap<>());
-        if (!endpoint.startsWith("test:")) {
-            throw new RuntimeException("Unsupported endpoint in test: " + endpoint);
-        }
+        CorfuTestServers.checkTestEndpoint(endpoint);
         return runtimeRouterMap.get(runtime).computeIfAbsent(endpoint,
                 x -> {
-                    TestClientRouter tcn =
-                            new TestClientRouter(router);
+                    TestClientRouter tcn = new TestClientRouter(router);
                     tcn.addClient(new BaseHandler())
                             .addClient(new SequencerHandler())
                             .addClient(new LayoutHandler())

@@ -5,7 +5,6 @@ import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.node.server.ServerUtil;
 import org.junit.Test;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.SortedSet;
 import java.util.TreeSet;

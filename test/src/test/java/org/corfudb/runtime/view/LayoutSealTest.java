@@ -4,6 +4,7 @@ import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.util.NodeLocator;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -21,35 +22,35 @@ public class LayoutSealTest extends AbstractViewTest {
 
     /**
      * Gets a layout with 5 Servers:
-     * PORT_0, PORT_1, PORT_2, PORT_3, PORT_4
+     * ENDPOINT_0, ENDPOINT_1, ENDPOINT_2, ENDPOINT_3, ENDPOINT_4
      * Sets the replication view as specified.
      *
      * @param replicationMode Replication view to set all segments in the layout with.
      * @return  Built layout with a connected runtime.
      */
     public RuntimeLayout getRuntimeLayout(Layout.ReplicationMode replicationMode) {
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
-        addServer(SERVERS.PORT_3);
-        addServer(SERVERS.PORT_4);
+        addServer(SERVERS.ENDPOINT_0);
+        addServer(SERVERS.ENDPOINT_1);
+        addServer(SERVERS.ENDPOINT_2);
+        addServer(SERVERS.ENDPOINT_3);
+        addServer(SERVERS.ENDPOINT_4);
 
         Layout l = new TestLayoutBuilder()
                 .setEpoch(1)
-                .addLayoutServer(SERVERS.PORT_0)
-                .addLayoutServer(SERVERS.PORT_1)
-                .addLayoutServer(SERVERS.PORT_2)
-                .addSequencer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_1)
+                .addLayoutServer(SERVERS.ENDPOINT_2)
+                .addSequencer(SERVERS.ENDPOINT_0)
                 .buildSegment()
                 .setReplicationMode(replicationMode)
                 .buildStripe()
-                .addLogUnit(SERVERS.PORT_0)
-                .addLogUnit(SERVERS.PORT_1)
-                .addLogUnit(SERVERS.PORT_2)
+                .addLogUnit(SERVERS.ENDPOINT_0)
+                .addLogUnit(SERVERS.ENDPOINT_1)
+                .addLogUnit(SERVERS.ENDPOINT_2)
                 .addToSegment()
                 .buildStripe()
-                .addLogUnit(SERVERS.PORT_3)
-                .addLogUnit(SERVERS.PORT_4)
+                .addLogUnit(SERVERS.ENDPOINT_3)
+                .addLogUnit(SERVERS.ENDPOINT_4)
                 .addToSegment()
                 .addToLayout()
                 .build();
@@ -58,11 +59,11 @@ public class LayoutSealTest extends AbstractViewTest {
         RuntimeLayout runtimeLayout = corfuRuntime.getLayoutView().getRuntimeLayout(l);
         setAggressiveTimeouts(runtimeLayout);
 
-        getManagementServer(SERVERS.PORT_0).shutdown();
-        getManagementServer(SERVERS.PORT_1).shutdown();
-        getManagementServer(SERVERS.PORT_2).shutdown();
-        getManagementServer(SERVERS.PORT_3).shutdown();
-        getManagementServer(SERVERS.PORT_4).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_0).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_1).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_2).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_3).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_4).shutdown();
         return runtimeLayout;
     }
 
@@ -71,13 +72,14 @@ public class LayoutSealTest extends AbstractViewTest {
      */
     public void setAggressiveTimeouts(RuntimeLayout runtimeLayout) {
         // Setting aggressive timeouts
-        List<Integer> serverPorts = new ArrayList<>();
-        serverPorts.add(SERVERS.PORT_0);
-        serverPorts.add(SERVERS.PORT_1);
-        serverPorts.add(SERVERS.PORT_2);
-        serverPorts.add(SERVERS.PORT_3);
-        serverPorts.add(SERVERS.PORT_4);
-        List<String> routerEndpoints = new ArrayList<>();
+        List<NodeLocator> serverPorts = new ArrayList<>();
+        serverPorts.add(SERVERS.ENDPOINT_0);
+        serverPorts.add(SERVERS.ENDPOINT_1);
+        serverPorts.add(SERVERS.ENDPOINT_2);
+        serverPorts.add(SERVERS.ENDPOINT_3);
+        serverPorts.add(SERVERS.ENDPOINT_4);
+
+        List<NodeLocator> routerEndpoints = new ArrayList<>();
         routerEndpoints.add(SERVERS.ENDPOINT_0);
         routerEndpoints.add(SERVERS.ENDPOINT_1);
         routerEndpoints.add(SERVERS.ENDPOINT_2);
@@ -97,9 +99,9 @@ public class LayoutSealTest extends AbstractViewTest {
      * Params: Expected epoch values
      */
     public void assertLayoutEpochs(long epochLayoutServer0, long epochLayoutServer1, long epochLayoutServer2) {
-        assertThat(getLayoutServer(SERVERS.PORT_0).getServerContext().getServerEpoch()).isEqualTo(epochLayoutServer0);
-        assertThat(getLayoutServer(SERVERS.PORT_1).getServerContext().getServerEpoch()).isEqualTo(epochLayoutServer1);
-        assertThat(getLayoutServer(SERVERS.PORT_2).getServerContext().getServerEpoch()).isEqualTo(epochLayoutServer2);
+        assertThat(getLayoutServer(SERVERS.ENDPOINT_0).getServerContext().getServerEpoch()).isEqualTo(epochLayoutServer0);
+        assertThat(getLayoutServer(SERVERS.ENDPOINT_1).getServerContext().getServerEpoch()).isEqualTo(epochLayoutServer1);
+        assertThat(getLayoutServer(SERVERS.ENDPOINT_2).getServerContext().getServerEpoch()).isEqualTo(epochLayoutServer2);
     }
 
     /**
@@ -107,11 +109,11 @@ public class LayoutSealTest extends AbstractViewTest {
      * Params: Expected epoch values
      */
     public void assertServerRouterEpochs(long epochServerRouter0, long epochServerRouter1, long epochServerRouter2, long epochServerRouter3, long epochServerRouter4) {
-        assertThat(getLayoutServer(SERVERS.PORT_0).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter0);
-        assertThat(getLayoutServer(SERVERS.PORT_1).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter1);
-        assertThat(getLayoutServer(SERVERS.PORT_2).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter2);
-        assertThat(getLayoutServer(SERVERS.PORT_3).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter3);
-        assertThat(getLayoutServer(SERVERS.PORT_4).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter4);
+        assertThat(getLayoutServer(SERVERS.ENDPOINT_0).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter0);
+        assertThat(getLayoutServer(SERVERS.ENDPOINT_1).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter1);
+        assertThat(getLayoutServer(SERVERS.ENDPOINT_2).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter2);
+        assertThat(getLayoutServer(SERVERS.ENDPOINT_3).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter3);
+        assertThat(getLayoutServer(SERVERS.ENDPOINT_4).getServerContext().getServerEpoch()).isEqualTo(epochServerRouter4);
     }
 
     /**

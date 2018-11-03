@@ -25,6 +25,7 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
+import org.corfudb.util.NodeLocator;
 
 /**
  * This is a wrapper over the layout to provide the clients required to communicate with the nodes.
@@ -67,10 +68,10 @@ public class RuntimeLayout {
                 layout.getAllServers());
 
         // Set remote epoch on all servers in layout.
-        Map<String, CompletableFuture<Boolean>> resultMap = SealServersHelper.asyncSealServers(this);
+        Map<NodeLocator, CompletableFuture<Boolean>> resultMap = SealServersHelper.asyncSealServers(this);
 
         // Validate if we received enough layout server responses.
-        SealServersHelper.waitForLayoutSeal(layout.getLayoutServers(), resultMap);
+        SealServersHelper.waitForLayoutSeal(layout.getLayoutServersNodes(), resultMap);
         // Validate if we received enough log unit server responses depending on the
         // replication mode.
         for (LayoutSegment layoutSegment : layout.getSegments()) {
@@ -100,19 +101,21 @@ public class RuntimeLayout {
      * @param endpoint    Router endpoint to create the client.
      * @return client
      */
-    private IClient getClient(final Class<? extends IClient> clientClass,
-                              final String endpoint) {
+    private IClient getClient(final Class<? extends IClient> clientClass, final String endpoint) {
         return senderClientMap.compute(clientClass, (senderClass, stringEntryMap) -> {
+
+            NodeLocator node = NodeLocator.parseString(endpoint);
+
             Map<String, IClient> endpointClientMap = stringEntryMap;
             if (endpointClientMap == null) {
                 endpointClientMap = new HashMap<>();
             }
 
-            endpointClientMap.computeIfAbsent(endpoint, s -> {
+            endpointClientMap.computeIfAbsent(node.toEndpointUrl(), s -> {
                 try {
                     Constructor<? extends IClient> ctor =
                             clientClass.getDeclaredConstructor(IClientRouter.class, long.class);
-                    return ctor.newInstance(getRuntime().getRouter(endpoint), layout.getEpoch());
+                    return ctor.newInstance(getRuntime().getRouter(node), layout.getEpoch());
                 } catch (NoSuchMethodException | IllegalAccessException | InstantiationException
                         | InvocationTargetException e) {
                     throw new UnrecoverableCorfuError(e);
@@ -122,26 +125,51 @@ public class RuntimeLayout {
         }).get(endpoint);
     }
 
+    @Deprecated
     public BaseClient getBaseClient(String endpoint) {
-        return (BaseClient) getClient(BaseClient.class, endpoint);
+        return getBaseClient(NodeLocator.parseString(endpoint));
     }
 
+    public BaseClient getBaseClient(NodeLocator endpoint) {
+        return (BaseClient) getClient(BaseClient.class, endpoint.toEndpointUrl());
+    }
+
+    @Deprecated
     public LayoutClient getLayoutClient(String endpoint) {
-        return (LayoutClient) getClient(LayoutClient.class, endpoint);
+        return getLayoutClient(NodeLocator.parseString(endpoint));
+    }
+
+    public LayoutClient getLayoutClient(NodeLocator endpoint) {
+        return (LayoutClient) getClient(LayoutClient.class, endpoint.toEndpointUrl());
     }
 
     public SequencerClient getPrimarySequencerClient() {
-        return getSequencerClient(layout.getSequencers().get(0));
+        return getSequencerClient(layout.getPrimarySequencerNode());
     }
 
+    /**
+     * @deprecated Use {@link this#getSequencerClient(NodeLocator)}
+     * @param endpoint
+     * @return
+     */
+    @Deprecated
     public SequencerClient getSequencerClient(String endpoint) {
-        return (SequencerClient) getClient(SequencerClient.class, endpoint);
+        return getSequencerClient(NodeLocator.parseString(endpoint));
+    }
+
+    public SequencerClient getSequencerClient(NodeLocator endpoint) {
+        return (SequencerClient) getClient(SequencerClient.class, endpoint.toEndpointUrl());
     }
 
     public LogUnitClient getLogUnitClient(long address, int index) {
-        return getLogUnitClient(layout.getStripe(address).getLogServers().get(index));
+        return getLogUnitClient(layout.getStripe(address).getLogServersNodes().get(index));
     }
 
+    public LogUnitClient getLogUnitClient(NodeLocator endpoint) {
+        return getLogUnitClient(endpoint.toEndpointUrl());
+    }
+
+    @Deprecated
     public LogUnitClient getLogUnitClient(String endpoint) {
         return ((LogUnitClient) getClient(LogUnitClient.class, endpoint))
                 .setMetricRegistry(getRuntime().getMetrics() != null
@@ -149,7 +177,12 @@ public class RuntimeLayout {
                 .setMaxWrite(getRuntime().getParameters().getMaxWriteSize());
     }
 
+    @Deprecated
     public ManagementClient getManagementClient(String endpoint) {
         return (ManagementClient) getClient(ManagementClient.class, endpoint);
+    }
+
+    public ManagementClient getManagementClient(NodeLocator endpoint) {
+        return getManagementClient(endpoint.toEndpointUrl());
     }
 }

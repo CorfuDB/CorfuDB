@@ -34,7 +34,7 @@ public class AddNode extends WorkflowRequest {
     @Override
     protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {
         // Select the current tail node and send an add node request to the orchestrator
-        CreateWorkflowResponse resp = managementClient.addNodeRequest(nodeForWorkflow);
+        CreateWorkflowResponse resp = managementClient.addNodeRequest(getNodeForWorkflow().toEndpointUrl());
         log.info("sendRequest: requested to add {} on orchestrator {}:{}",
                 nodeForWorkflow, managementClient.getRouter().getHost(),
                 managementClient.getRouter().getPort());
@@ -46,13 +46,13 @@ public class AddNode extends WorkflowRequest {
         // Verify that the node has been added and that the address space isn't
         // segmented
         log.info("verifyRequest: {} to {}", this, layout);
-        return layout.getAllServers().contains(nodeForWorkflow)
-                && layout.getSegmentsForEndpoint(nodeForWorkflow).size()
+        return layout.getAllServersNodes().contains(getNodeForWorkflow())
+                && layout.getSegmentsForEndpoint(getNodeForWorkflow().toEndpointUrl()).size()
                 == layout.getSegments().size();
     }
 
     @Override
     public String toString() {
-        return this.getClass().getSimpleName() + " " + nodeForWorkflow;
+        return this.getClass().getSimpleName() + " " + getNodeForWorkflow().toEndpointUrl();
     }
 }

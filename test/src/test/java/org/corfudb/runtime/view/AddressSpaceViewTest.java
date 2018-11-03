@@ -22,24 +22,24 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
     @Before
     public void setup(){
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
+        addServer(SERVERS.ENDPOINT_0);
+        addServer(SERVERS.ENDPOINT_1);
+        addServer(SERVERS.ENDPOINT_2);
 
         //configure the layout accordingly
         bootstrapAllServers(new TestLayoutBuilder()
                 .setEpoch(1L)
-                .addLayoutServer(SERVERS.PORT_0)
-                .addSequencer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_0)
+                .addSequencer(SERVERS.ENDPOINT_0)
                 .buildSegment()
                 .buildStripe()
-                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.ENDPOINT_0)
                 .addToSegment()
                 .buildStripe()
-                .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.ENDPOINT_1)
                 .addToSegment()
                 .buildStripe()
-                .addLogUnit(SERVERS.PORT_2)
+                .addLogUnit(SERVERS.ENDPOINT_2)
                 .addToSegment()
                 .addToLayout()
                 .build());
@@ -67,21 +67,21 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 .isTrue();
 
         // Ensure that the data was written to each logunit.
-        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_0))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.ENDPOINT_0))
                 .matchesDataAtAddress(0, testPayload);
-        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_1))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.ENDPOINT_1))
                 .isEmptyAtAddress(0);
-        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_2))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.ENDPOINT_2))
                 .isEmptyAtAddress(0);
 
         r.getAddressSpaceView().write(new TokenResponse(new Token(epoch, 1),
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
                 "1".getBytes());
-        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_0))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.ENDPOINT_0))
                 .matchesDataAtAddress(0, testPayload);
-        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_1))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.ENDPOINT_1))
                 .matchesDataAtAddress(1, "1".getBytes());
-        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_2))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.ENDPOINT_2))
                 .isEmptyAtAddress(0);
     }
 

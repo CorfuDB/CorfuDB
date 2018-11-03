@@ -6,6 +6,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.NodeLocator;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -29,16 +30,16 @@ public class CmdletIT extends AbstractIT {
 
     // Using port 9901 to avoid intellij port conflict.
     private final int PORT = 9901;
-    private final String ENDPOINT = DEFAULT_HOST + ":" + PORT;
+    private final NodeLocator ENDPOINT = NodeLocator.parseString(DEFAULT_HOST + ":" + PORT);
 
     private Layout getSingleLayout() {
         return new Layout(
-                Collections.singletonList(ENDPOINT),
-                Collections.singletonList(ENDPOINT),
+                Collections.singletonList(ENDPOINT.toEndpointUrl()),
+                Collections.singletonList(ENDPOINT.toEndpointUrl()),
                 Collections.singletonList(new Layout.LayoutSegment(Layout.ReplicationMode.CHAIN_REPLICATION,
                         0L,
                         -1L,
-                        Collections.singletonList(new Layout.LayoutStripe(Collections.singletonList(ENDPOINT))))),
+                        Collections.singletonList(new Layout.LayoutStripe(Collections.singletonList(ENDPOINT.toEndpointUrl()))))),
                 Collections.EMPTY_LIST,
                 0L,
                 UUID.randomUUID());

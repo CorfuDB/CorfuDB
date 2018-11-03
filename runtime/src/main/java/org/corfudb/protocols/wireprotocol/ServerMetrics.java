@@ -37,7 +37,7 @@ public class ServerMetrics implements ICorfuPayload<ServerMetrics> {
 
     @Override
     public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, endpoint.toString());
+        ICorfuPayload.serialize(buf, endpoint.toEndpointUrl());
         ICorfuPayload.serialize(buf, sequencerMetrics);
     }
 

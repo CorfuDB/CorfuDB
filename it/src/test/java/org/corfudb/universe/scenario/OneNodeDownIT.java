@@ -52,7 +52,7 @@ public class OneNodeDownIT extends GenericIntegrationTest {
 
                 // Verify layout, unresponsive servers should contain only the stopped node
                 Layout layout = corfuClient.getLayout();
-                assertThat(layout.getUnresponsiveServers()).containsExactly(server1.getEndpoint());
+                assertThat(layout.getUnresponsiveServersNodes()).containsExactly(server1.getEndpoint());
 
                 // Verify cluster status is DEGRADED with one node down
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
@@ -61,7 +61,7 @@ public class OneNodeDownIT extends GenericIntegrationTest {
 
                 Map<String, ClusterStatusReport.NodeStatus> statusMap = clusterStatusReport
                         .getClientServerConnectivityStatusMap();
-                assertThat(statusMap.get(server1.getEndpoint())).isEqualTo(ClusterStatusReport.NodeStatus.DOWN);
+                assertThat(statusMap.get(server1.getEndpoint().toEndpointUrl())).isEqualTo(ClusterStatusReport.NodeStatus.DOWN);
 
                 // Verify data path working fine
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {

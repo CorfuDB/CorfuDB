@@ -70,7 +70,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     @Override
     Set<AbstractServer> getServersForTest() {
         dirPath = PARAMETERS.TEST_TEMP_DIR;
-        serverContext = new ServerContextBuilder()
+        serverContext = new ServerContextBuilder(serverRouter.getNode())
                 .setInitialToken(0)
                 .setSingle(false)
                 .setNoVerify(false)

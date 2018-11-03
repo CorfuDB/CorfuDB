@@ -3,10 +3,7 @@ package org.corfudb.universe.node.server;
 import org.junit.Test;
 import org.slf4j.event.Level;
 
-import java.io.IOException;
-import java.net.ServerSocket;
 import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

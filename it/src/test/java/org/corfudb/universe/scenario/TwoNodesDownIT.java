@@ -57,9 +57,9 @@ public class TwoNodesDownIT extends GenericIntegrationTest {
                 // TODO: There is a bug with ClusterStatus, see issue #1482, uncomment after patch
                 // assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
                 Map<String, NodeStatus> statusMap = clusterStatusReport.getClientServerConnectivityStatusMap();
-                assertThat(statusMap.get(server0.getEndpoint())).isEqualTo(NodeStatus.UP);
-                assertThat(statusMap.get(server1.getEndpoint())).isEqualTo(NodeStatus.DOWN);
-                assertThat(statusMap.get(server2.getEndpoint())).isEqualTo(NodeStatus.DOWN);
+                assertThat(statusMap.get(server0.getEndpoint().toEndpointUrl())).isEqualTo(NodeStatus.UP);
+                assertThat(statusMap.get(server1.getEndpoint().toEndpointUrl())).isEqualTo(NodeStatus.DOWN);
+                assertThat(statusMap.get(server2.getEndpoint().toEndpointUrl())).isEqualTo(NodeStatus.DOWN);
 
                 // Wait for failure detector finds cluster is down before recovering
                 waitForClusterDown(table);

@@ -3,6 +3,7 @@ package org.corfudb.runtime.collections;
 import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
+import org.corfudb.util.NodeLocator;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -20,7 +21,7 @@ public class SMRMapEntrySetTest extends AbstractTransactionsTest {
     public void TXBegin() { OptimisticTXBegin(); }
 
     @Getter
-    final String defaultConfigurationString = getDefaultEndpoint();
+    final NodeLocator defaultConfigurationString = getDefaultEndpoint();
 
     public CorfuRuntime r;
 

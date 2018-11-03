@@ -13,12 +13,12 @@ public class NetworkException extends RuntimeException {
 
 
     public NetworkException(String message, NodeLocator node) {
-        super(message + " [endpoint=" + node.toString() + "]");
+        super(message + " [endpoint=" + node.toEndpointUrl() + "]");
         this.node = node;
     }
 
     public NetworkException(String message, NodeLocator node, Throwable cause) {
-        super(message + " [endpoint=" + node.toString() + "]", cause);
+        super(message + " [endpoint=" + node.toEndpointUrl() + "]", cause);
         this.node = node;
     }
 }

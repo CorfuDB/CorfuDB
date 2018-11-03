@@ -27,7 +27,7 @@ public class HealNode extends WorkflowRequest {
 
     @Override
     protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {
-        CreateWorkflowResponse resp = managementClient.healNodeRequest(nodeForWorkflow,
+        CreateWorkflowResponse resp = managementClient.healNodeRequest(getNodeForWorkflow().toEndpointUrl(),
                 true, true, true, 0);
         log.info("sendRequest: requested to heal {} on orchestrator {}:{}",
                 nodeForWorkflow, managementClient.getRouter().getHost(),
@@ -38,12 +38,12 @@ public class HealNode extends WorkflowRequest {
     @Override
     protected boolean verifyRequest(@NonNull Layout layout) {
         log.info("verifyRequest: {} in {}", this, layout);
-        return layout.getAllServers().contains(nodeForWorkflow)
-                && layout.getSegmentsForEndpoint(nodeForWorkflow).size() == 1;
+        return layout.getAllServersNodes().contains(getNodeForWorkflow())
+                && layout.getSegmentsForEndpoint(getNodeForWorkflow().toEndpointUrl()).size() == 1;
     }
 
     @Override
     public String toString() {
-        return this.getClass().getSimpleName() + " " + nodeForWorkflow;
+        return this.getClass().getSimpleName() + " " + getNodeForWorkflow().toEndpointUrl();
     }
 }

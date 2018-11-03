@@ -1,6 +1,7 @@
 package org.corfudb.protocols.wireprotocol.orchestrator;
 
 import lombok.Getter;
+import org.corfudb.util.NodeLocator;
 
 import java.nio.charset.StandardCharsets;
 
@@ -33,5 +34,9 @@ public class AddNodeRequest implements CreateRequest {
     @Override
     public byte[] getSerialized() {
         return endpoint.getBytes(StandardCharsets.UTF_8);
+    }
+
+    public NodeLocator getEndpointNode(){
+        return NodeLocator.parseString(endpoint);
     }
 }

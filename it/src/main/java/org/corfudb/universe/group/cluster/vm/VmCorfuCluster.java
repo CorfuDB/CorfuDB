@@ -1,6 +1,5 @@
 package org.corfudb.universe.group.cluster.vm;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.vmware.vim25.mo.VirtualMachine;
@@ -8,7 +7,9 @@ import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.Layout.LayoutStripe;
 import org.corfudb.universe.group.cluster.AbstractCorfuCluster;
+import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.Node.NodeParams;
@@ -19,8 +20,9 @@ import org.corfudb.universe.node.server.vm.VmCorfuServerParams;
 import org.corfudb.universe.node.stress.vm.VmStress;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
 import org.corfudb.universe.util.ClassUtils;
-import org.corfudb.universe.group.cluster.CorfuCluster;
+import org.corfudb.util.NodeLocator;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -67,8 +69,8 @@ public class VmCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams, VmU
     }
 
     @Override
-    protected ImmutableSortedSet<String> getClusterLayoutServers() {
-        return ImmutableSortedSet.copyOf(buildLayout().getLayoutServers());
+    protected ImmutableSortedSet<NodeLocator> getClusterLayoutServers() {
+        return ImmutableSortedSet.copyOf(buildLayout().getLayoutServersNodes());
     }
 
     @Override
@@ -86,18 +88,26 @@ public class VmCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams, VmU
         long epoch = 0;
         UUID clusterId = UUID.randomUUID();
 
-        List<String> servers = params.getNodesParams()
+        List<NodeLocator> serversNodes = params.getNodesParams()
                 .stream()
                 .map(this::getVmServerParams)
-                .map(vmParams -> vms.get(vmParams.getVmName()).getGuest().getIpAddress() + ":" + vmParams.getPort())
+                .map(vmParams -> {
+                    NodeLocator node = NodeLocator.builder()
+                            .host(vms.get(vmParams.getVmName()).getGuest().getIpAddress())
+                            .port(vmParams.getPort())
+                            .build();
+                     return node;
+                })
                 .collect(Collectors.toList());
 
         Layout.LayoutSegment segment = new Layout.LayoutSegment(
                 Layout.ReplicationMode.CHAIN_REPLICATION,
                 0L,
                 -1L,
-                Collections.singletonList(new Layout.LayoutStripe(servers))
+                Collections.singletonList(LayoutStripe.build(serversNodes))
         );
+
+        List<String> servers = new ArrayList<>(NodeLocator.transformToStringsList(serversNodes));
         return new Layout(servers, servers, Collections.singletonList(segment), epoch, clusterId);
     }
 

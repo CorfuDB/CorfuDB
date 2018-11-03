@@ -1,6 +1,5 @@
 package org.corfudb.universe.group.cluster.docker;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
 import com.spotify.docker.client.DockerClient;
 import lombok.Builder;
@@ -9,19 +8,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
+import org.corfudb.runtime.view.Layout.LayoutStripe;
 import org.corfudb.universe.group.cluster.AbstractCorfuCluster;
+import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
 import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.node.server.docker.DockerCorfuServer;
 import org.corfudb.universe.universe.UniverseParams;
-import org.corfudb.universe.group.cluster.CorfuCluster;
+import org.corfudb.util.NodeLocator;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.SortedSet;
-import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -56,8 +55,8 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams,
     }
 
     @Override
-    protected ImmutableSortedSet<String> getClusterLayoutServers() {
-        List<String> servers = nodes
+    protected ImmutableSortedSet<NodeLocator> getClusterLayoutServers() {
+        List<NodeLocator> servers = nodes
                 .values()
                 .stream()
                 .map(CorfuServer::getEndpoint)
@@ -77,14 +76,15 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams,
     private Layout getLayout() {
         long epoch = 0;
         UUID clusterId = UUID.randomUUID();
-        List<String> servers = getClusterLayoutServers().asList();
+        ImmutableSortedSet<NodeLocator> servers = getClusterLayoutServers();
+        List<String> serversStrings = servers.stream().map(NodeLocator::toEndpointUrl).collect(Collectors.toList());
 
         LayoutSegment segment = new LayoutSegment(
                 Layout.ReplicationMode.CHAIN_REPLICATION,
                 0L,
                 -1L,
-                Collections.singletonList(new Layout.LayoutStripe(servers))
+                Collections.singletonList(new LayoutStripe(serversStrings))
         );
-        return new Layout(servers, servers, Collections.singletonList(segment), epoch, clusterId);
+        return new Layout(serversStrings, serversStrings, Collections.singletonList(segment), epoch, clusterId);
     }
 }

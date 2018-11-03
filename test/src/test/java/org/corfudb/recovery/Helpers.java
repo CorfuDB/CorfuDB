@@ -5,12 +5,14 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.util.NodeLocator;
 
 import java.util.Map;
 import java.util.UUID;
@@ -78,8 +80,8 @@ public class Helpers{
         mapPrime.forEach((key, value) -> assertThat(value).isEqualTo(map.get(key)));
     }
 
-    static CorfuRuntime createNewRuntimeWithFastLoader(String configurationString) {
-        CorfuRuntime rt = new CorfuRuntime(configurationString).connect();
+    static CorfuRuntime createNewRuntimeWithFastLoader(NodeLocator configurationString) {
+        CorfuRuntime rt = new CorfuRuntime(configurationString.toEndpointUrl()).connect();
 
         FastObjectLoader loader = new FastObjectLoader(rt).setDefaultObjectsType(CorfuTable.class);
         loader.loadMaps();
@@ -87,9 +89,9 @@ public class Helpers{
         return rt;
     }
 
-    static Map<UUID, Long> getRecoveryStreamTails(String configurationString) {
-        CorfuRuntime rt = new CorfuRuntime(configurationString)
-                .connect();
+    static Map<UUID, Long> getRecoveryStreamTails(NodeLocator node) {
+        CorfuRuntimeParameters params = CorfuRuntimeParameters.builder().layoutServer(node).build();
+        CorfuRuntime rt = CorfuRuntime.fromParameters(params).connect();
 
         FastObjectLoader loader = new FastObjectLoader(rt);
         loader.setRecoverSequencerMode(true);

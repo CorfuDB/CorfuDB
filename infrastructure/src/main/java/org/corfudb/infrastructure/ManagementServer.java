@@ -100,7 +100,10 @@ public class ManagementServer extends AbstractServer {
     public ManagementServer(ServerContext serverContext) {
 
         this.opts = serverContext.getServerConfig();
-        this.localEndpoint = this.opts.get("--address") + ":" + this.opts.get("<port>");
+
+        String host = this.opts.get("--address").toString();
+        int port = Integer.parseInt(this.opts.get("<port>").toString());
+        this.localEndpoint =  NodeLocator.builder().host(host).port(port).build().toEndpointUrl();
         this.serverContext = serverContext;
 
         bootstrapEndpoint = (opts.get("--management-server") != null)
@@ -127,9 +130,11 @@ public class ManagementServer extends AbstractServer {
         final Layout managementLayout = serverContext.copyManagementLayout();
         // Runtime can be set up either using the layout or the bootstrapEndpoint address.
         if (managementLayout != null) {
-            managementLayout.getLayoutServers().forEach(runtime::addLayoutServer);
+            managementLayout
+                    .getLayoutServersNodes()
+                    .forEach(runtime::addLayoutServer);
         } else {
-            runtime.addLayoutServer(getBootstrapEndpoint());
+            runtime.addLayoutServer(NodeLocator.parseString(getBootstrapEndpoint()));
         }
         runtime.connect();
         log.info("getCorfuRuntime: Corfu Runtime connected successfully");

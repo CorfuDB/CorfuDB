@@ -149,7 +149,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canReloadMaps() throws Exception {
         populateMaps(2, getDefaultRuntime(), CorfuTable.class, true, 2);
 
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfiguration());
         assertThatMapsAreBuilt(rt2);
     }
 
@@ -181,9 +181,9 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true,2);
 
         LogUnitClient luc = getDefaultRuntime().getLayoutView().getRuntimeLayout()
-                .getLogUnitClient(getDefaultConfigurationString());
+                .getLogUnitClient(getDefaultEndpoint());
         SequencerClient seq = getDefaultRuntime().getLayoutView().getRuntimeLayout()
-                .getSequencerClient(getDefaultConfigurationString());
+                .getSequencerClient(getDefaultEndpoint());
 
         seq.nextToken(null, 1);
         luc.fillHole(getDefaultRuntime().getSequencerView().next().getToken());
@@ -193,7 +193,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         seq.nextToken(null, 1);
         luc.fillHole(getDefaultRuntime().getSequencerView().next().getToken());
 
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfiguration());
         assertThatMapsAreBuilt(rt2);
         assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
 
@@ -217,7 +217,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     @Test
     public void canRollBack() throws Exception {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, 2);
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfiguration());
 
         Map<String, String> map1Prime = Helpers.createMap("Map0", rt2, CorfuTable.class);
 
@@ -257,7 +257,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         clearAllMaps();
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
 
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfiguration());
 
         assertThatMapsAreBuilt(rt2);
         assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
@@ -272,7 +272,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
 
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfiguration());
 
         assertThatMapsAreBuilt(rt2);
         assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
@@ -291,7 +291,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
 
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfiguration());
 
         assertThatMapsAreBuilt(rt2);
         assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
@@ -307,7 +307,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
         Helpers.trim(getDefaultRuntime(), checkpointAddress);
 
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfiguration());
 
         assertThatMapsAreBuilt(rt2);
         assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
@@ -325,7 +325,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         Helpers.trim(getDefaultRuntime(), 2);
 
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfiguration());
 
         assertThatMapsAreBuilt(rt2);
         assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
@@ -335,7 +335,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     public void canFindTailsRecoverSequencerMode() throws Exception {
         populateMaps(2, getDefaultRuntime(), CorfuTable.class, true, 2);
 
-        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
+        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfiguration());
         assertThatStreamTailsAreCorrect(streamTails);
     }
 
@@ -348,7 +348,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         int mapCount = maps.size();
         checkPointAll(getDefaultRuntime());
 
-        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
+        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfiguration());
         assertThatStreamTailsAreCorrect(streamTails);
         assertThat(streamTails.size()).isEqualTo(mapCount * 2);
     }
@@ -375,7 +375,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         }
         map.put("k2", "v2");
 
-        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
+        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfiguration());
         final int streamTailOfMap = SOME;
         assertThat(streamTails.get(stream1)).isEqualTo(streamTailOfMap);
     }
@@ -390,7 +390,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         long checkPointAddress = checkPointAll(getDefaultRuntime());
 
         Helpers.trim(getDefaultRuntime(), checkPointAddress);
-        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
+        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfiguration());
         assertThatStreamTailsAreCorrect(streamTails);
         assertThat(streamTails.size()).isEqualTo(mapCount * 2);
     }
@@ -400,9 +400,9 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, true, 2);
 
         LogUnitClient luc = getDefaultRuntime().getLayoutView().getRuntimeLayout()
-                .getLogUnitClient(getDefaultConfigurationString());
+                .getLogUnitClient(getDefaultConfiguration());
         SequencerClient seq = getDefaultRuntime().getLayoutView().getRuntimeLayout()
-                .getSequencerClient(getDefaultConfigurationString());
+                .getSequencerClient(getDefaultConfiguration());
 
         long address = seq.nextToken(Collections.emptyList(),1).get().getSequence();
         ILogData data = Helpers.createEmptyData(address, DataType.RANK_ONLY,  new IMetadata.DataRank(2))
@@ -418,7 +418,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
 
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfiguration());
         assertThatMapsAreBuilt(rt2);
         assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
     }
@@ -458,13 +458,13 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         }
 
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfiguration());
         assertThatMapsAreBuilt(rt2);
         assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
 
 
         // Also test it cans find the tails
-        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
+        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfiguration());
         assertThatStreamTailsAreCorrect(streamTails);
 
         // Need to have checkpoint for each stream
@@ -485,7 +485,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         Helpers.trim(getDefaultRuntime(), firstCheckpointAddress);
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfiguration());
         assertThatMapsAreBuilt(rt2);
         assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
 
@@ -496,7 +496,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, SOME);
         checkPointAll(getDefaultRuntime());
 
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfiguration());
 
         assertThatMapsAreBuilt(rt2);
         assertThatObjectCacheIsTheSameSize(getDefaultRuntime(), rt2);
@@ -533,7 +533,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         assertThatMapsAreBuiltIgnore(rt2, "Map1");
 
-        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
+        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfiguration());
         assertThatStreamTailsAreCorrectIgnore(streamTails, "Map1");
     }
 
@@ -604,7 +604,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     @Test
     public void doNotReconstructTransactionStreams() throws Exception {
-        addSingleServer(SERVERS.PORT_0);
+        addSingleServer(SERVERS.ENDPOINT_0);
         CorfuRuntime rt1 = getNewRuntime(getDefaultNode())
                 .setTransactionLogging(true)
                 .connect();
@@ -620,7 +620,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         maps.get("Map2").size();
 
         // Create a new runtime with fastloader
-        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
+        CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfiguration());
         assertThatMapsAreBuilt(rt1, rt2);
 
         // Ensure that we didn't create a map for the transaction stream.
@@ -629,7 +629,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
     @Test
     public void doReconstructTransactionStreamTail() throws Exception {
-        addSingleServer(SERVERS.PORT_0);
+        addSingleServer(SERVERS.ENDPOINT_0);
         CorfuRuntime rt1 = getNewRuntime(getDefaultNode())
                 .setTransactionLogging(true)
                 .connect();
@@ -643,7 +643,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         rt1.getObjectsView().TXEnd();
 
         // Create a new runtime with fastloader
-        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
+        Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfiguration());
         assertThatStreamTailsAreCorrect(streamTails);
 
 
@@ -672,7 +672,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         CorfuRuntime rt1 = getDefaultRuntime();
 
         checkPointAll(rt1);
-        assertThatStreamTailsAreCorrect(Helpers.getRecoveryStreamTails(getDefaultConfigurationString()));
+        assertThatStreamTailsAreCorrect(Helpers.getRecoveryStreamTails(getDefaultConfiguration()));
     }
 
     /**

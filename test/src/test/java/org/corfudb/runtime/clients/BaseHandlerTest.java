@@ -19,7 +19,7 @@ public class BaseHandlerTest extends AbstractClientTest {
     @Override
     Set<AbstractServer> getServersForTest() {
         return new ImmutableSet.Builder<AbstractServer>()
-                .add(new BaseServer(ServerContextBuilder.defaultTestContext(0)))
+                .add(new BaseServer(ServerContextBuilder.defaultTestContext(SERVERS.ENDPOINT_0)))
                 .build();
     }
 

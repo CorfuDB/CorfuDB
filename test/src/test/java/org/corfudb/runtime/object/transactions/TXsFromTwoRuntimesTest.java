@@ -6,6 +6,7 @@ import com.google.common.reflect.TypeToken;
 import java.util.concurrent.Semaphore;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -138,8 +139,8 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
         //
 
         final Thread thread1 = new Thread( () -> {
-            CorfuRuntime myruntime = new CorfuRuntime(getDefaultEndpoint());
-            myruntime.connect();
+            CorfuRuntimeParameters params = CorfuRuntimeParameters.builder().layoutServer(SERVERS.ENDPOINT_0).build();
+            CorfuRuntime myruntime = CorfuRuntime.fromParameters(params).connect();
 
             ISMRMap<Integer, Integer> mymap =
                     myruntime.getObjectsView()

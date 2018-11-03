@@ -25,7 +25,7 @@ import java.util.Map;
 public class MemoryFootprintMeasurerIT extends AbstractIT{
     private static String corfuSingleNodeHost;
     private static int corfuStringNodePort;
-    private static String singleNodeEndpoint;
+    private static NodeLocator singleNodeEndpoint;
 
     /* A helper method that takes host and port specification, start a single server and
      *  returns a process. */
@@ -43,9 +43,7 @@ public class MemoryFootprintMeasurerIT extends AbstractIT{
     public void loadProperties() {
         corfuSingleNodeHost = PROPERTIES.getProperty("corfuSingleNodeHost");
         corfuStringNodePort = Integer.valueOf(PROPERTIES.getProperty("corfuSingleNodePort"));
-        singleNodeEndpoint = String.format("%s:%d",
-                corfuSingleNodeHost,
-                corfuStringNodePort);
+        singleNodeEndpoint = NodeLocator.builder().host(corfuSingleNodeHost).port(corfuStringNodePort).build();
     }
 
     /**

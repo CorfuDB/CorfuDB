@@ -1,6 +1,5 @@
 package org.corfudb.universe.node.client;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.reflect.TypeToken;
 import lombok.Builder;
@@ -16,8 +15,6 @@ import org.corfudb.universe.node.stress.Stress;
 import org.corfudb.util.NodeLocator;
 
 import java.time.Duration;
-import java.util.List;
-import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.CorfuRuntime.fromParameters;
 
@@ -31,21 +28,16 @@ public class LocalCorfuClient implements CorfuClient {
     @Getter
     private final ClientParams params;
     @Getter
-    private final ImmutableSortedSet<String> serverEndpoints;
+    private final ImmutableSortedSet<NodeLocator> serverEndpoints;
 
     @Builder
-    public LocalCorfuClient(ClientParams params, ImmutableSortedSet<String> serverEndpoints) {
+    public LocalCorfuClient(ClientParams params, ImmutableSortedSet<NodeLocator> serverEndpoints) {
         this.params = params;
         this.serverEndpoints = serverEndpoints;
 
-        List<NodeLocator> layoutServers = serverEndpoints.stream()
-                .sorted()
-                .map(NodeLocator::parseString)
-                .collect(Collectors.toList());
-
         CorfuRuntimeParameters runtimeParams = CorfuRuntimeParameters
                 .builder()
-                .layoutServers(layoutServers)
+                .layoutServers(serverEndpoints)
                 .systemDownHandler(this::systemDownHandler)
                 .build();
 

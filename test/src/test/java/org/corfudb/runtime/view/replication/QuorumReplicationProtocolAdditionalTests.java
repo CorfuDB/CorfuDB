@@ -25,6 +25,7 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
@@ -49,38 +50,38 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
     @Before
     public void before() {
 
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
+        addServer(SERVERS.ENDPOINT_0);
+        addServer(SERVERS.ENDPOINT_1);
+        addServer(SERVERS.ENDPOINT_2);
 
         layout = new TestLayoutBuilder()
                 .setEpoch(1L)
-                .addLayoutServer(SERVERS.PORT_0)
-                .addLayoutServer(SERVERS.PORT_1)
-                .addLayoutServer(SERVERS.PORT_2)
-                .addSequencer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_1)
+                .addLayoutServer(SERVERS.ENDPOINT_2)
+                .addSequencer(SERVERS.ENDPOINT_0)
                 .buildSegment()
                 .setReplicationMode(Layout.ReplicationMode.QUORUM_REPLICATION)
                 .buildStripe()
-                .addLogUnit(SERVERS.PORT_0)
-                .addLogUnit(SERVERS.PORT_1)
-                .addLogUnit(SERVERS.PORT_2)
+                .addLogUnit(SERVERS.ENDPOINT_0)
+                .addLogUnit(SERVERS.ENDPOINT_1)
+                .addLogUnit(SERVERS.ENDPOINT_2)
                 .addToSegment()
                 .addToLayout()
                 .build();
         bootstrapAllServers(layout);
-        getManagementServer(SERVERS.PORT_0).shutdown();
-        getManagementServer(SERVERS.PORT_1).shutdown();
-        getManagementServer(SERVERS.PORT_2).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_0).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_1).shutdown();
+        getManagementServer(SERVERS.ENDPOINT_2).shutdown();
 
         layout.getSegment(0L).setReplicationMode(Layout.ReplicationMode.QUORUM_REPLICATION);
 
         corfuRuntime = new CorfuRuntime();
         corfuRuntime.setCacheDisabled(true);
-        layout.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
+        layout.getLayoutServersNodes().forEach(corfuRuntime::addLayoutServer);
 
 
-        layout.getAllServers().forEach(serverEndpoint -> {
+        layout.getAllServersNodes().forEach(serverEndpoint -> {
             corfuRuntime.getRouter(serverEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             corfuRuntime.getRouter(serverEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             corfuRuntime.getRouter(serverEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
@@ -103,9 +104,9 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         //configure the layout accordingly
         CorfuRuntime r = getDefaultRuntime();
 
-        LogUnitServer u0 = getLogUnit(SERVERS.PORT_0);
-        LogUnitServer u1 = getLogUnit(SERVERS.PORT_1);
-        LogUnitServer u2 = getLogUnit(SERVERS.PORT_2);
+        LogUnitServer u0 = getLogUnit(SERVERS.ENDPOINT_0);
+        LogUnitServer u1 = getLogUnit(SERVERS.ENDPOINT_1);
+        LogUnitServer u2 = getLogUnit(SERVERS.ENDPOINT_2);
 
         final long ADDRESS_0 = 0L;
 
@@ -148,7 +149,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         //configure the layout accordingly
         CorfuRuntime r = getDefaultRuntime();
 
-        LogUnitServer u0 = getLogUnit(SERVERS.PORT_0);
+        LogUnitServer u0 = getLogUnit(SERVERS.ENDPOINT_0);
 
         UUID streamA = CorfuRuntime.getStreamID("stream A");
 
@@ -284,11 +285,11 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         assertThat(r.getAddressSpaceView().read(0L).containsStream(streamA));
 
         // Ensure that the data was written to each logunit.
-        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_0))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.ENDPOINT_0))
                 .matchesDataAtAddress(0, testPayload);
-        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_1))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.ENDPOINT_1))
                 .matchesDataAtAddress(0, testPayload);
-        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_2))
+        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.ENDPOINT_2))
                 .matchesDataAtAddress(0, testPayload);
     }
 

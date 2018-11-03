@@ -49,14 +49,14 @@ public class HandOfGodIT extends GenericIntegrationTest {
 
                 // Force remove the dead nodes
                 corfuClient.getManagementView().forceRemoveNode(
-                        server1.getEndpoint(),
+                        server1.getEndpoint().toEndpointUrl(),
                         clientFixture.getNumRetry(),
                         clientFixture.getTimeout(),
                         clientFixture.getPollPeriod()
                 );
 
                 corfuClient.getManagementView().forceRemoveNode(
-                        server2.getEndpoint(),
+                        server2.getEndpoint().toEndpointUrl(),
                         clientFixture.getNumRetry(),
                         clientFixture.getTimeout(),
                         clientFixture.getPollPeriod()
@@ -65,7 +65,7 @@ public class HandOfGodIT extends GenericIntegrationTest {
                 // Verify layout contains only the node that is up
                 corfuClient.invalidateLayout();
                 Layout layout = corfuClient.getLayout();
-                assertThat(layout.getAllActiveServers()).containsExactly(server0.getEndpoint());
+                assertThat(layout.getAllActiveServersNodes()).containsExactly(server0.getEndpoint());
 
                 // Verify cluster status is STABLE
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();

@@ -73,19 +73,19 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     public void canReadWriteToMultiple()
             throws Exception {
 
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
+        addServer(SERVERS.ENDPOINT_0);
+        addServer(SERVERS.ENDPOINT_1);
+        addServer(SERVERS.ENDPOINT_2);
 
         bootstrapAllServers(new TestLayoutBuilder()
-                .addLayoutServer(SERVERS.PORT_0)
-                .addSequencer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_0)
+                .addSequencer(SERVERS.ENDPOINT_0)
                 .buildSegment()
                     .setReplicationMode(Layout.ReplicationMode.CHAIN_REPLICATION)
                     .buildStripe()
-                        .addLogUnit(SERVERS.PORT_0)
-                        .addLogUnit(SERVERS.PORT_1)
-                        .addLogUnit(SERVERS.PORT_2)
+                        .addLogUnit(SERVERS.ENDPOINT_0)
+                        .addLogUnit(SERVERS.ENDPOINT_1)
+                        .addLogUnit(SERVERS.ENDPOINT_2)
                     .addToSegment()
                 .addToLayout()
                 .build());
@@ -115,19 +115,19 @@ public class ChainReplicationViewTest extends AbstractViewTest {
     public void ensureAllUnitsContainData()
             throws Exception {
 
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
+        addServer(SERVERS.ENDPOINT_0);
+        addServer(SERVERS.ENDPOINT_1);
+        addServer(SERVERS.ENDPOINT_2);
 
         bootstrapAllServers(new TestLayoutBuilder()
-                .addLayoutServer(SERVERS.PORT_0)
-                .addSequencer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_0)
+                .addSequencer(SERVERS.ENDPOINT_0)
                 .buildSegment()
                     .setReplicationMode(Layout.ReplicationMode.CHAIN_REPLICATION)
                     .buildStripe()
-                        .addLogUnit(SERVERS.PORT_0)
-                        .addLogUnit(SERVERS.PORT_1)
-                        .addLogUnit(SERVERS.PORT_2)
+                        .addLogUnit(SERVERS.ENDPOINT_0)
+                        .addLogUnit(SERVERS.ENDPOINT_1)
+                        .addLogUnit(SERVERS.ENDPOINT_2)
                     .addToSegment()
                 .addToLayout()
                 .build());
@@ -148,11 +148,11 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         assertThat(r.getAddressSpaceView().read(0L).containsStream(streamA));
 
         // Ensure that the data was written to each logunit.
-        assertThat(getLogUnit(SERVERS.PORT_0))
+        assertThat(getLogUnit(SERVERS.ENDPOINT_0))
                 .matchesDataAtAddress(0, testPayload);
-        assertThat(getLogUnit(SERVERS.PORT_1))
+        assertThat(getLogUnit(SERVERS.ENDPOINT_1))
                 .matchesDataAtAddress(0, testPayload);
-        assertThat(getLogUnit(SERVERS.PORT_2))
+        assertThat(getLogUnit(SERVERS.ENDPOINT_2))
                 .matchesDataAtAddress(0, testPayload);
     }
 }

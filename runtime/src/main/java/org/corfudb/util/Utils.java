@@ -485,17 +485,17 @@ public class Utils {
                 maxTokenRequested = Math.max(maxTokenRequested,
                         CFUtils.getUninterruptibly(
                                 runtime.getLayoutView().getRuntimeLayout(layout)
-                                        .getLogUnitClient(stripe.getLogServers().get(0))
+                                        .getLogUnitClient(stripe.getLogServersNodes().get(0))
                                         .getTail()));
 
             }
         } else if (segment.getReplicationMode()
                 .equals(Layout.ReplicationMode.QUORUM_REPLICATION)) {
             for (Layout.LayoutStripe stripe : segment.getStripes()) {
-                CompletableFuture<Long>[] completableFutures = stripe.getLogServers()
+                CompletableFuture<Long>[] completableFutures = stripe.getLogServersNodes()
                         .stream()
-                        .map(s -> runtime.getLayoutView().getRuntimeLayout(layout)
-                                .getLogUnitClient(s).getTail())
+                        .map(endpoint -> runtime.getLayoutView().getRuntimeLayout(layout)
+                                .getLogUnitClient(endpoint).getTail())
                         .toArray(CompletableFuture[]::new);
                 QuorumFuturesFactory.CompositeFuture<Long> quorumFuture =
                         QuorumFuturesFactory.getQuorumFuture(Comparator.naturalOrder(),

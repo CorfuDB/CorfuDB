@@ -16,6 +16,7 @@ import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
 
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -130,7 +131,7 @@ public class AddNodeWorkflow implements IWorkflow {
      * @param runtime   The runtime to read the segment from
      * @param segment   segment to transfer
      */
-    protected void stateTransfer(Set<String> endpoints, CorfuRuntime runtime,
+    protected void stateTransfer(Set<NodeLocator> endpoints, CorfuRuntime runtime,
                                  Layout.LayoutSegment segment) throws ExecutionException, InterruptedException {
 
         int batchSize = runtime.getParameters().getBulkReadSize();
@@ -138,7 +139,7 @@ public class AddNodeWorkflow implements IWorkflow {
         long trimMark = runtime.getAddressSpaceView().getTrimMark().getSequence();
         // Send the trimMark to the new/healing nodes.
         // If this times out or fails, the Action performing the stateTransfer fails and retries.
-        for (String endpoint : endpoints) {
+        for (NodeLocator endpoint : endpoints) {
             // TrimMark is the first address present on the log unit server.
             // Perform the prefix trim on the preceding address = (trimMark - 1).
             CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(newLayout)
@@ -179,7 +180,7 @@ public class AddNodeWorkflow implements IWorkflow {
                 entries.add((LogData) dataMap.get(x));
             }
 
-            for (String endpoint : endpoints) {
+            for (NodeLocator endpoint : endpoints) {
                 // Write segment chunk to the new logunit
                 ts1 = System.currentTimeMillis();
                 boolean transferSuccess = runtime.getLayoutView().getRuntimeLayout(newLayout)
@@ -194,7 +195,7 @@ public class AddNodeWorkflow implements IWorkflow {
                 }
 
                 log.info("stateTransfer: Transferred address chunk [{}, {}] to {} in {} ms",
-                        chunkStart, chunkEnd, endpoint, (ts2 - ts1));
+                        chunkStart, chunkEnd, endpoint.toEndpointUrl(), (ts2 - ts1));
             }
         }
     }
@@ -227,12 +228,12 @@ public class AddNodeWorkflow implements IWorkflow {
             //      In this case, the node was removed from all segments and was wiped clean.
             //      So either the healing workflow or the add node workflow will attempt
             //      to catchup the new node.
-            if (newLayout.getAllActiveServers().contains(request.endpoint)) {
+            if (newLayout.getAllActiveServersNodes().contains(request.getEndpointNode())) {
                 // Transfer only till the second last segment as the last segment is unbounded.
                 // The new server is already a part of the last segment. This is based on an
                 // assumption that the newly added node is not removed from the layout.
                 for (int i = 0; i < newLayout.getSegments().size() - 1; i++) {
-                    stateTransfer(Collections.singleton(request.getEndpoint()),
+                    stateTransfer(Collections.singleton(request.getEndpointNode()),
                             runtime,
                             newLayout.getSegments().get(i));
                 }

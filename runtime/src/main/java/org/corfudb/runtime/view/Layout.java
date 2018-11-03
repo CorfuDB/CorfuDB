@@ -2,6 +2,8 @@ package org.corfudb.runtime.view;
 
 import static java.util.Objects.requireNonNull;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -32,6 +34,7 @@ import org.corfudb.runtime.view.replication.QuorumReplicationProtocol;
 import org.corfudb.runtime.view.replication.ReadWaitHoleFillPolicy;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.NodeLocator;
 
 /**
  * This class represents the layout of a Corfu instance.
@@ -47,13 +50,17 @@ public class Layout {
             .registerTypeAdapter(Layout.class, new LayoutDeserializer())
             .create();
     /**
+     * @deprecated Use {@link this#getLayoutServersNodes()}
      * A list of layout servers in the layout.
      */
+    @Deprecated
     @Getter
     List<String> layoutServers;
     /**
      * A list of sequencers in the layout.
+     * @deprecated Use {@link this#getSequencersNodes()}
      */
+    @Deprecated
     @Getter
     List<String> sequencers;
     /**
@@ -63,7 +70,9 @@ public class Layout {
     List<LayoutSegment> segments;
     /**
      * A list of unresponsive nodes in the layout.
+     * @deprecated Use {@link this#getUnresponsiveServersNodes()}
      */
+    @Deprecated
     @Getter
     List<String> unresponsiveServers;
     /**
@@ -102,18 +111,18 @@ public class Layout {
         this.clusterId = clusterId;
 
         /* Assert that we constructed a valid Layout */
-        if (this.layoutServers.size() == 0) {
+        if (this.getLayoutServersNodes().isEmpty()) {
             throw new IllegalArgumentException("Empty list of LayoutServers");
         }
-        if (this.sequencers.size() == 0) {
+        if (this.getSequencersNodes().isEmpty()) {
             throw new IllegalArgumentException("Empty list of Sequencers");
         }
-        if (this.segments.size() == 0) {
+        if (this.segments.isEmpty()) {
             throw new IllegalArgumentException("Empty list of segments");
         }
         for (Layout.LayoutSegment segment : segments) {
             requireNonNull(segment.stripes);
-            if (segment.stripes.size() == 0) {
+            if (segment.stripes.isEmpty()) {
                 throw new IllegalArgumentException("One segment has an empty list of stripes");
             }
         }
@@ -122,6 +131,19 @@ public class Layout {
     public Layout(List<String> layoutServers, List<String> sequencers, List<LayoutSegment> segments,
                   long epoch, UUID clusterId) {
         this(layoutServers, sequencers, segments, new ArrayList<String>(), epoch, clusterId);
+    }
+
+    public Layout addLayoutServer(NodeLocator node){
+        layoutServers.add(node.toEndpointUrl());
+        return this;
+    }
+
+    public ImmutableList<NodeLocator> getSequencersNodes(){
+        return NodeLocator.transformToList(sequencers);
+    }
+
+    public boolean removeSequencer(NodeLocator node){
+        return sequencers.remove(node.toEndpointUrl());
     }
 
     /**
@@ -140,10 +162,11 @@ public class Layout {
      */
     public List<LayoutSegment> getSegmentsForEndpoint(@Nonnull String endpoint) {
         List<LayoutSegment> res = new ArrayList<>();
+        NodeLocator node = NodeLocator.parseString(endpoint);
 
         for (LayoutSegment segment : getSegments()) {
             for (LayoutStripe stripe : segment.getStripes()) {
-                if (stripe.getLogServers().contains(endpoint)) {
+                if (stripe.getLogServersNodes().contains(node)) {
                     res.add(segment);
                 }
             }
@@ -155,17 +178,23 @@ public class Layout {
     /**
      * This function returns a set of all active servers in the layout.
      *
+     * @deprecated Use {@link this#getAllActiveServersNodes()}
      * @return A set containing all servers in the layout.
      */
+    @Deprecated
     public Set<String> getAllActiveServers() {
         Set<String> activeServers = new HashSet<>();
         activeServers.addAll(layoutServers);
         activeServers.addAll(sequencers);
         segments.forEach(x ->
-                x.getStripes().forEach(y ->
-                        activeServers.addAll(y.getLogServers())));
+                x.getStripes().forEach(y -> activeServers.addAll(y.getLogServers()))
+        );
         activeServers.removeAll(unresponsiveServers);
         return activeServers;
+    }
+
+    public Set<NodeLocator> getAllActiveServersNodes() {
+        return getAllActiveServers().stream().map(NodeLocator::parseString).collect(Collectors.toSet());
     }
 
     /**
@@ -180,13 +209,31 @@ public class Layout {
         return allServers;
     }
 
+    public ImmutableList<NodeLocator> getAllServersNodes() {
+        return NodeLocator.transformToList(getAllServers());
+    }
+
+    public ImmutableList<NodeLocator> getLayoutServersNodes() {
+        return NodeLocator.transformToList(getLayoutServers());
+    }
+
+    public ImmutableList<NodeLocator> getUnresponsiveServersNodes(){
+        return NodeLocator.transformToList(unresponsiveServers);
+    }
+
     /**
      * Returns the primary sequencer.
      *
+     * @deprecated Use {@link this#getPrimarySequencerNode()}
      * @return The primary sequencer.
      */
+    @Deprecated
     public String getPrimarySequencer() {
         return sequencers.get(0);
+    }
+
+    public NodeLocator getPrimarySequencerNode() {
+        return NodeLocator.parseString(sequencers.get(0));
     }
 
     /**
@@ -326,12 +373,23 @@ public class Layout {
         this.clusterId = layoutCopy.clusterId;
     }
 
+    public boolean removeUnresponsiveServer(NodeLocator endpoint) {
+        return unresponsiveServers.remove(endpoint.toEndpointUrl());
+    }
+
+    public boolean removeLayoutServer(NodeLocator endpoint) {
+        return layoutServers.remove(endpoint.toEndpointUrl());
+    }
+
+    public void addUnresponsiveServer(NodeLocator endpoint) {
+        unresponsiveServers.add(endpoint.toEndpointUrl());
+    }
+
     public enum ReplicationMode {
         CHAIN_REPLICATION {
             @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,
-                                            Map<String, CompletableFuture<Boolean>>
-                                                    completableFutureMap)
+                                            Map<NodeLocator, CompletableFuture<Boolean>> completableFutureMap)
                     throws QuorumUnreachableException {
                 SealServersHelper.waitForChainSegmentSeal(layoutSegment, completableFutureMap);
             }
@@ -358,16 +416,15 @@ public class Layout {
 
             @Override
             public ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment,
-                                                            Set<String> responsiveNodes) {
-                return !responsiveNodes.containsAll(layoutSegment.getAllLogServers())
+                                                            Set<NodeLocator> responsiveNodes) {
+                return !responsiveNodes.containsAll(layoutSegment.getAllLogServersNodes())
                         ? ClusterStatus.UNAVAILABLE : ClusterStatus.STABLE;
             }
         },
         QUORUM_REPLICATION {
             @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,
-                                            Map<String, CompletableFuture<Boolean>>
-                                                    completableFutureMap)
+                                            Map<NodeLocator, CompletableFuture<Boolean>> completableFutureMap)
                     throws QuorumUnreachableException {
                 //TODO: Take care of log unit servers which were not sealed.
                 SealServersHelper.waitForQuorumSegmentSeal(layoutSegment, completableFutureMap);
@@ -395,21 +452,20 @@ public class Layout {
 
             @Override
             public ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment,
-                                                            Set<String> responsiveNodes) {
+                                                            Set<NodeLocator> responsiveNodes) {
                 ClusterStatus clusterStatus = ClusterStatus.STABLE;
                 // At least a quorum of nodes should be reachable in every stripe for the cluster
                 // to be STABLE.
                 for (LayoutStripe layoutStripe : layoutSegment.getStripes()) {
-                    List<String> responsiveLogServers
-                            = new ArrayList<>(layoutStripe.getLogServers());
+                    List<NodeLocator> responsiveLogServers = layoutStripe.getLogServersNodes();
                     // Retain only the responsive servers.
                     responsiveLogServers.retainAll(responsiveNodes);
 
-                    if (!responsiveLogServers.containsAll(layoutStripe.getLogServers())) {
+                    if (!responsiveLogServers.containsAll(layoutStripe.getLogServersNodes())) {
                         if (clusterStatus.equals(ClusterStatus.STABLE)) {
                             clusterStatus = ClusterStatus.DEGRADED;
                         }
-                        int quorumSize = (layoutStripe.getLogServers().size() / 2) + 1;
+                        int quorumSize = (layoutStripe.getLogServersNodes().size() / 2) + 1;
                         if (responsiveLogServers.size() < quorumSize) {
                             clusterStatus = ClusterStatus.UNAVAILABLE;
                             break;
@@ -422,8 +478,7 @@ public class Layout {
         }, NO_REPLICATION {
             @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,
-                                            Map<String, CompletableFuture<Boolean>>
-                                                    completableFutureMap)
+                                            Map<NodeLocator, CompletableFuture<Boolean>> completableFutureMap)
                     throws QuorumUnreachableException {
                 throw new UnsupportedOperationException("unsupported seal");
             }
@@ -441,7 +496,7 @@ public class Layout {
 
             @Override
             public ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment,
-                                                            Set<String> responsiveNodes) {
+                                                            Set<NodeLocator> responsiveNodes) {
                 throw new UnsupportedOperationException("Unsupported cluster health check.");
             }
         };
@@ -450,8 +505,7 @@ public class Layout {
          * Seals the layout segment.
          */
         public abstract void validateSegmentSeal(LayoutSegment layoutSegment,
-                                                 Map<String, CompletableFuture<Boolean>>
-                                                         completableFutureMap)
+                                                 Map<NodeLocator, CompletableFuture<Boolean>> completableFutureMap)
                 throws QuorumUnreachableException;
 
         /**
@@ -477,7 +531,8 @@ public class Layout {
          * @param responsiveNodes Set of all responsive nodes.
          * @return Cluster Health.
          */
-        public abstract ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment, Set<String> responsiveNodes);
+        public abstract ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment,
+                                                                 Set<NodeLocator> responsiveNodes);
     }
 
 
@@ -532,22 +587,50 @@ public class Layout {
         /**
          * Get all servers from all stripes present in this segment.
          *
+         * @deprecated Use {@link this#getAllLogServersNodes}
          * @return Set of log unit servers.
          */
+        @Deprecated
         public Set<String> getAllLogServers() {
             return this.getStripes().stream()
                     .flatMap(layoutStripe -> layoutStripe.getLogServers().stream())
                     .collect(Collectors.toSet());
+        }
+
+        public ImmutableSet<NodeLocator> getAllLogServersNodes() {
+            return NodeLocator.transformToSet(getAllLogServers());
         }
     }
 
     @Data
     @Getter
     public static class LayoutStripe {
-        final List<String> logServers;
+        private final List<String> logServers;
 
+        @Deprecated
         public LayoutStripe(@NonNull List<String> logServers) {
             this.logServers = logServers;
+        }
+
+        public static LayoutStripe build(@NonNull List<NodeLocator> logServers) {
+            return new LayoutStripe(logServers.stream().map(NodeLocator::toEndpointUrl).collect(Collectors.toList()));
+        }
+
+        public boolean removeLogServer(NodeLocator node){
+            return logServers.remove(node.toEndpointUrl());
+        }
+
+        public ImmutableList<NodeLocator> getLogServersNodes(){
+            return ImmutableList.copyOf(logServers.stream().map(NodeLocator::parseString).collect(Collectors.toList()));
+        }
+
+        public LayoutStripe addNode(NodeLocator node) {
+            logServers.add(node.toEndpointUrl());
+            return this;
+        }
+
+        public boolean isEmpty() {
+            return logServers.isEmpty();
         }
     }
 }

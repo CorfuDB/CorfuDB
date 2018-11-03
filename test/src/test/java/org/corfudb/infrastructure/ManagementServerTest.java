@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import org.corfudb.CorfuTestServers;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
@@ -26,9 +27,8 @@ public class ManagementServerTest extends AbstractServerTest {
     @Override
     public ManagementServer getDefaultServer() {
         // Adding layout server for management server runtime to connect to.
-        ServerContext serverContext = new ServerContextBuilder()
+        ServerContext serverContext = new ServerContextBuilder(new CorfuTestServers().ENDPOINT_0)
                 .setSingle(false)
-                .setPort(SERVERS.PORT_0)
                 .setServerRouter(getRouter())
                 .build();
         // Required for management server to fetch layout.
@@ -64,7 +64,7 @@ public class ManagementServerTest extends AbstractServerTest {
      */
     @Test
     public void bootstrapManagementServer() {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
         sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
         assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
@@ -77,7 +77,7 @@ public class ManagementServerTest extends AbstractServerTest {
      */
     @Test
     public void triggerFailureHandler() {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
         sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
                 new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())));

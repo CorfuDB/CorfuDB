@@ -44,7 +44,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
     private ServerContext getContext() {
         String path = getDirPath();
-        return new ServerContextBuilder()
+        return new ServerContextBuilder(SERVERS.ENDPOINT_0)
             .setLogPath(path)
             .setMemory(false)
             .build();

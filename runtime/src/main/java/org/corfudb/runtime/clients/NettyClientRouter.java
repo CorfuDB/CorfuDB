@@ -317,7 +317,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     private void addReconnectionOnCloseFuture(@Nonnull Channel channel,
             @Nonnull Bootstrap bootstrap) {
         channel.closeFuture().addListener((r) -> {
-            log.info("addReconnectionOnCloseFuture[{}]: disconnected", node);
+            log.info("addReconnectionOnCloseFuture[{}]: disconnected", node.toEndpointUrl());
             // Remove the current completion future, forcing clients to wait for reconnection.
             connectionFuture = new CompletableFuture<>();
             // Exceptionally complete all requests that were waiting for a completion.
@@ -329,7 +329,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             });
             // If we aren't shutdown, reconnect.
             if (!shutdown) {
-                log.info("addReconnectionOnCloseFuture[{}]: reconnecting", node);
+                log.info("addReconnectionOnCloseFuture[{}]: reconnecting", node.toEndpointUrl());
                 // Asynchronously connect again.
                 connectAsync(bootstrap);
             }
@@ -363,12 +363,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         if (future.isSuccess()) {
             // Register a future to reconnect in case we get disconnected
             addReconnectionOnCloseFuture(future.channel(), bootstrap);
-            log.info("connectAsync[{}]: Channel connected.", node);
+            log.info("connectAsync[{}]: Channel connected.", node.toEndpointUrl());
         } else {
             // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
             // a sleep period.
             if (!shutdown) {
-                log.info("connectAsync[{}]: Channel connection failed, reconnecting...", node);
+                log.info("connectAsync[{}]: Channel connection failed, reconnecting...", node.toEndpointUrl());
                 Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
                 // Call connect, which will retry the call again.
                 // Note that this is not recursive, because it is called in the
@@ -427,8 +427,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         // Check the connection future. If connected, continue with sending the message.
         // If timed out, return a exceptionally completed with the timeout.
         try {
-            connectionFuture
-                .get(parameters.getConnectionTimeout().toMillis(), TimeUnit.MILLISECONDS);
+            connectionFuture.get(parameters.getConnectionTimeout().toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new UnrecoverableCorfuInterruptedError(e);
@@ -653,8 +652,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     @Deprecated
     public NettyClientRouter(String host, Integer port) {
-        this(NodeLocator.builder().host(host).port(port).build(),
-            CorfuRuntimeParameters.builder().build());
+        this(NodeLocator.builder().host(host).port(port).build(), CorfuRuntimeParameters.builder().build());
     }
 
     /**

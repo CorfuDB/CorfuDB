@@ -51,7 +51,7 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void bootstrapServerInstallsNewLayout() {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         bootstrapServer(layout);
         requestLayout(layout.getEpoch());
         Assertions.assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_RESPONSE);
@@ -63,7 +63,7 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void cannotBootstrapServerTwice() {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         bootstrapServer(layout);
         bootstrapServer(layout);
         Assertions.assertThat(getLastMessage().getMsgType())
@@ -78,7 +78,7 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void prepareRejectsLowerRanks() {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         long epoch = layout.getEpoch();
         bootstrapServer(layout);
         sendPrepare(epoch, HIGH_RANK);
@@ -94,7 +94,7 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void proposeRejectsLowerRanks() {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         long epoch = layout.getEpoch();
         bootstrapServer(layout);
         sendPrepare(epoch, HIGH_RANK);
@@ -109,7 +109,7 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void proposeRejectsAlreadyProposed() {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         long epoch = layout.getEpoch();
         bootstrapServer(layout);
         sendPrepare(epoch, LOW_RANK);
@@ -126,11 +126,11 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void commitReturnsAck() {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         bootstrapServer(layout);
 
         long newEpoch = layout.getEpoch() + 1;
-        Layout newLayout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout newLayout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         newLayout.setEpoch(newEpoch);
 
         // set epoch on servers
@@ -153,7 +153,7 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void checkServerEpochDoesNotRegress() {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         long epoch = layout.getEpoch();
 
         bootstrapServer(layout);
@@ -182,10 +182,10 @@ public class LayoutServerTest extends AbstractServerTest {
 
         LayoutServer s1 = getDefaultServer(serviceDir);
 
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         bootstrapServer(layout);
 
-        Layout newLayout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout newLayout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
 
         final long OLD_EPOCH = 0;
         final long NEW_EPOCH = 100;
@@ -235,11 +235,11 @@ public class LayoutServerTest extends AbstractServerTest {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         LayoutServer s1 = getDefaultServer(serviceDir);
 
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         bootstrapServer(layout);
 
         long newEpoch = layout.getEpoch() + 1;
-        Layout newLayout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout newLayout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         newLayout.setEpoch(newEpoch);
 
         setEpoch(newEpoch);
@@ -282,11 +282,11 @@ public class LayoutServerTest extends AbstractServerTest {
     public void checkMessagesValidatedAgainstPhase1PersistedData() throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         LayoutServer s1 = getDefaultServer(serviceDir);
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         bootstrapServer(layout);
 
         long newEpoch = layout.getEpoch() + 1;
-        Layout newLayout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout newLayout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         newLayout.setEpoch(newEpoch);
 
         setEpoch(newEpoch);
@@ -326,11 +326,11 @@ public class LayoutServerTest extends AbstractServerTest {
     public void checkMessagesValidatedAgainstPhase2PersistedData() throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         LayoutServer s1 = getDefaultServer(serviceDir);
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         bootstrapServer(layout);
 
         long newEpoch = layout.getEpoch() + 1;
-        Layout newLayout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout newLayout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         newLayout.setEpoch(newEpoch);
 
         setEpoch(newEpoch);
@@ -384,11 +384,11 @@ public class LayoutServerTest extends AbstractServerTest {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
         LayoutServer s1 = getDefaultServer(serviceDir);
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         bootstrapServer(layout);
 
         long newEpoch = layout.getEpoch() + 1;
-        Layout newLayout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout newLayout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         newLayout.setEpoch(newEpoch);
 
         setEpoch(newEpoch);
@@ -443,7 +443,7 @@ public class LayoutServerTest extends AbstractServerTest {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
         LayoutServer s1 = getDefaultServer(serviceDir);
 
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         final long NEW_EPOCH = 99L;
         layout.setEpoch(NEW_EPOCH);
         bootstrapServer(layout);
@@ -469,7 +469,7 @@ public class LayoutServerTest extends AbstractServerTest {
         long newEpoch = baseEpoch + reboot;
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.SET_EPOCH, newEpoch));
 
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         layout.setEpoch(newEpoch);
 
         sendPrepare(newEpoch, HIGH_RANK);
@@ -491,11 +491,11 @@ public class LayoutServerTest extends AbstractServerTest {
     }
 
     private LayoutServer getDefaultServer(String serviceDir) {
-        ServerContext sc = new ServerContextBuilder()
+        ServerContext sc = new ServerContextBuilder(router.getNode())
                 .setSingle(false)
                 .setMemory(false)
                 .setLogPath(serviceDir)
-                .setServerRouter(getRouter())
+                .setServerRouter(router)
                 .build();
         LayoutServer s1 = new LayoutServer(sc);
         setServer(s1);

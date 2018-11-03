@@ -49,7 +49,7 @@ public class LayoutHandlerTest extends AbstractClientTest {
     @Test
     public void bootstrapServerInstallsNewLayout()
             throws Exception {
-        Layout l = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout l = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         assertThat(client.bootstrapLayout(l).get())
                 .isEqualTo(true);
 
@@ -60,16 +60,16 @@ public class LayoutHandlerTest extends AbstractClientTest {
     @Test
     public void cannotBootstrapServerTwice()
             throws Exception {
-        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(SERVERS.PORT_0)).get())
+        assertThat(client.bootstrapLayout(TestLayoutBuilder.single(SERVERS.ENDPOINT_0)).get())
                 .isEqualTo(true);
-        assertThatThrownBy(() -> client.bootstrapLayout(TestLayoutBuilder.single(SERVERS.PORT_0)).get())
+        assertThatThrownBy(() -> client.bootstrapLayout(TestLayoutBuilder.single(SERVERS.ENDPOINT_0)).get())
                 .hasCauseInstanceOf(AlreadyBootstrappedException.class);
     }
 
     @Test
     public void canGetNewLayoutInDifferentEpoch()
             throws Exception {
-        Layout l = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout l = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         final long NEW_EPOCH = 42L;
         l.setEpoch(NEW_EPOCH);
         assertThat(client.bootstrapLayout(l).get())
@@ -84,7 +84,7 @@ public class LayoutHandlerTest extends AbstractClientTest {
     @Test
     public void prepareRejectsLowerRanks()
             throws Exception {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);
         long epoch = layout.getEpoch();
@@ -103,7 +103,7 @@ public class LayoutHandlerTest extends AbstractClientTest {
     @Test
     public void proposeRejectsLowerRanks()
             throws Exception {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         long epoch = layout.getEpoch();
         assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);
@@ -115,14 +115,14 @@ public class LayoutHandlerTest extends AbstractClientTest {
             client.propose(epoch, RANK_LOW, layout).get();
         }).hasCauseInstanceOf(OutrankedException.class);
 
-        assertThat(client.propose(epoch, RANK_HIGH, TestLayoutBuilder.single(SERVERS.PORT_0)).get())
+        assertThat(client.propose(epoch, RANK_HIGH, TestLayoutBuilder.single(SERVERS.ENDPOINT_0)).get())
                 .isEqualTo(true);
     }
 
     @Test
     public void proposeRejectsAlreadyProposed()
             throws Exception {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         long epoch = layout.getEpoch();
         assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);
@@ -144,7 +144,7 @@ public class LayoutHandlerTest extends AbstractClientTest {
     @Test
     public void commitReturnsAck()
             throws Exception {
-        Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        Layout layout = TestLayoutBuilder.single(SERVERS.ENDPOINT_0);
         long epoch = layout.getEpoch();
         assertThat(client.bootstrapLayout(layout).get())
                 .isEqualTo(true);

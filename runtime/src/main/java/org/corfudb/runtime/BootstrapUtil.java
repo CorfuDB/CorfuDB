@@ -102,13 +102,12 @@ public class BootstrapUtil {
                                  @NonNull CorfuRuntimeParameters corfuRuntimeParameters,
                                  int retries,
                                  @NonNull Duration retryTimeout) {
-        for (String server : layout.getAllServers()) {
+        for (NodeLocator server : layout.getAllServersNodes()) {
             int retry = retries;
             while (retry-- > 0) {
                 try {
-                    log.info("Attempting to bootstrap node:{} with layout:{}", server, layout);
-                    IClientRouter router = new NettyClientRouter(NodeLocator.parseString(server),
-                            corfuRuntimeParameters);
+                    log.info("Attempting to bootstrap node: {} with layout:{}", server.toEndpointUrl(), layout);
+                    IClientRouter router = new NettyClientRouter(server, corfuRuntimeParameters);
                     router.addClient(new LayoutHandler())
                             .addClient(new ManagementHandler())
                             .addClient(new BaseHandler());
@@ -119,11 +118,11 @@ public class BootstrapUtil {
                     router.stop();
                     break;
                 } catch (AlreadyBootstrappedException abe) {
-                    log.error("Bootstrapping node: {} failed with exception:", server, abe);
+                    log.error("Bootstrapping node: {} failed with exception:", server.toEndpointUrl(), abe);
                     log.error("Cannot retry since already bootstrapped.");
                     throw new RuntimeException(abe);
                 } catch (Exception e) {
-                    log.error("Bootstrapping node: {} failed with exception:", server, e);
+                    log.error("Bootstrapping node: {} failed with exception:", server.toEndpointUrl(), e);
                     if (retry == 0) {
                         throw new RuntimeException(e);
                     }

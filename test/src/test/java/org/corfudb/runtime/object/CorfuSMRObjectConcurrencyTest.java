@@ -14,8 +14,7 @@ public class CorfuSMRObjectConcurrencyTest extends AbstractObjectTest {
 
         final int COUNTER_INITIAL = 55;
 
-        CorfuSharedCounter sharedCounter = (CorfuSharedCounter)
-                instantiateCorfuObject(CorfuSharedCounter.class, "test");
+        CorfuSharedCounter sharedCounter = instantiateCorfuObject(CorfuSharedCounter.class, "test");
 
         sharedCounter.setValue(COUNTER_INITIAL);
 

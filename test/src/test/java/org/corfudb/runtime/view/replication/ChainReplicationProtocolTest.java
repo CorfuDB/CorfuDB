@@ -8,6 +8,7 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.NodeLocator;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,19 +32,19 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
     /** {@inheritDoc} */
     @Override
     void setupNodes() {
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
+        addServer(SERVERS.ENDPOINT_0);
+        addServer(SERVERS.ENDPOINT_1);
+        addServer(SERVERS.ENDPOINT_2);
 
         bootstrapAllServers(new TestLayoutBuilder()
-                .addLayoutServer(SERVERS.PORT_0)
-                .addSequencer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.ENDPOINT_0)
+                .addSequencer(SERVERS.ENDPOINT_0)
                 .buildSegment()
                 .setReplicationMode(Layout.ReplicationMode.CHAIN_REPLICATION)
                 .buildStripe()
-                .addLogUnit(SERVERS.PORT_0)
-                .addLogUnit(SERVERS.PORT_1)
-                .addLogUnit(SERVERS.PORT_2)
+                .addLogUnit(SERVERS.ENDPOINT_0)
+                .addLogUnit(SERVERS.ENDPOINT_1)
+                .addLogUnit(SERVERS.ENDPOINT_2)
                 .addToSegment()
                 .addToLayout()
                 .build());
@@ -106,12 +107,12 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
                 .isEqualTo("incomplete".getBytes());
     }
 
-    private void removeLogUnit(Layout currentLayout, String endpoint) throws Exception {
+    private void removeLogUnit(Layout currentLayout, NodeLocator endpoint) throws Exception {
         CorfuRuntime corfuRuntime = getRuntime(currentLayout).connect();
         Layout layout = new Layout(corfuRuntime.getLayoutView().getLayout());
         layout.setEpoch(layout.getEpoch() + 1);
-        layout.getLayoutServers().add(endpoint);
-        layout.getSegment(0L).getStripes().get(0).getLogServers().remove(endpoint);
+        layout.addLayoutServer(endpoint);
+        layout.getSegment(0L).getStripes().get(0).removeLogServer(endpoint);
         corfuRuntime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
         corfuRuntime.getLayoutView().updateLayout(layout, 1L);
     }
