@@ -30,6 +30,10 @@ APP_LONG_NAME="Corfu Infrastructure Server"
 WRAPPER_CMD="./wrapper"
 WRAPPER_CONF="../conf/corfu-server-wrapper.conf"
 
+if [ -f /vmware_studio_build_in_progress ]; then
+    exit 0
+fi
+
 ADDITIONAL_MULTIROLE_CONF="../conf/corfu-server-wrapper_multirole.conf"
 ADDITIONAL_CONVERGED_APP_CONF="../conf/corfu-server-wrapper_converged_app.conf"
 NODE_TYPE=`grep node-type /etc/nsx_issue | cut -d\  --fields=2-4`
