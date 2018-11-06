@@ -15,6 +15,7 @@ import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -68,11 +69,18 @@ public class MultiCheckpointWriter<T extends Map> {
      */
 
     public long appendCheckpoints(CorfuRuntime rt, String author,
-                                  BiConsumer<CheckpointEntry, Long> postAppendFunc)
-            throws Exception {
-        long globalAddress = CheckpointWriter.startGlobalSnapshotTxn(rt);
+                                  BiConsumer<CheckpointEntry, Long> postAppendFunc) {
+
+        // We retrieve the tail from the logging units because the tail
+        // returned from the sequencer might not be materialized
+        long globalTail = rt.getAddressSpaceView().getLogTail();
+        rt.getObjectsView().TXBuild()
+                .setType(TransactionType.SNAPSHOT)
+                .setSnapshot(globalTail)
+                .begin();
+
         log.trace("appendCheckpoints: author '{}' at globalAddress {} begins",
-                author, globalAddress);
+                author, globalTail);
 
         log.info("appendCheckpoints: appending checkpoints for {} maps", maps.size());
         final long cpStart = System.currentTimeMillis();
@@ -102,14 +110,14 @@ public class MultiCheckpointWriter<T extends Map> {
             }
         } finally {
             log.trace("appendCheckpoints: author '{}' at globalAddress {} finished",
-                    author, globalAddress);
+                    author, globalTail);
             rt.getObjectsView().TXEnd();
         }
         final long cpStop = System.currentTimeMillis();
 
         log.info("appendCheckpoints: took {} ms to append {} checkpoints", cpStop - cpStart,
                 maps.size());
-        return globalAddress;
+        return globalTail;
     }
 
 }

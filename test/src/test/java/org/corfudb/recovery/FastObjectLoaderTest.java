@@ -361,7 +361,9 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         CheckpointWriter cpw = new CheckpointWriter(getDefaultRuntime(), stream1,
                 "author", (SMRMap) map);
-        CheckpointWriter.startGlobalSnapshotTxn(getDefaultRuntime());
+        getDefaultRuntime().getObjectsView().TXBuild()
+                .setType(TransactionType.SNAPSHOT)
+                .begin();
         try {
             cpw.startCheckpoint();
             cpw.appendObjectState();

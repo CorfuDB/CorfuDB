@@ -141,8 +141,9 @@ public class CheckpointWriter<T extends Map> {
     public List<Long> appendCheckpoint(Consumer<CheckpointWriter> setupWriter) {
         List<Long> addrs = new ArrayList<>();
         setupWriter.accept(this);
-
-        startGlobalSnapshotTxn(rt);
+        rt.getObjectsView().TXBuild()
+                .setType(TransactionType.SNAPSHOT)
+                .begin();
         try {
             addrs.add(startCheckpoint());
             addrs.addAll(appendObjectState());
@@ -304,22 +305,5 @@ public class CheckpointWriter<T extends Map> {
 
         postAppendFunc.accept(cp, endAddress);
         return endAddress;
-    }
-
-    /** Start a Global Snapshot Transaction.
-     *
-     * @param rt corfu runtime
-     * @return Global log address of the END record.
-     */
-    public static long startGlobalSnapshotTxn(CorfuRuntime rt) {
-        TokenResponse tokenResponse =
-                rt.getSequencerView().query();
-        long globalTail = tokenResponse.getToken().getTokenValue();
-        rt.getObjectsView().TXBuild()
-                .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(globalTail)
-                .begin();
-        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
-        return context.getSnapshotTimestamp();
     }
 }
