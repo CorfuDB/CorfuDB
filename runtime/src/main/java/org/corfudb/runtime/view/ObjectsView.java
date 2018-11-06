@@ -15,6 +15,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -149,11 +150,11 @@ public class ObjectsView extends AbstractView {
                 throw e;
             } catch (NetworkException e) {
                 log.warn("TXEnd[{}] Network Exception {}", context, e);
-                long snapshotTimestamp;
+                Token snapshotTimestamp;
                 try {
                     snapshotTimestamp = context.getSnapshotTimestamp();
                 } catch (NetworkException ne) {
-                    snapshotTimestamp = -1L;
+                    snapshotTimestamp = Token.UNINITIALIZED;
                 }
                 TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
                     snapshotTimestamp);
@@ -165,7 +166,7 @@ public class ObjectsView extends AbstractView {
             } catch (Exception e) {
                log.error("TXEnd[{}]: Unexpected exception", context, e);
                 TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
-                    -1L);
+                    Token.UNINITIALIZED);
                 TransactionAbortedException tae = new TransactionAbortedException(txInfo,
                     null, null, AbortCause.UNDEFINED, e, context);
                 context.abortTransaction(tae);

@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -444,11 +445,11 @@ public class ServerRestartIT extends AbstractIT {
         TokenResponse tokenResponseA = corfuRuntime.getSequencerView().next(streamNameA);
         TokenResponse tokenResponseB = corfuRuntime.getSequencerView().next(streamNameB);
 
-        assertThat(tokenResponseA.getToken().getTokenValue()).isEqualTo(newGlobalTail + 1);
+        assertThat(tokenResponseA.getToken().getSequence()).isEqualTo(newGlobalTail + 1);
         assertThat(tokenResponseA.getBackpointerMap().get(streamNameA))
                 .isEqualTo(newMapAStreamTail);
 
-        assertThat(tokenResponseB.getToken().getTokenValue()).isEqualTo(newGlobalTail + 2);
+        assertThat(tokenResponseB.getToken().getSequence()).isEqualTo(newGlobalTail + 2);
         assertThat(tokenResponseB.getBackpointerMap().get(streamNameB))
                 .isEqualTo(newMapBStreamTail);
 
@@ -483,7 +484,8 @@ public class ServerRestartIT extends AbstractIT {
                 .isEqualTo(1);
 
         // Force the token response to have epoch = 0, to simulate a request received in previous epoch
-        TokenResponse mockTr = new TokenResponse(tr.getToken().getTokenValue(), tr.getEpoch() - 1, Collections.emptyMap());
+        Token staleToken = new Token(tr.getEpoch() - 1, tr.getSequence());
+        TokenResponse mockTr = new TokenResponse(staleToken, Collections.emptyMap());
 
         byte[] testPayload = "hello world".getBytes();
 
@@ -558,7 +560,7 @@ public class ServerRestartIT extends AbstractIT {
                 MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
                 mcw1.addMap((SMRMap) mapA);
                 mcw1.addMap((SMRMap) mapB);
-                long checkpointAddress = mcw1.appendCheckpoints(corfuRuntime, "dahlia");
+                long checkpointAddress = mcw1.appendCheckpoints(corfuRuntime, "dahlia").getSequence();
 
                 // Trim the log
                 corfuRuntime.getAddressSpaceView().prefixTrim(checkpointAddress - 1);
@@ -608,15 +610,15 @@ public class ServerRestartIT extends AbstractIT {
                     .nextToken(Collections.singletonList(streamNameB), 1)
                     .get();
 
-            assertThat(tokenResponseA.getTokenValue()).isEqualTo(expectedGlobalTailResponse
-                    .getTokenValue() + 1);
+            assertThat(tokenResponseA.getSequence()).isEqualTo(expectedGlobalTailResponse
+                    .getSequence() + 1);
             assertThat(tokenResponseA.getBackpointerMap().get(streamNameA))
-                    .isEqualTo(expectedTokenResponseA.getTokenValue());
+                    .isEqualTo(expectedTokenResponseA.getSequence());
 
-            assertThat(tokenResponseB.getTokenValue()).isEqualTo(expectedGlobalTailResponse
-                    .getTokenValue() + 2);
+            assertThat(tokenResponseB.getSequence()).isEqualTo(expectedGlobalTailResponse
+                    .getSequence() + 2);
             assertThat(tokenResponseB.getBackpointerMap().get(streamNameB))
-                    .isEqualTo(expectedTokenResponseB.getTokenValue());
+                    .isEqualTo(expectedTokenResponseB.getSequence());
 
             // activity (iv): leave holes behind
             // this is done by having another shutdown/restart, so the token above becomes stale
@@ -634,7 +636,7 @@ public class ServerRestartIT extends AbstractIT {
                 // because we restart without ever having writes use the tokens
             } else {
                 System.out.println(r + ".. no holes left");
-                globalTail = tokenResponseB.getTokenValue();
+                globalTail = tokenResponseB.getSequence();
             }
 
             // these writes should throw a StaleTokenException if we restarted
@@ -693,7 +695,7 @@ public class ServerRestartIT extends AbstractIT {
         // Checkpoint and trim the log.
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(corfuTable1);
-        long trimMark = mcw.appendCheckpoints(rt1, "author");
+        long trimMark = mcw.appendCheckpoints(rt1, "author").getSequence();
         Collection<Map.Entry<String, String>> c1a =
                 corfuTable1.getByIndex(StringIndexer.BY_FIRST_LETTER, "9");
         Collection<Map.Entry<String, String>> c1b =
@@ -765,7 +767,7 @@ public class ServerRestartIT extends AbstractIT {
         // Checkpoint and trim
         MultiCheckpointWriter multiCheckpointWriter = new MultiCheckpointWriter();
         multiCheckpointWriter.addMap(corfuTable1);
-        long trimMark = multiCheckpointWriter.appendCheckpoints(runtime1, "Sam.Behnam");
+        long trimMark = multiCheckpointWriter.appendCheckpoints(runtime1, "Sam.Behnam").getSequence();
         Collection<Map.Entry<String, String>> resultInitial =
                 corfuTable1.getByIndex(StringMultiIndexer.BY_EACH_WORD, "tag666");
         runtime1.getAddressSpaceView().prefixTrim(trimMark);

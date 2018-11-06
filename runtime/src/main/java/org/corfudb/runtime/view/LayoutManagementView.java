@@ -134,7 +134,7 @@ public class LayoutManagementView extends AbstractView {
             }
             if (isLogUnitServer) {
                 layoutBuilder.addLogunitServer(logUnitStripeIndex,
-                        getMaxGlobalTail(currentLayout, runtime),
+                        getMaxGlobalTail(currentLayout, runtime).getSequence(),
                         endpoint);
             }
             if (isUnresponsiveServer) {
@@ -180,7 +180,7 @@ public class LayoutManagementView extends AbstractView {
 
             LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
             layoutBuilder.addLogunitServer(0,
-                    getMaxGlobalTail(currentLayout, runtime),
+                    getMaxGlobalTail(currentLayout, runtime).getSequence(),
                     endpoint);
             layoutBuilder.removeUnresponsiveServers(Collections.singleton(endpoint));
             newLayout = layoutBuilder.build();

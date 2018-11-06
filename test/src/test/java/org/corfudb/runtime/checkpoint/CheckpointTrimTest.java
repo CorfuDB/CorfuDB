@@ -1,6 +1,7 @@
 package org.corfudb.runtime.checkpoint;
 
 import com.google.common.reflect.TypeToken;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -32,7 +33,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         // Insert a checkpoint
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap((SMRMap) testMap);
-        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
+        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author").getSequence();
 
         // Trim the log
         getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress - 1);
@@ -64,7 +65,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
             map.put(String.valueOf(x), String.valueOf(x));
         }
 
-        long realTail = getDefaultRuntime().getSequencerView().query().getTokenValue();
+        long realTail = getDefaultRuntime().getSequencerView().query().getSequence();
 
         // move the sequencer tail forward
         for (int x = 0; x < initMapSize; x++) {
@@ -73,7 +74,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap((SMRMap) map);
-        long trimAddress = mcw.appendCheckpoints(getRuntime(), "author");
+        long trimAddress = mcw.appendCheckpoints(getRuntime(), "author").getSequence();
 
         assertThat(trimAddress).isEqualTo(realTail);
     }
@@ -99,7 +100,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
             // Insert a checkpoint
             MultiCheckpointWriter mcw = new MultiCheckpointWriter();
             mcw.addMap((SMRMap) testMap);
-            checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
+            checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author").getSequence();
         }
 
         // Trim the log in between the checkpoints
@@ -116,10 +117,11 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .open();
 
         // try to get a snapshot inside the gap
+        Token snapshot = new Token(0L, checkpointAddress - 1);
         getRuntime().getObjectsView()
                 .TXBuild()
                 .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(checkpointAddress-1)
+                .setSnapshot(snapshot)
                 .begin();
 
         // Reading an entry from scratch should be ok
@@ -148,9 +150,10 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .open();
 
         // Play the new view up to "b" only
+        Token snapshot = new Token(0L, 1);
         getRuntime().getObjectsView().TXBuild()
                 .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(1)
+                .setSnapshot(snapshot)
                 .begin();
 
         assertThat(newTestMap)
@@ -162,7 +165,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
         // Insert a checkpoint
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap((SMRMap) testMap);
-        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
+        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author").getSequence();
 
         // Trim the log
         getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress - 1);

@@ -17,7 +17,7 @@ public interface IToken {
      * on the log the token is for.
      * @return  The value of the token.
      */
-    long getTokenValue();
+    long getSequence();
 
     /** Get the epoch of the token, which represents the epoch the
      * token is valid in.

@@ -257,11 +257,11 @@ public class FastObjectLoader {
      * by the user.
      */
     private void findAndSetLogHead() {
-         logHead = runtime.getAddressSpaceView().getTrimMark();
+         logHead = runtime.getAddressSpaceView().getTrimMark().getSequence();
     }
 
     private void findAndSetLogTail() {
-        logTail = runtime.getAddressSpaceView().getLogTail();
+        logTail = runtime.getAddressSpaceView().getLogTail().getSequence();
     }
 
     private void resetAddressProcessed() {

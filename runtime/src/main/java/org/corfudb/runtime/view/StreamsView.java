@@ -113,12 +113,12 @@ public class StreamsView extends AbstractView {
             try {
                 runtime.getAddressSpaceView().write(tokenResponse, object, cacheOption);
                 // If we're here, we succeeded, return the acquired token
-                return tokenResponse.getTokenValue();
+                return tokenResponse.getSequence();
             } catch (OverwriteException oe) {
 
                 // We were overwritten, get a new token and try again.
                 log.warn("append[{}]: Overwritten after {} retries, streams {}",
-                        tokenResponse.getTokenValue(),
+                        tokenResponse.getSequence(),
                         x,
                         Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()));
 
@@ -130,7 +130,7 @@ public class StreamsView extends AbstractView {
 
                     // On retry, check for conflicts only from the previous
                     // attempt position
-                    conflictInfo.setSnapshotTimestamp(tokenResponse.getToken().getTokenValue());
+                    conflictInfo.setSnapshotTimestamp(tokenResponse.getToken());
 
                     // Token w/ conflict info
                     temp = runtime.getSequencerView().next(conflictInfo, streamIDs);
@@ -144,7 +144,7 @@ public class StreamsView extends AbstractView {
 
             } catch (StaleTokenException se) {
                 // the epoch changed from when we grabbed the token from sequencer
-                log.warn("append[{}]: StaleToken , streams {}", tokenResponse.getTokenValue(),
+                log.warn("append[{}]: StaleToken , streams {}", tokenResponse.getSequence(),
                         Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()));
 
                 throw new TransactionAbortedException(
@@ -156,7 +156,7 @@ public class StreamsView extends AbstractView {
         }
 
         log.error("append[{}]: failed after {} retries , streams {}, write size {} bytes",
-                tokenResponse.getTokenValue(),
+                tokenResponse.getSequence(),
                 runtime.getParameters().getWriteRetry(),
                 Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()),
                 ILogData.getSerializedSize(object));

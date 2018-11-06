@@ -5,6 +5,7 @@ import org.corfudb.CustomSerializer;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -81,7 +82,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         maps.forEach((streamName, map) -> {
             mcw.addMap(map);
         });
-        return mcw.appendCheckpoints(rt, "author");
+        return mcw.appendCheckpoints(rt, "author").getSequence();
     }
 
     private void assertThatMapsAreBuilt(CorfuRuntime rt1, CorfuRuntime rt2) {
@@ -122,7 +123,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     private void assertThatStreamTailsAreCorrect(Map<UUID, Long> streamTails) {
         maps.keySet().forEach((streamName) -> {
             UUID id = CorfuRuntime.getStreamID(streamName);
-            long tail = getDefaultRuntime().getSequencerView().query(id).getToken().getTokenValue();
+            long tail = getDefaultRuntime().getSequencerView().query(id).getToken().getSequence();
             if (streamTails.containsKey(id)) {
                 assertThat(streamTails.get(id)).isEqualTo(tail);
             }
@@ -185,12 +186,12 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .getSequencerClient(getDefaultConfigurationString());
 
         seq.nextToken(null, 1);
-        luc.fillHole(getDefaultRuntime().getSequencerView().next().getTokenValue());
+        luc.fillHole(getDefaultRuntime().getSequencerView().next().getSequence());
 
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
 
         seq.nextToken(null, 1);
-        luc.fillHole(getDefaultRuntime().getSequencerView().next().getTokenValue());
+        luc.fillHole(getDefaultRuntime().getSequencerView().next().getSequence());
 
         CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
         assertThatMapsAreBuilt(rt2);
@@ -220,7 +221,9 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         Map<String, String> map1Prime = Helpers.createMap("Map0", rt2, CorfuTable.class);
 
-        rt2.getObjectsView().TXBuild().setType(TransactionType.SNAPSHOT).setSnapshot(0).begin();
+        rt2.getObjectsView().TXBuild().setType(TransactionType.SNAPSHOT)
+                .setSnapshot(new Token(0L, 0L))
+                .begin();
         assertThat(map1Prime.get("key0")).isEqualTo("value0");
         assertThat(map1Prime.get("key1")).isNull();
         rt2.getObjectsView().TXEnd();
@@ -401,14 +404,14 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         SequencerClient seq = getDefaultRuntime().getLayoutView().getRuntimeLayout()
                 .getSequencerClient(getDefaultConfigurationString());
 
-        long address = seq.nextToken(Collections.emptyList(),1).get().getTokenValue();
+        long address = seq.nextToken(Collections.emptyList(),1).get().getSequence();
         ILogData data = Helpers.createEmptyData(address, DataType.RANK_ONLY,  new IMetadata.DataRank(2))
                 .getSerialized();
         luc.write(data).get();
 
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
 
-        address = seq.nextToken(Collections.emptyList(),1).get().getTokenValue();
+        address = seq.nextToken(Collections.emptyList(),1).get().getSequence();
         data = Helpers.createEmptyData(address, DataType.RANK_ONLY,  new IMetadata.DataRank(2))
                 .getSerialized();
         luc.write(data).get();
@@ -571,7 +574,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         Helpers.trim(getDefaultRuntime(),firstMileStone+2);
 
         incrementalLoader.setLogHead(firstMileStone + 1);
-        incrementalLoader.setLogTail(getDefaultRuntime().getSequencerView().next().getTokenValue());
+        incrementalLoader.setLogTail(getDefaultRuntime().getSequencerView().next().getSequence());
         incrementalLoader.loadMaps();
 
     }
@@ -646,7 +649,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         UUID transactionStreams = rt1.getObjectsView().TRANSACTION_STREAM_ID;
         long tailTransactionStream = rt1.getSequencerView().query(transactionStreams).
-                getToken().getTokenValue();
+                getToken().getSequence();
 
         // Also recover the Transaction Stream
         assertThat(streamTails.size()).isEqualTo(mapCount + 1);
@@ -775,7 +778,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(originalTable);
-        long cpAddress = mcw.appendCheckpoints(originalRuntime, "author");
+        long cpAddress = mcw.appendCheckpoints(originalRuntime, "author").getSequence();
         Helpers.trim(originalRuntime, cpAddress);
 
 

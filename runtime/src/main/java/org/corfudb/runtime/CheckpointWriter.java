@@ -19,6 +19,7 @@ import lombok.Setter;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
@@ -164,7 +165,7 @@ public class CheckpointWriter<T extends Map> {
     public long startCheckpoint() {
         startTime = LocalDateTime.now();
         AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
-        long txBeginGlobalAddress = context.getSnapshotTimestamp();
+        Token txBeginGlobalAddress = context.getSnapshotTimestamp();
 
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_TIME, startTime.toString());
         // Need the actual object's version
@@ -172,7 +173,7 @@ public class CheckpointWriter<T extends Map> {
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS,
                 Long.toString(corfuObject.getCorfuSMRProxy().getVersion()));
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS,
-                Long.toString(txBeginGlobalAddress));
+                Long.toString(txBeginGlobalAddress.getSequence()));
 
         ImmutableMap<CheckpointEntry.CheckpointDictKey,String> mdkv =
                 ImmutableMap.copyOf(this.mdkv);

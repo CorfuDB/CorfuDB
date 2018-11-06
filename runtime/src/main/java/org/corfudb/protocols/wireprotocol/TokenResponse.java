@@ -22,14 +22,13 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     /**
      * Constructor for TokenResponse.
      *
-     * @param tokenValue token value
-     * @param epoch current epoch
+     * @param token token value
      * @param backpointerMap  map of backpointers for all requested streams
      */
-    public TokenResponse(long tokenValue, long epoch, Map<UUID, Long> backpointerMap) {
+    public TokenResponse(Token token, Map<UUID, Long> backpointerMap) {
         respType = TokenType.NORMAL;
         conflictKey = NO_CONFLICT_KEY;
-        token = new Token(tokenValue, epoch);
+        this.token = token;
         this.backpointerMap = backpointerMap;
         this.streamTails = Collections.emptyList();
     }
@@ -59,9 +58,9 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     public TokenResponse(ByteBuf buf) {
         respType = TokenType.values()[ICorfuPayload.fromBuffer(buf, Byte.class)];
         conflictKey = ICorfuPayload.fromBuffer(buf, byte[].class);
-        Long tokenValue = ICorfuPayload.fromBuffer(buf, Long.class);
         Long epoch = ICorfuPayload.fromBuffer(buf, Long.class);
-        token = new Token(tokenValue, epoch);
+        Long sequence = ICorfuPayload.fromBuffer(buf, Long.class);
+        token = new Token(epoch, sequence);
         backpointerMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
         streamTails = ICorfuPayload.listFromBuffer(buf, Long.class);
     }
@@ -70,15 +69,15 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, respType);
         ICorfuPayload.serialize(buf, conflictKey);
-        ICorfuPayload.serialize(buf, token.getTokenValue());
         ICorfuPayload.serialize(buf, token.getEpoch());
+        ICorfuPayload.serialize(buf, this.getSequence());
         ICorfuPayload.serialize(buf, backpointerMap);
         ICorfuPayload.serialize(buf, streamTails);
     }
 
     @Override
-    public long getTokenValue() {
-        return token.getTokenValue();
+    public long getSequence() {
+        return token.getSequence();
     }
 
     @Override

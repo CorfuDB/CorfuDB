@@ -8,6 +8,7 @@ import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
@@ -54,7 +55,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         mcw.addMap(map);
 
         // Verify that a CP wasn't generated
-        long address = mcw.appendCheckpoints(r, "A1");
+        long address = mcw.appendCheckpoints(r, "A1").getSequence();
         assertThat(address).isEqualTo(-1);
 
         // Verify that nothing was written
@@ -377,9 +378,10 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             if (globalAddr < startAddress - 1) {
                 final long thisAddress = globalAddr;
                 try {
+                    Token ts = new Token(0L, thisAddress);
                     r.getObjectsView().TXBuild()
                             .setType(TransactionType.SNAPSHOT)
-                            .setSnapshot(thisAddress)
+                            .setSnapshot(ts)
                             .begin();
                     m2.size(); // Just call any accessor
                 } catch (TransactionAbortedException tae) {
@@ -389,9 +391,10 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 }
 
             } else {
+                Token ts = new Token(0L, globalAddr);
                 r.getObjectsView().TXBuild()
                         .setType(TransactionType.SNAPSHOT)
-                        .setSnapshot(globalAddr)
+                        .setSnapshot(ts)
                         .begin();
 
                 assertThat(m2.entrySet())
@@ -432,7 +435,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // Write cp #1 of 3
         if (write1) {
             TokenResponse tokResp1 = r.getSequencerView().query(streamId);
-            long addr1 = tokResp1.getToken().getTokenValue();
+            long addr1 = tokResp1.getToken().getSequence();
             mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1 + 1));
             CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                     checkpointAuthor, checkpointId, streamId, mdKV, null);
@@ -498,7 +501,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
         mcw1.addMap((SMRMap) mA);
         mcw1.addMap((SMRMap) mB);
-        long firstGlobalAddress1 = mcw1.appendCheckpoints(r, author);
+        long firstGlobalAddress1 = mcw1.appendCheckpoints(r, author).getSequence();
         assertThat(firstGlobalAddress1).isGreaterThan(-1);
         assertThat(mcw1.getCheckpointLogAddresses().size()).isGreaterThan(-1);
 
@@ -515,7 +518,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         MultiCheckpointWriter mcw2 = new MultiCheckpointWriter();
         mcw2.addMap((SMRMap) mA);
         mcw2.addMap((SMRMap) mB);
-        long firstGlobalAddress2 = mcw2.appendCheckpoints(r, author);
+        long firstGlobalAddress2 = mcw2.appendCheckpoints(r, author).getSequence();
         assertThat(firstGlobalAddress2).isGreaterThan(firstGlobalAddress1);
 
         setRuntime();
@@ -550,7 +553,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
         mcw1.addMap((SMRMap) mA);
         mcw1.addMap((SMRMap) mB);
-        long trimAddress = mcw1.appendCheckpoints(r, author);
+        long trimAddress = mcw1.appendCheckpoints(r, author).getSequence();
 
         r.getAddressSpaceView().prefixTrim(trimAddress - 1);
         r.getAddressSpaceView().gc();

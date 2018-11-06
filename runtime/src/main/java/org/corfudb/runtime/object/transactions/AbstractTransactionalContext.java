@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -104,7 +105,7 @@ public abstract class AbstractTransactionalContext implements
      * The global-log position that the transaction snapshots in all reads.
      */
     @Getter(lazy = true)
-    private final long snapshotTimestamp = obtainSnapshotTimestamp();
+    private final Token snapshotTimestamp = obtainSnapshotTimestamp();
 
     /**
      * The address that the transaction was committed at.
@@ -178,7 +179,7 @@ public abstract class AbstractTransactionalContext implements
                                                Object[] conflictObject);
 
     public void syncWithRetryUnsafe(VersionLockedObject vlo,
-                                    long snapshotTimestamp,
+                                    Token snapshotTimestamp,
                                     ICorfuSMRProxyInternal proxy,
                                     @Nullable Consumer<VersionLockedObject> optimisticStreamSetter) {
         for (int x = 0; x < this.builder.getRuntime().getParameters().getTrimRetry(); x++) {
@@ -191,7 +192,7 @@ public abstract class AbstractTransactionalContext implements
                     // object's new optimistic context.
                     optimisticStreamSetter.accept(vlo);
                 }
-                vlo.syncObjectUnsafe(snapshotTimestamp);
+                vlo.syncObjectUnsafe(snapshotTimestamp.getSequence());
                 break;
             } catch (TrimmedException te) {
                 // If a trim is encountered, we must reset the object
@@ -259,36 +260,35 @@ public abstract class AbstractTransactionalContext implements
      *
      * @return the current global tail
      */
-    private long obtainSnapshotTimestamp() {
+    private Token obtainSnapshotTimestamp() {
         final AbstractTransactionalContext parentCtx = getParentContext();
-        final long txnBuilderTs = getBuilder().getSnapshot();
+        final Token txnBuilderTs = getBuilder().getSnapshot();
         if (parentCtx != null) {
             // If we're in a nested transaction, the first read timestamp
             // needs to come from the root.
-            long parentTimestamp = parentCtx.getSnapshotTimestamp();
-            if (txnBuilderTs != Address.NON_ADDRESS
-                    && txnBuilderTs != parentTimestamp) {
+            Token parentTimestamp = parentCtx.getSnapshotTimestamp();
+            if (!txnBuilderTs.equals(Token.UNINITIALIZED)
+                    && !txnBuilderTs.equals(parentTimestamp)) {
                 String msg = String.format("Attempting to nest transactions with" +
-                        "different timestamps, parent ts=%d, user defined ts=%d", parentCtx.getSnapshotTimestamp(),
+                        " different timestamps, parent ts=%s, user defined ts=%s", parentCtx.getSnapshotTimestamp(),
                         txnBuilderTs);
                 throw new IllegalArgumentException(msg);
             }
             log.trace("obtainSnapshotTimestamp: nested transaction, inheriting parent" +
                     " SnapshotTimestamp[{}] {}", this, parentTimestamp);
             return parentTimestamp;
-        } else if (txnBuilderTs != Address.NON_ADDRESS) {
+        } else if (!txnBuilderTs.equals(Token.UNINITIALIZED)) {
             log.trace("obtainSnapshotTimestamp: using snapshot from builder" +
                     " SnapshotTimestamp[{}] {}", this, txnBuilderTs);
             return txnBuilderTs;
         } else {
             // Otherwise, fetch a read token from the sequencer the linearize
             // ourselves against.
-            long timestamp = getBuilder()
+            Token timestamp = getBuilder()
                     .getRuntime()
                     .getSequencerView()
                     .query()
-                    .getToken()
-                    .getTokenValue();
+                    .getToken();
             log.trace("obtainSnapshotTimestamp: sequencer SnapshotTimestamp[{}] {}", this, timestamp);
             return timestamp;
         }
@@ -376,8 +376,8 @@ public abstract class AbstractTransactionalContext implements
      */
     @Override
     public int compareTo(AbstractTransactionalContext o) {
-        return Long.compare(this.getSnapshotTimestamp(), o
-                .getSnapshotTimestamp());
+        return this.getSnapshotTimestamp()
+                .compareTo(o.getSnapshotTimestamp());
     }
 
     @Override

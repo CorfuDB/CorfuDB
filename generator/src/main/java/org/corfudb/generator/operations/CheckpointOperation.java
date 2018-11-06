@@ -2,6 +2,7 @@ package org.corfudb.generator.operations;
 
 import org.corfudb.generator.Correctness;
 import org.corfudb.generator.State;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.MultiCheckpointWriter;
 
 import lombok.extern.slf4j.Slf4j;
@@ -28,10 +29,10 @@ public class CheckpointOperation extends Operation {
 
             MultiCheckpointWriter mcw = new MultiCheckpointWriter();
             mcw.addAllMaps(state.getMaps());
-            long trimAddress = mcw.appendCheckpoints(state.getRuntime(), "Maithem");
-            state.setTrimMark(trimAddress);
+            Token trimAddress = mcw.appendCheckpoints(state.getRuntime(), "Maithem");
+            state.updateTrimMark(trimAddress);
             Thread.sleep(1000l * 30l * 1l);
-            state.getRuntime().getAddressSpaceView().prefixTrim(trimAddress - 1);
+            state.getRuntime().getAddressSpaceView().prefixTrim(trimAddress.getSequence() - 1);
             state.getRuntime().getAddressSpaceView().gc();
             state.getRuntime().getAddressSpaceView().invalidateClientCache();
             state.getRuntime().getAddressSpaceView().invalidateServerCaches();
