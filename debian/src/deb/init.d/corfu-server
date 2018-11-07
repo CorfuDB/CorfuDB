@@ -162,7 +162,11 @@ case "$1" in
         log_daemon_msg "Starting $ROLENAME on port $PORT"
         ensure_dirs
         ensure_profile_port $1
+
+        log_daemon_msg "Trust generation begins."
         generate_key_trust_artifacts
+        log_daemon_msg "Trust generation finished."
+
         change_ownership
         /usr/tanuki/bin/corfu-server-wrapper $1
         ;;
