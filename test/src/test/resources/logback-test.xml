@@ -2,13 +2,17 @@
 <configuration>
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{15}) - %msg%n %ex{3}</pattern>
+            <pattern>
+                %date{HH:mm:ss.SSS} %highlight(%-5level) %-15.15thread | %25.25logger{25} | %msg%n%xException{10}
+            </pattern>
         </encoder>
     </appender>
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
         <file>${user.home}/corfudb.log</file>
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{15}) - %msg%n %ex{3}</pattern>
+            <pattern>
+                %date{yyyy-MM-dd HH:mm:ss.SSS} %-5level %-10.10thread | %25.25logger{25} | %msg%n%xException{10}
+            </pattern>
         </encoder>
     </appender>
     <appender name="MetricsRollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
