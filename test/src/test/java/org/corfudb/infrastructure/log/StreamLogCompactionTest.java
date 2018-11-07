@@ -37,7 +37,7 @@ public class StreamLogCompactionTest extends AbstractCorfuTest {
 
         final long expectedGcCounter = 2;
         while(getGcCounter() < expectedGcCounter){
-            Thread.sleep(timeout);
+            TimeUnit.MILLISECONDS.sleep(timeout);
         }
 
         compaction.shutdown();
