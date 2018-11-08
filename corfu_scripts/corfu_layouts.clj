@@ -34,7 +34,7 @@ Options:
   [layout]
   ; For now, we start at rank 0, but we really should get the highest rank proposed
       (.setEpoch layout (inc (.getEpoch layout)))
-      (.moveServersToEpoch layout)
+      (.sealMinServerSet layout)
   (loop [layout-rank 0]
     (when (> layout-rank -1)
       (do

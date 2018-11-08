@@ -69,7 +69,7 @@ public class LayoutViewTest extends AbstractViewTest {
                 .addToLayout()
                 .setClusterId(r.clusterId)
                 .build();
-        r.getLayoutView().getRuntimeLayout(l).sealAndFlushMinSet();
+        r.getLayoutView().getRuntimeLayout(l).sealMinServerSet();
         r.getLayoutView().updateLayout(l, 1L);
         r.invalidateLayout();
         assertThat(r.getLayoutView().getLayout().epoch)
@@ -94,7 +94,7 @@ public class LayoutViewTest extends AbstractViewTest {
             .addToLayout()
             .setClusterId(UUID.nameUUIDFromBytes("wrong cluster".getBytes()))
             .build();
-        r.getLayoutView().getRuntimeLayout(l).sealAndFlushMinSet();
+        r.getLayoutView().getRuntimeLayout(l).sealMinServerSet();
         r.invalidateLayout();
         assertThatThrownBy(() -> r.getLayoutView().updateLayout(l, 1L))
             .isInstanceOf(WrongClusterException.class);
@@ -203,7 +203,7 @@ public class LayoutViewTest extends AbstractViewTest {
                         .build();
                 //TODO need to figure out if we can move to
                 //update layout
-                corfuRuntime.getLayoutView().getRuntimeLayout(newLayout).sealAndFlushMinSet();
+                corfuRuntime.getLayoutView().getRuntimeLayout(newLayout).sealMinServerSet();
 
                 corfuRuntime.getLayoutView().updateLayout(newLayout, newLayout.getEpoch());
                 corfuRuntime.invalidateLayout();
@@ -280,7 +280,7 @@ public class LayoutViewTest extends AbstractViewTest {
                 .build();
 
         l.setEpoch(l.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getRuntimeLayout(l).sealAndFlushMinSet();
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).sealMinServerSet();
         corfuRuntime.getLayoutView().updateLayout(newLayout, 1L);
 
         assertThat(getLayoutServer(SERVERS.PORT_0).getCurrentLayout()).isEqualTo(newLayout);
@@ -344,7 +344,7 @@ public class LayoutViewTest extends AbstractViewTest {
         // Keep old layout untouched for assertion
         Layout oldLayout = new Layout(l);
         l.setEpoch(l.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getRuntimeLayout(l).sealAndFlushMinSet();
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).sealMinServerSet();
 
         // We receive responses from PORT_0 and PORT_2
         corfuRuntime.getLayoutView().updateLayout(newLayout, 1L);
@@ -465,7 +465,7 @@ public class LayoutViewTest extends AbstractViewTest {
                 .build();
 
         l.setEpoch(l.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getRuntimeLayout(l).sealAndFlushMinSet();
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).sealMinServerSet();
 
         // STEP 1
         final long rank1 = 1L;
@@ -589,7 +589,7 @@ public class LayoutViewTest extends AbstractViewTest {
                 .build();
 
         l.setEpoch(l.getEpoch() + 1);
-        corfuRuntime1.getLayoutView().getRuntimeLayout(l).sealAndFlushMinSet();
+        corfuRuntime1.getLayoutView().getRuntimeLayout(l).sealMinServerSet();
 
         Semaphore proposeLock = new Semaphore(0);
         ExecutorService executorService = Executors.newSingleThreadExecutor();

@@ -343,7 +343,7 @@ public class LayoutManagementView extends AbstractView {
      */
     private void sealEpoch(Layout layout) throws QuorumUnreachableException {
         layout.setEpoch(layout.getEpoch() + 1);
-        runtime.getLayoutView().getRuntimeLayout(layout).sealAndFlushMinSet();
+        runtime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
     }
 
     /**

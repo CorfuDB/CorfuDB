@@ -67,7 +67,6 @@ public enum CorfuMsgType {
     TRIM_MARK_REQUEST(45, TypeToken.of(CorfuMsg.class)),
     TRIM_MARK_RESPONSE(46, new TypeToken<CorfuPayloadMsg<Long>>(){}),
     RESET_LOGUNIT(47, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
-    SET_EPOCH_WATER_MARK(48, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
 
     WRITE_OK(50, TypeToken.of(CorfuMsg.class)),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),
