@@ -31,8 +31,8 @@ public class BaseServer extends AbstractServer {
     private final CorfuMsgHandler handler =
             CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
 
-
-    /** Respond to a ping message.
+    /**
+     * Respond to a ping message.
      *
      * @param msg   The incoming message
      * @param ctx   The channel context
@@ -43,7 +43,8 @@ public class BaseServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.PONG.msg());
     }
 
-    /** Respond to a version request message.
+    /**
+     * Respond to a version request message.
      *
      * @param msg   The incoming message
      * @param ctx   The channel context
@@ -58,6 +59,7 @@ public class BaseServer extends AbstractServer {
 
     /**
      * Respond to a epoch change message.
+     * This method also executes sealing logic on each individual server type.
      *
      * @param msg The incoming message
      * @param ctx The channel context
@@ -68,9 +70,10 @@ public class BaseServer extends AbstractServer {
                                                    ChannelHandlerContext ctx,
                                                    @NonNull IServerRouter r) {
         try {
-            log.info("handleMessageSetEpoch: Received SET_EPOCH, moving to new epoch {}",
-                    msg.getPayload());
-            serverContext.setServerEpoch(msg.getPayload(), r);
+            long epoch = msg.getPayload();
+            log.info("handleMessageSetEpoch: Received SET_EPOCH, moving to new epoch {}", epoch);
+            serverContext.setServerEpoch(epoch, r);
+            serverContext.getServers().forEach(s -> s.sealServerWithEpoch(epoch, r));
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
         } catch (WrongEpochException e) {
             log.debug("handleMessageSetEpoch: Rejected SET_EPOCH current={}, requested={}",
@@ -80,7 +83,8 @@ public class BaseServer extends AbstractServer {
         }
     }
 
-    /** Reset the JVM. This mechanism leverages that corfu_server runs in a bash script
+    /**
+     * Reset the JVM. This mechanism leverages that corfu_server runs in a bash script
      * which monitors the exit code of Corfu. If the exit code is 100, then it resets
      * the server and DELETES ALL EXISTING DATA.
      *
@@ -95,7 +99,8 @@ public class BaseServer extends AbstractServer {
         CorfuServer.restartServer(serverContext, true);
     }
 
-    /** Restart the JVM. This mechanism leverages that corfu_server runs in a bash script
+    /**
+     * Restart the JVM. This mechanism leverages that corfu_server runs in a bash script
      * which monitors the exit code of Corfu. If the exit code is 200, then it restarts
      * the server.
      *

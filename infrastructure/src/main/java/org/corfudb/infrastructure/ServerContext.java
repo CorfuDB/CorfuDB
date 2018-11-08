@@ -175,7 +175,7 @@ public class ServerContext implements AutoCloseable {
      * fileName when so that the number of these files don't exceed the user-defined
      * retention limit. Cleanup is always done on files with lower epochs.
      */
-     void dataStoreFileCleanup(String fileName) {
+    void dataStoreFileCleanup(String fileName) {
         String logDirPath = getServerConfig(String.class, "--log-path");
         if (logDirPath == null) {
             return;
@@ -344,12 +344,22 @@ public class ServerContext implements AutoCloseable {
         return getDataStore().get(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT);
     }
 
-    /** Set the current {@link Layout} stored in the {@link DataStore}.
+    /**
+     * Set the current {@link Layout} stored in the {@link DataStore}.
      *
      * @param layout The {@link Layout} to set in the {@link DataStore}.
      */
     public void setCurrentLayout(Layout layout) {
         getDataStore().put(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT, layout);
+    }
+
+    /**
+     * Get the list of servers registered in serverRouter
+     *
+     * @return A list of servers registered in serverRouter
+     */
+    public List<AbstractServer> getServers() {
+        return serverRouter.getServers();
     }
 
     /**

@@ -27,7 +27,6 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 public class NettyServerRouter extends ChannelInboundHandlerAdapter
         implements IServerRouter {
 
-
     /**
      * This map stores the mapping from message type to netty server handler.
      */
@@ -125,8 +124,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
                 if (validateEpoch(m, ctx)) {
                     // Route the message to the handler.
                     if (log.isTraceEnabled()) {
-                        log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(),
-                                msg);
+                        log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
                     }
 
                     handler.getExecutor().submit(() -> {

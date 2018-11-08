@@ -286,11 +286,34 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
+     * Seal the server with the epoch by setting epochWaterMark.
+     *
+     * - The epochWaterMark is persisted to withstand restarts.
+     * - The epochWaterMark is inserted in the queue and then we wait to flush all operations
+     *   in the queue before this operation.
+     * - All operations after this operation but stamped with an older epoch will be failed.
+     */
+    @Override
+    public synchronized void sealServerWithEpoch(long epoch, IServerRouter r) {
+        if (epoch > serverContext.getLogUnitEpochWaterMark()) {
+            serverContext.setLogUnitEpochWaterMark(epoch);
+            batchWriter.waitForEpochWaterMark(epoch);
+            log.info("LogUnit sealServerWithEpoch: set epochWaterMark to {} and " +
+                    "flushed all operations", epoch);
+        } else {
+            log.info("LogUnit sealServerWithEpoch: Epoch water mark already set to: {}." +
+                    "Request is a no-op.", serverContext.getLogUnitEpochWaterMark());
+        }
+    }
+
+    /**
      * Resets the log unit server via the BatchWriter.
      * Warning: Clears all data.
+     *
      * - The epochWaterMark is persisted to withstand restarts.
-     * - The epochWaterMark is inserted in the queue and then we wait to flush all operations in
-     * the queue before this operation.
+     * - The epochWaterMark is inserted in the queue and then we wait to flush all operations
+     *   in the queue before this operation.
+     * - All operations after this operation but stamped with an older epoch will be failed.
      * - After this the reset operation is inserted which resets and clears all data.
      * - Finally the cache is invalidated to purge the existing entries.
      */
@@ -313,21 +336,6 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-    @ServerHandler(type = CorfuMsgType.SET_EPOCH_WATER_MARK)
-    private synchronized void setEpochWaterMark(CorfuPayloadMsg<Long> msg,
-                                                ChannelHandlerContext ctx, IServerRouter r) {
-        if (msg.getPayload() > serverContext.getLogUnitEpochWaterMark()
-                && msg.getPayload() == serverContext.getServerEpoch()) {
-            serverContext.setLogUnitEpochWaterMark(msg.getPayload());
-            batchWriter.waitForEpochWaterMark(msg.getPayload());
-            log.info("setEpochWaterMark: Epoch water mark set to : {}", msg.getPayload());
-        } else {
-            log.info("setEpochWaterMark: Epoch water mark already set to : {}. Request is a no-op.",
-                    msg.getPayload());
-        }
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-    }
-
     /**
      * Retrieve the LogUnitEntry from disk, given an address.
      *
@@ -343,7 +351,6 @@ public class LogUnitServer extends AbstractServer {
         log.trace("Retrieved[{} : {}]", address, entry);
         return entry;
     }
-
 
     public synchronized void handleEviction(long address, ILogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);

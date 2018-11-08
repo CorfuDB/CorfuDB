@@ -150,7 +150,6 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
     public void waitForEpochWaterMark(@Nonnull long epoch) {
         try {
             CompletableFuture<Void> cf = new CompletableFuture<>();
-            epochWaterMark = epoch;
             operationsQueue.add(new BatchWriterOperation(Type.EPOCH_WATER_MARK, null, null, epoch, null, cf));
             cf.get();
         } catch (Exception e) {
@@ -192,7 +191,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
         try {
             BatchWriterOperation lastOp = null;
             int processed = 0;
-            List<BatchWriterOperation> res = new LinkedList();
+            List<BatchWriterOperation> res = new LinkedList<>();
 
             while (true) {
                 BatchWriterOperation currOp;
@@ -217,7 +216,6 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
 
                 if (currOp == null) {
                     lastOp = null;
-                    continue;
                 } else if (currOp == BatchWriterOperation.SHUTDOWN) {
                     log.trace("Shutting down the write processor");
                     streamLog.sync(true);
@@ -247,6 +245,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                                 res.add(currOp);
                                 break;
                             case EPOCH_WATER_MARK:
+                                epochWaterMark = currOp.getEpoch();
                                 res.add(currOp);
                                 break;
                             case RESET:

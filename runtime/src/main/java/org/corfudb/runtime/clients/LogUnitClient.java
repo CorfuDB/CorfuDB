@@ -326,15 +326,4 @@ public class LogUnitClient extends AbstractClient {
     public CompletableFuture<Boolean> resetLogUnit(long epoch) {
         return sendMessageWithFuture(CorfuMsgType.RESET_LOGUNIT.payloadMsg(epoch));
     }
-
-    /**
-     * Sets the Epoch water mark on the log unit to invalidate any operations stamped with an
-     * older epoch.
-     *
-     * @param epoch Epoch to set epochWaterMark.
-     * @return Completable future which returns true on success.
-     */
-    public CompletableFuture<Boolean> setEpochWaterMark(long epoch) {
-        return sendMessageWithFuture(CorfuMsgType.SET_EPOCH_WATER_MARK.payloadMsg(epoch));
-    }
 }

@@ -47,7 +47,6 @@ public class RuntimeLayout {
      * Constructor taking a reference of the layout to stamp the clients.
      */
     public RuntimeLayout(@Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime) {
-
         this.layout = layout;
         this.runtime = corfuRuntime;
     }
@@ -57,18 +56,18 @@ public class RuntimeLayout {
      * The seal however waits only for a response from a quorum of layout servers (n/2 + 1),
      * a quorum of log unit servers in every stripe in case of QUORUM_REPLICATION or
      * at least one log unit server in every stripe in case of CHAIN_REPLICATION.
+     * The fault detector eventually corrects out of phase epochs by resealing the servers.
      *
      * @throws WrongEpochException        If any server is in a higher epoch.
      * @throws QuorumUnreachableException If enough number of servers cannot be sealed.
      */
-    public void sealAndFlushMinSet()
+    public void sealMinServerSet()
             throws WrongEpochException, QuorumUnreachableException {
         log.debug("Requested move of servers to new epoch {} servers are {}", layout.getEpoch(),
                 layout.getAllServers());
 
         // Set remote epoch on all servers in layout.
-        Map<String, CompletableFuture<Boolean>> resultMap =
-                SealServersHelper.asyncSetRemoteEpoch(this);
+        Map<String, CompletableFuture<Boolean>> resultMap = SealServersHelper.asyncSealServers(this);
 
         // Validate if we received enough layout server responses.
         SealServersHelper.waitForLayoutSeal(layout.getLayoutServers(), resultMap);
@@ -78,12 +77,6 @@ public class RuntimeLayout {
             layoutSegment.getReplicationMode().validateSegmentSeal(layoutSegment, resultMap);
         }
 
-        for (LayoutSegment layoutSegment : layout.getSegments()) {
-            for (String endpoint : layoutSegment.getAllLogServers()) {
-
-            }
-            layoutSegment.getReplicationMode().flush(layoutSegment);
-        }
         log.debug("Layout has been sealed successfully.");
     }
 

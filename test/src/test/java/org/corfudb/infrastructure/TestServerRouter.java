@@ -30,6 +30,9 @@ public class TestServerRouter implements IServerRouter {
     @Getter
     public Map<CorfuMsgType, AbstractServer> handlerMap;
 
+    @Getter
+    public List<AbstractServer> servers;
+
     public List<TestRule> rules;
 
     AtomicLong requestCounter;
@@ -53,6 +56,7 @@ public class TestServerRouter implements IServerRouter {
     public void reset() {
         this.responseMessages = new ArrayList<>();
         this.requestCounter = new AtomicLong();
+        this.servers = new ArrayList<>();
         this.handlerMap = new ConcurrentHashMap<>();
         this.rules = new ArrayList<>();
     }
@@ -79,13 +83,13 @@ public class TestServerRouter implements IServerRouter {
      */
     @Override
     public void addServer(AbstractServer server) {
+        servers.add(server);
         server.getHandler()
                 .getHandledTypes().forEach(x -> {
             handlerMap.put(x, server);
             log.trace("Registered {} to handle messages of type {}", server, x);
         });
     }
-
 
     /**
      * Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
