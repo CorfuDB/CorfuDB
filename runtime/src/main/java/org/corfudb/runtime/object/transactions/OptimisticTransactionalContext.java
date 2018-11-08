@@ -393,23 +393,4 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         }
         return (OptimisticTransactionalContext)atc;
     }
-
-    /**
-     * Get the first timestamp for this transaction.
-     *
-     * @return The first timestamp to be used for this transaction.
-     */
-    @Override
-    public synchronized long obtainSnapshotTimestamp() {
-        final AbstractTransactionalContext atc = getRootContext();
-        if (atc != null && atc != this) {
-            // If we're in a nested transaction, the first read timestamp
-            // needs to come from the root.
-            return atc.getSnapshotTimestamp();
-        } else {
-            // Otherwise, fetch a read token from the sequencer the linearize
-            // ourselves against.
-            return super.obtainSnapshotTimestamp();
-        }
-    }
 }

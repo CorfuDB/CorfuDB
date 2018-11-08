@@ -191,6 +191,8 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
             CorfuTable.IndexRegistry<K, V> result = (CorfuTable.IndexRegistry<K, V>) EMPTY;
             return result;
         }
+
+
     }
 
     /** Helper function to get a map (non-secondary index) Corfu table.
@@ -279,14 +281,12 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
             secondaryIndexes.put(index.getName().get(), new HashMap<>());
             indexSpec.add(index);
         });
-        log.info("CorfuTable: creating CorfuTable with {} as indexRegistry", indices);
+        log.info("CorfuTable: creating CorfuTable with the following indexes: {}", secondaryIndexes.keySet().toString());
     }
 
     /** Default constructor. Generates a table without any secondary indexes. */
     public CorfuTable() {
         this(IndexRegistry.empty());
-        log.trace("CorfuTable: Creating a table without secondary indexes! Secondary index lookup"
-            + " will DEGRADE to a full scan");
     }
 
     /** {@inheritDoc} */
@@ -346,11 +346,20 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     <I extends Comparable<I>>
     Collection<Entry<K, V>> getByIndex(@Nonnull IndexName indexName, I indexKey) {
         String secondaryIndex = indexName.get();
-        Map<K, V> res = secondaryIndexes.get(secondaryIndex).get(indexKey);
+        Map<Comparable, Map<K, V>> secondaryMap;
+        if (secondaryIndexes.containsKey(secondaryIndex) &&
+                ((secondaryMap = secondaryIndexes.get(secondaryIndex)) != null)) {
+            // If secondary index exists and function for this index is not null
+            Map<K, V> res = secondaryMap.get(indexKey);
 
-        return res == null ?
-                Collections.emptySet():
-                new HashSet<>(res.entrySet());
+            return res == null ?
+                    Collections.emptySet() :
+                    new HashSet<>(res.entrySet());
+        }
+
+        // If index is not specified, the lookup by index API must fail.
+        log.error("CorfuTable: secondary index " + secondaryIndex + " does not exist for this table, cannot complete the get by index.");
+        throw new IllegalArgumentException("Secondary Index " + secondaryIndex + " is not defined.");
     }
 
     /**
@@ -369,30 +378,23 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
                                                             entryPredicate,
                                                     I indexKey) {
         Stream<Entry<K, V>> entryStream;
+        String secondaryIndex = indexName.get();
+        Map<Comparable, Map<K, V>> secondaryMap;
 
-        if (secondaryIndexes.isEmpty()) {
-            // If there are no index functions, use the entire map
-            entryStream = mainMap.entrySet().parallelStream();
-            log.debug("getByIndexAndFilter: Attempted getByIndexAndFilter without indexing");
-        } else {
-            Map<Comparable, Map<K, V>> secondaryMap = secondaryIndexes.get(indexName.get());
-            if (secondaryMap != null) {
-                // Otherwise, use the secondary index that was generated.
-                if (secondaryMap.get(indexKey) == null) {
-                    entryStream = Stream.empty();
-                } else {
-                    entryStream = secondaryMap.get(indexKey).entrySet().stream();
-                }
+        if (secondaryIndexes.containsKey(secondaryIndex) &&
+                ((secondaryMap = secondaryIndexes.get(secondaryIndex)) != null)) {
+            if (secondaryMap.get(indexKey) == null) {
+                entryStream = Stream.empty();
             } else {
-                // For some reason the function is not present (maybe someone passed the
-                // wrong function).
-                log.error("getByIndexAndFilter: Attempted to read from a index function which"
-                        + "is not available, falling back to no secondary index");
-                entryStream = mainMap.entrySet().parallelStream();
+                entryStream = secondaryMap.get(indexKey).entrySet().stream();
             }
+
+            return entryStream.filter(entryPredicate).collect(Collectors.toCollection(ArrayList::new));
         }
 
-        return entryStream.filter(entryPredicate).collect(Collectors.toCollection(ArrayList::new));
+        // If there are is no index function available, fail
+        log.error("CorfuTable: secondary index " + secondaryIndex + " does not exist for this table, cannot complete the get by index and filter.");
+        throw new IllegalArgumentException("Secondary Index " + secondaryIndex + " is not defined.");
     }
 
     /** {@inheritDoc} */

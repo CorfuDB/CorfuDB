@@ -24,6 +24,7 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
 /**
@@ -252,14 +253,45 @@ public abstract class AbstractTransactionalContext implements
     }
 
     /**
-     * Retrieves the current timestamp from the sequencer.
+     * Retrieves the current tail from the sequencer, if this
+     * is a nested transaction, then inherit the snapshot
+     * time from the parent transaction.
+     *
      * @return the current global tail
      */
-    public long obtainSnapshotTimestamp() {
-        long timestamp = builder.runtime
-                .getSequencerView().query().getToken().getTokenValue();
-        log.trace("obtainSnapshotTimestamp: SnapshotTimestamp[{}] {}", this, timestamp);
-        return timestamp;
+    private long obtainSnapshotTimestamp() {
+        final AbstractTransactionalContext parentCtx = getParentContext();
+        final long txnBuilderTs = getBuilder().getSnapshot();
+        if (parentCtx != null) {
+            // If we're in a nested transaction, the first read timestamp
+            // needs to come from the root.
+            long parentTimestamp = parentCtx.getSnapshotTimestamp();
+            if (txnBuilderTs != Address.NON_ADDRESS
+                    && txnBuilderTs != parentTimestamp) {
+                String msg = String.format("Attempting to nest transactions with" +
+                        "different timestamps, parent ts=%d, user defined ts=%d", parentCtx.getSnapshotTimestamp(),
+                        txnBuilderTs);
+                throw new IllegalArgumentException(msg);
+            }
+            log.trace("obtainSnapshotTimestamp: nested transaction, inheriting parent" +
+                    " SnapshotTimestamp[{}] {}", this, parentTimestamp);
+            return parentTimestamp;
+        } else if (txnBuilderTs != Address.NON_ADDRESS) {
+            log.trace("obtainSnapshotTimestamp: using snapshot from builder" +
+                    " SnapshotTimestamp[{}] {}", this, txnBuilderTs);
+            return txnBuilderTs;
+        } else {
+            // Otherwise, fetch a read token from the sequencer the linearize
+            // ourselves against.
+            long timestamp = getBuilder()
+                    .getRuntime()
+                    .getSequencerView()
+                    .query()
+                    .getToken()
+                    .getTokenValue();
+            log.trace("obtainSnapshotTimestamp: sequencer SnapshotTimestamp[{}] {}", this, timestamp);
+            return timestamp;
+        }
     }
 
     /**

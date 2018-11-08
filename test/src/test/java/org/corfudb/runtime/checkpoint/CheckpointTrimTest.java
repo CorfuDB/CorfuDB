@@ -53,6 +53,32 @@ public class CheckpointTrimTest extends AbstractViewTest {
     }
 
     @Test
+    public void ensureMCWUsesRealTail() throws Exception {
+        Map<String, String> map = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<SMRMap<String, String>>() {})
+                .setStreamName("test")
+                .open();
+
+        final int initMapSize = 10;
+        for (int x = 0; x < initMapSize; x++) {
+            map.put(String.valueOf(x), String.valueOf(x));
+        }
+
+        long realTail = getDefaultRuntime().getSequencerView().query().getTokenValue();
+
+        // move the sequencer tail forward
+        for (int x = 0; x < initMapSize; x++) {
+            getDefaultRuntime().getSequencerView().next();
+        }
+
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap((SMRMap) map);
+        long trimAddress = mcw.appendCheckpoints(getRuntime(), "author");
+
+        assertThat(trimAddress).isEqualTo(realTail);
+    }
+
+    @Test
     public void testSuccessiveCheckpointTrim() throws Exception {
         final int nCheckpoints = 2;
         final long ckpointGap = 5;

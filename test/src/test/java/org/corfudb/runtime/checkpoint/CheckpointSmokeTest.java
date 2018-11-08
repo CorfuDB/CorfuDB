@@ -251,7 +251,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         cpw.setBatchSize(smallBatchSize);
 
         // Write all CP data.
-        long txBeginGlobalAddress = CheckpointWriter.startGlobalSnapshotTxn(r);
+        r.getObjectsView().TXBuild()
+                .setType(TransactionType.SNAPSHOT)
+                .begin();
         try {
             long startAddress = cpw.startCheckpoint();
             List<Long> continuationAddrs = cpw.appendObjectState();

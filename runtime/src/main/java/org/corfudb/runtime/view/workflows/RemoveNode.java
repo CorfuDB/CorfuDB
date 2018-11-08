@@ -1,12 +1,12 @@
 package org.corfudb.runtime.view.workflows;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.view.Layout;
 
-import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
@@ -20,9 +20,9 @@ import java.util.concurrent.TimeoutException;
 @Slf4j
 public class RemoveNode extends WorkflowRequest {
 
-    public RemoveNode(@Nonnull String endpointToRemove, @Nonnull CorfuRuntime runtime,
-                      int retry, @Nonnull Duration timeout,
-                      @Nonnull Duration pollPeriod) {
+    public RemoveNode(@NonNull String endpointToRemove, @NonNull CorfuRuntime runtime,
+                      int retry, @NonNull Duration timeout,
+                      @NonNull Duration pollPeriod) {
         this.nodeForWorkflow = endpointToRemove;
         this.runtime = runtime;
         this.retry = retry;
@@ -31,7 +31,7 @@ public class RemoveNode extends WorkflowRequest {
     }
 
     @Override
-    protected UUID sendRequest(@Nonnull ManagementClient managementClient) throws TimeoutException {
+    protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {
         // Send an remove node request to an orchestrator that is not on the node
         // to be removed
         CreateWorkflowResponse resp = managementClient.removeNode(nodeForWorkflow);
@@ -42,11 +42,10 @@ public class RemoveNode extends WorkflowRequest {
     }
 
     @Override
-    protected boolean verifyRequest(@Nonnull Layout layout) {
+    protected boolean verifyRequest(@NonNull Layout layout) {
         log.info("verifyRequest: {} from {}", this, layout);
         // Verify that the new layout doesn't include the removed node
-        return !runtime.getLayoutView().getLayout().getAllServers()
-                .contains(nodeForWorkflow);
+        return !layout.getAllServers().contains(nodeForWorkflow);
     }
 
     @Override
