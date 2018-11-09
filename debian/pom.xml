@@ -101,7 +101,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/share/corfu/corfu_scripts</prefix>
-                                        <filemode>750</filemode>
+                                        <filemode>755</filemode>
                                     </mapper>
                                 </data>
                                 <!-- control scripts -->
@@ -111,7 +111,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/share/corfu/scripts</prefix>
-                                        <filemode>750</filemode>
+                                        <filemode>755</filemode>
                                     </mapper>
                                 </data>
                                 <!-- tanuki wrapper -->
@@ -121,7 +121,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/tanuki/bin</prefix>
-                                        <filemode>750</filemode>
+                                        <filemode>755</filemode>
                                     </mapper>
                                 </data>
                                 <!-- tanuki configure -->
