@@ -4,24 +4,10 @@ import static java.util.Objects.requireNonNull;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
-
-import javax.annotation.Nullable;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
-
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -32,6 +18,17 @@ import org.corfudb.runtime.view.replication.QuorumReplicationProtocol;
 import org.corfudb.runtime.view.replication.ReadWaitHoleFillPolicy;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * This class represents the layout of a Corfu instance.
