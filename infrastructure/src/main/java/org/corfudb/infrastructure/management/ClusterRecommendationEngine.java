@@ -31,12 +31,13 @@ public interface ClusterRecommendationEngine {
      * given view of the cluster captured in {@link ClusterState} along with the expected
      * {@link Layout}.
      *
-     * @param clusterState view of the Corfu cluster of servers from a client node's perspective.
-     * @param layout       expected layout of the cluster.
-     * @return a {@link List} of Corfu servers suspected to have been failed according to the
+     * @param clusterStatus view of the Corfu server cluster from a client node's
+     *                      perspective.
+     * @param layout expected layout of the cluster.
+     * @return a {@link List} of Corfu servers considered to have been failed according to the
      * underlying {@link ClusterRecommendationStrategy}.
      */
-    List<String> suspectedFailedServers(ClusterState clusterState, Layout layout);
+    List<String> failedServers(final ClusterState clusterStatus, final Layout layout);
 
     /**
      * Provide a list of servers in the Corfu cluster which according to the underlying algorithm
@@ -44,10 +45,10 @@ public interface ClusterRecommendationEngine {
      * given view of the cluster captured in {@link ClusterState} along with the expected
      * {@link Layout}.
      *
-     * @param clusterState view of the Corfu cluster of servers from a client node's perspective.
-     * @param layout       expected layout of the cluster.
-     * @return a {@link List} of servers suspected to have been healed according to the underlying
+     * @param clusterStatus view of the Corfu server cluster from a client node's perspective.
+     * @param layout expected layout of the cluster.
+     * @return a {@link List} of servers considered to have been healed according to the underlying
      * {@link ClusterRecommendationStrategy}.
      */
-    List<String> suspectedHealedServers(ClusterState clusterState, Layout layout);
+    List<String> healedServers(final ClusterState clusterStatus, final Layout layout);
 }
