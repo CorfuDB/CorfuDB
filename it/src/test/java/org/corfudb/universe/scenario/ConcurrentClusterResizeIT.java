@@ -38,30 +38,36 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
             ClientParams clientFixture = fixture.getClient();
             CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
 
+            assertThat(corfuCluster.nodes().size()).isEqualTo(numNodes);
+
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-            CorfuTable table = corfuClient.createDefaultCorfuTable(TestFixtureConst.DEFAULT_STREAM_NAME);
+            CorfuTable<String, String> table =
+                    corfuClient.createDefaultCorfuTable(TestFixtureConst.DEFAULT_STREAM_NAME);
             for (int i = 0; i < TestFixtureConst.DEFAULT_TABLE_ITER; i++) {
                 table.put(String.valueOf(i), String.valueOf(i));
             }
 
-            // Get the servers list to be added/removed
+            CorfuServer server0 = corfuCluster.getFirstServer();
+
+            // Get the servers list to be added/removed -all servers in the cluster exclude server0
             List<CorfuServer> servers = IntStream.range(1, numNodes)
-                    .mapToObj(i -> (CorfuServer) corfuCluster.getNode("node" + (9000 + i)))
+                    .mapToObj(corfuCluster::getServerByIndex)
                     .collect(Collectors.toList());
 
             testCase.it("should concurrently remove four nodes from cluster", data -> {
-                CorfuServer server0 = corfuCluster.getNode("node9000");
-
                 // Concurrently remove four nodes from cluster
                 ExecutorService executor = Executors.newFixedThreadPool(numNodes - 1);
 
-                servers.forEach(node -> executor.submit(() -> corfuClient.getManagementView().removeNode(
-                        node.getEndpoint(),
-                        clientFixture.getNumRetry(),
-                        clientFixture.getTimeout(),
-                        clientFixture.getPollPeriod())
-                ));
+                servers.forEach(node -> {
+                    Runnable removeNodeAction = () -> corfuClient.getManagementView().removeNode(
+                            node.getEndpoint(),
+                            clientFixture.getNumRetry(),
+                            clientFixture.getTimeout(),
+                            clientFixture.getPollPeriod()
+                    );
+                    executor.submit(removeNodeAction);
+                });
 
                 // Wait for layout servers to change
                 waitForLayoutServersChange(size -> size == 1, corfuClient);

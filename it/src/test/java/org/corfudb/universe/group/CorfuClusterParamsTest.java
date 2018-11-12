@@ -2,9 +2,13 @@ package org.corfudb.universe.group;
 
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
 import org.corfudb.universe.node.server.CorfuServerParams;
+import org.corfudb.universe.node.server.ServerUtil;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.SortedSet;
+import java.util.TreeSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -13,17 +17,19 @@ public class CorfuClusterParamsTest {
     @Test
     public void testFullNodeName() {
         final String clusterName = "mycluster";
-        final int port = 9000;
+        final int port = ServerUtil.getRandomOpenPort();
 
-        CorfuServerParams corfuServerParams = CorfuServerParams
+        CorfuServerParams param = CorfuServerParams
                 .serverParamsBuilder()
                 .port(port)
                 .clusterName(clusterName)
                 .build();
 
+        SortedSet<CorfuServerParams> corfuServers = new TreeSet<>(Collections.singletonList(param));
+
         CorfuClusterParams clusterParams = CorfuClusterParams.builder()
                 .name(clusterName)
-                .nodes(Collections.singletonList(corfuServerParams))
+                .nodes(corfuServers)
                 .build();
 
         String fqdn = clusterParams.getFullNodeName("node" + port);

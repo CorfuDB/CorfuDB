@@ -1,6 +1,8 @@
 package org.corfudb.universe.node.client;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.reflect.TypeToken;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -29,14 +31,15 @@ public class LocalCorfuClient implements CorfuClient {
     @Getter
     private final ClientParams params;
     @Getter
-    private final ImmutableList<String> serverEndpoints;
+    private final ImmutableSortedSet<String> serverEndpoints;
 
     @Builder
-    public LocalCorfuClient(ClientParams params, ImmutableList<String> serverEndpoints) {
+    public LocalCorfuClient(ClientParams params, ImmutableSortedSet<String> serverEndpoints) {
         this.params = params;
         this.serverEndpoints = serverEndpoints;
 
         List<NodeLocator> layoutServers = serverEndpoints.stream()
+                .sorted()
                 .map(NodeLocator::parseString)
                 .collect(Collectors.toList());
 
@@ -90,10 +93,10 @@ public class LocalCorfuClient implements CorfuClient {
     }
 
     @Override
-    public CorfuTable createDefaultCorfuTable(String streamName) {
+    public <K, V> CorfuTable<K, V> createDefaultCorfuTable(String streamName) {
         return runtime.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<K, V>>() {})
                 .setStreamName(streamName)
                 .open();
     }

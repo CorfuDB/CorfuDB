@@ -14,8 +14,7 @@ import java.time.Duration;
 @Builder
 @Getter
 @EqualsAndHashCode(exclude = {"numRetry", "timeout", "pollPeriod"})
-public
-class ClientParams implements NodeParams {
+public class ClientParams implements NodeParams<ClientParams> {
     @Default
     @NonNull
     private final String name = "corfuClient";
@@ -39,4 +38,12 @@ class ClientParams implements NodeParams {
     @Default
     @NonNull
     private final Duration pollPeriod = Duration.ofMillis(50);
+
+    @Default
+    private final int order = 0;
+
+    @Override
+    public int compareTo(ClientParams other) {
+        return Integer.compare(order, other.order);
+    }
 }

@@ -2,8 +2,9 @@ package org.corfudb.universe.group.cluster;
 
 import static lombok.Builder.Default;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedMap;
+import com.google.common.collect.ImmutableSortedSet;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -21,8 +22,8 @@ import org.corfudb.universe.util.ClassUtils;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
@@ -31,7 +32,7 @@ import java.util.stream.Collectors;
 public abstract class AbstractCorfuCluster<P extends CorfuClusterParams, U extends UniverseParams>
         implements CorfuCluster {
     @Default
-    protected final ConcurrentMap<String, CorfuServer> nodes = new ConcurrentHashMap<>();
+    protected final ConcurrentNavigableMap<String, CorfuServer> nodes = new ConcurrentSkipListMap<>();
     @Getter
     @NonNull
     protected final P params;
@@ -54,7 +55,7 @@ public abstract class AbstractCorfuCluster<P extends CorfuClusterParams, U exten
      */
     @Override
     public AbstractCorfuCluster<P, U> deploy() {
-        log.info("Deploy vm corfu cluster. Params: {}", params);
+        log.info("Deploy corfu cluster. Params: {}", params);
 
         List<CompletableFuture<CorfuServer>> asyncDeployment = params
                 .getNodesParams()
@@ -155,8 +156,8 @@ public abstract class AbstractCorfuCluster<P extends CorfuClusterParams, U exten
     }
 
     @Override
-    public <T extends Node> ImmutableMap<String, T> nodes() {
-        return ClassUtils.cast(ImmutableMap.copyOf(nodes));
+    public <T extends Node> ImmutableSortedMap<String, T> nodes() {
+        return ClassUtils.cast(ImmutableSortedMap.copyOf(nodes));
     }
 
     @Override
@@ -167,5 +168,5 @@ public abstract class AbstractCorfuCluster<P extends CorfuClusterParams, U exten
                 .deploy();
     }
 
-    protected abstract ImmutableList<String> getClusterLayoutServers();
+    protected abstract ImmutableSortedSet<String> getClusterLayoutServers();
 }

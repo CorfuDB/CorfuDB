@@ -2,6 +2,8 @@ package org.corfudb.universe.group;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedMap;
+import com.google.common.collect.ImmutableSortedSet;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.universe.Universe;
@@ -64,14 +66,14 @@ public interface Group {
      *
      * @return an {@link ImmutableList} of {@link Node}s.
      */
-    <T extends Node> ImmutableMap<String, T> nodes();
+    <T extends Node> ImmutableSortedMap<String, T> nodes();
 
     <T extends Node> T getNode(String nodeName);
 
     interface GroupParams {
         String getName();
 
-        <T extends NodeParams> ImmutableList<T> getNodesParams();
+        <T extends NodeParams> ImmutableSortedSet<T> getNodesParams();
 
         NodeType getNodeType();
     }

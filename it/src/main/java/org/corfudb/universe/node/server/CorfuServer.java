@@ -7,7 +7,7 @@ import org.corfudb.universe.universe.Universe;
 /**
  * Represent a Corfu server implementation of {@link Node} used in the {@link Universe}.
  */
-public interface CorfuServer extends Node {
+public interface CorfuServer extends Node, Comparable<CorfuServer> {
 
     @Override
     CorfuServer deploy();
@@ -63,7 +63,7 @@ public interface CorfuServer extends Node {
     default String getEndpoint() {
         return getNetworkInterface() + ":" + getParams().getPort();
     }
-
+    
     enum Mode {
         SINGLE, CLUSTER
     }

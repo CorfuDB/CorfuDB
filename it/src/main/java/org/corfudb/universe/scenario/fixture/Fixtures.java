@@ -7,6 +7,7 @@ import org.corfudb.universe.group.cluster.CorfuClusterParams;
 import org.corfudb.universe.node.client.ClientParams;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.CorfuServerParams;
+import org.corfudb.universe.node.server.ServerUtil;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams;
 import org.corfudb.universe.universe.UniverseParams;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
@@ -20,6 +21,8 @@ import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Fixture factory provides predefined fixtures
@@ -117,18 +120,19 @@ public interface Fixtures {
     class FixtureUtil {
 
         static ImmutableList<CorfuServerParams> buildMultipleServers(int numNodes, String clusterName) {
-            List<CorfuServerParams> serversParams = new ArrayList<>();
 
-            for (int i = 0; i < numNodes; i++) {
-                final int port = 9000 + i;
+            List<CorfuServerParams> serversParams = IntStream
+                    .rangeClosed(1, numNodes)
+                    .map(i -> ServerUtil.getRandomOpenPort())
+                    .boxed()
+                    .sorted()
+                    .map(port -> CorfuServerParams.serverParamsBuilder()
+                            .port(port)
+                            .clusterName(clusterName)
+                            .build()
+                    )
+                    .collect(Collectors.toList());
 
-                CorfuServerParams serverParam = CorfuServerParams.serverParamsBuilder()
-                        .port(port)
-                        .clusterName(clusterName)
-                        .build();
-
-                serversParams.add(serverParam);
-            }
             return ImmutableList.copyOf(serversParams);
         }
 
@@ -136,7 +140,7 @@ public interface Fixtures {
             List<CorfuServerParams> serversParams = new ArrayList<>();
 
             for (int i = 0; i < numNodes; i++) {
-                final int port = 9000 + i;
+                final int port = ServerUtil.getRandomOpenPort();
 
                 VmCorfuServerParams serverParam = VmCorfuServerParams.builder()
                         .clusterName(clusterName)
