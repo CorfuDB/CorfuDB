@@ -20,6 +20,7 @@ import org.corfudb.universe.universe.UniverseParams;
 import org.corfudb.util.NodeLocator;
 
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -62,7 +63,7 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams,
                 .map(CorfuServer::getEndpoint)
                 .collect(Collectors.toList());
 
-        return ImmutableSortedSet.copyOf(servers);
+        return ImmutableSortedSet.copyOf(Comparator.comparingInt(NodeLocator::getPort), servers);
     }
 
     @Override
