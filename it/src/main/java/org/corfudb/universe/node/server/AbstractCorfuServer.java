@@ -3,12 +3,10 @@ package org.corfudb.universe.node.server;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.StringUtils;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.corfudb.universe.node.NodeException;
-import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.universe.universe.UniverseParams;
 
 import java.io.FileReader;
@@ -16,6 +14,8 @@ import java.io.IOException;
 
 @Slf4j
 public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends UniverseParams> implements CorfuServer {
+
+    private static final String POM_FILE = "pom.xml";
 
     @Getter
     @NonNull
@@ -69,13 +69,23 @@ public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends
 
     /**
      * Provides a current version of this project. It parses the version from pom.xml
+     *
      * @return maven/project version
      */
     protected static String getAppVersion() {
+        String version = System.getProperty("project.version");
+        if (version != null && !version.isEmpty()) {
+            return version;
+        }
+
+        return parseAppVersionInPom();
+    }
+
+    private static String parseAppVersionInPom() {
         MavenXpp3Reader reader = new MavenXpp3Reader();
         Model model;
         try {
-            model = reader.read(new FileReader("pom.xml"));
+            model = reader.read(new FileReader(POM_FILE));
             return model.getParent().getVersion();
         } catch (IOException | XmlPullParserException e) {
             throw new NodeException("Can't parse application version", e);

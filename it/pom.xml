@@ -64,52 +64,94 @@
 
     <build>
         <plugins>
+            <!-- Disable integration tests by default -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <version>1.8</version>
-                <executions>
-                    <execution>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <tasks>
-                                <echo>Copy infrastructure jar into target dir</echo>
-                                <copy file="../infrastructure/target/infrastructure-${project.version}-shaded.jar"
-                                      tofile="${project.build.directory}/corfu/infrastructure-${project.version}-shaded.jar"/>
-                            </tasks>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <version>1.8</version>
-                <executions>
-                    <execution>
-                        <id>Docker build</id>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <target>
-                                <exec dir="${project.basedir}"
-                                      executable="docker"
-                                      failonerror="true">
-                                    <arg line="build"/>
-                                    <arg line="--network=host"/>
-                                    <arg line="--build-arg CORFU_JAR=infrastructure-${project.version}-shaded.jar"/>
-                                    <arg line="-t corfu-server:${project.version}"/>
-                                    <arg line="."/>
-                                </exec>
-                            </target>
-                        </configuration>
-                    </execution>
-                </executions>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.0.0-M1</version>
+                <configuration>
+                    <skipITs>true</skipITs>
+                </configuration>
             </plugin>
         </plugins>
     </build>
+
+
+    <profiles>
+        <profile>
+            <id>it</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>3.0.0-M1</version>
+                        <configuration>
+                            <skipITs>false</skipITs>
+                            <forkCount>3</forkCount>
+                            <reuseForks>true</reuseForks>
+                            <systemProperties>
+                                <property>
+                                    <name>project.version</name>
+                                    <value>${project.version}</value>
+                                </property>
+                            </systemProperties>
+                            <workingDirectory>${project.build.directory}/fork_${surefire.forkNumber}</workingDirectory>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <artifactId>maven-resources-plugin</artifactId>
+                        <version>2.5</version>
+                        <executions>
+                            <execution>
+                                <phase>pre-integration-test</phase>
+                                <goals>
+                                    <goal>copy-resources</goal>
+                                </goals>
+                                <configuration>
+                                    <outputDirectory>${project.build.directory}/corfu/</outputDirectory>
+                                    <resources>
+                                        <resource>
+                                            <directory>../infrastructure/target/</directory>
+                                            <includes>
+                                                <include>infrastructure-${project.version}-shaded.jar</include>
+                                            </includes>
+                                        </resource>
+                                    </resources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>1.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>Docker build</id>
+                                <phase>pre-integration-test</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>docker</executable>
+                                    <arguments>
+                                        <argument>build</argument>
+                                        <argument>--network=host</argument>
+                                        <argument>--build-arg</argument>
+                                        <argument>CORFU_JAR=infrastructure-${project.version}-shaded.jar</argument>
+                                        <argument>-t</argument>
+                                        <argument>corfu-server:${project.version}</argument>
+                                        <argument>.</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
 </project>
