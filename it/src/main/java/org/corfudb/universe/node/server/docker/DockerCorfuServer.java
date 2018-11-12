@@ -24,6 +24,7 @@ import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.node.stress.Stress;
 import org.corfudb.universe.universe.UniverseParams;
+import org.corfudb.universe.util.DockerManager;
 import org.corfudb.universe.util.IpTablesUtil;
 
 import java.io.File;
@@ -51,6 +52,10 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
 
     @NonNull
     private final DockerClient docker;
+
+    @NonNull
+    private final DockerManager dockerManager;
+
     @NonNull
     private final LoggingParams loggingParams;
     @NonNull
@@ -60,11 +65,13 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
 
     @Builder
     public DockerCorfuServer(DockerClient docker, CorfuServerParams params, UniverseParams universeParams,
-                             CorfuClusterParams clusterParams, LoggingParams loggingParams) {
+                             CorfuClusterParams clusterParams, LoggingParams loggingParams,
+                             DockerManager dockerManager) {
         super(params, universeParams);
         this.docker = docker;
         this.loggingParams = loggingParams;
         this.clusterParams = clusterParams;
+        this.dockerManager = dockerManager;
     }
 
     /**
@@ -88,17 +95,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     @Override
     public void stop(Duration timeout) {
         log.info("Stopping the Corfu server. Docker container: {}", params.getName());
-
-        try {
-            ContainerInfo container = docker.inspectContainer(params.getName());
-            if (!container.state().running() && !container.state().paused()) {
-                log.warn("The container `{}` is already stopped", container.name());
-                return;
-            }
-            docker.stopContainer(params.getName(), (int) timeout.getSeconds());
-        } catch (DockerException | InterruptedException e) {
-            throw new NodeException("Can't stop Corfu server: " + params.getName(), e);
-        }
+        dockerManager.stop(params.getName(), timeout);
     }
 
     /**
@@ -109,18 +106,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     @Override
     public void kill() {
         log.info("Killing the Corfu server. Docker container: {}", params.getName());
-
-        try {
-            ContainerInfo container = docker.inspectContainer(params.getName());
-
-            if (!container.state().running() && !container.state().paused()) {
-                log.warn("The container `{}` is not running", container.name());
-                return;
-            }
-            docker.killContainer(params.getName());
-        } catch (DockerException | InterruptedException ex) {
-            throw new NodeException("Can't kill Corfu server: " + params.getName(), ex);
-        }
+        dockerManager.kill(params.getName());
     }
 
     /**
@@ -137,19 +123,8 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
             return;
         }
 
-        try {
-            kill();
-        } catch (NodeException ex) {
-            log.warn("Can't kill container: {}", params.getName());
-        }
-
         collectLogs();
-
-        try {
-            docker.removeContainer(params.getName());
-        } catch (DockerException | InterruptedException ex) {
-            throw new NodeException("Can't destroy Corfu server. Already deleted. Container: " + params.getName(), ex);
-        }
+        dockerManager.destroy(params.getName());
     }
 
     @Override
@@ -185,13 +160,19 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
                 }
 
                 // iptables -A INPUT -s $gateway -j ACCEPT
-                execCommand("iptables", "-A", "INPUT", "-s", gateway, "-j", "ACCEPT");
+                dockerManager.execCommand(params.getName(), "iptables", "-A", "INPUT", "-s", gateway, "-j", "ACCEPT");
                 // iptables -A INPUT -s $subnet -j DROP
-                execCommand("iptables", "-A", "INPUT", "-s", neighbourhoodIp, "-j", "DROP");
+                dockerManager.execCommand(
+                        params.getName(),
+                        "iptables", "-A", "INPUT", "-s", neighbourhoodIp, "-j", "DROP"
+                );
                 // iptables -A OUTPUT -d $gateway -j ACCEPT
-                execCommand("iptables", "-A", "OUTPUT", "-d", gateway, "-j", "ACCEPT");
+                dockerManager.execCommand(params.getName(), "iptables", "-A", "OUTPUT", "-d", gateway, "-j", "ACCEPT");
                 // iptables -A OUTPUT -d $subnet -j DROP
-                execCommand("iptables", "-A", "OUTPUT", "-d", neighbourhoodIp, "-j", "DROP");
+                dockerManager.execCommand(
+                        params.getName(),
+                        "iptables", "-A", "OUTPUT", "-d", neighbourhoodIp, "-j", "DROP"
+                );
             } catch (DockerException | InterruptedException ex) {
                 throw new NodeException("Can't disconnect container from docker network " + params.getName(), ex);
             }
@@ -206,17 +187,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     @Override
     public void pause() {
         log.info("Pausing the Corfu server: {}", params.getName());
-
-        try {
-            ContainerInfo container = docker.inspectContainer(params.getName());
-            if (!container.state().running()) {
-                log.warn("The container `{}` is not running", container.name());
-                return;
-            }
-            docker.pauseContainer(params.getName());
-        } catch (DockerException | InterruptedException ex) {
-            throw new NodeException("Can't pause container " + params.getName(), ex);
-        }
+        dockerManager.pause(params.getName());
     }
 
     /**
@@ -227,17 +198,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     @Override
     public void start() {
         log.info("Starting the corfu server: {}", params.getName());
-
-        try {
-            ContainerInfo container = docker.inspectContainer(params.getName());
-            if (container.state().running() || container.state().paused()) {
-                log.warn("The container `{}` already running, should stop before start", container.name());
-                return;
-            }
-            docker.startContainer(params.getName());
-        } catch (DockerException | InterruptedException ex) {
-            throw new NodeException("Can't start container " + params.getName(), ex);
-        }
+        dockerManager.start(params.getName());
     }
 
     /**
@@ -248,17 +209,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     @Override
     public void restart() {
         log.info("Restarting the corfu server: {}", params.getName());
-
-        try {
-            ContainerInfo container = docker.inspectContainer(params.getName());
-            if (container.state().running() || container.state().paused()) {
-                log.warn("The container `{}` already running, should stop before restart", container.name());
-                return;
-            }
-            docker.restartContainer(params.getName());
-        } catch (DockerException | InterruptedException ex) {
-            throw new NodeException("Can't restart container " + params.getName(), ex);
-        }
+        dockerManager.restart(params.getName());
     }
 
     /**
@@ -271,8 +222,8 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
         log.info("Reconnecting the corfu server to the network. Docker container: {}", params.getName());
 
         try {
-            execCommand(IpTablesUtil.cleanInput());
-            execCommand(IpTablesUtil.cleanOutput());
+            dockerManager.execCommand(params.getName(), IpTablesUtil.cleanInput());
+            dockerManager.execCommand(params.getName(), IpTablesUtil.cleanOutput());
         } catch (DockerException | InterruptedException e) {
             throw new NodeException("Can't reconnect container to docker network " + params.getName(), e);
         }
@@ -286,17 +237,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     @Override
     public void resume() {
         log.info("Resuming the corfu server: {}", params.getName());
-
-        try {
-            ContainerInfo container = docker.inspectContainer(params.getName());
-            if (!container.state().paused()) {
-                log.warn("The container `{}` is not paused, should pause before resuming", container.name());
-                return;
-            }
-            docker.unpauseContainer(params.getName());
-        } catch (DockerException | InterruptedException ex) {
-            throw new NodeException("Can't resume container " + params.getName(), ex);
-        }
+        dockerManager.resume(params.getName());
     }
 
     @Override
@@ -317,7 +258,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
             ContainerCreation container = docker.createContainer(containerConfig, params.getName());
             id = container.id();
 
-            addShutdownHook();
+            dockerManager.addShutdownHook(params.getName());
 
             docker.disconnectFromNetwork(id, "bridge");
             docker.connectToNetwork(id, docker.inspectNetwork(universeParams.getNetworkName()).id());
@@ -371,33 +312,6 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
                 .exposedPorts(ports)
                 .cmd("sh", "-c", cmdLine)
                 .build();
-    }
-
-    private void addShutdownHook() {
-        // Just in case a test failed and didn't kill the container
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-                destroy();
-            } catch (Exception e) {
-                log.debug("Corfu server shutdown hook. Can't kill container: {}", params.getName());
-            }
-        }));
-    }
-
-    /**
-     * Run `docker exec` on a container
-     */
-    private void execCommand(String... command) throws DockerException, InterruptedException {
-        log.info("Executing docker command: {}", String.join(" ", command));
-
-        ExecCreation execCreation = docker.execCreate(
-                params.getName(),
-                command,
-                ExecCreateParam.attachStdout(),
-                ExecCreateParam.attachStderr()
-        );
-
-        docker.execStart(execCreation.id());
     }
 
     /**
