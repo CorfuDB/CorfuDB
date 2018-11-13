@@ -3,6 +3,8 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
+import java.util.List;
+
 /**
  * Created by mwei on 12/13/15.
  */
@@ -24,4 +26,9 @@ public interface IServerRouter {
      * @param server    The server to route messages to
      */
     void addServer(AbstractServer server);
+
+    /**
+     * Get a list of registered servers.
+     */
+    List<AbstractServer> getServers();
 }

@@ -887,7 +887,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // Seal
         Layout newLayout = new Layout(l);
         newLayout.setEpoch(newLayout.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getRuntimeLayout(newLayout).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(newLayout).sealMinServerSet();
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(l.getEpoch());
     }
 
@@ -899,7 +899,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
         addClientRule(corfuRuntime, SERVERS.ENDPOINT_0, new TestRule().always().drop());
         layout.setEpoch(2L);
-        corfuRuntime.getLayoutView().getRuntimeLayout(layout).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
         // We increase to a higher rank to avoid being outranked. We could be outranked if the management
         // agent attempts to fill in the epoch slot before we update.
         corfuRuntime.getLayoutView().updateLayout(layout, highRank);
@@ -931,7 +931,7 @@ public class ManagementViewTest extends AbstractViewTest {
         waitForSequencerToBootstrap(SERVERS.PORT_0);
 
         l.setEpoch(l.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).sealMinServerSet();
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
@@ -1388,7 +1388,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 .assignResponsiveSequencerAsPrimary(Collections.singleton(SERVERS.ENDPOINT_0))
                 .build();
         layout_2.setEpoch(layout_2.getEpoch() + 1);
-        runtime_1.getLayoutView().getRuntimeLayout(layout_2).moveServersToEpoch();
+        runtime_1.getLayoutView().getRuntimeLayout(layout_2).sealMinServerSet();
         runtime_1.getLayoutView().updateLayout(layout_2, 1L);
         runtime_1.getLayoutManagementView().reconfigureSequencerServers(layout_1, layout_2, false);
 
@@ -1416,7 +1416,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 .assignResponsiveSequencerAsPrimary(Collections.singleton(SERVERS.ENDPOINT_1))
                 .build();
         layout_3.setEpoch(layout_3.getEpoch() + 1);
-        runtime_1.getLayoutView().getRuntimeLayout(layout_3).moveServersToEpoch();
+        runtime_1.getLayoutView().getRuntimeLayout(layout_3).sealMinServerSet();
         runtime_1.getLayoutView().updateLayout(layout_3, 1L);
         runtime_1.getLayoutManagementView().reconfigureSequencerServers(layout_2, layout_3, false);
 
@@ -1449,7 +1449,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // Due to the router and sequencer epoch mismatch, the sequencer becomes NOT_READY.
         // Note that this reconfiguration is not followed by the explicit sequencer bootstrap step.
         layout.setEpoch(layout.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getRuntimeLayout(layout).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
         // We increase to a higher rank to avoid being outranked. We could be outranked if the management
         // agent attempts to fill in the epoch slot before we update.
         corfuRuntime.getLayoutView().updateLayout(layout, highRank);
@@ -1708,7 +1708,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // Trigger an epoch change to trigger FastObjectLoader to run for sequencer bootstrap.
         Layout layout1 = new Layout(layout);
         layout1.setEpoch(layout1.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getRuntimeLayout(layout1).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout1).sealMinServerSet();
         corfuRuntime.getLayoutView().updateLayout(layout1, 1L);
 
         assertThat(semaphore
@@ -1720,7 +1720,8 @@ public class ManagementViewTest extends AbstractViewTest {
         corfuRuntime.invalidateLayout();
         Layout layout2 = new Layout(corfuRuntime.getLayoutView().getLayout());
         layout2.setEpoch(layout2.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getRuntimeLayout(layout2).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout2).sealMinServerSet();
+
 
         clearClientRules(managementRuntime0);
         clearClientRules(managementRuntime1);
@@ -1945,7 +1946,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
         Layout layout = new Layout(corfuRuntime.getLayoutView().getLayout());
         layout.setEpoch(layout.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getRuntimeLayout(layout).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             corfuRuntime.invalidateLayout();

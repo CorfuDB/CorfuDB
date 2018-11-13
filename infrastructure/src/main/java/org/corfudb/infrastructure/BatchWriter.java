@@ -45,24 +45,22 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                     .build());
 
     /**
-     * The epochWaterMark is the epoch up to which all operations have been sealed. Any
-     * BatchWriterOperation arriving after the epochWaterMark with an epoch less than the epochWaterMark, is
-     * completed exceptionally with a WrongEpochException.
+     * The sealEpoch is the epoch up to which all operations have been sealed. Any
+     * BatchWriterOperation arriving after the sealEpoch with an epoch less than the sealEpoch
+     * is completed exceptionally with a WrongEpochException.
      * This is persisted in the ServerContext by the LogUnitServer to withstand restarts.
      */
-    private volatile long epochWaterMark;
+    private long sealEpoch;
 
     /**
      * Returns a new BatchWriter for a stream log.
      *
-     * @param streamLog      stream log for writes (can be in memory or file)
-     * @param epochWaterMark All operations stamped with epoch less than the epochWaterMark are
-     *                       discarded.
-     * @param streamLog stream log for writes (can be in memory or file)
-     * @param doSync    If true, the batch writer will sync writes to secondary storage
+     * @param streamLog  Stream log for writes (can be in memory or file)
+     * @param sealEpoch  All operations stamped with epoch less than the sealEpoch are discarded
+     * @param doSync     If true, the batch writer will sync writes to secondary storage
      */
-    public BatchWriter(StreamLog streamLog, long epochWaterMark, boolean doSync) {
-        this.epochWaterMark = epochWaterMark;
+    public BatchWriter(StreamLog streamLog, long sealEpoch, boolean doSync) {
+        this.sealEpoch = sealEpoch;
         this.doSync = doSync;
         this.streamLog = streamLog;
         operationsQueue = new LinkedBlockingQueue<>();
@@ -136,22 +134,17 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
     }
 
     /**
-     * Insert epochWaterMark in queue and wait for queue to process all preceding operations.
-     * All operations in the queue after the epochWaterMark operation, that have epoch less than
-     * the epochWaterMark epoch are discarded and their futures are completed exceptionally with a
-     * WrongEpochException. The epochWaterMark is used in case of:
-     * Reset - All operations need to be flushed before a reset and no new operations for the
-     * previous epoch should be accepted.
-     * SealAndFlush - Similarly on a seal, all operations need to be flushed before a seal and no
-     * new operations for the previous epoch should be accepted.
+     * Insert seal operation in queue and wait for queue to process all preceding operations.
+     * All operations in the queue after the sealEpoch operation, that have epoch less than
+     * the sealEpoch epoch are discarded and their futures are completed exceptionally with a
+     * WrongEpochException.
      *
-     * @param epoch Epoch to epochWaterMark with.
+     * @param epoch Epoch to seal with.
      */
-    public void waitForEpochWaterMark(@Nonnull long epoch) {
+    public void waitForSealComplete(long epoch) {
         try {
             CompletableFuture<Void> cf = new CompletableFuture<>();
-            epochWaterMark = epoch;
-            operationsQueue.add(new BatchWriterOperation(Type.EPOCH_WATER_MARK, null, null, epoch, null, cf));
+            operationsQueue.add(new BatchWriterOperation(Type.SEAL, null, null, epoch, null, cf));
             cf.get();
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -192,7 +185,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
         try {
             BatchWriterOperation lastOp = null;
             int processed = 0;
-            List<BatchWriterOperation> res = new LinkedList();
+            List<BatchWriterOperation> res = new LinkedList<>();
 
             while (true) {
                 BatchWriterOperation currOp;
@@ -217,13 +210,12 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
 
                 if (currOp == null) {
                     lastOp = null;
-                    continue;
                 } else if (currOp == BatchWriterOperation.SHUTDOWN) {
                     log.trace("Shutting down the write processor");
                     streamLog.sync(true);
                     break;
-                } else if (currOp.getEpoch() < epochWaterMark) {
-                    currOp.setException(new WrongEpochException(epochWaterMark));
+                } else if (currOp.getEpoch() < sealEpoch) {
+                    currOp.setException(new WrongEpochException(sealEpoch));
                     res.add(currOp);
                     processed++;
                     lastOp = currOp;
@@ -246,7 +238,8 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                                 streamLog.append(currOp.getEntries());
                                 res.add(currOp);
                                 break;
-                            case EPOCH_WATER_MARK:
+                            case SEAL:
+                                sealEpoch = currOp.getEpoch();
                                 res.add(currOp);
                                 break;
                             case RESET:
