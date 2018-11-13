@@ -135,7 +135,7 @@ public class AddNodeWorkflow implements IWorkflow {
 
         int batchSize = runtime.getParameters().getBulkReadSize();
 
-        long trimMark = runtime.getAddressSpaceView().getTrimMark();
+        long trimMark = runtime.getAddressSpaceView().getTrimMark().getSequence();
         // Send the trimMark to the new/healing nodes.
         // If this times out or fails, the Action performing the stateTransfer fails and retries.
         for (String endpoint : endpoints) {

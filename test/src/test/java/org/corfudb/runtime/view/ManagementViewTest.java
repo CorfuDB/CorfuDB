@@ -1180,7 +1180,7 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
 
         TokenResponse tokenResponse = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
-        long lastAddress = tokenResponse.getTokenValue();
+        long lastAddress = tokenResponse.getSequence();
 
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
@@ -1314,7 +1314,7 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
 
         TokenResponse tokenResponse = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
-        long lastAddress = tokenResponse.getTokenValue();
+        long lastAddress = tokenResponse.getSequence();
 
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
@@ -1914,7 +1914,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 TimeUnit.MILLISECONDS)).isTrue();
 
         final long expectedTokenValue = 19L;
-        assertThat(corfuRuntime.getSequencerView().query().getTokenValue())
+        assertThat(corfuRuntime.getSequencerView().query().getSequence())
                 .isEqualTo(expectedTokenValue);
     }
 

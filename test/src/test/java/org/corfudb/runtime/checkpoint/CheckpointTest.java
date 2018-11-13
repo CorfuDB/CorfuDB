@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
@@ -83,7 +84,7 @@ public class CheckpointTest extends AbstractObjectTest {
                     mcw1.addMap(map);
                 }
 
-                checkpointAddress = mcw1.appendCheckpoints(rt, author);
+                checkpointAddress = mcw1.appendCheckpoints(rt, author).getSequence();
 
                 try {
                     Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
@@ -420,9 +421,10 @@ public class CheckpointTest extends AbstractObjectTest {
             Map<String, Long> localm2A = openMap(rt, streamNameA);
 
             // start a snapshot TX at position snapshotPosition
+            Token timestamp = new Token(0L, snapshotPosition - 1);
             rt.getObjectsView().TXBuild()
                     .setType(TransactionType.SNAPSHOT)
-                    .setSnapshot(snapshotPosition - 1)
+                    .setSnapshot(timestamp)
                     .begin();
 
             // finally, instantiate the map for the snapshot and assert is has the right state
@@ -500,13 +502,14 @@ public class CheckpointTest extends AbstractObjectTest {
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap((SMRMap) testMap);
         mcw.addMap((SMRMap) testMap2);
-        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
+        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author").getSequence();
 
 
         // TX1: Move object to 1
+        Token timestamp = new Token(0L, 1);
         getRuntime().getObjectsView().TXBuild()
                 .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(1)
+                .setSnapshot(timestamp)
                 .begin();
 
         testMap.get("a");

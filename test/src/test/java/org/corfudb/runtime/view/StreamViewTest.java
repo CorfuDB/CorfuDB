@@ -340,14 +340,14 @@ public class StreamViewTest extends AbstractViewTest {
 
         // read from an address that hasn't been written to
         // causing a hole fill
-        r.getAddressSpaceView().read(tr.getToken().getTokenValue());
+        r.getAddressSpaceView().read(tr.getToken().getSequence());
 
 
         tr = r.getSequencerView().next(streamA);
 
         // read from an address that hasn't been written to
         // causing a hole fill
-        r.getAddressSpaceView().read(tr.getToken().getTokenValue());
+        r.getAddressSpaceView().read(tr.getToken().getSequence());
 
 
         sv.append(testPayload2);

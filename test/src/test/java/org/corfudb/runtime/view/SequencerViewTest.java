@@ -35,7 +35,7 @@ public class SequencerViewTest extends AbstractViewTest {
         assertThat(r.getSequencerView().next(stream1).getToken())
                 .isEqualTo(new Token(0l, 0l));
         assertThat(r.getSequencerView().next(stream2).getToken())
-                .isEqualTo(new Token(1l, 0l));
+                .isEqualTo(new Token( 0l, 1l));
 
         assertThat(r.getSequencerView().query(stream1, stream2, stream3).getStreamTails())
                 .containsExactly(0l, 1l, Address.NON_EXIST);
@@ -47,7 +47,7 @@ public class SequencerViewTest extends AbstractViewTest {
         assertThat(r.getSequencerView().next().getToken())
                 .isEqualTo(new Token(0L, 0L));
         assertThat(r.getSequencerView().next().getToken())
-                .isEqualTo(new Token(1L, 0L));
+                .isEqualTo(new Token(0L, 1L));
     }
 
     @Test
@@ -70,9 +70,9 @@ public class SequencerViewTest extends AbstractViewTest {
         assertThat(r.getSequencerView().query(streamA).getToken())
                 .isEqualTo(new Token(0L, 0L));
         assertThat(r.getSequencerView().next(streamB).getToken())
-                .isEqualTo(new Token(1L, 0L));
+                .isEqualTo(new Token(0L, 1L));
         assertThat(r.getSequencerView().query(streamB).getToken())
-                .isEqualTo(new Token(1L, 0L));
+                .isEqualTo(new Token(0L, 1L));
         assertThat(r.getSequencerView().query(streamA).getToken())
                 .isEqualTo(new Token(0L, 0L));
     }
