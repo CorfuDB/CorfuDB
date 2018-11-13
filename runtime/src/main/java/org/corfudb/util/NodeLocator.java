@@ -73,7 +73,7 @@ public class NodeLocator implements Serializable {
      */
     public static NodeLocator parseString(String connectionString) {
         try {
-            // Fix a "legacy" node locator, which doesn't have a protocol.
+            //Fix a "legacy" node locator, which doesn't have a protocol.
             if (!connectionString.contains("://")) {
                 connectionString = "tcp://" + connectionString;
             }
@@ -139,12 +139,13 @@ public class NodeLocator implements Serializable {
 
     public String toEndpointUrl(){
         StringBuilder sb = new StringBuilder()
-                .append(protocol.toString().toLowerCase())
-                .append("://")
+                //TODO migrate to url format in future versions
+                //.append(protocol.toString().toLowerCase())
+                //.append("://")
                 .append(host)
                 .append(":")
-                .append(port)
-                .append("/");
+                .append(port);
+                //.append("/");
 
         return sb.toString();
     }
@@ -172,12 +173,11 @@ public class NodeLocator implements Serializable {
         NodeLocator that = (NodeLocator) o;
         return port == that.port &&
                 protocol == that.protocol &&
-                Objects.equals(host, that.host) &&
-                Objects.equals(nodeId, that.nodeId);
+                Objects.equals(host, that.host);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(protocol, host, port, nodeId);
+        return Objects.hash(protocol, host, port);
     }
 }
