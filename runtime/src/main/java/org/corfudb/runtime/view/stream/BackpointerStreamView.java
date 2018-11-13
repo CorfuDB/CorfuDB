@@ -12,6 +12,7 @@ import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AppendException;
@@ -62,7 +63,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
      * write, and automatically retrying if we get overwritten (hole filled).
      */
     @Override
-    public long append(Object object,
+    public LogicalSequenceNumber append(Object object,
                        Function<TokenResponse, Boolean> acquisitionCallback,
                        Function<TokenResponse, Boolean> deacquisitionCallback) {
         // First, we get a token from the sequencer.
@@ -80,7 +81,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                     // We'll leave the hole to be filled by the client or
                     // someone else.
                     log.debug("Acquisition rejected token={}", tokenResponse);
-                    return -1L;
+                    return LogicalSequenceNumber.getDefaultLSN();
                 }
             }
 
@@ -92,7 +93,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         .write(tokenResponse, object);
                 // The write completed successfully, so we return this
                 // address to the client.
-                return tokenResponse.getToken().getTokenValue();
+                return tokenResponse.getLogicalSequenceNumber();
             } catch (OverwriteException oe) {
                 log.trace("Overwrite occurred at {}", tokenResponse);
                 // We got overwritten, so we call the deacquisition callback
@@ -100,17 +101,17 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 if (deacquisitionCallback != null) {
                     if (!deacquisitionCallback.apply(tokenResponse)) {
                         log.debug("Deacquisition requested abort");
-                        return -1L;
+                        return LogicalSequenceNumber.getDefaultLSN();
                     }
                 }
                 // Request a new token, informing the sequencer we were
                 // overwritten.
                 tokenResponse = runtime.getSequencerView().next(id);
             } catch (StaleTokenException te) {
-                log.trace("Token grew stale occurred at {}", tokenResponse);
+                log.trace("LogicalSequenceNumber grew stale occurred at {}", tokenResponse);
                 if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
                         log.debug("Deacquisition requested abort");
-                        return -1L;
+                        return LogicalSequenceNumber.getDefaultLSN();
                 }
                 // Request a new token, informing the sequencer we were
                 // overwritten.
@@ -119,7 +120,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         }
 
         log.error("append[{}]: failed after {} retries, write size {} bytes",
-                tokenResponse.getTokenValue(),
+                tokenResponse.getLogicalSequenceNumber(),
                 runtime.getParameters().getWriteRetry(),
                 ILogData.getSerializedSize(object));
         throw new AppendException();
@@ -127,8 +128,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
     void processTrimmedException(TrimmedException te) {
         if (TransactionalContext.getCurrentContext() != null
-                && TransactionalContext.getCurrentContext().getSnapshotTimestamp()
-                < getCurrentContext().checkpointSnapshotAddress) {
+                && TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequenceNumber()
+                < getCurrentContext().checkpointSnapshotAddress.getSequenceNumber()) {
             te.setRetriable(false);
         }
     }
@@ -143,7 +144,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
      *
      * */
     @Override
-    protected ILogData read(final long address) {
+    protected ILogData read(final LogicalSequenceNumber address) {
         try {
             return runtime.getAddressSpaceView().read(address);
         } catch (TrimmedException te) {
@@ -154,9 +155,9 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
     @Nonnull
     @Override
-    protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
+    protected List<ILogData> readAll(@Nonnull List<LogicalSequenceNumber> addresses) {
         try {
-            Map<Long, ILogData> dataMap =
+            Map<LogicalSequenceNumber, ILogData> dataMap =
                     runtime.getAddressSpaceView().read(addresses);
             return addresses.stream()
                     .map(x -> dataMap.get(x))
@@ -177,8 +178,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     @Override
     public boolean getHasNext(QueuedStreamContext context) {
         return  !context.readQueue.isEmpty()
-                || runtime.getSequencerView().query(context.id).getToken().getTokenValue()
-                        > context.globalPointer;
+                || runtime.getSequencerView().query(context.id).getLogicalSequenceNumber().isGreaterThan(context.globalPointer);
     }
 
     /**
@@ -188,15 +188,15 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     public void close() {}
 
 
-    protected boolean fillFromResolved(final long maxGlobal,
+    protected boolean fillFromResolved(final LogicalSequenceNumber maxGlobal,
                                        final QueuedStreamContext context) {
         // There's nothing to read if we're already past maxGlobal.
-        if (maxGlobal < context.globalPointer) {
+        if (maxGlobal.isLessThan(context.globalPointer)) {
             return false;
         }
         // Get the subset of the resolved queue, which starts at
-        // globalPointer and ends at maxAddress inclusive.
-        NavigableSet<Long> resolvedSet =
+        // globalPointer and ends at maxGlobal inclusive.
+        NavigableSet<LogicalSequenceNumber> resolvedSet =
                 context.resolvedQueue.subSet(context.globalPointer,
                         false, maxGlobal, true);
         // Put those elements in the read queue
@@ -217,19 +217,19 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     }
 
     protected boolean followBackpointers(final UUID streamId,
-                                      final NavigableSet<Long> queue,
-                                      final long startAddress,
-                                      final long stopAddress,
+                                      final NavigableSet<LogicalSequenceNumber> queue,
+                                      final LogicalSequenceNumber startAddress,
+                                      final LogicalSequenceNumber stopAddress,
                                       final Function<ILogData, BackpointerOp> filter) {
         log.trace("followBackPointers: stmreadId[{}], queue[{}], startAddress[{}], stopAddress[{}]," +
                 "filter[{}]", streamId, queue, startAddress, stopAddress, filter);
         // Whether or not we added entries to the queue.
         boolean entryAdded = false;
         // The current address which we are reading from.
-        long currentAddress = startAddress;
+        LogicalSequenceNumber currentAddress = startAddress;
 
         // Loop until we have reached the stop address.
-        while (currentAddress > stopAddress  && Address.isAddress(currentAddress)) {
+        while (currentAddress.isGreaterThan(stopAddress)  && Address.isAddress(currentAddress.getSequenceNumber())) {
             backpointerCount++;
 
             // Read the current address
@@ -272,11 +272,11 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             log.trace("followBackPointers: calculate the next address");
 
             if (!runtime.getParameters().isBackpointersDisabled() && d.hasBackpointer(streamId)) {
-                long tmp = d.getBackpointer(streamId);
+                LogicalSequenceNumber tmp = d.getBackpointer(streamId);
                 log.trace("followBackPointers: backpointer points to {}", tmp);
                 // if backpointer is a valid log address or Address.NON_EXIST
                 // (beginning of the stream), do not single step back on the log
-                if (Address.isAddress(tmp) || tmp == Address.NON_EXIST) {
+                if (Address.isAddress(tmp.getSequenceNumber()) || tmp.getSequenceNumber() == Address.NON_EXIST) {
                     currentAddress = tmp;
                     singleStep = false;
                 }
@@ -286,7 +286,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 // backpointers failed, so we're
                 // downgrading to a linear scan
                 log.trace("followBackPointers: downgrading to single step, backpointer failed");
-                currentAddress = currentAddress - 1;
+                // TODO: epoch might be different, how do we handle this?
+                currentAddress = currentAddress.getPrevious();
             }
         }
 
@@ -295,7 +296,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     }
 
     protected BackpointerOp resolveCheckpoint(final QueuedStreamContext context, ILogData data,
-                                              long maxGlobal) {
+                                              LogicalSequenceNumber maxGlobal) {
         if (data.hasCheckpointMetadata()) {
             CheckpointEntry cpEntry = (CheckpointEntry)
                     data.getPayload(runtime);
@@ -304,7 +305,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             // which is less than maxGlobal
             if (context.checkpointSuccessId == null &&
                     cpEntry.getCpType() == CheckpointEntry.CheckpointEntryType.END
-             && Long.decode(cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)) <= maxGlobal) {
+             && LogicalSequenceNumber.decode(cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)).isEqualOrLessThan(maxGlobal)) {
                 log.trace("Checkpoint[{}] END found at address {} type {} id {} author {}",
                         this, data.getGlobalAddress(), cpEntry.getCpType(),
                         Utils.toReadableId(cpEntry.getCheckpointId()),
@@ -319,11 +320,11 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 context.checkpointSuccessNumEntries++;
                 context.checkpointSuccessBytes += cpEntry.getSmrEntriesBytes();
                 if (cpEntry.getCpType().equals(CheckpointEntry.CheckpointEntryType.START)) {
-                    context.checkpointSuccessStartAddr = Long.decode(cpEntry.getDict()
+                    context.checkpointSuccessStartAddr = LogicalSequenceNumber.decode(cpEntry.getDict()
                             .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS));
                     if (cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey
                             .SNAPSHOT_ADDRESS) != null) {
-                        context.checkpointSnapshotAddress = Long.decode(cpEntry.getDict()
+                        context.checkpointSnapshotAddress = LogicalSequenceNumber.decode(cpEntry.getDict()
                                 .get(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS));
                     }
                     log.trace("Checkpoint[{}] HALT due to START at address {} startAddr"
@@ -345,15 +346,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
      * {@inheritDoc}
      */
     @Override
-    protected boolean fillReadQueue(final long maxGlobal,
+    protected boolean fillReadQueue(final LogicalSequenceNumber maxGlobal,
                                  final QueuedStreamContext context) {
         log.trace("Read_Fill_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}", this,
                 maxGlobal, context.globalPointer, context.maxResolution, context.minResolution);
 
-        // If the stream has just been reset and we don't have
-        // any checkpoint entries, we should consult
-        // a checkpoint first.
-        if (context.globalPointer == Address.NEVER_READ &&
+        if (context.globalPointer.getSequenceNumber() == Address.NEVER_READ &&
                 context.checkpointSuccessId == null) {
             // The checkpoint stream ID is the UUID appended with CP
             final UUID checkpointId = CorfuRuntime
@@ -362,8 +360,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             try {
                 if (followBackpointers(checkpointId, context.readCpQueue,
                         runtime.getSequencerView()
-                                .query(checkpointId).getToken().getTokenValue(),
-                        Address.NEVER_READ, d -> resolveCheckpoint(context, d, maxGlobal))) {
+                                .query(checkpointId).getLogicalSequenceNumber(),
+                        LogicalSequenceNumber.getDefaultLSN(), d -> resolveCheckpoint(context, d, maxGlobal))) {
                     log.trace("Read_Fill_Queue[{}] Using checkpoint with {} entries",
                             this, context.readCpQueue.size());
                     return true;
@@ -376,44 +374,42 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         }
 
         // The maximum address we will fill to.
-        final long maxAddress =
-                Long.min(maxGlobal, context.maxGlobalAddress);
+        final LogicalSequenceNumber maxAddress = maxGlobal.isGreaterThan(context.maxGlobalAddress) ? context.maxGlobalAddress : maxGlobal;
 
-        // If we already reached maxAddress ,
+        // If we already reached maxAddress,
         // we return since there is nothing left to do.
-        if (context.globalPointer >= maxAddress) {
+        if (context.globalPointer.isEqualOrGreaterThan(maxAddress)) {
             return false;
         }
 
         // If everything is available in the resolved
         // queue, use it
-        if (context.maxResolution >= maxAddress
-                && context.minResolution < context.globalPointer) {
+        if (context.maxResolution.isEqualOrGreaterThan(maxAddress) && context.minResolution.isLessThan(context.globalPointer)) {
             return fillFromResolved(maxGlobal, context);
         }
 
-        Long latestTokenValue = null;
+        LogicalSequenceNumber latestTokenValue = null;
 
         // If the max has been resolved, use it.
-        if (maxGlobal != Address.MAX) {
+        if (maxGlobal.getSequenceNumber() != Address.MAX) {
             latestTokenValue = context.resolvedQueue.ceiling(maxGlobal);
         }
 
         // If we don't have a larger token in resolved, or the request was for
         // a linearized read, fetch the token from the sequencer.
-        if (latestTokenValue == null || maxGlobal == Address.MAX) {
+        if (latestTokenValue == null || maxGlobal.getSequenceNumber() == Address.MAX) {
             latestTokenValue = runtime.getSequencerView().query(context.id)
-                    .getToken().getTokenValue();
+                    .getLogicalSequenceNumber();
             log.trace("Read_Fill_Queue[{}] Fetched tail {} from sequencer", this, latestTokenValue);
         }
         // If there is no information on the tail of the stream, return,
         // there is nothing to do
-        if (Address.nonAddress(latestTokenValue)) {
+        if (Address.nonAddress(latestTokenValue.getSequenceNumber())) {
 
             // sanity check:
             // curretly, the only possible non-address return value for a token-query
             // is Address.NON_EXIST
-            if (latestTokenValue != Address.NON_EXIST) {
+            if (latestTokenValue.getSequenceNumber() != Address.NON_EXIST) {
                 log.warn("TOKEN[{}] unexpected return value", latestTokenValue);
             }
 
@@ -422,8 +418,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         // If everything is available in the resolved
         // queue, use it
-        if (context.maxResolution >= latestTokenValue
-                && context.minResolution < context.globalPointer) {
+        if (context.maxResolution.isEqualOrGreaterThan(latestTokenValue)
+                && context.minResolution.isLessThan(context.globalPointer)) {
             return fillFromResolved(latestTokenValue, context);
         }
 
@@ -436,7 +432,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
         followBackpointers(context.id, context.readQueue,
                 latestTokenValue,
-                Long.max(context.globalPointer, context.checkpointSnapshotAddress),
+                context.globalPointer.getMax(context.checkpointSnapshotAddress),
                 d -> BackpointerOp.INCLUDE);
 
         return ! context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();

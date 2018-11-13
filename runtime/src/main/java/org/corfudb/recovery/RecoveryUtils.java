@@ -6,6 +6,7 @@ import com.google.common.collect.Range;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
@@ -30,11 +31,11 @@ public class RecoveryUtils {
         return logData.hasCheckpointMetadata();
     }
 
-    static long getSnapShotAddressOfCheckPoint(CheckpointEntry logEntry) {
-        return Long.parseLong(logEntry.getDict().get(SNAPSHOT_ADDRESS));
+    static LogicalSequenceNumber getSnapShotAddressOfCheckPoint(CheckpointEntry logEntry) {
+        return LogicalSequenceNumber.decode(logEntry.getDict().get(SNAPSHOT_ADDRESS));
     }
 
-    static long getStartAddressOfCheckPoint(ILogData logData) {
+    static LogicalSequenceNumber getStartAddressOfCheckPoint(ILogData logData) {
         return logData.getCheckpointedStreamStartLogAddress();
     }
 
@@ -66,7 +67,7 @@ public class RecoveryUtils {
      * @param address address to be fetched
      * @return LogData at address
      */
-    static ILogData getLogData(CorfuRuntime runtime, boolean loadInCache, long address) {
+    static ILogData getLogData(CorfuRuntime runtime, boolean loadInCache, LogicalSequenceNumber address) {
         if (loadInCache) {
             return runtime.getAddressSpaceView().read(address);
         } else {
@@ -88,7 +89,7 @@ public class RecoveryUtils {
      * @param end end address for the bulk read
      * @return logData map ordered by addresses (increasing)
      */
-    static Map<Long, ILogData> getLogData(CorfuRuntime runtime, long start, long end) {
+    static Map<LogicalSequenceNumber, ILogData> getLogData(CorfuRuntime runtime, LogicalSequenceNumber start, LogicalSequenceNumber end) {
         return runtime.getAddressSpaceView().
                 cacheFetch(ContiguousSet.create(Range.closedOpen(start, end), DiscreteDomain.longs()));
     }

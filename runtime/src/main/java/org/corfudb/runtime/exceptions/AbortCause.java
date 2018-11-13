@@ -16,5 +16,6 @@ public enum AbortCause {
     SEQUENCER_OVERFLOW,
     SEQUENCER_TRIM,
     UNSUPPORTED,
+    SNAPSHOT_NON_EXIST,
     UNDEFINED;
 }

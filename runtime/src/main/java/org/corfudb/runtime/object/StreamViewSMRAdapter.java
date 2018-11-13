@@ -12,6 +12,7 @@ import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
@@ -74,7 +75,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
      * @param maxGlobal Max Global up to which SMR Entries are required.
      * @return Returns a list of SMR Entries upto the maxGlobal.
      */
-    public List<SMREntry> remainingUpTo(long maxGlobal) {
+    public List<SMREntry> remainingUpTo(LogicalSequenceNumber maxGlobal) {
         return streamView.remainingUpTo(maxGlobal).stream()
                 .filter(m -> m.getType() == DataType.DATA)
                 .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable
@@ -110,7 +111,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
      */
     public List<SMREntry> previous() {
         ILogData data = streamView.previous();
-        while (Address.isAddress(streamView.getCurrentGlobalPosition())
+        while (Address.isAddress(streamView.getCurrentGlobalPosition().getSequenceNumber())
                 && data != null) {
             if (data.getType() == DataType.DATA
                     && data.getPayload(runtime) instanceof ISMRConsumable) {
@@ -122,7 +123,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
         return null;
     }
 
-    public long pos() {
+    public LogicalSequenceNumber pos() {
         return streamView.getCurrentGlobalPosition();
     }
 
@@ -130,17 +131,17 @@ public class StreamViewSMRAdapter implements ISMRStream {
         streamView.reset();
     }
 
-    public void seek(long globalAddress) {
+    public void seek(LogicalSequenceNumber globalAddress) {
         streamView.seek(globalAddress);
     }
 
     @Override
     public Stream<SMREntry> stream() {
-        return streamUpTo(Address.MAX);
+        return streamUpTo(new LogicalSequenceNumber(-1L, Address.MAX));
     }
 
     @Override
-    public Stream<SMREntry> streamUpTo(long maxGlobal) {
+    public Stream<SMREntry> streamUpTo(LogicalSequenceNumber maxGlobal) {
         return streamView.streamUpTo(maxGlobal)
                 .filter(m -> m.getType() == DataType.DATA)
                 .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable
@@ -168,7 +169,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
      *                              writing.
      * @return The (global) address the object was written at.
      */
-    public long append(SMREntry entry,
+    public LogicalSequenceNumber append(SMREntry entry,
                        Function<TokenResponse, Boolean> acquisitionCallback,
                        Function<TokenResponse, Boolean> deacquisitionCallback) {
         return streamView.append(entry, acquisitionCallback, deacquisitionCallback);

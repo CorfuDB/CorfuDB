@@ -2,7 +2,7 @@
 (in-ns 'org.corfudb.shell) ; so our IDE knows what NS we are using
 
 (import org.docopt.Docopt) ; parse some cmdline opts
-(import org.corfudb.protocols.wireprotocol.TokenResponse)
+(import org.corfudb.protocols.wireprotocol.LSNResponse)
 (import org.corfudb.protocols.wireprotocol.LogData)
 (import org.corfudb.protocols.wireprotocol.DataType)
 (import org.corfudb.protocols.wireprotocol.ILogData)

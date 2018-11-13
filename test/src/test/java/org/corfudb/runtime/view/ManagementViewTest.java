@@ -820,14 +820,14 @@ public class ManagementViewTest extends AbstractViewTest {
      * @param expectedBackpointerValue Expected backpointer for given stream.
      */
     private void getTokenWriteAndAssertBackPointer(UUID streamID, Long expectedBackpointerValue) {
-        TokenResponse tokenResponse =
+        LSNResponse LSNResponse =
                 corfuRuntime.getSequencerView().next(streamID);
         if (expectedBackpointerValue == null) {
-            assertThat(tokenResponse.getBackpointerMap()).isEmpty();
+            assertThat(LSNResponse.getBackpointerMap()).isEmpty();
         } else {
-            assertThat(tokenResponse.getBackpointerMap()).containsEntry(streamID, expectedBackpointerValue);
+            assertThat(LSNResponse.getBackpointerMap()).containsEntry(streamID, expectedBackpointerValue);
         }
-        corfuRuntime.getAddressSpaceView().write(tokenResponse,
+        corfuRuntime.getAddressSpaceView().write(LSNResponse,
                 "test".getBytes());
     }
 
@@ -1179,8 +1179,8 @@ public class ManagementViewTest extends AbstractViewTest {
                 .build();
         assertThat(rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
 
-        TokenResponse tokenResponse = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
-        long lastAddress = tokenResponse.getTokenValue();
+        LSNResponse LSNResponse = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
+        long lastAddress = LSNResponse.getSequenceNumber();
 
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
@@ -1313,8 +1313,8 @@ public class ManagementViewTest extends AbstractViewTest {
                 .build();
         assertThat(rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
 
-        TokenResponse tokenResponse = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
-        long lastAddress = tokenResponse.getTokenValue();
+        LSNResponse LSNResponse = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
+        long lastAddress = LSNResponse.getSequenceNumber();
 
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
@@ -1429,8 +1429,8 @@ public class ManagementViewTest extends AbstractViewTest {
 
         // Assert that the streamTailMap has been reset and returns the correct backpointer.
         final long expectedBackpointerStreamA = 11;
-        TokenResponse tokenResponse = runtime_1.getSequencerView().next(streamA);
-        assertThat(tokenResponse.getBackpointerMap().get(streamA))
+        LSNResponse LSNResponse = runtime_1.getSequencerView().next(streamA);
+        assertThat(LSNResponse.getBackpointerMap().get(streamA))
                 .isEqualTo(expectedBackpointerStreamA);
     }
 
@@ -1914,7 +1914,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 TimeUnit.MILLISECONDS)).isTrue();
 
         final long expectedTokenValue = 19L;
-        assertThat(corfuRuntime.getSequencerView().query().getTokenValue())
+        assertThat(corfuRuntime.getSequencerView().query().getSequenceNumber())
                 .isEqualTo(expectedTokenValue);
     }
 

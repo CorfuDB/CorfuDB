@@ -12,7 +12,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -28,7 +28,7 @@ public class MultiCheckpointWriter<T extends Map> {
     private List<ICorfuSMR<T>> maps = new ArrayList<>();
 
     @Getter
-    private List<Long> checkpointLogAddresses = new ArrayList<>();
+    private List<LogicalSequenceNumber> checkpointLogAddresses = new ArrayList<>();
 
     @Setter
     @Getter
@@ -54,7 +54,7 @@ public class MultiCheckpointWriter<T extends Map> {
      * @param author Author's name, stored in checkpoint metadata
      * @return Global log address of the first record of
      */
-    public long appendCheckpoints(CorfuRuntime rt, String author)
+    public LogicalSequenceNumber appendCheckpoints(CorfuRuntime rt, String author)
             throws Exception {
         return appendCheckpoints(rt, author, (x,y) -> { });
     }
@@ -68,12 +68,12 @@ public class MultiCheckpointWriter<T extends Map> {
      * @return Global log address of the first record of
      */
 
-    public long appendCheckpoints(CorfuRuntime rt, String author,
-                                  BiConsumer<CheckpointEntry, Long> postAppendFunc) {
+    public LogicalSequenceNumber appendCheckpoints(CorfuRuntime rt, String author,
+                                  BiConsumer<CheckpointEntry, LogicalSequenceNumber> postAppendFunc) {
 
         // We retrieve the tail from the logging units because the tail
         // returned from the sequencer might not be materialized
-        long globalTail = rt.getAddressSpaceView().getLogTail();
+        LogicalSequenceNumber globalTail = rt.getAddressSpaceView().getLogTail();
         rt.getObjectsView().TXBuild()
                 .setType(TransactionType.SNAPSHOT)
                 .setSnapshot(globalTail)
@@ -98,7 +98,7 @@ public class MultiCheckpointWriter<T extends Map> {
                 cpw.setPostAppendFunc(postAppendFunc);
                 log.trace("appendCheckpoints: checkpoint map {} begin",
                         Utils.toReadableId(map.getCorfuStreamID()));
-                List<Long> addresses = cpw.appendCheckpoint();
+                List<LogicalSequenceNumber> addresses = cpw.appendCheckpoint();
                 log.trace("appendCheckpoints: checkpoint map {} end",
                         Utils.toReadableId(map.getCorfuStreamID()));
                 checkpointLogAddresses.addAll(addresses);

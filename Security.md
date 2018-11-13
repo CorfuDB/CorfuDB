@@ -10,7 +10,7 @@ TLS can be enabled on the corfu infrastructure by using the ```-e``` option whil
 Corfu Server, the server for the Corfu Infrastructure.
 
 Usage:
-	corfu_server (-l <path>|-m) [-nsQ] [-a <address>] [-t <token>] [-c <size>] [-k seconds] [-d <level>] [-p <seconds>] [-M <address>:<port>] [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] [-x <ciphers>] [-z <tls-protocols>]] <port>
+	corfu_server (-l <path>|-m) [-nsQ] [-a <address>] [-t <logicalSequenceNumber>] [-c <size>] [-k seconds] [-d <level>] [-p <seconds>] [-M <address>:<port>] [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] [-x <ciphers>] [-z <tls-protocols>]] <port>
 
 Options:
  -l <path>, --log-path=<path>                                                           Set the path to the storage file for the log unit.
@@ -22,7 +22,7 @@ Options:
  -c <size>, --max-cache=<size>                                                          The size of the in-memory cache to serve requests from -
                                                                                         If there is no log, then this is the max size of the log unit
                                                                                         evicted entries will be auto-trimmed. [default: 1000000000].
- -t <token>, --initial-token=<token>                                                    The first token the sequencer will issue, or -1 to recover
+ -t <logicalSequenceNumber>, --initial-logicalSequenceNumber=<logicalSequenceNumber>                                                    The first logicalSequenceNumber the sequencer will issue, or -1 to recover
                                                                                         from the log. [default: -1].
  -p <seconds>, --compact=<seconds>                                                      The rate the log unit should compact entries (find the,
                                                                                         contiguous tail) in seconds [default: 60].

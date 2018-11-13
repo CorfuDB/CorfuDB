@@ -13,6 +13,7 @@ import javax.annotation.Nonnull;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
@@ -404,8 +405,8 @@ public class LayoutManagementView extends AbstractView {
                     return;
                 }
 
-                long maxTokenRequested = -1L;
-                Map<UUID, Long> streamTails = Collections.emptyMap();
+                LogicalSequenceNumber maxTokenRequested = LogicalSequenceNumber.getDefaultLSN();
+                Map<UUID, LogicalSequenceNumber> streamTails = Collections.emptyMap();
                 boolean bootstrapWithoutTailsUpdate = true;
 
                 // Reconfigure Primary Sequencer if required
@@ -424,7 +425,7 @@ public class LayoutManagementView extends AbstractView {
                     verifyStreamTailsMap(streamTails);
 
                     // Incrementing the maxTokenRequested value for sequencer reset.
-                    maxTokenRequested++;
+                    maxTokenRequested = maxTokenRequested.increment(1);
                     bootstrapWithoutTailsUpdate = false;
                 }
 
@@ -454,9 +455,9 @@ public class LayoutManagementView extends AbstractView {
      *
      * @param streamTails Stream tails map obtained from the fastSMRLoader.
      */
-    private void verifyStreamTailsMap(Map<UUID, Long> streamTails) {
-        for (Long value : streamTails.values()) {
-            if (value < 0) {
+    private void verifyStreamTailsMap(Map<UUID, LogicalSequenceNumber> streamTails) {
+        for (LogicalSequenceNumber value : streamTails.values()) {
+            if (value.getSequenceNumber() < 0) {
                 log.error("Stream Tails map verification failed. Map = {}", streamTails);
                 throw new RecoveryException("Invalid stream tails found in map.");
             }

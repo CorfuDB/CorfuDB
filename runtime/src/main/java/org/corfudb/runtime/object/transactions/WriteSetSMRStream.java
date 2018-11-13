@@ -10,6 +10,7 @@ import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.object.ISMRStream;
 import org.corfudb.runtime.view.Address;
@@ -67,10 +68,10 @@ public class WriteSetSMRStream implements ISMRStream {
     int currentContext = 0;
 
     // TODO add comment
-    long currentContextPos;
+    LogicalSequenceNumber currentContextPos;
 
     // TODO add comment
-    long writePos;
+    LogicalSequenceNumber writePos;
 
     // the specific stream-id for which this SMRstream wraps the write-set
     final UUID id;
@@ -118,12 +119,13 @@ public class WriteSetSMRStream implements ISMRStream {
         if (currentContext == contexts.size()) {
             // recalculate the pos based on the write pointer
             // TODO add explanation, code below very confusing!
-            long readPos = Address.maxNonAddress();
+            LogicalSequenceNumber readPos = LogicalSequenceNumber.getDefaultLSN();
             for (int i = 0; i < contexts.size(); i++) {
-                readPos += contexts.get(i).getWriteSetEntryList(id).size();
-                if (readPos >= writePos) {
-                    currentContextPos = contexts.get(i).getWriteSetEntryList(id).size()
-                                        - (writePos - readPos) - 1;
+                readPos = readPos.increment(contexts.get(i).getWriteSetEntryList(id).size());
+                if (readPos.isEqualOrGreaterThan(writePos)) {
+                    long currentContextPosSequenceNum = contexts.get(i).getWriteSetEntryList(id).size()
+                            - (writePos.getSequenceNumber() - readPos.getSequenceNumber()) - 1;
+                    currentContextPos = new LogicalSequenceNumber(writePos.getEpoch(), currentContextPosSequenceNum);
                 }
             }
             currentContext--;
@@ -131,7 +133,7 @@ public class WriteSetSMRStream implements ISMRStream {
     }
 
     @Override
-    public List<SMREntry> remainingUpTo(long maxGlobal) {
+    public List<SMREntry> remainingUpTo(LogicalSequenceNumber maxGlobal) {
         // Check for any new contexts
         if (TransactionalContext.getTransactionStack().size()
                 > contexts.size()) {
@@ -146,14 +148,14 @@ public class WriteSetSMRStream implements ISMRStream {
         for (int i = currentContext; i < contexts.size(); i++) {
             final List<SMREntry> writeSet = contexts.get(i)
                     .getWriteSetEntryList(id);
-            long readContextStart = i == currentContext ? currentContextPos + 1 : 0;
-            for (long j = readContextStart; j < writeSet.size(); j++) {
+            LogicalSequenceNumber readContextStart = i == currentContext ? currentContextPos.increment(1) : new LogicalSequenceNumber(-1L, 0L);
+            for (long j = readContextStart.getSequenceNumber(); j < writeSet.size(); j++) {
                 entryList.add(writeSet.get((int) j));
-                writePos++;
+                writePos = writePos.increment(1);
             }
             if (writeSet.size() > 0) {
                 currentContext = i;
-                currentContextPos = writeSet.size() - 1;
+                currentContextPos = new LogicalSequenceNumber( writePos.getEpoch(), writeSet.size() - 1);
             }
         }
         return entryList;
@@ -161,30 +163,30 @@ public class WriteSetSMRStream implements ISMRStream {
 
     @Override
     public List<SMREntry> current() {
-        if (Address.nonAddress(writePos)) {
+        if (Address.nonAddress(writePos.getSequenceNumber())) {
             return null;
         }
-        if (Address.nonAddress(currentContextPos)) {
-            currentContextPos = -1;
+        if (Address.nonAddress(currentContextPos.getSequenceNumber())) {
+            currentContextPos = currentContextPos.getPrevious();
         }
         return Collections.singletonList(contexts
                 .get(currentContext)
                 .getWriteSetEntryList(id)
-                .get((int)(currentContextPos)));
+                .get((int)(currentContextPos.getSequenceNumber())));
     }
 
     @Override
     public List<SMREntry> previous() {
-        writePos--;
+        writePos = writePos.getPrevious();
 
-        if (writePos <= Address.maxNonAddress()) {
-            writePos = Address.maxNonAddress();
+        if (writePos.getSequenceNumber() <= Address.maxNonAddress()) {
+            writePos = LogicalSequenceNumber.getDefaultLSN();
             return null;
         }
 
-        currentContextPos--;
+        currentContextPos = currentContextPos.getPrevious();
         // Pop the context if we're at the beginning of it
-        if (currentContextPos <= Address.maxNonAddress()) {
+        if (currentContextPos.getSequenceNumber() <= Address.maxNonAddress()) {
             do {
                 if (currentContext == 0) {
                     throw new RuntimeException(
@@ -195,44 +197,44 @@ public class WriteSetSMRStream implements ISMRStream {
             } while (contexts
                     .get(currentContext)
                     .getWriteSetEntrySize(id) == 0);
-            currentContextPos = contexts
+            currentContextPos = new LogicalSequenceNumber(currentContextPos.getEpoch(), contexts
                     .get(currentContext)
-                    .getWriteSetEntrySize(id) - 1 ;
+                    .getWriteSetEntrySize(id) - 1);
         }
 
         return current();
     }
 
     @Override
-    public long pos() {
+    public LogicalSequenceNumber pos() {
         return writePos;
     }
 
     @Override
     public void reset() {
-        writePos = Address.maxNonAddress();
+        writePos = LogicalSequenceNumber.getDefaultLSN();
         currentContext = 0;
-        currentContextPos = Address.maxNonAddress();
+        currentContextPos = LogicalSequenceNumber.getDefaultLSN();
     }
 
     @Override
-    public void seek(long globalAddress) {
+    public void seek(LogicalSequenceNumber globalAddress) {
         throw new UnsupportedOperationException();
     }
 
     @Override
     public Stream<SMREntry> stream() {
-        return streamUpTo(Address.MAX);
+        return streamUpTo(new LogicalSequenceNumber(-1L, Address.MAX));
     }
 
     @Override
-    public Stream<SMREntry> streamUpTo(long maxGlobal) {
+    public Stream<SMREntry> streamUpTo(LogicalSequenceNumber maxGlobal) {
         return remainingUpTo(maxGlobal)
                 .stream();
     }
 
     @Override
-    public long append(SMREntry entry,
+    public LogicalSequenceNumber append(SMREntry entry,
                        Function<TokenResponse, Boolean> acquisitionCallback,
                        Function<TokenResponse, Boolean> deacquisitionCallback) {
         throw new UnsupportedOperationException();

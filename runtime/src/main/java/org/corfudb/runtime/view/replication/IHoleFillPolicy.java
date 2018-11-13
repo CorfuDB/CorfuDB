@@ -4,6 +4,7 @@ import java.util.function.Function;
 import javax.annotation.Nonnull;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
 
 /**
@@ -24,7 +25,7 @@ public interface IHoleFillPolicy {
      * @throws HoleFillRequiredException  If hole filling is required.
      */
     @Nonnull
-    ILogData peekUntilHoleFillRequired(long address,
-                                       Function<Long, ILogData> peekFunction)
+    ILogData peekUntilHoleFillRequired(LogicalSequenceNumber address,
+                                       Function<LogicalSequenceNumber, ILogData> peekFunction)
             throws HoleFillRequiredException;
 }

@@ -9,13 +9,13 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 
 /**
- * A token request is at the heart of the Corfu log protocol.
+ * A logicalSequenceNumber request is at the heart of the Corfu log protocol.
  *
- * <p>There are four token request scenarios, designated by the relevant constants :
+ * <p>There are four logicalSequenceNumber request scenarios, designated by the relevant constants :
  * 0. {@link TokenRequest::TK_QUERY} : Query of the current log tail and of specific stream-tails.
- * 1. {@link TokenRequest::TK_RAW} : Ask for raw (global) log token(s).
+ * 1. {@link TokenRequest::TK_RAW} : Ask for raw (global) log logicalSequenceNumber(s).
  *              This extends the global log tail by the requested # of tokens.
- * 2. {@link TokenRequest::TK_MULTI_STREAM} : Ask for token(s) on multiple streams.
+ * 2. {@link TokenRequest::TK_MULTI_STREAM} : Ask for logicalSequenceNumber(s) on multiple streams.
  *          This extends both the global log tail, and each of the specified stream tails,
  *          by the requested # of tokens.
  * 3. {@link TokenRequest::TK_TX} :
@@ -38,7 +38,7 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
     /** The number of tokens to request. */
     final Long numTokens;
 
-    /** The streams which are written to by this token request. */
+    /** The streams which are written to by this logicalSequenceNumber request. */
     final List<UUID> streams;
 
     /* used for transaction resolution. */
@@ -48,7 +48,7 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
      * Constructor for generating TokenRequest.
      *
      * @param numTokens number of tokens to request
-     * @param streams streams UUIDs required in the token request
+     * @param streams streams UUIDs required in the logicalSequenceNumber request
      * @param conflictInfo transaction resolution information
      */
     public TokenRequest(Long numTokens, List<UUID> streams,
@@ -63,7 +63,7 @@ public class TokenRequest implements ICorfuPayload<TokenRequest> {
      * Constructor for generating TokenRequest.
      *
      * @param numTokens number of tokens to request
-     * @param streams streams UUIDs required in the token request
+     * @param streams streams UUIDs required in the logicalSequenceNumber request
      */
     public TokenRequest(Long numTokens, List<UUID> streams) {
         if (numTokens == 0) {

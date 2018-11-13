@@ -14,6 +14,7 @@ import java.util.function.Supplier;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
@@ -55,7 +56,7 @@ public class VersionLockedObject<T> {
      * A list of upcalls pending in the system. The proxy keeps this
      * set so it can remember to save the upcalls for pending requests.
      */
-    final Set<Long> pendingUpcalls;
+    final Set<LogicalSequenceNumber> pendingUpcalls;
 
     // This enum is necessary because null cannot be inserted
     // into a ConcurrentHashMap.
@@ -67,7 +68,7 @@ public class VersionLockedObject<T> {
      * A list of upcall results, keyed by the address they were
      * requested.
      */
-    final Map<Long, Object> upcallResults;
+    final Map<LogicalSequenceNumber, Object> upcallResults;
 
 
     /**
@@ -189,7 +190,7 @@ public class VersionLockedObject<T> {
                         this, getVersionUnsafe());
                     R ret = accessFunction.apply(object);
 
-                    long versionForCorrectness = getVersionUnsafe();
+                    LogicalSequenceNumber versionForCorrectness = getVersionUnsafe();
                     if (lock.validate(ts)) {
                         correctnessLogger.trace("Version, {}", versionForCorrectness);
                         return ret;
@@ -223,7 +224,7 @@ public class VersionLockedObject<T> {
                 log.trace("Access [{}] Direct (writelock) access at {}", this, getVersionUnsafe());
                 R ret = accessFunction.apply(object);
 
-                long versionForCorrectness = getVersionUnsafe();
+                LogicalSequenceNumber versionForCorrectness = getVersionUnsafe();
                 if (lock.validate(ts)) {
                     correctnessLogger.trace("Version, {}", versionForCorrectness);
                     return ret;
@@ -269,7 +270,7 @@ public class VersionLockedObject<T> {
      * @throws NoRollbackException If the object cannot be rolled back to
      *                             the supplied version.
      */
-    public void rollbackObjectUnsafe(long rollbackVersion) {
+    public void rollbackObjectUnsafe(LogicalSequenceNumber rollbackVersion) {
         log.trace("Rollback[{}] to {}", this, rollbackVersion);
         rollbackStreamUnsafe(smrStream, rollbackVersion);
         log.trace("Rollback[{}] completed", this);
@@ -282,7 +283,7 @@ public class VersionLockedObject<T> {
      *
      * @param globalAddress The global address to set the pointer to
      */
-    public void seek(long globalAddress) {
+    public void seek(LogicalSequenceNumber globalAddress) {
         smrStream.seek(globalAddress);
     }
 
@@ -292,16 +293,16 @@ public class VersionLockedObject<T> {
      *
      * @param timestamp The timestamp to update the object to.
      */
-    public void syncObjectUnsafe(long timestamp) {
+    public void syncObjectUnsafe(LogicalSequenceNumber timestamp) {
         // If there is an optimistic stream attached,
         // and it belongs to this thread use that
         if (optimisticallyOwnedByThreadUnsafe()) {
             // If there are no updates, ensure we are at the right snapshot
-            if (optimisticStream.pos() == Address.NEVER_READ) {
+            if (optimisticStream.pos().getSequenceNumber() == Address.NEVER_READ) {
                 final WriteSetSMRStream currentOptimisticStream =
                         optimisticStream;
                 // If we are too far ahead, roll back to the past
-                if (getVersionUnsafe() > timestamp) {
+                if (getVersionUnsafe().getSequenceNumber() > timestamp.getSequenceNumber()) {
                     try {
                         rollbackObjectUnsafe(timestamp);
                     } catch (NoRollbackException nre) {
@@ -316,7 +317,7 @@ public class VersionLockedObject<T> {
                 // present. Restore it.
                 optimisticStream = currentOptimisticStream;
             }
-            syncStreamUnsafe(optimisticStream, Address.OPTIMISTIC);
+            syncStreamUnsafe(optimisticStream, new LogicalSequenceNumber(-1L, Address.OPTIMISTIC));
         } else {
             // If there is an optimistic stream for another
             // transaction, remove it by rolling it back first
@@ -325,7 +326,7 @@ public class VersionLockedObject<T> {
                 this.optimisticStream = null;
             }
             // If we are too far ahead, roll back to the past
-            if (getVersionUnsafe() > timestamp) {
+            if (getVersionUnsafe().getSequenceNumber() > timestamp.getSequenceNumber()) {
                 try {
                     rollbackObjectUnsafe(timestamp);
                     // Rollback successfully got us to the right
@@ -351,17 +352,17 @@ public class VersionLockedObject<T> {
      *                   saved, false otherwise.
      * @return The address the update was logged at.
      */
-    public long logUpdate(SMREntry entry, boolean saveUpcall) {
+    public LogicalSequenceNumber logUpdate(SMREntry entry, boolean saveUpcall) {
         return smrStream.append(entry,
                 t -> {
                     if (saveUpcall) {
-                        pendingUpcalls.add(t.getToken().getTokenValue());
+                        pendingUpcalls.add(t.getLogicalSequenceNumber());
                     }
                     return true;
                 },
                 t -> {
                     if (saveUpcall) {
-                        pendingUpcalls.remove(t.getToken().getTokenValue());
+                        pendingUpcalls.remove(t.getLogicalSequenceNumber());
                     }
                     return true;
                 });
@@ -412,7 +413,7 @@ public class VersionLockedObject<T> {
      *
      * @return Returns the pointer position to the object in the stream.
      */
-    public long getVersionUnsafe() {
+    public LogicalSequenceNumber getVersionUnsafe() {
         return smrStream.pos();
     }
 
@@ -420,7 +421,7 @@ public class VersionLockedObject<T> {
      * Check whether this object is currently under optimistic modifications.
      */
     public boolean isOptimisticallyModifiedUnsafe() {
-        return optimisticStream != null && optimisticStream.pos() != Address.NEVER_READ;
+        return optimisticStream != null && optimisticStream.pos().getSequenceNumber() != Address.NEVER_READ;
     }
 
     /**
@@ -458,7 +459,7 @@ public class VersionLockedObject<T> {
 
         return object.getClass().getSimpleName()
                 + "[" + Utils.toReadableId(smrStream.getID()) + "]@"
-                + (getVersionUnsafe() == Address.NEVER_READ ? "NR" : getVersionUnsafe())
+                + (getVersionUnsafe().getSequenceNumber() == Address.NEVER_READ ? "NR" : getVersionUnsafe())
                 + (optimisticStream == null ? "" : "+" + optimisticStream.pos());
     }
 
@@ -554,10 +555,10 @@ public class VersionLockedObject<T> {
      * @throws NoRollbackException If an entry in the stream did not contain
      *                             undo information.
      */
-    protected void rollbackStreamUnsafe(ISMRStream stream, long rollbackVersion) {
+    protected void rollbackStreamUnsafe(ISMRStream stream, LogicalSequenceNumber rollbackVersion) {
         // If we're already at or before the given version, there's
         // nothing to do
-        if (stream.pos() <= rollbackVersion) {
+        if (stream.pos().compareTo(rollbackVersion) <= 0) {
             return;
         }
 
@@ -578,7 +579,7 @@ public class VersionLockedObject<T> {
 
             entries = stream.previous();
 
-            if (stream.pos() <= rollbackVersion) {
+            if (stream.pos().compareTo(rollbackVersion) <= 0) {
                 return;
             }
         }
@@ -601,20 +602,20 @@ public class VersionLockedObject<T> {
      * @param stream    The stream to sync forward
      * @param timestamp The timestamp to sync up to.
      */
-    protected void syncStreamUnsafe(ISMRStream stream, long timestamp) {
-        log.trace("Sync[{}] {}", this, (timestamp == Address.OPTIMISTIC)
-                ? "Optimistic" : "to " + timestamp);
-        long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;
+    protected void syncStreamUnsafe(ISMRStream stream, LogicalSequenceNumber timestamp) {
+        log.trace("Sync[{}] {}", this, (timestamp.getSequenceNumber() == Address.OPTIMISTIC)
+                ? "Optimistic" : "to " + timestamp.getSequenceNumber());
+        LogicalSequenceNumber syncTo = (timestamp.getSequenceNumber() == Address.OPTIMISTIC) ? new LogicalSequenceNumber(timestamp.getEpoch(), Address.MAX) : timestamp;
         stream.streamUpTo(syncTo)
                 .forEachOrdered(entry -> {
                     try {
                         Object res = applyUpdateUnsafe(entry);
-                        if (timestamp == Address.OPTIMISTIC) {
+                        if (timestamp.getSequenceNumber() == Address.OPTIMISTIC) {
                             entry.setUpcallResult(res);
                         } else if (pendingUpcalls.contains(entry.getEntry().getGlobalAddress())) {
                             log.debug("Sync[{}] Upcall Result {}",
                                     this, entry.getEntry().getGlobalAddress());
-                            upcallResults.put(entry.getEntry().getGlobalAddress(), res == null
+                            upcallResults.put(new LogicalSequenceNumber(timestamp.getEpoch(), entry.getEntry().getGlobalAddress()), res == null
                                     ? NullValue.NULL_VALUE : res);
                             pendingUpcalls.remove(entry.getEntry().getGlobalAddress());
                         }
@@ -634,7 +635,7 @@ public class VersionLockedObject<T> {
         try {
             log.trace("OptimisticRollback[{}] started", this);
             rollbackStreamUnsafe(this.optimisticStream,
-                    Address.NEVER_READ);
+                    new LogicalSequenceNumber(-1L, Address.NEVER_READ));
             log.trace("OptimisticRollback[{}] complete", this);
         } catch (NoRollbackException nre) {
             log.warn("OptimisticRollback[{}] failed", this);
@@ -647,9 +648,9 @@ public class VersionLockedObject<T> {
      *
      * @param entry
      */
-    public void applyUpdateToStreamUnsafe(SMREntry entry, long globalAddress) {
+    public void applyUpdateToStreamUnsafe(SMREntry entry, LogicalSequenceNumber globalAddress) {
         applyUpdateUnsafe(entry);
-        seek(globalAddress + 1);
+        seek(globalAddress.increment(1));
     }
 
 }

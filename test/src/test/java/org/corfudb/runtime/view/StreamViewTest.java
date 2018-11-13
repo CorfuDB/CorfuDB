@@ -1,19 +1,20 @@
 package org.corfudb.runtime.view;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.util.List;
+import java.util.UUID;
+
 import lombok.Getter;
+
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.List;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 1/8/16.
@@ -45,6 +46,13 @@ public class StreamViewTest extends AbstractViewTest {
 
         assertThat(sv.next())
                 .isEqualTo(null);
+    }
+
+    @Test
+    public void temp() {
+        String lsn = "(2,4)";
+        LogicalSequenceNumber lsnTrue = LogicalSequenceNumber.decode(lsn);
+        System.out.println("LSN is actually: " + lsnTrue);
     }
 
     /**
@@ -335,19 +343,19 @@ public class StreamViewTest extends AbstractViewTest {
         sv.append(testPayload);
 
         //generate a stream hole
-        TokenResponse tr =
+        LSNResponse tr =
                 r.getSequencerView().next(streamA);
 
         // read from an address that hasn't been written to
         // causing a hole fill
-        r.getAddressSpaceView().read(tr.getToken().getTokenValue());
+        r.getAddressSpaceView().read(tr.getLogicalSequenceNumber().getSequenceNumber());
 
 
         tr = r.getSequencerView().next(streamA);
 
         // read from an address that hasn't been written to
         // causing a hole fill
-        r.getAddressSpaceView().read(tr.getToken().getTokenValue());
+        r.getAddressSpaceView().read(tr.getLogicalSequenceNumber().getSequenceNumber());
 
 
         sv.append(testPayload2);

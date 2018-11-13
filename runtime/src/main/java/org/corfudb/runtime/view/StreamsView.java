@@ -11,6 +11,7 @@ import javax.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -73,12 +74,12 @@ public class StreamsView extends AbstractView {
      * @throws TransactionAbortedException If the transaction was aborted by
      *                                     the sequencer.
      */
-    public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
+    public LogicalSequenceNumber append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
                        @Nonnull CacheOption cacheOption, @Nonnull UUID ... streamIDs) {
         // Go to the sequencer, grab an initial token.
         TokenResponse tokenResponse = conflictInfo == null
-                ? runtime.getSequencerView().next(streamIDs) // Token w/o conflict info
-                : runtime.getSequencerView().next(conflictInfo, streamIDs); // Token w/ conflict info
+                ? runtime.getSequencerView().next(streamIDs) // LogicalSequenceNumber w/o conflict info
+                : runtime.getSequencerView().next(conflictInfo, streamIDs); // LogicalSequenceNumber w/ conflict info
 
         for (int x = 0; x < runtime.getParameters().getWriteRetry(); x++) {
 
@@ -113,26 +114,26 @@ public class StreamsView extends AbstractView {
             try {
                 runtime.getAddressSpaceView().write(tokenResponse, object, cacheOption);
                 // If we're here, we succeeded, return the acquired token
-                return tokenResponse.getTokenValue();
+                return tokenResponse.getLogicalSequenceNumber();
             } catch (OverwriteException oe) {
 
                 // We were overwritten, get a new token and try again.
                 log.warn("append[{}]: Overwritten after {} retries, streams {}",
-                        tokenResponse.getTokenValue(),
+                        tokenResponse.getLogicalSequenceNumber(),
                         x,
                         Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()));
 
                 TokenResponse temp;
                 if (conflictInfo == null) {
-                    // Token w/o conflict info
+                    // LogicalSequenceNumber w/o conflict info
                     temp = runtime.getSequencerView().next(streamIDs);
                 } else {
 
                     // On retry, check for conflicts only from the previous
                     // attempt position
-                    conflictInfo.setSnapshotTimestamp(tokenResponse.getToken().getTokenValue());
+                    conflictInfo.setSnapshotTimestamp(tokenResponse.getLogicalSequenceNumber());
 
-                    // Token w/ conflict info
+                    // LogicalSequenceNumber w/ conflict info
                     temp = runtime.getSequencerView().next(conflictInfo, streamIDs);
                 }
 
@@ -140,11 +141,11 @@ public class StreamsView extends AbstractView {
                 // eventually be deprecated since these are no longer used)
                 tokenResponse = new TokenResponse(
                         temp.getRespType(), tokenResponse.getConflictKey(),
-                        temp.getToken(), temp.getBackpointerMap(), Collections.emptyList());
+                        temp.getLogicalSequenceNumber(), temp.getBackpointerMap(), Collections.emptyList());
 
             } catch (StaleTokenException se) {
                 // the epoch changed from when we grabbed the token from sequencer
-                log.warn("append[{}]: StaleToken , streams {}", tokenResponse.getTokenValue(),
+                log.warn("append[{}]: StaleToken , streams {}", tokenResponse.getLogicalSequenceNumber(),
                         Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()));
 
                 throw new TransactionAbortedException(
@@ -156,7 +157,7 @@ public class StreamsView extends AbstractView {
         }
 
         log.error("append[{}]: failed after {} retries , streams {}, write size {} bytes",
-                tokenResponse.getTokenValue(),
+                tokenResponse.getLogicalSequenceNumber(),
                 runtime.getParameters().getWriteRetry(),
                 Arrays.stream(streamIDs).map(Utils::toReadableId).collect(Collectors.toSet()),
                 ILogData.getSerializedSize(object));
@@ -168,8 +169,8 @@ public class StreamsView extends AbstractView {
      *
      * @see StreamsView#append(Object, TxResolutionInfo, CacheOption, UUID...)
      */
-    public long append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
-                       @Nonnull UUID ... streamIDs) {
+    public LogicalSequenceNumber append(@Nonnull Object object, @Nullable TxResolutionInfo conflictInfo,
+                                        @Nonnull UUID ... streamIDs) {
        return append(object, conflictInfo, CacheOption.WRITE_THROUGH, streamIDs);
     }
 }

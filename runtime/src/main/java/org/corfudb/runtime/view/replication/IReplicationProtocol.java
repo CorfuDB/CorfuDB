@@ -4,10 +4,12 @@ import java.util.AbstractMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.RuntimeLayout;
 
@@ -52,7 +54,7 @@ public interface IReplicationProtocol {
      *                             given global address, committing a hole
      *                             filling entry if necessary.
      */
-    @Nonnull ILogData read(RuntimeLayout runtimeLayout, long globalAddress);
+    @Nonnull ILogData read(RuntimeLayout runtimeLayout, LogicalSequenceNumber globalAddress);
 
     /** Read data from all the given addresses.
      *
@@ -69,7 +71,7 @@ public interface IReplicationProtocol {
      *                              addresses, hole filling if necessary.
      */
     default @Nonnull
-            Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout, List<Long> globalAddresses) {
+            Map<LogicalSequenceNumber, ILogData> readAll(RuntimeLayout runtimeLayout, List<LogicalSequenceNumber> globalAddresses) {
         return globalAddresses.parallelStream()
                 .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(runtimeLayout, a)))
                 .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
@@ -90,7 +92,7 @@ public interface IReplicationProtocol {
      *                              addresses, hole filling if necessary.
      */
     default @Nonnull
-    Map<Long, ILogData> readRange(RuntimeLayout runtimeLayout, Set<Long> globalAddresses) {
+    Map<LogicalSequenceNumber, ILogData> readRange(RuntimeLayout runtimeLayout, Set<LogicalSequenceNumber> globalAddresses) {
         return globalAddresses.parallelStream()
                 .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(runtimeLayout, a)))
                 .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
@@ -109,7 +111,21 @@ public interface IReplicationProtocol {
      *                             given global address, or NULL, if
      *                             there was no entry committed.
      */
-    ILogData peek(RuntimeLayout runtimeLayout, long globalAddress);
+    ILogData peek(RuntimeLayout runtimeLayout, LogicalSequenceNumber globalAddress);
+
+    /** Validate that the given address exists in any log unit.
+     *
+     * This method issues a validation request to 'n' log units (depending on the actual
+     * implementation of the replication protocol), and requires a minimum of 'one' log unit
+     * to validate the existence of this address and return.
+     *
+     * No data propagation or hole filling is performed by this method call.
+     *
+     * @param runtimeLayout        The RuntimeLayout stamped with layout to use for the read.
+     * @param address              The  address to validate existence.
+     * @return                     true if address exists, false otherwise.
+     */
+    boolean validate(RuntimeLayout runtimeLayout, LogicalSequenceNumber address) throws InterruptedException, ExecutionException;
 
     /** Peek data from all the given addresses.
      *
@@ -125,8 +141,8 @@ public interface IReplicationProtocol {
      * @return                      A map of addresses to uncommitted
      *                              addresses, without hole filling.
      */
-    default @Nonnull Map<Long, ILogData> peekAll(RuntimeLayout runtimeLayout,
-                                                 Set<Long> globalAddresses) {
+    default @Nonnull Map<LogicalSequenceNumber, ILogData> peekAll(RuntimeLayout runtimeLayout,
+                                                 Set<LogicalSequenceNumber> globalAddresses) {
         return globalAddresses.parallelStream()
                 .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, peek(runtimeLayout, a)))
                 .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));

@@ -13,6 +13,7 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClient;
@@ -138,7 +139,7 @@ public class RuntimeLayout {
         return (SequencerClient) getClient(SequencerClient.class, endpoint);
     }
 
-    public LogUnitClient getLogUnitClient(long address, int index) {
+    public LogUnitClient getLogUnitClient(LogicalSequenceNumber address, int index) {
         return getLogUnitClient(layout.getStripe(address).getLogServers().get(index));
     }
 

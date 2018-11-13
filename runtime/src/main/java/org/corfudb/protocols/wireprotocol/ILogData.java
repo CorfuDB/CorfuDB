@@ -141,12 +141,12 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
         return size;
     }
 
-    /** Assign a given token to this log data.
+    /** Assign a given logicalSequenceNumber to this log data.
      *
-     * @param token     The token to use.
+     * @param token     The logicalSequenceNumber to use.
      */
     default void useToken(IToken token) {
-        setGlobalAddress(token.getTokenValue());
+        setGlobalAddress(token.getLogicalSequenceNumber());
         if (token.getBackpointerMap().size() > 0) {
             setBackpointerMap(token.getBackpointerMap());
         }

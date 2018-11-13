@@ -16,7 +16,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.LSNResponse;
 import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
@@ -155,7 +155,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
 
 
         //generate a stream hole
-        TokenResponse tr =
+        LSNResponse tr =
                 r.getSequencerView().next(streamA);
 
         IStreamView sv = r.getStreamsView().get(streamA);
@@ -186,7 +186,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         CorfuRuntime r = getDefaultRuntime();
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
-        r.getAddressSpaceView().write(new TokenResponse(0,
+        r.getAddressSpaceView().write(new LSNResponse(0,
                         r.getLayoutView().getLayout().getEpoch(),
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
                 testPayload);
@@ -215,7 +215,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         scheduleConcurrently(numberThreads, threadNumber -> {
             int base = threadNumber * numberRecords;
             for (int i = base; i < base + numberRecords; i++) {
-                r.getAddressSpaceView().write(new TokenResponse((long)i,
+                r.getAddressSpaceView().write(new LSNResponse((long)i,
                                 r.getLayoutView().getLayout().getEpoch(),
                                 Collections.singletonMap(CorfuRuntime.getStreamID("a"), Address.NO_BACKPOINTER)),
                         Integer.toString(i).getBytes());
@@ -249,7 +249,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(new TokenResponse(0,
+        r.getAddressSpaceView().write(new LSNResponse(0,
                         r.getLayoutView().getLayout().getEpoch(),
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
                 testPayload);
@@ -276,7 +276,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(new TokenResponse(0, 1,
+        r.getAddressSpaceView().write(new LSNResponse(0, 1,
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
                 testPayload);
 

@@ -1,16 +1,19 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.collect.Sets;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.exceptions.LayoutModificationException;
-import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.runtime.view.Layout.LayoutStripe;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
+import org.corfudb.runtime.exceptions.LayoutModificationException;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
+import org.corfudb.runtime.view.Layout.LayoutStripe;
 
 /**
  * A builder that allows us to make modifications to a layout and construct
@@ -199,7 +202,7 @@ public class LayoutBuilder {
      * @param newLogunitEndpoint a non null String representing Logunit endpoint to be added.
      * @return this builder
      */
-    public LayoutBuilder addLogunitServer(int stripeIndex, long globalLogTail,
+    public LayoutBuilder addLogunitServer(int stripeIndex, LogicalSequenceNumber globalLogTail,
                                           @NonNull String newLogunitEndpoint) {
         List<LayoutSegment> layoutSegmentList = layout.getSegments();
         LayoutSegment segmentToSplit = layoutSegmentList.remove(layoutSegmentList.size() - 1);
@@ -207,7 +210,7 @@ public class LayoutBuilder {
         // Close the existing segment with the provided globalLogTail.
         LayoutSegment closedSegment = new LayoutSegment(segmentToSplit.getReplicationMode(),
                 segmentToSplit.getStart(),
-                globalLogTail + 1,
+                globalLogTail.increment(1),
                 segmentToSplit.getStripes());
 
         List<String> logunitServerList = new ArrayList<>();
@@ -224,7 +227,7 @@ public class LayoutBuilder {
         newStripeList.add(stripeIndex, newStripe);
 
         LayoutSegment openSegment = new LayoutSegment(segmentToSplit.getReplicationMode(),
-                globalLogTail + 1,
+                globalLogTail.increment(1),
                 segmentToSplit.getEnd(),
                 newStripeList);
         layoutSegmentList.add(layoutSegmentList.size(), closedSegment);

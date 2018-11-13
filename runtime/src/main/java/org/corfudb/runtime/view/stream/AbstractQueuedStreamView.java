@@ -15,6 +15,7 @@ import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
@@ -58,13 +59,13 @@ public abstract class AbstractQueuedStreamView extends
      * @param globalAddress     The resolved global address.
      */
     protected void addToResolvedQueue(QueuedStreamContext context,
-                                      long globalAddress,
+                                      LogicalSequenceNumber globalAddress,
                                       ILogData ld) {
         context.resolvedQueue.add(globalAddress);
 
         // Trimming the resolvedQueue using the learnt trimMark.
-        long runtimeTrimMark = runtime.matureTrimMark;
-        if (context.resolvedQueue.first() < runtimeTrimMark) {
+        LogicalSequenceNumber runtimeTrimMark = runtime.matureTrimMark;
+        if (context.resolvedQueue.first().isLessThan(runtimeTrimMark)) {
             log.info("addToResolvedQueue: Clearing resolvedQueue for stream:{}, trim mark:{}",
                     id, runtimeTrimMark);
             context.resolvedQueue.headSet(runtimeTrimMark).clear();
@@ -72,7 +73,7 @@ public abstract class AbstractQueuedStreamView extends
 
         context.resolvedEstBytes += ld.getSizeEstimate();
 
-        if (context.maxResolution < globalAddress) {
+        if (context.maxResolution.isLessThan(globalAddress)) {
             context.maxResolution = globalAddress;
         }
     }
@@ -82,7 +83,7 @@ public abstract class AbstractQueuedStreamView extends
      */
     @Override
     protected ILogData getNextEntry(QueuedStreamContext context,
-                                    long maxGlobal) {
+                                    LogicalSequenceNumber maxGlobal) {
         // If we have no entries to read, fill the read queue.
         // Return if the queue is still empty.
         if (context.readQueue.isEmpty() && context.readCpQueue.isEmpty()
@@ -92,12 +93,12 @@ public abstract class AbstractQueuedStreamView extends
 
         // If maxGlobal is before the checkpoint position, throw a
         // trimmed exception
-        if (maxGlobal < context.checkpointSuccessStartAddr) {
+        if (maxGlobal.isLessThan(context.checkpointSuccessStartAddr)) {
             throw new TrimmedException();
         }
 
         // If checkpoint data is available, get from readCpQueue first
-        NavigableSet<Long> getFrom;
+        NavigableSet<LogicalSequenceNumber> getFrom;
         if (context.readCpQueue.size() > 0) {
             getFrom = context.readCpQueue;
             context.globalPointer = context.checkpointSuccessStartAddr;
@@ -107,13 +108,13 @@ public abstract class AbstractQueuedStreamView extends
 
         // If the lowest DATA element is greater than maxGlobal, there's nothing
         // to return.
-        if (context.readCpQueue.isEmpty() && context.readQueue.first() > maxGlobal) {
+        if (context.readCpQueue.isEmpty() && context.readQueue.first().isGreaterThan(maxGlobal)) {
             return null;
         }
 
         // Otherwise we remove entries one at a time from the read queue.
         if (getFrom.size() > 0) {
-            final long thisRead = getFrom.pollFirst();
+            final LogicalSequenceNumber thisRead = getFrom.pollFirst();
             ILogData ld = read(thisRead);
             if (getFrom == context.readQueue) {
                 addToResolvedQueue(context, thisRead, ld);
@@ -133,9 +134,9 @@ public abstract class AbstractQueuedStreamView extends
      * list off there.
      * */
     @Override
-    protected List<ILogData> getNextEntries(QueuedStreamContext context, long maxGlobal,
+    protected List<ILogData> getNextEntries(QueuedStreamContext context, LogicalSequenceNumber maxGlobal,
                                             Function<ILogData, Boolean> contextCheckFn) {
-        NavigableSet<Long> readSet = new TreeSet<>();
+        NavigableSet<LogicalSequenceNumber> readSet = new TreeSet<>();
 
         // Scan backward in the stream to find interesting
         // log records less than or equal to maxGlobal.
@@ -144,7 +145,7 @@ public abstract class AbstractQueuedStreamView extends
 
         // If maxGlobal is before the checkpoint position, throw a
         // trimmed exception
-        if (maxGlobal < context.checkpointSuccessStartAddr) {
+        if (maxGlobal.isLessThan(context.checkpointSuccessStartAddr)) {
             throw new TrimmedException();
         }
 
@@ -158,7 +159,7 @@ public abstract class AbstractQueuedStreamView extends
         // we should pay attention to, then start with them.
         readSet.addAll(context.readCpQueue);
 
-        if (!context.readQueue.isEmpty() && context.readQueue.first() > maxGlobal) {
+        if (!context.readQueue.isEmpty() && context.readQueue.first().isGreaterThan(maxGlobal)) {
             // If the lowest element is greater than maxGlobal, there's nothing
             // more to return: readSet is ok as-is.
         } else {
@@ -166,7 +167,7 @@ public abstract class AbstractQueuedStreamView extends
             // the start and maxGlobal
             readSet.addAll(context.readQueue.headSet(maxGlobal, true));
         }
-        List<Long> toRead = readSet.stream()
+        List<LogicalSequenceNumber> toRead = readSet.stream()
                 .collect(Collectors.toList());
 
         // The list to store read results in
@@ -211,7 +212,7 @@ public abstract class AbstractQueuedStreamView extends
      *
      * @param address       The address to read.
      */
-    protected abstract @Nonnull ILogData read(final long address);
+    protected abstract @Nonnull ILogData read(final LogicalSequenceNumber address);
 
     /**
      * Given a list of addresses, retrieve the data as a list in the same
@@ -220,7 +221,7 @@ public abstract class AbstractQueuedStreamView extends
      * @return              A list of ILogData in the same order as the
      *                      addresses given.
      */
-    protected @Nonnull List<ILogData> readAll(@Nonnull final List<Long> addresses) {
+    protected @Nonnull List<ILogData> readAll(@Nonnull final List<LogicalSequenceNumber> addresses) {
         return addresses.parallelStream()
                         .map(this::read)
                         .collect(Collectors.toList());
@@ -240,20 +241,20 @@ public abstract class AbstractQueuedStreamView extends
      * @return              True, if entries were added to the read queue,
      *                      False, otherwise.
      */
-    protected abstract boolean fillReadQueue(final long maxGlobal,
+    protected abstract boolean fillReadQueue(final LogicalSequenceNumber maxGlobal,
                                           final QueuedStreamContext context);
 
     /**
      * {@inheritDoc}
      */
     @Override
-    public synchronized long find(long globalAddress, SearchDirection direction) {
+    public synchronized LogicalSequenceNumber find(LogicalSequenceNumber globalAddress, SearchDirection direction) {
         final QueuedStreamContext context = getCurrentContext();
         // First, check if we have resolved up to the given address
-        if (context.maxResolution < globalAddress) {
+        if (context.maxResolution.isLessThan(globalAddress)) {
             // If not we need to read to that position
             // to resolve all the addresses.
-            remainingUpTo(globalAddress + 1);
+            remainingUpTo(globalAddress.increment(1));
         }
 
         // Now we can do the search.
@@ -264,7 +265,7 @@ public abstract class AbstractQueuedStreamView extends
         }
         // Next, check all elements excluding
         // in the correct direction.
-        Long result;
+        LogicalSequenceNumber result;
         if (direction.isForward()) {
             result = context.resolvedQueue.higher(globalAddress);
         }  else {
@@ -272,7 +273,7 @@ public abstract class AbstractQueuedStreamView extends
         }
 
         // Convert the address to never read if there was no result.
-        return result == null ? Address.NOT_FOUND : result;
+        return result == null ? new LogicalSequenceNumber(-1L, Address.NOT_FOUND) : result;
     }
 
     /**
@@ -281,36 +282,36 @@ public abstract class AbstractQueuedStreamView extends
     @Override
     public synchronized ILogData previous() {
         final QueuedStreamContext context = getCurrentContext();
-        final long oldPointer = context.globalPointer;
+        final LogicalSequenceNumber oldPointer = context.globalPointer;
 
         log.trace("previous[{}]: max={} min={}", this,
                 context.maxResolution,
                 context.minResolution);
 
         // If never read, there would be no pointer to the previous entry.
-        if (context.globalPointer == Address.NEVER_READ) {
+        if (context.globalPointer.getSequenceNumber() == Address.NEVER_READ) {
             return null;
         }
 
         // If we're attempt to go prior to most recent checkpoint, we
         // throw a TrimmedException.
-        if (context.globalPointer - 1 < context.checkpointSuccessStartAddr) {
+        if (context.globalPointer.getSequenceNumber() - 1 < context.checkpointSuccessStartAddr.getSequenceNumber()) {
             throw new TrimmedException();
         }
 
         // Otherwise, the previous entry should be resolved, so get
         // one less than the current.
-        Long prevAddress = context
+        LogicalSequenceNumber prevAddress = context
                 .resolvedQueue.lower(context.globalPointer);
         // If the pointer is before our min resolution, we need to resolve
         // to get the correct previous entry.
-        if (prevAddress == null && Address.isAddress(context.minResolution)
-                || prevAddress != null && prevAddress <= context.minResolution) {
-            context.globalPointer = prevAddress == null ? Address.NEVER_READ :
-                                                prevAddress - 1L;
+        if (prevAddress == null && Address.isAddress(context.minResolution.getSequenceNumber())
+                || prevAddress != null && prevAddress.isEqualOrLessThan(context.minResolution)) {
+            context.globalPointer = prevAddress == null ? new LogicalSequenceNumber(prevAddress.getEpoch(), Address.NEVER_READ) :
+                                                prevAddress.getPrevious();
 
             remainingUpTo(context.minResolution);
-            context.minResolution = Address.NON_ADDRESS;
+            context.minResolution = LogicalSequenceNumber.getDefaultLSN();
             context.globalPointer = oldPointer;
             prevAddress = context
                     .resolvedQueue.lower(context.globalPointer);
@@ -338,7 +339,7 @@ public abstract class AbstractQueuedStreamView extends
     public synchronized ILogData current() {
         final QueuedStreamContext context = getCurrentContext();
 
-        if (Address.nonAddress(context.globalPointer)) {
+        if (Address.nonAddress(context.globalPointer.getSequenceNumber())) {
             return null;
         }
         return read(context.globalPointer);
@@ -348,7 +349,7 @@ public abstract class AbstractQueuedStreamView extends
      * {@inheritDoc}
      * */
     @Override
-    public long getCurrentGlobalPosition() {
+    public LogicalSequenceNumber getCurrentGlobalPosition() {
         return getCurrentContext().globalPointer;
     }
 
@@ -363,35 +364,35 @@ public abstract class AbstractQueuedStreamView extends
 
 
         /** A queue of addresses which have already been resolved. */
-        final NavigableSet<Long> resolvedQueue
+        final NavigableSet<LogicalSequenceNumber> resolvedQueue
                 = new TreeSet<>();
 
         /** The minimum global address which we have resolved this
          * stream to.
          */
-        long minResolution = Address.NON_ADDRESS;
+        LogicalSequenceNumber minResolution = new LogicalSequenceNumber(-1L, Address.NON_ADDRESS);
 
         /** The maximum global address which we have resolved this
          * stream to.
          */
-        long maxResolution = Address.NON_ADDRESS;
+        LogicalSequenceNumber maxResolution = new LogicalSequenceNumber(-1L, Address.NON_ADDRESS);
 
         /**
          * A priority queue of potential addresses to be read from.
          */
-        final NavigableSet<Long> readQueue
+        final NavigableSet<LogicalSequenceNumber> readQueue
                 = new TreeSet<>();
 
         /** List of checkpoint records, if a successful checkpoint has been observed.
          */
-        final NavigableSet<Long> readCpQueue = new TreeSet<>();
+        final NavigableSet<LogicalSequenceNumber> readCpQueue = new TreeSet<>();
 
         /** Info on checkpoint we used for initial stream replay,
          *  other checkpoint-related info & stats.  Hodgepodge, clarify.
          */
         UUID checkpointSuccessId = null;
-        long checkpointSuccessStartAddr = Address.NEVER_READ;
-        long checkpointSuccessEndAddr = Address.NEVER_READ;
+        LogicalSequenceNumber checkpointSuccessStartAddr = new LogicalSequenceNumber(-1L, Address.NEVER_READ);
+        LogicalSequenceNumber checkpointSuccessEndAddr = new LogicalSequenceNumber(-1L, Address.NEVER_READ);
         long checkpointSuccessNumEntries = 0L;
         long checkpointSuccessBytes = 0L;
         // No need to keep track of # of DATA entries, use context.resolvedQueue.size()?
@@ -400,14 +401,14 @@ public abstract class AbstractQueuedStreamView extends
          *  The checkpoint guarantees for this stream there are no entries
          *  between checkpointSuccessStartAddr and checkpointSnapshotAddress.
          */
-        long checkpointSnapshotAddress = Address.NEVER_READ;
+        LogicalSequenceNumber checkpointSnapshotAddress = new LogicalSequenceNumber(-1L, Address.NEVER_READ);
 
         /** Create a new stream context with the given ID and maximum address
          * to read to.
          * @param id                  The ID of the stream to read from
          * @param maxGlobalAddress    The maximum address for the context.
          */
-        public QueuedStreamContext(UUID id, long maxGlobalAddress) {
+        public QueuedStreamContext(UUID id, LogicalSequenceNumber maxGlobalAddress) {
             super(id, maxGlobalAddress);
         }
 
@@ -421,13 +422,13 @@ public abstract class AbstractQueuedStreamView extends
             readCpQueue.clear();
             readQueue.clear();
             resolvedQueue.clear();
-            minResolution = Address.NON_ADDRESS;
-            maxResolution = Address.NON_ADDRESS;
+            minResolution = new LogicalSequenceNumber(-1L, Address.NON_ADDRESS);
+            maxResolution = new LogicalSequenceNumber(-1L, Address.NON_ADDRESS);
 
             checkpointSuccessId = null;
-            checkpointSuccessStartAddr = Address.NEVER_READ;
-            checkpointSuccessEndAddr = Address.NEVER_READ;
-            checkpointSnapshotAddress = Address.NEVER_READ;
+            checkpointSuccessStartAddr = LogicalSequenceNumber.getDefaultLSN();
+            checkpointSuccessEndAddr = LogicalSequenceNumber.getDefaultLSN();
+            checkpointSnapshotAddress = LogicalSequenceNumber.getDefaultLSN();
             checkpointSuccessNumEntries = 0;
             checkpointSuccessBytes = 0;
             resolvedEstBytes = 0;
@@ -437,15 +438,15 @@ public abstract class AbstractQueuedStreamView extends
          * {@inheritDoc}
          * */
         @Override
-        synchronized void seek(long globalAddress) {
-            if (Address.nonAddress(globalAddress)) {
+        synchronized void seek(LogicalSequenceNumber globalAddress) {
+            if (Address.nonAddress(globalAddress.getSequenceNumber())) {
                 throw new IllegalArgumentException("globalAddress must"
                         + " be >= Address.maxNonAddress()");
             }
             log.trace("Seek[{}]({}), min={} max={}", this,  globalAddress,
                     minResolution, maxResolution);
             // Update minResolution if necessary
-            if (globalAddress >= maxResolution) {
+            if (globalAddress.isEqualOrGreaterThan(maxResolution)) {
                 log.trace("set min res to {}" , globalAddress);
                 minResolution = globalAddress;
             }

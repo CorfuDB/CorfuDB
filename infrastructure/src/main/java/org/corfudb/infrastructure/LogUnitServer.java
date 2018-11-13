@@ -8,6 +8,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -24,10 +25,13 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.TouchRequest;
+import org.corfudb.protocols.wireprotocol.TouchResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -83,7 +87,7 @@ public class LogUnitServer extends AbstractServer {
      * it is not backed by anything, but in a disk implementation it is backed by persistent
      * storage.
      */
-    private final LoadingCache<Long, ILogData> dataCache;
+    private final LoadingCache<LogicalSequenceNumber, ILogData> dataCache;
     private final long maxCacheSize;
 
     private final StreamLog streamLog;
@@ -176,8 +180,8 @@ public class LogUnitServer extends AbstractServer {
         log.trace("read: {}", msg.getPayload().getRange());
         ReadResponse rr = new ReadResponse();
         try {
-            for (Long l = msg.getPayload().getRange().lowerEndpoint();
-                    l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
+            for (LogicalSequenceNumber l = msg.getPayload().getRange().lowerEndpoint();
+                 l < msg.getPayload().getRange().upperEndpoint() + 1L; l++) {
                 ILogData e = dataCache.get(l);
                 if (e == null) {
                     rr.put(l, LogData.getEmpty(l));
@@ -186,6 +190,22 @@ public class LogUnitServer extends AbstractServer {
                 }
             }
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
+        } catch (DataCorruptionException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
+        }
+    }
+
+    @ServerHandler(type = CorfuMsgType.TOUCH_REQUEST)
+    private void touch(CorfuPayloadMsg<TouchRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.trace("touch: {}", msg.getPayload().getAddresses());
+        TouchResponse tr = new TouchResponse();
+        try {
+            List<LogicalSequenceNumber> addresses = msg.getPayload().getAddresses();
+            for (LogicalSequenceNumber address : addresses) {
+                tr.put(address, dataCache.getIfPresent(address) != null);
+            }
+
+            r.sendResponse(ctx, msg, CorfuMsgType.TOUCH_RESPONSE.payloadMsg(tr));
         } catch (DataCorruptionException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
         }
@@ -215,7 +235,7 @@ public class LogUnitServer extends AbstractServer {
     private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
         IServerRouter r) {
         try {
-            long address = msg.getPayload().getAddress();
+            LogicalSequenceNumber address = msg.getPayload().getLogicalSequenceNumber();
             log.debug("fillHole: filling address {}, epoch {}", address, msg.getEpoch());
             LogData hole = LogData.getHole(address);
             hole.setEpoch(msg.getEpoch());

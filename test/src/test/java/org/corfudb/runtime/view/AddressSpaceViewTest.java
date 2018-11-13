@@ -56,7 +56,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
         final long epoch = r.getLayoutView().getLayout().getEpoch();
 
-        r.getAddressSpaceView().write(new TokenResponse(0, epoch,
+        r.getAddressSpaceView().write(new LSNResponse(0, epoch,
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
                 "hello world".getBytes());
 
@@ -74,7 +74,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_2))
                 .isEmptyAtAddress(0);
 
-        r.getAddressSpaceView().write(new TokenResponse(1, epoch,
+        r.getAddressSpaceView().write(new LSNResponse(1, epoch,
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
                 "1".getBytes());
         LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_0))
@@ -92,16 +92,16 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         final long epoch = r.getLayoutView().getLayout().getEpoch();
 
         // Write two entries, with different cache options
-        r.getAddressSpaceView().write(new TokenResponse(0, epoch,
+        r.getAddressSpaceView().write(new LSNResponse(0, epoch,
                 Collections.singletonMap(CorfuRuntime.getStreamID("stream1"), Address.NO_BACKPOINTER)),
                 "payload".getBytes(), CacheOption.WRITE_THROUGH);
 
-        r.getAddressSpaceView().write(new TokenResponse(1, epoch,
+        r.getAddressSpaceView().write(new LSNResponse(1, epoch,
                         Collections.singletonMap(CorfuRuntime.getStreamID("stream1"), Address.NO_BACKPOINTER)),
                 "payload".getBytes(), CacheOption.WRITE_AROUND);
 
         // write with the default write method
-        r.getAddressSpaceView().write(new TokenResponse(2, epoch,
+        r.getAddressSpaceView().write(new LSNResponse(2, epoch,
                         Collections.singletonMap(CorfuRuntime.getStreamID("stream1"), Address.NO_BACKPOINTER)),
                 "payload".getBytes());
 
@@ -144,7 +144,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
         for (int i = 0; i < entryNum; i++) {
             String payload = basicTestPayload + String.valueOf(i);
-            spaceView.write(new Token(i, layoutEpoch), payload.getBytes());
+            spaceView.write(new LogicalSequenceNumber(i, layoutEpoch), payload.getBytes());
         }
 
         final int inclusiveTrimAddress = 3;
@@ -179,17 +179,17 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         final long ADDRESS_0 = 0;
         final long ADDRESS_1 = 1;
         final long ADDRESS_2 = 3;
-        Token token = new Token(ADDRESS_0, r.getLayoutView().getLayout().getEpoch());
-        r.getAddressSpaceView().write(token, testPayload);
+        LogicalSequenceNumber logicalSequenceNumber = new LogicalSequenceNumber(ADDRESS_0, r.getLayoutView().getLayout().getEpoch());
+        r.getAddressSpaceView().write(logicalSequenceNumber, testPayload);
 
         assertThat(r.getAddressSpaceView().read(ADDRESS_0).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());
 
 
-        r.getAddressSpaceView().write(new Token(ADDRESS_1, r.getLayoutView().getLayout().getEpoch()),
+        r.getAddressSpaceView().write(new LogicalSequenceNumber(ADDRESS_1, r.getLayoutView().getLayout().getEpoch()),
                 "1".getBytes());
 
-        r.getAddressSpaceView().write(new Token(ADDRESS_2, r.getLayoutView().getLayout().getEpoch()),
+        r.getAddressSpaceView().write(new LogicalSequenceNumber(ADDRESS_2, r.getLayoutView().getLayout().getEpoch()),
                 "3".getBytes());
 
         List<Long> rs = new ArrayList<>();
@@ -219,8 +219,8 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         final long ADDRESS_0 = 0;
         final long ADDRESS_1 = 1;
         final long ADDRESS_2 = 3;
-        Token token = new Token(ADDRESS_0, r.getLayoutView().getLayout().getEpoch());
-        r.getAddressSpaceView().write(token, testPayload);
+        LogicalSequenceNumber logicalSequenceNumber = new LogicalSequenceNumber(ADDRESS_0, r.getLayoutView().getLayout().getEpoch());
+        r.getAddressSpaceView().write(logicalSequenceNumber, testPayload);
 
         assertThat(r.getAddressSpaceView().read(ADDRESS_0).getPayload(getRuntime()))
                 .isEqualTo("hello world".getBytes());

@@ -6,6 +6,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
@@ -54,19 +55,19 @@ public class SequencerClient extends AbstractClient {
      * @return A completable future with the token response from the sequencer.
      */
     public CompletableFuture<TokenResponse> nextToken(List<UUID> streamIDs, long numTokens,
-                                                      TxResolutionInfo conflictInfo) {
+                                                    TxResolutionInfo conflictInfo) {
         return sendMessageWithFuture(CorfuMsgType.TOKEN_REQ.payloadMsg(
                 new TokenRequest(numTokens, streamIDs, conflictInfo)));
     }
 
-    public CompletableFuture<Void> trimCache(Long address) {
+    public CompletableFuture<Void> trimCache(LogicalSequenceNumber address) {
         return sendMessageWithFuture(CorfuMsgType.SEQUENCER_TRIM_REQ.payloadMsg(address));
     }
 
     /**
      * Resets the sequencer with the specified initialToken
      *
-     * @param initialToken                Token Number which the sequencer starts distributing.
+     * @param initialToken                LogicalSequenceNumber Number which the sequencer starts distributing.
      * @param sequencerTails              Sequencer tails map.
      * @param readyStateEpoch             Epoch at which the sequencer is ready and to stamp tokens.
      * @param bootstrapWithoutTailsUpdate True, if this is a delta message and just updates an
@@ -74,7 +75,7 @@ public class SequencerClient extends AbstractClient {
      *                                    False otherwise.
      * @return A CompletableFuture which completes once the sequencer is reset.
      */
-    public CompletableFuture<Boolean> bootstrap(Long initialToken, Map<UUID, Long> sequencerTails,
+    public CompletableFuture<Boolean> bootstrap(LogicalSequenceNumber initialToken, Map<UUID, LogicalSequenceNumber> sequencerTails,
                                                 Long readyStateEpoch,
                                                 boolean bootstrapWithoutTailsUpdate) {
         return sendMessageWithFuture(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(
@@ -86,13 +87,13 @@ public class SequencerClient extends AbstractClient {
      * Resets the sequencer with the specified initialToken.
      * BootstrapWithoutTailsUpdate defaulted to false.
      *
-     * @param initialToken    Token Number which the sequencer starts distributing.
+     * @param initialToken    LogicalSequenceNumber Number which the sequencer starts distributing.
      * @param sequencerTails  Sequencer tails map.
      * @param readyStateEpoch Epoch at which the sequencer is ready and to stamp tokens.
      * @return A CompletableFuture which completes once the sequencer is reset.
      */
-    public CompletableFuture<Boolean> bootstrap(Long initialToken,
-                                                Map<UUID, Long> sequencerTails,
+    public CompletableFuture<Boolean> bootstrap(LogicalSequenceNumber initialToken,
+                                                Map<UUID, LogicalSequenceNumber> sequencerTails,
                                                 Long readyStateEpoch) {
         return bootstrap(initialToken, sequencerTails, readyStateEpoch, false);
     }

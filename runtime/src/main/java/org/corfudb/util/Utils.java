@@ -29,6 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.recovery.RecoveryUtils;
 import org.corfudb.runtime.CorfuRuntime;
@@ -474,34 +475,32 @@ public class Utils {
      * @param layout  Latest layout to get clients to fetch tails.
      * @return The max global log tail obtained from the log unit servers.
      */
-    public static long getMaxGlobalTail(Layout layout, CorfuRuntime runtime) {
-        long maxTokenRequested = Address.NON_ADDRESS;
+    public static LogicalSequenceNumber getMaxGlobalTail(Layout layout, CorfuRuntime runtime) {
+        LogicalSequenceNumber maxTokenRequested = new LogicalSequenceNumber(runtime.getLayoutView().getLayout().getEpoch(), Address.NON_ADDRESS);
         Layout.LayoutSegment segment = layout.getLatestSegment();
 
         // Query the tail of the head log unit in every stripe.
         if (segment.getReplicationMode().equals(Layout.ReplicationMode.CHAIN_REPLICATION)) {
             for (Layout.LayoutStripe stripe : segment.getStripes()) {
-                maxTokenRequested = Math.max(maxTokenRequested,
-                        CFUtils.getUninterruptibly(
-                                runtime.getLayoutView().getRuntimeLayout(layout)
-                                        .getLogUnitClient(stripe.getLogServers().get(0))
-                                        .getTail()));
-
+                LogicalSequenceNumber logTail =  CFUtils.getUninterruptibly(
+                        runtime.getLayoutView().getRuntimeLayout(layout)
+                                .getLogUnitClient(stripe.getLogServers().get(0))
+                                .getTail());
+                maxTokenRequested = logTail.isGreaterThan(maxTokenRequested) ? logTail : maxTokenRequested;
             }
         } else if (segment.getReplicationMode()
                 .equals(Layout.ReplicationMode.QUORUM_REPLICATION)) {
             for (Layout.LayoutStripe stripe : segment.getStripes()) {
-                CompletableFuture<Long>[] completableFutures = stripe.getLogServers()
+                CompletableFuture<LogicalSequenceNumber>[] completableFutures = stripe.getLogServers()
                         .stream()
                         .map(s -> runtime.getLayoutView().getRuntimeLayout(layout)
                                 .getLogUnitClient(s).getTail())
                         .toArray(CompletableFuture[]::new);
-                QuorumFuturesFactory.CompositeFuture<Long> quorumFuture =
+                QuorumFuturesFactory.CompositeFuture<LogicalSequenceNumber> quorumFuture =
                         QuorumFuturesFactory.getQuorumFuture(Comparator.naturalOrder(),
                                 completableFutures);
-                maxTokenRequested = Math.max(maxTokenRequested,
-                        CFUtils.getUninterruptibly(quorumFuture));
-
+                LogicalSequenceNumber logTail = CFUtils.getUninterruptibly(quorumFuture);
+                maxTokenRequested = logTail.isGreaterThan(maxTokenRequested) ? logTail : maxTokenRequested;
             }
         }
         return maxTokenRequested;

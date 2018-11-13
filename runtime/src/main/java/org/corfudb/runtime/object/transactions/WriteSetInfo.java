@@ -1,5 +1,7 @@
 package org.corfudb.runtime.object.transactions;
 
+import static org.corfudb.runtime.object.transactions.TransactionalContext.getRootContext;
+
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -9,8 +11,6 @@ import lombok.Getter;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
-
-import static org.corfudb.runtime.object.transactions.TransactionalContext.getRootContext;
 
 /**
  * This class captures information about objects mutated (written) during speculative

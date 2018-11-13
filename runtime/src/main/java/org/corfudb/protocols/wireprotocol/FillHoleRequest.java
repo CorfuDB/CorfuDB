@@ -17,7 +17,7 @@ import lombok.RequiredArgsConstructor;
 public class FillHoleRequest implements ICorfuPayload<FillHoleRequest> {
 
     final UUID stream;
-    final Long prefix;
+    final LogicalSequenceNumber prefix;
 
     /**
      * Constructor to generate a Fill Hole Request Payload.
@@ -30,7 +30,7 @@ public class FillHoleRequest implements ICorfuPayload<FillHoleRequest> {
         } else {
             stream = null;
         }
-        prefix = ICorfuPayload.fromBuffer(buf, Long.class);
+        prefix = ICorfuPayload.fromBuffer(buf, LogicalSequenceNumber.class);
     }
 
     @Override

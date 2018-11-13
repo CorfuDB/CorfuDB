@@ -1,7 +1,7 @@
 package org.corfudb.integration;
 
 import java.util.UUID;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.view.Layout;
@@ -180,15 +180,15 @@ public class CmdletIT extends AbstractIT {
         final String streamA = "streamA";
         CorfuRuntime runtime = createRuntime(ENDPOINT);
 
-        String commandNextToken = CORFU_PROJECT_DIR + "bin/corfu_sequencer -i " + streamA + " -c " + ENDPOINT + " next-token 3";
+        String commandNextToken = CORFU_PROJECT_DIR + "bin/corfu_sequencer -i " + streamA + " -c " + ENDPOINT + " next-logicalSequenceNumber 3";
         runCmdletGetOutput(commandNextToken);
 
-        Token token = runtime.getSequencerView()
-                .query(CorfuRuntime.getStreamID(streamA)).getToken();
+        LogicalSequenceNumber logicalSequenceNumber = runtime.getSequencerView()
+                .query(CorfuRuntime.getStreamID(streamA)).getLogicalSequenceNumber();
 
         String commandLatest = CORFU_PROJECT_DIR + "bin/corfu_sequencer -i " + streamA + " -c " + ENDPOINT + " latest";
         String output = runCmdletGetOutput(commandLatest);
-        assertThat(output.contains(token.toString())).isTrue();
+        assertThat(output.contains(logicalSequenceNumber.toString())).isTrue();
         shutdownCorfuServer(corfuServerProcess);
     }
 

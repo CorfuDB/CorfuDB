@@ -27,7 +27,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     /* snapshot timestamp of the txn. */
     @Getter
     @Setter
-    Long snapshotTimestamp;
+    LogicalSequenceNumber snapshotTimestamp;
 
     /** A set of poisoned streams, which have a conflict against all updates. */
 
@@ -43,7 +43,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
      * @param txId transaction identifier
      * @param snapshotTimestamp transaction snapshot timestamp
      */
-    public TxResolutionInfo(UUID txId, long snapshotTimestamp) {
+    public TxResolutionInfo(UUID txId, LogicalSequenceNumber snapshotTimestamp) {
         this.TXid = txId;
         this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = Collections.emptyMap();
@@ -58,7 +58,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
      * @param conflictMap map of conflict parameters, arranged by stream IDs
      * @param writeConflictParams map of write conflict parameters, arranged by stream IDs
      */
-    public TxResolutionInfo(UUID txId, long snapshotTimestamp, Map<UUID, Set<byte[]>>
+    public TxResolutionInfo(UUID txId, LogicalSequenceNumber snapshotTimestamp, Map<UUID, Set<byte[]>>
             conflictMap, Map<UUID, Set<byte[]>> writeConflictParams) {
         this.TXid = txId;
         this.snapshotTimestamp = snapshotTimestamp;
@@ -78,7 +78,9 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
      */
     public TxResolutionInfo(ByteBuf buf) {
         TXid = ICorfuPayload.fromBuffer(buf, UUID.class);
-        snapshotTimestamp = buf.readLong();
+        long epoch = buf.readLong();
+        long sequenceNumber = buf.readLong();
+        snapshotTimestamp = new LogicalSequenceNumber(epoch, sequenceNumber);
 
         // conflictSet
         int numEntries = buf.readInt();
@@ -110,7 +112,8 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, TXid);
-        buf.writeLong(snapshotTimestamp);
+        buf.writeLong(snapshotTimestamp.getEpoch());
+        buf.writeLong(snapshotTimestamp.getSequenceNumber());
 
         // conflictSet
         buf.writeInt(conflictSet.size());

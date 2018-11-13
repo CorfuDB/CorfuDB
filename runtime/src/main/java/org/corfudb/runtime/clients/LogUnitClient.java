@@ -6,8 +6,16 @@ import com.google.common.collect.Range;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
 import lombok.Getter;
 import lombok.NonNull;
+
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -15,10 +23,13 @@ import org.corfudb.protocols.wireprotocol.FillHoleRequest;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.TouchRequest;
+import org.corfudb.protocols.wireprotocol.TouchResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
@@ -26,12 +37,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.serializer.Serializers;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 
 /**
@@ -166,7 +171,7 @@ public class LogUnitClient extends AbstractClient {
      * @return A CompletableFuture which will complete with a ReadResult once the read
      * completes.
      */
-    public CompletableFuture<ReadResponse> read(long address) {
+    public CompletableFuture<ReadResponse> read(LogicalSequenceNumber address) {
         Timer.Context context = getTimerContext("read");
         CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
                 CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address)));
@@ -183,7 +188,7 @@ public class LogUnitClient extends AbstractClient {
      * @param range Range of global offsets.
      * @return CompletableFuture which returns a ReadResponse on completion.
      */
-    public CompletableFuture<ReadResponse> read(Range<Long> range) {
+    public CompletableFuture<ReadResponse> read(Range<LogicalSequenceNumber> range) {
         Timer.Context context = getTimerContext("readRange");
         CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
                 CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(range)));
@@ -199,7 +204,7 @@ public class LogUnitClient extends AbstractClient {
      * @param list list of global addresses.
      * @return CompletableFuture which returns a ReadResponse on completion.
      */
-    public CompletableFuture<ReadResponse> read(List<Long> list) {
+    public CompletableFuture<ReadResponse> read(List<LogicalSequenceNumber> list) {
         Timer.Context context = getTimerContext("readList");
         CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
                 CorfuMsgType.MULTIPLE_READ_REQUEST.payloadMsg(new MultipleReadRequest(list)));
@@ -210,12 +215,23 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
+     * Touch (validate existence) address from the log unit servers for a given address.
+     *
+     * @param address
+     * @return CompletableFuture which returns a TouchResponse on completion.
+     */
+    public CompletableFuture<TouchResponse> touch(LogicalSequenceNumber address) {
+        // TODO: write unit tests for 'touch' api
+        return sendMessageWithFuture(CorfuMsgType.TOUCH_REQUEST.payloadMsg(new TouchRequest(address)));
+    }
+
+    /**
      * Get the global tail maximum address the log unit has written.
      *
      * @return A CompletableFuture which will complete with the globalTail once
      * received.
      */
-    public CompletableFuture<Long> getTail() {
+    public CompletableFuture<LogicalSequenceNumber> getTail() {
         return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.msg());
     }
 
@@ -223,7 +239,7 @@ public class LogUnitClient extends AbstractClient {
      * Get the starting address of a logging unit.
      * @return A CompletableFuture for the starting address
      */
-    public CompletableFuture<Long> getTrimMark() {
+    public CompletableFuture<LogicalSequenceNumber> getTrimMark() {
         return sendMessageWithFuture(CorfuMsgType.TRIM_MARK_REQUEST.msg());
     }
 
@@ -232,7 +248,7 @@ public class LogUnitClient extends AbstractClient {
      *
      * @param prefix The prefix of the stream, as a global physical offset, to trim.
      */
-    public void trim(long prefix) {
+    public void trim(LogicalSequenceNumber prefix) {
         sendMessage(CorfuMsgType.TRIM.payloadMsg(new TrimRequest(null, prefix)));
     }
 
@@ -241,7 +257,7 @@ public class LogUnitClient extends AbstractClient {
      *
      * @param address An address to trim up to (i.e. [0, address))
      */
-    public CompletableFuture<Void> prefixTrim(long address) {
+    public CompletableFuture<Void> prefixTrim(LogicalSequenceNumber address) {
         return sendMessageWithFuture(CorfuMsgType.PREFIX_TRIM
                 .payloadMsg(new TrimRequest(null, address)));
     }
@@ -265,7 +281,7 @@ public class LogUnitClient extends AbstractClient {
      *
      * @param address The address to fill a hole at.
      */
-    public CompletableFuture<Boolean> fillHole(long address) {
+    public CompletableFuture<Boolean> fillHole(LogicalSequenceNumber address) {
         Timer.Context context = getTimerContext("fillHole");
         CompletableFuture<Boolean> cf = sendMessageWithFuture(
                 CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(null, address)));
@@ -283,7 +299,7 @@ public class LogUnitClient extends AbstractClient {
      */
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-    public CompletableFuture<Boolean> fillHole(UUID streamID, long address) {
+    public CompletableFuture<Boolean> fillHole(UUID streamID, LogicalSequenceNumber address) {
         Timer.Context context = getTimerContext("fillHole");
         CompletableFuture<Boolean> cf = sendMessageWithFuture(
                 CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(streamID, address)));

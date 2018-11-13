@@ -66,6 +66,12 @@ public interface ICorfuPayload<T> {
                 .put(CheckpointEntry.CheckpointEntryType.class, x ->
                     CheckpointEntry.CheckpointEntryType.typeMap.get(x.readByte()))
                 .put(UUID.class, x -> new UUID(x.readLong(), x.readLong()))
+                .put(LogicalSequenceNumber.class, x -> {
+                    long epoch = x.readLong();
+                    long sequenceNumber = x.readLong();
+                    LogicalSequenceNumber lsn = new LogicalSequenceNumber(epoch, sequenceNumber);
+                    return lsn;
+                })
                 .put(byte[].class, x -> {
                     int length = x.readInt();
                     byte[] bytes = new byte[length];
@@ -360,7 +366,12 @@ public interface ICorfuPayload<T> {
             buffer.writeLong(rank.getUuid().getLeastSignificantBits());
         } else if (payload instanceof CheckpointEntry.CheckpointEntryType) {
             buffer.writeByte(((CheckpointEntry.CheckpointEntryType) payload).asByte());
-        } else {
+        } else if (payload instanceof LogicalSequenceNumber) {
+            LogicalSequenceNumber lsn = (LogicalSequenceNumber)payload;
+            buffer.writeLong(lsn.getEpoch());
+            buffer.writeLong(lsn.getSequenceNumber());
+        }
+        else {
             throw new RuntimeException("Unknown class " + payload.getClass()
                     + " for serialization");
         }

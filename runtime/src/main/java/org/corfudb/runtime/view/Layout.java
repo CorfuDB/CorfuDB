@@ -22,6 +22,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -194,11 +195,12 @@ public class Layout {
      *
      * @param globalAddress The global address
      */
-    public long getLocalAddress(long globalAddress) {
+    public LogicalSequenceNumber getLocalAddress(LogicalSequenceNumber globalAddress) {
         for (LayoutSegment ls : segments) {
-            if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1)) {
+            if (ls.start.isEqualOrLessThan( globalAddress) && (ls.end.isGreaterThan(globalAddress)
+                    || ls.end.isEqualTo(LogicalSequenceNumber.getDefaultLSN()))) {
                 // TODO: this does not account for shifting segments.
-                return globalAddress / ls.getNumberOfStripes();
+                return new LogicalSequenceNumber(globalAddress.getEpoch(), globalAddress.getSequenceNumber() / ls.getNumberOfStripes());
             }
         }
         throw new RuntimeException("Unmapped address!");
@@ -234,9 +236,9 @@ public class Layout {
      *                      or equal to the global
      *                      address.
      */
-    public @Nonnull List<LayoutSegment> getPrefixSegments(long globalAddress) {
+    public @Nonnull List<LayoutSegment> getPrefixSegments(LogicalSequenceNumber globalAddress) {
         return segments.stream()
-                .filter(p -> p.getEnd() <= globalAddress)
+                .filter(p -> p.getEnd().isEqualOrLessThan(globalAddress))
                 .collect(Collectors.toList());
     }
 
@@ -245,11 +247,12 @@ public class Layout {
      *
      * @param globalAddress The global address.
      */
-    public LayoutStripe getStripe(long globalAddress) {
+    public LayoutStripe getStripe(LogicalSequenceNumber globalAddress) {
         for (LayoutSegment ls : segments) {
-            if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1)) {
+            // TODO ANNY: last isEqualTo (check if the epoch is required as well).
+            if (ls.start.isEqualOrLessThan(globalAddress) && (ls.end.isGreaterThan(globalAddress) || ls.end.isEqualTo(LogicalSequenceNumber.getDefaultLSN()))) {
                 // TODO: this does not account for shifting segments.
-                return ls.getStripes().get((int) (globalAddress % ls.getNumberOfStripes()));
+                return ls.getStripes().get((int) (globalAddress.getSequenceNumber() % ls.getNumberOfStripes()));
             }
         }
         throw new RuntimeException("Unmapped address!");
@@ -260,13 +263,13 @@ public class Layout {
      *
      * @param globalAddress The global address.
      */
-    public LayoutSegment getSegment(long globalAddress) {
+    public LayoutSegment getSegment(LogicalSequenceNumber globalAddress) {
         for (LayoutSegment ls : segments) {
-            if (ls.start <= globalAddress && (ls.end > globalAddress || ls.end == -1)) {
+            if (ls.start.isEqualOrGreaterThan(globalAddress) && (ls.end.isGreaterThan(globalAddress) || ls.end.isEqualTo(LogicalSequenceNumber.getDefaultLSN()))) {
                 return ls;
             }
         }
-        throw new RuntimeException("Unmapped address " + Long.toString(globalAddress) + "!");
+        throw new RuntimeException("Unmapped address " + globalAddress + "!");
     }
 
     /**
@@ -283,7 +286,7 @@ public class Layout {
      * @param address The address to check.
      * @return The length (number of servers) of that segment, or 0 if empty.
      */
-    public int getSegmentLength(long address) {
+    public int getSegmentLength(LogicalSequenceNumber address) {
         return getStripe(address).getLogServers().size();
     }
 
@@ -293,9 +296,10 @@ public class Layout {
      * @param address The address to check.
      * @return The replication mode of the segment, or null if empty.
      */
-    public ReplicationMode getReplicationMode(long address) {
+    public ReplicationMode getReplicationMode(LogicalSequenceNumber address) {
         for (LayoutSegment ls : segments) {
-            if (ls.start <= address && (ls.end > address || ls.end == -1)) {
+            // TODO ANNY: Same, check last isEqualTo if epoch needs to be properly set..
+            if (ls.start.isEqualOrLessThan(address) && (ls.end.isGreaterThan(address) || ls.end.isEqualTo(LogicalSequenceNumber.getDefaultLSN()))) {
                 return ls.getReplicationMode();
             }
         }
@@ -493,12 +497,12 @@ public class Layout {
         /**
          * The address the layout segment starts at. (included in the segment)
          */
-        long start;
+        LogicalSequenceNumber start;
 
         /**
          * The address the layout segment ends at. (excluded from the segment)
          */
-        long end;
+        LogicalSequenceNumber end;
 
         /**
          * A list of log servers for this segment.
@@ -516,7 +520,7 @@ public class Layout {
          * @param end  The end address for layout segment. (e.g., 100)
          * @param stripes List of stripes for layout segment.
          */
-        public LayoutSegment(@NonNull ReplicationMode replicationMode, long start, long end,
+        public LayoutSegment(@NonNull ReplicationMode replicationMode, LogicalSequenceNumber start, LogicalSequenceNumber end,
                              @NonNull List<LayoutStripe> stripes) {
             this.replicationMode = replicationMode;
             this.start = start;

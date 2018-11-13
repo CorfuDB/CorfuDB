@@ -23,9 +23,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import org.corfudb.protocols.wireprotocol.LSNResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -240,9 +240,9 @@ public class ClusterReconfigIT extends AbstractIT {
      */
     private void verifyData(CorfuRuntime corfuRuntime) throws Exception {
 
-        TokenResponse tokenResponse = corfuRuntime.getSequencerView()
+        LSNResponse LSNResponse = corfuRuntime.getSequencerView()
                 .query(CorfuRuntime.getStreamID("test"));
-        long lastAddress = tokenResponse.getTokenValue();
+        long lastAddress = LSNResponse.getSequenceNumber();
 
         Map<Long, LogData> map_0 = getAllNonEmptyData(corfuRuntime, "localhost:9000", lastAddress);
         Map<Long, LogData> map_1 = getAllNonEmptyData(corfuRuntime, "localhost:9001", lastAddress);

@@ -15,16 +15,16 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum  TokenType implements ICorfuPayload<TokenType> {
 
-    // standard token issue by sequencer
+    // standard logicalSequenceNumber issue by sequencer
     NORMAL((byte) 0),
 
     // response to tail-query (no allocation)
     QUERY((byte)1),
 
-    // token request for optimistic TX-commit rejected due to conflict
+    // logicalSequenceNumber request for optimistic TX-commit rejected due to conflict
     TX_ABORT_CONFLICT((byte)2),
 
-    // token request for optimistic TX-commit rejected due to a
+    // logicalSequenceNumber request for optimistic TX-commit rejected due to a
     // failover-sequencer lacking conflict-resolution info
     TX_ABORT_NEWSEQ((byte) 3),
 

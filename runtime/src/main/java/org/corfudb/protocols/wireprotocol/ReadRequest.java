@@ -4,8 +4,6 @@ import com.google.common.collect.Range;
 
 import io.netty.buffer.ByteBuf;
 
-import java.util.UUID;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -16,7 +14,7 @@ import lombok.Data;
 @AllArgsConstructor
 public class ReadRequest implements ICorfuPayload<ReadRequest> {
 
-    final Range<Long> range;
+    final Range<LogicalSequenceNumber> range;
 
     /**
      * Deserialization Constructor from ByteBuf to ReadRequest.
@@ -24,10 +22,10 @@ public class ReadRequest implements ICorfuPayload<ReadRequest> {
      * @param buf The buffer to deserialize
      */
     public ReadRequest(ByteBuf buf) {
-        range = ICorfuPayload.rangeFromBuffer(buf, Long.class);
+        range = ICorfuPayload.rangeFromBuffer(buf, LogicalSequenceNumber.class);
     }
 
-    public ReadRequest(Long address) {
+    public ReadRequest(LogicalSequenceNumber address) {
         range = Range.singleton(address);
     }
 

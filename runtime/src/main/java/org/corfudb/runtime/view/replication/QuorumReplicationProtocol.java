@@ -22,6 +22,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
@@ -68,7 +69,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
      * {@inheritDoc}
      */
     @Override
-    public ILogData peek(RuntimeLayout runtimeLayout, long address) {
+    public ILogData peek(RuntimeLayout runtimeLayout, LogicalSequenceNumber address) {
         int numUnits = runtimeLayout.getLayout().getSegmentLength(address);
         log.trace("Peek[{}]: quorum {}/{}", address, numUnits, numUnits);
         try {
@@ -102,7 +103,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
      * {@inheritDoc}
      */
     @Override
-    protected void holeFill(RuntimeLayout runtimeLayout, long globalAddress) {
+    protected void holeFill(RuntimeLayout runtimeLayout, LogicalSequenceNumber globalAddress) {
         int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);
         log.trace("fillHole[{}]: quorum head {}/{}", globalAddress, 1, numUnits);
         try (ILogData.SerializationHandle holeData = createEmptyData(globalAddress,
@@ -147,7 +148,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
 
 
     private ILogData.SerializationHandle createEmptyData(
-            long position, DataType type, IMetadata.DataRank rank) {
+            LogicalSequenceNumber position, DataType type, IMetadata.DataRank rank) {
         ILogData data = new LogData(type);
         data.setRank(rank);
         data.setGlobalAddress(position);
@@ -267,7 +268,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
     @Data
     @AllArgsConstructor
     private class ReadResponseComparator implements Comparator<ReadResponse> {
-        private long logPosition;
+        private LogicalSequenceNumber logPosition;
 
         @Override
         public int compare(ReadResponse o1, ReadResponse o2) {
@@ -286,5 +287,10 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
             }
             return rank1.compareTo(rank2);
         }
+    }
+
+    @Override
+    public boolean validate(RuntimeLayout runtimeLayout, LogicalSequenceNumber address) {
+        throw new UnsupportedOperationException("QuorumReplicationProtocol validate method not implemented.");
     }
 }

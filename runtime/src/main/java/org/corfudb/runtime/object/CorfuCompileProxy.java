@@ -6,6 +6,7 @@ import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -15,6 +16,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.TrimmedUpcallException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Sleep;
@@ -187,12 +189,12 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // Perform underlying access
         for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
             // Linearize this read against a timestamp
-            final long timestamp = rt.getSequencerView()
-                            .query(getStreamID()).getToken().getTokenValue();
+            final LogicalSequenceNumber timestamp = rt.getSequencerView()
+                            .query(getStreamID()).getLogicalSequenceNumber();
             log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
             try {
-                return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp
+                return underlyingObject.access(o -> o.getVersionUnsafe().isEqualOrGreaterThan(timestamp)
                                 && !o.isOptimisticallyModifiedUnsafe(),
                         o -> o.syncObjectUnsafe(timestamp),
                         o -> accessMethod.access(o));
@@ -214,14 +216,14 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * {@inheritDoc}
      */
     @Override
-    public long logUpdate(String smrUpdateFunction, final boolean keepUpcallResult,
+    public LogicalSequenceNumber logUpdate(String smrUpdateFunction, final boolean keepUpcallResult,
                           Object[] conflictObject, Object... args) {
         try (Timer.Context context = MetricsUtils.getConditionalContext(timerLogWrite)) {
             return logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args);
         }
     }
 
-    private long logUpdateInner(String smrUpdateFunction, final boolean keepUpcallResult,
+    private LogicalSequenceNumber logUpdateInner(String smrUpdateFunction, final boolean keepUpcallResult,
                                 Object[] conflictObject, Object... args) {
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
@@ -240,7 +242,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         // If we aren't in a transaction, we can just write the modification.
         // We need to add the acquired token into the pending upcall list.
         SMREntry smrEntry = new SMREntry(smrUpdateFunction, args, serializer);
-        long address = underlyingObject.logUpdate(smrEntry, keepUpcallResult);
+        LogicalSequenceNumber address = underlyingObject.logUpdate(smrEntry, keepUpcallResult);
         log.trace("Update[{}] {}@{} ({}) conflictObj={}",
                 this, smrUpdateFunction, address, args, conflictObject);
         correctnessLogger.trace("Version, {}", address);
@@ -251,7 +253,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * {@inheritDoc}
      */
     @Override
-    public <R> R getUpcallResult(long timestamp, Object[] conflictObject) {
+    public <R> R getUpcallResult(LogicalSequenceNumber timestamp, Object[] conflictObject) {
         try (Timer.Context context = MetricsUtils.getConditionalContext(timerUpcall);) {
             return getUpcallResultInner(timestamp, conflictObject);
         }
@@ -263,10 +265,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public void sync() {
         // Linearize this read against a timestamp
-        final long timestamp =
+        final LogicalSequenceNumber timestamp =
                 rt.getSequencerView()
-                        .query(getStreamID()).getToken()
-                        .getTokenValue();
+                        .query(getStreamID()).getLogicalSequenceNumber();
 
         log.debug("Sync[{}] {}", this, timestamp);
         // Acquire locks and perform read.
@@ -276,7 +277,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         });
     }
 
-    private <R> R getUpcallResultInner(long timestamp, Object[] conflictObject) {
+    private <R> R getUpcallResultInner(LogicalSequenceNumber timestamp, Object[] conflictObject) {
         // If we aren't coming from a transactional context,
         // redirect us to a transactional context first.
         if (TransactionalContext.isInTransaction()) {
@@ -424,7 +425,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
      * @return The latest version read by the proxy.
      */
     @Override
-    public long getVersion() {
+    public LogicalSequenceNumber getVersion() {
         return access(o -> underlyingObject.getVersionUnsafe(),
                 null);
     }
@@ -467,7 +468,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     }
 
     private void abortTransaction(Exception e) {
-        long snapshotTimestamp;
+        LogicalSequenceNumber snapshotTimestamp;
         AbortCause abortCause;
         TransactionAbortedException tae;
 
@@ -481,7 +482,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 // 'getSnapshotTimestamp' will also fail (as it requests it to the Sequencer).
                 // A new NetworkException would prevent the earliest to be propagated and encapsulated
                 // as a TransactionAbortedException.
-                snapshotTimestamp = -1L;
+                snapshotTimestamp = new LogicalSequenceNumber(-1L, Address.NON_ADDRESS);
                 abortCause = AbortCause.NETWORK;
             } else if (e instanceof UnsupportedOperationException) {
                 snapshotTimestamp = context.getSnapshotTimestamp();

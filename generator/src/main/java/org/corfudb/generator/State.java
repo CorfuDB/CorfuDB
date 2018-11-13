@@ -8,16 +8,17 @@ import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.OperationCount;
 import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.distributions.Streams;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionType;
-
-import lombok.Getter;
-import lombok.Setter;
 
 /**
  * This object keeps state information of the different data distributions and runtime client.
@@ -54,7 +55,7 @@ public class State {
 
     @Getter
     @Setter
-    volatile long trimMark = -1;
+    volatile LogicalSequenceNumber trimMark = LogicalSequenceNumber.getDefaultLSN();
 
     public final Random rand;
 
@@ -111,7 +112,7 @@ public class State {
         return runtime.getObjectsView().TXEnd();
     }
 
-    public void startSnapshotTx(long snapshot) {
+    public void startSnapshotTx(LogicalSequenceNumber snapshot) {
         runtime.getObjectsView()
                 .TXBuild()
                 .setType(TransactionType.SNAPSHOT)

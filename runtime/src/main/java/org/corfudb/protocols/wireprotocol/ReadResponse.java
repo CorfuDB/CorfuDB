@@ -17,17 +17,17 @@ import lombok.Getter;
 public class ReadResponse implements ICorfuPayload<ReadResponse> {
 
     @Getter
-    Map<Long, LogData> addresses;
+    Map<LogicalSequenceNumber, LogData> addresses;
 
     public ReadResponse(ByteBuf buf) {
-        addresses = ICorfuPayload.mapFromBuffer(buf, Long.class, LogData.class);
+        addresses = ICorfuPayload.mapFromBuffer(buf, LogicalSequenceNumber.class, LogData.class);
     }
 
     public ReadResponse() {
-        addresses = new HashMap<Long, LogData>();
+        addresses = new HashMap<LogicalSequenceNumber, LogData>();
     }
 
-    public void put(Long address, LogData data) {
+    public void put(LogicalSequenceNumber address, LogData data) {
         addresses.put(address, data);
     }
 

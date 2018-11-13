@@ -79,6 +79,4 @@ public interface ICorfuSMRProxy<T> {
      * @return              The latest version read by the proxy.
      */
     long getVersion();
-
-
 }

@@ -1,11 +1,13 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.Lists;
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
 
-import com.google.common.collect.Lists;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
@@ -82,12 +84,12 @@ public class SequencerView extends AbstractView {
 
     @Deprecated
     public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens,
-                                   TxResolutionInfo conflictInfo) {
+                                 TxResolutionInfo conflictInfo) {
         return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                 .nextToken(Lists.newArrayList(streamIDs), numTokens, conflictInfo)));
     }
 
-    public void trimCache(long address) {
+    public void trimCache(LogicalSequenceNumber address) {
         runtime.getLayoutView().getRuntimeLayout().getPrimarySequencerClient().trimCache(address);
     }
 }

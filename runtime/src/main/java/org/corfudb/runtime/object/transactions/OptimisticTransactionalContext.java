@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
@@ -88,7 +89,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // to the correct version, reflecting any optimistic
         // updates.
         // Get snapshot timestamp in advance so it is not performed under the VLO lock
-        long ts = getSnapshotTimestamp();
+        LogicalSequenceNumber ts = getSnapshotTimestamp();
         return proxy
                 .getUnderlyingObject()
                 .access(o -> {
@@ -96,7 +97,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
 
                             // Obtain the stream position as when transaction context last
                             // remembered it.
-                            long streamReadPosition = getKnownStreamPosition()
+                            LogicalSequenceNumber streamReadPosition = getKnownStreamPosition()
                                     .getOrDefault(proxy.getStreamID(), ts);
 
                             return (
@@ -138,22 +139,22 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @Override
     public <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
-                                      long timestamp, Object[] conflictObject) {
+                                      LogicalSequenceNumber timestamp, Object[] conflictObject) {
         // Getting an upcall result adds the object to the conflict set.
         addToReadSet(proxy, conflictObject);
 
         // if we have a result, return it.
-        SMREntry wrapper = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
+        SMREntry wrapper = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp.getSequenceNumber());
         if (wrapper != null && wrapper.isHaveUpcallResult()) {
             return wrapper.getUpcallResult();
         }
         // Otherwise, we need to sync the object
         // Get snapshot timestamp in advance so it is not performed under the VLO lock
-        long ts = getSnapshotTimestamp();
+        LogicalSequenceNumber ts = getSnapshotTimestamp();
         return proxy.getUnderlyingObject().update(o -> {
             log.trace("Upcall[{}] {} Sync'd", this,  timestamp);
             syncWithRetryUnsafe(o, ts, proxy, this::setAsOptimisticStream);
-            SMREntry wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp);
+            SMREntry wrapper2 = getWriteSetEntryList(proxy.getStreamID()).get((int)timestamp.getSequenceNumber());
             if (wrapper2 != null && wrapper2.isHaveUpcallResult()) {
                 return wrapper2.getUpcallResult();
             }
@@ -201,14 +202,14 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * @return              The "address" that the update was written to.
      */
     @Override
-    public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
+    public <T> LogicalSequenceNumber logUpdate(ICorfuSMRProxyInternal<T> proxy,
                               SMREntry updateEntry,
                               Object[] conflictObjects) {
         log.trace("LogUpdate[{},{}] {} ({}) conflictObj={}",
                 this, proxy, updateEntry.getSMRMethod(),
                 updateEntry.getSMRArguments(), conflictObjects);
 
-        return addToWriteSet(proxy, updateEntry, conflictObjects);
+        return new LogicalSequenceNumber(-1L, addToWriteSet(proxy, updateEntry, conflictObjects));
     }
 
     /**
@@ -239,7 +240,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @Override
     @SuppressWarnings("unchecked")
-    public long commitTransaction() throws TransactionAbortedException {
+    public LogicalSequenceNumber commitTransaction() throws TransactionAbortedException {
         log.debug("TX[{}] request optimistic commit", this);
 
         return getConflictSetAndCommit(getReadSetInfo());
@@ -251,11 +252,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * @param conflictSet  conflict set used to check whether transaction can commit
      * @return  the commit address
      */
-    public long getConflictSetAndCommit(ConflictSetInfo conflictSet) {
+    public LogicalSequenceNumber getConflictSetAndCommit(ConflictSetInfo conflictSet) {
 
         if (TransactionalContext.isInNestedTransaction()) {
             getParentContext().addTransaction(this);
-            commitAddress = AbstractTransactionalContext.FOLDED_ADDRESS;
+            commitAddress = new LogicalSequenceNumber(-1L, AbstractTransactionalContext.FOLDED_ADDRESS);
             log.trace("Commit[{}] Folded into {}", this, getParentContext());
             return commitAddress;
         }
@@ -279,7 +280,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // Now we obtain a conditional address from the sequencer.
         // This step currently happens all at once, and we get an
         // address of -1L if it is rejected.
-        long address = -1L;
+        LogicalSequenceNumber address;
         final TxResolutionInfo txInfo =
             // TxResolution info:
             // 1. snapshot timestamp
@@ -332,7 +333,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             // If some other client updated this object, sync
             // it forward to grab those updates
             x.getUnderlyingObject().syncObjectUnsafe(
-                        commitAddress - 1);
+                        commitAddress.getPrevious());
             // Also, be nice and transfer the undo
             // log from the optimistic updates
             // for this to work the write sets better
@@ -356,7 +357,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                         });
             }
             // and move the stream pointer to "skip" this commit entry
-            x.getUnderlyingObject().seek(commitAddress + 1);
+            x.getUnderlyingObject().seek(commitAddress.increment(1));
             log.trace("Commit[{}] Committed {}", this,  x);
         });
 

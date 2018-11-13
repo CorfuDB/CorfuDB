@@ -64,7 +64,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
             map.put(String.valueOf(x), String.valueOf(x));
         }
 
-        long realTail = getDefaultRuntime().getSequencerView().query().getTokenValue();
+        long realTail = getDefaultRuntime().getSequencerView().query().getSequenceNumber();
 
         // move the sequencer tail forward
         for (int x = 0; x < initMapSize; x++) {

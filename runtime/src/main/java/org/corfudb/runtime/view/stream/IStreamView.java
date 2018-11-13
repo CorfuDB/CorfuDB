@@ -14,6 +14,7 @@ import javax.annotation.Nullable;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.view.Address;
 
@@ -29,6 +30,8 @@ import org.corfudb.runtime.view.Address;
 public interface IStreamView extends
         Iterator<ILogData> {
 
+    LogicalSequenceNumber maxAddress = new LogicalSequenceNumber(-1l, Address.MAX);
+
     /** Return the ID of the stream this view is for.
      * @return  The ID of the stream.
      */
@@ -43,7 +46,7 @@ public interface IStreamView extends
      * begin at the given global address, inclusive.
      * @param globalAddress Address to seek to
      */
-    void seek(long globalAddress);
+    void seek(LogicalSequenceNumber globalAddress);
 
     /** An enum representing search directions. */
     @RequiredArgsConstructor
@@ -57,8 +60,7 @@ public interface IStreamView extends
         /** Search backwards, including address given. */
         REVERSE_INCLUSIVE(true, false);
 
-        /** Whether the address given should be included
-         * in the search.
+        /** Whether the address given should be included in the search.
          */
         @Getter
         final boolean inclusive;
@@ -77,7 +79,7 @@ public interface IStreamView extends
      *                          stream, or Address.NOT_FOUND if no entry
      *                          was found.
      */
-    long find(long globalAddress, SearchDirection direction);
+    LogicalSequenceNumber find(LogicalSequenceNumber globalAddress, SearchDirection direction);
 
     /** Append an object to the stream, returning the global address
      * it was written at.
@@ -96,7 +98,7 @@ public interface IStreamView extends
      *                                writing.
      * @return  The (global) address the object was written at.
      */
-    long append(Object object,
+    LogicalSequenceNumber append(Object object,
                 Function<TokenResponse, Boolean> acquisitionCallback,
                 Function<TokenResponse, Boolean> deacquisitionCallback);
 
@@ -105,7 +107,7 @@ public interface IStreamView extends
      * @param   object Object to append/write
      * @return  The (global) address the object was written at.
      */
-    default long append(Object object) {
+    default LogicalSequenceNumber append(Object object) {
         return append(object, null, null);
     }
 
@@ -117,7 +119,7 @@ public interface IStreamView extends
      */
     @Nullable
     default ILogData next() {
-        return nextUpTo(Long.MAX_VALUE);
+        return nextUpTo(new LogicalSequenceNumber(-1L, Long.MAX_VALUE));
     }
 
     /** Retrieve the previous entry in the stream. If there are no previous entries,
@@ -146,7 +148,7 @@ public interface IStreamView extends
      *                  are available.
      */
     @Nullable
-    ILogData nextUpTo(long maxGlobal);
+    ILogData nextUpTo(LogicalSequenceNumber maxGlobal);
 
     /** Retrieve all of the entries from this stream, up to the tail of this
      *  stream. If there are no entries present, this function
@@ -161,7 +163,7 @@ public interface IStreamView extends
      */
     @Nonnull
     default List<ILogData> remaining() {
-        return remainingUpTo(Address.MAX);
+        return remainingUpTo(maxAddress);
     }
 
     /** Retrieve all of the entries from this stream, up to the address given or
@@ -173,7 +175,7 @@ public interface IStreamView extends
      * @return          The next entries in the stream, or an empty list,
      *                  if no entries are available.
      */
-    List<ILogData> remainingUpTo(long maxGlobal);
+    List<ILogData> remainingUpTo(LogicalSequenceNumber maxGlobal);
 
     /** Returns whether or not there are potentially more entries in this
      * stream - this function may return true even if there are no entries
@@ -188,7 +190,7 @@ public interface IStreamView extends
      * @return          The position of the pointer in this stream (global address),
      *                  or Address.NON_ADDRESS.
      */
-    long getCurrentGlobalPosition();
+    LogicalSequenceNumber getCurrentGlobalPosition();
 
     /** Get a spliterator for this stream view
      * @return  A spliterator for this stream view.
@@ -202,7 +204,7 @@ public interface IStreamView extends
      * @param maxGlobal     The maximum global address to read to
      * @return              A spliterator for this stream view.
      */
-    default Spliterator<ILogData> spliteratorUpTo(long maxGlobal) {
+    default Spliterator<ILogData> spliteratorUpTo(LogicalSequenceNumber maxGlobal) {
         return new StreamSpliterator(this, maxGlobal);
     }
 
@@ -218,7 +220,7 @@ public interface IStreamView extends
      * @param maxGlobal     The maximum global address to read to.
      * @return              A spliterator for this stream view.
      */
-    default Stream<ILogData> streamUpTo(long maxGlobal) {
+    default Stream<ILogData> streamUpTo(LogicalSequenceNumber maxGlobal) {
         return StreamSupport.stream(spliteratorUpTo(maxGlobal), false);
     }
 }

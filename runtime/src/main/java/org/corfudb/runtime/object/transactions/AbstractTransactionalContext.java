@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -24,7 +25,6 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
-import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
 /**
@@ -101,16 +101,18 @@ public abstract class AbstractTransactionalContext implements
     public final long startTime;
 
     /**
-     * The global-log position that the transaction snapshots in all reads.
+     * The timestamp that the transaction snapshots in all reads.
+     * <p>
+     * In the context of a snapshot transaction this value represents an initial hint given by the sequencer, but the actual time
      */
     @Getter(lazy = true)
-    private final long snapshotTimestamp = obtainSnapshotTimestamp();
+    private final LogicalSequenceNumber snapshotTimestamp = obtainSnapshotTimestamp();
 
     /**
      * The address that the transaction was committed at.
      */
     @Getter
-    public long commitAddress = AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
+    public LogicalSequenceNumber commitAddress = LogicalSequenceNumber.getDefaultLSN();
 
     /**
      * The parent context of this transaction, if in a nested transaction.
@@ -136,7 +138,7 @@ public abstract class AbstractTransactionalContext implements
      * Cache of last known position of streams accessed in this transaction.
      */
     @Getter
-    private final Map<UUID, Long> knownStreamPosition = new HashMap<>();
+    private final Map<UUID, LogicalSequenceNumber> knownStreamPosition = new HashMap<>();
 
     AbstractTransactionalContext(TransactionBuilder builder) {
         transactionID = UUID.randomUUID();
@@ -174,11 +176,11 @@ public abstract class AbstractTransactionalContext implements
      * @return The result of the upcall.
      */
     public abstract <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
-                                               long timestamp,
+                                               LogicalSequenceNumber timestamp,
                                                Object[] conflictObject);
 
     public void syncWithRetryUnsafe(VersionLockedObject vlo,
-                                    long snapshotTimestamp,
+                                    LogicalSequenceNumber snapshotTimestamp,
                                     ICorfuSMRProxyInternal proxy,
                                     @Nullable Consumer<VersionLockedObject> optimisticStreamSetter) {
         for (int x = 0; x < this.builder.getRuntime().getParameters().getTrimRetry(); x++) {
@@ -221,7 +223,7 @@ public abstract class AbstractTransactionalContext implements
      * @param <T>            The type of the proxy's underlying object.
      * @return The address the update was written at.
      */
-    public abstract <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry,
+    public abstract <T> LogicalSequenceNumber logUpdate(ICorfuSMRProxyInternal<T> proxy, SMREntry updateEntry,
                                        Object[] conflictObject);
 
     /**
@@ -237,9 +239,10 @@ public abstract class AbstractTransactionalContext implements
      *
      * @throws TransactionAbortedException If the transaction is aborted.
      */
-    public long commitTransaction() throws TransactionAbortedException {
+    public LogicalSequenceNumber commitTransaction() throws TransactionAbortedException {
         completionFuture.complete(true);
-        return NOWRITE_ADDRESS;
+        //TODO ANNY: is it correct to stamp it with the system's epoch
+        return new LogicalSequenceNumber(-1L, NOWRITE_ADDRESS);
     }
 
     /**
@@ -247,7 +250,7 @@ public abstract class AbstractTransactionalContext implements
      */
     public void abortTransaction(TransactionAbortedException ae) {
         AbstractTransactionalContext.log.debug("TXAbort[{}]", this);
-        commitAddress = ABORTED_ADDRESS;
+        commitAddress = new LogicalSequenceNumber(ae.getTxResolutionInfo().getSnapshotTimestamp().getEpoch(), ABORTED_ADDRESS);
         completionFuture
                 .completeExceptionally(ae);
     }
@@ -259,36 +262,35 @@ public abstract class AbstractTransactionalContext implements
      *
      * @return the current global tail
      */
-    private long obtainSnapshotTimestamp() {
+    public LogicalSequenceNumber obtainSnapshotTimestamp() {
         final AbstractTransactionalContext parentCtx = getParentContext();
-        final long txnBuilderTs = getBuilder().getSnapshot();
+        final LogicalSequenceNumber txnBuilderTs = getBuilder().getSnapshot();
         if (parentCtx != null) {
             // If we're in a nested transaction, the first read timestamp
             // needs to come from the root.
-            long parentTimestamp = parentCtx.getSnapshotTimestamp();
-            if (txnBuilderTs != Address.NON_ADDRESS
-                    && txnBuilderTs != parentTimestamp) {
+            LogicalSequenceNumber parentTimestamp = parentCtx.getSnapshotTimestamp();
+            if (txnBuilderTs != null
+                    && !txnBuilderTs.isEqualTo(parentTimestamp)) {
                 String msg = String.format("Attempting to nest transactions with" +
-                        "different timestamps, parent ts=%d, user defined ts=%d", parentCtx.getSnapshotTimestamp(),
+                                "different timestamps, parent ts=%d, user defined ts=%d", parentCtx.getSnapshotTimestamp(),
                         txnBuilderTs);
                 throw new IllegalArgumentException(msg);
             }
             log.trace("obtainSnapshotTimestamp: nested transaction, inheriting parent" +
                     " SnapshotTimestamp[{}] {}", this, parentTimestamp);
             return parentTimestamp;
-        } else if (txnBuilderTs != Address.NON_ADDRESS) {
+        } else if (txnBuilderTs != null) {
             log.trace("obtainSnapshotTimestamp: using snapshot from builder" +
                     " SnapshotTimestamp[{}] {}", this, txnBuilderTs);
             return txnBuilderTs;
         } else {
             // Otherwise, fetch a read token from the sequencer the linearize
             // ourselves against.
-            long timestamp = getBuilder()
+            LogicalSequenceNumber timestamp = getBuilder()
                     .getRuntime()
                     .getSequencerView()
                     .query()
-                    .getToken()
-                    .getTokenValue();
+                    .getLogicalSequenceNumber();
             log.trace("obtainSnapshotTimestamp: sequencer SnapshotTimestamp[{}] {}", this, timestamp);
             return timestamp;
         }
@@ -308,7 +310,7 @@ public abstract class AbstractTransactionalContext implements
     /**
      * Merge another readSet into this one.
      *
-     * @param other  Source readSet to merge in
+     * @param other Source readSet to merge in
      */
     void mergeReadSetInto(ConflictSetInfo other) {
         getReadSetInfo().mergeInto(other);
@@ -321,7 +323,7 @@ public abstract class AbstractTransactionalContext implements
      * @param updateEntry     the update
      * @param conflictObjects the conflict objects to add
      * @return a synthetic "address" in the write-set, to be used for
-     *     checking upcall results
+     * checking upcall results
      */
     long addToWriteSet(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[]
             conflictObjects) {
@@ -345,7 +347,7 @@ public abstract class AbstractTransactionalContext implements
     /**
      * convert our write set into a new MultiObjectSMREntry.
      *
-     * @return  the write set
+     * @return the write set
      */
     MultiObjectSMREntry collectWriteSetEntries() {
         return getWriteSetInfo().getWriteSet();
@@ -363,7 +365,6 @@ public abstract class AbstractTransactionalContext implements
 
     int getWriteSetEntrySize(UUID id) {
         List<SMREntry> entries = getWriteSetInfo().getWriteSet().getSMRUpdates(id);
-
         if (entries == null) {
             return 0;
         } else {
@@ -376,8 +377,7 @@ public abstract class AbstractTransactionalContext implements
      */
     @Override
     public int compareTo(AbstractTransactionalContext o) {
-        return Long.compare(this.getSnapshotTimestamp(), o
-                .getSnapshotTimestamp());
+        return this.getSnapshotTimestamp().compareTo(o.getSnapshotTimestamp());
     }
 
     @Override

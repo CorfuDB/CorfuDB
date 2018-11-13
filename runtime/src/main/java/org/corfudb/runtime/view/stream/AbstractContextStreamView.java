@@ -11,6 +11,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
@@ -90,11 +91,11 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      * {@inheritDoc}
      */
     @Override
-    public synchronized void seek(long globalAddress) {
+    public synchronized void seek(LogicalSequenceNumber globalAddress) {
         // pop any stream context which has a max address
         // less than the global address
         while (this.streamContexts.size() > 1) {
-            if (this.streamContexts.first().maxGlobalAddress < globalAddress) {
+            if (this.streamContexts.first().maxGlobalAddress.isLessThan(globalAddress)) {
                 this.streamContexts.pollFirst();
             }
         }
@@ -113,16 +114,15 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      * {@inheritDoc}
      */
     @Override
-    public final synchronized ILogData nextUpTo(final long maxGlobal) {
+    public final synchronized ILogData nextUpTo(final LogicalSequenceNumber maxGlobal) {
         // Don't do anything if we've already exceeded the global
         // pointer.
-        if (getCurrentContext().globalPointer > maxGlobal) {
+        if (getCurrentContext().globalPointer.isGreaterThan(maxGlobal)) {
             return null;
         }
 
         // Pop the context if it has changed.
-        if (getCurrentContext().globalPointer
-                >= getCurrentContext().maxGlobalAddress) {
+        if (getCurrentContext().globalPointer.isEqualOrGreaterThan(getCurrentContext().maxGlobalAddress)) {
             final T last = streamContexts.pollFirst();
             log.trace("Completed context {}@{}, removing.",
                     last.id, last.maxGlobalAddress);
@@ -152,11 +152,10 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
     /** {@inheritDoc}
      */
     @Override
-    public final synchronized List<ILogData> remainingUpTo(long maxGlobal) {
+    public final synchronized List<ILogData> remainingUpTo(LogicalSequenceNumber maxGlobal) {
 
         // Pop the context if it has changed.
-        if (getCurrentContext().globalPointer
-                >= getCurrentContext().maxGlobalAddress) {
+        if (getCurrentContext().globalPointer.isEqualOrGreaterThan(getCurrentContext().maxGlobalAddress)) {
             final T last = streamContexts.pollFirst();
             log.trace("Completed context {}@{}, removing.",
                     last.id, last.maxGlobalAddress);
@@ -168,7 +167,9 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         // Nothing read, nothing to process.
         if (entries.size() == 0) {
             // We've resolved up to maxGlobal, so remember it. (if it wasn't max)
-            if (maxGlobal != Address.MAX) {
+            if (maxGlobal.getSequenceNumber() != Address.MAX) {
+                // TODO ANNY: IT'S SAFER TO MARK STREAM TAIL AS THE ADDRESS UNTIL WE HAVE
+                // RESOLVED, EVENTUALLY THIS COULD INCLUDE PART OF NON-MATERIALIZED LOG ENTRIES
                 getCurrentContext().globalPointer = maxGlobal;
             }
             return entries;
@@ -192,7 +193,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         }
 
         // Otherwise update the pointer
-        if (maxGlobal != Address.MAX) {
+        if (maxGlobal.getSequenceNumber() != Address.MAX) {
             getCurrentContext().globalPointer = maxGlobal;
         } else {
             updatePointer(entries.get(entries.size() - 1));
@@ -224,7 +225,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      * @param maxGlobal     The maximum global address to read to.
      * @return              Next ILogData for this context
      */
-    protected abstract ILogData getNextEntry(T context, long maxGlobal);
+    protected abstract ILogData getNextEntry(T context, LogicalSequenceNumber maxGlobal);
 
     /** Retrieve the next entries in the stream, given the context.
      *
@@ -242,7 +243,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      *                          stream context.
      * @return                  A list of the next entries for this context
      */
-    protected List<ILogData> getNextEntries(T context, long maxGlobal,
+    protected List<ILogData> getNextEntries(T context, LogicalSequenceNumber maxGlobal,
                                                      Function<ILogData, Boolean> contextCheckFn) {
         final List<ILogData> dataList = new ArrayList<>();
         ILogData thisData;

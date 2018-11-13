@@ -6,6 +6,7 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 
 /**
@@ -25,21 +26,21 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 public interface ISMRStream {
 
 
-    List<SMREntry> remainingUpTo(long maxGlobal);
+    List<SMREntry> remainingUpTo(LogicalSequenceNumber maxGlobal);
 
     List<SMREntry> current();
 
     List<SMREntry> previous();
 
-    long pos();
+    LogicalSequenceNumber pos();
 
     void reset();
 
-    void seek(long globalAddress);
+    void seek(LogicalSequenceNumber globalAddress);
 
     Stream<SMREntry> stream();
 
-    Stream<SMREntry> streamUpTo(long maxGlobal);
+    Stream<SMREntry> streamUpTo(LogicalSequenceNumber maxGlobal);
 
     /**
      * Append a SMREntry to the stream, returning the global address
@@ -60,7 +61,7 @@ public interface ISMRStream {
      *                              writing.
      * @return The (global) address the object was written at.
      */
-    long append(SMREntry entry,
+    LogicalSequenceNumber append(SMREntry entry,
                 Function<TokenResponse, Boolean> acquisitionCallback,
                 Function<TokenResponse, Boolean> deacquisitionCallback);
 

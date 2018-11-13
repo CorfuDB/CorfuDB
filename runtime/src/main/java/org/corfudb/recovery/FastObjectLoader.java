@@ -38,6 +38,7 @@ import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuTable.IndexRegistry;
@@ -88,10 +89,10 @@ public class FastObjectLoader {
     private boolean loadInCache;
 
     @Getter
-    private long logHead = Address.NON_EXIST;
+    private LogicalSequenceNumber logHead = new LogicalSequenceNumber(-1L, Address.NON_EXIST);;
 
     @Getter
-    private long logTail = Address.NON_EXIST;
+    private LogicalSequenceNumber logTail = new LogicalSequenceNumber(-1L, Address.NON_EXIST);
 
     @Setter
     @Getter
@@ -113,10 +114,10 @@ public class FastObjectLoader {
     private List<UUID> streamsToLoad = new ArrayList<>();
 
     @VisibleForTesting
-    void setLogHead(long head) { this.logHead = head; }
+    void setLogHead(LogicalSequenceNumber head) { this.logHead = head; }
 
     @VisibleForTesting
-    void setLogTail(long tail) { this.logTail = tail; }
+    void setLogTail(LogicalSequenceNumber tail) { this.logTail = tail; }
 
     /**
      * Enable whiteList mode where we only reconstruct
@@ -178,7 +179,7 @@ public class FastObjectLoader {
         return defaultObjectsType;
     }
 
-    private long addressProcessed;
+    private LogicalSequenceNumber addressProcessed;
 
     // In charge of summoning Corfu maps back in this world
     private ExecutorService necromancer;
@@ -186,14 +187,14 @@ public class FastObjectLoader {
     private Map<UUID, StreamMetaData> streamsMetaData;
 
     @Getter
-    private Map<UUID, Long> streamTails = new HashMap<>();
+    private Map<UUID, LogicalSequenceNumber> streamTails = new HashMap<>();
 
     @Setter
     @Getter
     private int numberOfAttempt = NUMBER_OF_ATTEMPT;
 
     private int retryIteration = 0;
-    private long nextRead;
+    private LogicalSequenceNumber nextRead;
 
     private List<Future> futureList;
 
@@ -265,7 +266,7 @@ public class FastObjectLoader {
     }
 
     private void resetAddressProcessed() {
-        addressProcessed = logHead - 1;
+        addressProcessed = logHead.increment(-1);
     }
 
     /**
@@ -273,19 +274,19 @@ public class FastObjectLoader {
      *
      * @param logData
      */
-    public void updateStreamTails(long address, ILogData logData) {
+    public void updateStreamTails(LogicalSequenceNumber address, ILogData logData) {
         // On checkpoint, we also need to track the stream tail of the checkpoint
         if (isCheckPointEntry(logData)) {
             if (logData.getCheckpointType() == CheckpointEntry.CheckpointEntryType.END &&
-                    isAddress(getStartAddressOfCheckPoint(logData))) {
+                    isAddress(getStartAddressOfCheckPoint(logData).getSequenceNumber())) {
                 streamTails.compute(logData.getCheckpointedStreamId(),
                         (uuid, value) -> (value == null) ? getStartAddressOfCheckPoint(logData)
-                            : Math.max(value, getStartAddressOfCheckPoint(logData)));
+                            : value.getMax(getStartAddressOfCheckPoint(logData)));
             }
         }
         for (UUID streamId : logData.getStreams()) {
             streamTails.compute(streamId,
-                    (uuid, value) -> (value == null) ? address : Math.max(value, address));
+                    (uuid, value) -> (value == null) ? address : value.getMax(address));
         }
     }
 
@@ -380,7 +381,7 @@ public class FastObjectLoader {
      * @param isCheckPointEntry
      */
     private void applySmrEntryToStream(UUID streamId, SMREntry entry,
-                                       long globalAddress, boolean isCheckPointEntry) {
+                                       LogicalSequenceNumber globalAddress, boolean isCheckPointEntry) {
         if (shouldEntryBeApplied(streamId, entry, isCheckPointEntry)) {
 
             // Get the serializer type from the entry
@@ -403,18 +404,18 @@ public class FastObjectLoader {
         }
     }
 
-    private void applySmrEntryToStream(UUID streamId, SMREntry entry, long globalAddress) {
+    private void applySmrEntryToStream(UUID streamId, SMREntry entry, LogicalSequenceNumber globalAddress) {
         applySmrEntryToStream(streamId, entry, globalAddress, false);
 
     }
 
 
-    private void updateCorfuObjectWithSmrEntry(ILogData logData, LogEntry logEntry, long globalAddress) {
+    private void updateCorfuObjectWithSmrEntry(ILogData logData, LogEntry logEntry, LogicalSequenceNumber globalAddress) {
         UUID streamId = logData.getStreams().iterator().next();
         applySmrEntryToStream(streamId, (SMREntry) logEntry, globalAddress);
     }
 
-    private void updateCorfuObjectWithMultiObjSmrEntry(LogEntry logEntry, long globalAddress) {
+    private void updateCorfuObjectWithMultiObjSmrEntry(LogEntry logEntry, LogicalSequenceNumber globalAddress) {
         MultiObjectSMREntry multiObjectLogEntry = (MultiObjectSMREntry) logEntry;
         multiObjectLogEntry.getEntryMap().forEach((streamId, multiSmrEntry) -> {
             multiSmrEntry.getSMRUpdates(streamId).forEach((smrEntry) -> {
@@ -430,7 +431,7 @@ public class FastObjectLoader {
         UUID checkPointId = checkPointEntry.getCheckpointId();
 
         // We need to apply the start address for the version of the object
-        long startAddress = streamsMetaData.get(streamId)
+        LogicalSequenceNumber startAddress = streamsMetaData.get(streamId)
                 .getCheckPoint(checkPointId)
                 .getStartAddress();
 
@@ -459,7 +460,7 @@ public class FastObjectLoader {
             return;
         }
 
-        long globalAddress = logData.getGlobalAddress();
+        LogicalSequenceNumber globalAddress = logData.getGlobalAddress();
 
         switch (logEntry.getType()) {
             case SMR:
@@ -486,11 +487,11 @@ public class FastObjectLoader {
      *
      */
     private void initializeHeadAndTails() {
-        if (logHead == Address.NON_EXIST) {
+        if (logHead.getSequenceNumber() == Address.NON_EXIST) {
             findAndSetLogHead();
         }
 
-        if (logTail == Address.NON_EXIST) {
+        if (logTail.getSequenceNumber() == Address.NON_EXIST) {
             findAndSetLogTail();
         }
 
@@ -573,8 +574,8 @@ public class FastObjectLoader {
                                        UUID checkPointId, StreamMetaData streamMeta) {
         try {
             CheckpointEntry logEntry = (CheckpointEntry) deserializeLogData(runtime, logData);
-            long snapshotAddress = getSnapShotAddressOfCheckPoint(logEntry);
-            long startAddress = getStartAddressOfCheckPoint(logData);
+            LogicalSequenceNumber snapshotAddress = getSnapShotAddressOfCheckPoint(logEntry);
+            LogicalSequenceNumber startAddress = getStartAddressOfCheckPoint(logData);
 
             streamMeta.addCheckPoint(new CheckPoint(checkPointId)
                     .addAddress(address)
@@ -723,21 +724,24 @@ public class FastObjectLoader {
 
         summonNecromancer();
         nextRead = logHead;
-        while (nextRead <= logTail) {
-            final long start = nextRead;
-            final long stopNotIncluded = Math.min(start + batchReadSize, logTail + 1);
+        while (nextRead.isEqualOrLessThan(logTail)) {
+            final LogicalSequenceNumber start = nextRead;
+            final LogicalSequenceNumber endBatchWindow = start.increment(batchReadSize);
+            final LogicalSequenceNumber nextLogTail = logTail.increment(1);
+            final LogicalSequenceNumber stopNotIncluded = endBatchWindow.isLessThan(nextLogTail) ? endBatchWindow : nextLogTail;
+
             nextRead = stopNotIncluded;
-            final Map<Long, ILogData> range = getLogData(runtime, start, stopNotIncluded);
+            final Map<LogicalSequenceNumber, ILogData> range = getLogData(runtime, start, stopNotIncluded);
 
             // Sanity
             boolean canProcessRange = true;
-            for(Map.Entry<Long, ILogData> entry : range.entrySet()) {
-                long address = entry.getKey();
+            for(Map.Entry<LogicalSequenceNumber, ILogData> entry : range.entrySet()) {
+                LogicalSequenceNumber address = entry.getKey();
                 ILogData logData = entry.getValue();
-                if (address != addressProcessed + 1) {
+                if (!address.isEqualTo(addressProcessed.increment(1))) {
                     fail("We missed an entry. It can lead to correctness issues.");
                 }
-                addressProcessed++;
+                addressProcessed = addressProcessed.increment(1);
 
                 if (logData.getType() == DataType.TRIMMED) {
                     log.warn("applyForEachAddress[{}, start={}] address is trimmed", address, logHead);
@@ -760,8 +764,8 @@ public class FastObjectLoader {
     @Data
     private class CheckPoint {
         final UUID checkPointId;
-        long snapshotAddress;
-        long startAddress;
+        LogicalSequenceNumber snapshotAddress;
+        LogicalSequenceNumber startAddress;
         boolean ended = false;
         boolean started = false;
         List<Long> addresses = new ArrayList<>();
@@ -778,8 +782,8 @@ public class FastObjectLoader {
         CheckPoint latestCheckPoint;
         Map<UUID, CheckPoint> checkPoints = new HashMap<>();
 
-        public Long getHeadAddress() {
-            return latestCheckPoint != null ? latestCheckPoint.snapshotAddress : Address.NEVER_READ;
+        public LogicalSequenceNumber getHeadAddress() {
+            return latestCheckPoint != null ? latestCheckPoint.snapshotAddress : LogicalSequenceNumber.getDefaultLSN();
         }
 
         public void addCheckPoint(CheckPoint cp) {
@@ -797,7 +801,7 @@ public class FastObjectLoader {
         public void updateLatestCheckpointIfLater(UUID checkPointId) {
             CheckPoint contender = getCheckPoint(checkPointId);
             if (latestCheckPoint == null ||
-                    contender.getSnapshotAddress() > latestCheckPoint.getSnapshotAddress()) {
+                    contender.getSnapshotAddress().isGreaterThan(latestCheckPoint.getSnapshotAddress())) {
                         latestCheckPoint = contender;
             }
         }

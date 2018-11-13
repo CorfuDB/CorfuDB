@@ -3,8 +3,28 @@ package org.corfudb.runtime;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+
+import java.lang.Thread.UncaughtExceptionHandler;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeoutException;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import javax.annotation.Nonnull;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Builder.Default;
@@ -16,7 +36,9 @@ import lombok.Singular;
 import lombok.ToString;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.recovery.FastObjectLoader;
@@ -33,7 +55,6 @@ import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutManagementView;
@@ -49,23 +70,6 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
-
-import javax.annotation.Nonnull;
-import java.lang.Thread.UncaughtExceptionHandler;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeoutException;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/9/15.
@@ -408,7 +412,7 @@ public class CorfuRuntime {
     @ToString
     @AllArgsConstructor
     public class TrimSnapshot {
-        public final long trimMark;
+        public final LogicalSequenceNumber trimMark;
         public final long trimTimestamp;
     }
 
@@ -426,7 +430,7 @@ public class CorfuRuntime {
      * @param trimMark  Address at which the log was trimmed.
      * @param timestamp Timestamp at which the trim was learnt.
      */
-    public void addTrimSnapshot(@NonNull long trimMark, @NonNull long timestamp) {
+    public void addTrimSnapshot(@NonNull LogicalSequenceNumber trimMark, @NonNull long timestamp) {
         trimSnapshotList.addLast(new TrimSnapshot(trimMark, timestamp));
     }
 
@@ -434,7 +438,7 @@ public class CorfuRuntime {
      * Trim snapshot which was recorded more than {@link CorfuRuntimeParameters#resolvedStreamTrimTimeout}
      * duration ago and can now be used the trim the resolvedQueue safely.
      */
-    public volatile long matureTrimMark = Address.NON_ADDRESS;
+    public volatile LogicalSequenceNumber matureTrimMark = LogicalSequenceNumber.getDefaultLSN();
 
     /**
      * A completable future containing a layout, when completed.

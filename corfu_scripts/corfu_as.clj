@@ -2,8 +2,8 @@
 (in-ns 'org.corfudb.shell) ; so our IDE knows what NS we are using
 
 (import org.docopt.Docopt) ; parse some cmdline opts
-(import org.corfudb.protocols.wireprotocol.Token)
-(import org.corfudb.protocols.wireprotocol.TokenResponse)
+(import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber)
+(import org.corfudb.protocols.wireprotocol.LSNResponse)
 
 (def usage "corfu_as, work with a Corfu address space.
 Usage:

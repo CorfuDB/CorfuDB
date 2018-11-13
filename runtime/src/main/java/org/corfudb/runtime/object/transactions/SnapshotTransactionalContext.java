@@ -7,10 +7,10 @@ import java.util.Set;
 import lombok.Getter;
 
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.view.Address;
@@ -43,7 +43,6 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     public <R, T> R access(ICorfuSMRProxyInternal<T> proxy,
                            ICorfuSMRAccess<R, T> accessFunction,
                            Object[] conflictObject) {
-
         // In snapshot transactions, there are no conflicts.
         // Hence, we do not need to add this access to a conflict set
         // do not add: addToReadSet(proxy, conflictObject);
@@ -65,7 +64,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      */
     @Override
     public <T> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
-                                      long timestamp,
+                                      LogicalSequenceNumber timestamp,
                                       Object[] conflictObject) {
         throw new UnsupportedOperationException("Can't get upcall during a read-only transaction!");
     }
@@ -78,7 +77,7 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
      * @return The address the update was written at.
      */
     @Override
-    public <T> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
+    public <T> LogicalSequenceNumber logUpdate(ICorfuSMRProxyInternal<T> proxy,
                               SMREntry updateEntry,
                               Object[] conflictObject) {
         throw new UnsupportedOperationException(
@@ -88,5 +87,27 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     @Override
     public void addTransaction(AbstractTransactionalContext tc) {
         throw new UnsupportedOperationException("Can't merge into a readonly txn (yet)");
+    }
+
+    @Override
+    public LogicalSequenceNumber obtainSnapshotTimestamp() {
+        if (getBuilder().getSnapshot() == null) {
+            // If snapshot time is not user-defined, we query the sequencer for the latest tail
+            // and take this LSN as a hint to the current snapshot timestamp. The actual (guaranteed)
+            // snapshot timestamp, will be determined at the end of the transaction
+            // based on the accesses that give guarantee on materialized sections of the log.
+            return super.obtainSnapshotTimestamp();
+        } else {
+            // Snapshot time was defined by the user, we should validate if this snapshot exists.
+            LogicalSequenceNumber userSnapshotTimestamp = getBuilder().getSnapshot();
+            if (userSnapshotTimestamp.getSequenceNumber() > Address.NON_ADDRESS) {
+                if (!builder.runtime.getAddressSpaceView().validate(userSnapshotTimestamp)) {
+                    TxResolutionInfo txResolutionInfo = new TxResolutionInfo(getTransactionID(),
+                            userSnapshotTimestamp);
+                    throw new TransactionAbortedException(txResolutionInfo, null, AbortCause.SNAPSHOT_NON_EXIST, TransactionalContext.getCurrentContext());
+                }
+            }
+            return getBuilder().getSnapshot();
+        }
     }
 }

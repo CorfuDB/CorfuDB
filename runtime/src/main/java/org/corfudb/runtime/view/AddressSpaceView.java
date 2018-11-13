@@ -29,6 +29,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteCause;
@@ -61,20 +62,20 @@ public class AddressSpaceView extends AbstractView {
     /**
      * A cache for read results.
      */
-    final LoadingCache<Long, ILogData> readCache = Caffeine.<Long, ILogData>newBuilder()
+    final LoadingCache<LogicalSequenceNumber, ILogData> readCache = Caffeine.<Long, ILogData>newBuilder()
             .maximumSize(runtime.getParameters().getNumCacheEntries())
             .expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .recordStats()
-            .build(new CacheLoader<Long, ILogData>() {
+            .build(new CacheLoader<LogicalSequenceNumber, ILogData>() {
                 @Override
-                public ILogData load(Long value) throws Exception {
+                public ILogData load(LogicalSequenceNumber value) throws Exception {
                     return cacheFetch(value);
                 }
 
                 @Override
-                public Map<Long, ILogData> loadAll(Iterable<? extends Long> keys) throws Exception {
-                    return cacheFetch((Iterable<Long>) keys);
+                public Map<LogicalSequenceNumber, ILogData> loadAll(Iterable<? extends LogicalSequenceNumber> keys) throws Exception {
+                    return cacheFetch((Iterable<LogicalSequenceNumber>) keys);
                 }
             });
 
@@ -132,7 +133,7 @@ public class AddressSpaceView extends AbstractView {
      *
      * @param address
      */
-    private void validateStateOfWrittenEntry(long address, @Nonnull ILogData ld) {
+    private void validateStateOfWrittenEntry(LogicalSequenceNumber address, @Nonnull ILogData ld) {
         ILogData logData;
         try {
             logData = read(address);
@@ -168,7 +169,7 @@ public class AddressSpaceView extends AbstractView {
             // Check if the token issued is in the same
             // epoch as the layout we are about to write
             // to.
-            if (token.getEpoch() != l.getEpoch()) {
+            if (token.getLogicalSequenceNumber().getEpoch() != l.getEpoch()) {
                 throw new StaleTokenException(l.getEpoch());
             }
 
@@ -179,7 +180,7 @@ public class AddressSpaceView extends AbstractView {
 
             // Do the write
             try {
-                l.getReplicationMode(token.getTokenValue())
+                l.getReplicationMode(token.getLogicalSequenceNumber())
                         .getReplicationProtocol(runtime)
                         .write(e, ld);
             } catch (OverwriteException ex) {
@@ -187,7 +188,7 @@ public class AddressSpaceView extends AbstractView {
                     // If we have an overwrite exception with the SAME_DATA cause, it means that the
                     // server suspects our data has already been written, in this case we need to
                     // validate the state of the write.
-                    validateStateOfWrittenEntry(token.getTokenValue(), ld);
+                    validateStateOfWrittenEntry(token.getLogicalSequenceNumber(), ld);
                 } else {
                     // If we have an Overwrite exception with a different cause than SAME_DATA
                     // we do not need to validate the state of the write, as we know we have been
@@ -198,14 +199,14 @@ public class AddressSpaceView extends AbstractView {
             } catch (WriteSizeException we) {
                 throw we;
             } catch (RuntimeException re) {
-                validateStateOfWrittenEntry(token.getTokenValue(), ld);
+                validateStateOfWrittenEntry(token.getLogicalSequenceNumber(), ld);
             }
             return null;
         }, true);
 
         // Cache the successful write
         if (!runtime.getParameters().isCacheDisabled() && cacheOption == CacheOption.WRITE_THROUGH) {
-            readCache.put(token.getTokenValue(), ld);
+            readCache.put(token.getLogicalSequenceNumber(), ld);
         }
     }
 
@@ -228,7 +229,7 @@ public class AddressSpaceView extends AbstractView {
      *                  log, or NULL, if no value
      *                  has been committed.
      */
-    public @Nullable ILogData peek(final long address) {
+    public @Nullable ILogData peek(final LogicalSequenceNumber address) {
         return layoutHelper(e -> e.getLayout().getReplicationMode(address)
                     .getReplicationProtocol(runtime)
                     .peek(e, address));
@@ -240,7 +241,7 @@ public class AddressSpaceView extends AbstractView {
      * @param address An address to read from.
      * @return A result, which be cached.
      */
-    public @Nonnull ILogData read(long address) {
+    public @Nonnull ILogData read(LogicalSequenceNumber address) {
         if (!runtime.getParameters().isCacheDisabled()) {
             ILogData data = readCache.get(address);
             if (data == null || data.getType() == DataType.EMPTY) {
@@ -255,13 +256,27 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
+     * Validate that this position exists in the log. This does not perform an actual read, only
+     * verifies that an actual slot is present for this LSN in the current log.
+     *
+     * @param address An address to validate existence.
+     * @return true if address present in current log.
+     */
+    public boolean validate(LogicalSequenceNumber address) {
+        return layoutHelper(e -> e.getLayout().getReplicationMode(address)
+                .getReplicationProtocol(runtime)
+                .validate(e, address)
+        );
+    }
+
+    /**
      * Read the given object from a range of addresses.
      *
      * @param addresses An iterable with addresses to read from
      * @return A result, which be cached.
      */
-    public Map<Long, ILogData> read(Iterable<Long> addresses) {
-        Map<Long, ILogData> addressesMap;
+    public Map<LogicalSequenceNumber, ILogData> read(Iterable<LogicalSequenceNumber> addresses) {
+        Map<LogicalSequenceNumber, ILogData> addressesMap;
         if (!runtime.getParameters().isCacheDisabled()) {
             addressesMap = readCache.getAll(addresses);
         } else {
@@ -280,7 +295,7 @@ public class AddressSpaceView extends AbstractView {
     /**
      * Get the first address in the address space.
      */
-    public long getTrimMark() {
+    public LogicalSequenceNumber getTrimMark() {
         return layoutHelper(
                 e -> e.getLayout().segments.stream()
                         .flatMap(seg -> seg.getStripes().stream())
@@ -294,7 +309,7 @@ public class AddressSpaceView extends AbstractView {
     /**
      * Get the last address in the address space
      */
-    public long getLogTail() {
+    public LogicalSequenceNumber getLogTail() {
         return layoutHelper(
                 e -> getMaxGlobalTail(e.getLayout(), runtime));
     }
@@ -309,7 +324,7 @@ public class AddressSpaceView extends AbstractView {
      *
      * @param address log address
      */
-    public void prefixTrim(final long address) {
+    public void prefixTrim(final LogicalSequenceNumber address) {
         log.debug("PrefixTrim[{}]", address);
         try {
             layoutHelper(e -> {
@@ -374,11 +389,11 @@ public class AddressSpaceView extends AbstractView {
      *
      * @param address Keys less than the input log address will be invalidated.
      */
-    public void invalidateClientCache(long address) {
+    public void invalidateClientCache(LogicalSequenceNumber address) {
         // TODO: Might need to do some statistics to clear up cache when the amount to
         // invalidate is huge.
         readCache.asMap().keySet().forEach(k -> {
-            if (k < address) {
+            if (k.isLessThan(address)) {
                 try {
                     readCache.invalidate(k);
                 } catch (RuntimeException e) {
@@ -397,7 +412,7 @@ public class AddressSpaceView extends AbstractView {
      * @return A result to be cached. If the readresult is empty,
      *         This entry will be scheduled to self invalidate.
      */
-    private @Nonnull ILogData cacheFetch(long address) {
+    private @Nonnull ILogData cacheFetch(LogicalSequenceNumber address) {
         log.trace("CacheMiss[{}]", address);
         ILogData result = fetch(address);
         if (result.getType() == DataType.EMPTY) {
@@ -413,13 +428,13 @@ public class AddressSpaceView extends AbstractView {
      * @return A result to be cached
      */
     public @Nonnull
-    Map<Long, ILogData> cacheFetch(Iterable<Long> addresses) {
-        Map<Long, ILogData> allAddresses = new HashMap<>();
+    Map<LogicalSequenceNumber, ILogData> cacheFetch(Iterable<LogicalSequenceNumber> addresses) {
+        Map<LogicalSequenceNumber, ILogData> allAddresses = new HashMap<>();
 
-        Iterable<List<Long>> batches = Iterables.partition(addresses,
+        Iterable<List<LogicalSequenceNumber>> batches = Iterables.partition(addresses,
             runtime.getParameters().getBulkReadSize());
 
-        for (List<Long> batch : batches) {
+        for (List<LogicalSequenceNumber> batch : batches) {
             try {
                 //doesn't handle the case where some address have a different replication mode
                 allAddresses.putAll(layoutHelper(e -> e.getLayout()
@@ -443,7 +458,7 @@ public class AddressSpaceView extends AbstractView {
      * @return A result to be cached
      */
     public @Nonnull
-    Map<Long, ILogData> cacheFetch(Set<Long> addresses) {
+    Map<LogicalSequenceNumber, ILogData> cacheFetch(Set<LogicalSequenceNumber> addresses) {
         return layoutHelper(e -> e.getLayout().getReplicationMode(addresses.iterator().next())
                 .getReplicationProtocol(runtime)
                 .readRange(e, addresses));
@@ -456,7 +471,7 @@ public class AddressSpaceView extends AbstractView {
      * @return A result, which will be uncached.
      */
     public @Nonnull
-    ILogData fetch(final long address) {
+    ILogData fetch(final LogicalSequenceNumber address) {
         return layoutHelper(e -> e.getLayout().getReplicationMode(address)
                 .getReplicationProtocol(runtime)
                 .read(e, address)
@@ -464,7 +479,7 @@ public class AddressSpaceView extends AbstractView {
     }
 
     @VisibleForTesting
-    LoadingCache<Long, ILogData> getReadCache() {
+    LoadingCache<LogicalSequenceNumber, ILogData> getReadCache() {
         return readCache;
     }
 
@@ -477,12 +492,12 @@ public class AddressSpaceView extends AbstractView {
 
         @Override
         public void run() {
-            long latestTrimMark = getTrimMark();
+            LogicalSequenceNumber latestTrimMark = getTrimMark();
             final long currentTimestamp = System.currentTimeMillis();
 
             // Learns the trim mark and updates only if not previously recorded.
             if (runtime.getTrimSnapshotList().isEmpty()
-                    || runtime.getTrimSnapshotList().getLast().trimMark < latestTrimMark) {
+                    || runtime.getTrimSnapshotList().getLast().trimMark.isLessThan(latestTrimMark)) {
                 runtime.addTrimSnapshot(latestTrimMark, currentTimestamp);
                 log.info("TrimMarkSyncTask: trim mark is updated from {} to {}.",
                         runtime.getTrimSnapshotList().getLast().trimMark, latestTrimMark);

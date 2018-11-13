@@ -6,6 +6,7 @@ import java.util.Spliterators;
 import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.view.Address;
 
 
@@ -30,21 +31,22 @@ public class StreamSpliterator extends Spliterators.AbstractSpliterator<ILogData
     final IStreamView streamView;
 
     /** The maximum global address the spliterator permits reading up to. */
-    final long maxGlobal;
+    final LogicalSequenceNumber maxGlobal;
 
     /** Construct a stream spliterator with the given view and no limit.
      * @param view  The view to construct the spliterator with.
      */
     public StreamSpliterator(IStreamView view) {
-        this(view, Address.MAX);
+        this(view, new LogicalSequenceNumber(-1L, Address.MAX));
     }
 
     /** Construct a stream spliterator with the given view and limit
      * @param view          The view to construct the spliterator with.
      * @param maxGlobal     The maximum global address to limit reads up to.
      */
-    public StreamSpliterator(IStreamView view, long maxGlobal) {
-        super(maxGlobal - view.getCurrentGlobalPosition(),
+    public StreamSpliterator(IStreamView view, LogicalSequenceNumber maxGlobal) {
+        super(new LogicalSequenceNumber(maxGlobal.getEpoch(),
+                maxGlobal.getSequenceNumber() - view.getCurrentGlobalPosition().getSequenceNumber()).getSequenceNumber(),
                 Spliterator.ORDERED | Spliterator.SORTED);
         streamView = view;
         this.maxGlobal = maxGlobal;

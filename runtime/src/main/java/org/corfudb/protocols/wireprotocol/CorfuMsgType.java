@@ -1,18 +1,20 @@
 package org.corfudb.protocols.wireprotocol;
 
 import com.google.common.reflect.TypeToken;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
-import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
-import org.corfudb.runtime.view.Layout;
 
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
+import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
+import org.corfudb.runtime.view.Layout;
 
 /**
  * Created by mwei on 8/8/16.
@@ -48,7 +50,7 @@ public enum CorfuMsgType {
     TOKEN_REQ(20, new TypeToken<CorfuPayloadMsg<TokenRequest>>(){}),
     TOKEN_RES(21, new TypeToken<CorfuPayloadMsg<TokenResponse>>(){}),
     BOOTSTRAP_SEQUENCER(22, new TypeToken<CorfuPayloadMsg<SequencerTailsRecoveryMsg>>(){}),
-    SEQUENCER_TRIM_REQ(23, new TypeToken<CorfuPayloadMsg<Long>>() {}),
+    SEQUENCER_TRIM_REQ(23, new TypeToken<CorfuPayloadMsg<LogicalSequenceNumber>>() {}),
     SEQUENCER_METRICS_REQUEST(24, TypeToken.of(CorfuMsg.class), true),
     SEQUENCER_METRICS_RESPONSE(25, new TypeToken<CorfuPayloadMsg<SequencerMetrics>>(){}, true),
 
@@ -61,12 +63,14 @@ public enum CorfuMsgType {
     FILL_HOLE(34, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
     PREFIX_TRIM(38, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
     TAIL_REQUEST(41, TypeToken.of(CorfuMsg.class)),
-    TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<Long>>(){}),
+    TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<LogicalSequenceNumber>>(){}),
     COMPACT_REQUEST(43, TypeToken.of(CorfuMsg.class), true),
     FLUSH_CACHE(44, TypeToken.of(CorfuMsg.class), true),
     TRIM_MARK_REQUEST(45, TypeToken.of(CorfuMsg.class)),
-    TRIM_MARK_RESPONSE(46, new TypeToken<CorfuPayloadMsg<Long>>(){}),
-    RESET_LOGUNIT(47, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
+    TRIM_MARK_RESPONSE(46, new TypeToken<CorfuPayloadMsg<LogicalSequenceNumber>>(){}),
+    RESET_LOGUNIT(47, new TypeToken<CorfuPayloadMsg<LogicalSequenceNumber>>(){}, true),
+    TOUCH_REQUEST(48, new TypeToken<CorfuPayloadMsg<TouchRequest>>() {}),
+    TOUCH_RESPONSE(49,  new TypeToken<CorfuPayloadMsg<TouchResponse>>() {}),
 
     WRITE_OK(50, TypeToken.of(CorfuMsg.class)),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),

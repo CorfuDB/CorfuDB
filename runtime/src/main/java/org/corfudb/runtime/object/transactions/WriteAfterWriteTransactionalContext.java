@@ -1,6 +1,8 @@
 package org.corfudb.runtime.object.transactions;
 
 import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 
@@ -29,7 +31,7 @@ public class WriteAfterWriteTransactionalContext
     }
 
     @Override
-    public long commitTransaction() throws TransactionAbortedException {
+    public LogicalSequenceNumber commitTransaction() throws TransactionAbortedException {
         log.debug("TX[{}] request write-write commit", this);
 
         return getConflictSetAndCommit(getWriteSetInfo());

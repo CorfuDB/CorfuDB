@@ -4,6 +4,7 @@ import java.util.function.Function;
 import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.exceptions.HoleFillRequiredException;
 import org.corfudb.util.Sleep;
 
@@ -34,8 +35,8 @@ public class NeverHoleFillPolicy implements IHoleFillPolicy {
      */
     @Nonnull
     @Override
-    public ILogData peekUntilHoleFillRequired(long address,
-            Function<Long, ILogData> peekFunction) throws HoleFillRequiredException {
+    public ILogData peekUntilHoleFillRequired(LogicalSequenceNumber address,
+            Function<LogicalSequenceNumber, ILogData> peekFunction) throws HoleFillRequiredException {
         ILogData data = null;
         int tryNum = 0;
         do {

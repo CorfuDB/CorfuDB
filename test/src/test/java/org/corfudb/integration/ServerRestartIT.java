@@ -1,21 +1,7 @@
 package org.corfudb.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.clients.SequencerClient;
-import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.collections.StringIndexer;
-import org.corfudb.runtime.collections.StringMultiIndexer;
-import org.corfudb.runtime.exceptions.AbortCause;
-import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.StaleTokenException;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.util.CFUtils;
-import org.junit.Before;
-import org.junit.Test;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -39,7 +25,22 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.corfudb.protocols.wireprotocol.LSNResponse;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.clients.SequencerClient;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.StringIndexer;
+import org.corfudb.runtime.collections.StringMultiIndexer;
+import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.StaleTokenException;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.util.CFUtils;
+import org.junit.Before;
+import org.junit.Test;
 
 /**
  * Tests the recovery of the Corfu instance.
@@ -441,15 +442,15 @@ public class ServerRestartIT extends AbstractIT {
 
         restartServer(corfuRuntime, DEFAULT_ENDPOINT);
 
-        TokenResponse tokenResponseA = corfuRuntime.getSequencerView().next(streamNameA);
-        TokenResponse tokenResponseB = corfuRuntime.getSequencerView().next(streamNameB);
+        LSNResponse LSNResponseA = corfuRuntime.getSequencerView().next(streamNameA);
+        LSNResponse LSNResponseB = corfuRuntime.getSequencerView().next(streamNameB);
 
-        assertThat(tokenResponseA.getToken().getTokenValue()).isEqualTo(newGlobalTail + 1);
-        assertThat(tokenResponseA.getBackpointerMap().get(streamNameA))
+        assertThat(LSNResponseA.getLogicalSequenceNumber().getSequenceNumber()).isEqualTo(newGlobalTail + 1);
+        assertThat(LSNResponseA.getBackpointerMap().get(streamNameA))
                 .isEqualTo(newMapAStreamTail);
 
-        assertThat(tokenResponseB.getToken().getTokenValue()).isEqualTo(newGlobalTail + 2);
-        assertThat(tokenResponseB.getBackpointerMap().get(streamNameB))
+        assertThat(LSNResponseB.getLogicalSequenceNumber().getSequenceNumber()).isEqualTo(newGlobalTail + 2);
+        assertThat(LSNResponseB.getBackpointerMap().get(streamNameB))
                 .isEqualTo(newMapBStreamTail);
 
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
@@ -470,20 +471,20 @@ public class ServerRestartIT extends AbstractIT {
         final CorfuRuntime corfuRuntime = createDefaultRuntime();
 
         // wait for this server long enough to start (by requesting token service)
-        TokenResponse firsttr = corfuRuntime.getSequencerView().next();
+        LSNResponse firsttr = corfuRuntime.getSequencerView().next();
 
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
 
         corfuServerProcess = runCorfuServer();
 
         corfuRuntime.invalidateLayout();
-        TokenResponse tr = corfuRuntime.getSequencerView().next();
+        LSNResponse tr = corfuRuntime.getSequencerView().next();
 
         assertThat(tr.getEpoch())
                 .isEqualTo(1);
 
         // Force the token response to have epoch = 0, to simulate a request received in previous epoch
-        TokenResponse mockTr = new TokenResponse(tr.getToken().getTokenValue(), tr.getEpoch() - 1, Collections.emptyMap());
+        LSNResponse mockTr = new LSNResponse(tr.getLogicalSequenceNumber().getSequenceNumber(), tr.getEpoch() - 1, Collections.emptyMap());
 
         byte[] testPayload = "hello world".getBytes();
 
@@ -575,15 +576,15 @@ public class ServerRestartIT extends AbstractIT {
                     .getLayoutView().getRuntimeLayout()
                     .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
 
-            TokenResponse expectedTokenResponseA = sequencerClient
+            LSNResponse expectedLSNResponseA = sequencerClient
                     .nextToken(Collections.singletonList(streamNameA), 0)
                     .get();
 
-            TokenResponse expectedTokenResponseB = sequencerClient
+            LSNResponse expectedLSNResponseB = sequencerClient
                     .nextToken(Collections.singletonList(streamNameB), 0)
                     .get();
 
-            TokenResponse expectedGlobalTailResponse = sequencerClient
+            LSNResponse expectedGlobalTailResponse = sequencerClient
                     .nextToken(Collections.emptyList(), 0)
                     .get();
 
@@ -600,23 +601,23 @@ public class ServerRestartIT extends AbstractIT {
                     .getSequencerClient(corfuSingleNodeHost + ":" + corfuSingleNodePort);
 
             // check tail recovery after restart
-            TokenResponse tokenResponseA = sequencerClient
+            LSNResponse LSNResponseA = sequencerClient
                     .nextToken(Collections.singletonList(streamNameA), 1)
                     .get();
 
-            TokenResponse tokenResponseB = sequencerClient
+            LSNResponse LSNResponseB = sequencerClient
                     .nextToken(Collections.singletonList(streamNameB), 1)
                     .get();
 
-            assertThat(tokenResponseA.getTokenValue()).isEqualTo(expectedGlobalTailResponse
-                    .getTokenValue() + 1);
-            assertThat(tokenResponseA.getBackpointerMap().get(streamNameA))
-                    .isEqualTo(expectedTokenResponseA.getTokenValue());
+            assertThat(LSNResponseA.getSequenceNumber()).isEqualTo(expectedGlobalTailResponse
+                    .getSequenceNumber() + 1);
+            assertThat(LSNResponseA.getBackpointerMap().get(streamNameA))
+                    .isEqualTo(expectedLSNResponseA.getSequenceNumber());
 
-            assertThat(tokenResponseB.getTokenValue()).isEqualTo(expectedGlobalTailResponse
-                    .getTokenValue() + 2);
-            assertThat(tokenResponseB.getBackpointerMap().get(streamNameB))
-                    .isEqualTo(expectedTokenResponseB.getTokenValue());
+            assertThat(LSNResponseB.getSequenceNumber()).isEqualTo(expectedGlobalTailResponse
+                    .getSequenceNumber() + 2);
+            assertThat(LSNResponseB.getBackpointerMap().get(streamNameB))
+                    .isEqualTo(expectedLSNResponseB.getSequenceNumber());
 
             // activity (iv): leave holes behind
             // this is done by having another shutdown/restart, so the token above becomes stale
@@ -634,20 +635,20 @@ public class ServerRestartIT extends AbstractIT {
                 // because we restart without ever having writes use the tokens
             } else {
                 System.out.println(r + ".. no holes left");
-                globalTail = tokenResponseB.getTokenValue();
+                globalTail = LSNResponseB.getSequenceNumber();
             }
 
             // these writes should throw a StaleTokenException if we restarted
             try {
                 corfuRuntime.getAddressSpaceView()
-                        .write(tokenResponseA.getToken(), "fixed string".getBytes());
+                        .write(LSNResponseA.getLogicalSequenceNumber(), "fixed string".getBytes());
             } catch (StaleTokenException se) {
                 assertThat(restartwithHoles).isTrue();
             }
 
             try {
                 corfuRuntime.getAddressSpaceView()
-                        .write(tokenResponseB.getToken(), "fixed string".getBytes());
+                        .write(LSNResponseB.getLogicalSequenceNumber(), "fixed string".getBytes());
             } catch (StaleTokenException se) {
                 assertThat(restartwithHoles).isTrue();
             }

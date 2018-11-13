@@ -1,7 +1,8 @@
 package org.corfudb.runtime.view.stream;
 
 import java.util.UUID;
-import org.corfudb.runtime.view.Address;
+
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 
 
 /** A data class which keeps data for each stream context.
@@ -23,13 +24,13 @@ public abstract class AbstractStreamContext implements
      * The maximum global address that we should follow to, or
      * Address.MAX, if this is the final context.
      */
-    final long maxGlobalAddress;
+    final LogicalSequenceNumber maxGlobalAddress;
 
     /**
      * A pointer to the current global address, which is the
      * global address of the most recently added entry.
      */
-    long globalPointer;
+    LogicalSequenceNumber globalPointer;
 
     /**
      * Generate a new stream context given the id of the stream and the
@@ -38,28 +39,28 @@ public abstract class AbstractStreamContext implements
      * @param maxGlobalAddress    The maximum address to read up to.
      */
     public AbstractStreamContext(final UUID id,
-                                 final long maxGlobalAddress) {
+                                 final LogicalSequenceNumber maxGlobalAddress) {
         this.id = id;
         this.maxGlobalAddress = maxGlobalAddress;
-        this.globalPointer = Address.NON_ADDRESS;
+        this.globalPointer = LogicalSequenceNumber.getDefaultLSN();
     }
 
     /** Reset the stream context. */
     void reset() {
-        globalPointer = Address.NON_ADDRESS;
+        globalPointer = LogicalSequenceNumber.getDefaultLSN();
     }
 
     /** Move the pointer for the context to the given global address,
      * updating any structures if necessary.
      * @param globalAddress     The address to seek to.
      */
-    void seek(long globalAddress) {
+    void seek(LogicalSequenceNumber globalAddress) {
         // by default we just need to update the pointer.
         // we subtract by one, since the NEXT read will
         // have to include globalAddress.
         // FIXME change this; what if globalAddress==0? somewhere down the line,
         // some code will compare this with NEVER_READ
-        globalPointer = globalAddress - 1;
+        globalPointer = globalAddress.getPrevious();
     }
 
     /**
@@ -67,6 +68,6 @@ public abstract class AbstractStreamContext implements
      */
     @Override
     public int compareTo(AbstractStreamContext o) {
-        return Long.compare(this.maxGlobalAddress, o.maxGlobalAddress);
+        return this.maxGlobalAddress.compareTo(o.maxGlobalAddress);
     }
 }

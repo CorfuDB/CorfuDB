@@ -13,17 +13,20 @@ import java.util.UUID;
  */
 public interface IToken {
 
-    /** The value of the token, which represents the global address
-     * on the log the token is for.
-     * @return  The value of the token.
-     */
-    long getTokenValue();
 
-    /** Get the epoch of the token, which represents the epoch the
-     * token is valid in.
-     * @return  The token's epoch.
-     */
-    long getEpoch();
+    LogicalSequenceNumber getLogicalSequenceNumber();
+
+//    /** The value of the token, which represents the global address
+//     * on the log the token is for.
+//     * @return  The value of the token.
+//     */
+//    long getSequenceNumber();
+//
+//    /** Get the epoch of the token, which represents the epoch the
+//     * token is valid in.
+//     * @return  The token's epoch.
+//     */
+//    long getEpoch();
 
     /** Get the backpointer map, if it was available.
      * @return  A map of backpointers for the streams in the log.

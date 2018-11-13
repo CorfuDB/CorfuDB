@@ -19,7 +19,7 @@ import lombok.Setter;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
@@ -44,8 +44,8 @@ public class CheckpointWriter<T extends Map> {
     @Getter
     private UUID checkpointId;
     private LocalDateTime startTime;
-    private long startAddress;
-    private long endAddress;
+    private LogicalSequenceNumber startAddress;
+    private LogicalSequenceNumber endAddress;
     private long numEntries = 0;
     private long numBytes = 0;
 
@@ -87,7 +87,7 @@ public class CheckpointWriter<T extends Map> {
      */
     @Getter
     @Setter
-    BiConsumer<CheckpointEntry,Long> postAppendFunc = (cp, l) -> { };
+    BiConsumer<CheckpointEntry, LogicalSequenceNumber> postAppendFunc = (cp, l) -> { };
 
     /** Local ref to the object's runtime.
      */
@@ -128,7 +128,7 @@ public class CheckpointWriter<T extends Map> {
      *  the map while the checkpoint entries are written to
      *  the stream.
      */
-    public List<Long> appendCheckpoint() {
+    public List<LogicalSequenceNumber> appendCheckpoint() {
         return appendCheckpoint(cpw -> { });
     }
 
@@ -138,8 +138,8 @@ public class CheckpointWriter<T extends Map> {
      *                    to use.
      * @return List of global addresses of all entries for this checkpoint.
      */
-    public List<Long> appendCheckpoint(Consumer<CheckpointWriter> setupWriter) {
-        List<Long> addrs = new ArrayList<>();
+    public List<LogicalSequenceNumber> appendCheckpoint(Consumer<CheckpointWriter> setupWriter) {
+        List<LogicalSequenceNumber> addrs = new ArrayList<>();
         setupWriter.accept(this);
         rt.getObjectsView().TXBuild()
                 .setType(TransactionType.SNAPSHOT)
@@ -161,18 +161,19 @@ public class CheckpointWriter<T extends Map> {
      *
      * @return Global log address of the START record.
      */
-    public long startCheckpoint() {
+    public LogicalSequenceNumber startCheckpoint() {
         startTime = LocalDateTime.now();
         AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
-        long txBeginGlobalAddress = context.getSnapshotTimestamp();
+        LogicalSequenceNumber txBeginGlobalAddress = context.getSnapshotTimestamp();
 
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_TIME, startTime.toString());
         // Need the actual object's version
         ICorfuSMR<T> corfuObject = (ICorfuSMR<T>) this.map;
+        // TODO: when circular dependency is fixed in ICorfuCompileProxy, change getVersion from Long to LSN
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS,
                 Long.toString(corfuObject.getCorfuSMRProxy().getVersion()));
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS,
-                Long.toString(txBeginGlobalAddress));
+                Long.toString(txBeginGlobalAddress.getSequenceNumber()));
 
         ImmutableMap<CheckpointEntry.CheckpointDictKey,String> mdkv =
                 ImmutableMap.copyOf(this.mdkv);
@@ -187,7 +188,7 @@ public class CheckpointWriter<T extends Map> {
     /**
      *  Append an object to a stream without caching the entries.
      */
-    private long nonCachedAppend(Object object, UUID ... streamIDs) {
+    private LogicalSequenceNumber nonCachedAppend(Object object, UUID ... streamIDs) {
         return sv.append(object, null, CacheOption.WRITE_AROUND, streamIDs);
     }
 
@@ -215,10 +216,10 @@ public class CheckpointWriter<T extends Map> {
      *
      * @return Stream of global log addresses of the CONTINUATION records written.
      */
-    public List<Long> appendObjectState() {
+    public List<LogicalSequenceNumber> appendObjectState() {
         ImmutableMap<CheckpointEntry.CheckpointDictKey,String> mdkv =
                 ImmutableMap.copyOf(this.mdkv);
-        List<Long> continuationAddresses = new ArrayList<>();
+        List<LogicalSequenceNumber> continuationAddresses = new ArrayList<>();
 
         Class underlyingObjectType = ((CorfuCompileProxy<Map>)
                 ((ICorfuSMR<T>) map).getCorfuSMRProxy())
@@ -241,7 +242,7 @@ public class CheckpointWriter<T extends Map> {
                 CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
                         author, checkpointId, streamId, mdkv, smrEntries);
 
-                long pos = nonCachedAppend(cp, checkpointStreamID);
+                LogicalSequenceNumber pos = nonCachedAppend(cp, checkpointStreamID);
 
                 postAppendFunc.accept(cp, pos);
                 continuationAddresses.add(pos);
@@ -267,7 +268,7 @@ public class CheckpointWriter<T extends Map> {
                 CheckpointEntry cp = new CheckpointEntry(CheckpointEntry
                         .CheckpointEntryType.CONTINUATION,
                         author, checkpointId, streamId, mdkv, smrEntries);
-                long pos = nonCachedAppend(cp, checkpointStreamID);
+                LogicalSequenceNumber pos = nonCachedAppend(cp, checkpointStreamID);
 
                 postAppendFunc.accept(cp, pos);
                 continuationAddresses.add(pos);
@@ -290,7 +291,7 @@ public class CheckpointWriter<T extends Map> {
      *
      * @return Global log address of the END record.
      */
-    public long finishCheckpoint() {
+    public LogicalSequenceNumber finishCheckpoint() {
         LocalDateTime endTime = LocalDateTime.now();
         mdkv.put(CheckpointEntry.CheckpointDictKey.END_TIME, endTime.toString());
         numEntries++;

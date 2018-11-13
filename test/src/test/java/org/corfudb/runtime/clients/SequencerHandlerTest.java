@@ -4,9 +4,9 @@ import com.google.common.collect.ImmutableSet;
 
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.protocols.wireprotocol.LogicalSequenceNumber;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -60,19 +60,19 @@ public class SequencerHandlerTest extends AbstractClientTest {
     @Test
     public void tokensAreIncrementing()
             throws Exception {
-        Token token = client.nextToken(Collections.emptyList(), 1).get().getToken();
-        Token token2 = client.nextToken(Collections.emptyList(), 1).get().getToken();
-        assertThat(token2.getTokenValue())
-                .isGreaterThan(token.getTokenValue());
+        LogicalSequenceNumber logicalSequenceNumber = client.nextToken(Collections.emptyList(), 1).get().getLogicalSequenceNumber();
+        LogicalSequenceNumber logicalSequenceNumber2 = client.nextToken(Collections.emptyList(), 1).get().getLogicalSequenceNumber();
+        assertThat(logicalSequenceNumber2.getSequenceNumber())
+                .isGreaterThan(logicalSequenceNumber.getSequenceNumber());
     }
 
     @Test
     public void checkTokenPositionWorks()
             throws Exception {
-        Token token = client.nextToken(Collections.emptyList(), 1).get().getToken();
-        Token token2 = client.nextToken(Collections.emptyList(), 0).get().getToken();
-        assertThat(token)
-                .isEqualTo(token2);
+        LogicalSequenceNumber logicalSequenceNumber = client.nextToken(Collections.emptyList(), 1).get().getLogicalSequenceNumber();
+        LogicalSequenceNumber logicalSequenceNumber2 = client.nextToken(Collections.emptyList(), 0).get().getLogicalSequenceNumber();
+        assertThat(logicalSequenceNumber)
+                .isEqualTo(logicalSequenceNumber2);
     }
 
     @Test
@@ -81,19 +81,19 @@ public class SequencerHandlerTest extends AbstractClientTest {
         UUID streamA = UUID.nameUUIDFromBytes("streamA".getBytes());
         UUID streamB = UUID.nameUUIDFromBytes("streamB".getBytes());
         client.nextToken(Collections.singletonList(streamA), 1).get();
-        Token tokenA = client.nextToken(Collections.singletonList(streamA), 1).get().getToken();
-        Token tokenA2 = client.nextToken(Collections.singletonList(streamA), 0).get().getToken();
-        assertThat(tokenA)
-                .isEqualTo(tokenA2);
-        Token tokenB = client.nextToken(Collections.singletonList(streamB), 0).get().getToken();
-        assertThat(tokenB)
-                .isNotEqualTo(tokenA2);
-        Token tokenB2 = client.nextToken(Collections.singletonList(streamB), 1).get().getToken();
-        Token tokenB3 = client.nextToken(Collections.singletonList(streamB), 0).get().getToken();
-        assertThat(tokenB2)
-                .isEqualTo(tokenB3);
-        Token tokenA3 = client.nextToken(Collections.singletonList(streamA), 0).get().getToken();
-        assertThat(tokenA3)
-                .isEqualTo(tokenA2);
+        LogicalSequenceNumber logicalSequenceNumberA = client.nextToken(Collections.singletonList(streamA), 1).get().getLogicalSequenceNumber();
+        LogicalSequenceNumber logicalSequenceNumberA2 = client.nextToken(Collections.singletonList(streamA), 0).get().getLogicalSequenceNumber();
+        assertThat(logicalSequenceNumberA)
+                .isEqualTo(logicalSequenceNumberA2);
+        LogicalSequenceNumber logicalSequenceNumberB = client.nextToken(Collections.singletonList(streamB), 0).get().getLogicalSequenceNumber();
+        assertThat(logicalSequenceNumberB)
+                .isNotEqualTo(logicalSequenceNumberA2);
+        LogicalSequenceNumber logicalSequenceNumberB2 = client.nextToken(Collections.singletonList(streamB), 1).get().getLogicalSequenceNumber();
+        LogicalSequenceNumber logicalSequenceNumberB3 = client.nextToken(Collections.singletonList(streamB), 0).get().getLogicalSequenceNumber();
+        assertThat(logicalSequenceNumberB2)
+                .isEqualTo(logicalSequenceNumberB3);
+        LogicalSequenceNumber logicalSequenceNumberA3 = client.nextToken(Collections.singletonList(streamA), 0).get().getLogicalSequenceNumber();
+        assertThat(logicalSequenceNumberA3)
+                .isEqualTo(logicalSequenceNumberA2);
     }
 }
