@@ -61,9 +61,8 @@ public abstract class GenericIntegrationTest {
                 .universeParams(universeParams)
                 .build();
 
-        universe = UNIVERSE_FACTORY
-                .buildVmUniverse(universeParams, manager)
-                .deploy();
+        universe = UNIVERSE_FACTORY.buildVmUniverse(universeParams, manager);
+        universe.deploy();
 
         return Scenario.with(universeFixture);
     }
@@ -72,9 +71,8 @@ public abstract class GenericIntegrationTest {
         UniverseFixture universeFixture = new UniverseFixture();
         universeFixture.setNumNodes(numNodes);
 
-        universe = UNIVERSE_FACTORY
-                .buildDockerUniverse(universeFixture.data(), docker, getDockerLoggingParams())
-                .deploy();
+        universe = UNIVERSE_FACTORY.buildDockerUniverse(universeFixture.data(), docker, getDockerLoggingParams());
+        universe.deploy();
 
         return Scenario.with(universeFixture);
     }
