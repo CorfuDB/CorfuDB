@@ -19,7 +19,7 @@
     <logger name="org.corfudb.runtime.view.workflows.WorkflowRequest" level="off"/>
 
     <!-- Control logging levels for individual components here. -->
-    <root level="debug">
+    <root level="warn">
         <appender-ref ref="STDOUT"/>
     </root>
 </configuration>

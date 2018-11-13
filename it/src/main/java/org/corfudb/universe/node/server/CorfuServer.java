@@ -63,7 +63,7 @@ public interface CorfuServer extends Node, Comparable<CorfuServer> {
     default String getEndpoint() {
         return getNetworkInterface() + ":" + getParams().getPort();
     }
-    
+
     enum Mode {
         SINGLE, CLUSTER
     }
