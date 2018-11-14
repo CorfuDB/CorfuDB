@@ -77,12 +77,12 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         map.clear());
     }
 
-    private long checkPointAll(CorfuRuntime rt) throws Exception {
+    private Token checkPointAll(CorfuRuntime rt) throws Exception {
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         maps.forEach((streamName, map) -> {
             mcw.addMap(map);
         });
-        return mcw.appendCheckpoints(rt, "author").getSequence();
+        return mcw.appendCheckpoints(rt, "author");
     }
 
     private void assertThatMapsAreBuilt(CorfuRuntime rt1, CorfuRuntime rt2) {
@@ -301,7 +301,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     @Test
     public void canReadCheckPointMultipleStreamsTrim() throws Exception {
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
-        long checkpointAddress = checkPointAll(getDefaultRuntime());
+        Token checkpointAddress = checkPointAll(getDefaultRuntime());
         clearAllMaps();
 
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
@@ -322,8 +322,8 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         clearAllMaps();
 
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
-
-        Helpers.trim(getDefaultRuntime(), 2);
+        Token token = new Token(getDefaultRuntime().getLayoutView().getLayout().getEpoch(), 2);
+        Helpers.trim(getDefaultRuntime(), token);
 
         CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
 
@@ -387,7 +387,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(2, getDefaultRuntime(), CorfuTable.class, false, 1);
         int mapCount = maps.size();
 
-        long checkPointAddress = checkPointAll(getDefaultRuntime());
+        Token checkPointAddress = checkPointAll(getDefaultRuntime());
 
         Helpers.trim(getDefaultRuntime(), checkPointAddress);
         Map<UUID, Long> streamTails = Helpers.getRecoveryStreamTails(getDefaultConfigurationString());
@@ -475,7 +475,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     @Test
     public void canReadWithTruncatedCheckPoint() throws Exception{
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
-        long firstCheckpointAddress = checkPointAll(getDefaultRuntime());
+        Token firstCheckpointAddress = checkPointAll(getDefaultRuntime());
 
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, false, 1);
 
@@ -571,7 +571,8 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         incrementalLoader.setDefaultObjectsType(CorfuTable.class);
         incrementalLoader.loadMaps();
 
-        Helpers.trim(getDefaultRuntime(),firstMileStone+2);
+        Token token = new Token(rt2.getLayoutView().getLayout().getEpoch(), firstMileStone + 2);
+        Helpers.trim(getDefaultRuntime(), token);
 
         incrementalLoader.setLogHead(firstMileStone + 1);
         incrementalLoader.setLogTail(getDefaultRuntime().getSequencerView().next().getSequence());
@@ -585,7 +586,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         populateMaps(SOME, getDefaultRuntime(), CorfuTable.class, true, 1);
         populateMaps(2, getDefaultRuntime(), CorfuTable.class, false, 1);
 
-        long snapShotAddress = checkPointAll(getDefaultRuntime());
+        Token snapShotAddress = checkPointAll(getDefaultRuntime());
         Helpers.trim(getDefaultRuntime(), snapShotAddress);
 
         CorfuRuntime rt2 = getNewRuntime(getDefaultNode())
@@ -778,7 +779,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(originalTable);
-        long cpAddress = mcw.appendCheckpoints(originalRuntime, "author").getSequence();
+        Token cpAddress = mcw.appendCheckpoints(originalRuntime, "author");
         Helpers.trim(originalRuntime, cpAddress);
 
 

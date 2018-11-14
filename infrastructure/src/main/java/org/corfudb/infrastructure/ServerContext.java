@@ -374,6 +374,7 @@ public class ServerContext implements AutoCloseable {
         if (lastEpoch == null || lastEpoch < serverEpoch) {
             dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
             r.setServerEpoch(serverEpoch);
+            getServers().forEach(s -> s.sealServerWithEpoch(serverEpoch));
         } else if (serverEpoch == lastEpoch) {
             // Setting to the same epoch, don't need to do anything.
         } else {

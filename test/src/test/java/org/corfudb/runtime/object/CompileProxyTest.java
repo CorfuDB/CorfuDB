@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.reflect.TypeToken;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -51,7 +52,8 @@ public class CompileProxyTest extends AbstractViewTest {
         rt.getSequencerView().next(CorfuRuntime.getStreamID(streamName));
 
         // Trim all the way up to the tail
-        rt.getAddressSpaceView().prefixTrim(numOfTokens);
+        Token token = new Token(rt.getLayoutView().getLayout().getEpoch(), numOfTokens);
+        rt.getAddressSpaceView().prefixTrim(token);
         rt.getAddressSpaceView().gc();
         rt.getAddressSpaceView().invalidateServerCaches();
 

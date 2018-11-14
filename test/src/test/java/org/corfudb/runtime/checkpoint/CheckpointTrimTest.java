@@ -4,6 +4,7 @@ import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectOpenOptions;
@@ -12,6 +13,7 @@ import org.junit.Test;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 5/25/17.
@@ -33,10 +35,10 @@ public class CheckpointTrimTest extends AbstractViewTest {
         // Insert a checkpoint
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap((SMRMap) testMap);
-        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author").getSequence();
+        Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
         // Trim the log
-        getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress - 1);
+        getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress);
         getRuntime().getAddressSpaceView().gc();
         getRuntime().getAddressSpaceView().invalidateServerCaches();
         getRuntime().getAddressSpaceView().invalidateClientCache();
@@ -74,9 +76,11 @@ public class CheckpointTrimTest extends AbstractViewTest {
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap((SMRMap) map);
-        long trimAddress = mcw.appendCheckpoints(getRuntime(), "author").getSequence();
-
-        assertThat(trimAddress).isEqualTo(realTail);
+        Token trimAddress = mcw.appendCheckpoints(getRuntime(), "author");
+        Token staleTrimAddress = new Token(trimAddress.getEpoch() - 1, trimAddress.getSequence());
+        assertThatThrownBy(() -> getRuntime().getAddressSpaceView().prefixTrim(staleTrimAddress))
+                .isInstanceOf(RuntimeException.class)
+                .hasCauseInstanceOf(WrongEpochException.class);
     }
 
     @Test
@@ -89,7 +93,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .setStreamName("test")
                 .open();
 
-        long checkpointAddress = -1;
+        Token checkpointAddress = Token.UNINITIALIZED;
         // generate two successive checkpoints
         for (int ckpoint = 0; ckpoint < nCheckpoints; ckpoint++) {
             // Place 3 entries into the map
@@ -100,11 +104,12 @@ public class CheckpointTrimTest extends AbstractViewTest {
             // Insert a checkpoint
             MultiCheckpointWriter mcw = new MultiCheckpointWriter();
             mcw.addMap((SMRMap) testMap);
-            checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author").getSequence();
+            checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
         }
 
         // Trim the log in between the checkpoints
-        getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress - ckpointGap - 1);
+        Token token = new Token(checkpointAddress.getEpoch(), checkpointAddress.getSequence() - ckpointGap - 1);
+        getRuntime().getAddressSpaceView().prefixTrim(token);
         getRuntime().getAddressSpaceView().gc();
         getRuntime().getAddressSpaceView().invalidateServerCaches();
         getRuntime().getAddressSpaceView().invalidateClientCache();
@@ -117,7 +122,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .open();
 
         // try to get a snapshot inside the gap
-        Token snapshot = new Token(0L, checkpointAddress - 1);
+        Token snapshot = new Token(0L, checkpointAddress.getSequence() - 1);
         getRuntime().getObjectsView()
                 .TXBuild()
                 .setType(TransactionType.SNAPSHOT)
@@ -165,10 +170,10 @@ public class CheckpointTrimTest extends AbstractViewTest {
         // Insert a checkpoint
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap((SMRMap) testMap);
-        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author").getSequence();
+        Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
         // Trim the log
-        getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress - 1);
+        getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress);
         getRuntime().getAddressSpaceView().gc();
         getRuntime().getAddressSpaceView().invalidateServerCaches();
         getRuntime().getAddressSpaceView().invalidateClientCache();

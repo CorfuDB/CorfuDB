@@ -233,8 +233,8 @@ public class LogUnitClient extends AbstractClient {
      *
      * @param prefix The prefix of the stream, as a global physical offset, to trim.
      */
-    public void trim(long prefix) {
-        sendMessage(CorfuMsgType.TRIM.payloadMsg(new TrimRequest(null, prefix)));
+    public void trim(Token prefix) {
+        sendMessage(CorfuMsgType.TRIM.payloadMsg(new TrimRequest(prefix)));
     }
 
     /**
@@ -242,9 +242,9 @@ public class LogUnitClient extends AbstractClient {
      *
      * @param address An address to trim up to (i.e. [0, address))
      */
-    public CompletableFuture<Void> prefixTrim(long address) {
+    public CompletableFuture<Void> prefixTrim(Token address) {
         return sendMessageWithFuture(CorfuMsgType.PREFIX_TRIM
-                .payloadMsg(new TrimRequest(null, address)));
+                .payloadMsg(new TrimRequest(address)));
     }
 
     /**

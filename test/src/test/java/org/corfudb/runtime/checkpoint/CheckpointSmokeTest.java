@@ -553,9 +553,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
         mcw1.addMap((SMRMap) mA);
         mcw1.addMap((SMRMap) mB);
-        long trimAddress = mcw1.appendCheckpoints(r, author).getSequence();
+        Token trimAddress = mcw1.appendCheckpoints(r, author);
 
-        r.getAddressSpaceView().prefixTrim(trimAddress - 1);
+        r.getAddressSpaceView().prefixTrim(trimAddress);
         r.getAddressSpaceView().gc();
         r.getAddressSpaceView().invalidateServerCaches();
         r.getAddressSpaceView().invalidateClientCache();

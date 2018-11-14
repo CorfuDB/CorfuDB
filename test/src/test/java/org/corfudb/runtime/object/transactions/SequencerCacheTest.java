@@ -8,6 +8,7 @@ import java.util.Map;
 
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.SequencerClient;
 import org.corfudb.runtime.collections.SMRMap;
@@ -38,7 +39,7 @@ public class SequencerCacheTest extends AbstractObjectTest {
                 .open();
 
         final int numTxn = 500;
-        final int trimAddress = 250;
+        final Token trimAddress = new Token(getDefaultRuntime().getLayoutView().getLayout().getEpoch(), 250);
         for (int x = 0; x < numTxn; x++) {
             getRuntime().getObjectsView().TXBegin();
             map.put(x, x);
@@ -49,6 +50,6 @@ public class SequencerCacheTest extends AbstractObjectTest {
         Cache<String, Long> cache = sequencerServer.getConflictToGlobalTailCache();
         assertThat(cache.asMap().size()).isEqualTo(numTxn);
         getDefaultRuntime().getAddressSpaceView().prefixTrim(trimAddress);
-        assertThat(cache.asMap().size()).isEqualTo(trimAddress);
+        assertThat(cache.asMap().size()).isEqualTo((int) trimAddress.getSequence());
     }
 }

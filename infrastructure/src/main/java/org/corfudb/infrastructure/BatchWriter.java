@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
@@ -120,16 +121,19 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
      * Trim addresses from log up to a prefix.
      *
      * @param address prefix address to trim to (inclusive)
-     * @param epoch   Epoch at which the prefixTrim operation is received.
      */
-    public void prefixTrim(@Nonnull long address, @Nonnull long epoch) {
+    public void prefixTrim(@Nonnull Token address) {
         try {
             CompletableFuture<Void> cf = new CompletableFuture();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.PREFIX_TRIM,
-                    address, null, epoch, null, cf));
+                    address.getSequence(), null, address.getEpoch(), null, cf));
             cf.get();
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            if (e.getCause() instanceof RuntimeException) {
+                throw (RuntimeException) e.getCause();
+            } else {
+                throw new RuntimeException(e);
+            }
         }
     }
 
@@ -147,7 +151,11 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
             operationsQueue.add(new BatchWriterOperation(Type.SEAL, null, null, epoch, null, cf));
             cf.get();
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            if (e.getCause() instanceof RuntimeException) {
+                throw (RuntimeException) e.getCause();
+            } else {
+                throw new RuntimeException(e);
+            }
         }
     }
 
@@ -160,7 +168,11 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
             operationsQueue.add(new BatchWriterOperation(Type.RESET, null, null, epoch, null, cf));
             cf.get();
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            if (e.getCause() instanceof RuntimeException) {
+                throw (RuntimeException) e.getCause();
+            } else {
+                throw new RuntimeException(e);
+            }
         }
     }
 
@@ -214,7 +226,14 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                     log.trace("Shutting down the write processor");
                     streamLog.sync(true);
                     break;
-                } else if (currOp.getEpoch() < sealEpoch) {
+                } else if (currOp.getType() == Type.SEAL && currOp.getEpoch() >= sealEpoch) {
+                    sealEpoch = currOp.getEpoch();
+                    res.add(currOp);
+                    processed++;
+                    lastOp = currOp;
+                } else if (currOp.getEpoch() != sealEpoch) {
+                    log.warn("batchWriteProcessor: wrong epoch on {} msg, seal epoch is {}",
+                            currOp.getType(), currOp.getEpoch());
                     currOp.setException(new WrongEpochException(sealEpoch));
                     res.add(currOp);
                     processed++;
@@ -236,10 +255,6 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                                 break;
                             case RANGE_WRITE:
                                 streamLog.append(currOp.getEntries());
-                                res.add(currOp);
-                                break;
-                            case SEAL:
-                                sealEpoch = currOp.getEpoch();
                                 res.add(currOp);
                                 break;
                             case RESET:
