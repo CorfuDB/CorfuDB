@@ -28,10 +28,21 @@ public abstract class AbstractServer {
         shutdown = false;
     }
 
-    /** Get the message handler for this instance.
-     * @return  A message handler.
+    /**
+     * Get the message handler for this instance.
+     *
+     * @return A message handler.
      */
     public abstract CorfuMsgHandler getHandler();
+
+    /**
+     * Seal the server with the epoch.
+     *
+     * @param epoch Epoch to seal with
+     */
+    public void sealServerWithEpoch(long epoch) {
+        // Overridden in log unit to flush operations stamped with an old epoch
+    }
 
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
         // Overridden in sequencer to mark ready/not-ready state.

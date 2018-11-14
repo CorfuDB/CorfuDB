@@ -12,6 +12,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
@@ -54,7 +55,7 @@ public class MultiCheckpointWriter<T extends Map> {
      * @param author Author's name, stored in checkpoint metadata
      * @return Global log address of the first record of
      */
-    public long appendCheckpoints(CorfuRuntime rt, String author)
+    public Token appendCheckpoints(CorfuRuntime rt, String author)
             throws Exception {
         return appendCheckpoints(rt, author, (x,y) -> { });
     }
@@ -68,12 +69,12 @@ public class MultiCheckpointWriter<T extends Map> {
      * @return Global log address of the first record of
      */
 
-    public long appendCheckpoints(CorfuRuntime rt, String author,
+    public Token appendCheckpoints(CorfuRuntime rt, String author,
                                   BiConsumer<CheckpointEntry, Long> postAppendFunc) {
 
         // We retrieve the tail from the logging units because the tail
         // returned from the sequencer might not be materialized
-        long globalTail = rt.getAddressSpaceView().getLogTail();
+        Token globalTail = rt.getAddressSpaceView().getLogTail();
         rt.getObjectsView().TXBuild()
                 .setType(TransactionType.SNAPSHOT)
                 .setSnapshot(globalTail)

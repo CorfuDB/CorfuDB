@@ -1,9 +1,11 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.collect.ImmutableList;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -24,9 +26,7 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
  */
 @Slf4j
 @ChannelHandler.Sharable
-public class NettyServerRouter extends ChannelInboundHandlerAdapter
-        implements IServerRouter {
-
+public class NettyServerRouter extends ChannelInboundHandlerAdapter implements IServerRouter {
 
     /**
      * This map stores the mapping from message type to netty server handler.
@@ -41,7 +41,6 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     volatile long serverEpoch;
 
     /** The {@link AbstractServer}s this {@link NettyServerRouter} routes messages for. */
-    @Getter
     final List<AbstractServer> servers;
 
     /** Construct a new {@link NettyServerRouter}.
@@ -52,7 +51,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     public NettyServerRouter(List<AbstractServer> servers) {
         // Initialize the router epoch from the persisted server epoch
         this.serverEpoch = ((BaseServer) servers.get(0)).serverContext.getServerEpoch();
-        this.servers = servers;
+        this.servers = ImmutableList.copyOf(servers);
         handlerMap = new EnumMap<>(CorfuMsgType.class);
         servers.forEach(server -> server.getHandler().getHandledTypes()
             .forEach(x -> handlerMap.put(x, server)));
@@ -68,6 +67,14 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
     @Deprecated
     public void addServer(AbstractServer server) {
         throw new UnsupportedOperationException("No longer supported");
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public List<AbstractServer> getServers() {
+        return servers;
     }
 
     /**
@@ -125,8 +132,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter
                 if (validateEpoch(m, ctx)) {
                     // Route the message to the handler.
                     if (log.isTraceEnabled()) {
-                        log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(),
-                                msg);
+                        log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
                     }
 
                     handler.getExecutor().submit(() -> {

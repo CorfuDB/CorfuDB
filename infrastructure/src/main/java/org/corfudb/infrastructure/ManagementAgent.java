@@ -725,7 +725,7 @@ public class ManagementAgent {
 
             // Re-seal all servers with the latestLayout epoch.
             // This has no effect on up-to-date servers. Only the trailing servers are caught up.
-            getCorfuRuntime().getLayoutView().getRuntimeLayout(layout).moveServersToEpoch();
+            getCorfuRuntime().getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
 
             // Check if any layout server has a stale layout.
             // If yes patch it (commit) with the latestLayout (received from quorum).

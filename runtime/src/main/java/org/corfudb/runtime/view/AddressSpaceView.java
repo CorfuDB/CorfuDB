@@ -29,6 +29,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteCause;
@@ -179,7 +180,7 @@ public class AddressSpaceView extends AbstractView {
 
             // Do the write
             try {
-                l.getReplicationMode(token.getTokenValue())
+                l.getReplicationMode(token.getSequence())
                         .getReplicationProtocol(runtime)
                         .write(e, ld);
             } catch (OverwriteException ex) {
@@ -187,7 +188,7 @@ public class AddressSpaceView extends AbstractView {
                     // If we have an overwrite exception with the SAME_DATA cause, it means that the
                     // server suspects our data has already been written, in this case we need to
                     // validate the state of the write.
-                    validateStateOfWrittenEntry(token.getTokenValue(), ld);
+                    validateStateOfWrittenEntry(token.getSequence(), ld);
                 } else {
                     // If we have an Overwrite exception with a different cause than SAME_DATA
                     // we do not need to validate the state of the write, as we know we have been
@@ -198,14 +199,14 @@ public class AddressSpaceView extends AbstractView {
             } catch (WriteSizeException we) {
                 throw we;
             } catch (RuntimeException re) {
-                validateStateOfWrittenEntry(token.getTokenValue(), ld);
+                validateStateOfWrittenEntry(token.getSequence(), ld);
             }
             return null;
         }, true);
 
         // Cache the successful write
         if (!runtime.getParameters().isCacheDisabled() && cacheOption == CacheOption.WRITE_THROUGH) {
-            readCache.put(token.getTokenValue(), ld);
+            readCache.put(token.getSequence(), ld);
         }
     }
 
@@ -280,21 +281,25 @@ public class AddressSpaceView extends AbstractView {
     /**
      * Get the first address in the address space.
      */
-    public long getTrimMark() {
+    public Token getTrimMark() {
         return layoutHelper(
-                e -> e.getLayout().segments.stream()
-                        .flatMap(seg -> seg.getStripes().stream())
-                        .flatMap(stripe -> stripe.getLogServers().stream())
-                        .map(e::getLogUnitClient)
-                        .map(LogUnitClient::getTrimMark)
-                        .map(CFUtils::getUninterruptibly)
-                        .max(Comparator.naturalOrder()).get());
+                e -> {
+                    long trimMark = e.getLayout().segments.stream()
+                            .flatMap(seg -> seg.getStripes().stream())
+                            .flatMap(stripe -> stripe.getLogServers().stream())
+                            .map(e::getLogUnitClient)
+                            .map(LogUnitClient::getTrimMark)
+                            .map(CFUtils::getUninterruptibly)
+                            .max(Comparator.naturalOrder()).get();
+                    return new Token(e.getLayout().getEpoch(), trimMark);
+                });
+
     }
 
     /**
      * Get the last address in the address space
      */
-    public long getLogTail() {
+    public Token getLogTail() {
         return layoutHelper(
                 e -> getMaxGlobalTail(e.getLayout(), runtime));
     }
@@ -477,7 +482,8 @@ public class AddressSpaceView extends AbstractView {
 
         @Override
         public void run() {
-            long latestTrimMark = getTrimMark();
+            // TODO this seems wrong, make sure that the trim mark can be compared to the cache entries
+            long latestTrimMark = getTrimMark().getSequence();
             final long currentTimestamp = System.currentTimeMillis();
 
             // Learns the trim mark and updates only if not previously recorded.

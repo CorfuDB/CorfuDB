@@ -92,7 +92,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         .write(tokenResponse, object);
                 // The write completed successfully, so we return this
                 // address to the client.
-                return tokenResponse.getToken().getTokenValue();
+                return tokenResponse.getToken().getSequence();
             } catch (OverwriteException oe) {
                 log.trace("Overwrite occurred at {}", tokenResponse);
                 // We got overwritten, so we call the deacquisition callback
@@ -119,7 +119,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         }
 
         log.error("append[{}]: failed after {} retries, write size {} bytes",
-                tokenResponse.getTokenValue(),
+                tokenResponse.getSequence(),
                 runtime.getParameters().getWriteRetry(),
                 ILogData.getSerializedSize(object));
         throw new AppendException();
@@ -127,7 +127,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
     void processTrimmedException(TrimmedException te) {
         if (TransactionalContext.getCurrentContext() != null
-                && TransactionalContext.getCurrentContext().getSnapshotTimestamp()
+                && TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequence()
                 < getCurrentContext().checkpointSnapshotAddress) {
             te.setRetriable(false);
         }
@@ -177,7 +177,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
     @Override
     public boolean getHasNext(QueuedStreamContext context) {
         return  !context.readQueue.isEmpty()
-                || runtime.getSequencerView().query(context.id).getToken().getTokenValue()
+                || runtime.getSequencerView().query(context.id).getToken().getSequence()
                         > context.globalPointer;
     }
 
@@ -362,7 +362,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             try {
                 if (followBackpointers(checkpointId, context.readCpQueue,
                         runtime.getSequencerView()
-                                .query(checkpointId).getToken().getTokenValue(),
+                                .query(checkpointId).getToken().getSequence(),
                         Address.NEVER_READ, d -> resolveCheckpoint(context, d, maxGlobal))) {
                     log.trace("Read_Fill_Queue[{}] Using checkpoint with {} entries",
                             this, context.readCpQueue.size());
@@ -403,7 +403,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         // a linearized read, fetch the token from the sequencer.
         if (latestTokenValue == null || maxGlobal == Address.MAX) {
             latestTokenValue = runtime.getSequencerView().query(context.id)
-                    .getToken().getTokenValue();
+                    .getToken().getSequence();
             log.trace("Read_Fill_Queue[{}] Fetched tail {} from sequencer", this, latestTokenValue);
         }
         // If there is no information on the tail of the stream, return,

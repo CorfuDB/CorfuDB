@@ -58,9 +58,9 @@ public class SequencerServerTest extends AbstractServerTest {
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ, new TokenRequest(1L, Collections.emptyList())));
             Token thisToken = getLastPayloadMessageAs(TokenResponse.class).getToken();
-            assertThat(thisToken.getTokenValue())
+            assertThat(thisToken.getSequence())
                     .isGreaterThan(lastTokenValue);
-            lastTokenValue = thisToken.getTokenValue();
+            lastTokenValue = thisToken.getSequence();
         }
     }
 
@@ -114,8 +114,8 @@ public class SequencerServerTest extends AbstractServerTest {
             assertThat(checkTokenA2)
                     .isEqualTo(checkTokenA);
 
-            assertThat(thisTokenB.getTokenValue())
-                    .isGreaterThan(checkTokenA2.getTokenValue());
+            assertThat(thisTokenB.getSequence())
+                    .isGreaterThan(checkTokenA2.getSequence());
         }
     }
 
@@ -133,7 +133,7 @@ public class SequencerServerTest extends AbstractServerTest {
                     new TokenRequest(1L, Collections.singletonList(streamA))));
             long checkTokenAValue = getLastPayloadMessageAs(TokenResponse.class).getBackpointerMap().get(streamA);
 
-            assertThat(thisTokenA.getTokenValue())
+            assertThat(thisTokenA.getSequence())
                     .isEqualTo(checkTokenAValue);
 
             sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
@@ -144,7 +144,7 @@ public class SequencerServerTest extends AbstractServerTest {
                     new TokenRequest(1L, Collections.singletonList(streamB))));
             long checkTokenBValue = getLastPayloadMessageAs(TokenResponse.class).getBackpointerMap().get(streamB);
 
-            assertThat(thisTokenB.getTokenValue())
+            assertThat(thisTokenB.getSequence())
                     .isEqualTo(checkTokenBValue);
 
             final long MULTI_TOKEN = 5L;
@@ -157,7 +157,7 @@ public class SequencerServerTest extends AbstractServerTest {
                     new TokenRequest(1L, Collections.singletonList(streamA))));
             checkTokenAValue = getLastPayloadMessageAs(TokenResponse.class).getBackpointerMap().get(streamA);
 
-            assertThat(thisTokenA.getTokenValue() + MULTI_TOKEN - 1)
+            assertThat(thisTokenA.getSequence() + MULTI_TOKEN - 1)
                     .isEqualTo(checkTokenAValue);
 
             // check the requesting multiple tokens does not break the back-pointer for the multi-entry
@@ -169,7 +169,7 @@ public class SequencerServerTest extends AbstractServerTest {
                     new TokenRequest(MULTI_TOKEN, Collections.singletonList(streamA))));
             checkTokenAValue = getLastPayloadMessageAs(TokenResponse.class).getBackpointerMap().get(streamA);
 
-            assertThat(thisTokenA.getTokenValue())
+            assertThat(thisTokenA.getSequence())
                     .isEqualTo(checkTokenAValue);
 
         }
@@ -183,22 +183,22 @@ public class SequencerServerTest extends AbstractServerTest {
 
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
                 new TokenRequest(1L, Collections.singletonList(streamA))));
-        long tailA = getLastPayloadMessageAs(TokenResponse.class).getToken().getTokenValue();
+        long tailA = getLastPayloadMessageAs(TokenResponse.class).getToken().getSequence();
 
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
                 new TokenRequest(1L, Collections.singletonList(streamB))));
-        long tailB = getLastPayloadMessageAs(TokenResponse.class).getToken().getTokenValue();
+        long tailB = getLastPayloadMessageAs(TokenResponse.class).getToken().getSequence();
 
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
                 new TokenRequest(1L, Collections.singletonList(streamC))));
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
                 new TokenRequest(1L, Collections.singletonList(streamC))));
 
-        long tailC = getLastPayloadMessageAs(TokenResponse.class).getToken().getTokenValue();
+        long tailC = getLastPayloadMessageAs(TokenResponse.class).getToken().getSequence();
 
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
                 new TokenRequest(0L, Collections.emptyList())));
-        long globalTail = getLastPayloadMessageAs(TokenResponse.class).getToken().getTokenValue();
+        long globalTail = getLastPayloadMessageAs(TokenResponse.class).getToken().getSequence();
 
         // Construct new tails
         Map<UUID, Long> tailMap = new HashMap<>();
@@ -218,15 +218,15 @@ public class SequencerServerTest extends AbstractServerTest {
 
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
                 new TokenRequest(0L, Collections.singletonList(streamA))));
-        assertThat(getLastPayloadMessageAs(TokenResponse.class).getToken().getTokenValue()).isEqualTo(newTailA);
+        assertThat(getLastPayloadMessageAs(TokenResponse.class).getToken().getSequence()).isEqualTo(newTailA);
 
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
                 new TokenRequest(0L, Collections.singletonList(streamB))));
-        assertThat(getLastPayloadMessageAs(TokenResponse.class).getToken().getTokenValue()).isEqualTo(newTailB);
+        assertThat(getLastPayloadMessageAs(TokenResponse.class).getToken().getSequence()).isEqualTo(newTailB);
 
         // We should have the same value than before
         sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
                 new TokenRequest(0L, Collections.singletonList(streamC))));
-        assertThat(getLastPayloadMessageAs(TokenResponse.class).getToken().getTokenValue()).isEqualTo(newTailC);
+        assertThat(getLastPayloadMessageAs(TokenResponse.class).getToken().getSequence()).isEqualTo(newTailC);
     }
 }

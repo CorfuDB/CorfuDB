@@ -19,7 +19,7 @@ public class BatchWriterOperation {
         RANGE_WRITE,
         TRIM,
         PREFIX_TRIM,
-        EPOCH_WATER_MARK,
+        SEAL,
         RESET
     }
 
