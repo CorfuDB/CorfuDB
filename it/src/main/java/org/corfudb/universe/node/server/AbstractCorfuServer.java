@@ -62,6 +62,11 @@ public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends
         return cmdLineParams;
     }
 
+    @Override
+    public int compareTo(CorfuServer other) {
+        return Integer.compare(getParams().getPort(), other.getParams().getPort());
+    }
+
     /**
      * Provides a current version of this project. It parses the version from pom.xml
      * @return maven/project version

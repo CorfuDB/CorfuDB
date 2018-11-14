@@ -34,7 +34,8 @@ public class AllNodesPartitionedIT extends GenericIntegrationTest {
 
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-            CorfuTable table = corfuClient.createDefaultCorfuTable(TestFixtureConst.DEFAULT_STREAM_NAME);
+            CorfuTable<String, String> table =
+                    corfuClient.createDefaultCorfuTable(TestFixtureConst.DEFAULT_STREAM_NAME);
             for (int i = 0; i < TestFixtureConst.DEFAULT_TABLE_ITER; i++) {
                 table.put(String.valueOf(i), String.valueOf(i));
             }

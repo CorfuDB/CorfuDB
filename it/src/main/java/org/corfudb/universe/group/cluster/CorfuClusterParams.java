@@ -1,6 +1,6 @@
 package org.corfudb.universe.group.cluster;
 
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSortedSet;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
@@ -14,9 +14,9 @@ import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.util.ClassUtils;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 @Builder
@@ -30,7 +30,7 @@ class CorfuClusterParams implements GroupParams {
     private String name = RandomStringUtils.randomAlphabetic(6).toLowerCase();
     @Default
     @NonNull
-    private final List<CorfuServerParams> nodes = new ArrayList<>();
+    private final SortedSet<CorfuServerParams> nodes = new TreeSet<>();
     @Getter
     @Default
     @NonNull
@@ -45,8 +45,8 @@ class CorfuClusterParams implements GroupParams {
     private final Duration retryTimeout = Duration.ofSeconds(3);
 
     @Override
-    public ImmutableList<CorfuServerParams> getNodesParams() {
-        return ImmutableList.copyOf(nodes);
+    public ImmutableSortedSet<CorfuServerParams> getNodesParams() {
+        return ImmutableSortedSet.copyOf(nodes);
     }
 
     public synchronized CorfuServerParams getNode(String serverName) {

@@ -36,13 +36,13 @@ public class OneNodePartitionedIT extends GenericIntegrationTest {
 
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-            CorfuTable table = corfuClient.createDefaultCorfuTable(DEFAULT_STREAM_NAME);
+            CorfuTable<String, String> table = corfuClient.createDefaultCorfuTable(DEFAULT_STREAM_NAME);
             for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                 table.put(String.valueOf(i), String.valueOf(i));
             }
 
             testCase.it("should symmetrically partition one node from cluster", data -> {
-                CorfuServer server1 = corfuCluster.getNode("node9001");
+                CorfuServer server1 = corfuCluster.getServerByIndex(1);
 
                 // Symmetrically Partition one node and wait for layout's unresponsive servers to change
                 server1.disconnect();

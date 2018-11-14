@@ -168,7 +168,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
         log.info("Disconnecting the server from docker network. Docker container: {}", params.getName());
 
         clusterParams.getNodesParams().forEach(neighbourServer -> {
-            if (neighbourServer.equals(params)){
+            if (neighbourServer.equals(params)) {
                 return;
             }
 
@@ -180,7 +180,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
                 ContainerInfo server = docker.inspectContainer(neighbourServer.getName());
                 String neighbourhoodIp = server.networkSettings().networks().values().asList().get(0).ipAddress();
 
-                if (StringUtils.isEmpty(neighbourhoodIp)){
+                if (StringUtils.isEmpty(neighbourhoodIp)) {
                     throw new NodeException("Empty ip address. Container: " + neighbourServer.getName());
                 }
 
@@ -329,7 +329,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
                     .values().asList().get(0)
                     .ipAddress();
 
-            if (StringUtils.isEmpty(ipAddr)){
+            if (StringUtils.isEmpty(ipAddr)) {
                 throw new NodeException("Empty Ip address for container: " + params.getName());
             }
 
