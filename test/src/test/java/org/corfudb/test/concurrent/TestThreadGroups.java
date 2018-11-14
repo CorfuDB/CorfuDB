@@ -6,8 +6,12 @@ import io.netty.channel.EventLoopGroup;
 import javax.annotation.Nonnull;
 import org.corfudb.util.concurrent.SingletonResource;
 
+import java.util.concurrent.TimeUnit;
+
 public class TestThreadGroups {
 
+    private static final int QUIET_PERIOD = 50;
+    private static final int TIMEOUT = 100;
     /**
      * Netty "boss" thread group which is reused in tests.
      */
@@ -34,9 +38,9 @@ public class TestThreadGroups {
      * Gracefully shutdown the event loop groups.
      */
     public static void shutdownThreadGroups() {
-        NETTY_BOSS_GROUP.cleanup(EventLoopGroup::shutdownGracefully);
-        NETTY_WORKER_GROUP.cleanup(EventLoopGroup::shutdownGracefully);
-        NETTY_CLIENT_GROUP.cleanup(EventLoopGroup::shutdownGracefully);
+        NETTY_BOSS_GROUP.cleanup(group -> group.shutdownGracefully(QUIET_PERIOD, TIMEOUT, TimeUnit.MILLISECONDS));
+        NETTY_WORKER_GROUP.cleanup(group -> group.shutdownGracefully(QUIET_PERIOD, TIMEOUT, TimeUnit.MILLISECONDS));
+        NETTY_CLIENT_GROUP.cleanup(group -> group.shutdownGracefully(QUIET_PERIOD, TIMEOUT, TimeUnit.MILLISECONDS));
     }
 
     /**
