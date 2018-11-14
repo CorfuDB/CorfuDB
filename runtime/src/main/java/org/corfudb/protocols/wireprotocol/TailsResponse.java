@@ -20,12 +20,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class TailsResponse implements ICorfuPayload<TailsResponse> {
 
-    final long logTail;
+    final Token tail;
 
-    final Map<UUID, Long> streamTails;
+    final Map<UUID, Token> streamTails;
 
     public TailsResponse(ByteBuf buf) {
-        logTail = ICorfuPayload.fromBuffer(buf, Long.class);
+        tail = ICorfuPayload.fromBuffer(buf, Long.class);
         streamTails = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
     }
 

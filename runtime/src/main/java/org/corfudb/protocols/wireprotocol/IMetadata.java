@@ -203,7 +203,7 @@ public interface IMetadata {
     /**
      * Returns the tail of the checkpointed stream at the time of taking the checkpoint snapshot.
      */
-    default Long getCheckpointedStreamStartLogAddress() {
+    default Token getCheckpointedStreamStartLogAddress() {
         return (Long) getMetadataMap()
                 .getOrDefault(LogUnitMetadataType.CHECKPOINTED_STREAM_START_LOG_ADDRESS,
                         Address.NO_BACKPOINTER);

@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.view.Address;
 
 import javax.annotation.concurrent.NotThreadSafe;
@@ -26,13 +27,13 @@ import java.util.UUID;
 public class LogMetadata {
 
     @Getter
-    private volatile long globalTail;
+    private volatile Token globalTail;
 
     @Getter
-    private final Map<UUID, Long> streamTails;
+    private final Map<UUID, Token> streamTails;
 
     public LogMetadata() {
-        this.globalTail = Address.NON_ADDRESS;
+        this.globalTail = Token.UNINITIALIZED;
         this.streamTails = new HashMap();
     }
 
@@ -46,8 +47,8 @@ public class LogMetadata {
         long entryAddress = entry.getGlobalAddress();
         updateGlobalTail(entryAddress);
         for (UUID streamId : entry.getStreams()) {
-            long currentStreamTail = streamTails.getOrDefault(streamId, Address.NON_ADDRESS);
-            streamTails.put(streamId, Math.max(currentStreamTail, globalTail));
+            Token currentStreamTail = streamTails.getOrDefault(streamId, Token.UNINITIALIZED);
+            streamTails.put(streamId, Token.max(currentStreamTail, globalTail));
         }
 
         // We should also consider checkpoint metadata while updating the tails.
@@ -57,23 +58,23 @@ public class LogMetadata {
         // streams as empty, which is not correct.
         if (entry.hasCheckpointMetadata()) {
             UUID streamId = entry.getCheckpointedStreamId();
-            long streamTailAtCP = entry.getCheckpointedStreamStartLogAddress();
+            Token streamTailAtCP = entry.getCheckpointedStreamStartLogAddress();
 
-            if (Address.isAddress(streamTailAtCP)) {
+            if (Address.isAddress(streamTailAtCP.getSequence())) {
                 // TODO(Maithem) This is needed to filter out checkpoints of empty streams,
                 // if the map has an entry (streamId, Address.Non_ADDRESS), then
                 // when the sequencer services queries on that stream it will
                 // "think" that the tail is not empty and return Address.Non_ADDRESS
                 // instead of NON_EXIST. The sequencer, should handle both cases,
                 // but that can be addressed in another issue.
-                long currentStreamTail = streamTails.getOrDefault(streamId, Address.NON_ADDRESS);
-                streamTails.put(streamId, Math.max(currentStreamTail, streamTailAtCP));
+                Token currentStreamTail = streamTails.getOrDefault(streamId, Token.UNINITIALIZED);
+                streamTails.put(streamId, Token.max(currentStreamTail, streamTailAtCP));
             }
         }
     }
 
-    public void updateGlobalTail(long newTail) {
-        globalTail = Math.max(globalTail, newTail);
+    public void updateGlobalTail(Token newTail) {
+        globalTail = Token.max(globalTail, newTail);
     }
 
 }

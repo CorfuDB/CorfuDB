@@ -20,6 +20,7 @@ import lombok.Setter;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -416,10 +417,10 @@ public class ServerContext implements AutoCloseable {
      *
      * @return the starting address
      */
-    public long getStartingAddress() {
-        Long startingAddress = dataStore.get(Long.class, PREFIX_STARTING_ADDRESS,
+    public Token getStartingAddress() {
+        Token startingAddress = dataStore.get(Token.class, PREFIX_STARTING_ADDRESS,
                 KEY_STARTING_ADDRESS);
-        return startingAddress == null ? 0 : startingAddress;
+        return startingAddress == null ? Token.UNINITIALIZED : startingAddress;
     }
 
     public void setStartingAddress(long startingAddress) {

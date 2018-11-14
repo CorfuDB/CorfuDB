@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.List;
 
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.view.Tails;
 
@@ -48,7 +49,7 @@ public interface StreamLog {
      * Prefix trim the global log.
      * @param address address to trim the log up to
      */
-    void prefixTrim(long address);
+    void prefixTrim(Token address);
 
     /**
      * Remove all trimmed addresses from the StreamLog.
@@ -63,7 +64,7 @@ public interface StreamLog {
     /**
      * Get the first untrimmed address in the address space.
      */
-    long getTrimMark();
+    Token getTrimMark();
 
     /**
      * Sync the stream log file to secondary storage.

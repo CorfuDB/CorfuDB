@@ -74,7 +74,7 @@ public class MultiCheckpointWriter<T extends Map> {
 
         // We retrieve the tail from the logging units because the tail
         // returned from the sequencer might not be materialized
-        long globalTail = rt.getAddressSpaceView().getAllTails().getLogTail();
+        Token globalTail = rt.getAddressSpaceView().getAllTails().getGlobalTail();
 
         rt.getObjectsView().TXBuild()
                 .setType(TransactionType.SNAPSHOT)

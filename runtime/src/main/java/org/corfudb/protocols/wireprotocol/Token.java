@@ -29,4 +29,12 @@ public class Token implements IToken, Comparable<Token> {
         }
         return epochCmp;
     }
+
+    public static Token max(Token t1, Token t2) {
+        if (t1.compareTo(t2) > 0) {
+            return t1;
+        } else {
+            return t2;
+        }
+    }
 }

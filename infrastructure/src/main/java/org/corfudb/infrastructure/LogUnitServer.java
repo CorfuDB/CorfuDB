@@ -139,7 +139,7 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.TAIL_REQUEST)
     public void handleTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         Tails tails = batchWriter.queryTails(msg.getEpoch());
-        r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(new TailsResponse(tails.getLogTail(),
+        r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(new TailsResponse(tails.getTail(),
                 tails.getStreamTails())));
     }
 

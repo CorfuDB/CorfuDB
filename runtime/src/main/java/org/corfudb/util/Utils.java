@@ -473,16 +473,16 @@ public class Utils {
      * @param responses a set of tail responses
      * @return An max-aggregation of all tails
      */
-    static Tails getTails(Set<TailsResponse> responses, Layout layout) {
-        long globalTail = Address.NON_ADDRESS;
-        Map<UUID, Long> globalStreamTails = new HashMap<>();
+    static Tails getTails(Set<TailsResponse> responses) {
+        Token globalTail = Token.UNINITIALIZED;
+        Map<UUID, Token> globalStreamTails = new HashMap<>();
 
         for (TailsResponse res : responses) {
-            globalTail = Math.max(globalTail, res.getLogTail());
+            globalTail = Token.max(globalTail, res.getTail());
 
-            for (Map.Entry<UUID, Long> stream : res.getStreamTails().entrySet()) {
-                long streamTail = globalStreamTails.getOrDefault(stream.getKey(), Address.NON_ADDRESS);
-                globalStreamTails.put(stream.getKey(), Math.max(streamTail, stream.getValue()));
+            for (Map.Entry<UUID, Token> stream : res.getStreamTails().entrySet()) {
+                Token streamTail = globalStreamTails.getOrDefault(stream.getKey(), Token.UNINITIALIZED);
+                globalStreamTails.put(stream.getKey(), Token.max(streamTail, stream.getValue()));
             }
         }
         return new Tails(globalTail, globalStreamTails);
