@@ -8,7 +8,7 @@ import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
@@ -378,7 +378,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             if (globalAddr < startAddress - 1) {
                 final long thisAddress = globalAddr;
                 try {
-                    Token ts = new Token(0L, thisAddress);
+                    LSN ts = new LSN(0L, thisAddress);
                     r.getObjectsView().TXBuild()
                             .setType(TransactionType.SNAPSHOT)
                             .setSnapshot(ts)
@@ -391,7 +391,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 }
 
             } else {
-                Token ts = new Token(0L, globalAddr);
+                LSN ts = new LSN(0L, globalAddr);
                 r.getObjectsView().TXBuild()
                         .setType(TransactionType.SNAPSHOT)
                         .setSnapshot(ts)
@@ -435,7 +435,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // Write cp #1 of 3
         if (write1) {
             TokenResponse tokResp1 = r.getSequencerView().query(streamId);
-            long addr1 = tokResp1.getToken().getSequence();
+            long addr1 = tokResp1.getLSN().getSequence();
             mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1 + 1));
             CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                     checkpointAuthor, checkpointId, streamId, mdKV, null);

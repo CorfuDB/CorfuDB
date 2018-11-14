@@ -19,6 +19,7 @@ import org.corfudb.format.Types.TrimEntry;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
@@ -81,12 +82,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     public final String logDir;
     private final boolean noVerify;
     private final ServerContext serverContext;
-    private final AtomicLong globalTail = new AtomicLong(Address.NON_ADDRESS);
+    private final LSN globalTail = new AtomicLong(Address.NON_ADDRESS);
     private Map<String, SegmentHandle> writeChannels;
     private Set<FileChannel> channelsToSync;
     private MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
     private long lastSegment;
-    private volatile long startingAddress;
+    private volatile LSN startingAddress;
 
     /**
      * Returns a file-based stream log object.
@@ -200,7 +201,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public long getGlobalTail() {
+    public LSN getGlobalTail() {
         return globalTail.get();
     }
 
@@ -233,7 +234,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
     }
 
-    private boolean isTrimmed(long address) {
+    private boolean isTrimmed(LSN address) {
         if (address < startingAddress) {
             return true;
         }
@@ -1261,7 +1262,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public LogData read(long address) {
+    public LogData read(LSN address) {
         if (isTrimmed(address)) {
             return LogData.getTrimmed(address);
         }
@@ -1289,7 +1290,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public void release(long address, LogData entry) {
+    public void release(LSN address) {
     }
 
     /**

@@ -1,7 +1,5 @@
 package org.corfudb.runtime.view;
 
-import com.sun.xml.internal.bind.v2.TODO;
-
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
@@ -11,25 +9,21 @@ import javax.annotation.Nonnull;
 
 import lombok.Data;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.util.serializer.Serializers;
 
 /**
  * A view of the objects inside a Corfu instance.
@@ -150,11 +144,11 @@ public class ObjectsView extends AbstractView {
                 throw e;
             } catch (NetworkException e) {
                 log.warn("TXEnd[{}] Network Exception {}", context, e);
-                Token snapshotTimestamp;
+                LSN snapshotTimestamp;
                 try {
                     snapshotTimestamp = context.getSnapshotTimestamp();
                 } catch (NetworkException ne) {
-                    snapshotTimestamp = Token.UNINITIALIZED;
+                    snapshotTimestamp = LSN.UNINITIALIZED;
                 }
                 TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
                     snapshotTimestamp);
@@ -166,7 +160,7 @@ public class ObjectsView extends AbstractView {
             } catch (Exception e) {
                log.error("TXEnd[{}]: Unexpected exception", context, e);
                 TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
-                    Token.UNINITIALIZED);
+                    LSN.UNINITIALIZED);
                 TransactionAbortedException tae = new TransactionAbortedException(txInfo,
                     null, null, AbortCause.UNDEFINED, e, context);
                 context.abortTransaction(tae);

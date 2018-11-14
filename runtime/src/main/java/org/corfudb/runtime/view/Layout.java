@@ -22,6 +22,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -290,12 +291,12 @@ public class Layout {
     /**
      * Get the replication mode of a segment at a particular address.
      *
-     * @param address The address to check.
+     * @param lsn The address to check.
      * @return The replication mode of the segment, or null if empty.
      */
-    public ReplicationMode getReplicationMode(long address) {
+    public ReplicationMode getReplicationMode(LSN lsn) {
         for (LayoutSegment ls : segments) {
-            if (ls.start <= address && (ls.end > address || ls.end == -1)) {
+            if (ls.start <= lsn.getSequence() && (ls.end > lsn.getSequence() || ls.end == -1)) {
                 return ls.getReplicationMode();
             }
         }

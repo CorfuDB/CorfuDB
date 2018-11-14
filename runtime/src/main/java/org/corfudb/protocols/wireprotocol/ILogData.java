@@ -19,7 +19,7 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
 
     @Override
     default int compareTo(ILogData o) {
-        return getGlobalAddress().compareTo(o.getGlobalAddress());
+        return getToken().getLSN().compareTo(o.getToken().getLSN());
     }
 
     /** This class provides a serialization handle, which
@@ -139,17 +139,6 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
         int size = ld.getSizeEstimate();
         ld.releaseBuffer();
         return size;
-    }
-
-    /** Assign a given token to this log data.
-     *
-     * @param token     The token to use.
-     */
-    default void useToken(IToken token) {
-        setGlobalAddress(token.getSequence());
-        if (token.getBackpointerMap().size() > 0) {
-            setBackpointerMap(token.getBackpointerMap());
-        }
     }
 
     default void setId(UUID clientId) {

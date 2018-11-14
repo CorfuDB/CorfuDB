@@ -77,8 +77,8 @@ public class StreamsView extends AbstractView {
                        @Nonnull CacheOption cacheOption, @Nonnull UUID ... streamIDs) {
         // Go to the sequencer, grab an initial token.
         TokenResponse tokenResponse = conflictInfo == null
-                ? runtime.getSequencerView().next(streamIDs) // Token w/o conflict info
-                : runtime.getSequencerView().next(conflictInfo, streamIDs); // Token w/ conflict info
+                ? runtime.getSequencerView().next(streamIDs) // LSN w/o conflict info
+                : runtime.getSequencerView().next(conflictInfo, streamIDs); // LSN w/ conflict info
 
         for (int x = 0; x < runtime.getParameters().getWriteRetry(); x++) {
 
@@ -124,15 +124,15 @@ public class StreamsView extends AbstractView {
 
                 TokenResponse temp;
                 if (conflictInfo == null) {
-                    // Token w/o conflict info
+                    // LSN w/o conflict info
                     temp = runtime.getSequencerView().next(streamIDs);
                 } else {
 
                     // On retry, check for conflicts only from the previous
                     // attempt position
-                    conflictInfo.setSnapshotTimestamp(tokenResponse.getToken());
+                    conflictInfo.setSnapshotTimestamp(tokenResponse.getLSN());
 
-                    // Token w/ conflict info
+                    // LSN w/ conflict info
                     temp = runtime.getSequencerView().next(conflictInfo, streamIDs);
                 }
 
@@ -140,7 +140,7 @@ public class StreamsView extends AbstractView {
                 // eventually be deprecated since these are no longer used)
                 tokenResponse = new TokenResponse(
                         temp.getRespType(), tokenResponse.getConflictKey(),
-                        temp.getToken(), temp.getBackpointerMap(), Collections.emptyList());
+                        temp.getLSN(), temp.getBackpointerMap(), Collections.emptyList());
 
             } catch (StaleTokenException se) {
                 // the epoch changed from when we grabbed the token from sequencer

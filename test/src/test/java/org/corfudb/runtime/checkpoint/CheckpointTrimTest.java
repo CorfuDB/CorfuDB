@@ -1,7 +1,7 @@
 package org.corfudb.runtime.checkpoint;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -117,7 +117,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .open();
 
         // try to get a snapshot inside the gap
-        Token snapshot = new Token(0L, checkpointAddress - 1);
+        LSN snapshot = new LSN(0L, checkpointAddress - 1);
         getRuntime().getObjectsView()
                 .TXBuild()
                 .setType(TransactionType.SNAPSHOT)
@@ -150,7 +150,7 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .open();
 
         // Play the new view up to "b" only
-        Token snapshot = new Token(0L, 1);
+        LSN snapshot = new LSN(0L, 1);
         getRuntime().getObjectsView().TXBuild()
                 .setType(TransactionType.SNAPSHOT)
                 .setSnapshot(snapshot)

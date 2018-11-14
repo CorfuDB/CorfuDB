@@ -6,7 +6,7 @@ import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -189,7 +189,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
             // Linearize this read against a timestamp
             final long timestamp = rt.getSequencerView()
-                            .query(getStreamID()).getToken().getSequence();
+                            .query(getStreamID()).getLSN().getSequence();
             log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
             try {
@@ -264,9 +264,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Override
     public void sync() {
         // Linearize this read against a timestamp
-        final Token timestamp =
+        final LSN timestamp =
                 rt.getSequencerView()
-                        .query(getStreamID()).getToken();
+                        .query(getStreamID()).getLSN();
 
         log.debug("Sync[{}] {}", this, timestamp);
         // Acquire locks and perform read.
@@ -467,7 +467,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     }
 
     private void abortTransaction(Exception e) {
-        Token snapshotTimestamp;
+        LSN snapshotTimestamp;
         AbortCause abortCause;
         TransactionAbortedException tae;
 
@@ -481,7 +481,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
                 // 'getSnapshotTimestamp' will also fail (as it requests it to the Sequencer).
                 // A new NetworkException would prevent the earliest to be propagated and encapsulated
                 // as a TransactionAbortedException.
-                snapshotTimestamp = Token.UNINITIALIZED;
+                snapshotTimestamp = LSN.UNINITIALIZED;
                 abortCause = AbortCause.NETWORK;
             } else if (e instanceof UnsupportedOperationException) {
                 snapshotTimestamp = context.getSnapshotTimestamp();

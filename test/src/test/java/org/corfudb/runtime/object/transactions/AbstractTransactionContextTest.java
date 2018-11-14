@@ -2,7 +2,7 @@ package org.corfudb.runtime.object.transactions;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuSharedCounter;
@@ -104,7 +104,7 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
 
     @Test
     public void ensureUserTsIsInherited() {
-        final Token parentTs = new Token(0L, 10L);
+        final LSN parentTs = new LSN(0L, 10L);
         getRuntime().getObjectsView().TXBuild()
                 .setSnapshot(parentTs)
                 .begin();
@@ -157,7 +157,7 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
     public void nestingUserDefineAndDefaultTs() {
         // Let the parent transaction set its its ts
         // from the sequencer
-        final Token childTs = new Token(0L, 5L);
+        final LSN childTs = new LSN(0L, 5L);
         getRuntime().getObjectsView()
                 .TXBuild()
                 .begin();

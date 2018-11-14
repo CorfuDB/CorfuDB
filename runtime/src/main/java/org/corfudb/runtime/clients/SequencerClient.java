@@ -66,7 +66,7 @@ public class SequencerClient extends AbstractClient {
     /**
      * Resets the sequencer with the specified initialToken
      *
-     * @param initialToken                Token Number which the sequencer starts distributing.
+     * @param initialToken                LSN Number which the sequencer starts distributing.
      * @param sequencerTails              Sequencer tails map.
      * @param readyStateEpoch             Epoch at which the sequencer is ready and to stamp tokens.
      * @param bootstrapWithoutTailsUpdate True, if this is a delta message and just updates an
@@ -86,7 +86,7 @@ public class SequencerClient extends AbstractClient {
      * Resets the sequencer with the specified initialToken.
      * BootstrapWithoutTailsUpdate defaulted to false.
      *
-     * @param initialToken    Token Number which the sequencer starts distributing.
+     * @param initialToken    LSN Number which the sequencer starts distributing.
      * @param sequencerTails  Sequencer tails map.
      * @param readyStateEpoch Epoch at which the sequencer is ready and to stamp tokens.
      * @return A CompletableFuture which completes once the sequencer is reset.

@@ -4,15 +4,15 @@ import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class TokenTest {
+public class LSNTest {
 
     @Test
     public void tokenComparisionTest() {
 
-        Token uninitialized = Token.UNINITIALIZED;
-        Token a = new Token(0, 0);
-        Token a2 = new Token(0, 0);
-        Token b = new Token(0, 1);
+        LSN uninitialized = LSN.UNINITIALIZED;
+        LSN a = new LSN(0, 0);
+        LSN a2 = new LSN(0, 0);
+        LSN b = new LSN(0, 1);
 
         // Verify that uninitialized < a <= a2 < b < c
         assertThat(uninitialized.compareTo(a)).isEqualTo(-1);

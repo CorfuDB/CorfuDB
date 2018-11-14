@@ -1,32 +1,30 @@
 package org.corfudb.protocols.wireprotocol;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import org.corfudb.runtime.view.Address;
+import java.util.Collections;
+import java.util.Map;
+import java.util.UUID;
 
-/**
- * Token returned by the sequencer is a combination of the
- * sequence number and the epoch at which it was acquired.
+/** Represents a position on the log and pointers to previous
+ * entries on the log.
  *
- * <p>Created by zlokhandwala on 4/7/17.</p>
+ * <p>Clients must obtain a LSN to write to the log using the normal
+ * writing protocol.</p>
+ *
+ * <p>Created by mwei on 4/14/17.</p>
  */
-@Data
-@AllArgsConstructor
-@EqualsAndHashCode
-public class Token implements IToken, Comparable<Token> {
+public interface Token {
 
-    public static final Token UNINITIALIZED = new Token(Address.NON_ADDRESS, Address.NON_ADDRESS);
+    /**
+     * Returns the logical sequence number for this token.
+     * @return
+     */
+    LSN getLSN();
 
-    private final long epoch;
-    private final long sequence;
-
-    @Override
-    public int compareTo(Token o) {
-        int epochCmp = Long.compare(epoch, o.getEpoch());
-        if (epochCmp == 0) {
-            return Long.compare(sequence, o.getSequence());
-        }
-        return epochCmp;
+    /** Get the backpointer map, if it was available.
+     * @return  A map of backpointers for the streams in the log.
+     *          Also represents the streams this LSN is valid for.
+     */
+    default Map<UUID, LSN> getBackpointerMap() {
+        return Collections.emptyMap();
     }
 }

@@ -26,7 +26,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
     /* snapshot timestamp of the txn. */
     @Getter
     @Setter
-    Token snapshotTimestamp;
+    LSN snapshotTimestamp;
 
     /** A set of poisoned streams, which have a conflict against all updates. */
 
@@ -42,7 +42,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
      * @param txId transaction identifier
      * @param snapshotTimestamp transaction snapshot timestamp
      */
-    public TxResolutionInfo(UUID txId, Token snapshotTimestamp) {
+    public TxResolutionInfo(UUID txId, LSN snapshotTimestamp) {
         this.TXid = txId;
         this.snapshotTimestamp = snapshotTimestamp;
         this.conflictSet = Collections.emptyMap();
@@ -57,7 +57,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
      * @param conflictMap map of conflict parameters, arranged by stream IDs
      * @param writeConflictParams map of write conflict parameters, arranged by stream IDs
      */
-    public TxResolutionInfo(UUID txId, Token snapshotTimestamp, Map<UUID, Set<byte[]>>
+    public TxResolutionInfo(UUID txId, LSN snapshotTimestamp, Map<UUID, Set<byte[]>>
             conflictMap, Map<UUID, Set<byte[]>> writeConflictParams) {
         this.TXid = txId;
         this.snapshotTimestamp = snapshotTimestamp;
@@ -79,7 +79,7 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
         TXid = ICorfuPayload.fromBuffer(buf, UUID.class);
         final long epoch = buf.readLong();
         final long sequence = buf.readLong();
-        snapshotTimestamp = new Token(epoch, sequence);
+        snapshotTimestamp = new LSN(epoch, sequence);
 
         // conflictSet
         int numEntries = buf.readInt();

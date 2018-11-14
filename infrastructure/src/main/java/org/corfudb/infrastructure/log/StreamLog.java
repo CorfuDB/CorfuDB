@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log;
 import java.io.IOException;
 import java.util.List;
 
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 
@@ -16,10 +17,9 @@ public interface StreamLog {
 
     /**
      * Append an entry to the stream log.
-     * @param address  address of append entry
      * @param entry    entry to append to the log
      */
-    void append(long address, LogData entry);
+    void append(LogData entry);
 
     /**
      * Append a range of consecutive entries ordered by their addresses.
@@ -32,22 +32,22 @@ public interface StreamLog {
 
     /**
      * Given an address, read the corresponding stream entry.
-     * @param address  address to read from the log
+     * @param lsn  address to read from the log
      * @return Stream entry if it exists, otherwise return null
      */
-    LogData read(long address);
+    LogData read(LSN lsn);
 
     /**
      * Mark a StreamLog address as trimmed.
-     * @param address  address to trim from the log
+     * @param lsn  address to trim from the log
      */
-    void trim(long address);
+    void trim(LSN lsn);
 
     /**
      * Prefix trim the global log.
-     * @param address address to trim the log up to
+     * @param lsn address to trim the log up to
      */
-    void prefixTrim(long address);
+    void prefixTrim(LSN lsn);
 
     /**
      * Remove all trimmed addresses from the StreamLog.
@@ -57,12 +57,12 @@ public interface StreamLog {
     /**
      * Get the last global address that was written.
      */
-    long getGlobalTail();
+    LSN getGlobalTail();
 
     /**
      * Get the first untrimmed address in the address space.
      */
-    long getTrimMark();
+    LSN getTrimMark();
 
     /**
      * Sync the stream log file to secondary storage.
@@ -81,7 +81,7 @@ public interface StreamLog {
      *
      * @param address  address to release
      */
-    void release(long address, LogData entry);
+    void release(LSN address);
 
     /**
      * Clears all data and resets all segment handlers.
@@ -90,13 +90,11 @@ public interface StreamLog {
 
     /**
      * Get overwrite cause for a given address.
-     *
-     * @param address global log address
      * @param entry entry which would cause the overwrite
      * @return (OverwriteCause) Cause of the overwrite
      */
-    default OverwriteCause getOverwriteCauseForAddress(long address, LogData entry) {
-        LogData currentEntry = read(address);
+    default OverwriteCause getOverwriteCauseForAddress(LogData entry) {
+        LogData currentEntry = read(entry.getToken().getLSN());
         OverwriteCause cause = OverwriteCause.DIFF_DATA;
 
         if (currentEntry != null) {

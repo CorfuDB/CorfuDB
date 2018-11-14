@@ -3,7 +3,7 @@ package org.corfudb.generator.operations;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
 import org.corfudb.generator.State;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 
 import java.util.List;
@@ -24,15 +24,15 @@ public class SnapshotTxOperation extends Operation {
     @Override
     public void execute() {
         try {
-            Token trimMark = state.getTrimMark();
+            LSN trimMark = state.getTrimMark();
             Random rand = new Random();
             long delta = (long) rand.nextInt(10) + 1;
 
             // Safety Hack for not having snapshot in the future
 
-            Token currentMax = state.getRuntime().getSequencerView()
+            LSN currentMax = state.getRuntime().getSequencerView()
                     .query()
-                    .getToken();
+                    .getLSN();
 
             long snapShotAddress = Long.min(trimMark.getSequence() + delta, currentMax.getSequence());
 
@@ -40,7 +40,7 @@ public class SnapshotTxOperation extends Operation {
 
             // TODO(Maithem) the tail subtraction results in an sequence from a different
             // epoch, this would fail
-            state.startSnapshotTx(new Token(currentMax.getEpoch(), snapShotAddress));
+            state.startSnapshotTx(new LSN(currentMax.getEpoch(), snapShotAddress));
 
             int numOperations = state.getOperationCount().sample(1).get(0);
             List<Operation> operations = state.getOperations().sample(numOperations);

@@ -16,7 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -25,7 +25,6 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
-import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
 
 /**
@@ -105,7 +104,7 @@ public abstract class AbstractTransactionalContext implements
      * The global-log position that the transaction snapshots in all reads.
      */
     @Getter(lazy = true)
-    private final Token snapshotTimestamp = obtainSnapshotTimestamp();
+    private final LSN snapshotTimestamp = obtainSnapshotTimestamp();
 
     /**
      * The address that the transaction was committed at.
@@ -179,7 +178,7 @@ public abstract class AbstractTransactionalContext implements
                                                Object[] conflictObject);
 
     public void syncWithRetryUnsafe(VersionLockedObject vlo,
-                                    Token snapshotTimestamp,
+                                    LSN snapshotTimestamp,
                                     ICorfuSMRProxyInternal proxy,
                                     @Nullable Consumer<VersionLockedObject> optimisticStreamSetter) {
         for (int x = 0; x < this.builder.getRuntime().getParameters().getTrimRetry(); x++) {
@@ -260,14 +259,14 @@ public abstract class AbstractTransactionalContext implements
      *
      * @return the current global tail
      */
-    private Token obtainSnapshotTimestamp() {
+    private LSN obtainSnapshotTimestamp() {
         final AbstractTransactionalContext parentCtx = getParentContext();
-        final Token txnBuilderTs = getBuilder().getSnapshot();
+        final LSN txnBuilderTs = getBuilder().getSnapshot();
         if (parentCtx != null) {
             // If we're in a nested transaction, the first read timestamp
             // needs to come from the root.
-            Token parentTimestamp = parentCtx.getSnapshotTimestamp();
-            if (!txnBuilderTs.equals(Token.UNINITIALIZED)
+            LSN parentTimestamp = parentCtx.getSnapshotTimestamp();
+            if (!txnBuilderTs.equals(LSN.UNINITIALIZED)
                     && !txnBuilderTs.equals(parentTimestamp)) {
                 String msg = String.format("Attempting to nest transactions with" +
                         " different timestamps, parent ts=%s, user defined ts=%s", parentCtx.getSnapshotTimestamp(),
@@ -277,18 +276,18 @@ public abstract class AbstractTransactionalContext implements
             log.trace("obtainSnapshotTimestamp: nested transaction, inheriting parent" +
                     " SnapshotTimestamp[{}] {}", this, parentTimestamp);
             return parentTimestamp;
-        } else if (!txnBuilderTs.equals(Token.UNINITIALIZED)) {
+        } else if (!txnBuilderTs.equals(LSN.UNINITIALIZED)) {
             log.trace("obtainSnapshotTimestamp: using snapshot from builder" +
                     " SnapshotTimestamp[{}] {}", this, txnBuilderTs);
             return txnBuilderTs;
         } else {
             // Otherwise, fetch a read token from the sequencer the linearize
             // ourselves against.
-            Token timestamp = getBuilder()
+            LSN timestamp = getBuilder()
                     .getRuntime()
                     .getSequencerView()
                     .query()
-                    .getToken();
+                    .getLSN();
             log.trace("obtainSnapshotTimestamp: sequencer SnapshotTimestamp[{}] {}", this, timestamp);
             return timestamp;
         }

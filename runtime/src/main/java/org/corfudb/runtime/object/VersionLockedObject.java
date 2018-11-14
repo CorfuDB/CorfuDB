@@ -355,13 +355,13 @@ public class VersionLockedObject<T> {
         return smrStream.append(entry,
                 t -> {
                     if (saveUpcall) {
-                        pendingUpcalls.add(t.getToken().getSequence());
+                        pendingUpcalls.add(t.getLSN().getSequence());
                     }
                     return true;
                 },
                 t -> {
                     if (saveUpcall) {
-                        pendingUpcalls.remove(t.getToken().getSequence());
+                        pendingUpcalls.remove(t.getLSN().getSequence());
                     }
                     return true;
                 });

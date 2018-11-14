@@ -7,7 +7,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -22,7 +21,6 @@ import lombok.Value;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.Layout;
 
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_ID;
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_START_LOG_ADDRESS;
@@ -34,10 +32,6 @@ import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.C
  */
 public interface IMetadata {
 
-    Map<Byte, LogUnitMetadataType> metadataTypeMap =
-            Arrays.<LogUnitMetadataType>stream(LogUnitMetadataType.values())
-                    .collect(Collectors.toMap(LogUnitMetadataType::asByte, Function.identity()));
-
     EnumMap<IMetadata.LogUnitMetadataType, Object> getMetadataMap();
 
     /**
@@ -47,8 +41,10 @@ public interface IMetadata {
      */
     @SuppressWarnings("unchecked")
     default Set<UUID> getStreams() {
-        return (Set<UUID>) ((Map<UUID, Long>)getMetadataMap().getOrDefault(
-                LogUnitMetadataType.BACKPOINTER_MAP, Collections.emptyMap())).keySet();
+        //TODO(Maithem): use default token
+        return ((Token)getMetadataMap()
+                .getOrDefault(LogUnitMetadataType.TOKEN, null))
+                .getBackpointerMap().keySet();
     }
 
     /**
@@ -89,21 +85,19 @@ public interface IMetadata {
     }
 
     @SuppressWarnings("unchecked")
-    default Map<UUID, Long> getBackpointerMap() {
-        return (Map<UUID, Long>) getMetadataMap().getOrDefault(LogUnitMetadataType.BACKPOINTER_MAP,
-                Collections.EMPTY_MAP);
+    default Map<UUID, LSN> getBackpointerMap() {
+        // TODO(Maithem): use default token
+        return ((Token)getMetadataMap()
+                .getOrDefault(LogUnitMetadataType.TOKEN, null)).getBackpointerMap();
     }
 
-    default void setBackpointerMap(Map<UUID, Long> backpointerMap) {
-        getMetadataMap().put(LogUnitMetadataType.BACKPOINTER_MAP, backpointerMap);
+    default void setToken(Token token) {
+        getMetadataMap().put(LogUnitMetadataType.TOKEN, token);
     }
 
-    default void setGlobalAddress(Long address) {
-        getMetadataMap().put(LogUnitMetadataType.GLOBAL_ADDRESS, address);
-    }
-
-    default void setEpoch(Long epoch) {
-        getMetadataMap().put(LogUnitMetadataType.EPOCH, epoch);
+    default Token getToken() {
+        // TODO(Maithem): create default token
+        return (Token) getMetadataMap().getOrDefault(LogUnitMetadataType.TOKEN, null);
     }
 
     default void setClientId(UUID clientId) {getMetadataMap().put(LogUnitMetadataType.CLIENT_ID, clientId); }
@@ -125,41 +119,8 @@ public interface IMetadata {
     }
 
 
-    /**
-     * Get Log's global address (global tail).
-     * @return global address
-     */
-    @SuppressWarnings("unchecked")
-    default Long getGlobalAddress() {
-        if (getMetadataMap() == null
-                || getMetadataMap().get(LogUnitMetadataType.GLOBAL_ADDRESS) == null) {
-            return -1L;
-        }
-        return Optional.ofNullable((Long) getMetadataMap()
-                .get(LogUnitMetadataType.GLOBAL_ADDRESS)).orElse((long) -1);
-    }
 
-    /**
-     * Get Log's epoch.
-     *
-     * @return epoch.
-     */
-    default Long getEpoch() {
-        if (getMetadataMap() == null
-                || getMetadataMap().get(LogUnitMetadataType.EPOCH) == null) {
-            return Layout.INVALID_EPOCH;
-        }
-        return Optional.ofNullable((Long) getMetadataMap()
-                .get(LogUnitMetadataType.EPOCH)).orElse(Layout.INVALID_EPOCH);
-    }
 
-    default void clearCommit() {
-        getMetadataMap().put(LogUnitMetadataType.COMMIT, false);
-    }
-
-    default void setCommit() {
-        getMetadataMap().put(LogUnitMetadataType.COMMIT, true);
-    }
 
     default boolean hasCheckpointMetadata() {
         return getCheckpointType() != null && getCheckpointId() != null;
@@ -216,16 +177,13 @@ public interface IMetadata {
     @RequiredArgsConstructor
     public enum LogUnitMetadataType implements ITypedEnum {
         RANK(1, TypeToken.of(DataRank.class)),
-        BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {}),
-        GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
-        COMMIT(5, TypeToken.of(Boolean.class)),
+        TOKEN(2, TypeToken.of(Token.class)),
         CHECKPOINT_TYPE(6, TypeToken.of(CheckpointEntry.CheckpointEntryType.class)),
         CHECKPOINT_ID(7, TypeToken.of(UUID.class)),
         CHECKPOINTED_STREAM_ID(8, TypeToken.of(UUID.class)),
         CHECKPOINTED_STREAM_START_LOG_ADDRESS(9, TypeToken.of(Long.class)),
         CLIENT_ID(10, TypeToken.of(UUID.class)),
         THREAD_ID(11, TypeToken.of(Long.class)),
-        EPOCH(12, TypeToken.of(Long.class))
         ;
         final int type;
         @Getter

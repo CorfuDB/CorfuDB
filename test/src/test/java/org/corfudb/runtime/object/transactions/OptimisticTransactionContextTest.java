@@ -12,7 +12,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.SMRMap;
@@ -179,7 +179,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         TestRule testRule = new TestRule()
                 .matches(m -> {
                     if (m.getMsgType().equals(CorfuMsgType.WRITE) && retry[0] < rtSlowWriter.getParameters().getWriteRetry()) {
-                        rtIntersect.getAddressSpaceView().write(new Token( 0, retry[0]), "hello world".getBytes());
+                        rtIntersect.getAddressSpaceView().write(new LSN( 0, retry[0]), "hello world".getBytes());
                         retry[0]++;
                         return true;
                     } else {
@@ -218,7 +218,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         TestRule testRule = new TestRule()
                 .matches(m -> {
                     if (m.getMsgType().equals(CorfuMsgType.WRITE)) {
-                        rtPropagateWrite.getAddressSpaceView().write(new Token(0, 0), "hello world".getBytes());
+                        rtPropagateWrite.getAddressSpaceView().write(new LSN(0, 0), "hello world".getBytes());
                         retry[0]++;
                         return true;
                     } else {

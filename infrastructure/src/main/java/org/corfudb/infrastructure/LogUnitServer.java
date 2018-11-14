@@ -23,6 +23,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
@@ -83,12 +84,12 @@ public class LogUnitServer extends AbstractServer {
      * it is not backed by anything, but in a disk implementation it is backed by persistent
      * storage.
      */
-    private final LoadingCache<Long, ILogData> dataCache;
+    private final LoadingCache<LSN, ILogData> dataCache;
     private final long maxCacheSize;
 
     private final StreamLog streamLog;
     private final StreamLogCompaction logCleaner;
-    private final BatchWriter<Long, ILogData> batchWriter;
+    private final BatchWriter<LSN, ILogData> batchWriter;
 
     /**
      * Returns a new LogUnitServer.
@@ -121,7 +122,7 @@ public class LogUnitServer extends AbstractServer {
         );
 
         dataCache = Caffeine.newBuilder()
-                .<Long, ILogData>weigher((k, v) -> ((LogData) v).getData() == null ? 1 : (
+                .<LSN, ILogData>weigher((k, v) -> ((LogData) v).getData() == null ? 1 : (
                         (LogData) v).getData().length)
                 .maximumWeight(maxCacheSize)
                 .removalListener(this::handleEviction)
@@ -215,11 +216,10 @@ public class LogUnitServer extends AbstractServer {
     private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
         IServerRouter r) {
         try {
-            long address = msg.getPayload().getAddress();
-            log.debug("fillHole: filling address {}, epoch {}", address, msg.getEpoch());
-            LogData hole = LogData.getHole(address);
-            hole.setEpoch(msg.getEpoch());
-            dataCache.put(address, hole);
+            LogData hole = LogData.getHole(msg.getPayload().getLsn());
+            log.debug("fillHole: filling address {}, epoch {}", hole.getToken().getLSN(), msg.getEpoch());
+            //TODO(Maithem): make sure epoch is propagated
+            dataCache.put(hole.getToken().getLSN(), hole);
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
 
         } catch (OverwriteException e) {
@@ -316,23 +316,23 @@ public class LogUnitServer extends AbstractServer {
     /**
      * Retrieve the LogUnitEntry from disk, given an address.
      *
-     * @param address The address to retrieve the entry from.
+     * @param lsn The address to retrieve the entry from.
      * @return The log unit entry to retrieve into the cache.
      *
      *     This function should not care about trimmed addresses, as that is handled in
      *     the read() and append(). Any address that cannot be retrieved should be returned as
      *     unwritten (null).
      */
-    public synchronized ILogData handleRetrieval(long address) {
-        LogData entry = streamLog.read(address);
-        log.trace("Retrieved[{} : {}]", address, entry);
+    public synchronized ILogData handleRetrieval(LSN lsn) {
+        LogData entry = streamLog.read(lsn);
+        log.trace("Retrieved[{} : {}]", lsn, entry);
         return entry;
     }
 
 
-    public synchronized void handleEviction(long address, ILogData entry, RemovalCause cause) {
+    public synchronized void handleEviction(LSN address, ILogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
-        streamLog.release(address, (LogData) entry);
+        streamLog.release(address);
     }
 
     /**
@@ -346,7 +346,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @VisibleForTesting
-    public LoadingCache<Long, ILogData> getDataCache() {
+    public LoadingCache<LSN, ILogData> getDataCache() {
         return dataCache;
     }
 

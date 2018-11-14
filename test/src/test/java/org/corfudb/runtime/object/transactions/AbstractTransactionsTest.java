@@ -1,6 +1,6 @@
 package org.corfudb.runtime.object.transactions;
 
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.junit.Before;
 
@@ -45,7 +45,7 @@ public abstract class AbstractTransactionsTest extends AbstractObjectTest {
         // By default, begin a snapshot at address 2L
         getRuntime().getObjectsView().TXBuild()
                 .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(new Token(0L, 2L))
+                .setSnapshot(new LSN(0L, 2L))
                 .begin();
     }
 

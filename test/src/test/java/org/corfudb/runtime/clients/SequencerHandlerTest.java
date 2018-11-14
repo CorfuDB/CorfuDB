@@ -4,9 +4,9 @@ import com.google.common.collect.ImmutableSet;
 
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.SequencerServer;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -60,19 +60,19 @@ public class SequencerHandlerTest extends AbstractClientTest {
     @Test
     public void tokensAreIncrementing()
             throws Exception {
-        Token token = client.nextToken(Collections.emptyList(), 1).get().getToken();
-        Token token2 = client.nextToken(Collections.emptyList(), 1).get().getToken();
-        assertThat(token2.getSequence())
-                .isGreaterThan(token.getSequence());
+        LSN LSN = client.nextToken(Collections.emptyList(), 1).get().getLSN();
+        LSN LSN2 = client.nextToken(Collections.emptyList(), 1).get().getLSN();
+        assertThat(LSN2.getSequence())
+                .isGreaterThan(LSN.getSequence());
     }
 
     @Test
     public void checkTokenPositionWorks()
             throws Exception {
-        Token token = client.nextToken(Collections.emptyList(), 1).get().getToken();
-        Token token2 = client.nextToken(Collections.emptyList(), 0).get().getToken();
-        assertThat(token)
-                .isEqualTo(token2);
+        LSN LSN = client.nextToken(Collections.emptyList(), 1).get().getLSN();
+        LSN LSN2 = client.nextToken(Collections.emptyList(), 0).get().getLSN();
+        assertThat(LSN)
+                .isEqualTo(LSN2);
     }
 
     @Test
@@ -81,19 +81,19 @@ public class SequencerHandlerTest extends AbstractClientTest {
         UUID streamA = UUID.nameUUIDFromBytes("streamA".getBytes());
         UUID streamB = UUID.nameUUIDFromBytes("streamB".getBytes());
         client.nextToken(Collections.singletonList(streamA), 1).get();
-        Token tokenA = client.nextToken(Collections.singletonList(streamA), 1).get().getToken();
-        Token tokenA2 = client.nextToken(Collections.singletonList(streamA), 0).get().getToken();
-        assertThat(tokenA)
-                .isEqualTo(tokenA2);
-        Token tokenB = client.nextToken(Collections.singletonList(streamB), 0).get().getToken();
-        assertThat(tokenB)
-                .isNotEqualTo(tokenA2);
-        Token tokenB2 = client.nextToken(Collections.singletonList(streamB), 1).get().getToken();
-        Token tokenB3 = client.nextToken(Collections.singletonList(streamB), 0).get().getToken();
-        assertThat(tokenB2)
-                .isEqualTo(tokenB3);
-        Token tokenA3 = client.nextToken(Collections.singletonList(streamA), 0).get().getToken();
-        assertThat(tokenA3)
-                .isEqualTo(tokenA2);
+        LSN LSNA = client.nextToken(Collections.singletonList(streamA), 1).get().getLSN();
+        LSN LSNA2 = client.nextToken(Collections.singletonList(streamA), 0).get().getLSN();
+        assertThat(LSNA)
+                .isEqualTo(LSNA2);
+        LSN LSNB = client.nextToken(Collections.singletonList(streamB), 0).get().getLSN();
+        assertThat(LSNB)
+                .isNotEqualTo(LSNA2);
+        LSN LSNB2 = client.nextToken(Collections.singletonList(streamB), 1).get().getLSN();
+        LSN LSNB3 = client.nextToken(Collections.singletonList(streamB), 0).get().getLSN();
+        assertThat(LSNB2)
+                .isEqualTo(LSNB3);
+        LSN LSNA3 = client.nextToken(Collections.singletonList(streamA), 0).get().getLSN();
+        assertThat(LSNA3)
+                .isEqualTo(LSNA2);
     }
 }

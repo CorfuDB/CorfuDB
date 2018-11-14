@@ -29,7 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.recovery.RecoveryUtils;
 import org.corfudb.runtime.CorfuRuntime;
@@ -475,7 +475,7 @@ public class Utils {
      * @param layout  Latest layout to get clients to fetch tails.
      * @return The max global log tail obtained from the log unit servers.
      */
-    public static Token getMaxGlobalTail(Layout layout, CorfuRuntime runtime) {
+    public static LSN getMaxGlobalTail(Layout layout, CorfuRuntime runtime) {
         long maxTokenRequested = Address.NON_ADDRESS;
         Layout.LayoutSegment segment = layout.getLatestSegment();
 
@@ -505,6 +505,6 @@ public class Utils {
 
             }
         }
-        return new Token(layout.getEpoch(), maxTokenRequested);
+        return new LSN(layout.getEpoch(), maxTokenRequested);
     }
 }

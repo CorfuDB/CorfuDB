@@ -31,10 +31,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
@@ -230,7 +230,7 @@ public class SequencerServer extends AbstractServer {
     private TokenType txnCanCommit(TxResolutionInfo txInfo, /** Input. */
                                   AtomicReference<byte[]> conflictKey /** Output. */) {
         log.trace("Commit-req[{}]", txInfo);
-        final Token txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
+        final LSN txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
 
         // A transaction can start with a timestamp issued from a previous
         // epoch, so we need to reject transactions that have a snapshot
@@ -331,19 +331,19 @@ public class SequencerServer extends AbstractServer {
         TokenRequest req = msg.getPayload();
         List<UUID> streams = req.getStreams();
         List<Long> streamTails;
-        Token token;
+        LSN LSN;
         if (req.getStreams().isEmpty()) {
             // Global tail query
-            token = new Token(sequencerEpoch, globalLogTail.get() - 1);
+            LSN = new LSN(sequencerEpoch, globalLogTail.get() - 1);
             streamTails = Collections.emptyList();
         } else if (req.getStreams().size() == 1) {
             // single stream query
-            token = new Token(sequencerEpoch, streamTailToGlobalTailMap.getOrDefault(streams.get(0), Address.NON_EXIST));
+            LSN = new LSN(sequencerEpoch, streamTailToGlobalTailMap.getOrDefault(streams.get(0), Address.NON_EXIST));
             streamTails = Collections.emptyList();
         } else {
-            // multiple stream query, the token is populated with the global tail and the tail queries are stored in
+            // multiple stream query, the LSN is populated with the global tail and the tail queries are stored in
             // streamTails
-            token = new Token(sequencerEpoch, globalLogTail.get() - 1);
+            LSN = new LSN(sequencerEpoch, globalLogTail.get() - 1);
             streamTails = new ArrayList<>(streams.size());
             for (int x = 0; x < streams.size(); x++) {
                 streamTails.add(streamTailToGlobalTailMap.getOrDefault(streams.get(x), Address.NON_EXIST));
@@ -351,7 +351,7 @@ public class SequencerServer extends AbstractServer {
         }
 
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, Collections.emptyMap(),
+                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, LSN, Collections.emptyMap(),
                 streamTails)));
 
     }
@@ -493,9 +493,9 @@ public class SequencerServer extends AbstractServer {
                                 ChannelHandlerContext ctx, IServerRouter r) {
         final TokenRequest req = msg.getPayload();
 
-        Token token = new Token(sequencerEpoch, globalLogTail.getAndAdd(req.getNumTokens()));
+        LSN LSN = new LSN(sequencerEpoch, globalLogTail.getAndAdd(req.getNumTokens()));
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, Collections.emptyMap(), Collections.emptyList())));
+                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, LSN, Collections.emptyMap(), Collections.emptyList())));
 
     }
 
@@ -522,14 +522,14 @@ public class SequencerServer extends AbstractServer {
         AtomicReference<byte[]> conflictKey = new AtomicReference(TokenResponse.NO_CONFLICT_KEY);
 
         // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
-        // Token allocation is conditioned on commit.
+        // LSN allocation is conditioned on commit.
         // First, we check if the transaction can commit.
         TokenType tokenType = txnCanCommit(req.getTxnResolution(), conflictKey);
         if (tokenType != TokenType.NORMAL) {
-            // If the txn aborts, then DO NOT hand out a token.
-            Token token = new Token(sequencerEpoch, Address.ABORTED);
+            // If the txn aborts, then DO NOT hand out a LSN.
+            LSN LSN = new LSN(sequencerEpoch, Address.ABORTED);
             r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(tokenType,
-                    conflictKey.get(), token, Collections.emptyMap(), Collections.emptyList())));
+                    conflictKey.get(), LSN, Collections.emptyMap(), Collections.emptyList())));
             return;
         }
 
@@ -593,13 +593,13 @@ public class SequencerServer extends AbstractServer {
                                             newTail - 1)));
         }
 
-        log.trace("token {} backpointers {}",
+        log.trace("LSN {} backpointers {}",
                 currentTail, backPointerMap.build());
-        // return the token response with the new global tail
+        // return the LSN response with the new global tail
         // and the streams backpointers
-        Token token = new Token(sequencerEpoch, currentTail);
+        LSN LSN = new LSN(sequencerEpoch, currentTail);
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token,
+                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, LSN,
                 backPointerMap.build(), Collections.emptyList())));
     }
 

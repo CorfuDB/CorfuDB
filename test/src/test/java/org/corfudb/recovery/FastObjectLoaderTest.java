@@ -5,7 +5,7 @@ import org.corfudb.CustomSerializer;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -123,7 +123,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     private void assertThatStreamTailsAreCorrect(Map<UUID, Long> streamTails) {
         maps.keySet().forEach((streamName) -> {
             UUID id = CorfuRuntime.getStreamID(streamName);
-            long tail = getDefaultRuntime().getSequencerView().query(id).getToken().getSequence();
+            long tail = getDefaultRuntime().getSequencerView().query(id).getLSN().getSequence();
             if (streamTails.containsKey(id)) {
                 assertThat(streamTails.get(id)).isEqualTo(tail);
             }
@@ -222,7 +222,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
         Map<String, String> map1Prime = Helpers.createMap("Map0", rt2, CorfuTable.class);
 
         rt2.getObjectsView().TXBuild().setType(TransactionType.SNAPSHOT)
-                .setSnapshot(new Token(0L, 0L))
+                .setSnapshot(new LSN(0L, 0L))
                 .begin();
         assertThat(map1Prime.get("key0")).isEqualTo("value0");
         assertThat(map1Prime.get("key1")).isNull();
@@ -649,7 +649,7 @@ public class FastObjectLoaderTest extends AbstractViewTest {
 
         UUID transactionStreams = rt1.getObjectsView().TRANSACTION_STREAM_ID;
         long tailTransactionStream = rt1.getSequencerView().query(transactionStreams).
-                getToken().getSequence();
+                getLSN().getSequence();
 
         // Also recover the Transaction Stream
         assertThat(streamTails.size()).isEqualTo(mapCount + 1);

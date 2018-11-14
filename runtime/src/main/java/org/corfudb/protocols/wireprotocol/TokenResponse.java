@@ -15,20 +15,20 @@ import lombok.Data;
  */
 @Data
 @AllArgsConstructor
-public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
+public class TokenResponse implements ICorfuPayload<TokenResponse>, Token {
 
     public static byte[] NO_CONFLICT_KEY = new byte[]{};
 
     /**
      * Constructor for TokenResponse.
      *
-     * @param token token value
+     * @param LSN LSN value
      * @param backpointerMap  map of backpointers for all requested streams
      */
-    public TokenResponse(Token token, Map<UUID, Long> backpointerMap) {
+    public TokenResponse(LSN LSN, Map<UUID, Long> backpointerMap) {
         respType = TokenType.NORMAL;
         conflictKey = NO_CONFLICT_KEY;
-        this.token = token;
+        this.lsn = LSN;
         this.backpointerMap = backpointerMap;
         this.streamTails = Collections.emptyList();
     }
@@ -41,9 +41,9 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
      */
     final byte[] conflictKey;
 
-    /** The current token,
-     * or overload with "cause address" in case token request is denied. */
-    final Token token;
+    /** The current LSN,
+     * or overload with "cause address" in case LSN request is denied. */
+    final LSN lsn;
 
     /** The backpointer map, if available. */
     final Map<UUID, Long> backpointerMap;
@@ -60,7 +60,7 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
         conflictKey = ICorfuPayload.fromBuffer(buf, byte[].class);
         Long epoch = ICorfuPayload.fromBuffer(buf, Long.class);
         Long sequence = ICorfuPayload.fromBuffer(buf, Long.class);
-        token = new Token(epoch, sequence);
+        lsn = new LSN(epoch, sequence);
         backpointerMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, Long.class);
         streamTails = ICorfuPayload.listFromBuffer(buf, Long.class);
     }
@@ -69,20 +69,14 @@ public class TokenResponse implements ICorfuPayload<TokenResponse>, IToken {
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, respType);
         ICorfuPayload.serialize(buf, conflictKey);
-        ICorfuPayload.serialize(buf, token.getEpoch());
-        ICorfuPayload.serialize(buf, this.getSequence());
+        ICorfuPayload.serialize(buf, lsn.getEpoch());
+        ICorfuPayload.serialize(buf, lsn.getSequence());
         ICorfuPayload.serialize(buf, backpointerMap);
         ICorfuPayload.serialize(buf, streamTails);
     }
 
     @Override
-    public long getSequence() {
-        return token.getSequence();
+    public LSN getLSN() {
+        return lsn;
     }
-
-    @Override
-    public long getEpoch() {
-        return token.getEpoch();
-    }
-
 }

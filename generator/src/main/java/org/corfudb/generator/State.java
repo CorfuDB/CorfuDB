@@ -12,7 +12,7 @@ import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.OperationCount;
 import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.distributions.Streams;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -54,7 +54,7 @@ public class State {
     volatile long lastSuccessfulWriteOperationTimestamp = -1;
 
     @Getter
-    volatile Token trimMark = Token.UNINITIALIZED;
+    volatile LSN trimMark = LSN.UNINITIALIZED;
 
     public final Random rand;
 
@@ -77,7 +77,7 @@ public class State {
         openObjects();
     }
 
-    public void updateTrimMark(Token newTrimMark) {
+    public void updateTrimMark(LSN newTrimMark) {
         if (newTrimMark.compareTo(trimMark) > 0) {
             trimMark = newTrimMark;
         }
@@ -117,7 +117,7 @@ public class State {
         return runtime.getObjectsView().TXEnd();
     }
 
-    public void startSnapshotTx(Token snapshot) {
+    public void startSnapshotTx(LSN snapshot) {
         runtime.getObjectsView()
                 .TXBuild()
                 .setType(TransactionType.SNAPSHOT)

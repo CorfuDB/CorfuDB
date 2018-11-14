@@ -1,7 +1,7 @@
 package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -445,11 +445,11 @@ public class ServerRestartIT extends AbstractIT {
         TokenResponse tokenResponseA = corfuRuntime.getSequencerView().next(streamNameA);
         TokenResponse tokenResponseB = corfuRuntime.getSequencerView().next(streamNameB);
 
-        assertThat(tokenResponseA.getToken().getSequence()).isEqualTo(newGlobalTail + 1);
+        assertThat(tokenResponseA.getLSN().getSequence()).isEqualTo(newGlobalTail + 1);
         assertThat(tokenResponseA.getBackpointerMap().get(streamNameA))
                 .isEqualTo(newMapAStreamTail);
 
-        assertThat(tokenResponseB.getToken().getSequence()).isEqualTo(newGlobalTail + 2);
+        assertThat(tokenResponseB.getLSN().getSequence()).isEqualTo(newGlobalTail + 2);
         assertThat(tokenResponseB.getBackpointerMap().get(streamNameB))
                 .isEqualTo(newMapBStreamTail);
 
@@ -484,8 +484,8 @@ public class ServerRestartIT extends AbstractIT {
                 .isEqualTo(1);
 
         // Force the token response to have epoch = 0, to simulate a request received in previous epoch
-        Token staleToken = new Token(tr.getEpoch() - 1, tr.getSequence());
-        TokenResponse mockTr = new TokenResponse(staleToken, Collections.emptyMap());
+        LSN staleLSN = new LSN(tr.getEpoch() - 1, tr.getSequence());
+        TokenResponse mockTr = new TokenResponse(staleLSN, Collections.emptyMap());
 
         byte[] testPayload = "hello world".getBytes();
 
@@ -642,14 +642,14 @@ public class ServerRestartIT extends AbstractIT {
             // these writes should throw a StaleTokenException if we restarted
             try {
                 corfuRuntime.getAddressSpaceView()
-                        .write(tokenResponseA.getToken(), "fixed string".getBytes());
+                        .write(tokenResponseA.getLSN(), "fixed string".getBytes());
             } catch (StaleTokenException se) {
                 assertThat(restartwithHoles).isTrue();
             }
 
             try {
                 corfuRuntime.getAddressSpaceView()
-                        .write(tokenResponseB.getToken(), "fixed string".getBytes());
+                        .write(tokenResponseB.getLSN(), "fixed string".getBytes());
             } catch (StaleTokenException se) {
                 assertThat(restartwithHoles).isTrue();
             }

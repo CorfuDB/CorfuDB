@@ -1,7 +1,7 @@
 package org.corfudb.runtime.view;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
@@ -26,7 +26,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(new TokenResponse(new Token(runtime.getLayoutView()
+        r.getAddressSpaceView().write(new TokenResponse(new LSN(runtime.getLayoutView()
                         .getLayout().getEpoch(), 0),
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
                 testPayload);
@@ -50,7 +50,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         scheduleConcurrently(numberThreads, threadNumber -> {
             int base = threadNumber * numberRecords;
             for (int i = base; i < base + numberRecords; i++) {
-                r.getAddressSpaceView().write(new TokenResponse(new Token(
+                r.getAddressSpaceView().write(new TokenResponse(new LSN(
                                 runtime.getLayoutView().getLayout().getEpoch(), i),
                                 Collections.singletonMap(CorfuRuntime.getStreamID("a"), Address.NO_BACKPOINTER)),
                         Integer.toString(i).getBytes());
@@ -98,7 +98,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(new TokenResponse(new Token(
+        r.getAddressSpaceView().write(new TokenResponse(new LSN(
                         runtime.getLayoutView().getLayout().getEpoch(), 0),
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
                 testPayload);
@@ -138,7 +138,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
 
-        r.getAddressSpaceView().write(new TokenResponse(new Token(0, 0),
+        r.getAddressSpaceView().write(new TokenResponse(new LSN(0, 0),
                         Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
                 testPayload);
 

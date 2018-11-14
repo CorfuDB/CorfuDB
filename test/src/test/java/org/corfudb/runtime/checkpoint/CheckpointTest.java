@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
@@ -421,7 +421,7 @@ public class CheckpointTest extends AbstractObjectTest {
             Map<String, Long> localm2A = openMap(rt, streamNameA);
 
             // start a snapshot TX at position snapshotPosition
-            Token timestamp = new Token(0L, snapshotPosition - 1);
+            LSN timestamp = new LSN(0L, snapshotPosition - 1);
             rt.getObjectsView().TXBuild()
                     .setType(TransactionType.SNAPSHOT)
                     .setSnapshot(timestamp)
@@ -506,7 +506,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
 
         // TX1: Move object to 1
-        Token timestamp = new Token(0L, 1);
+        LSN timestamp = new LSN(0L, 1);
         getRuntime().getObjectsView().TXBuild()
                 .setType(TransactionType.SNAPSHOT)
                 .setSnapshot(timestamp)

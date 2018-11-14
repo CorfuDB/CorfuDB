@@ -3,9 +3,8 @@ package org.corfudb.runtime.object.transactions;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.Address;
 
 /** Helper class to build transactional contexts.
  *
@@ -29,7 +28,7 @@ public class TransactionBuilder {
     /** For snapshot transactions, the address the
      * snapshot will start at.
      */
-    Token snapshot = Token.UNINITIALIZED;
+    LSN snapshot = LSN.UNINITIALIZED;
 
     public TransactionBuilder(CorfuRuntime runtime) {
         this.runtime = runtime;

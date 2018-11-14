@@ -5,7 +5,7 @@
 (def usage "corfu_sequencer, directly interact with a Corfu sequencer.
 Usage:
   corfu_sequencer [-i <stream-id>] -c <config> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]] latest
-  corfu_sequencer [-i <stream-id>] -c <config> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]] next-token <num-tokens>
+  corfu_sequencer [-i <stream-id>] -c <config> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]] next-LSN <num-tokens>
 Options:
   -i <stream-id>, --stream-id <stream-id>                                                ID or name of the stream to work with.
   -c <config>, --config <config>                                                         Configuration string to use.
@@ -28,7 +28,7 @@ Options:
       nil
   (uuid-from-string (.. localcmd (get "--stream-id")))))
 
-(defn get-token [stream, num-tokens]
+(defn get-LSN [stream, num-tokens]
   (println (.. (.. (get-sequencer-view) (nextToken (if (nil? stream)
                                                    (java.util.Collections/emptySet)
                                                    (java.util.Collections/singleton stream)) num-tokens))
@@ -37,8 +37,8 @@ Options:
 (get-runtime (.. localcmd (get "--config")) localcmd)
 (connect-runtime)
 ; determine what to do
-(cond (.. localcmd (get "latest")) (get-token stream 0)
-  (.. localcmd (get "next-token")) (get-token stream (Integer/parseInt (.. localcmd (get "<num-tokens>"))))
+(cond (.. localcmd (get "latest")) (get-LSN stream 0)
+  (.. localcmd (get "next-LSN")) (get-LSN stream (Integer/parseInt (.. localcmd (get "<num-tokens>"))))
   :else (println "Unknown arguments.")
   )
 

@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
@@ -204,7 +204,7 @@ public class ClusterReconfigIT extends AbstractIT {
         Layout twoNodeLayout = runtime.getLayoutView().getLayout();
         assertThat(twoNodeLayout.getAllServers().size()).isEqualTo(clusterSize2N);
         final int offset = 100;
-        Token futureTimestamp = new Token(twoNodeLayout.getEpoch() + offset, offset);
+        LSN futureTimestamp = new LSN(twoNodeLayout.getEpoch() + offset, offset);
 
         runtime.getObjectsView().TXBuild().setSnapshot(futureTimestamp).begin();
         map.put("key", "val");

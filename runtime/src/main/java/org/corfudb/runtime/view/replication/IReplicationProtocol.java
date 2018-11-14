@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LSN;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.RuntimeLayout;
 
@@ -47,12 +48,12 @@ public interface IReplicationProtocol {
      * entry to that address.
      *
      * @param runtimeLayout        The RuntimeLayout stamped with layout to use for the read.
-     * @param globalAddress        The global address to read the data from.
+     * @param lsn        The global address to read the data from.
      * @return                     The data that was committed at the
      *                             given global address, committing a hole
      *                             filling entry if necessary.
      */
-    @Nonnull ILogData read(RuntimeLayout runtimeLayout, long globalAddress);
+    @Nonnull ILogData read(RuntimeLayout runtimeLayout, LSN lsn);
 
     /** Read data from all the given addresses.
      *
@@ -69,7 +70,7 @@ public interface IReplicationProtocol {
      *                              addresses, hole filling if necessary.
      */
     default @Nonnull
-            Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout, List<Long> globalAddresses) {
+            Map<LSN, ILogData> readAll(RuntimeLayout runtimeLayout, List<LSN> globalAddresses) {
         return globalAddresses.parallelStream()
                 .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(runtimeLayout, a)))
                 .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
@@ -90,7 +91,7 @@ public interface IReplicationProtocol {
      *                              addresses, hole filling if necessary.
      */
     default @Nonnull
-    Map<Long, ILogData> readRange(RuntimeLayout runtimeLayout, Set<Long> globalAddresses) {
+    Map<LSN, ILogData> readRange(RuntimeLayout runtimeLayout, Set<LSN> globalAddresses) {
         return globalAddresses.parallelStream()
                 .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(runtimeLayout, a)))
                 .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
@@ -109,7 +110,7 @@ public interface IReplicationProtocol {
      *                             given global address, or NULL, if
      *                             there was no entry committed.
      */
-    ILogData peek(RuntimeLayout runtimeLayout, long globalAddress);
+    ILogData peek(RuntimeLayout runtimeLayout, LSN globalAddress);
 
     /** Peek data from all the given addresses.
      *
@@ -125,8 +126,8 @@ public interface IReplicationProtocol {
      * @return                      A map of addresses to uncommitted
      *                              addresses, without hole filling.
      */
-    default @Nonnull Map<Long, ILogData> peekAll(RuntimeLayout runtimeLayout,
-                                                 Set<Long> globalAddresses) {
+    default @Nonnull Map<LSN, ILogData> peekAll(RuntimeLayout runtimeLayout,
+                                                 Set<LSN> globalAddresses) {
         return globalAddresses.parallelStream()
                 .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, peek(runtimeLayout, a)))
                 .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
