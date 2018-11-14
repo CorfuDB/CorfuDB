@@ -19,6 +19,7 @@ import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
@@ -265,28 +266,10 @@ public class LogUnitClient extends AbstractClient {
      *
      * @param address The address to fill a hole at.
      */
-    public CompletableFuture<Boolean> fillHole(long address) {
+    public CompletableFuture<Boolean> fillHole(Token address) {
         Timer.Context context = getTimerContext("fillHole");
         CompletableFuture<Boolean> cf = sendMessageWithFuture(
-                CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(null, address)));
-        return cf.thenApply(x -> {
-            context.stop();
-            return x;
-        });
-    }
-
-    /**
-     * Fills hole at a given address for a particular streamID.
-     *
-     * @param streamID StreamID to hole fill.
-     * @param address  The address to fill a hole at.
-     */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-    public CompletableFuture<Boolean> fillHole(UUID streamID, long address) {
-        Timer.Context context = getTimerContext("fillHole");
-        CompletableFuture<Boolean> cf = sendMessageWithFuture(
-                CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(streamID, address)));
+                CorfuMsgType.FILL_HOLE.payloadMsg(new FillHoleRequest(address)));
         return cf.thenApply(x -> {
             context.stop();
             return x;

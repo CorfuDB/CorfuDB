@@ -186,12 +186,12 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .getSequencerClient(getDefaultConfigurationString());
 
         seq.nextToken(null, 1);
-        luc.fillHole(getDefaultRuntime().getSequencerView().next().getSequence());
+        luc.fillHole(getDefaultRuntime().getSequencerView().next().getToken());
 
         populateMaps(1, getDefaultRuntime(), CorfuTable.class, false, 1);
 
         seq.nextToken(null, 1);
-        luc.fillHole(getDefaultRuntime().getSequencerView().next().getSequence());
+        luc.fillHole(getDefaultRuntime().getSequencerView().next().getToken());
 
         CorfuRuntime rt2 = Helpers.createNewRuntimeWithFastLoader(getDefaultConfigurationString());
         assertThatMapsAreBuilt(rt2);
