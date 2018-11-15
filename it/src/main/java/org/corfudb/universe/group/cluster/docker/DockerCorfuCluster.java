@@ -1,6 +1,5 @@
 package org.corfudb.universe.group.cluster.docker;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
 import com.spotify.docker.client.DockerClient;
 import lombok.Builder;
@@ -17,11 +16,10 @@ import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.node.server.docker.DockerCorfuServer;
 import org.corfudb.universe.universe.UniverseParams;
 import org.corfudb.universe.group.cluster.CorfuCluster;
+import org.corfudb.universe.util.DockerManager;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.SortedSet;
-import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -34,6 +32,7 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams,
     private final DockerClient docker;
     @NonNull
     private final LoggingParams loggingParams;
+    private final DockerManager dockerManager;
 
     @Builder
     public DockerCorfuCluster(DockerClient docker, CorfuClusterParams params, UniverseParams universeParams,
@@ -41,6 +40,7 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams,
         super(params, universeParams);
         this.docker = docker;
         this.loggingParams = loggingParams;
+        this.dockerManager = DockerManager.builder().docker(docker).build();
     }
 
     @Override
@@ -52,6 +52,7 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams,
                 .params(nodeParams)
                 .loggingParams(loggingParams)
                 .docker(docker)
+                .dockerManager(dockerManager)
                 .build();
     }
 

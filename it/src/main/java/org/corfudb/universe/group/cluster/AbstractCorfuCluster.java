@@ -2,7 +2,6 @@ package org.corfudb.universe.group.cluster;
 
 import static lombok.Builder.Default;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import lombok.Getter;

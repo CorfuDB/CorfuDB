@@ -34,12 +34,14 @@ public abstract class AbstractUniverse<P extends UniverseParams> implements Univ
         universeParams
                 .getGroups()
                 .keySet()
-                .forEach(groupName -> {
+                .stream()
+                .map(groupName -> {
                     GroupParams groupParams = universeParams.getGroupParams(groupName, GroupParams.class);
                     Group group = buildGroup(groupParams);
                     groups.put(groupParams.getName(), group);
-                    group.deploy();
-                });
+                    return group;
+                })
+                .forEach(Group::deploy);
     }
 
     protected abstract Group buildGroup(GroupParams groupParams);
