@@ -10,6 +10,7 @@ import javax.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.runtime.view.RuntimeLayout;
@@ -158,9 +159,10 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                                     .write(data),
                             OverwriteException.class);
                 } else {
+                    Token token = new Token(runtimeLayout.getLayout().getEpoch(), globalAddress);
                     CFUtils.getUninterruptibly(runtimeLayout
                             .getLogUnitClient(globalAddress, i)
-                            .fillHole(globalAddress), OverwriteException.class);
+                            .fillHole(token), OverwriteException.class);
                 }
             } catch (OverwriteException oe) {
                 log.trace("Propogate[{}]: Completed by other writer", globalAddress);
@@ -236,9 +238,10 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         // In chain replication, we write synchronously to every unit in
         // the chain.
         try {
+            Token token = new Token(runtimeLayout.getLayout().getEpoch(), globalAddress);
             CFUtils.getUninterruptibly(runtimeLayout
                     .getLogUnitClient(globalAddress, 0)
-                    .fillHole(globalAddress), OverwriteException.class);
+                    .fillHole(token), OverwriteException.class);
             propagate(runtimeLayout, globalAddress, null);
         } catch (OverwriteException oe) {
             // The hole-fill failed. We must ensure the other writer's

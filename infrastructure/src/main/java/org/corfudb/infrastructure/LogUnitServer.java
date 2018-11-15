@@ -22,12 +22,14 @@ import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.FillHoleRequest;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -211,14 +213,14 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @ServerHandler(type = CorfuMsgType.FILL_HOLE)
-    private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
-        IServerRouter r) {
+    private void fillHole(CorfuPayloadMsg<FillHoleRequest> msg, ChannelHandlerContext ctx,
+                          IServerRouter r) {
         try {
-            long address = msg.getPayload().getAddress();
+            Token address = msg.getPayload().getAddress();
             log.debug("fillHole: filling address {}, epoch {}", address, msg.getEpoch());
-            LogData hole = LogData.getHole(address);
+            LogData hole = LogData.getHole(address.getSequence());
             hole.setEpoch(msg.getEpoch());
-            dataCache.put(address, hole);
+            dataCache.put(address.getSequence(), hole);
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
 
         } catch (OverwriteException e) {

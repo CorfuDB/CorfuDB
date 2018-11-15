@@ -16,8 +16,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class FillHoleRequest implements ICorfuPayload<FillHoleRequest> {
 
-    final UUID stream;
-    final Long prefix;
+    final Token address;
 
     /**
      * Constructor to generate a Fill Hole Request Payload.
@@ -25,20 +24,14 @@ public class FillHoleRequest implements ICorfuPayload<FillHoleRequest> {
      * @param buf The buffer to deserialize.
      */
     public FillHoleRequest(ByteBuf buf) {
-        if (ICorfuPayload.fromBuffer(buf, Boolean.class)) {
-            stream = ICorfuPayload.fromBuffer(buf, UUID.class);
-        } else {
-            stream = null;
-        }
-        prefix = ICorfuPayload.fromBuffer(buf, Long.class);
+        long epoch = buf.readLong();
+        long sequence = buf.readLong();
+        address = new Token(epoch, sequence);
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, stream != null);
-        if (stream != null) {
-            ICorfuPayload.serialize(buf, stream);
-        }
-        ICorfuPayload.serialize(buf, prefix);
+        buf.writeLong(address.getEpoch());
+        buf.writeLong(address.getSequence());
     }
 }
