@@ -55,6 +55,20 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         this.options = StreamOptions.DEFAULT;
     }
 
+    @Override
+    public void gc(long trimMark) {
+        // Remove all the entries that are strictly less than
+        // the trim mark
+        getCurrentContext().readCpQueue.headSet(trimMark).clear();
+        getCurrentContext().readQueue.headSet(trimMark).clear();
+        getCurrentContext().resolvedQueue.headSet(trimMark).clear();
+
+        if (!getCurrentContext().resolvedQueue.isEmpty()) {
+            getCurrentContext().minResolution = getCurrentContext()
+                    .resolvedQueue.first();
+        }
+    }
+
     /**
      * {@inheritDoc}
      *

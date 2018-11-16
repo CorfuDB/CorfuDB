@@ -221,7 +221,7 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
-     * Get the starting address of a loggining unit.
+     * Get the starting address of a log unit.
      * @return A CompletableFuture for the starting address
      */
     public CompletableFuture<Long> getTrimMark() {

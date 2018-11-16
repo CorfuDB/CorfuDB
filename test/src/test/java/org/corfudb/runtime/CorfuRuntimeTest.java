@@ -2,8 +2,10 @@ package org.corfudb.runtime;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
 
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 
 import org.corfudb.runtime.exceptions.WrongEpochException;

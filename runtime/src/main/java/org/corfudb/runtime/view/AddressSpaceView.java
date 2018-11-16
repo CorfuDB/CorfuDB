@@ -1,6 +1,5 @@
 package org.corfudb.runtime.view;
 
-import static org.corfudb.util.LambdaUtils.runSansThrow;
 import static org.corfudb.util.Utils.getMaxGlobalTail;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
@@ -51,7 +50,7 @@ public class AddressSpaceView extends AbstractView {
     /**
      * A cache for read results.
      */
-    final LoadingCache<Long, ILogData> readCache = Caffeine.<Long, ILogData>newBuilder()
+    final LoadingCache<Long, ILogData> readCache = Caffeine.newBuilder()
             .maximumSize(runtime.getParameters().getNumCacheEntries())
             .expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
@@ -83,6 +82,13 @@ public class AddressSpaceView extends AbstractView {
         metrics.register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
     }
 
+
+    /**
+     * Remove all log entries that are less than the trim mark
+     */
+    public void gc(long trimMark) {
+        readCache.asMap().entrySet().removeIf(e -> e.getKey() < trimMark);
+    }
 
     /**
      * Reset all in-memory caches.
