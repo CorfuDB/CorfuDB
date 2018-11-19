@@ -2,6 +2,8 @@ package org.corfudb.protocols.wireprotocol;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import org.corfudb.runtime.view.Address;
 
 /**
  * Token returned by the sequencer is a combination of the
@@ -11,9 +13,20 @@ import lombok.Data;
  */
 @Data
 @AllArgsConstructor
-public class Token implements IToken {
+@EqualsAndHashCode
+public class Token implements IToken, Comparable<Token> {
 
-    private final long tokenValue;
+    public static final Token UNINITIALIZED = new Token(Address.NON_ADDRESS, Address.NON_ADDRESS);
+
     private final long epoch;
+    private final long sequence;
 
+    @Override
+    public int compareTo(Token o) {
+        int epochCmp = Long.compare(epoch, o.getEpoch());
+        if (epochCmp == 0) {
+            return Long.compare(sequence, o.getSequence());
+        }
+        return epochCmp;
+    }
 }

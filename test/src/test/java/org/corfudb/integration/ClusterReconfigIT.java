@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
@@ -37,6 +38,7 @@ import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Layout;
@@ -64,34 +66,24 @@ public class ClusterReconfigIT extends AbstractIT {
         return new Random(SEED);
     }
 
-    private Layout get3NodeLayout() {
-        return new Layout(
-                new ArrayList<>(
-                        Arrays.asList("localhost:9000", "localhost:9001", "localhost:9002")),
-                new ArrayList<>(
-                        Arrays.asList("localhost:9000", "localhost:9001", "localhost:9002")),
-                Collections.singletonList(new Layout.LayoutSegment(
-                        Layout.ReplicationMode.CHAIN_REPLICATION,
-                        0L,
-                        -1L,
-                        Collections.singletonList(new Layout.LayoutStripe(
-                                Arrays.asList("localhost:9000", "localhost:9001", "localhost:9002")
-                        )))),
-                0L,
-                UUID.randomUUID());
-    }
+    final int basePort = 9000;
 
-    private Layout get1NodeLayout() {
+    private Layout getLayout(int numNodes) {
+        List<String> servers = new ArrayList<>();
+
+        for (int x = 0; x < numNodes; x++) {
+            String serverAddress = "localhost:" + (basePort + x);
+            servers.add(serverAddress);
+        }
+
         return new Layout(
-                new ArrayList<>(Collections.singletonList("localhost:9000")),
-                new ArrayList<>(Collections.singletonList("localhost:9000")),
+                new ArrayList<>(servers),
+                new ArrayList<>(servers),
                 Collections.singletonList(new Layout.LayoutSegment(
                         Layout.ReplicationMode.CHAIN_REPLICATION,
                         0L,
                         -1L,
-                        Collections.singletonList(new Layout.LayoutStripe(
-                                Collections.singletonList("localhost:9000")
-                        )))),
+                        Collections.singletonList(new Layout.LayoutStripe(servers)))),
                 0L,
                 UUID.randomUUID());
     }
@@ -131,21 +123,12 @@ public class ClusterReconfigIT extends AbstractIT {
         return sb.toString();
     }
 
-    private Process runSinglePersistentServer(String address, int port) throws IOException {
+    private Process runPersistentServer(String address, int port, boolean singleNode) throws IOException {
         return new CorfuServerRunner()
                 .setHost(address)
                 .setPort(port)
                 .setLogPath(getCorfuServerLogPath(address, port))
-                .setSingle(true)
-                .runServer();
-    }
-
-    private Process runUnbootstrappedPersistentServer(String address, int port) throws IOException {
-        return new CorfuServerRunner()
-                .setHost(address)
-                .setPort(port)
-                .setLogPath(getCorfuServerLogPath(address, port))
-                .setSingle(false)
+                .setSingle(singleNode)
                 .runServer();
     }
 
@@ -171,6 +154,72 @@ public class ClusterReconfigIT extends AbstractIT {
     }
 
     /**
+     * This test verifies transactions that span system reconfigurations are
+     * aborted. There are two cases, transactions that start at an older epoch
+     * and commit at a later epoch and transactions that start an a newer epoch (i.e.
+     * epoch greater than the current system's epoch). The latter is not expected to happen
+     * normally, but we check for the sake of guarding against user defined (i.e. transactions
+     * that use a timestamp passed from the user) transactions.
+     */
+    @Test
+    public void transactionsSpanningReconfigurationTest() throws Exception {
+        final int PORT_0 = 9000;
+        final int PORT_1 = 9001;
+        final Duration timeout = Duration.ofMinutes(5);
+        final Duration pollPeriod = Duration.ofSeconds(5);
+        final int workflowNumRetry = 3;
+
+        runPersistentServer(corfuSingleNodeHost, PORT_0, true);
+        runPersistentServer(corfuSingleNodeHost, PORT_1, false);
+
+        CorfuRuntime runtime = createDefaultRuntime();
+
+        Map<String, String> map = runtime.getObjectsView()
+                .build()
+                .setType(CorfuTable.class)
+                .setStreamName("test")
+                .open();
+
+        // Start a transaction and add a new node before the transaction commits
+        runtime.getObjectsView().TXBegin();
+        map.put("key", "val");
+
+        runtime.getManagementView().addNode("localhost:9001", workflowNumRetry,
+                timeout, pollPeriod);
+
+        // Try to commit a transaction from an older epoch to the new system
+        boolean txnFailed = false;
+        try {
+            runtime.getObjectsView().TXEnd();
+        } catch (TransactionAbortedException tae) {
+            assertThat(tae.getAbortCause()).isEqualTo(AbortCause.NEW_SEQUENCER);
+            txnFailed = true;
+        }
+
+        assertThat(txnFailed).isTrue();
+
+        final int clusterSize2N = 2;
+
+        // Try to commit a transaction from a future epoch
+        Layout twoNodeLayout = runtime.getLayoutView().getLayout();
+        assertThat(twoNodeLayout.getAllServers().size()).isEqualTo(clusterSize2N);
+        final int offset = 100;
+        Token futureTimestamp = new Token(twoNodeLayout.getEpoch() + offset, offset);
+
+        runtime.getObjectsView().TXBuild().setSnapshot(futureTimestamp).begin();
+        map.put("key", "val");
+
+        try {
+            runtime.getObjectsView().TXEnd();
+        } catch (TransactionAbortedException tae) {
+            assertThat(tae.getAbortCause()).isEqualTo(AbortCause.NEW_SEQUENCER);
+            txnFailed = true;
+        }
+
+        assertThat(txnFailed).isTrue();
+    }
+
+    /**
      * A cluster of one node is started - 9000.
      * Then a block of data of 15,000 entries is written to the node.
      * This is to ensure we have at least 1.5 data log files.
@@ -189,9 +238,9 @@ public class ClusterReconfigIT extends AbstractIT {
         final Duration pollPeriod = Duration.ofSeconds(5);
         final int workflowNumRetry = 3;
 
-        Process corfuServer_1 = runSinglePersistentServer(corfuSingleNodeHost, PORT_0);
-        Process corfuServer_2 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_1);
-        Process corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, true);
+        Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
+        Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
 
         CorfuRuntime runtime = createDefaultRuntime();
 
@@ -242,7 +291,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         TokenResponse tokenResponse = corfuRuntime.getSequencerView()
                 .query(CorfuRuntime.getStreamID("test"));
-        long lastAddress = tokenResponse.getTokenValue();
+        long lastAddress = tokenResponse.getSequence();
 
         Map<Long, LogData> map_0 = getAllNonEmptyData(corfuRuntime, "localhost:9000", lastAddress);
         Map<Long, LogData> map_1 = getAllNonEmptyData(corfuRuntime, "localhost:9001", lastAddress);
@@ -283,7 +332,7 @@ public class ClusterReconfigIT extends AbstractIT {
         long oldEpoch = corfuRuntime.getLayoutView().getLayout().getEpoch();
         Layout l = new Layout(corfuRuntime.getLayoutView().getLayout());
         l.setEpoch(l.getEpoch() + 1);
-        corfuRuntime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(l).sealMinServerSet();
         corfuRuntime.getLayoutView().updateLayout(l, 1L);
         corfuRuntime.invalidateLayout();
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(oldEpoch + 1);
@@ -302,7 +351,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         final int PORT_0 = 9000;
 
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, PORT_0);
+        Process corfuServer = runPersistentServer(corfuSingleNodeHost, PORT_0, true);
 
         CorfuRuntime corfuRuntime = createDefaultRuntime();
         incrementClusterEpoch(corfuRuntime);
@@ -337,7 +386,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         final int PORT_0 = 9000;
 
-        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, PORT_0);
+        Process corfuServer = runPersistentServer(corfuSingleNodeHost, PORT_0, true);
 
         CorfuRuntime corfuRuntime = createDefaultRuntime();
         Layout l = incrementClusterEpoch(corfuRuntime);
@@ -367,11 +416,11 @@ public class ClusterReconfigIT extends AbstractIT {
         final int PORT_0 = 9000;
         final int PORT_1 = 9001;
         final int PORT_2 = 9002;
-        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
-        Process corfuServer_2 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_1);
-        Process corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
+        Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
+        Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
         List<Process> corfuServers = Arrays.asList(corfuServer_1, corfuServer_2, corfuServer_3);
-        final Layout layout = get3NodeLayout();
+        final Layout layout = getLayout(3);
         final int retries = 3;
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
@@ -466,10 +515,10 @@ public class ClusterReconfigIT extends AbstractIT {
         final int PORT_0 = 9000;
         final int PORT_1 = 9001;
         final int PORT_2 = 9002;
-        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
-        Process corfuServer_2 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_1);
-        Process corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
-        final Layout layout = get3NodeLayout();
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
+        Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
+        Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
+        final Layout layout = getLayout(3);
 
         final int retries = 3;
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
@@ -506,8 +555,8 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // Set up cluster of 1 nodes.
         final int PORT_0 = 9000;
-        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
-        final Layout layout = get1NodeLayout();
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
+        final Layout layout = getLayout(1);
         final int retries = 5;
 
         IClientRouter router = new NettyClientRouter(NodeLocator
@@ -537,8 +586,8 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // Set up cluster of 1 node.
         final int PORT_0 = 9000;
-        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
-        final Layout layout = get1NodeLayout();
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
+        final Layout layout = getLayout(1);
         final int retries = 3;
 
         IClientRouter router = new NettyClientRouter(NodeLocator
@@ -566,8 +615,8 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // Set up cluster of 1 node.
         final int PORT_0 = 9000;
-        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
-        final Layout layout = get1NodeLayout();
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
+        final Layout layout = getLayout(1);
         final int retries = 3;
 
         IClientRouter router = new NettyClientRouter(NodeLocator
@@ -609,10 +658,10 @@ public class ClusterReconfigIT extends AbstractIT {
         final int PORT_0 = 9000;
         final int PORT_1 = 9001;
         final int PORT_2 = 9002;
-        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
-        Process corfuServer_2 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_1);
-        Process corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
-        final Layout layout = get3NodeLayout();
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
+        Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
+        Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
+        final Layout layout = getLayout(3);
         final int retries = 3;
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
@@ -661,7 +710,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // PART 2.
         // Reviving same node.
-        corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
+        corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
         final long epochAfterHealingNode = 3L;
 
         // Waiting node to be healed and added back to the layout.
@@ -682,7 +731,7 @@ public class ClusterReconfigIT extends AbstractIT {
     public void testSystemDownHandler() throws Exception {
 
         final int PORT_0 = 9000;
-        Process corfuServer_1 = runSinglePersistentServer(corfuSingleNodeHost, PORT_0);
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, true);
         final Semaphore semaphore = new Semaphore(1);
         semaphore.acquire();
 
@@ -748,10 +797,10 @@ public class ClusterReconfigIT extends AbstractIT {
         final int PORT_0 = 9000;
         final int PORT_1 = 9001;
         final int PORT_2 = 9002;
-        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
-        Process corfuServer_2 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_1);
-        Process corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
-        final Layout layout = get3NodeLayout();
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
+        Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
+        Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
+        final Layout layout = getLayout(3);
 
         final int retries = 3;
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
@@ -773,7 +822,7 @@ public class ClusterReconfigIT extends AbstractIT {
         }
 
         // Restart server 3 and wait for heal node workflow to modify the layout.
-        corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
+        corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
         waitForEpochChange(refreshedEpoch -> refreshedEpoch > layoutAfterFailure.getEpoch(), runtime);
 
         // Write at address 5-9.
@@ -817,11 +866,11 @@ public class ClusterReconfigIT extends AbstractIT {
         final int PORT_0 = 9000;
         final int PORT_1 = 9001;
         final int PORT_2 = 9002;
-        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
-        Process corfuServer_2 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_1);
-        Process corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
+        Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
+        Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
         final int nodesCount = 3;
-        final Layout layout = get3NodeLayout();
+        final Layout layout = getLayout(3);
 
         final int retries = 3;
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
@@ -835,7 +884,7 @@ public class ClusterReconfigIT extends AbstractIT {
         final Layout layoutAfterFailure1 = runtime.getLayoutView().getLayout();
 
         shutdownCorfuServer(corfuServer_1);
-        corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
+        corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
         waitForEpochChange(refreshedEpoch -> refreshedEpoch > layoutAfterFailure1.getEpoch(), runtime);
         final Layout layoutAfterHeal1 = runtime.getLayoutView().getLayout();
         int counter = 0;
@@ -847,7 +896,7 @@ public class ClusterReconfigIT extends AbstractIT {
             stream.append(Integer.toString(counter++).getBytes());
         }
 
-        corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
+        corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
         waitForEpochChange(refreshedEpoch -> refreshedEpoch > layoutAfterHeal1.getEpoch(), runtime);
 
         // Write at address 3-4-5
@@ -896,10 +945,10 @@ public class ClusterReconfigIT extends AbstractIT {
         final int PORT_0 = 9000;
         final int PORT_1 = 9001;
         final int PORT_2 = 9002;
-        Process corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
-        Process corfuServer_2 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_1);
-        Process corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
-        final Layout layout = get3NodeLayout();
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
+        Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
+        Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
+        final Layout layout = getLayout(3);
 
         final int retries = 3;
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
@@ -954,8 +1003,8 @@ public class ClusterReconfigIT extends AbstractIT {
         assertThat(latch.tryAcquire(PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS))
                 .isTrue();
         // Restart both the servers.
-        corfuServer_1 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_0);
-        corfuServer_3 = runUnbootstrappedPersistentServer(corfuSingleNodeHost, PORT_2);
+        corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
+        corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
 
         t.join(PARAMETERS.TIMEOUT_LONG.toMillis());
 

@@ -57,18 +57,6 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
     }
 
     /**
-     * This variant of TXBegin sets a snapshot-point,
-     * as well as sets the transaction type to WRITE_AFTER_WRITE
-     */
-    protected void TXBegin(long snapTime) {
-        getCorfuRuntime().getObjectsView().TXBuild()
-                .setSnapshot(snapTime)
-                .setType(TransactionType.WRITE_AFTER_WRITE)
-                .begin();
-    }
-
-
-    /**
      * This is where activity is started
      */
     @Override

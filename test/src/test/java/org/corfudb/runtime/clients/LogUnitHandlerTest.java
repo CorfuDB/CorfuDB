@@ -33,6 +33,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -308,7 +309,8 @@ public class LogUnitHandlerTest extends AbstractClientTest {
             throws Exception {
         byte[] testString = "hello world".getBytes();
         final long address0 = 0;
-        client.fillHole(address0).get();
+        Token token = new Token(0, address0);
+        client.fillHole(token).get();
         LogData r = client.read(address0).get().getAddresses().get(0L);
         assertThat(r.getType())
                 .isEqualTo(DataType.HOLE);
@@ -337,8 +339,8 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 return false;
             }
         }, "Expected overwrite cause to be DIFF_DATA");
-
-        assertThatThrownBy(() -> client.fillHole(0).get())
+        Token token = new Token(0, 0);
+        assertThatThrownBy(() -> client.fillHole(token).get())
                 .isInstanceOf(ExecutionException.class)
                 .hasCauseInstanceOf(OverwriteException.class)
                 .has(conditionOverwrite);

@@ -3,7 +3,10 @@ package org.corfudb.universe.node.server;
 import org.junit.Test;
 import org.slf4j.event.Level;
 
+import java.io.IOException;
+import java.net.ServerSocket;
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -12,10 +15,11 @@ public class CorfuServerParamsTest {
 
     @Test
     public void testEquals() {
+        final int port = 9000;
 
         CorfuServerParams p1 = CorfuServerParams.serverParamsBuilder()
                 .clusterName("test-cluster")
-                .port(9000)
+                .port(port)
                 .logLevel(Level.TRACE)
                 .mode(CorfuServer.Mode.CLUSTER)
                 .persistence(CorfuServer.Persistence.DISK)
@@ -24,7 +28,7 @@ public class CorfuServerParamsTest {
 
         CorfuServerParams p2 = CorfuServerParams.serverParamsBuilder()
                 .clusterName("test-cluster")
-                .port(9000)
+                .port(port)
                 .logLevel(Level.WARN)
                 .mode(CorfuServer.Mode.CLUSTER)
                 .persistence(CorfuServer.Persistence.DISK)

@@ -38,13 +38,13 @@ public class OneNodeDownIT extends GenericIntegrationTest {
 
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-            CorfuTable table = corfuClient.createDefaultCorfuTable(DEFAULT_STREAM_NAME);
+            CorfuTable<String, String> table = corfuClient.createDefaultCorfuTable(DEFAULT_STREAM_NAME);
             for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                 table.put(String.valueOf(i), String.valueOf(i));
             }
 
             testCase.it("Should stop one node and then restart", data -> {
-                CorfuServer server1 = corfuCluster.getNode("node9000");
+                CorfuServer server1 = corfuCluster.getFirstServer();
 
                 // Stop one node and wait for layout's unresponsive servers to change
                 server1.stop(Duration.ofSeconds(10));
@@ -56,8 +56,11 @@ public class OneNodeDownIT extends GenericIntegrationTest {
 
                 // Verify cluster status is DEGRADED with one node down
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatusReport.ClusterStatus.DEGRADED);
-                Map<String, ClusterStatusReport.NodeStatus> statusMap = clusterStatusReport.getClientServerConnectivityStatusMap();
+                assertThat(clusterStatusReport.getClusterStatus())
+                        .isEqualTo(ClusterStatusReport.ClusterStatus.DEGRADED);
+
+                Map<String, ClusterStatusReport.NodeStatus> statusMap = clusterStatusReport
+                        .getClientServerConnectivityStatusMap();
                 assertThat(statusMap.get(server1.getEndpoint())).isEqualTo(ClusterStatusReport.NodeStatus.DOWN);
 
                 // Verify data path working fine

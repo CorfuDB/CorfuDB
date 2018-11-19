@@ -15,12 +15,14 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
@@ -149,11 +151,11 @@ public class ObjectsView extends AbstractView {
                 throw e;
             } catch (NetworkException e) {
                 log.warn("TXEnd[{}] Network Exception {}", context, e);
-                long snapshotTimestamp;
+                Token snapshotTimestamp;
                 try {
                     snapshotTimestamp = context.getSnapshotTimestamp();
                 } catch (NetworkException ne) {
-                    snapshotTimestamp = -1L;
+                    snapshotTimestamp = Token.UNINITIALIZED;
                 }
                 TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
                     snapshotTimestamp);
@@ -165,7 +167,7 @@ public class ObjectsView extends AbstractView {
             } catch (Exception e) {
                log.error("TXEnd[{}]: Unexpected exception", context, e);
                 TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
-                    -1L);
+                    Token.UNINITIALIZED);
                 TransactionAbortedException tae = new TransactionAbortedException(txInfo,
                     null, null, AbortCause.UNDEFINED, e, context);
                 context.abortTransaction(tae);
@@ -176,27 +178,16 @@ public class ObjectsView extends AbstractView {
         }
     }
 
-    /** Given a Corfu object, syncs the object to the most up to date version.
-     * If the object is not a Corfu object, this function won't do anything.
-     * @param object    The Corfu object to sync.
+    /**
+     * Run garbage collection on all opened objects. Note that objects
+     * open with the NO_CACHE options will not be gc'd
+     *
      */
-    public void syncObject(Object object) {
-        if (object instanceof ICorfuSMR<?>) {
-            ICorfuSMR<?> corfuObject = (ICorfuSMR<?>) object;
-            corfuObject.getCorfuSMRProxy().sync();
+    public void gc(long trimMark) {
+        for (Object obj : getObjectCache().values()) {
+            ((CorfuCompileProxy) ((ICorfuSMR) obj).
+                    getCorfuSMRProxy()).getUnderlyingObject().gc(trimMark);
         }
-    }
-
-    /** Given a list of Corfu objects, syncs the objects to the most up to date
-     * version, possibly in parallel.
-     * @param objects   A list of Corfu objects to sync.
-     */
-    public void syncObject(Object... objects) {
-        Arrays.stream(objects)
-                .parallel()
-                .filter(x -> x instanceof ICorfuSMR<?>)
-                .map(x -> (ICorfuSMR<?>) x)
-                .forEach(x -> x.getCorfuSMRProxy().sync());
     }
 
     @Data

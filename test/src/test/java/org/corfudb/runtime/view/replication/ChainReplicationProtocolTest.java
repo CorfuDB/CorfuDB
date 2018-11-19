@@ -106,13 +106,13 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
                 .isEqualTo("incomplete".getBytes());
     }
 
-    private void removeLogunit(Layout currentLayout, String endpoint) throws Exception {
+    private void removeLogUnit(Layout currentLayout, String endpoint) throws Exception {
         CorfuRuntime corfuRuntime = getRuntime(currentLayout).connect();
         Layout layout = new Layout(corfuRuntime.getLayoutView().getLayout());
         layout.setEpoch(layout.getEpoch() + 1);
         layout.getLayoutServers().add(endpoint);
         layout.getSegment(0L).getStripes().get(0).getLogServers().remove(endpoint);
-        corfuRuntime.getLayoutView().getRuntimeLayout(layout).moveServersToEpoch();
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
         corfuRuntime.getLayoutView().updateLayout(layout, 1L);
     }
 
@@ -137,7 +137,7 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
 
         // Write the incomplete write to the head of the chain
         runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0).write(incompleteWrite);
-        removeLogunit(layout, SERVERS.ENDPOINT_2);
+        removeLogUnit(layout, SERVERS.ENDPOINT_2);
         r.invalidateLayout();
         r.getLayoutView().getLayout();
         runtimeLayout = r.getLayoutView().getRuntimeLayout();

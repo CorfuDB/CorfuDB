@@ -119,11 +119,11 @@ public class BootstrapUtil {
                     router.stop();
                     break;
                 } catch (AlreadyBootstrappedException abe) {
-                    log.error("Bootstrapping node:{} failed with exception:", server, abe);
+                    log.error("Bootstrapping node: {} failed with exception:", server, abe);
                     log.error("Cannot retry since already bootstrapped.");
                     throw new RuntimeException(abe);
                 } catch (Exception e) {
-                    log.error("Bootstrapping node:{} failed with exception:", server, e);
+                    log.error("Bootstrapping node: {} failed with exception:", server, e);
                     if (retry == 0) {
                         throw new RuntimeException(e);
                     }

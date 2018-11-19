@@ -230,9 +230,18 @@ public class SequencerServer extends AbstractServer {
     private TokenType txnCanCommit(TxResolutionInfo txInfo, /** Input. */
                                   AtomicReference<byte[]> conflictKey /** Output. */) {
         log.trace("Commit-req[{}]", txInfo);
-        final long txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
+        final Token txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
 
-        if (txSnapshotTimestamp < trimMark) {
+        // A transaction can start with a timestamp issued from a previous
+        // epoch, so we need to reject transactions that have a snapshot
+        // timestamp with a different epoch than the this sequencer's epoch.
+        if (txSnapshotTimestamp.getEpoch() != sequencerEpoch) {
+            log.debug("ABORT[{}] snapshot-ts[{}] current epoch[{}]", txInfo,
+                    txSnapshotTimestamp, sequencerEpoch);
+            return TokenType.TX_ABORT_NEWSEQ;
+        }
+
+        if (txSnapshotTimestamp.getSequence() < trimMark) {
             log.debug("ABORT[{}] snapshot-ts[{}] trimMark-ts[{}]", txInfo,
                     txSnapshotTimestamp, trimMark);
             return TokenType.TX_ABORT_SEQ_TRIM;
@@ -259,7 +268,7 @@ public class SequencerServer extends AbstractServer {
 
                     log.trace("Commit-ck[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
 
-                    if (v != null && v > txSnapshotTimestamp) {
+                    if (v != null && v > txSnapshotTimestamp.getSequence()) {
                         log.debug("ABORT[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
                         conflictKey.set(conflictParam);
                         response.set(TokenType.TX_ABORT_CONFLICT);
@@ -271,7 +280,7 @@ public class SequencerServer extends AbstractServer {
                     // evicted from the cache at that time. If a txSnapshotTimestamp falls
                     // under this threshold we can report that the cause of abort is due to
                     // a NEW_SEQUENCER (not able to hold these in its cache).
-                    if (txSnapshotTimestamp < maxConflictNewSequencer) {
+                    if (txSnapshotTimestamp.getSequence() < maxConflictNewSequencer) {
                         log.debug("ABORT[{}] snapshot-ts[{}] WILDCARD New Sequencer ts=[{}]",
                                 txInfo, txSnapshotTimestamp, maxConflictNewSequencer);
                         response.set(TX_ABORT_NEWSEQ);
@@ -281,7 +290,7 @@ public class SequencerServer extends AbstractServer {
                     // If the txSnapshotTimestamp did not fall under the new sequencer threshold
                     // but it does fall under the latest evicted timestamp we report the cause of
                     // abort as SEQUENCER_OVERFLOW
-                    if (txSnapshotTimestamp < maxConflictWildcard) {
+                    if (txSnapshotTimestamp.getSequence() < maxConflictWildcard) {
                         log.debug("ABORT[{}] snapshot-ts[{}] WILDCARD ts=[{}]",
                                 txInfo, txSnapshotTimestamp, maxConflictWildcard);
                         response.set(TX_ABORT_SEQ_OVERFLOW);
@@ -294,7 +303,7 @@ public class SequencerServer extends AbstractServer {
                     if (v == null) {
                         return null;
                     }
-                    if (v > txSnapshotTimestamp) {
+                    if (v > txSnapshotTimestamp.getSequence()) {
                         log.debug("ABORT[{}] conflict-stream[{}](ts={})",
                                 txInfo, Utils.toReadableId(streamId), v);
                         response.set(TokenType.TX_ABORT_CONFLICT);
@@ -325,16 +334,16 @@ public class SequencerServer extends AbstractServer {
         Token token;
         if (req.getStreams().isEmpty()) {
             // Global tail query
-            token = new Token(globalLogTail.get() - 1, sequencerEpoch);
+            token = new Token(sequencerEpoch, globalLogTail.get() - 1);
             streamTails = Collections.emptyList();
         } else if (req.getStreams().size() == 1) {
             // single stream query
-            token = new Token(streamTailToGlobalTailMap.getOrDefault(streams.get(0), Address.NON_EXIST), sequencerEpoch);
+            token = new Token(sequencerEpoch, streamTailToGlobalTailMap.getOrDefault(streams.get(0), Address.NON_EXIST));
             streamTails = Collections.emptyList();
         } else {
             // multiple stream query, the token is populated with the global tail and the tail queries are stored in
             // streamTails
-            token = new Token(globalLogTail.get() - 1, sequencerEpoch);
+            token = new Token(sequencerEpoch, globalLogTail.get() - 1);
             streamTails = new ArrayList<>(streams.size());
             for (int x = 0; x < streams.size(); x++) {
                 streamTails.add(streamTailToGlobalTailMap.getOrDefault(streams.get(x), Address.NON_EXIST));
@@ -484,7 +493,7 @@ public class SequencerServer extends AbstractServer {
                                 ChannelHandlerContext ctx, IServerRouter r) {
         final TokenRequest req = msg.getPayload();
 
-        Token token = new Token(globalLogTail.getAndAdd(req.getNumTokens()), sequencerEpoch);
+        Token token = new Token(sequencerEpoch, globalLogTail.getAndAdd(req.getNumTokens()));
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
                 TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, Collections.emptyMap(), Collections.emptyList())));
 
@@ -518,7 +527,7 @@ public class SequencerServer extends AbstractServer {
         TokenType tokenType = txnCanCommit(req.getTxnResolution(), conflictKey);
         if (tokenType != TokenType.NORMAL) {
             // If the txn aborts, then DO NOT hand out a token.
-            Token token = new Token(Address.ABORTED, sequencerEpoch);
+            Token token = new Token(sequencerEpoch, Address.ABORTED);
             r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(tokenType,
                     conflictKey.get(), token, Collections.emptyMap(), Collections.emptyList())));
             return;
@@ -588,7 +597,7 @@ public class SequencerServer extends AbstractServer {
                 currentTail, backPointerMap.build());
         // return the token response with the new global tail
         // and the streams backpointers
-        Token token = new Token(currentTail, sequencerEpoch);
+        Token token = new Token(sequencerEpoch, currentTail);
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
                 TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token,
                 backPointerMap.build(), Collections.emptyList())));

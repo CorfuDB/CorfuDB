@@ -284,7 +284,7 @@ public class CorfuServer {
             serverContext.setBindToAllInterfaces(bindToAllInterfaces);
 
             // Register shutdown handler
-            shutdownThread = new Thread(() -> cleanShutdown(router));
+            shutdownThread = new Thread(() -> cleanShutdown(servers));
             shutdownThread.setName("ShutdownThread");
             Runtime.getRuntime().addShutdownHook(shutdownThread);
 
@@ -487,7 +487,7 @@ public class CorfuServer {
         final boolean bindToAllInterfaces = serverContext.isBindToAllInterfaces();
 
         corfuServerThread = new Thread(() -> {
-            cleanShutdown((NettyServerRouter) serverContext.getServerRouter());
+            cleanShutdown(serverContext.getServers());
             if (resetData && !(Boolean) serverContext.getServerConfig().get("--memory")) {
                 File serviceDir = new File((String) serverContext.getServerConfig()
                         .get("--log-path"));
@@ -521,10 +521,8 @@ public class CorfuServer {
     /**
      * Attempt to cleanly shutdown all the servers.
      */
-    public static void cleanShutdown(@Nonnull NettyServerRouter router) {
+    public static void cleanShutdown(@Nonnull List<AbstractServer> servers) {
         log.info("CleanShutdown: Starting Cleanup.");
-        // Create a list of servers
-        final List<AbstractServer> servers = router.getServers();
 
         // A executor service to create the shutdown threads
         // plus name the threads correctly.

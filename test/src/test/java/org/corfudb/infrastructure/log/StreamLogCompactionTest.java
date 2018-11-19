@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.log;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -25,7 +24,7 @@ public class StreamLogCompactionTest extends AbstractCorfuTest {
     public void testCompaction() throws InterruptedException {
         log.debug("Start log compaction test");
 
-        final int timeout = 35;
+        final int timeout = 10;
         final int initialDelay = 10;
         final int period = 10;
 
@@ -36,15 +35,20 @@ public class StreamLogCompactionTest extends AbstractCorfuTest {
                 streamLog, initialDelay, period, TimeUnit.MILLISECONDS, Duration.ofSeconds(1)
         );
 
-        TimeUnit.MILLISECONDS.sleep(timeout);
+        final long expectedGcCounter = 2;
+        while(getGcCounter() < expectedGcCounter){
+            TimeUnit.MILLISECONDS.sleep(timeout);
+        }
+
         compaction.shutdown();
 
-        long gcCounter = ServerContext.getMetrics()
-                .getCounters()
-                .get(StreamLogCompaction.STREAM_COMPACT_METRIC)
-                .getCount();
+        assertThat(getGcCounter()).isGreaterThanOrEqualTo(expectedGcCounter);
+    }
 
-        final long expectedGcCounter = 2;
-        assertThat(gcCounter).isGreaterThanOrEqualTo(expectedGcCounter);
+    private long getGcCounter() {
+        return ServerContext.getMetrics()
+                    .getCounters()
+                    .get(StreamLogCompaction.STREAM_COMPACT_METRIC)
+                    .getCount();
     }
 }

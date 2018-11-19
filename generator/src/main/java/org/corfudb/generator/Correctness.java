@@ -25,7 +25,7 @@ public class Correctness {
         if (transactionPrefix) {
             String txOperation = "Tx" + operation;
             correctnessLogger.info("{}, {}", txOperation,
-                    TransactionalContext.getCurrentContext().getSnapshotTimestamp());
+                    TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequence());
         } else {
             correctnessLogger.info(operation);
         }

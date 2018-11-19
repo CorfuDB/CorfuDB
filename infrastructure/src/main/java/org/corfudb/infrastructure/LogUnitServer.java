@@ -22,12 +22,14 @@ import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.FillHoleRequest;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -113,10 +115,9 @@ public class LogUnitServer extends AbstractServer {
             streamLog = new StreamLogFiles(serverContext, (Boolean) opts.get("--no-verify"));
         }
 
-
         batchWriter = new BatchWriter<>(
                 streamLog,
-                serverContext.getLogUnitEpochWaterMark(),
+                serverContext.getServerEpoch(),
                 !((Boolean) opts.get("--no-sync"))
         );
 
@@ -212,14 +213,14 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @ServerHandler(type = CorfuMsgType.FILL_HOLE)
-    private void fillHole(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
-        IServerRouter r) {
+    private void fillHole(CorfuPayloadMsg<FillHoleRequest> msg, ChannelHandlerContext ctx,
+                          IServerRouter r) {
         try {
-            long address = msg.getPayload().getAddress();
+            Token address = msg.getPayload().getAddress();
             log.debug("fillHole: filling address {}, epoch {}", address, msg.getEpoch());
-            LogData hole = LogData.getHole(address);
+            LogData hole = LogData.getHole(address.getSequence());
             hole.setEpoch(msg.getEpoch());
-            dataCache.put(address, hole);
+            dataCache.put(address.getSequence(), hole);
             r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
 
         } catch (OverwriteException e) {
@@ -286,24 +287,36 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
+     * Seal the server with the epoch.
+     *
+     * - A seal operation is inserted in the queue and then we wait to flush all operations
+     *   in the queue before this operation.
+     * - All operations after this operation but stamped with an older epoch will be failed.
+     */
+    @Override
+    public void sealServerWithEpoch(long epoch) {
+        batchWriter.waitForSealComplete(epoch);
+        log.info("LogUnit sealServerWithEpoch: sealed and flushed with epoch {}", epoch);
+    }
+
+    /**
      * Resets the log unit server via the BatchWriter.
      * Warning: Clears all data.
-     * - The epochWaterMark is persisted to withstand restarts.
-     * - The epochWaterMark is inserted in the queue and then we wait to flush all operations in
-     * the queue before this operation.
+     *
+     * - The epochWaterMark is set to prevent resetting log unit multiple times during
+     *   same epoch.
      * - After this the reset operation is inserted which resets and clears all data.
      * - Finally the cache is invalidated to purge the existing entries.
      */
     @ServerHandler(type = CorfuMsgType.RESET_LOGUNIT)
     private synchronized void resetLogUnit(CorfuPayloadMsg<Long> msg,
                                            ChannelHandlerContext ctx, IServerRouter r) {
-        // Check if the reset request is with an epoch greater than the last reset epoch seen.
-        // and should be equal to the current router epoch to prevent stale reset requests from
-        // wiping out the data.
+        // Check if the reset request is with an epoch greater than the last reset epoch seen to
+        // prevent multiple reset in the same epoch. and should be equal to the current router
+        // epoch to prevent stale reset requests from wiping out the data.
         if (msg.getPayload() > serverContext.getLogUnitEpochWaterMark()
                 && msg.getPayload() == serverContext.getServerEpoch()) {
             serverContext.setLogUnitEpochWaterMark(msg.getPayload());
-            batchWriter.waitForEpochWaterMark(msg.getPayload());
             batchWriter.reset(msg.getPayload());
             dataCache.invalidateAll();
             log.info("LogUnit Server Reset.");
@@ -328,7 +341,6 @@ public class LogUnitServer extends AbstractServer {
         log.trace("Retrieved[{} : {}]", address, entry);
         return entry;
     }
-
 
     public synchronized void handleEviction(long address, ILogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);

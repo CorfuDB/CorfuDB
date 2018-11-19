@@ -2,9 +2,10 @@ package org.corfudb.runtime;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
 
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -130,7 +131,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         // Seal
         Layout currentLayout = new Layout(rt.getLayoutView().getCurrentLayout());
         currentLayout.setEpoch(currentLayout.getEpoch() + 1);
-        rt.getLayoutView().getRuntimeLayout(currentLayout).moveServersToEpoch();
+        rt.getLayoutView().getRuntimeLayout(currentLayout).sealMinServerSet();
 
         // Server2 is sealed but will not be able to commit the layout.
         addClientRule(rt, SERVERS.ENDPOINT_2,
@@ -184,7 +185,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
         sv.append("testPayload".getBytes());
 
         l.setEpoch(l.getEpoch() + 1);
-        runtime.getLayoutView().getRuntimeLayout(l).moveServersToEpoch();
+        runtime.getLayoutView().getRuntimeLayout(l).sealMinServerSet();
 
         // We need to be sure that the layout is invalidated before proceeding
         // This is what would trigger the wrong epoch exception in the consequent read.

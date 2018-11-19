@@ -48,7 +48,7 @@ public interface Node {
     /**
      * Common interface for the configurations of different implementation of {@link Node}.
      */
-    interface NodeParams {
+    interface NodeParams<T> extends Comparable<T> {
         String getName();
 
         NodeType getNodeType();

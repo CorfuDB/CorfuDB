@@ -22,7 +22,7 @@ public interface CorfuClient extends Node {
      * @param streamName stream name of the table
      * @return CorfuTable object created by runtime
      */
-    CorfuTable createDefaultCorfuTable(String streamName);
+    <K, V> CorfuTable<K, V> createDefaultCorfuTable(String streamName);
 
     /**
      * See {@link CorfuRuntime#connect()}

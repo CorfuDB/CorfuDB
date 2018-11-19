@@ -2,6 +2,7 @@ package org.corfudb.universe.group.cluster.vm;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedSet;
 import com.vmware.vim25.mo.VirtualMachine;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
@@ -66,8 +67,8 @@ public class VmCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams, VmU
     }
 
     @Override
-    protected ImmutableList<String> getClusterLayoutServers() {
-        return ImmutableList.copyOf(buildLayout().getLayoutServers());
+    protected ImmutableSortedSet<String> getClusterLayoutServers() {
+        return ImmutableSortedSet.copyOf(buildLayout().getLayoutServers());
     }
 
     @Override

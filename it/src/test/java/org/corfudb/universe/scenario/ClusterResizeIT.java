@@ -8,6 +8,9 @@ import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.junit.Test;
 
+import java.util.Arrays;
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
 
@@ -25,25 +28,29 @@ public class ClusterResizeIT extends GenericIntegrationTest {
     @Test(timeout = 300000)
     public void clusterResizeTest() {
         getScenario().describe((fixture, testCase) -> {
-            final int numNodes = fixture.getNumNodes();
             ClientParams clientFixture = fixture.getClient();
 
             CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
 
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-            CorfuTable table = corfuClient.createDefaultCorfuTable(TestFixtureConst.DEFAULT_STREAM_NAME);
+            CorfuTable<String, String> table =
+                    corfuClient.createDefaultCorfuTable(TestFixtureConst.DEFAULT_STREAM_NAME);
 
             for (int i = 0; i < TestFixtureConst.DEFAULT_TABLE_ITER; i++) {
                 table.put(String.valueOf(i), String.valueOf(i));
             }
 
+            List<CorfuServer> servers = Arrays.asList(
+                    corfuCluster.getServerByIndex(1),
+                    corfuCluster.getServerByIndex(2)
+            );
+
             testCase.it("should remove two nodes from corfu cluster", data -> {
-                CorfuServer server0 = corfuCluster.getNode("node9000");
+                CorfuServer server0 = corfuCluster.getFirstServer();
 
                 // Sequentially remove two nodes from cluster
-                for (int i = 1; i <= numNodes - 1; i++) {
-                    CorfuServer candidate = corfuCluster.getNode("node" + (9000 + i));
+                for (CorfuServer candidate: servers) {
                     corfuClient.getManagementView().removeNode(
                             candidate.getEndpoint(),
                             clientFixture.getNumRetry(),
@@ -62,10 +69,10 @@ public class ClusterResizeIT extends GenericIntegrationTest {
                 }
             });
 
+
             testCase.it("should add two nodes back to corfu cluster", data -> {
                 // Sequentially add two nodes back into cluster
-                for (int i = 1; i <= numNodes - 1; i++) {
-                    CorfuServer candidate = corfuCluster.getNode("node" + (9000 + i));
+                for (CorfuServer candidate: servers) {
                     corfuClient.getManagementView().addNode(
                             candidate.getEndpoint(),
                             clientFixture.getNumRetry(),

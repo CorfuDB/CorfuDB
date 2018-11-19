@@ -34,15 +34,16 @@ public class NodesPausedAndPartitionedIT extends GenericIntegrationTest {
 
             CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
 
-            CorfuTable table = corfuClient.createDefaultCorfuTable(TestFixtureConst.DEFAULT_STREAM_NAME);
+            CorfuTable<String, String> table =
+                    corfuClient.createDefaultCorfuTable(TestFixtureConst.DEFAULT_STREAM_NAME);
             for (int i = 0; i < TestFixtureConst.DEFAULT_TABLE_ITER; i++) {
                 table.put(String.valueOf(i), String.valueOf(i));
             }
 
             testCase.it("Should pause one node and partition another", data -> {
-                CorfuServer server0 = corfuCluster.getNode("node9000");
-                CorfuServer server1 = corfuCluster.getNode("node9001");
-                CorfuServer server2 = corfuCluster.getNode("node9002");
+                CorfuServer server0 = corfuCluster.getServerByIndex(0);
+                CorfuServer server1 = corfuCluster.getServerByIndex(1);
+                CorfuServer server2 = corfuCluster.getServerByIndex(2);
 
                 // Pause one node and partition another one
                 server1.pause();

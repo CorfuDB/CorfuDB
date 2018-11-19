@@ -90,7 +90,7 @@ public class WorkflowIT extends AbstractIT {
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
 
-        long prefix = mcw.appendCheckpoints(n1Rt, "Maithem");
+        long prefix = mcw.appendCheckpoints(n1Rt, "Maithem").getSequence();
 
         n1Rt.getAddressSpaceView().prefixTrim(prefix - 1);
 
@@ -314,13 +314,13 @@ public class WorkflowIT extends AbstractIT {
         // Checkpoint and trim the entries.
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
-        long prefixTrimAddress = mcw.appendCheckpoints(rt, "author");
+        long prefixTrimAddress = mcw.appendCheckpoints(rt, "author").getSequence();
         rt.getAddressSpaceView().prefixTrim(prefixTrimAddress);
         rt.getAddressSpaceView().invalidateServerCaches();
         rt.getAddressSpaceView().invalidateClientCache();
         rt.getAddressSpaceView().gc();
 
-        assertThat(rt.getAddressSpaceView().getTrimMark()).isEqualTo(entriesCount);
+        assertThat(rt.getAddressSpaceView().getTrimMark().getSequence()).isEqualTo(entriesCount);
 
         // 2 Checkpoint entries for the start and end.
         // 1000 entries being checkpointed = 20 checkpoint entries due to batch size of 50.
@@ -346,7 +346,7 @@ public class WorkflowIT extends AbstractIT {
 
         run(n0.shutdown);
 
-        assertThat(rt.getAddressSpaceView().getTrimMark()).isEqualTo(entriesCount);
+        assertThat(rt.getAddressSpaceView().getTrimMark().getSequence()).isEqualTo(entriesCount);
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             if (rt.getLayoutView().getLayout().getEpoch() > layoutAfterAdds.getEpoch()) {

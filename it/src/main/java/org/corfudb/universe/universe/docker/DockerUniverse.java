@@ -101,14 +101,12 @@ public class DockerUniverse extends AbstractUniverse<UniverseParams> {
                         FAKE_DNS.addForwardResolution(node.getName(), InetAddress.getLoopbackAddress())
                 );
 
-                DockerCorfuCluster cluster = DockerCorfuCluster.builder()
+                return DockerCorfuCluster.builder()
                         .universeParams(universeParams)
                         .params(ClassUtils.cast(groupParams))
                         .loggingParams(loggingParams)
                         .docker(docker)
                         .build();
-
-                return cluster;
             case CORFU_CLIENT:
                 throw new UniverseException("Not implemented corfu client. Group config: " + groupParams);
             default:

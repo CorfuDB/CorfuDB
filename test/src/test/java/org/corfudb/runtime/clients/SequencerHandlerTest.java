@@ -62,8 +62,8 @@ public class SequencerHandlerTest extends AbstractClientTest {
             throws Exception {
         Token token = client.nextToken(Collections.emptyList(), 1).get().getToken();
         Token token2 = client.nextToken(Collections.emptyList(), 1).get().getToken();
-        assertThat(token2.getTokenValue())
-                .isGreaterThan(token.getTokenValue());
+        assertThat(token2.getSequence())
+                .isGreaterThan(token.getSequence());
     }
 
     @Test

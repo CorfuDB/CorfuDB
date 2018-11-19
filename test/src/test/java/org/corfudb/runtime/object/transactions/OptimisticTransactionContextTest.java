@@ -179,7 +179,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         TestRule testRule = new TestRule()
                 .matches(m -> {
                     if (m.getMsgType().equals(CorfuMsgType.WRITE) && retry[0] < rtSlowWriter.getParameters().getWriteRetry()) {
-                        rtIntersect.getAddressSpaceView().write(new Token(retry[0], 0), "hello world".getBytes());
+                        rtIntersect.getAddressSpaceView().write(new Token( 0, retry[0]), "hello world".getBytes());
                         retry[0]++;
                         return true;
                     } else {

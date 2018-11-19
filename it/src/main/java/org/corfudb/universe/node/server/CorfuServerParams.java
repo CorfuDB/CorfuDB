@@ -19,13 +19,12 @@ import java.time.Duration;
 @AllArgsConstructor
 @EqualsAndHashCode(exclude = {"logLevel", "stopTimeout"})
 @ToString
-public
-class CorfuServerParams implements NodeParams {
+public class CorfuServerParams implements NodeParams<CorfuServerParams> {
     @NonNull
     private final String streamLogDir = "db";
     @Default
     @Getter
-    private final int port = 9000;
+    private final int port = ServerUtil.getRandomOpenPort();
     @Default
     @NonNull
     @Getter
@@ -54,10 +53,15 @@ class CorfuServerParams implements NodeParams {
 
     @Override
     public String getName() {
-        return clusterName + "-corfu-node" + port;
+        return clusterName + "-corfu-node" + getPort();
     }
 
     public String getStreamLogDir(){
         return getName() + "/" + streamLogDir;
+    }
+
+    @Override
+    public int compareTo(CorfuServerParams other) {
+        return Integer.compare(port, other.port);
     }
 }

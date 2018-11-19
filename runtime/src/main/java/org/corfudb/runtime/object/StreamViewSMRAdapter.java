@@ -7,6 +7,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -66,6 +67,11 @@ public class StreamViewSMRAdapter implements ISMRStream {
         } else {
             return ((ISMRConsumable) logData.getPayload(runtime)).getSMRUpdates(streamView.getId());
         }
+    }
+
+    @Override
+    public void gc(long trimMark) {
+        streamView.gc(trimMark);
     }
 
     /**
@@ -181,5 +187,4 @@ public class StreamViewSMRAdapter implements ISMRStream {
     public UUID getID() {
         return streamView.getId();
     }
-
 }

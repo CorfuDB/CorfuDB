@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Created by rmichoud on 2/12/17.
  */
-public class SealIT extends AbstractIT{
+public class SealIT extends AbstractIT {
     static String corfuSingleNodeHost;
     static int corfuSingleNodePort;
 
@@ -31,7 +31,7 @@ public class SealIT extends AbstractIT{
         CorfuRuntime cr1 = createDefaultRuntime();
         CorfuRuntime cr2 = createDefaultRuntime();
 
-        Long beforeAddress = cr2.getSequencerView().next().getToken().getTokenValue();
+        Long beforeAddress = cr2.getSequencerView().next().getToken().getSequence();
 
         /* We will trigger a Paxos round, this is what will happen:
          *   1. Set our layout (same than before) with a new Epoch
@@ -43,7 +43,7 @@ public class SealIT extends AbstractIT{
         /* 1 */
         currentLayout.setEpoch(currentLayout.getEpoch() + 1);
         /* 2 */
-        cr1.getLayoutView().getRuntimeLayout(currentLayout).moveServersToEpoch();
+        cr1.getLayoutView().getRuntimeLayout(currentLayout).sealMinServerSet();
         /* 3 */
         cr1.getLayoutView().updateLayout(currentLayout, 0);
 
@@ -66,7 +66,7 @@ public class SealIT extends AbstractIT{
          *
          * These steps get cr2 in the new epoch.
          */
-        Long afterAddress = cr2.getSequencerView().next().getToken().getTokenValue();
+        Long afterAddress = cr2.getSequencerView().next().getToken().getSequence();
         assertThat(cr2.getLayoutView().getCurrentLayout().getEpoch()).
             isEqualTo(cr1.getLayoutView().getCurrentLayout().getEpoch());
         assertThat(afterAddress).isEqualTo(beforeAddress+1);
