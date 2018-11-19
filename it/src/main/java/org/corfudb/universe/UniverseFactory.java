@@ -45,8 +45,8 @@ public class UniverseFactory {
     /**
      * Build a VM {@link Universe} based on provided {@link VmUniverseParams}.
      *
-     * @param universeParams {@link VmUniverse} parameters
-     * @param applianceManager      appliances manager.
+     * @param universeParams   {@link VmUniverse} parameters
+     * @param applianceManager appliances manager.
      * @return a instance of {@link VmUniverse}
      */
     public VmUniverse buildVmUniverse(VmUniverseParams universeParams, ApplianceManager applianceManager) {

@@ -1,6 +1,5 @@
 package org.corfudb.universe.group.cluster.vm;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.vmware.vim25.mo.VirtualMachine;
@@ -9,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.group.cluster.AbstractCorfuCluster;
+import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.Node.NodeParams;
@@ -19,7 +19,6 @@ import org.corfudb.universe.node.server.vm.VmCorfuServerParams;
 import org.corfudb.universe.node.stress.vm.VmStress;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
 import org.corfudb.universe.util.ClassUtils;
-import org.corfudb.universe.group.cluster.CorfuCluster;
 
 import java.util.Collections;
 import java.util.List;

@@ -167,7 +167,7 @@ public class DockerManager {
     /**
      * Run `docker exec` on a container
      */
-    public void execCommand(String containerName,  String... command) throws DockerException, InterruptedException {
+    public void execCommand(String containerName, String... command) throws DockerException, InterruptedException {
         log.info("Executing docker command: {}", String.join(" ", command));
 
         ExecCreation execCreation = docker.execCreate(

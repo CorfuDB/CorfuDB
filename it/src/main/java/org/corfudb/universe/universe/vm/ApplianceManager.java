@@ -204,7 +204,7 @@ public class ApplianceManager {
         return vmCloneSpec;
     }
 
-    public ImmutableMap<String, VirtualMachine> getVms(){
+    public ImmutableMap<String, VirtualMachine> getVms() {
         return ImmutableMap.copyOf(vms);
     }
 
