@@ -5,7 +5,7 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.2.2.20181117182624.5946</version>
+        <version>0.2.2.20181120225637.3043</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -101,7 +101,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/share/corfu/corfu_scripts</prefix>
-                                        <filemode>750</filemode>
+                                        <filemode>755</filemode>
                                     </mapper>
                                 </data>
                                 <!-- control scripts -->
@@ -111,7 +111,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/share/corfu/scripts</prefix>
-                                        <filemode>750</filemode>
+                                        <filemode>755</filemode>
                                     </mapper>
                                 </data>
                                 <!-- tanuki wrapper -->
@@ -121,7 +121,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/tanuki/bin</prefix>
-                                        <filemode>750</filemode>
+                                        <filemode>755</filemode>
                                     </mapper>
                                 </data>
                                 <!-- tanuki configure -->
