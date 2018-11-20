@@ -1,13 +1,11 @@
 package org.corfudb.universe.node.server.docker;
 
 import com.spotify.docker.client.DockerClient;
-import com.spotify.docker.client.DockerClient.ExecCreateParam;
 import com.spotify.docker.client.LogStream;
 import com.spotify.docker.client.exceptions.DockerException;
 import com.spotify.docker.client.messages.ContainerConfig;
 import com.spotify.docker.client.messages.ContainerCreation;
 import com.spotify.docker.client.messages.ContainerInfo;
-import com.spotify.docker.client.messages.ExecCreation;
 import com.spotify.docker.client.messages.HostConfig;
 import com.spotify.docker.client.messages.IpamConfig;
 import com.spotify.docker.client.messages.PortBinding;

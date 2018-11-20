@@ -1,6 +1,5 @@
 package org.corfudb.universe.node.client;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.reflect.TypeToken;
 import lombok.Builder;
@@ -54,6 +53,7 @@ public class LocalCorfuClient implements CorfuClient {
 
     /**
      * Connect corfu runtime to the server
+     *
      * @return
      */
     @Override
@@ -64,6 +64,7 @@ public class LocalCorfuClient implements CorfuClient {
 
     /**
      * Shutdown corfu runtime
+     *
      * @param timeout a limit within which the method attempts to gracefully stop the client (not used for a client).
      */
     @Override
@@ -96,7 +97,8 @@ public class LocalCorfuClient implements CorfuClient {
     public <K, V> CorfuTable<K, V> createDefaultCorfuTable(String streamName) {
         return runtime.getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<K, V>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<K, V>>() {
+                })
                 .setStreamName(streamName)
                 .open();
     }

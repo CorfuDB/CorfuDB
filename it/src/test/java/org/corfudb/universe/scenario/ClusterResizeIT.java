@@ -50,7 +50,7 @@ public class ClusterResizeIT extends GenericIntegrationTest {
                 CorfuServer server0 = corfuCluster.getFirstServer();
 
                 // Sequentially remove two nodes from cluster
-                for (CorfuServer candidate: servers) {
+                for (CorfuServer candidate : servers) {
                     corfuClient.getManagementView().removeNode(
                             candidate.getEndpoint(),
                             clientFixture.getNumRetry(),
@@ -72,7 +72,7 @@ public class ClusterResizeIT extends GenericIntegrationTest {
 
             testCase.it("should add two nodes back to corfu cluster", data -> {
                 // Sequentially add two nodes back into cluster
-                for (CorfuServer candidate: servers) {
+                for (CorfuServer candidate : servers) {
                     corfuClient.getManagementView().addNode(
                             candidate.getEndpoint(),
                             clientFixture.getNumRetry(),
