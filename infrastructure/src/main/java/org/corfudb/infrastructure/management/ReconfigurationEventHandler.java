@@ -34,25 +34,6 @@ public class ReconfigurationEventHandler {
     private static Duration workflowTimeout = Duration.ofMinutes(1L);
 
     /**
-     * Recover cluster from layout.
-     *
-     * @param recoveryLayout Layout to use to recover
-     * @param corfuRuntime   Connected runtime
-     * @return True if the cluster was recovered, False otherwise
-     */
-    public boolean recoverCluster(@Nonnull Layout recoveryLayout,
-                                  @Nonnull CorfuRuntime corfuRuntime) {
-
-        try {
-            corfuRuntime.getLayoutManagementView().recoverCluster(recoveryLayout);
-        } catch (Exception e) {
-            log.error("Error: recovery: {}", e);
-            return false;
-        }
-        return true;
-    }
-
-    /**
      * Takes in the existing layout and a set of failed nodes.
      * It first generates a new layout by removing the failed nodes from the existing layout.
      * It then seals the epoch to prevent any client from accessing the stale layout.
@@ -62,10 +43,10 @@ public class ReconfigurationEventHandler {
      * @param corfuRuntime  Connected corfu runtime instance
      * @param failedServers Set of failed server addresses
      */
-    public boolean handleFailure(@Nonnull IReconfigurationHandlerPolicy failureHandlerPolicy,
-                                 @Nonnull Layout currentLayout,
-                                 @Nonnull CorfuRuntime corfuRuntime,
-                                 @Nonnull Set<String> failedServers) {
+    public static boolean handleFailure(@Nonnull IReconfigurationHandlerPolicy failureHandlerPolicy,
+                                        @Nonnull Layout currentLayout,
+                                        @Nonnull CorfuRuntime corfuRuntime,
+                                        @Nonnull Set<String> failedServers) {
         try {
             corfuRuntime.getLayoutManagementView().handleFailure(failureHandlerPolicy,
                     currentLayout, failedServers);
@@ -88,10 +69,10 @@ public class ReconfigurationEventHandler {
      * @param healedServers     Set of healed server addresses
      * @param retryQueryTimeout Timeout to poll for workflow status.
      */
-    public boolean handleHealing(@Nonnull IReconfigurationHandlerPolicy failureHandlerPolicy,
-                                 @Nonnull CorfuRuntime runtime,
-                                 @Nonnull Set<String> healedServers,
-                                 @Nonnull Duration retryQueryTimeout) {
+    public static boolean handleHealing(@Nonnull IReconfigurationHandlerPolicy failureHandlerPolicy,
+                                        @Nonnull CorfuRuntime runtime,
+                                        @Nonnull Set<String> healedServers,
+                                        @Nonnull Duration retryQueryTimeout) {
         try {
             for (String healedServer : healedServers) {
                 runtime.getManagementView().healNode(

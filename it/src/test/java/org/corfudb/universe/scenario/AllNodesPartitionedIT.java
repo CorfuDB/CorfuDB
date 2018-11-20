@@ -46,14 +46,14 @@ public class AllNodesPartitionedIT extends GenericIntegrationTest {
                 corfuCluster.<CorfuServer>nodes().values().forEach(CorfuServer::disconnect);
 
                 // Verify cluster status is UNAVAILABLE with all nodes UP
-                // TODO: There is a bug in NodeStatus API, waiting for patch and uncomment following lines
+                // TODO: There is a bug in NodeState API, waiting for patch and uncomment following lines
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
                 // assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
                 //
-                // Map<String, NodeStatus> statusMap = clusterStatusReport.getClientServerConnectivityStatusMap();
+                // Map<String, NodeState> statusMap = clusterStatusReport.getClientServerConnectivityStatusMap();
                 // corfuCluster.<CorfuServer>nodes().values().forEach(node -> {
                 //     CorfuServerParams serverParams = node.getParams();
-                //     assertThat(statusMap.get(serverParams.getEndpoint())).isEqualTo(NodeStatus.UP);
+                //     assertThat(statusMap.get(serverParams.getEndpoint())).isEqualTo(NodeState.UP);
                 // });
                 //
                 // // Wait for failure detector finds cluster is down before recovering

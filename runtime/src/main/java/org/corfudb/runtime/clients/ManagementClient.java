@@ -8,9 +8,9 @@ import java.util.concurrent.TimeoutException;
 
 import javax.annotation.Nonnull;
 
+import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
-import org.corfudb.protocols.wireprotocol.NodeView;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
@@ -76,7 +76,7 @@ public class ManagementClient extends AbstractClient {
      * @return A future which will return the node health metrics of
      * the node which was requested for the heartbeat.
      */
-    public CompletableFuture<NodeView> sendHeartbeatRequest() {
+    public CompletableFuture<ClusterState> sendHeartbeatRequest() {
         return sendMessageWithFuture(CorfuMsgType.HEARTBEAT_REQUEST.msg());
     }
 

@@ -7,10 +7,7 @@ import java.lang.invoke.MethodHandles;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.NodeView;
+import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
@@ -48,7 +45,7 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
     }
 
     @ClientHandler(type = CorfuMsgType.HEARTBEAT_RESPONSE)
-    private static Object handleHeartbeatResponse(CorfuPayloadMsg<NodeView> msg,
+    private static Object handleHeartbeatResponse(CorfuPayloadMsg<ClusterState> msg,
                                                   ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }

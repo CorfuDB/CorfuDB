@@ -214,6 +214,7 @@ public class ManagementViewTest extends AbstractViewTest {
         Arrays.stream(managementServersPorts).forEach(port -> {
             FailureDetector failureDetector = (FailureDetector) getManagementServer(port)
                     .getManagementAgent()
+                    .getRemoteMonitoringService()
                     .getFailureDetector();
             failureDetector.setInitPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             failureDetector.setPeriodDelta(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
@@ -222,6 +223,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
             HealingDetector healingDetector = (HealingDetector) getManagementServer(port)
                     .getManagementAgent()
+                    .getRemoteMonitoringService()
                     .getHealingDetector();
             healingDetector.setDetectionPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             healingDetector.setInterIterationInterval(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
@@ -335,27 +337,26 @@ public class ManagementViewTest extends AbstractViewTest {
         setAggressiveTimeouts(l, corfuRuntime,
                 getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
 
-        NodeView nodeView = null;
-
-        ServerMetrics serverMetrics =
-                new ServerMetrics(NodeLocator.parseString(SERVERS.ENDPOINT_0),
-                        new SequencerMetrics(SequencerStatus.UNKNOWN));
+        ClusterState clusterState = null;
 
         // Send heartbeat requests and wait until we get a valid response.
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
 
-            nodeView = corfuRuntime.getLayoutView().getRuntimeLayout()
+            clusterState = corfuRuntime.getLayoutView().getRuntimeLayout()
                     .getManagementClient(SERVERS.ENDPOINT_0).sendHeartbeatRequest().get();
 
-            if (!nodeView.getEndpoint().toString().isEmpty()) {
+            if (!clusterState.getNodeStatusMap().isEmpty()) {
                 break;
             }
             Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
         }
-        assertThat(nodeView).isNotNull();
-        assertThat(nodeView.getEndpoint()).isEqualTo(NodeLocator.parseString(SERVERS.ENDPOINT_0));
-        assertThat(nodeView.getServerMetrics().getEndpoint())
-                .isEqualTo(serverMetrics.getEndpoint());
+        assertThat(clusterState).isNotNull();
+        assertThat(clusterState.getNodeStatusMap()).isNotNull();
+        assertThat(clusterState.getNodeStatusMap().get(SERVERS.ENDPOINT_0)).isNotNull();
+
+        NodeState nodeState
+                = clusterState.getNodeStatusMap().get(SERVERS.ENDPOINT_0);
+        assertThat(nodeState.getEndpoint()).isEqualTo(NodeLocator.parseString(SERVERS.ENDPOINT_0));
     }
 
     /**
@@ -1478,7 +1479,8 @@ public class ManagementViewTest extends AbstractViewTest {
      *
      * STEP 2: In this step the client is partitioned from the 2 nodes in the cluster.
      * The cluster however is healthy. Status query:
-     * PORT_0 and PORT_1 are DOWN. Cluster status: STABLE
+     * PORT_0 and PORT_1 are DOWN. Cluster status: UNAVAILABLE
+     * (Since the client cannot reach all healthy servers)
      *
      * A few entries are appended on a Stream. This data is written to PORT_0, PORT_1 and PORT_2.
      *
@@ -1524,7 +1526,7 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.DOWN);
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.DOWN);
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
-        assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
+        assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
 
         // Write 10 entries. 0-9.
         IStreamView streamView = getCorfuRuntime().getStreamsView()
@@ -1766,7 +1768,11 @@ public class ManagementViewTest extends AbstractViewTest {
         addServerRule(SERVERS.PORT_0, new TestRule().matches(m -> m.getMsgType()
                 .equals(CorfuMsgType.READ_RESPONSE)).drop());
 
-        getManagementServer(SERVERS.PORT_0).getManagementAgent().triggerSequencerBootstrap(layout)
+        getManagementServer(SERVERS.PORT_0).getManagementAgent()
+                .getCorfuRuntime().getLayoutManagementView()
+                .asyncSequencerBootstrap(layout,
+                        getManagementServer(SERVERS.PORT_0).getManagementAgent()
+                                .getRemoteMonitoringService().getDetectionTaskWorkers())
                 .get();
     }
 

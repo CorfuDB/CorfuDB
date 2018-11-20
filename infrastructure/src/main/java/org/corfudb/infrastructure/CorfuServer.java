@@ -1,8 +1,17 @@
 package org.corfudb.infrastructure;
 
+import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
+import static org.fusesource.jansi.Ansi.Color.BLUE;
+import static org.fusesource.jansi.Ansi.Color.MAGENTA;
+import static org.fusesource.jansi.Ansi.Color.RED;
+import static org.fusesource.jansi.Ansi.Color.WHITE;
+import static org.fusesource.jansi.Ansi.ansi;
+
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
+
 import com.google.common.collect.ImmutableList;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -15,7 +24,22 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
+
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.apache.commons.io.FileUtils;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
@@ -28,26 +52,6 @@ import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
-
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
-import java.io.File;
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.regex.Pattern;
-
-import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
-import static org.fusesource.jansi.Ansi.Color.BLUE;
-import static org.fusesource.jansi.Ansi.Color.MAGENTA;
-import static org.fusesource.jansi.Ansi.Color.RED;
-import static org.fusesource.jansi.Ansi.Color.WHITE;
-import static org.fusesource.jansi.Ansi.ansi;
-
 
 /**
  * This is the new Corfu server single-process executable.
@@ -75,12 +79,12 @@ public class CorfuServer {
                     + "\n"
                     + "Usage:\n"
                     + "\tcorfu_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
-                    + "[-t <token>] [-c <ratio>] [-d <level>] [-p <seconds>] [-M <address>:<port>] "
+                    + "[-t <token>] [-c <ratio>] [-d <level>] [-p <seconds>] "
                     + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w "
                     + "<truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] "
-                    + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] [-H <seconds>] "
-                    + "[-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] [-P <prefix>] [-R <retention>]"
-                    + " [--agent] <port>\n"
+                    + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
+                    + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
+                    + "[-P <prefix>] [-R <retention>] [--agent] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
@@ -142,8 +146,6 @@ public class CorfuServer {
                     + "              Set the logging level, valid levels are: \n"
                     + "                                                                          "
                     + "              ALL,ERROR,WARN,INFO,DEBUG,TRACE,OFF [default: INFO].\n"
-                    + " -M <address>:<port>, --management-server=<address>:<port>                "
-                    + "              Layout endpoint to seed Management Server\n"
                     + " -n, --no-verify                                                          "
                     + "              Disable checksum computation and verification.\n"
                     + " -N, --no-sync                                                            "
