@@ -190,7 +190,7 @@
                             <includes>
                                 <include>**/*IT.java</include>
                             </includes>
-                            <s--kipTests>false</s--kipTests>
+                            <skipTests>false</skipTests>
                         </configuration>
                         <executions>
                             <execution>
@@ -365,7 +365,6 @@
                     <includes>
                         <include>**/*Test.java</include>
                     </includes>
-                    <workingDirectory>${project.build.directory}/fork_${surefire.forkNumber}</workingDirectory>
                 </configuration>
                 <executions>
                     <execution>
