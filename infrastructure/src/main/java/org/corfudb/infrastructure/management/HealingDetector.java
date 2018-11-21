@@ -88,10 +88,7 @@ public class HealingDetector implements IDetector {
         });
 
         // Perform polling of all unresponsive servers.
-        return new PollReport.PollReportBuilder()
-                .pollEpoch(layout.getEpoch())
-                .changedNodes(pollRound(members, routerMap, layout.getEpoch()))
-                .build();
+        return pollRound(members, routerMap, layout.getEpoch());
     }
 
     /**
@@ -100,11 +97,14 @@ public class HealingDetector implements IDetector {
      *
      * @return Poll Report with detected healed nodes.
      */
-    private ImmutableSet<String> pollRound(List<String> members,
-                                  Map<String, IClientRouter> routerMap,
-                                  long epoch) {
+    private PollReport pollRound(List<String> members,
+                                 Map<String, IClientRouter> routerMap,
+                                 long epoch) {
 
         Map<String, Integer> pollResultMap = new HashMap<>();
+
+        // Cluster State map for analysis.
+        Map<String, ClusterState> clusterStateMap = new HashMap<>();
 
         // In each iteration we poll all the servers in the members list.
         for (int iteration = 0; iteration < detectionThreshold; iteration++) {
@@ -115,7 +115,7 @@ public class HealingDetector implements IDetector {
 
             // Collect all poll responses.
             Set<String> responses = collectResponsesAndVerifyEpochs(members,
-                    pollCompletableFutures);
+                    pollCompletableFutures, clusterStateMap);
 
             // Count unsuccessful ping responses.
             // If we receive no responses and there are no nodes to heal,
@@ -131,10 +131,16 @@ public class HealingDetector implements IDetector {
         }
 
         // Check all responses and report all healed nodes.
-        return members.stream()
+        ImmutableSet<String> healedNodes = members.stream()
                 .filter(s -> pollResultMap.get(s) != null
                         && pollResultMap.get(s) == (detectionThreshold - 1))
                 .collect(ImmutableSet.toImmutableSet());
+
+        return PollReport.builder()
+                .pollEpoch(epoch)
+                .changedNodes(healedNodes)
+                .clusterStateMap(clusterStateMap)
+                .build();
     }
 
     /**
@@ -178,13 +184,15 @@ public class HealingDetector implements IDetector {
      */
     private Set<String> collectResponsesAndVerifyEpochs(List<String> members,
                                                         Map<String, CompletableFuture<ClusterState>>
-                                                                pollCompletableFutures) {
+                                                                pollCompletableFutures,
+                                                        Map<String, ClusterState> clusterStateMap) {
         // Collect responses and increment response counters for successful pings.
         Set<String> responses = new HashSet<>();
         members.forEach(s -> {
             try {
-                pollCompletableFutures.get(s).get();
+                ClusterState clusterState = pollCompletableFutures.get(s).get();
                 responses.add(s);
+                clusterStateMap.put(s, clusterState);
             } catch (Exception e) {
                 // WrongEpochException signifies liveness of node.
                 if (e.getCause() instanceof WrongEpochException) {

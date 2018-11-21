@@ -1,15 +1,22 @@
 package org.corfudb.infrastructure;
 
-import org.corfudb.protocols.wireprotocol.*;
-import org.junit.Before;
-import org.junit.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenRequest;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.TokenType;
+import org.corfudb.runtime.view.Address;
+import org.junit.Before;
+import org.junit.Test;
 
 /**
  * Created by mwei on 12/13/15.
@@ -20,11 +27,14 @@ public class SequencerServerTest extends AbstractServerTest {
         super();
     }
 
+    ServerContext serverContext;
+
     SequencerServer server;
 
     @Override
     public AbstractServer getDefaultServer() {
-        server = new SequencerServer(ServerContextBuilder.emptyContext());
+        serverContext = ServerContextBuilder.defaultTestContext(SERVERS.PORT_0);
+        server = new SequencerServer(serverContext);
         return server;
     }
 
@@ -229,4 +239,49 @@ public class SequencerServerTest extends AbstractServerTest {
                 new TokenRequest(0L, Collections.singletonList(streamC))));
         assertThat(getLastPayloadMessageAs(TokenResponse.class).getToken().getSequence()).isEqualTo(newTailC);
     }
+
+
+    /**
+     * Scenario to verify that we do not regress the token count when the layout switches primary
+     * sequencers.
+     * We assert that the failover sequencer should always receive a full bootstrap message rather
+     * than an empty bootstrap message (without streamTailsMap)
+     */
+    @Test
+    public void failoverSeqDoesNotRegressTokenValue() {
+
+        UUID streamA = UUID.nameUUIDFromBytes("streamA".getBytes());
+
+        // Request tokens.
+        final long num = 10;
+        // 0 - 9
+        for (int i = 0; i < num; i++) {
+            sendMessage(new CorfuPayloadMsg<>(CorfuMsgType.TOKEN_REQ,
+                    new TokenRequest(1L, Collections.singletonList(streamA))));
+        }
+        assertThat(server.getGlobalLogTail().get()).isEqualTo(num);
+
+        // Sequencer accepts a delta bootstrap message only if the new epoch is consecutive.
+        long newEpoch = serverContext.getServerEpoch() + 1;
+        serverContext.setServerEpoch(newEpoch, serverContext.getServerRouter());
+        sendMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerTailsRecoveryMsg(
+                Address.NON_EXIST, Collections.emptyMap(), newEpoch, true)));
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
+
+        // Sequencer accepts only a full bootstrap message if the epoch is not consecutive.
+        newEpoch = serverContext.getServerEpoch() + 2;
+        serverContext.setServerEpoch(newEpoch, serverContext.getServerRouter());
+        sendMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerTailsRecoveryMsg(
+                Address.NON_EXIST, Collections.emptyMap(), newEpoch, true)));
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.NACK);
+        sendMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerTailsRecoveryMsg(
+                num, Collections.singletonMap(streamA, num), newEpoch, false)));
+        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
+
+        sendMessage(CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(0L, Collections.emptyList())));
+        assertThat(getLastPayloadMessageAs(TokenResponse.class))
+                .isEqualTo(new TokenResponse(TokenType.NORMAL, new byte[0], new Token(newEpoch, num - 1),
+                        Collections.emptyMap(), Collections.emptyList()));
+    }
+
 }
