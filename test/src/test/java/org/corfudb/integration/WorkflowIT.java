@@ -5,6 +5,7 @@ import static org.corfudb.integration.Harness.run;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.integration.cluster.Harness.Node;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.recovery.FastObjectLoader;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -90,9 +91,9 @@ public class WorkflowIT extends AbstractIT {
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
 
-        long prefix = mcw.appendCheckpoints(n1Rt, "Maithem").getSequence();
+        Token prefix = mcw.appendCheckpoints(n1Rt, "Maithem");
 
-        n1Rt.getAddressSpaceView().prefixTrim(prefix - 1);
+        n1Rt.getAddressSpaceView().prefixTrim(prefix);
 
         n1Rt.getAddressSpaceView().invalidateClientCache();
         n1Rt.getAddressSpaceView().invalidateServerCaches();
@@ -314,7 +315,7 @@ public class WorkflowIT extends AbstractIT {
         // Checkpoint and trim the entries.
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
-        long prefixTrimAddress = mcw.appendCheckpoints(rt, "author").getSequence();
+        Token prefixTrimAddress = mcw.appendCheckpoints(rt, "author");
         rt.getAddressSpaceView().prefixTrim(prefixTrimAddress);
         rt.getAddressSpaceView().invalidateServerCaches();
         rt.getAddressSpaceView().invalidateClientCache();
@@ -358,9 +359,9 @@ public class WorkflowIT extends AbstractIT {
 
         // Assert that the new nodes should have the correct trimMark.
         assertThat(rt.getLayoutView().getRuntimeLayout().getLogUnitClient("localhost:9001").getTrimMark().get())
-                .isEqualTo(prefixTrimAddress + 1);
+                .isEqualTo(prefixTrimAddress.getSequence() + 1);
         assertThat(rt.getLayoutView().getRuntimeLayout().getLogUnitClient("localhost:9002").getTrimMark().get())
-                .isEqualTo(prefixTrimAddress + 1);
+                .isEqualTo(prefixTrimAddress.getSequence() + 1);
         FastObjectLoader fastObjectLoader = new FastObjectLoader(rt);
         fastObjectLoader.setRecoverSequencerMode(true);
         fastObjectLoader.loadMaps();

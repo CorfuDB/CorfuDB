@@ -4,7 +4,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
@@ -38,7 +37,6 @@ public class TestServerRouter implements IServerRouter {
     AtomicLong requestCounter;
 
     @Getter
-    @Setter
     long serverEpoch;
 
     @Getter
@@ -160,4 +158,8 @@ public class TestServerRouter implements IServerRouter {
         return msgOut;
     }
 
+    public void setServerEpoch(long serverEpoch) {
+        this.serverEpoch = serverEpoch;
+        getServers().forEach(s -> s.sealServerWithEpoch(serverEpoch));
+    }
 }

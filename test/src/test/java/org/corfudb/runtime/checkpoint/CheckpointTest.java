@@ -74,8 +74,8 @@ public class CheckpointTest extends AbstractObjectTest {
      * checkpoint the maps, and then trim the log
      */
     void mapCkpointAndTrim(CorfuRuntime rt, SMRMap... maps) throws Exception {
-        long checkpointAddress = -1;
-        long lastCheckpointAddress = -1;
+        Token checkpointAddress = Token.UNINITIALIZED;
+        Token lastCheckpointAddress = Token.UNINITIALIZED;
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
             try {
@@ -84,7 +84,7 @@ public class CheckpointTest extends AbstractObjectTest {
                     mcw1.addMap(map);
                 }
 
-                checkpointAddress = mcw1.appendCheckpoints(rt, author).getSequence();
+                checkpointAddress = mcw1.appendCheckpoints(rt, author);
 
                 try {
                     Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
@@ -92,7 +92,7 @@ public class CheckpointTest extends AbstractObjectTest {
                     //
                 }
                 // Trim the log
-                rt.getAddressSpaceView().prefixTrim(checkpointAddress - 1);
+                rt.getAddressSpaceView().prefixTrim(checkpointAddress);
                 rt.getAddressSpaceView().gc();
                 rt.getAddressSpaceView().invalidateServerCaches();
                 rt.getAddressSpaceView().invalidateClientCache();
@@ -404,7 +404,8 @@ public class CheckpointTest extends AbstractObjectTest {
             mcw1.appendCheckpoints(rt, author);
 
             // Trim the log
-            rt.getAddressSpaceView().prefixTrim(trimPosition);
+            Token token = new Token(rt.getLayoutView().getLayout().getEpoch(), trimPosition);
+            rt.getAddressSpaceView().prefixTrim(token);
             rt.getAddressSpaceView().gc();
             rt.getAddressSpaceView().invalidateServerCaches();
             rt.getAddressSpaceView().invalidateClientCache();
@@ -467,8 +468,9 @@ public class CheckpointTest extends AbstractObjectTest {
         populateMaps(mapSize, map1, map2);
 
         // Trim again in exactly the same place shouldn't fail
-        rt.getAddressSpaceView().prefixTrim(2);
-        rt.getAddressSpaceView().prefixTrim(2);
+        Token token = new Token(rt.getLayoutView().getLayout().getEpoch(), 2);
+        rt.getAddressSpaceView().prefixTrim(token);
+        rt.getAddressSpaceView().prefixTrim(token);
 
         // GC twice at the same place should be fine.
         rt.getAddressSpaceView().gc();
@@ -502,7 +504,7 @@ public class CheckpointTest extends AbstractObjectTest {
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap((SMRMap) testMap);
         mcw.addMap((SMRMap) testMap2);
-        long checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author").getSequence();
+        Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
 
         // TX1: Move object to 1
@@ -517,7 +519,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
 
         // Trim the log
-        getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress - 1);
+        getRuntime().getAddressSpaceView().prefixTrim(checkpointAddress);
         getRuntime().getAddressSpaceView().gc();
         getRuntime().getAddressSpaceView().invalidateServerCaches();
         getRuntime().getAddressSpaceView().invalidateClientCache();

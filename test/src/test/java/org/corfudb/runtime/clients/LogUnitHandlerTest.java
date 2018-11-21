@@ -180,7 +180,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         assertThat(r.getType())
                 .isEqualTo(DataType.DATA);
 
-        client.prefixTrim(address0);
+        client.prefixTrim(new Token(0L, address0));
         client.compact();
 
         // For logunit cach flush

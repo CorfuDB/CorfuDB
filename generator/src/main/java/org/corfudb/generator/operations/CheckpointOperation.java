@@ -32,7 +32,7 @@ public class CheckpointOperation extends Operation {
             Token trimAddress = mcw.appendCheckpoints(state.getRuntime(), "Maithem");
             state.updateTrimMark(trimAddress);
             Thread.sleep(1000l * 30l * 1l);
-            state.getRuntime().getAddressSpaceView().prefixTrim(trimAddress.getSequence() - 1);
+            state.getRuntime().getAddressSpaceView().prefixTrim(trimAddress);
             state.getRuntime().getAddressSpaceView().gc();
             state.getRuntime().getAddressSpaceView().invalidateClientCache();
             state.getRuntime().getAddressSpaceView().invalidateServerCaches();

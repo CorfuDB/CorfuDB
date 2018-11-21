@@ -17,6 +17,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 
@@ -72,16 +73,14 @@ public class MultiCheckpointWriter<T extends Map> {
     public Token appendCheckpoints(CorfuRuntime rt, String author,
                                   BiConsumer<CheckpointEntry, Long> postAppendFunc) {
 
-        // We retrieve the tail from the logging units because the tail
-        // returned from the sequencer might not be materialized
-        Token globalTail = rt.getAddressSpaceView().getLogTail();
         rt.getObjectsView().TXBuild()
                 .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(globalTail)
                 .begin();
 
+        Token snapshot = TransactionalContext.getCurrentContext().getSnapshotTimestamp();
+
         log.trace("appendCheckpoints: author '{}' at globalAddress {} begins",
-                author, globalTail);
+                author, snapshot);
 
         log.info("appendCheckpoints: appending checkpoints for {} maps", maps.size());
         final long cpStart = System.currentTimeMillis();
@@ -111,14 +110,14 @@ public class MultiCheckpointWriter<T extends Map> {
             }
         } finally {
             log.trace("appendCheckpoints: author '{}' at globalAddress {} finished",
-                    author, globalTail);
+                    author, snapshot);
             rt.getObjectsView().TXEnd();
         }
         final long cpStop = System.currentTimeMillis();
 
         log.info("appendCheckpoints: took {} ms to append {} checkpoints", cpStop - cpStart,
                 maps.size());
-        return globalTail;
+        return snapshot;
     }
 
 }
