@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{15}) - %msg%n %ex{150}</pattern>
-        </encoder>
+        <pattern>
+            %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %highlight(%-5level) | %15.15thread{15} | %50.50(%logger.%M:%L) | %msg%n%xException
+        </pattern>
     </appender>
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
         <file>${user.home}/corfudb.log</file>
-        <encoder>
-            <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%thread] %cyan(%logger{15}) - %msg%n %ex{150}</pattern>
-        </encoder>
+        <pattern>
+            %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %highlight(%-5level) | %15.15thread{15} | %50.50(%logger.%M:%L) | %msg%n%xException
+        </pattern>
     </appender>
 
     <logger name="io.netty" level="warn"/>
