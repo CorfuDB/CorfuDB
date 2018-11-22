@@ -187,10 +187,16 @@
                         <artifactId>maven-failsafe-plugin</artifactId>
                         <version>3.0.0-M1</version>
                         <configuration>
+                            <forkCount>1</forkCount>
                             <includes>
                                 <include>**/*IT.java</include>
                             </includes>
+                            <systemPropertyVariables>
+                                <propertyName>test.travisBuild</propertyName>
+                                <propertyName>test.seed</propertyName>
+                            </systemPropertyVariables>
                             <skipTests>false</skipTests>
+                            <skipAfterFailureCount>1</skipAfterFailureCount>
                         </configuration>
                         <executions>
                             <execution>
@@ -358,6 +364,7 @@
                     <forkCount>1C</forkCount>
                     <reuseForks>true</reuseForks>
                     <trimStackTrace>false</trimStackTrace>
+                    <skipAfterFailureCount>2</skipAfterFailureCount>
                     <systemPropertyVariables>
                         <propertyName>test.travisBuild</propertyName>
                         <propertyName>test.seed</propertyName>
