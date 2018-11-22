@@ -3,7 +3,6 @@ package org.corfudb.runtime.view;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.ViewsGarbageCollector;
 import org.corfudb.runtime.collections.CorfuTable;
 
 import org.ehcache.sizeof.SizeOf;

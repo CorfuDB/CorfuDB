@@ -394,7 +394,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         }
         try {
             if (shutdownEventLoop) {
-                eventLoopGroup.shutdownGracefully().sync();
+                eventLoopGroup.shutdownGracefully(
+                        parameters.getNettyShutdownQuitePeriod(),
+                        parameters.getNettyShutdownTimeout(),
+                        TimeUnit.MILLISECONDS
+                ).sync();
             }
         } catch (InterruptedException e) {
             throw new UnrecoverableCorfuInterruptedError("Interrupted while stopping", e);

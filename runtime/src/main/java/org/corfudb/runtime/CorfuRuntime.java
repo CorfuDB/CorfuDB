@@ -78,6 +78,10 @@ public class CorfuRuntime {
     @Builder
     @Data
     public static class CorfuRuntimeParameters {
+        @Default
+        private final long nettyShutdownQuitePeriod = 100;
+        @Default
+        private final long nettyShutdownTimeout = 300;
 
         // region Object Layer Parameters
         /**
