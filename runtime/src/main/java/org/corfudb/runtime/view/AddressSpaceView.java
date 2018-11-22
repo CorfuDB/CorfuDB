@@ -9,6 +9,7 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterables;
 
+import java.time.Duration;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -19,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import io.netty.handler.timeout.TimeoutException;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -28,6 +30,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
@@ -37,6 +40,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.Sleep;
 
 
 /**
@@ -292,25 +296,29 @@ public class AddressSpaceView extends AbstractView {
      *
      * @param address log address
      */
-    public void prefixTrim(final long address) {
-        log.debug("PrefixTrim[{}]", address);
-        try {
-            layoutHelper(e -> {
-                        e.getLayout().getPrefixSegments(address).stream()
-                                .flatMap(seg -> seg.getStripes().stream())
-                                .flatMap(stripe -> stripe.getLogServers().stream())
-                                .map(e::getLogUnitClient)
-                                .map(client -> client.prefixTrim(address))
-                                .forEach(CFUtils::getUninterruptibly);
-                        return null;    // No return value
-                    }
-            );
+    public void prefixTrim(final Token address) {
+        log.info("PrefixTrim[{}]", address);
+        final int numRetries = 3;
 
-            runtime.getSequencerView().trimCache(address);
-
-        } catch (Exception e) {
-            log.error("prefixTrim: Error while calling prefix trimming {}", address, e);
-            throw new UnrecoverableCorfuError("Unexpected error while prefix trimming", e);
+        for (int x = 0; x < numRetries; x++) {
+            try {
+                layoutHelper(e -> {
+                            e.getLayout().getPrefixSegments(address.getSequence()).stream()
+                                    .flatMap(seg -> seg.getStripes().stream())
+                                    .flatMap(stripe -> stripe.getLogServers().stream())
+                                    .map(e::getLogUnitClient)
+                                    .map(client -> client.prefixTrim(address))
+                                    .forEach(CFUtils::getUninterruptibly);
+                            return null;    // No return value
+                        }, true);
+                // TODO(Maithem): trimCache should be epoch aware?
+                runtime.getSequencerView().trimCache(address.getSequence());
+                break;
+            } catch (NetworkException | TimeoutException e) {
+                log.warn("prefixTrim: encountered a network error on try {}", x, e);
+                Duration retryRate = runtime.getParameters().getConnectionRetryRate();
+                Sleep.sleepUninterruptibly(retryRate);
+            }
         }
     }
 

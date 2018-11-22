@@ -73,7 +73,6 @@ public class BaseServer extends AbstractServer {
             long epoch = msg.getPayload();
             log.info("handleMessageSetEpoch: Received SET_EPOCH, moving to new epoch {}", epoch);
             serverContext.setServerEpoch(epoch, r);
-            serverContext.getServers().forEach(s -> s.sealServerWithEpoch(epoch));
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
         } catch (WrongEpochException e) {
             log.debug("handleMessageSetEpoch: Rejected SET_EPOCH current={}, requested={}",

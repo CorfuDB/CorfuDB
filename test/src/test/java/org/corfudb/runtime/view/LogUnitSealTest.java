@@ -73,8 +73,12 @@ public class LogUnitSealTest extends AbstractViewTest {
         layout.setEpoch(layout.getEpoch() + 1);
         runtimeLayout.sealMinServerSet();
 
-        // Intentionally reset router epoch to bypass epoch check on router
-        getLayoutServer(SERVERS.PORT_0).getServerContext().getServerRouter().setServerEpoch(epoch);
+        // Intentionally reset router epoch to bypass epoch check on router.
+        // We expect that the test server router's epoch is reset, but the
+        // batchWriter should reject update its epoch with a smaller epoch.
+        assertThatThrownBy(() -> getLayoutServer(SERVERS.PORT_0)
+                .getServerContext().getServerRouter().setServerEpoch(epoch))
+                .isExactlyInstanceOf(WrongEpochException.class);
 
         // Still using the old client to send messages stamped with old epoch
         for (int i = 0; i < numOp; i++) {

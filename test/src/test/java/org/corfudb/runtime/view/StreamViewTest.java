@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -67,7 +68,8 @@ public class StreamViewTest extends AbstractViewTest {
         List<ILogData> entries = txStream.remainingUpTo((firstIter - 1) / 2);
         assertThat(entries.size()).isEqualTo(firstIter / 2);
 
-        runtime.getAddressSpaceView().prefixTrim((firstIter - 1) / 2);
+        Token token = new Token(runtime.getLayoutView().getLayout().getEpoch(), (firstIter - 1) / 2);
+        runtime.getAddressSpaceView().prefixTrim(token);
         runtime.getAddressSpaceView().invalidateServerCaches();
         runtime.getAddressSpaceView().invalidateClientCache();
 
@@ -373,7 +375,8 @@ public class StreamViewTest extends AbstractViewTest {
         sv.append(testPayload);
 
         // Trim the entry
-        runtime.getAddressSpaceView().prefixTrim(0);
+        Token token = new Token(runtime.getLayoutView().getLayout().getEpoch(), 0);
+        runtime.getAddressSpaceView().prefixTrim(token);
         runtime.getAddressSpaceView().gc();
         runtime.getAddressSpaceView().invalidateServerCaches();
         runtime.getAddressSpaceView().invalidateClientCache();

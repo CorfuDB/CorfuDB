@@ -15,8 +15,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class TrimRequest implements ICorfuPayload<TrimRequest> {
 
-    final UUID stream;
-    final Long address;
+    final Token address;
 
     /**
      * Deserialization Constructor from Bytebuf to TrimRequest.
@@ -24,20 +23,14 @@ public class TrimRequest implements ICorfuPayload<TrimRequest> {
      * @param buf The buffer to deserialize
      */
     public TrimRequest(ByteBuf buf) {
-        if (ICorfuPayload.fromBuffer(buf, Boolean.class)) {
-            stream = ICorfuPayload.fromBuffer(buf, UUID.class);
-        } else {
-            stream = null;
-        }
-        address = ICorfuPayload.fromBuffer(buf, Long.class);
+        long epoch = buf.readLong();
+        long sequence = buf.readLong();
+        address = new Token(epoch, sequence);
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, stream != null);
-        if (stream != null) {
-            ICorfuPayload.serialize(buf, stream);
-        }
-        ICorfuPayload.serialize(buf, address);
+        buf.writeLong(address.getEpoch());
+        buf.writeLong(address.getSequence());
     }
 }

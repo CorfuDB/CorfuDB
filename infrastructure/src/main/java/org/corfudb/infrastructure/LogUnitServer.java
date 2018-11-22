@@ -236,7 +236,8 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.TRIM)
     private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        batchWriter.trim(msg.getPayload().getAddress(), msg.getEpoch());
+        TrimRequest req = msg.getPayload();
+        batchWriter.trim(req.getAddress().getSequence(), req.getAddress().getEpoch());
         //TODO(Maithem): should we return an error if the write fails
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
@@ -245,7 +246,8 @@ public class LogUnitServer extends AbstractServer {
     private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
                             IServerRouter r) {
         try {
-            batchWriter.prefixTrim(msg.getPayload().getAddress(), msg.getEpoch());
+            TrimRequest req = msg.getPayload();
+            batchWriter.prefixTrim(req.getAddress());
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         } catch (TrimmedException ex) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
