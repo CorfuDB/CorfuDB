@@ -25,6 +25,8 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.codec.compression.Lz4FrameDecoder;
+import io.netty.handler.codec.compression.Lz4FrameEncoder;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 
@@ -43,6 +45,8 @@ import javax.net.ssl.SSLException;
 
 import lombok.extern.slf4j.Slf4j;
 
+import net.jpountz.lz4.LZ4Factory;
+import net.jpountz.xxhash.XXHashFactory;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
@@ -477,6 +481,16 @@ public class CorfuServer {
                     ch.pipeline().addLast("sasl/plain-text", new
                             PlainTextSaslNettyServer());
                 }
+
+                Lz4FrameEncoder encoder = new Lz4FrameEncoder(LZ4Factory.fastestInstance(),
+                        false, 1 << 9 + 0x0F,
+                        XXHashFactory.fastestInstance().newStreamingHash32(0x9747b28c).asChecksum());
+                Lz4FrameDecoder decoder = new Lz4FrameDecoder(LZ4Factory.fastestInstance(),
+                        XXHashFactory.fastestInstance().newStreamingHash32(0x9747b28c).asChecksum());
+
+                ch.pipeline().addLast(decoder);
+                ch.pipeline().addLast(encoder);
+
                 // Transform the framed message into a Corfu message.
                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());

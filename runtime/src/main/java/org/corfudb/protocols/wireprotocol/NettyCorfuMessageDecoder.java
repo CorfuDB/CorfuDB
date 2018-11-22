@@ -19,7 +19,9 @@ public class NettyCorfuMessageDecoder extends ByteToMessageDecoder {
     @Override
     protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf,
                           List<Object> list) throws Exception {
+        System.out.println();
         list.add(CorfuMsg.deserialize(byteBuf));
+        System.out.println();
     }
 
     @Override
@@ -29,7 +31,9 @@ public class NettyCorfuMessageDecoder extends ByteToMessageDecoder {
         // (out == null) ? null : out.size());
 
         if (in != Unpooled.EMPTY_BUFFER) {
+
             this.decode(ctx, in, out);
+            System.out.println();
         }
         // ignore the Netty generated {@link EmptyByteBuf empty ByteBuf message} when channel
         // handler goes inactive (typically happened after each received burst of batch of messages)

@@ -15,6 +15,8 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.codec.compression.Lz4FrameDecoder;
+import io.netty.handler.codec.compression.Lz4FrameEncoder;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
@@ -24,6 +26,8 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import net.jpountz.lz4.LZ4Factory;
+import net.jpountz.xxhash.XXHashFactory;
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler;
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler.ClientHandshakeEvent;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -59,6 +63,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.zip.Checksum;
 
 
 /**
@@ -274,9 +279,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             protected void initChannel(@Nonnull Channel ch) throws Exception {
                 ch.pipeline().addLast(new IdleStateHandler(parameters.getIdleConnectionTimeout(),
                         parameters.getKeepAlivePeriod(), 0));
+
                 if (parameters.isTlsEnabled()) {
                     ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
                 }
+
+
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
                     0, 4, 0,
@@ -287,6 +295,17 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                             parameters.getPasswordFile());
                     ch.pipeline().addLast("sasl/plain-text", saslNettyClient);
                 }
+
+
+                Lz4FrameEncoder encoder = new Lz4FrameEncoder(LZ4Factory.fastestInstance(),
+                        false, 1 << 9 + 0x0F,
+                        XXHashFactory.fastestInstance().newStreamingHash32(0x9747b28c).asChecksum());
+                Lz4FrameDecoder decoder = new Lz4FrameDecoder(LZ4Factory.fastestInstance(),
+                        XXHashFactory.fastestInstance().newStreamingHash32(0x9747b28c).asChecksum());
+
+                ch.pipeline().addLast(decoder);
+                ch.pipeline().addLast(encoder);
+
                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
                 ch.pipeline().addLast(new ClientHandshakeHandler(parameters.getClientId(),
