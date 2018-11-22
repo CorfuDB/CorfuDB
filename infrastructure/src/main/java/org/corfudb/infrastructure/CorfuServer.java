@@ -10,6 +10,9 @@ import static org.fusesource.jansi.Ansi.ansi;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.util.ContextInitializer;
+import ch.qos.logback.core.joran.spi.JoranException;
 import com.google.common.collect.ImmutableList;
 
 import io.netty.bootstrap.ServerBootstrap;
@@ -196,7 +199,7 @@ public class CorfuServer {
      *
      * @param args command line argument strings
      */
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
 
         // Parse the options given, using docopt.
         Map<String, Object> opts = new Docopt(USAGE)
@@ -205,11 +208,6 @@ public class CorfuServer {
         // Print a nice welcome message.
         AnsiConsole.systemInstall();
         printStartupMsg(opts);
-
-        // Pick the correct logging level before outputting error messages.
-        final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-        final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
-        root.setLevel(level);
 
         log.debug("Started with arguments: {}", opts);
 
@@ -229,6 +227,8 @@ public class CorfuServer {
             // Address is specified by the user.
             bindToAllInterfaces = false;
         }
+
+        configureLogger(opts);
 
         // Create the service directory if it does not exist.
         if (!(Boolean) opts.get("--memory")) {
@@ -259,6 +259,20 @@ public class CorfuServer {
         corfuServerThread = new Thread(() -> startServer(opts, bindToAllInterfaces));
         corfuServerThread.setName("CorfuServer");
         corfuServerThread.start();
+    }
+
+    /**
+     * Setup logback logger
+     *  - pick the correct logging level before outputting error messages
+     *  - add serverEndpoint information
+     *
+     * @param opts command line parameters
+     * @throws JoranException logback exception
+     */
+    private static void configureLogger(Map<String, Object> opts) {
+        final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
+        root.setLevel(level);
     }
 
     /**
