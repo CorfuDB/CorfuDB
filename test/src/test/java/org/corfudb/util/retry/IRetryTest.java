@@ -11,7 +11,6 @@ import java.sql.SQLException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
 
 /**
  * Created by Konstantin Spirov on 4/6/2017.
@@ -32,18 +31,11 @@ public class IRetryTest extends AbstractCorfuTest {
         assertThat(retries.get()).isEqualTo(PARAMETERS.NUM_ITERATIONS_MODERATE+1);
     }
 
-    @Test
-    public void testIRetryIsAbleToThrowCatchedExceptions() throws InterruptedException {
-        AtomicInteger retries = new AtomicInteger(0);
-        try {
-            String e = IRetry.build(ExponentialBackoffRetry.class, SQLException.class, () -> {
-                if (true) throw new SQLException();
-                return "";
-            }).run();
-            fail("Exception not propagated");
-        } catch (SQLException e) {
-            // expected
-        }
+    @Test(expected = SQLException.class)
+    public void testIRetryIsAbleToThrowCatchedExceptions()
+            throws SQLException, InterruptedException {
+        IRetry.build(ExponentialBackoffRetry.class, SQLException.class, () -> {
+            throw new SQLException();
+        }).run();
     }
-
 }

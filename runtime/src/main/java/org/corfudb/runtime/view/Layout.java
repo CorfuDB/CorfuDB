@@ -351,8 +351,9 @@ public class Layout {
                 if (r.getParameters().isHoleFillingDisabled()) {
                     return new ChainReplicationProtocol(new NeverHoleFillPolicy(100));
                 } else {
-                    return new ChainReplicationProtocol(new ReadWaitHoleFillPolicy(100,
-                            r.getParameters().getHoleFillRetry()));
+                    return new ChainReplicationProtocol(
+                            new ReadWaitHoleFillPolicy(r.getParameters().getRequestTimeout(),
+                                    r.getParameters().getHoleFillRetryThreshold()));
                 }
             }
 
@@ -388,8 +389,9 @@ public class Layout {
                 if (r.getParameters().isHoleFillingDisabled()) {
                     return new QuorumReplicationProtocol(new NeverHoleFillPolicy(100));
                 } else {
-                    return new QuorumReplicationProtocol(new ReadWaitHoleFillPolicy(100,
-                            r.getParameters().getHoleFillRetry()));
+                    return new QuorumReplicationProtocol(
+                            new ReadWaitHoleFillPolicy(r.getParameters().getRequestTimeout(),
+                                    r.getParameters().getHoleFillRetryThreshold()));
                 }
             }
 
