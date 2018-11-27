@@ -30,14 +30,9 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
                 .open();
 
         assertThat(rt.getGarbageCollector().isStarted()).isTrue();
-
         SizeOf sizeOf = SizeOf.newInstance();
-        long sizeAfterCreation = sizeOf.deepSizeOf(table);
-        rt.getGarbageCollector().runRuntimeGC();
-        assertThat(sizeAfterCreation).isLessThanOrEqualTo(sizeOf.deepSizeOf(table));
 
         final int numWrites = 100;
-
         //TODO(Maithem): sync garbage from other clients
         for (int x = 0; x < numWrites; x++) {
             table.put(String.valueOf(x), String.valueOf(x));
