@@ -4,16 +4,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
-
-import org.corfudb.runtime.view.Address;
 
 /**
  * This class implements the StreamLog interface using a Java hash map.
@@ -24,10 +23,10 @@ import org.corfudb.runtime.view.Address;
 @Slf4j
 public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressSpace {
 
-    private final AtomicLong globalTail = new AtomicLong(Address.NON_ADDRESS);
     private Map<Long, LogData> logCache;
     private Set<Long> trimmed;
     private volatile long startingAddress;
+    private volatile LogMetadata logMetadata;
 
     /**
      * Returns an object that stores a stream log in memory.
@@ -36,6 +35,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         logCache = new ConcurrentHashMap();
         trimmed = ConcurrentHashMap.newKeySet();
         startingAddress = 0;
+        logMetadata = new LogMetadata();
     }
 
     @Override
@@ -46,8 +46,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             }
 
             logCache.put(entry.getGlobalAddress(), entry);
-            globalTail.getAndUpdate(maxTail -> entry.getGlobalAddress() > maxTail
-                    ? entry.getGlobalAddress() : maxTail);
+            logMetadata.update(entry);
         }
     }
 
@@ -61,17 +60,11 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             throwLogUnitExceptionsIfNecessary(address, entry);
         }
         logCache.put(address, entry);
-
-
-        globalTail.getAndUpdate(maxTail -> entry.getGlobalAddress() > maxTail
-                ? entry.getGlobalAddress() : maxTail);
+        logMetadata.update(entry);
     }
 
     private boolean isTrimmed(long address) {
-        if (address < startingAddress) {
-            return true;
-        }
-        return false;
+        return address < startingAddress || trimmed.contains(address);
     }
 
     @Override
@@ -84,8 +77,12 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     @Override
-    public long getGlobalTail() {
-        return globalTail.get();
+    public synchronized TailsResponse getTails() {
+        Map<UUID, Long> tails = new HashMap<>(logMetadata.getStreamTails().size());
+        for (Map.Entry<UUID, Long> entry : logMetadata.getStreamTails().entrySet()) {
+            tails.put(entry.getKey(), entry.getValue());
+        }
+        return new TailsResponse(logMetadata.getGlobalTail(), tails);
     }
 
     @Override
@@ -112,9 +109,6 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public LogData read(long address) {
         if (isTrimmed(address)) {
-            return LogData.getTrimmed(address);
-        }
-        if (trimmed.contains(address)) {
             return LogData.getTrimmed(address);
         }
 
@@ -160,7 +154,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public void reset() {
         startingAddress = 0;
-        globalTail.set(Address.NON_ADDRESS);
+        logMetadata = new LogMetadata();
         // Clear the trimmed addresses record.
         trimmed.clear();
         // Clearing all data from the cache.
