@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -33,7 +34,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
 
     static final int BATCH_SIZE = 50;
 
-    final boolean doSync;
+    final boolean sync;
 
     private StreamLog streamLog;
 
@@ -56,13 +57,15 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
     /**
      * Returns a new BatchWriter for a stream log.
      *
-     * @param streamLog  Stream log for writes (can be in memory or file)
-     * @param sealEpoch  All operations stamped with epoch less than the sealEpoch are discarded
-     * @param doSync     If true, the batch writer will sync writes to secondary storage
+     * @param streamLog      stream log for writes (can be in memory or file)
+     * @param sealEpoch All operations stamped with epoch less than the epochWaterMark are
+     *                       discarded.
+     * @param streamLog stream log for writes (can be in memory or file)
+     * @param sync    If true, the batch writer will sync writes to secondary storage
      */
-    public BatchWriter(StreamLog streamLog, long sealEpoch, boolean doSync) {
+    public BatchWriter(StreamLog streamLog, long sealEpoch, boolean sync) {
         this.sealEpoch = sealEpoch;
-        this.doSync = doSync;
+        this.sync = sync;
         this.streamLog = streamLog;
         operationsQueue = new LinkedBlockingQueue<>();
         writerService.submit(this::batchWriteProcessor);
@@ -176,12 +179,27 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
         }
     }
 
+    public TailsResponse queryTails(long epoch) {
+        try {
+            CompletableFuture<TailsResponse> cf = new CompletableFuture<>();
+            operationsQueue.add(new BatchWriterOperation(Type.TAILS_QUERY, null,
+                    null, epoch, null, cf));
+            return cf.get();
+        } catch (Exception e) {
+            if (e.getCause() instanceof RuntimeException) {
+                throw (RuntimeException) e.getCause();
+            } else {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
     @Override
     public void delete(K key, V value, RemovalCause removalCause) {
     }
 
     private void handleOperationResults(BatchWriterOperation operation) {
-        if (operation.getException() == null) {
+        if (operation.getException() == null && !operation.getFuture().isDone()) {
             operation.getFuture().complete(null);
         } else {
             operation.getFuture().completeExceptionally(operation.getException());
@@ -190,7 +208,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
 
     private void batchWriteProcessor() {
 
-        if (!doSync) {
+        if (!sync) {
             log.warn("batchWriteProcessor: writes configured to not sync with secondary storage");
         }
 
@@ -209,7 +227,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
 
                     if (currOp == null || processed == BATCH_SIZE
                             || currOp == BatchWriterOperation.SHUTDOWN) {
-                        streamLog.sync(doSync);
+                        streamLog.sync(sync);
                         log.trace("Sync'd {} writes", processed);
 
                         for (BatchWriterOperation operation : res) {
@@ -261,6 +279,10 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                                 streamLog.reset();
                                 res.add(currOp);
                                 break;
+                            case TAILS_QUERY:
+                                TailsResponse tails = streamLog.getTails();
+                                currOp.getFuture().complete(tails);
+                                break;
                             default:
                                 log.warn("Unknown BatchWriterOperation {}", currOp);
                         }
@@ -274,7 +296,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                 }
             }
         } catch (Exception e) {
-            log.error("Caught exception in the write processor {}", e);
+            log.error("Caught exception in the write processor ", e);
         }
     }
 

@@ -91,12 +91,7 @@ public class Helpers{
     static Map<UUID, Long> getRecoveryStreamTails(String configurationString) {
         CorfuRuntime rt = new CorfuRuntime(configurationString)
                 .connect();
-
-        FastObjectLoader loader = new FastObjectLoader(rt);
-        loader.setRecoverSequencerMode(true);
-        loader.loadMaps();
-
-        return loader.getStreamTails();
+        return rt.getAddressSpaceView().getAllTails().getStreamTails();
     }
 
     static void trim(CorfuRuntime rt, Token address) {

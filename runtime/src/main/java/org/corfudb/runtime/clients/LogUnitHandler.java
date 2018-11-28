@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
@@ -190,7 +191,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      * @param r   Router
      */
     @ClientHandler(type = CorfuMsgType.TAIL_RESPONSE)
-    private static Object handleTailResponse(CorfuPayloadMsg<Long> msg,
+    private static Object handleTailResponse(CorfuPayloadMsg<TailsResponse> msg,
                                              ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }
