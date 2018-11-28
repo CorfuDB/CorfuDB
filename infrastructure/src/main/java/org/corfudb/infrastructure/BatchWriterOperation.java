@@ -5,6 +5,7 @@ import java.util.concurrent.CompletableFuture;
 
 import lombok.Data;
 
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.LogData;
 
 /**
@@ -12,7 +13,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
  */
 
 @Data
-public class BatchWriterOperation {
+public class BatchWriterOperation<T> {
     public enum Type {
         SHUTDOWN,
         WRITE,
@@ -25,14 +26,9 @@ public class BatchWriterOperation {
     }
 
     private final Type type;
-    private final Long address;
-    private final LogData logData;
-    private final Long epoch;
-    private final List<LogData> entries;
-    private final CompletableFuture future;
-    private Exception exception;
+    private final CorfuPayloadMsg msg;
+    private Object retVal;
+    private final CompletableFuture<T> futureResult = new CompletableFuture<>();
 
-
-    public static BatchWriterOperation SHUTDOWN = new BatchWriterOperation(Type.SHUTDOWN,
-            null, null, null, null, null);
+    public static BatchWriterOperation<Void> SHUTDOWN = new BatchWriterOperation<>(Type.SHUTDOWN, null);
 }

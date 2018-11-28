@@ -19,9 +19,13 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TrimRequest;
+import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
@@ -30,7 +34,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
  * sync writes.
  */
 @Slf4j
-public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
+public class BatchWriter implements AutoCloseable {
 
     static final int BATCH_SIZE = 50;
 
@@ -71,139 +75,10 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
         writerService.submit(this::batchWriteProcessor);
     }
 
-    @Override
-    public void write(@Nonnull K key, @Nonnull V value) {
-        try {
-            CompletableFuture<Void> cf = new CompletableFuture();
-            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.WRITE,
-                    (Long) key, (LogData) value, ((LogData) value).getEpoch(), null, cf));
-            cf.get();
-        } catch (Exception e) {
-            log.trace("Write Exception {}", e);
-            if (e.getCause() instanceof RuntimeException) {
-                throw (RuntimeException) e.getCause();
-            } else {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
-    public void bulkWrite(List<LogData> entries, long epoch) {
-        try {
-            CompletableFuture<Void> cf = new CompletableFuture();
-            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.RANGE_WRITE,
-                    null, null, epoch, entries, cf));
-        } catch (Exception e) {
-            log.trace("Write Exception {}", e);
-            if (e.getCause() instanceof RuntimeException) {
-                throw (RuntimeException) e.getCause();
-            } else {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
-    /**
-     * Trim an address from the log.
-     *
-     * @param address log address to trim
-     * @param epoch   Epoch at which the trim operation is received.
-     */
-    public void trim(@Nonnull long address, @Nonnull long epoch) {
-        try {
-            CompletableFuture<Void> cf = new CompletableFuture();
-            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.TRIM,
-                    address, null, epoch, null, cf));
-            cf.get();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
-     * Trim addresses from log up to a prefix.
-     *
-     * @param address prefix address to trim to (inclusive)
-     */
-    public void prefixTrim(@Nonnull Token address) {
-        try {
-            CompletableFuture<Void> cf = new CompletableFuture();
-            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.PREFIX_TRIM,
-                    address.getSequence(), null, address.getEpoch(), null, cf));
-            cf.get();
-        } catch (Exception e) {
-            if (e.getCause() instanceof RuntimeException) {
-                throw (RuntimeException) e.getCause();
-            } else {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
-    /**
-     * Insert seal operation in queue and wait for queue to process all preceding operations.
-     * All operations in the queue after the sealEpoch operation, that have epoch less than
-     * the sealEpoch epoch are discarded and their futures are completed exceptionally with a
-     * WrongEpochException.
-     *
-     * @param epoch Epoch to seal with.
-     */
-    public void waitForSealComplete(long epoch) {
-        try {
-            CompletableFuture<Void> cf = new CompletableFuture<>();
-            operationsQueue.add(new BatchWriterOperation(Type.SEAL, null, null, epoch, null, cf));
-            cf.get();
-        } catch (Exception e) {
-            if (e.getCause() instanceof RuntimeException) {
-                throw (RuntimeException) e.getCause();
-            } else {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
-    /**
-     * Reset the log unit node.
-     */
-    public void reset(@Nonnull long epoch) {
-        try {
-            CompletableFuture<Void> cf = new CompletableFuture<>();
-            operationsQueue.add(new BatchWriterOperation(Type.RESET, null, null, epoch, null, cf));
-            cf.get();
-        } catch (Exception e) {
-            if (e.getCause() instanceof RuntimeException) {
-                throw (RuntimeException) e.getCause();
-            } else {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
-    public TailsResponse queryTails(long epoch) {
-        try {
-            CompletableFuture<TailsResponse> cf = new CompletableFuture<>();
-            operationsQueue.add(new BatchWriterOperation(Type.TAILS_QUERY, null,
-                    null, epoch, null, cf));
-            return cf.get();
-        } catch (Exception e) {
-            if (e.getCause() instanceof RuntimeException) {
-                throw (RuntimeException) e.getCause();
-            } else {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
-    @Override
-    public void delete(K key, V value, RemovalCause removalCause) {
-    }
-
-    private void handleOperationResults(BatchWriterOperation operation) {
-        if (operation.getException() == null && !operation.getFuture().isDone()) {
-            operation.getFuture().complete(null);
-        } else {
-            operation.getFuture().completeExceptionally(operation.getException());
-        }
+    public <T> CompletableFuture <T> addTask(Type type, CorfuPayloadMsg msg) {
+        BatchWriterOperation<T> operation = new BatchWriterOperation<>(type, msg);
+        operationsQueue.add(operation);
+        return operation.getFutureResult();
     }
 
     private void batchWriteProcessor() {
@@ -231,6 +106,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                         log.trace("Sync'd {} writes", processed);
 
                         for (BatchWriterOperation operation : res) {
+                            operation.
                             handleOperationResults(operation);
                         }
                         res.clear();
@@ -244,14 +120,14 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                     log.trace("Shutting down the write processor");
                     streamLog.sync(true);
                     break;
-                } else if (currOp.getType() == Type.SEAL && currOp.getEpoch() >= sealEpoch) {
-                    sealEpoch = currOp.getEpoch();
+                } else if (currOp.getType() == Type.SEAL && currOp.getMsg().getEpoch() >= sealEpoch) {
+                    sealEpoch = currOp.getMsg().getEpoch();
                     res.add(currOp);
                     processed++;
                     lastOp = currOp;
-                } else if (currOp.getEpoch() != sealEpoch) {
+                } else if (currOp.getMsg().getEpoch() != sealEpoch) {
                     log.warn("batchWriteProcessor: wrong epoch on {} msg, seal epoch is {}",
-                            currOp.getType(), currOp.getEpoch());
+                            currOp.getType(), currOp.getMsg().getEpoch());
                     currOp.setException(new WrongEpochException(sealEpoch));
                     res.add(currOp);
                     processed++;
@@ -260,19 +136,23 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                     try {
                         switch (currOp.getType()) {
                             case TRIM:
-                                streamLog.trim(currOp.getAddress());
+                                TrimRequest pointTrim = (TrimRequest) currOp.getMsg().getPayload();
+                                streamLog.trim(pointTrim.getAddress().getSequence());
                                 res.add(currOp);
                                 break;
                             case PREFIX_TRIM:
-                                streamLog.prefixTrim(currOp.getAddress());
+                                TrimRequest prefixTrim = (TrimRequest) currOp.getMsg().getPayload();
+                                streamLog.prefixTrim(prefixTrim.getAddress().getSequence());
                                 res.add(currOp);
                                 break;
                             case WRITE:
-                                streamLog.append(currOp.getAddress(), currOp.getLogData());
+                                WriteRequest write = (WriteRequest) currOp.getMsg().getPayload();
+                                streamLog.append(write.getGlobalAddress(), (LogData) write.getData());
                                 res.add(currOp);
                                 break;
                             case RANGE_WRITE:
-                                streamLog.append(currOp.getEntries());
+                                RangeWriteMsg writeRange = (RangeWriteMsg) currOp.getMsg().getPayload();
+                                streamLog.append(writeRange.getEntries());
                                 res.add(currOp);
                                 break;
                             case RESET:
@@ -287,7 +167,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                                 log.warn("Unknown BatchWriterOperation {}", currOp);
                         }
                     } catch (Exception e) {
-                        currOp.setException(e);
+                        currOp.getFutureResult().completeExceptionally(e);
                         res.add(currOp);
                     }
 
