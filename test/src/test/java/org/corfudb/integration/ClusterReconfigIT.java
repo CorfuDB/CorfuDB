@@ -42,6 +42,7 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.CFUtils;
@@ -207,17 +208,11 @@ public class ClusterReconfigIT extends AbstractIT {
         final int offset = 100;
         Token futureTimestamp = new Token(twoNodeLayout.getEpoch() + offset, offset);
 
-        runtime.getObjectsView().TXBuild().snapshot(futureTimestamp).build().begin();
-        map.put("key", "val");
-
-        try {
-            runtime.getObjectsView().TXEnd();
-        } catch (TransactionAbortedException tae) {
-            assertThat(tae.getAbortCause()).isEqualTo(AbortCause.NEW_SEQUENCER);
-            txnFailed = true;
-        }
-
-        assertThat(txnFailed).isTrue();
+        assertThatThrownBy(() -> runtime.getObjectsView()
+                .TXBuild()
+                .snapshot(futureTimestamp)
+                .build()
+                .begin()).isInstanceOf(IllegalArgumentException.class);
     }
 
     /**

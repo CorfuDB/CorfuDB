@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -267,18 +268,11 @@ public abstract class AbstractTransactionalContext implements
             // If we're in a nested transaction, the first read timestamp
             // needs to come from the root.
             Token parentTimestamp = parentCtx.getSnapshotTimestamp();
-            if (!txnBuilderTs.equals(Token.UNINITIALIZED)
-                    && !txnBuilderTs.equals(parentTimestamp)) {
-                String msg = String.format("Attempting to nest transactions with" +
-                        " different timestamps, parent ts=%s, user defined ts=%s", parentCtx.getSnapshotTimestamp(),
-                        txnBuilderTs);
-                throw new IllegalArgumentException(msg);
-            }
-            log.trace("obtainSnapshotTimestamp: nested transaction, inheriting parent" +
+            log.trace("obtainSnapshotTimestamp: inheriting parent snapshot" +
                     " SnapshotTimestamp[{}] {}", this, parentTimestamp);
             return parentTimestamp;
         } else if (!txnBuilderTs.equals(Token.UNINITIALIZED)) {
-            log.trace("obtainSnapshotTimestamp: using snapshot from builder" +
+            log.trace("obtainSnapshotTimestamp: using user defined snapshot" +
                     " SnapshotTimestamp[{}] {}", this, txnBuilderTs);
             return txnBuilderTs;
         } else {

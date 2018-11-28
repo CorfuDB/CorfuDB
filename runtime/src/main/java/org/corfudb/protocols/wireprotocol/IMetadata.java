@@ -153,6 +153,11 @@ public interface IMetadata {
                 .get(LogUnitMetadataType.EPOCH)).orElse(Layout.INVALID_EPOCH);
     }
 
+    // TODO(Maithem): replace getGlobalAddress and getEpoch with getToken
+    default Token getToken() {
+        return new Token(getEpoch(), getGlobalAddress());
+    }
+
     default void clearCommit() {
         getMetadataMap().put(LogUnitMetadataType.COMMIT, false);
     }
