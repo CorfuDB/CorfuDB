@@ -5,7 +5,7 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.2.2.20181126211557.3202</version>
+        <version>0.2.2.20181128203616.8765</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -54,7 +54,8 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/etc/init.d</prefix>
-                                        <filemode>755</filemode>
+                                        <group>corfu</group>
+                                        <filemode>750</filemode>
                                     </mapper>
                                 </data>
                                 <!-- systemd service script -->
@@ -64,6 +65,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/lib/systemd/system</prefix>
+                                        <group>corfu</group>
                                         <filemode>644</filemode>
                                     </mapper>
                                 </data>
@@ -74,6 +76,8 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/share/corfu/lib</prefix>
+                                        <group>corfu</group>
+                                        <filemode>750</filemode>
                                     </mapper>
                                 </data>
                                 <data>
@@ -82,6 +86,8 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/share/corfu/conf</prefix>
+                                        <group>corfu</group>
+                                        <filemode>750</filemode>
                                     </mapper>
                                 </data>
                                 <!-- general shell scripts -->
@@ -91,6 +97,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/share/corfu/bin</prefix>
+                                        <group>corfu</group>
                                         <filemode>750</filemode>
                                     </mapper>
                                 </data>
@@ -101,6 +108,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/share/corfu/corfu_scripts</prefix>
+                                        <group>corfu</group>
                                         <filemode>750</filemode>
                                     </mapper>
                                 </data>
@@ -111,6 +119,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/share/corfu/scripts</prefix>
+                                        <group>corfu</group>
                                         <filemode>750</filemode>
                                     </mapper>
                                 </data>
@@ -121,6 +130,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/tanuki/bin</prefix>
+                                        <group>corfu</group>
                                         <filemode>750</filemode>
                                     </mapper>
                                 </data>
@@ -131,6 +141,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/tanuki/conf</prefix>
+                                        <group>corfu</group>
                                         <filemode>644</filemode>
                                     </mapper>
                                 </data>
@@ -140,6 +151,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/tanuki/conf</prefix>
+                                        <group>corfu</group>
                                         <filemode>644</filemode>
                                     </mapper>
                                 </data>
@@ -149,6 +161,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/tanuki/conf</prefix>
+                                        <group>corfu</group>
                                         <filemode>644</filemode>
                                     </mapper>
                                 </data>
@@ -158,6 +171,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/tanuki/conf</prefix>
+                                        <group>corfu</group>
                                         <filemode>644</filemode>
                                     </mapper>
                                 </data>
@@ -168,6 +182,7 @@
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/tanuki/conf</prefix>
+                                        <group>corfu</group>
                                         <filemode>644</filemode>
                                     </mapper>
                                 </data>
