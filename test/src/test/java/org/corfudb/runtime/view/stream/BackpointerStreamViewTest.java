@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view.stream;
 
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
@@ -158,7 +159,28 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
 
         // Fetch Stream B and verify backpointer count (which requires 1 read = 1 entry)
         svB.remainingUpTo(totalEntries);
-        assertThat(((BackpointerStreamView) svB).getBackpointerCount()).isEqualTo(1L);
+        assertThat(((ThreadSafeStreamView) svB).getUnderlyingStream().getBackpointerCount()).isEqualTo(1L);
+    }
+
+    @Test
+    public void testStreamGC() throws Exception {
+        CorfuRuntime runtime = getDefaultRuntime();
+
+        IStreamView svA = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
+            svA.append(String.valueOf(i).getBytes());
+        }
+
+        // Make sure that the stream is built in-memory
+        BackpointerStreamView bpsv = ((ThreadSafeStreamView) svA).getUnderlyingStream();
+        svA.remaining();
+        assertThat(bpsv.getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
+        TokenResponse tail = runtime.getSequencerView().query();
+        runtime.getAddressSpaceView().prefixTrim(tail.getToken());
+        runtime.getGarbageCollector().runRuntimeGC();
+        assertThat(bpsv.getContext().resolvedQueue).isEmpty();
+        assertThat(bpsv.getContext().readQueue).isEmpty();
+        assertThat(bpsv.getContext().readCpQueue).isEmpty();
     }
 
 }
