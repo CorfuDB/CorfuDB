@@ -690,7 +690,7 @@ public class CorfuRuntime {
 
         // Shutdown the event loop
         if (parameters.shutdownNettyEventLoop) {
-            nettyEventLoop.shutdownGracefully().syncUninterruptibly();
+            nettyEventLoop.shutdownGracefully();
         }
     }
 
