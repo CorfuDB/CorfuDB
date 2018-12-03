@@ -5,7 +5,10 @@ jdk: oraclejdk8
 
 stages:
 - name: test
-  if: type = pull_request
+  # Run tests for:
+  # - any branch exclude master branch
+  # - for any PR
+  if: branch != master OR (branch = master AND type = pull_request)
 - name: code_quality
   if: branch = master AND type != pull_request
 
