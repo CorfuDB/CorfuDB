@@ -14,7 +14,7 @@ import org.corfudb.annotations.MutatorAccessor;
  */
 @Deprecated // TODO: Add replacement method that conforms to style
 @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject {
+public interface ISMRMap<K, V> extends Map<K, V>, ISMRObject, CMap<K, V> {
 
     /**
      * {@inheritDoc}

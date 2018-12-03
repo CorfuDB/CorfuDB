@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.function.Predicate;
 
 public interface ICorfuMap<K, V>
-    extends Map<K, V> {
+    extends Map<K, V>, CMap<K, V> {
 
     /** Insert a key-value pair into a map, overwriting any previous mapping.
      *
