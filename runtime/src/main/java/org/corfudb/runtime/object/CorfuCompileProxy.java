@@ -144,8 +144,9 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
         this.args = args;
         this.serializer = serializer;
 
+        // Since the VLO is thread safe we don't need to use a thread safe stream implementation
         underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
-                new StreamViewSMRAdapter(rt, rt.getStreamsView().get(streamID)),
+                new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
                 upcallTargetMap, undoRecordTargetMap,
                 undoTargetMap, resetSet);
 

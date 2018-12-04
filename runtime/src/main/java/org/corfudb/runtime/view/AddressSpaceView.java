@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
@@ -272,11 +273,24 @@ public class AddressSpaceView extends AbstractView {
                             .flatMap(stripe -> stripe.getLogServers().stream())
                             .map(e::getLogUnitClient)
                             .map(LogUnitClient::getTrimMark)
-                            .map(CFUtils::getUninterruptibly)
+                            .map(future -> {
+                                // This doesn't look nice, but its required to trigger
+                                // the retry mechanism in AbstractView. Also, getUninterruptibly
+                                // can't be used here because it throws a UnrecoverableCorfuInterruptedError
+                                try {
+                                    return future.join();
+                                } catch (CompletionException ex) {
+                                    Throwable cause = ex.getCause();
+                                    if (cause instanceof RuntimeException) {
+                                        throw (RuntimeException) cause;
+                                    } else {
+                                        throw new RuntimeException(cause);
+                                    }
+                                }
+                            })
                             .max(Comparator.naturalOrder()).get();
                     return new Token(e.getLayout().getEpoch(), trimMark);
                 });
-
     }
 
     /**

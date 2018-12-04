@@ -18,6 +18,7 @@ import org.corfudb.runtime.view.replication.QuorumReplicationProtocol;
 import org.corfudb.runtime.view.replication.ReadWaitHoleFillPolicy;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.runtime.view.stream.ThreadSafeStreamView;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -340,6 +341,11 @@ public class Layout {
 
             @Override
             public IStreamView  getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
+                return new ThreadSafeStreamView(r, streamId, options);
+            }
+
+            @Override
+            public IStreamView getUnsafeStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
                 return new BackpointerStreamView(r, streamId, options);
             }
 
@@ -377,7 +383,12 @@ public class Layout {
             }
 
             @Override
-            public IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
+            public IStreamView  getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
+                return new ThreadSafeStreamView(r, streamId, options);
+            }
+
+            @Override
+            public IStreamView getUnsafeStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
                 return new BackpointerStreamView(r, streamId, options);
             }
 
@@ -439,6 +450,12 @@ public class Layout {
             }
 
             @Override
+            public IStreamView getUnsafeStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
+                throw new UnsupportedOperationException("Stream view used without a"
+                        + " replication mode");
+            }
+
+            @Override
             public ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment,
                                                             Set<String> responsiveNodes) {
                 throw new UnsupportedOperationException("Unsupported cluster health check.");
@@ -464,6 +481,8 @@ public class Layout {
         public abstract int getMinReplicationFactor(Layout layout, LayoutStripe stripe);
 
         public abstract IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options);
+
+        public abstract IStreamView getUnsafeStreamView(CorfuRuntime r, UUID streamId, StreamOptions options);
 
         public IReplicationProtocol getReplicationProtocol(CorfuRuntime r) {
             throw new UnsupportedOperationException();

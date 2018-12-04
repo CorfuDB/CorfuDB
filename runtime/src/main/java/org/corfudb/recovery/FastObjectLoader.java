@@ -471,6 +471,7 @@ public class FastObjectLoader {
     private void cleanUpForRetry() {
         runtime.getAddressSpaceView().invalidateClientCache();
         runtime.getObjectsView().getObjectCache().clear();
+        runtime.getStreamsView().getStreamCache().clear();
         nextRead = logHead;
         resetAddressProcessed();
 
