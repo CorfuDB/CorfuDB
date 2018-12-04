@@ -1,8 +1,20 @@
 package org.corfudb.infrastructure;
 
+import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
+import static org.fusesource.jansi.Ansi.Color.BLUE;
+import static org.fusesource.jansi.Ansi.Color.MAGENTA;
+import static org.fusesource.jansi.Ansi.Color.RED;
+import static org.fusesource.jansi.Ansi.Color.WHITE;
+import static org.fusesource.jansi.Ansi.ansi;
+
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
+
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.util.ContextInitializer;
+import ch.qos.logback.core.joran.spi.JoranException;
 import com.google.common.collect.ImmutableList;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -15,7 +27,22 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
+
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.apache.commons.io.FileUtils;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
@@ -28,26 +55,6 @@ import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
-
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
-import java.io.File;
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.regex.Pattern;
-
-import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
-import static org.fusesource.jansi.Ansi.Color.BLUE;
-import static org.fusesource.jansi.Ansi.Color.MAGENTA;
-import static org.fusesource.jansi.Ansi.Color.RED;
-import static org.fusesource.jansi.Ansi.Color.WHITE;
-import static org.fusesource.jansi.Ansi.ansi;
-
 
 /**
  * This is the new Corfu server single-process executable.
@@ -75,12 +82,12 @@ public class CorfuServer {
                     + "\n"
                     + "Usage:\n"
                     + "\tcorfu_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
-                    + "[-t <token>] [-c <ratio>] [-d <level>] [-p <seconds>] [-M <address>:<port>] "
+                    + "[-t <token>] [-c <ratio>] [-d <level>] [-p <seconds>] "
                     + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w "
                     + "<truststore_password_file>] [-b] [-g -o <username_file> -j <password_file>] "
-                    + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] [-H <seconds>] "
-                    + "[-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] [-P <prefix>] [-R <retention>]"
-                    + " [--agent] <port>\n"
+                    + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
+                    + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
+                    + "[-P <prefix>] [-R <retention>] [--agent] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
@@ -142,8 +149,6 @@ public class CorfuServer {
                     + "              Set the logging level, valid levels are: \n"
                     + "                                                                          "
                     + "              ALL,ERROR,WARN,INFO,DEBUG,TRACE,OFF [default: INFO].\n"
-                    + " -M <address>:<port>, --management-server=<address>:<port>                "
-                    + "              Layout endpoint to seed Management Server\n"
                     + " -n, --no-verify                                                          "
                     + "              Disable checksum computation and verification.\n"
                     + " -N, --no-sync                                                            "
@@ -194,7 +199,7 @@ public class CorfuServer {
      *
      * @param args command line argument strings
      */
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
 
         // Parse the options given, using docopt.
         Map<String, Object> opts = new Docopt(USAGE)
@@ -203,11 +208,6 @@ public class CorfuServer {
         // Print a nice welcome message.
         AnsiConsole.systemInstall();
         printStartupMsg(opts);
-
-        // Pick the correct logging level before outputting error messages.
-        final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-        final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
-        root.setLevel(level);
 
         log.debug("Started with arguments: {}", opts);
 
@@ -227,6 +227,8 @@ public class CorfuServer {
             // Address is specified by the user.
             bindToAllInterfaces = false;
         }
+
+        configureLogger(opts);
 
         // Create the service directory if it does not exist.
         if (!(Boolean) opts.get("--memory")) {
@@ -257,6 +259,20 @@ public class CorfuServer {
         corfuServerThread = new Thread(() -> startServer(opts, bindToAllInterfaces));
         corfuServerThread.setName("CorfuServer");
         corfuServerThread.start();
+    }
+
+    /**
+     * Setup logback logger
+     *  - pick the correct logging level before outputting error messages
+     *  - add serverEndpoint information
+     *
+     * @param opts command line parameters
+     * @throws JoranException logback exception
+     */
+    private static void configureLogger(Map<String, Object> opts) {
+        final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
+        root.setLevel(level);
     }
 
     /**

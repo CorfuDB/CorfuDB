@@ -12,6 +12,10 @@ import lombok.Data;
 @Data
 public class SequencerMetrics implements ICorfuPayload<SequencerMetrics> {
 
+    public static final SequencerMetrics READY = new SequencerMetrics(SequencerStatus.READY);
+    public static final SequencerMetrics NOT_READY = new SequencerMetrics(SequencerStatus.NOT_READY);
+    public static final SequencerMetrics UNKNOWN = new SequencerMetrics(SequencerStatus.UNKNOWN);
+
     public enum SequencerStatus {
         // Sequencer is in READY state, and can dispatch tokens.
         READY,
@@ -22,7 +26,7 @@ public class SequencerMetrics implements ICorfuPayload<SequencerMetrics> {
     }
 
     /**
-     * Ready state of a sequencer to determine its READY/NOT_READY state.
+     * Ready state ofN a sequencer to determine its READY/NOT_READY state.
      */
     private final SequencerStatus sequencerStatus;
 
@@ -37,14 +41,5 @@ public class SequencerMetrics implements ICorfuPayload<SequencerMetrics> {
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, sequencerStatus.toString());
-    }
-
-    /**
-     * Creates and returns default SequencerMetrics with status UNKNOWN.
-     *
-     * @return Default SequencerMetrics.
-     */
-    public static SequencerMetrics getDefaultSequencerMetrics() {
-        return new SequencerMetrics(SequencerStatus.UNKNOWN);
     }
 }

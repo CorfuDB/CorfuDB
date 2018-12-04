@@ -1,25 +1,16 @@
 package org.corfudb.infrastructure;
 
 import com.codahale.metrics.MetricRegistry;
-
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
-
-import java.io.File;
-import java.nio.file.Files;
-import java.time.Duration;
-import java.util.*;
-
-import java.util.concurrent.ThreadFactory;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.Setter;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.infrastructure.management.HealingDetector;
+import org.corfudb.infrastructure.management.IDetector;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -27,12 +18,25 @@ import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.infrastructure.management.FailureDetector;
-import org.corfudb.infrastructure.management.HealingDetector;
-import org.corfudb.infrastructure.management.IDetector;
 import org.corfudb.runtime.view.SequencerHealingPolicy;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.UuidUtils;
+
+import javax.annotation.Nonnull;
+import java.io.File;
+import java.nio.file.Files;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
@@ -101,14 +105,6 @@ public class ServerContext implements AutoCloseable {
 
     @Getter
     @Setter
-    private IDetector failureDetector;
-
-    @Getter
-    @Setter
-    private IDetector healingDetector;
-
-    @Getter
-    @Setter
     private IReconfigurationHandlerPolicy failureHandlerPolicy;
 
     @Getter
@@ -144,8 +140,6 @@ public class ServerContext implements AutoCloseable {
         this.serverConfig = serverConfig;
         this.dataStore = new DataStore(serverConfig, this::dataStoreFileCleanup);
         generateNodeId();
-        this.failureDetector = new FailureDetector();
-        this.healingDetector = new HealingDetector();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
         this.healingHandlerPolicy = new SequencerHealingPolicy();
 
@@ -168,6 +162,10 @@ public class ServerContext implements AutoCloseable {
         if (!isMetricsReportingSetUp(metrics)) {
             MetricsUtils.metricsReportingSetup(metrics);
         }
+    }
+
+    String getLocalEndpoint() {
+        return serverConfig.get("--address") + ":" + serverConfig.get("<port>");
     }
 
     /**
@@ -380,6 +378,7 @@ public class ServerContext implements AutoCloseable {
         if (lastEpoch == null || lastEpoch < serverEpoch) {
             dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
             r.setServerEpoch(serverEpoch);
+            getServers().forEach(s -> s.sealServerWithEpoch(serverEpoch));
         } else if (serverEpoch == lastEpoch) {
             // Setting to the same epoch, don't need to do anything.
         } else {
@@ -602,11 +601,24 @@ public class ServerContext implements AutoCloseable {
      */
     @Override
     public void close() {
+        CorfuRuntimeParameters params = getDefaultRuntimeParameters();
         // Shutdown the active event loops unless they were provided to us
         if (!getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
-            clientGroup.shutdownGracefully();
-            bossGroup.shutdownGracefully();
-            workerGroup.shutdownGracefully();
+            clientGroup.shutdownGracefully(
+                    params.getNettyShutdownQuitePeriod(),
+                    params.getNettyShutdownTimeout(),
+                    TimeUnit.MILLISECONDS
+            );
+            bossGroup.shutdownGracefully(
+                    params.getNettyShutdownQuitePeriod(),
+                    params.getNettyShutdownTimeout(),
+                    TimeUnit.MILLISECONDS
+            );
+            workerGroup.shutdownGracefully(
+                    params.getNettyShutdownQuitePeriod(),
+                    params.getNettyShutdownTimeout(),
+                    TimeUnit.MILLISECONDS
+            );
         }
     }
 }

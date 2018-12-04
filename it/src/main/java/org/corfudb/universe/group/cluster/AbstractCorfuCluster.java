@@ -1,7 +1,5 @@
 package org.corfudb.universe.group.cluster;
 
-import static lombok.Builder.Default;
-
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import lombok.Getter;
@@ -26,6 +24,8 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+
+import static lombok.Builder.Default;
 
 @Slf4j
 public abstract class AbstractCorfuCluster<P extends CorfuClusterParams, U extends UniverseParams>
@@ -88,6 +88,7 @@ public abstract class AbstractCorfuCluster<P extends CorfuClusterParams, U exten
 
     /**
      * Stop the cluster
+     *
      * @param timeout allowed time to gracefully stop the {@link Group}
      */
     @Override

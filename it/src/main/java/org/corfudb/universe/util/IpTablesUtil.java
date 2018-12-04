@@ -7,6 +7,7 @@ public class IpTablesUtil {
 
     /**
      * Drop input packages for a particular ip address
+     *
      * @param ipAddress ip address to drop packages
      * @return command line
      */
@@ -16,6 +17,7 @@ public class IpTablesUtil {
 
     /**
      * Drop output packages for a particular ip address
+     *
      * @param ipAddress ip address to drop packages
      * @return command line
      */
@@ -25,6 +27,7 @@ public class IpTablesUtil {
 
     /**
      * Clean all input rules
+     *
      * @return command line
      */
     public static String[] cleanInput() {
@@ -33,6 +36,7 @@ public class IpTablesUtil {
 
     /**
      * Clean all output rules
+     *
      * @return command line
      */
     public static String[] cleanOutput() {
@@ -41,6 +45,7 @@ public class IpTablesUtil {
 
     /**
      * Clean all rules
+     *
      * @return command line
      */
     public static String cleanAll() {

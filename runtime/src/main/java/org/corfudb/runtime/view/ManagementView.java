@@ -1,5 +1,7 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.Sets;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -19,8 +21,8 @@ import javax.annotation.Nonnull;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.NetworkMetrics;
-import org.corfudb.protocols.wireprotocol.NodeView;
+import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -37,6 +39,7 @@ import org.corfudb.runtime.view.workflows.ForceRemoveNode;
 import org.corfudb.runtime.view.workflows.HealNode;
 import org.corfudb.runtime.view.workflows.RemoveNode;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.NodeLocator;
 
 /**
  * A view of the Management Service to manage reconfigurations of the Corfu Cluster.
@@ -179,10 +182,11 @@ public class ManagementView extends AbstractView {
                 .map(segment -> segment.getReplicationMode()
                         .getClusterHealthForSegment(segment, peerResponsiveNodes))
                 .max(Comparator.comparingInt(ClusterStatus::getHealthValue))
-                .get();
+                .orElse(ClusterStatus.UNAVAILABLE);
         // Gets max of cluster status and logUnitRedundancyStatus.
         return Stream.of(logunitClusterStatus, logUnitRedundancyStatus)
-                .max(Comparator.comparingInt(ClusterStatus::getHealthValue)).get();
+                .max(Comparator.comparingInt(ClusterStatus::getHealthValue))
+                .orElse(ClusterStatus.UNAVAILABLE);
     }
 
     /**
@@ -207,30 +211,35 @@ public class ManagementView extends AbstractView {
                 // Gets cluster status from the layout, sequencer and log unit clusters.
                 // The status is then aggregated by the max of the 3 statuses acquired.
                 .max(Comparator.comparingInt(ClusterStatus::getHealthValue))
-                .get();
+                .orElse(ClusterStatus.UNAVAILABLE);
     }
 
     /**
      * Prunes out the unresponsive nodes as seen by the Management Agents on the Corfu nodes.
      *
-     * @param layout      Layout based on which the health is analyzed.
-     * @param nodeViewMap Map of nodeViews from the ManagementAgents.
+     * @param layout           Layout based on which the health is analyzed.
+     * @param clusterStatusMap Map of clusterStatus from the ManagementAgents.
      * @return Set of responsive servers as seen by the Corfu cluster nodes.
      */
-    private Set<String> filterResponsiveNodes(Layout layout, Map<String, NodeView> nodeViewMap) {
+    private Set<String> filterResponsiveNodes(Layout layout, Map<String, ClusterState> clusterStatusMap) {
 
         // Using the peer views from the nodes to determine health of the cluster.
+        // First all nodes are added to the set. All are assumed to be responsive.
         Set<String> peerResponsiveNodes = new HashSet<>(layout.getAllServers());
-        nodeViewMap.values().stream()
-                .map(NodeView::getNetworkMetrics)
-                // Get all peer connectivity maps from all node views.
-                .map(NetworkMetrics::getPeerConnectivityView)
-                .flatMap(stringBooleanMap -> stringBooleanMap.entrySet().stream())
-                // Filter out all unresponsive nodes from all the fault detectors.
+        // Truncates all nodes which did not respond to the Heartbeat request.
+        peerResponsiveNodes.retainAll(clusterStatusMap.keySet());
+        // Filter out all nodes which are not reachable by the cluster nodes.
+        clusterStatusMap.forEach((endpoint, clusterStatus) -> clusterStatus.getNodeStatusMap()
+                // For each clusterState we are only interested in the nodeState of the polling endpoint.
+                // In node X's cluster state we fetch node X's node state and so on.
+                .getOrDefault(endpoint, NodeState.getDefaultNodeState(NodeLocator.parseString(endpoint)))
+                .getConnectivityStatus().entrySet().stream()
+                // Filter out all unreachable nodes from each node state's connectivity view.
                 .filter(entry -> !entry.getValue())
                 .map(Entry::getKey)
-                // Remove the unresponsive nodes from the set of all nodes.
-                .forEach(peerResponsiveNodes::remove);
+                // Remove all the unreachable nodes from the set of all nodes.
+                .forEach(peerResponsiveNodes::remove));
+        // Filter out the unresponsive servers in the layout.
         layout.getUnresponsiveServers().forEach(peerResponsiveNodes::remove);
         return peerResponsiveNodes;
     }
@@ -272,6 +281,7 @@ public class ManagementView extends AbstractView {
                     layout = nodeLayout;
                 }
             } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
                 throw new UnrecoverableCorfuInterruptedError(ie);
             } catch (ExecutionException ee) {
                 log.error("getClusterStatus: Error while fetching layout from {}.",
@@ -292,7 +302,7 @@ public class ManagementView extends AbstractView {
      *
      * @param layout Layout to check.
      * @param server LogUnit Server endpoint.
-     * @return NodeStatus with respect to the layout specified.
+     * @return NodeState with respect to the layout specified.
      */
     private NodeStatus getLogUnitNodeStatusInLayout(Layout layout, String server) {
         if (layout.getUnresponsiveServers().contains(server)) {
@@ -371,18 +381,18 @@ public class ManagementView extends AbstractView {
         Map<String, Integer> counters = new HashMap<>();
         allNodes.forEach(endpoint -> counters.put(endpoint, 0));
 
-        // Map of nodeView received from heartbeatResponses.
-        Map<String, NodeView> nodeViewMap = new HashMap<>();
+        // Map of clusterStatus received from heartbeatResponses.
+        Map<String, ClusterState> clusterStatusMap = new HashMap<>();
 
         // Ping all nodes CLUSTER_STATUS_QUERY_ATTEMPTS times.
-        // Increment the counter map and save the NodeView response received in the
+        // Increment the counter map and save the ClusterState response received in the
         // heartbeat responses.
         for (int i = 0; i < CLUSTER_STATUS_QUERY_ATTEMPTS; i++) {
-            Map<String, CompletableFuture<NodeView>> futureMap = new HashMap<>();
+            Map<String, CompletableFuture<ClusterState>> futureMap = new HashMap<>();
 
             // Ping all nodes asynchronously
             for (String endpoint : allNodes) {
-                CompletableFuture<NodeView> cf = new CompletableFuture<>();
+                CompletableFuture<ClusterState> cf = new CompletableFuture<>();
                 try {
                     cf = runtimeLayout.getManagementClient(endpoint).sendHeartbeatRequest();
                 } catch (Exception e) {
@@ -394,9 +404,9 @@ public class ManagementView extends AbstractView {
             }
 
             // Accumulate all responses.
-            for (String endpoint : futureMap.keySet()) {
+            futureMap.forEach((endpoint, clusterStateFuture) -> {
                 try {
-                    nodeViewMap.put(endpoint, CFUtils.getUninterruptibly(futureMap.get(endpoint),
+                    clusterStatusMap.put(endpoint, CFUtils.getUninterruptibly(clusterStateFuture,
                             WrongEpochException.class));
                     counters.computeIfPresent(endpoint, (s, count) -> count + 1);
                 } catch (WrongEpochException wee) {
@@ -404,15 +414,11 @@ public class ManagementView extends AbstractView {
                 } catch (Exception ignored) {
                     // Ignore all exceptions.
                 }
-            }
+            });
         }
 
         // Using the peer views from the nodes to determine health of the cluster.
-        Set<String> peerResponsiveNodes = filterResponsiveNodes(layout, nodeViewMap);
-
-        // Analyzes the responsive nodes as seen by the fault detectors to determine the health
-        // of the cluster.
-        ClusterStatus clusterStatus = getClusterHealth(layout, peerResponsiveNodes);
+        Set<String> peerResponsiveNodes = filterResponsiveNodes(layout, clusterStatusMap);
 
         // Set of all nodes which are responsive to this client.
         // Client connectivity to the cluster.
@@ -421,6 +427,14 @@ public class ManagementView extends AbstractView {
                 .filter(entry -> entry.getValue() > 0)
                 .map(Entry::getKey)
                 .collect(Collectors.toSet());
+
+        // Analyzes the responsive nodes as seen by the fault detectors to determine the health
+        // of the cluster.
+        ClusterStatus clusterStatus = getClusterHealth(layout,
+                // We need to consider the intersection of how the clients view the cluster and
+                // how the server nodes perceive each other. Together we determine the cluster
+                // status.
+                Sets.intersection(peerResponsiveNodes, responsiveEndpoints));
 
         Map<String, NodeStatus> nodeStatusMap
                 = createNodeStatusMap(layout, responsiveEndpoints, allNodes);

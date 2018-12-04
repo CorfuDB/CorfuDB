@@ -10,6 +10,7 @@ import org.corfudb.infrastructure.orchestrator.Action;
 import org.corfudb.infrastructure.orchestrator.IWorkflow;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
@@ -141,9 +142,12 @@ public class AddNodeWorkflow implements IWorkflow {
         for (String endpoint : endpoints) {
             // TrimMark is the first address present on the log unit server.
             // Perform the prefix trim on the preceding address = (trimMark - 1).
+            // Since the LU will reject trim decisions made from older epochs, we
+            // need to adjust the new trim mark to have the new layout's epoch.
+            Token prefixToken = new Token(newLayout.getEpoch(), trimMark - 1);
             CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(newLayout)
                     .getLogUnitClient(endpoint)
-                    .prefixTrim(trimMark - 1));
+                    .prefixTrim(prefixToken));
         }
 
         if (trimMark > segment.getEnd()) {

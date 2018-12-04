@@ -20,6 +20,7 @@ import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
@@ -216,7 +217,7 @@ public class LogUnitClient extends AbstractClient {
      * @return A CompletableFuture which will complete with the globalTail once
      * received.
      */
-    public CompletableFuture<Long> getTail() {
+    public CompletableFuture<TailsResponse> getTail() {
         return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.msg());
     }
 
@@ -233,8 +234,8 @@ public class LogUnitClient extends AbstractClient {
      *
      * @param prefix The prefix of the stream, as a global physical offset, to trim.
      */
-    public void trim(long prefix) {
-        sendMessage(CorfuMsgType.TRIM.payloadMsg(new TrimRequest(null, prefix)));
+    public void trim(Token prefix) {
+        sendMessage(CorfuMsgType.TRIM.payloadMsg(new TrimRequest(prefix)));
     }
 
     /**
@@ -242,9 +243,9 @@ public class LogUnitClient extends AbstractClient {
      *
      * @param address An address to trim up to (i.e. [0, address))
      */
-    public CompletableFuture<Void> prefixTrim(long address) {
+    public CompletableFuture<Void> prefixTrim(Token address) {
         return sendMessageWithFuture(CorfuMsgType.PREFIX_TRIM
-                .payloadMsg(new TrimRequest(null, address)));
+                .payloadMsg(new TrimRequest(address)));
     }
 
     /**

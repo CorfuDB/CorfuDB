@@ -118,11 +118,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     private volatile Channel channel = null;
 
-    /**
-     * The {@link EventLoopGroup} for this router which services requests.
-     */
-    public final EventLoopGroup eventLoopGroup;
-
     /** Whether to shutdown the {@code eventLoopGroup} or not. Only applies when
      *  a deprecated constructor (which generates its own {@link EventLoopGroup} is used.
      */
@@ -168,7 +163,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         @Nonnull CorfuRuntimeParameters parameters) {
         this.node = node;
         this.parameters = parameters;
-        this.eventLoopGroup = eventLoopGroup;
 
         // Set timer mapping
         ImmutableMap.Builder<CorfuMsgType, String> mapBuilder = ImmutableMap.builder();
@@ -386,19 +380,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         log.debug("stop: Shutting down router for {}", node);
         shutdown = true;
         connectionFuture.completeExceptionally(new ShutdownException());
-        try {
-            channel.disconnect();
-            channel.close().syncUninterruptibly();
-        } catch (Exception e) {
-            log.error("Error in closing channel");
-        }
-        try {
-            if (shutdownEventLoop) {
-                eventLoopGroup.shutdownGracefully().sync();
-            }
-        } catch (InterruptedException e) {
-            throw new UnrecoverableCorfuInterruptedError("Interrupted while stopping", e);
-        }
     }
 
     /** {@inheritDoc}

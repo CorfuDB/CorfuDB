@@ -3,11 +3,13 @@ package org.corfudb.universe.scenario;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
+import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
+import org.corfudb.util.Sleep;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -72,9 +74,14 @@ public class OneNodeDownIT extends GenericIntegrationTest {
                 server1.start();
                 waitForUnresponsiveServersChange(size -> size == 0, corfuClient);
 
+                final Duration sleepDuration = Duration.ofSeconds(1);
                 // Verify cluster status is STABLE
                 clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatusReport.ClusterStatus.STABLE);
+                while (!clusterStatusReport.getClusterStatus().equals(ClusterStatus.STABLE)) {
+                    clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
+                    Sleep.sleepUninterruptibly(sleepDuration);
+                }
+                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
 
                 // Verify data path working fine
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {

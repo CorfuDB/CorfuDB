@@ -1,7 +1,6 @@
 package org.corfudb.universe.group;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import org.corfudb.universe.node.Node;

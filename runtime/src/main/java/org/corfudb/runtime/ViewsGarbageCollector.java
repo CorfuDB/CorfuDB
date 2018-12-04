@@ -75,6 +75,7 @@ public class ViewsGarbageCollector {
                     currTrimMark);
             long startTs = System.currentTimeMillis();
             runtime.getObjectsView().gc(currTrimMark);
+            runtime.getStreamsView().gc(currTrimMark);
             runtime.getAddressSpaceView().gc(currTrimMark);
             long endTs = System.currentTimeMillis();
             trimMark = currTrimMark;

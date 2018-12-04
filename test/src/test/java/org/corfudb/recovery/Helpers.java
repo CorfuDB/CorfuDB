@@ -4,6 +4,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.SMRMap;
@@ -90,16 +91,12 @@ public class Helpers{
     static Map<UUID, Long> getRecoveryStreamTails(String configurationString) {
         CorfuRuntime rt = new CorfuRuntime(configurationString)
                 .connect();
-
-        FastObjectLoader loader = new FastObjectLoader(rt);
-        loader.setRecoverSequencerMode(true);
-        loader.loadMaps();
-
-        return loader.getStreamTails();
+        return rt.getAddressSpaceView().getAllTails().getStreamTails();
     }
 
-    static void trim(CorfuRuntime rt, long address) {
-        rt.getAddressSpaceView().prefixTrim(address - 1);
+    static void trim(CorfuRuntime rt, Token address) {
+        Token prefix = new Token(address.getEpoch(), address.getSequence() - 1);
+        rt.getAddressSpaceView().prefixTrim(prefix);
         rt.getAddressSpaceView().gc();
         rt.getAddressSpaceView().invalidateServerCaches();
         rt.getAddressSpaceView().invalidateClientCache();

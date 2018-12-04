@@ -560,10 +560,10 @@ public class ServerRestartIT extends AbstractIT {
                 MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
                 mcw1.addMap((SMRMap) mapA);
                 mcw1.addMap((SMRMap) mapB);
-                long checkpointAddress = mcw1.appendCheckpoints(corfuRuntime, "dahlia").getSequence();
+                Token checkpointAddress = mcw1.appendCheckpoints(corfuRuntime, "dahlia");
 
                 // Trim the log
-                corfuRuntime.getAddressSpaceView().prefixTrim(checkpointAddress - 1);
+                corfuRuntime.getAddressSpaceView().prefixTrim(checkpointAddress);
                 corfuRuntime.getAddressSpaceView().gc();
                 corfuRuntime.getAddressSpaceView().invalidateServerCaches();
                 corfuRuntime.getAddressSpaceView().invalidateClientCache();
@@ -695,7 +695,7 @@ public class ServerRestartIT extends AbstractIT {
         // Checkpoint and trim the log.
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(corfuTable1);
-        long trimMark = mcw.appendCheckpoints(rt1, "author").getSequence();
+        Token trimMark = mcw.appendCheckpoints(rt1, "author");
         Collection<Map.Entry<String, String>> c1a =
                 corfuTable1.getByIndex(StringIndexer.BY_FIRST_LETTER, "9");
         Collection<Map.Entry<String, String>> c1b =
@@ -767,7 +767,7 @@ public class ServerRestartIT extends AbstractIT {
         // Checkpoint and trim
         MultiCheckpointWriter multiCheckpointWriter = new MultiCheckpointWriter();
         multiCheckpointWriter.addMap(corfuTable1);
-        long trimMark = multiCheckpointWriter.appendCheckpoints(runtime1, "Sam.Behnam").getSequence();
+        Token trimMark = multiCheckpointWriter.appendCheckpoints(runtime1, "Sam.Behnam");
         Collection<Map.Entry<String, String>> resultInitial =
                 corfuTable1.getByIndex(StringMultiIndexer.BY_EACH_WORD, "tag666");
         runtime1.getAddressSpaceView().prefixTrim(trimMark);

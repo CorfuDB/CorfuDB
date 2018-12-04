@@ -49,12 +49,19 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
     @Setter
     private long extraWait = 0;
 
+    /**
+     * Maximum duration at which the wait time needs to be capped.
+     */
+    @Getter
+    @Setter
+    private Duration maxRetryThreshold = Duration.ZERO;
+
     public ExponentialBackoffRetry(IRetryable runFunction) {
         super(runFunction);
     }
 
     @Override
-    public void nextWait() throws InterruptedException {
+    public void nextWait() {
         if (nextBackoffTime == 0) {
             nextBackoffTime = System.currentTimeMillis() + backoffDuration.toMillis();
         }
@@ -63,6 +70,10 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
         sleepTime += extraWait;
         float randomPart = new Random().nextFloat() * randomPortion;
         sleepTime -= sleepTime * randomPart;
+        if (maxRetryThreshold.toMillis() > 0) {
+            sleepTime = Math.min(sleepTime, maxRetryThreshold.toMillis());
+        }
+
         if (System.currentTimeMillis() + sleepTime > nextBackoffTime) {
             nextBackoffTime = 0;
             retryCounter = 1;

@@ -1,11 +1,15 @@
 package org.corfudb.runtime.view;
 
-import static org.corfudb.util.Utils.getMaxGlobalTail;
+import static org.corfudb.util.Utils.getTails;
 
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 import javax.annotation.Nonnull;
@@ -13,7 +17,7 @@ import javax.annotation.Nonnull;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.recovery.FastObjectLoader;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -37,6 +41,13 @@ public class LayoutManagementView extends AbstractView {
 
     private final ReentrantLock recoverSequencerLock = new ReentrantLock();
 
+    /**
+     * Future which is reset every time a new task to bootstrap the sequencer is launched.
+     * This is to avoid multiple bootstrap requests.
+     */
+    private final AtomicReference<Future<Boolean>> sequencerRecoveryFuture
+            = new AtomicReference<>(CompletableFuture.completedFuture(true));
+
     private volatile long lastKnownSequencerEpoch = Layout.INVALID_EPOCH;
 
     /**
@@ -44,13 +55,19 @@ public class LayoutManagementView extends AbstractView {
      * the Management Server attempts to recover the cluster from that layout.
      *
      * @param recoveryLayout Layout to use to recover
+     * @return True if the cluster was recovered, False otherwise
      */
-    public void recoverCluster(Layout recoveryLayout)
-            throws QuorumUnreachableException, OutrankedException {
+    public boolean attemptClusterRecovery(Layout recoveryLayout) {
 
-        Layout layout = new Layout(recoveryLayout);
-        sealEpoch(layout);
-        attemptConsensus(layout);
+        try {
+            Layout layout = new Layout(recoveryLayout);
+            sealEpoch(layout);
+            attemptConsensus(layout);
+        } catch (Exception e) {
+            log.error("Error: recovery: {}", e);
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -134,7 +151,7 @@ public class LayoutManagementView extends AbstractView {
             }
             if (isLogUnitServer) {
                 layoutBuilder.addLogunitServer(logUnitStripeIndex,
-                        getMaxGlobalTail(currentLayout, runtime).getSequence(),
+                        getTails(currentLayout, runtime).getLogTail(),
                         endpoint);
             }
             if (isUnresponsiveServer) {
@@ -180,7 +197,7 @@ public class LayoutManagementView extends AbstractView {
 
             LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
             layoutBuilder.addLogunitServer(0,
-                    getMaxGlobalTail(currentLayout, runtime).getSequence(),
+                    getTails(currentLayout, runtime).getLogTail(),
                     endpoint);
             layoutBuilder.removeUnresponsiveServers(Collections.singleton(endpoint));
             newLayout = layoutBuilder.build();
@@ -413,14 +430,12 @@ public class LayoutManagementView extends AbstractView {
                         || !originalLayout.getPrimarySequencer()
                         .equals(newLayout.getPrimarySequencer())) {
 
-                    FastObjectLoader fastObjectLoader = new FastObjectLoader(runtime);
-                    fastObjectLoader.setRecoverSequencerMode(true);
-                    fastObjectLoader.setLoadInCache(false);
+                    //TODO(Maithem) why isn't this getting the tails
+                    // from utils?
+                    TailsResponse tails = runtime.getAddressSpaceView().getAllTails();
 
-                    // FastSMRLoader sets the logHead based on trim mark.
-                    fastObjectLoader.loadMaps();
-                    maxTokenRequested = fastObjectLoader.getLogTail();
-                    streamTails = fastObjectLoader.getStreamTails();
+                    maxTokenRequested = tails.getLogTail();
+                    streamTails = tails.getStreamTails();
                     verifyStreamTailsMap(streamTails);
 
                     // Incrementing the maxTokenRequested value for sequencer reset.
@@ -447,6 +462,33 @@ public class LayoutManagementView extends AbstractView {
         } else {
             log.info("reconfigureSequencerServers: Sequencer reconfiguration already in progress.");
         }
+    }
+
+    /**
+     * Triggers a new task to bootstrap the sequencer for the specified layout. If there is already
+     * a task in progress, this is a no-op.
+     *
+     * @param layout Layout to use to bootstrap the primary sequencer.
+     * @return Future which completes when the task completes successfully or with a failure.
+     */
+    public Future<Boolean> asyncSequencerBootstrap(@NonNull Layout layout,
+                                                   @NonNull ExecutorService service) {
+        return sequencerRecoveryFuture.updateAndGet(sequencerRecovery -> {
+            if (sequencerRecovery.isDone()) {
+                return service.submit(() -> {
+                    log.info("triggerSequencerBootstrap: a bootstrap task is triggered.");
+                    try {
+                        reconfigureSequencerServers(layout, layout, true);
+                    } catch (Exception e) {
+                        log.error("triggerSequencerBootstrap: Failed with Exception: ", e);
+                    }
+                    return true;
+                });
+            }
+
+            log.info("triggerSequencerBootstrap: a bootstrap task is already in progress.");
+            return sequencerRecovery;
+        });
     }
 
     /**

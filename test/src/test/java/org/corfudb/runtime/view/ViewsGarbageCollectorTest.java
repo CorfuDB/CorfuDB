@@ -3,7 +3,6 @@ package org.corfudb.runtime.view;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.ViewsGarbageCollector;
 import org.corfudb.runtime.collections.CorfuTable;
 
 import org.ehcache.sizeof.SizeOf;
@@ -49,7 +48,7 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
         Token trimMark = mcw.appendCheckpoints(rt, "cp1");
-        rt.getAddressSpaceView().prefixTrim(trimMark.getSequence());
+        rt.getAddressSpaceView().prefixTrim(trimMark);
         rt.getParameters().setRuntimeGCPeriod(Duration.ofMinutes(0));
         rt.getGarbageCollector().runRuntimeGC();
         long sizeOfTableAfterGc = sizeOf.deepSizeOf(table);

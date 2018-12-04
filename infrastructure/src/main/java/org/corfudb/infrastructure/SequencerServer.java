@@ -435,9 +435,9 @@ public class SequencerServer extends AbstractServer {
         sequencerEpoch = bootstrapMsgEpoch;
         serverContext.setSequencerEpoch(bootstrapMsgEpoch);
 
-        log.info("Sequencer reset with token = {}, streamTailToGlobalTailMap = {},"
+        log.info("Sequencer reset with token = {}, size {} streamTailToGlobalTailMap = {},"
                         + " sequencerEpoch = {}",
-                globalLogTail.get(), streamTailToGlobalTailMap, sequencerEpoch);
+                globalLogTail.get(), streamTailToGlobalTailMap.size(), streamTailToGlobalTailMap, sequencerEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
