@@ -148,7 +148,7 @@ public class FailureDetector implements IDetector {
         boolean failuresDetected = false;
 
         // Cluster State map for analysis.
-        Map<String, ClusterState> clusterStatusMap = new HashMap<>();
+        Map<String, ClusterState> clusterStateMap = new HashMap<>();
 
         // In each iteration we poll all the servers in the members list.
         for (int iteration = 0; iteration < failureThreshold; iteration++) {
@@ -163,7 +163,7 @@ public class FailureDetector implements IDetector {
                     members,
                     pollCompletableFutures,
                     expectedEpoch,
-                    clusterStatusMap);
+                    clusterStateMap);
 
             // Aggregate the responses.
             // Return false if we received responses from all the members - failure NOT present.
@@ -211,7 +211,7 @@ public class FailureDetector implements IDetector {
                 .pollEpoch(epoch)
                 .changedNodes(failed)
                 .outOfPhaseEpochNodes(expectedEpoch)
-                .clusterStateMap(clusterStatusMap)
+                .clusterStateMap(clusterStateMap)
                 .build();
     }
 
@@ -254,7 +254,7 @@ public class FailureDetector implements IDetector {
             List<String> members,
             Map<String, CompletableFuture<ClusterState>> pollCompletableFutures,
             Map<String, Long> expectedEpoch,
-            Map<String, ClusterState> clusterStatusMap) {
+            Map<String, ClusterState> clusterStateMap) {
         // Collect responses and increment response counters for successful pings.
         Set<String> responses = new HashSet<>();
         members.forEach(s -> {
@@ -263,7 +263,7 @@ public class FailureDetector implements IDetector {
                         .within(pollCompletableFutures.get(s), Duration.ofMillis(period)).get();
                 responses.add(s);
                 expectedEpoch.remove(s);
-                clusterStatusMap.put(s, clusterState);
+                clusterStateMap.put(s, clusterState);
             } catch (Exception e) {
                 if (e.getCause() instanceof WrongEpochException) {
                     responses.add(s);
