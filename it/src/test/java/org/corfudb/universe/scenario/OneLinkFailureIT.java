@@ -3,7 +3,6 @@ package org.corfudb.universe.scenario;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
-import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
@@ -12,27 +11,28 @@ import org.corfudb.util.Sleep;
 import org.junit.Test;
 
 import java.time.Duration;
-import java.util.Map;
+import java.util.Arrays;
+import java.util.Collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 
-public class OneNodeDownIT extends GenericIntegrationTest {
+public class OneLinkFailureIT extends GenericIntegrationTest {
 
     /**
-     * Test cluster behavior after one node down.
+     * Test cluster behavior after one link failure.
      * <p>
      * 1) Deploy and bootstrap a three nodes cluster
-     * 2) Stop one node
+     * 2) Create a link failure between two nodes which
+     *    results in a partial partition
      * 3) Verify layout, cluster status and data path
-     * 4) Recover cluster by restarting the stopped node
+     * 4) Recover cluster by removing the link failure
      * 5) Verify layout, cluster status and data path again
      */
     @Test(timeout = 300000)
-    public void oneNodeDownTest() {
-
+    public void oneLinkFailureTest() {
         getScenario().describe((fixture, testCase) -> {
             CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
 
@@ -43,33 +43,32 @@ public class OneNodeDownIT extends GenericIntegrationTest {
                 table.put(String.valueOf(i), String.valueOf(i));
             }
 
-            testCase.it("Should stop one node and then restart", data -> {
-                CorfuServer server0 = corfuCluster.getFirstServer();
+            testCase.it("Should fail one link and then heal", data -> {
+                CorfuServer server0 = corfuCluster.getServerByIndex(0);
+                CorfuServer server2 = corfuCluster.getServerByIndex(2);
 
-                // Stop one node and wait for layout's unresponsive servers to change
-                server0.stop(Duration.ofSeconds(10));
+                // Partition server0 and server2 and wait for layout's unresponsive servers to change
+                server0.disconnect(Collections.singletonList(server2));
+                // Server0 and server2 has same number of link failure ie. 1, the one with
+                // larger endpoint should be marked as unresponsive.
+                String serverToKick = Collections.max(Arrays.asList(server0.getEndpoint(), server2.getEndpoint()));
                 waitForUnresponsiveServersChange(size -> size == 1, corfuClient);
 
-                // Verify layout, unresponsive servers should contain only the stopped node
-                Layout layout = corfuClient.getLayout();
-                assertThat(layout.getUnresponsiveServers()).containsExactly(server0.getEndpoint());
+                assertThat(corfuClient.getLayout().getUnresponsiveServers()).containsExactly(serverToKick);
 
-                // Verify cluster status is DEGRADED with one node down
+                // Cluster status should be DEGRADED after one node is marked unresponsive
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                assertThat(clusterStatusReport.getClusterStatus())
-                        .isEqualTo(ClusterStatusReport.ClusterStatus.DEGRADED);
-
-                Map<String, ClusterStatusReport.NodeStatus> statusMap = clusterStatusReport
-                        .getClientServerConnectivityStatusMap();
-                assertThat(statusMap.get(server0.getEndpoint())).isEqualTo(ClusterStatusReport.NodeStatus.DOWN);
+                // TODO: uncomment the following line after ClusterStatus API is fixed for partial partition
+                // assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
+                // TODO: add node status check after we redefine NodeStatus semantics
 
                 // Verify data path working fine
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }
 
-                // restart the stopped node and wait for layout's unresponsive servers to change
-                server0.start();
+                // Repair the partition between server0 and server2
+                server0.reconnect(Collections.singletonList(server2));
                 waitForUnresponsiveServersChange(size -> size == 0, corfuClient);
 
                 final Duration sleepDuration = Duration.ofSeconds(1);

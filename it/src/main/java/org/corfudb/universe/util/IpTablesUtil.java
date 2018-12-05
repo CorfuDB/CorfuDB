@@ -11,8 +11,8 @@ public class IpTablesUtil {
      * @param ipAddress ip address to drop packages
      * @return command line
      */
-    public static String dropInput(String ipAddress) {
-        return "iptables -A INPUT -s " + ipAddress + " -j DROP";
+    public static String[] dropInput(String ipAddress) {
+        return new String[] {"iptables", "-A", "INPUT", "-s", ipAddress, "-j", "DROP"};
     }
 
     /**
@@ -21,8 +21,28 @@ public class IpTablesUtil {
      * @param ipAddress ip address to drop packages
      * @return command line
      */
-    public static String dropOutput(String ipAddress) {
-        return "iptables -A OUTPUT -d " + ipAddress + " -j DROP";
+    public static String[] dropOutput(String ipAddress) {
+        return new String[] {"iptables", "-A", "OUTPUT", "-d", ipAddress, "-j", "DROP"};
+    }
+
+    /**
+     * Recover the drop input rule
+     *
+     * @param ipAddress ip address to recover the drop input rule
+     * @return command line
+     */
+    public static String[] revertDropInput(String ipAddress) {
+        return new String[] {"iptables", "-D", "INPUT", "-s", ipAddress, "-j", "DROP"};
+    }
+
+    /**
+     * Recover the drop input rule
+     *
+     * @param ipAddress ip address to recover the drop input rule
+     * @return command line
+     */
+    public static String[] revertDropOutput(String ipAddress) {
+        return new String[] {"iptables", "-D", "OUTPUT", "-d", ipAddress, "-j", "DROP"};
     }
 
     /**
