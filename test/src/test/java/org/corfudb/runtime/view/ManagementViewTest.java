@@ -930,8 +930,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * @throws Exception
      */
     @Test
-    public void testNodeHealing() throws Exception {
-
+    public void testNodeHealing() {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
         addServer(SERVERS.PORT_2);
@@ -955,24 +954,12 @@ public class ManagementViewTest extends AbstractViewTest {
         setAggressiveDetectorTimeouts(SERVERS.PORT_0);
 
         addServerRule(SERVERS.PORT_2, new TestRule().always().drop());
-
-        while (corfuRuntime.getLayoutView().getLayout().getEpoch() == l.getEpoch()) {
-            Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-            corfuRuntime.invalidateLayout();
-        }
-        final long newEpoch = 2L;
-        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(newEpoch);
-        assertThat(corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers())
-                .containsExactly(SERVERS.ENDPOINT_2);
+        waitForLayoutChange(layout -> layout.getUnresponsiveServers()
+                .equals(Collections.singletonList(SERVERS.ENDPOINT_2)), corfuRuntime);
 
         clearServerRules(SERVERS.PORT_2);
-        final long finalEpoch = 4L;
-        while (corfuRuntime.getLayoutView().getLayout().getEpoch() != finalEpoch) {
-            Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-            corfuRuntime.invalidateLayout();
-        }
-        assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch()).isEqualTo(finalEpoch);
-        assertThat(corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers()).isEmpty();
+        waitForLayoutChange(layout -> layout.getUnresponsiveServers().isEmpty()
+                && layout.getSegments().size() == 1, corfuRuntime);
     }
 
     /**
