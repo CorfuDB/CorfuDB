@@ -207,7 +207,7 @@ public class ClusterReconfigIT extends AbstractIT {
         final int offset = 100;
         Token futureTimestamp = new Token(twoNodeLayout.getEpoch() + offset, offset);
 
-        runtime.getObjectsView().TXBuild().setSnapshot(futureTimestamp).begin();
+        runtime.getObjectsView().TXBuild().snapshot(futureTimestamp).build().begin();
         map.put("key", "val");
 
         try {
