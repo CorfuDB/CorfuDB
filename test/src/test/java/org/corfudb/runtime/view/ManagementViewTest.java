@@ -18,7 +18,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import lombok.Getter;
@@ -83,28 +82,6 @@ public class ManagementViewTest extends AbstractViewTest {
             Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
         }
         Assert.fail();
-    }
-
-    /**
-     * Refreshes the layout and waits for a limited time for the refreshed layout to
-     * satisfy the expected verifier.
-     *
-     * @param verifier     Layout predicate to test the refreshed layout.
-     * @param corfuRuntime corfu runtime.
-     */
-    public static void waitForLayoutChange(Predicate<Layout> verifier, CorfuRuntime corfuRuntime) {
-        corfuRuntime.invalidateLayout();
-        Layout refreshedLayout = corfuRuntime.getLayoutView().getLayout();
-
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
-            if (verifier.test(refreshedLayout)) {
-                break;
-            }
-            corfuRuntime.invalidateLayout();
-            refreshedLayout = corfuRuntime.getLayoutView().getLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
-        }
-        assertThat(verifier.test(refreshedLayout)).isTrue();
     }
 
     /**
@@ -173,12 +150,24 @@ public class ManagementViewTest extends AbstractViewTest {
      * We fail SERVERS.PORT_1 and then wait for one of the other two servers to
      * handle this failure, propose a new layout and we assert on the epoch change.
      * The failure is handled by removing the failed node.
+     *
+     * @throws Exception
      */
     @Test
-    public void removeSingleNodeFailure() {
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
+    public void removeSingleNodeFailure()
+            throws Exception {
+
+        // Creating server contexts with PurgeFailurePolicies.
+        ServerContext sc0 = new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(SERVERS.PORT_0)).setPort(SERVERS.PORT_0).build();
+        ServerContext sc1 = new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(SERVERS.PORT_1)).setPort(SERVERS.PORT_1).build();
+        ServerContext sc2 = new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(SERVERS.PORT_2)).setPort(SERVERS.PORT_2).build();
+        sc0.setFailureHandlerPolicy(new PurgeFailurePolicy());
+        sc1.setFailureHandlerPolicy(new PurgeFailurePolicy());
+        sc2.setFailureHandlerPolicy(new PurgeFailurePolicy());
+
+        addServer(SERVERS.PORT_0, sc0);
+        addServer(SERVERS.PORT_1, sc1);
+        addServer(SERVERS.PORT_2, sc2);
 
         Layout l = new TestLayoutBuilder()
                 .setEpoch(1L)
@@ -208,13 +197,17 @@ public class ManagementViewTest extends AbstractViewTest {
         addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
         getManagementServer(SERVERS.PORT_1).shutdown();
 
-        waitForLayoutChange(layout -> layout.getEpoch() > l.getEpoch(), corfuRuntime);
-
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            corfuRuntime.invalidateLayout();
+            if (corfuRuntime.getLayoutView().getLayout().getEpoch() == 2L) {
+                break;
+            }
+            Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        }
         Layout l2 = corfuRuntime.getLayoutView().getLayout();
-        assertThat(l2.getEpoch()).isGreaterThan(l.getEpoch());
-        assertThat(l2.getLayoutServers().size()).isEqualTo(l.getAllServers().size());
-        assertThat(l2.getAllActiveServers().size()).isEqualTo(l.getAllServers().size() - 1);
-        assertThat(l2.getUnresponsiveServers()).contains(SERVERS.ENDPOINT_1);
+        assertThat(l2.getEpoch()).isEqualTo(2L);
+        assertThat(l2.getLayoutServers().size()).isEqualTo(2);
+        assertThat(l2.getLayoutServers().contains(SERVERS.ENDPOINT_1)).isFalse();
     }
 
     private void setAggressiveDetectorTimeouts(int... managementServersPorts) {
@@ -508,7 +501,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
     }
 
-    private void induceSequencerFailureAndWait() {
+    private void induceSequencerFailureAndWait() throws Exception {
 
         long currentEpoch = getCorfuRuntime().getLayoutView().getLayout().getEpoch();
 
@@ -518,9 +511,12 @@ public class ManagementViewTest extends AbstractViewTest {
         addServerRule(SERVERS.PORT_0, new TestRule().always().drop());
 
         // wait for failover to install a new epoch (and a new layout)
-        waitForLayoutChange(layout ->
-                        layout.getEpoch() > currentEpoch && !layout.getPrimarySequencer().equals(SERVERS.ENDPOINT_0),
-                getCorfuRuntime());
+        //
+        while (getCorfuRuntime().getLayoutView().getLayout().getEpoch() == currentEpoch) {
+            getCorfuRuntime().invalidateLayout();
+            Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        }
+
     }
 
     /**
@@ -531,9 +527,11 @@ public class ManagementViewTest extends AbstractViewTest {
      * No nodes are removed from the layout, but are marked unresponsive.
      * A sequencer failover takes place where the next working sequencer is reset
      * and made the primary.
+     *
+     * @throws Exception
      */
     @Test
-    public void testSequencerFailover() {
+    public void testSequencerFailover() throws Exception {
         getManagementTestLayout();
 
         final long beforeFailure = 5L;
@@ -552,14 +550,11 @@ public class ManagementViewTest extends AbstractViewTest {
 
         induceSequencerFailureAndWait();
 
-        waitForLayoutChange(layout -> layout.getUnresponsiveServers().size() == 1
-                && layout.getUnresponsiveServers().contains(SERVERS.ENDPOINT_0), getCorfuRuntime());
-        Layout newLayout = new Layout(getCorfuRuntime().getLayoutView().getLayout());
-
         // Block until new sequencer reaches READY state.
-        TokenResponse tokenResponse = getCorfuRuntime().getSequencerView().query();
+        getCorfuRuntime().getSequencerView().query(CorfuRuntime.getStreamID("streamA"));
         // verify that a failover sequencer was started with the correct starting-tail
-        assertThat(tokenResponse.getSequence()).isEqualTo(beforeFailure - 1);
+        //
+        assertThat(getSequencer(SERVERS.PORT_1).getGlobalLogTail().get()).isEqualTo(beforeFailure);
 
         sv.append(testPayload);
         sv.append(testPayload);
@@ -567,18 +562,43 @@ public class ManagementViewTest extends AbstractViewTest {
         sv.append(testPayload);
         sv.append(testPayload);
 
-        assertThat(newLayout.getUnresponsiveServers()).containsExactly(SERVERS.ENDPOINT_0);
+        // verify the failover layout
+        //
+        Layout expectedLayout = new TestLayoutBuilder()
+                .setEpoch(2L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_2)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.PORT_2)
+                .addToSegment()
+                .addToLayout()
+                .addUnresponsiveServer(SERVERS.PORT_0)
+                .setClusterId(getCorfuRuntime().getLayoutView().getLayout().getClusterId())
+                .build();
 
-        tokenResponse = getCorfuRuntime().getSequencerView().query();
-        assertThat(tokenResponse.getSequence()).isEqualTo(afterFailure - 1);
+        assertThat(getCorfuRuntime().getLayoutView().getLayout()).isEqualTo(expectedLayout);
+
+        // verify that the new sequencer is advancing the tail properly
+        assertThat(getSequencer(SERVERS.PORT_1).getGlobalLogTail().get()).isEqualTo(afterFailure);
+
+        // sanity check that no other sequencer is active
+        assertThat(getSequencer(SERVERS.PORT_2).getGlobalLogTail().get()).isEqualTo(0L);
+
     }
 
     protected <T> Object instantiateCorfuObject(TypeToken<T> tType, String name) {
-        return getCorfuRuntime().getObjectsView()
-                .build()
-                .setStreamName(name)     // stream name
-                .setTypeToken(tType)    // a TypeToken of the specified class
-                .open();                // instantiate the object!
+        return (T)
+                getCorfuRuntime().getObjectsView()
+                        .build()
+                        .setStreamName(name)     // stream name
+                        .setTypeToken(tType)    // a TypeToken of the specified class
+                        .open();                // instantiate the object!
     }
 
 
@@ -605,7 +625,8 @@ public class ManagementViewTest extends AbstractViewTest {
      * Check that transaction conflict resolution works properly in face of sequencer failover
      */
     @Test
-    public void ckSequencerFailoverTXResolution() {
+    public void ckSequencerFailoverTXResolution()
+            throws Exception {
         // setup 3-Corfu node cluster
         getManagementTestLayout();
 
@@ -676,7 +697,8 @@ public class ManagementViewTest extends AbstractViewTest {
      * small variant on the above : don't start the first TX at the start of the log.
      */
     @Test
-    public void ckSequencerFailoverTXResolution1() {
+    public void ckSequencerFailoverTXResolution1()
+            throws Exception {
         getManagementTestLayout();
 
         Map<Integer, String> map = getMap();
@@ -759,9 +781,11 @@ public class ManagementViewTest extends AbstractViewTest {
      * -1 : New StreamID so empty backpointers
      * X : (null) Unknown backpointers as this is a failed-over sequencer.
      * <p>
+     *
+     * @throws Exception
      */
     @Test
-    public void sequencerFailoverBackpointerCheck() {
+    public void sequencerFailoverBackpointerCheck() throws Exception {
         getManagementTestLayout();
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
@@ -825,9 +849,9 @@ public class ManagementViewTest extends AbstractViewTest {
 
         resetDetected.acquire();
         // Allow only SERVERS.PORT_0 to handle the failure.
-        // Preventing PORT_2 from bootstrapping the sequencer.
+        // Preventing PORT_2 from handling failures.
         addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
-                new TestRule().matches(msg -> msg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER)).drop());
+                SERVERS.ENDPOINT_2, new TestRule().always().drop());
         addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
                 new TestRule().matches(msg -> {
                     if (msg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER)) {
@@ -858,7 +882,7 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
     @Test
-    public void sealDoesNotModifyClientEpoch() {
+    public void sealDoesNotModifyClientEpoch() throws Exception {
         Layout l = getManagementTestLayout();
 
         // Seal
@@ -1505,11 +1529,13 @@ public class ManagementViewTest extends AbstractViewTest {
         addServerRule(SERVERS.PORT_0, new TestRule().drop().always());
         addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
                 new TestRule().always().drop());
-        waitForLayoutChange(layout -> layout.getUnresponsiveServers().size() == 1
-                        && layout.getUnresponsiveServers().contains(SERVERS.ENDPOINT_0)
-                        && layout.getSegments().size() == 1,
-                getCorfuRuntime());
-
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            if (!corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers().isEmpty())
+                break;
+            corfuRuntime.invalidateLayout();
+        }
+        assertThat(corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers()).isNotEmpty();
         clusterStatus = getCorfuRuntime().getManagementView().getClusterStatus();
         nodeStatusMap = clusterStatus.getClientServerConnectivityStatusMap();
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.DOWN);
@@ -1542,6 +1568,7 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
         assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
 
+
         // STEP 5.
         // PORT_1 is revived and PORT_0 is also revived. PORT_0 attempts to add itself back to the
         // log unit chain.
@@ -1559,6 +1586,34 @@ public class ManagementViewTest extends AbstractViewTest {
         clearServerRules(SERVERS.PORT_0);
         assertThat(latch2.tryAcquire(PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS))
                 .isTrue();
+
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            if (corfuRuntime.getLayoutView().getLayout().getSegments().size() > 1)
+                break;
+            corfuRuntime.invalidateLayout();
+        }
+        assertThat(corfuRuntime.getLayoutView().getLayout().getSegments().size()).isGreaterThan(1);
+        clusterStatus = getCorfuRuntime().getManagementView().getClusterStatus();
+        nodeStatusMap = clusterStatus.getClientServerConnectivityStatusMap();
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.DB_SYNCING);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.UP);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
+        assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
+
+        // STEP 6.
+        // All nodes are failed.
+        addServerRule(SERVERS.PORT_0, new TestRule().drop().always());
+        addServerRule(SERVERS.PORT_1, new TestRule().drop().always());
+        addServerRule(SERVERS.PORT_2, new TestRule().drop().always());
+        // We invalidate the layout to prove that even without the layout, the API works.
+        getCorfuRuntime().invalidateLayout();
+        clusterStatus = getCorfuRuntime().getManagementView().getClusterStatus();
+        nodeStatusMap = clusterStatus.getClientServerConnectivityStatusMap();
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.DOWN);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.DOWN);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.DOWN);
+        assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
     }
 
     /**
@@ -1707,6 +1762,155 @@ public class ManagementViewTest extends AbstractViewTest {
                         getManagementServer(SERVERS.PORT_0).getManagementAgent()
                                 .getRemoteMonitoringService().getDetectionTaskWorkers())
                 .get();
+    }
+
+    /**
+     * Scenario to verify that we do not regress the token count when the layout switches primary
+     * sequencers.
+     * We assert that the failover sequencer should always receive a full bootstrap message rather
+     * than an empty bootstrap message (without streamTailsMap)
+     */
+    @Test
+    public void failoverSeqDoesNotRegressTokenValue() throws Exception {
+        getManagementTestLayout();
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+
+        // Append data.
+        IStreamView streamView = corfuRuntime.getStreamsView()
+                .get(CorfuRuntime.getStreamID("testStream"));
+        final byte[] payload = "test".getBytes();
+        final int num = 10;
+        // 0 - 9
+        for (int i = 0; i < num; i++) {
+            streamView.append(payload);
+        }
+
+        // Add rules so that Full Sequencer bootstrap messages are not sent to PORT_0.
+        // Adding after the append to be sure that the sequencer was bootstrapped initially.
+        TestRule dropFullBootstrapRule = new TestRule()
+                .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER)
+                        && !((CorfuPayloadMsg<SequencerTailsRecoveryMsg>) corfuMsg).getPayload()
+                        .getBootstrapWithoutTailsUpdate()).drop();
+        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_0, dropFullBootstrapRule);
+        addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_0, dropFullBootstrapRule);
+        addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_0, dropFullBootstrapRule);
+
+        // Adding rule to partition out PORT_0.
+        addServerRule(SERVERS.PORT_0, new TestRule().always().drop());
+
+        // Append data 10 - 19
+        for (int i = 0; i < num; i++) {
+            streamView.append(payload);
+        }
+
+        // Remove partition and allow PORT_0 to be healed.
+        clearServerRules(SERVERS.PORT_0);
+
+        // Wait until PORT_0 is responsive and healed in the layout.
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            if (corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers().isEmpty()) {
+                break;
+            }
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            corfuRuntime.invalidateLayout();
+        }
+        assertThat(corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers().isEmpty())
+                .isTrue();
+
+        // Add a rule to partition out PORT_1.
+        addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
+
+        // Wait until PORT_1 is marked unresponsive.
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            if (!corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers().isEmpty()) {
+                break;
+            }
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            corfuRuntime.invalidateLayout();
+        }
+        assertThat(corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers().isEmpty())
+                .isFalse();
+
+        // Here we have 2 latches to detect a delta bootstrap message sent to the primary sequencer.
+        // Another latch is released if that same request is responded with a NACK.
+        Semaphore deltaBootstrapLatch = new Semaphore(1);
+        Semaphore deltaBootstrapRejectLatch = new Semaphore(1);
+        deltaBootstrapLatch.acquire();
+        deltaBootstrapRejectLatch.acquire();
+        AtomicLong deltaBootstrapREquestID = new AtomicLong(0);
+        TestRule detectDeltaBootstrapReject = new TestRule()
+                .matches(corfuMsg -> {
+                    if (corfuMsg.getMsgType().equals(CorfuMsgType.NACK)) {
+                        if (deltaBootstrapREquestID.get() == corfuMsg.getRequestID()) {
+                            deltaBootstrapRejectLatch.release();
+                        }
+                    }
+                    return true;
+                });
+        TestRule detectDeltaBootstrapMessage = new TestRule()
+                .matches(corfuMsg -> {
+                    if (corfuMsg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER)
+                            && ((CorfuPayloadMsg<SequencerTailsRecoveryMsg>) corfuMsg).getPayload()
+                            .getBootstrapWithoutTailsUpdate()) {
+                        deltaBootstrapLatch.release();
+                        deltaBootstrapREquestID.set(corfuMsg.getRequestID());
+                        addServerRule(SERVERS.PORT_0, detectDeltaBootstrapReject);
+                    }
+                    return true;
+                });
+        // Adding rules to detect delta bootstrap rejection and release the latches.
+        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_0, detectDeltaBootstrapMessage);
+        addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_0, detectDeltaBootstrapMessage);
+        addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_0, detectDeltaBootstrapMessage);
+
+        // Remove partition and allow PORT_1 to be healed.
+        clearServerRules(SERVERS.PORT_1);
+
+        // Wait until PORT_1 is responsive and healed in the layout.
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            if (corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers().isEmpty()) {
+                break;
+            }
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            corfuRuntime.invalidateLayout();
+        }
+        assertThat(corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers().isEmpty())
+                .isTrue();
+
+        // Add a rule to partition out PORT_2.
+        addServerRule(SERVERS.PORT_2, new TestRule().always().drop());
+
+        // Wait until PORT_2 is marked unresponsive.
+        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+            if (!corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers().isEmpty()) {
+                break;
+            }
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
+            corfuRuntime.invalidateLayout();
+        }
+        assertThat(corfuRuntime.getLayoutView().getLayout().getUnresponsiveServers().isEmpty())
+                .isFalse();
+
+        // Clear all rules to now allow full sequencer bootstrap messages to reach PORT_0.
+        clearClientRules(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
+        clearClientRules(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime());
+        clearClientRules(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime());
+
+        // Assert that the delta bootstrap message was sent and was rejected.
+        assertThat(deltaBootstrapLatch.tryAcquire(1, PARAMETERS.TIMEOUT_LONG.toMillis(),
+                TimeUnit.MILLISECONDS)).isTrue();
+        assertThat(deltaBootstrapRejectLatch.tryAcquire(1, PARAMETERS.TIMEOUT_LONG.toMillis(),
+                TimeUnit.MILLISECONDS)).isTrue();
+
+        final long expectedTokenValue = 19L;
+        assertThat(corfuRuntime.getSequencerView().query().getSequence())
+                .isEqualTo(expectedTokenValue);
     }
 
     /**

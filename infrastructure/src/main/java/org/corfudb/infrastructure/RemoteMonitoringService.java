@@ -13,7 +13,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -29,12 +28,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.infrastructure.management.ClusterRecommendationEngine;
-import org.corfudb.infrastructure.management.ClusterRecommendationEngineFactory;
-import org.corfudb.infrastructure.management.ClusterRecommendationStrategy;
-import org.corfudb.infrastructure.management.ClusterStateContext;
-import org.corfudb.infrastructure.management.IDetector;
-import org.corfudb.infrastructure.management.PollReport;
+import org.corfudb.infrastructure.management.*;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.runtime.CorfuRuntime;
@@ -92,9 +86,6 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     private Future failureDetectorFuture = CompletableFuture.completedFuture(true);
     private Future healingDetectorFuture = CompletableFuture.completedFuture(true);
-
-    ClusterRecommendationEngine recommendationEngine = ClusterRecommendationEngineFactory
-            .createForStrategy(ClusterRecommendationStrategy.FULLY_CONNECTED_CLUSTER);
 
     /**
      * The management agent attempts to bootstrap a NOT_READY sequencer if the
@@ -162,7 +153,14 @@ public class RemoteMonitoringService implements MonitoringService {
         getCorfuRuntime().getLayoutManagementView()
                 .asyncSequencerBootstrap(serverContext.copyManagementLayout(), detectionTaskWorkers);
 
-        detectionTasksScheduler.scheduleAtFixedRate(() -> runSansThrow(this::runDetectionTasks),
+        detectionTasksScheduler.scheduleAtFixedRate(
+                () -> {
+                    // Launch detection tasks.
+                    runSansThrow(this::runDetectionTasks);
+
+                    // Increment heartbeat counter.
+                    clusterStateContext.incrementHeartbeat();
+                },
                 0, monitoringInterval.toMillis(), TimeUnit.MILLISECONDS);
     }
 
@@ -179,9 +177,11 @@ public class RemoteMonitoringService implements MonitoringService {
         // current layout, it should not attempt to change layout.
         Layout layout = serverContext.getManagementLayout();
         if (!layout.getAllServers().contains(serverContext.getLocalEndpoint())) {
-            log.debug("This Server is not a part of the active layout. Aborting reconfiguration handling.");
+            log.debug("This Server is not a part of the active layout. "
+                    + "Aborting reconfiguration handling.");
             return false;
         }
+
         return true;
     }
 
@@ -201,8 +201,6 @@ public class RemoteMonitoringService implements MonitoringService {
         if (!canHandleReconfigurations()) {
             return;
         }
-
-        clusterStateContext.refreshClusterView(serverContext.getLocalEndpoint(), serverContext.copyManagementLayout());
 
         runFailureDetectorTask();
         runHealingDetectorTask();
@@ -236,23 +234,19 @@ public class RemoteMonitoringService implements MonitoringService {
             final PollReport pollReport = healingDetector.poll(layout, corfuRuntime);
 
             clusterStateContext.updateResponsiveNodes(pollReport.getChangedNodes());
-            pollReport.getClusterStateMap().forEach((s, clusterStatus) ->
-                    clusterStateContext.updateNodeState(clusterStatus, layout));
+            pollReport.getClusterStateMap().forEach((s, clusterStatus)
+                    -> clusterStateContext.updateNodeState(clusterStatus, layout));
 
-            Set<String> healedNodes = new TreeSet<>(recommendationEngine
-                    .healedServers(clusterStateContext.getClusterState(), layout));
-
-            if (healedNodes.isEmpty()) {
+            if (pollReport.isChangedNodesEmpty()) {
                 return;
             }
 
             try {
-                log.info("[{}] : Attempting to heal nodes in poll report: {}",
-                        serverContext.getLocalEndpoint(), pollReport);
-
+                log.info("Attempting to heal nodes in poll report: {}", pollReport);
                 corfuRuntime.getLayoutView().getRuntimeLayout(layout)
                         .getManagementClient(serverContext.getLocalEndpoint())
-                        .handleHealing(pollReport.getPollEpoch(), healedNodes)
+                        .handleHealing(pollReport.getPollEpoch(),
+                                pollReport.getChangedNodes())
                         .get();
                 log.info("Healing nodes successful: {}", pollReport);
             } catch (ExecutionException ee) {
@@ -294,6 +288,7 @@ public class RemoteMonitoringService implements MonitoringService {
             final PollReport pollReport = failureDetector.poll(layout, corfuRuntime);
 
             clusterStateContext.updateUnresponsiveNodes(pollReport.getChangedNodes());
+            clusterStateContext.refreshClusterView(serverContext.getLocalEndpoint(), layout);
             pollReport.getClusterStateMap().forEach((s, clusterStatus) ->
                     clusterStateContext.updateNodeState(clusterStatus, layout));
 
@@ -306,6 +301,20 @@ public class RemoteMonitoringService implements MonitoringService {
             handleFailures(pollReport);
 
         });
+    }
+
+    /**
+     * We check if these servers are the same set of servers which are marked as unresponsive in
+     * the layout.
+     * Check if this new detected failure has already been recognized.
+     *
+     * @param pollReport Report from the polling task
+     * @return Set of nodes which have failed, relative to the latest local copy of the layout.
+     */
+    private Set<String> getNewFailures(PollReport pollReport) {
+        return Sets.difference(
+                pollReport.getChangedNodes(),
+                new HashSet<>(serverContext.copyManagementLayout().getUnresponsiveServers()));
     }
 
     /**
@@ -359,15 +368,14 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     private void handleFailures(PollReport pollReport) {
         try {
+            Set<String> failedNodes = new HashSet<>(getNewFailures(pollReport));
+
             // These conditions are mutually exclusive. If there is a failure to be
             // handled, we don't need to explicitly fix the unfilled layout slot. Else we do.
             Layout layout = serverContext.copyManagementLayout();
-            Set<String> failedNodes = new TreeSet<>(recommendationEngine
-                    .failedServers(clusterStateContext.getClusterState(), layout));
-
             if (!failedNodes.isEmpty() || isCurrentLayoutSlotUnFilled(pollReport)) {
 
-                log.info("Detected failed nodes in node responsiveness: Failed:{}, pollReport:{}",
+                log.info("Detected changes in node responsiveness: Failed:{}, pollReport:{}",
                         failedNodes, pollReport);
                 getCorfuRuntime().getLayoutView().getRuntimeLayout(layout)
                         .getManagementClient(serverContext.getLocalEndpoint())
