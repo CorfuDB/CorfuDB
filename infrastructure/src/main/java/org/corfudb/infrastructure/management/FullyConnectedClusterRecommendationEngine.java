@@ -60,11 +60,11 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
      *             didn't get received by the Node)
      *
      *         Proposed Failed Set = {}
-     *         
-     *         // Greedily find and remove the nodes with highest number of link failures until 
+     *
+     *         // Greedily find and remove the nodes with highest number of link failures until
      *         // all the remaining nodes form a fully connected corfu cluster
      *         while (disconnectedLinksMap is not empty):
-     *         
+     *
      *             // Descending sort of the nodes based on number of failed links
      *             sortedDisconnectedLinksMap <- descending sort by size of Node Set of
      *             disconnectedLinksMap entries

@@ -138,6 +138,9 @@ public class ClusterStateContext {
      */
     public synchronized void refreshClusterView(@NonNull String localEndpoint,
                                                 @NonNull Layout snapshotLayout) {
+        // Increment heartbeat counter.
+        incrementHeartbeat();
+
         Map<String, Boolean> peerConnectivityDeltaMap = new HashMap<>();
         // All nodes detected as unreachable by the failure detector are added to the map.
         unresponsiveNodesState.forEach(s -> peerConnectivityDeltaMap.put(s, false));
@@ -163,7 +166,7 @@ public class ClusterStateContext {
     /**
      * Print the clusterView for debugging.
      */
-    public synchronized void printClusterView() {
+    public synchronized void logClusterView() {
         clusterView.forEach((endpoint, nodeHeartbeat) -> log.info("{} => {}", endpoint, nodeHeartbeat.toString()));
     }
 
