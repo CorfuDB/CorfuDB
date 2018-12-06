@@ -167,20 +167,30 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         CorfuRuntime runtime = getDefaultRuntime();
 
         IStreamView svA = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
+        IStreamView svB = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
+
+        // Since both steam views open the same stream, a write to one stream
+        // should be reflected in the other
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             svA.append(String.valueOf(i).getBytes());
         }
 
         // Make sure that the stream is built in-memory
-        BackpointerStreamView bpsv = ((ThreadSafeStreamView) svA).getUnderlyingStream();
-        svA.remaining();
-        assertThat(bpsv.getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
+        BackpointerStreamView bpsvA = ((ThreadSafeStreamView) svA).getUnderlyingStream();
+        BackpointerStreamView bpsvB = ((ThreadSafeStreamView) svA).getUnderlyingStream();
+        assertThat(svA.remaining()).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
+        assertThat(svB.remaining()).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
+        assertThat(bpsvA.getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
+        assertThat(bpsvB.getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
         TokenResponse tail = runtime.getSequencerView().query();
         runtime.getAddressSpaceView().prefixTrim(tail.getToken());
         runtime.getGarbageCollector().runRuntimeGC();
-        assertThat(bpsv.getContext().resolvedQueue).isEmpty();
-        assertThat(bpsv.getContext().readQueue).isEmpty();
-        assertThat(bpsv.getContext().readCpQueue).isEmpty();
+        assertThat(bpsvA.getContext().resolvedQueue).isEmpty();
+        assertThat(bpsvA.getContext().readQueue).isEmpty();
+        assertThat(bpsvA.getContext().readCpQueue).isEmpty();
+        assertThat(bpsvB.getContext().resolvedQueue).isEmpty();
+        assertThat(bpsvB.getContext().readQueue).isEmpty();
+        assertThat(bpsvB.getContext().readCpQueue).isEmpty();
     }
 
 }
