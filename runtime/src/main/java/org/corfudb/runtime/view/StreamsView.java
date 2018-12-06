@@ -10,6 +10,10 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Multimaps;
+import com.google.common.collect.TreeMultimap;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -42,7 +46,7 @@ public class StreamsView extends AbstractView {
     public static final String CHECKPOINT_SUFFIX = "_cp";
 
     @Getter
-    Map<UUID, IStreamView> streamCache = new ConcurrentHashMap<>();
+    Multimap<UUID, IStreamView> streamCache = Multimaps.synchronizedMultimap(HashMultimap.create());
 
     public StreamsView(final CorfuRuntime runtime) {
         super(runtime);
@@ -78,8 +82,10 @@ public class StreamsView extends AbstractView {
      * @return A view
      */
     public IStreamView get(UUID stream, StreamOptions options) {
-        return streamCache.computeIfAbsent(stream, id -> runtime.getLayoutView().getLayout().getLatestSegment()
-                .getReplicationMode().getStreamView(runtime, id, options));
+        IStreamView streamView = runtime.getLayoutView().getLayout().getLatestSegment()
+                .getReplicationMode().getStreamView(runtime, stream, options);
+        streamCache.put(stream, streamView);
+        return streamView;
     }
 
     public IStreamView getUnsafe(UUID stream, StreamOptions options) {
