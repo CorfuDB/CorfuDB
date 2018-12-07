@@ -10,6 +10,7 @@ After=systemd-journald-dev-log.socket
 After=nsx-custom.target
 
 [Service]
+Nice=-10
 Type=forking
 Restart=no
 TimeoutSec=5min
