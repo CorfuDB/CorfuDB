@@ -12,16 +12,14 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Random;
 import java.util.UUID;
-
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-
-import lombok.Getter;
 
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
@@ -30,13 +28,20 @@ import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.HealingDetector;
-import org.corfudb.protocols.wireprotocol.*;
+import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.AbortCause;
+import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -46,6 +51,7 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.junit.Assert;
 import org.junit.Test;
+import lombok.Getter;
 
 /**
  * Test to verify the Management Server functionality.
@@ -171,8 +177,8 @@ public class ManagementViewTest extends AbstractViewTest {
     /**
      * Scenario with 3 nodes: SERVERS.PORT_0, SERVERS.PORT_1 and SERVERS.PORT_2.
      * We fail SERVERS.PORT_1 and then wait for one of the other two servers to
-     * handle this failure, propose a new layout and we assert on the epoch change.
-     * The failure is handled by removing the failed node.
+     * handle this failure, propose a new layout. The test asserts on a stable
+     * layout. The failure is handled by removing the failed node.
      */
     @Test
     public void removeSingleNodeFailure() {
@@ -197,19 +203,25 @@ public class ManagementViewTest extends AbstractViewTest {
 
         CorfuRuntime corfuRuntime = getRuntime(l).connect();
 
-        // Setting aggressive timeouts
+        // Setting aggressive timeouts for connect, retry, response timeouts
         setAggressiveTimeouts(l, corfuRuntime,
                 getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
                 getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
                 getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime());
+
+        // Setting aggressive timeouts for failure and healing detectors
         setAggressiveDetectorTimeouts(SERVERS.PORT_0, SERVERS.PORT_1, SERVERS.PORT_2);
 
         // Adding a rule on SERVERS.PORT_1 to drop all packets
         addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
         getManagementServer(SERVERS.PORT_1).shutdown();
 
-        waitForLayoutChange(layout -> layout.getEpoch() > l.getEpoch(), corfuRuntime);
+        // Waiting until a stable layout is committed
+        waitForLayoutChange(layout -> layout.getUnresponsiveServers().contains(SERVERS.ENDPOINT_1) &&
+                        layout.getUnresponsiveServers().size() == 1,
+                corfuRuntime);
 
+        // Verifying layout and remove of failed server
         Layout l2 = corfuRuntime.getLayoutView().getLayout();
         assertThat(l2.getEpoch()).isGreaterThan(l.getEpoch());
         assertThat(l2.getLayoutServers().size()).isEqualTo(l.getAllServers().size());
@@ -1747,5 +1759,80 @@ public class ManagementViewTest extends AbstractViewTest {
         }
 
         assertThat(corfuRuntime.getLayoutView().getLayout()).isEqualTo(layout);
+    }
+
+    /**
+     * Write a random entry to the specified CorfuTable.
+     *
+     * @param table CorfuTable to populate.
+     */
+    private void writeRandomEntryToTable(CorfuTable table) {
+        Random r = new Random();
+        corfuRuntime.getObjectsView().TXBegin();
+        table.put(r.nextInt(), r.nextInt());
+        corfuRuntime.getObjectsView().TXEnd();
+    }
+
+    /**
+     * Increment the cluster layout epoch by 1.
+     *
+     * @return New committed layout
+     * @throws OutrankedException If layout proposal is outranked.
+     */
+    private Layout incrementClusterEpoch() throws OutrankedException {
+        corfuRuntime.invalidateLayout();
+        Layout layout = new Layout(corfuRuntime.getLayoutView().getLayout());
+        layout.setEpoch(layout.getEpoch() + 1);
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
+        corfuRuntime.getLayoutView().updateLayout(layout, 1L);
+        return layout;
+    }
+
+    /**
+     * Test scenario where the sequencer bootstrap triggers cache cleanup causing maxConflictWildcard to be reset.
+     * The runtime requests for 2 tokens but persists only 1 log entry. On an epoch change, the failover sequencer
+     * (in this case, itself) is bootstrapped by running the fastObjectLoader.
+     * This bootstrap sets the token to 1 and maxConflictWildcard to 0. This test asserts that the maxConflictWildcard
+     * stays 0 even after the cache eviction and does not abort transactions with SEQUENCER_OVERFLOW cause.
+     */
+    @Test
+    public void testSequencerCacheOverflowOnFailover() throws Exception {
+        corfuRuntime = getDefaultRuntime();
+
+        CorfuTable<String, String> table = corfuRuntime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
+                .setStreamName("test")
+                .open();
+
+        writeRandomEntryToTable(table);
+        // Block the writes so that we only fetch a sequencer token but not persist the entry on the LogUnit.
+        addClientRule(corfuRuntime, new TestRule().matches(corfuMsg -> corfuMsg.getMsgType() == CorfuMsgType.WRITE)
+                .drop());
+        CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
+            writeRandomEntryToTable(table);
+            return true;
+        });
+        // Block any sequencer bootstrap attempts.
+        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(), new TestRule()
+                .matches(corfuMsg -> corfuMsg.getMsgType() == CorfuMsgType.BOOTSTRAP_SEQUENCER).drop());
+
+        // Increment the sequencer epoch twice so that a full sequencer bootstrap is required.
+        incrementClusterEpoch();
+        Layout layout = incrementClusterEpoch();
+
+        // Clear rules to now allow sequencer bootstrap.
+        clearClientRules(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
+        while (getSequencer(SERVERS.PORT_0).getSequencerEpoch() != layout.getEpoch()) {
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+        }
+        clearClientRules(corfuRuntime);
+
+        // Attempt data operation.
+        // The data operation should fail if the maxConflictWildcard is updated on cache invalidation causing the
+        // the value to change.
+        writeRandomEntryToTable(table);
+
+        future.cancel(true);
     }
 }
