@@ -4,25 +4,10 @@ package org.corfudb.runtime.view;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.Assert.fail;
+
 import com.google.common.collect.Range;
 import com.google.common.reflect.TypeToken;
-
-import java.time.Duration;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.UUID;
-
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
-
 import lombok.Getter;
-
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
@@ -30,8 +15,13 @@ import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.HealingDetector;
-import org.corfudb.protocols.wireprotocol.*;
+import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.ISMRMap;
@@ -46,6 +36,18 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * Test to verify the Management Server functionality.
@@ -171,8 +173,8 @@ public class ManagementViewTest extends AbstractViewTest {
     /**
      * Scenario with 3 nodes: SERVERS.PORT_0, SERVERS.PORT_1 and SERVERS.PORT_2.
      * We fail SERVERS.PORT_1 and then wait for one of the other two servers to
-     * handle this failure, propose a new layout and we assert on the epoch change.
-     * The failure is handled by removing the failed node.
+     * handle this failure, propose a new layout. The test asserts on a stable
+     * layout. The failure is handled by removing the failed node.
      */
     @Test
     public void removeSingleNodeFailure() {
@@ -197,19 +199,25 @@ public class ManagementViewTest extends AbstractViewTest {
 
         CorfuRuntime corfuRuntime = getRuntime(l).connect();
 
-        // Setting aggressive timeouts
+        // Setting aggressive timeouts for connect, retry, response timeouts
         setAggressiveTimeouts(l, corfuRuntime,
                 getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
                 getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
                 getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime());
+
+        // Setting aggressive timeouts for failure and healing detectors
         setAggressiveDetectorTimeouts(SERVERS.PORT_0, SERVERS.PORT_1, SERVERS.PORT_2);
 
         // Adding a rule on SERVERS.PORT_1 to drop all packets
         addServerRule(SERVERS.PORT_1, new TestRule().always().drop());
         getManagementServer(SERVERS.PORT_1).shutdown();
 
-        waitForLayoutChange(layout -> layout.getEpoch() > l.getEpoch(), corfuRuntime);
+        // Waiting until a stable layout is committed
+        waitForLayoutChange(layout -> layout.getUnresponsiveServers().contains(SERVERS.ENDPOINT_1) &&
+                                      layout.getUnresponsiveServers().size() == 1,
+                            corfuRuntime);
 
+        // Verifying layout and remove of failed server
         Layout l2 = corfuRuntime.getLayoutView().getLayout();
         assertThat(l2.getEpoch()).isGreaterThan(l.getEpoch());
         assertThat(l2.getLayoutServers().size()).isEqualTo(l.getAllServers().size());
