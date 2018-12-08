@@ -13,5 +13,5 @@ public enum TransactionType {
     SNAPSHOT(SnapshotTransactionalContext::new),
     WRITE_AFTER_WRITE(WriteAfterWriteTransactionalContext::new);
 
-    final Function<TransactionBuilder, ? extends AbstractTransactionalContext> get;
+    final Function<Transaction, ? extends AbstractTransactionalContext> get;
 }

@@ -19,7 +19,8 @@ public class SnapshotTransactionContextTest extends AbstractTransactionContextTe
 
         // Start a snapshot transaction with the default timestamp
         t2(() ->  getRuntime().getObjectsView().TXBuild()
-                .setType(TransactionType.SNAPSHOT)
+                .type(TransactionType.SNAPSHOT)
+                .build()
                 .begin());
         // Verify that the snapshot transaction reads the table
         // with the latest snapshot
