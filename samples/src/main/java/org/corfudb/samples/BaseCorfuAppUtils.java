@@ -121,6 +121,7 @@ public abstract class BaseCorfuAppUtils {
      */
     protected void TXBegin() {
         getCorfuRuntime().getObjectsView().TXBuild()
+                .build()
                 .begin();
     }
 

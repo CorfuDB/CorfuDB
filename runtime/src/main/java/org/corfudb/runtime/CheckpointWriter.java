@@ -143,7 +143,8 @@ public class CheckpointWriter<T extends Map> {
         List<Long> addrs = new ArrayList<>();
         setupWriter.accept(this);
         rt.getObjectsView().TXBuild()
-                .setType(TransactionType.SNAPSHOT)
+                .type(TransactionType.SNAPSHOT)
+                .build()
                 .begin();
         try {
             addrs.add(startCheckpoint());

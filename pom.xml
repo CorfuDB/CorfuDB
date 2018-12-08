@@ -4,7 +4,7 @@
 
     <groupId>org.corfudb</groupId>
     <artifactId>corfu</artifactId>
-    <version>0.2.2.20181207235326.2332</version>
+    <version>0.2.2.20181208191959.9209</version>
 
     <modules>
         <module>infrastructure</module>
