@@ -333,7 +333,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             // If we aren't shutdown, reconnect.
             if (!shutdown) {
                 Duration reconnectTime = retryPolicy.nextWait();
-                log.info("addReconnectionOnCloseFuture[{}]: client backoff. Reconnecting in {} milliseconds", node, reconnectTime);
+                log.info("addReconnectionOnCloseFuture[{}]: client backoff. Reconnecting in {} milliseconds", node, reconnectTime.toMillis());
                 Sleep.MILLISECONDS.sleepUninterruptibly(reconnectTime);
                 // Asynchronously connect again.
                 connectAsync(bootstrap);
@@ -376,7 +376,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             // a sleep period.
             if (!shutdown) {
                 Duration reconnectTime = retryPolicy.nextWait();
-                log.info("connectAsync[{}]: Client backoff. Reconnecting in {} milliseconds", node, reconnectTime);
+                log.info("connectAsync[{}]: Client backoff. Reconnecting in {} milliseconds", node, reconnectTime.toMillis());
                 Sleep.MILLISECONDS.sleepUninterruptibly(reconnectTime);
 
                 // Call connect, which will retry the call again.
