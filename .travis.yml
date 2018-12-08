@@ -25,25 +25,25 @@ before_install: |
     -DnewVersion=\${parsedVersion.majorVersion}.\${parsedVersion.minorVersion}.\${parsedVersion.incrementalVersion}-${TRAVIS_BUILD_NUMBER} \
     -q
 
-install: true
+install: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C
 
 jobs:
   include:
   - stage: test
     name: Unit Tests
     script:
-    - ./mvnw -pl :test clean test -T 1C -am -Dtest.travisBuild=true
+    - ./mvnw -pl :test clean test -T 1C -Dtest.travisBuild=true
   - script:
-    - ./mvnw -pl :test clean verify -T 1C -am -Pit -DskipTests -Dtest.travisBuild=true
+    - ./mvnw -pl :test clean verify -T 1C -Pit -DskipTests -Dtest.travisBuild=true
     name: Integration Tests
   - script:
-    - ./mvnw -pl :universe clean verify -T 1C -am -Pit
+    - ./mvnw -pl :universe clean verify -T 1C -Pit
     name: Testing Framework Tests
   - stage: code_quality
     name: Code Quality
     script:
     - |
-      ./mvnw verify -Pit sonar:sonar \
+      ./mvnw verify -Pit -T 1C sonar:sonar \
       -Dtest.travisBuild=true \
       -Dsonar.host.url=https://sonarqube.com \
       -Dsonar.github.pullRequest=$TRAVIS_PULL_REQUEST \

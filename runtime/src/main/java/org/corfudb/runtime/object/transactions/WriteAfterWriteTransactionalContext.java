@@ -23,8 +23,8 @@ import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 public class WriteAfterWriteTransactionalContext
         extends OptimisticTransactionalContext {
 
-    WriteAfterWriteTransactionalContext(TransactionBuilder builder) {
-        super(builder);
+    WriteAfterWriteTransactionalContext(Transaction transaction) {
+        super(transaction);
         getSnapshotTimestamp();
     }
 
