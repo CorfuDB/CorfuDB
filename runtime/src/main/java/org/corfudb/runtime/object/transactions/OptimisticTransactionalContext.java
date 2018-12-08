@@ -55,8 +55,8 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             new HashSet<>();
 
 
-    OptimisticTransactionalContext(TransactionBuilder builder) {
-        super(builder);
+    OptimisticTransactionalContext(Transaction transaction) {
+        super(transaction);
     }
 
     /**
@@ -271,7 +271,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // Write to the transaction stream if transaction logging is enabled
         Set<UUID> affectedStreamsIds = new HashSet<>(getWriteSetInfo().getWriteSet().getEntryMap().keySet());
 
-        if (this.builder.runtime.getObjectsView().isTransactionLogging()) {
+        if (this.transaction.isLoggingEnabled()) {
             affectedStreamsIds.add(TRANSACTION_STREAM_ID);
         }
 
@@ -293,7 +293,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                 getWriteSetInfo().getHashedConflictSet());
 
         try {
-            address = this.builder.runtime.getStreamsView()
+            address = this.transaction.runtime.getStreamsView()
                 .append(
                     // a MultiObjectSMREntry that contains the update(s) to objects
                     collectWriteSetEntries(),
@@ -323,7 +323,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         // First, get the committed entry
         // in order to get the backpointers
         // and the underlying SMREntries.
-        ILogData committedEntry = this.builder.getRuntime()
+        ILogData committedEntry = this.transaction.getRuntime()
                 .getAddressSpaceView().read(commitAddress);
 
         updateAllProxies(x -> {
@@ -342,7 +342,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
                     getWriteSetEntryList(x.getStreamID());
             List<SMREntry> entryWrites =
                     ((ISMRConsumable) committedEntry
-                            .getPayload(this.getBuilder().runtime))
+                            .getPayload(this.transaction.getRuntime()))
                     .getSMRUpdates(x.getStreamID());
             if (committedWrites.size()
                     == entryWrites.size()) {

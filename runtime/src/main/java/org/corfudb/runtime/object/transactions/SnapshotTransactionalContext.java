@@ -32,8 +32,8 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     @Getter
     private Set<ICorfuSMRProxyInternal> modifiedProxies = ImmutableSet.of();
 
-    public SnapshotTransactionalContext(TransactionBuilder builder) {
-        super(builder);
+    public SnapshotTransactionalContext(Transaction transaction) {
+        super(transaction);
     }
 
     /**

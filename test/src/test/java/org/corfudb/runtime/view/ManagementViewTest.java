@@ -4,23 +4,10 @@ package org.corfudb.runtime.view;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.Assert.fail;
+
 import com.google.common.collect.Range;
 import com.google.common.reflect.TypeToken;
-
-import java.time.Duration;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
-
+import lombok.Getter;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
@@ -51,11 +38,24 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.junit.Assert;
 import org.junit.Test;
-import lombok.Getter;
+
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Random;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
- * Test to verify the Management Server functionality.
- * <p>
+ * Test to verify the Management Server functionalities.
+ *
  * Created by zlokhandwala on 11/9/16.
  */
 public class ManagementViewTest extends AbstractViewTest {
@@ -1166,35 +1166,38 @@ public class ManagementViewTest extends AbstractViewTest {
 
     /**
      * The test first creates a layout with 3 segments.
-     * Epoch 1
+     * Initial layout:
      * Segment 1: 0 -> 3 (exclusive) Node 0
      * Segment 2: 3 -> 6 (exclusive) Node 0, Node 1
      * Segment 3: 6 -> infinity (exclusive) Node 0, Node 1
      *
-     * Now a failed node, Node 2 is healed back to the layout which first splits the last segment:
-     * Epoch 2
+     * Now a failed node, Node 2 is healed back which results in the following intermediary
+     * states.
+     *
+     * First, last segment will be split.
      * Segment 1: 0 -> 3 (exclusive) Node 0
      * Segment 2: 3 -> 6 (exclusive) Node 0, Node 1
      * Segment 3: 6 -> 9 (exclusive) Node 0, Node 1
      * Segment 4: 9 -> infinity (exclusive) Node 0, Node 1, Node 2
      *
-     * Now healing carries out a cleaning task of merging the segments.
-     * Epoch 3 (transfer segment 1 to Node 1 and merge segments 1 and 2.)
+     * Then, healing carries out a cleaning task of merging the segments.
+     * (transfer segment 1 to Node 1 and merge segments 1 and 2.)
      * Segment 1: 0 -> 6 (exclusive) Node 0, Node 1
      * Segment 2: 6 -> 9 (exclusive) Node 0, Node 1
      * Segment 3: 9 -> infinity (exclusive) Node 0, Node 1, Node 2
      *
-     * Epoch 4
+     * And then:
      * Segment 1: 0 -> 9 (exclusive) Node 0, Node 1
      * Segment 2: 9 -> infinity (exclusive) Node 0, Node 1, Node 2
      *
-     * Epoch 5
+     * At the end, the stable layout will be the following:
      * Segment 1: 0 -> infinity (exclusive) Node 0, Node 1, Node 2
-     * Finally the state transfer is verified by asserting all 3 nodes' data.
+     * Finally the stable layout is verified as well as the state transfer is verified by asserting
+     * all 3 nodes' data.
      */
     @Test
     public void verifyStateTransferAndMergeInHeal() throws Exception {
-
+        // Add three servers
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
         addServer(SERVERS.PORT_2);
@@ -1246,6 +1249,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
         setAggressiveDetectorTimeouts(SERVERS.PORT_0);
         IStreamView testStream = rt.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+
         // Write to address spaces 0 to 2 (inclusive) to SERVER 0 only.
         testStream.append("testPayload".getBytes());
         testStream.append("testPayload".getBytes());
@@ -1265,33 +1269,41 @@ public class ManagementViewTest extends AbstractViewTest {
         clearServerRules(SERVERS.PORT_2);
 
         rt.invalidateLayout();
-        final long epochAfterHeal = 5L;
-        while (rt.getLayoutView().getLayout().getEpoch() < epochAfterHeal) {
-            rt.invalidateLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
-        }
 
-        Layout expectedLayout = new TestLayoutBuilder()
-                .setEpoch(epochAfterHeal)
-                .addLayoutServer(SERVERS.PORT_0)
-                .addLayoutServer(SERVERS.PORT_1)
-                .addLayoutServer(SERVERS.PORT_2)
-                .addSequencer(SERVERS.PORT_0)
-                .addSequencer(SERVERS.PORT_1)
-                .addSequencer(SERVERS.PORT_2)
-                .buildSegment()
-                .buildStripe()
-                .addLogUnit(SERVERS.PORT_0)
-                .addLogUnit(SERVERS.PORT_1)
-                .addLogUnit(SERVERS.PORT_2)
-                .addToSegment()
-                .addToLayout()
-                .build();
-        assertThat(rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
+        // Wait until a stable and merged layout is observed
+        waitForLayoutChange(layout -> layout.getUnresponsiveServers().isEmpty() &&
+                                      layout.segments.size() == 1,
+                            rt);
 
-        TokenResponse tokenResponse = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
-        long lastAddress = tokenResponse.getSequence();
+        final String[] expectedNodes = new String[]{SERVERS.ENDPOINT_0,
+                                                    SERVERS.ENDPOINT_1,
+                                                    SERVERS.ENDPOINT_2};
+        final Layout actualLayout = rt.getLayoutView().getLayout();
 
+        // Verify Node 1, Node 2, and Node 3 are active without considering order
+        assertThat(actualLayout.getAllActiveServers()).containsExactlyInAnyOrder(expectedNodes);
+
+        // Verify segments are merged into one segment
+        assertThat(actualLayout.getSegments().size()).isEqualTo(1);
+
+        // Verify start and end of the segment
+        assertThat(actualLayout.getSegments().get(0).start).isEqualTo(0);
+        assertThat(actualLayout.getSegments().get(0).end).isEqualTo(-1);
+
+        // Verify no unresponsive server are in the layout
+        assertThat(actualLayout.getUnresponsiveServers()).isEmpty();
+
+        // Verify layout servers in the layout and their order
+        assertThat(actualLayout.getLayoutServers()).containsExactly(expectedNodes);
+
+        // Verify sequencers in the layout and their order
+        assertThat(actualLayout.getSequencers()).containsExactly(expectedNodes);
+
+        final TokenResponse tokenResponse = rt.getSequencerView().query(CorfuRuntime.getStreamID(
+                "test"));
+        final long lastAddress = tokenResponse.getSequence();
+
+        // Verify Nodes' data
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
         assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
