@@ -125,8 +125,9 @@ public class CheckpointTrimTest extends AbstractViewTest {
         Token snapshot = new Token(0L, checkpointAddress.getSequence() - 1);
         getRuntime().getObjectsView()
                 .TXBuild()
-                .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(snapshot)
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(snapshot)
+                .build()
                 .begin();
 
         // Reading an entry from scratch should be ok
@@ -157,8 +158,9 @@ public class CheckpointTrimTest extends AbstractViewTest {
         // Play the new view up to "b" only
         Token snapshot = new Token(0L, 1);
         getRuntime().getObjectsView().TXBuild()
-                .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(snapshot)
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(snapshot)
+                .build()
                 .begin();
 
         assertThat(newTestMap)
