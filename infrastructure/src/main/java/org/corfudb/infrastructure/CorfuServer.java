@@ -6,13 +6,6 @@ import static org.fusesource.jansi.Ansi.Color.MAGENTA;
 import static org.fusesource.jansi.Ansi.Color.RED;
 import static org.fusesource.jansi.Ansi.Color.WHITE;
 import static org.fusesource.jansi.Ansi.ansi;
-
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-
-import ch.qos.logback.classic.LoggerContext;
-import ch.qos.logback.classic.util.ContextInitializer;
-import ch.qos.logback.core.joran.spi.JoranException;
 import com.google.common.collect.ImmutableList;
 
 import io.netty.bootstrap.ServerBootstrap;
@@ -40,6 +33,7 @@ import java.util.regex.Pattern;
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLHandshakeException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -55,6 +49,10 @@ import org.corfudb.util.Version;
 import org.docopt.Docopt;
 import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.core.joran.spi.JoranException;
 
 /**
  * This is the new Corfu server single-process executable.
@@ -462,11 +460,25 @@ public class CorfuServer {
                     SSLEngine engine = sslContext.newEngine(ch.alloc());
                     engine.setEnabledCipherSuites(enabledTlsCipherSuites);
                     engine.setEnabledProtocols(enabledTlsProtocols);
+
                     if (tlsMutualAuthEnabled) {
                         engine.setNeedClientAuth(true);
                     }
-                    ch.pipeline().addLast("ssl", new SslHandler(engine));
+
+                    SslHandler sslHandler = new SslHandler(engine);
+
+                    // Add listener to handle SSL Handshake Exceptions in order to properly log
+                    // the target IP failing to authenticate against this server.
+                    sslHandler.handshakeFuture().addListener(channelFuture -> {
+                        if (channelFuture.cause() != null && channelFuture.cause().getClass()
+                                .equals(SSLHandshakeException.class)) {
+                            log.error("Client authentication failed for remote address {}", ch.remoteAddress());
+                        }
+                    });
+
+                    ch.pipeline().addLast("ssl", sslHandler);
                 }
+
                 // Add/parse a length field
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer
