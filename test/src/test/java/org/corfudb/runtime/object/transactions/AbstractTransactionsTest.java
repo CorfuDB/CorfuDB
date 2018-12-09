@@ -34,7 +34,8 @@ public abstract class AbstractTransactionsTest extends AbstractObjectTest {
      */
     protected void OptimisticTXBegin() {
         getRuntime().getObjectsView().TXBuild()
-                .setType(TransactionType.OPTIMISTIC)
+                .type(TransactionType.OPTIMISTIC)
+                .build()
                 .begin();
     }
 
@@ -44,8 +45,9 @@ public abstract class AbstractTransactionsTest extends AbstractObjectTest {
     protected void SnapshotTXBegin() {
         // By default, begin a snapshot at address 2L
         getRuntime().getObjectsView().TXBuild()
-                .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(new Token(0L, 2L))
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(new Token(0L, 2L))
+                .build()
                 .begin();
     }
 
@@ -54,7 +56,8 @@ public abstract class AbstractTransactionsTest extends AbstractObjectTest {
      */
     protected void WWTXBegin() {
         getRuntime().getObjectsView().TXBuild()
-                .setType(TransactionType.WRITE_AFTER_WRITE)
+                .type(TransactionType.WRITE_AFTER_WRITE)
+                .build()
                 .begin();
     }
 
