@@ -106,9 +106,11 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
     public void ensureUserTsIsInherited() {
         final Token parentTs = new Token(0L, 10L);
         getRuntime().getObjectsView().TXBuild()
-                .setSnapshot(parentTs)
+                .snapshot(parentTs)
+                .build()
                 .begin();
         getRuntime().getObjectsView().TXBuild()
+                .build()
                 .begin();
 
         // Verify that the child inherits the user defined
@@ -135,8 +137,10 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
         }
 
         getRuntime().getObjectsView().TXBuild()
+                .build()
                 .begin();
         getRuntime().getObjectsView().TXBuild()
+                .build()
                 .begin();
 
         // Verify that the child inherits timestamp
@@ -160,12 +164,14 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
         final Token childTs = new Token(0L, 5L);
         getRuntime().getObjectsView()
                 .TXBuild()
+                .build()
                 .begin();
         // nest a transaction with a user defined ts
         // and verify that it fails
         getRuntime().getObjectsView()
                 .TXBuild()
-                .setSnapshot(childTs)
+                .snapshot(childTs)
+                .build()
                 .begin();
         assertThatThrownBy(() -> TransactionalContext.getCurrentContext().getSnapshotTimestamp())
                 .isInstanceOf(IllegalArgumentException.class);

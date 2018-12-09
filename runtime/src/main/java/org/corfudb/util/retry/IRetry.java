@@ -1,8 +1,11 @@
 package org.corfudb.util.retry;
 
+import java.time.Duration;
 import java.util.function.Consumer;
 
 import lombok.SneakyThrows;
+
+import org.corfudb.util.Sleep;
 
 
 /**
@@ -78,7 +81,8 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
                 return getRunFunction().retryFunction();
             } catch (RetryNeededException ex) {
                 // retry requested
-                nextWait();
+                Duration sleepTime = nextWait();
+                Sleep.MILLISECONDS.sleepUninterruptibly(sleepTime);
             }
         }
     }
@@ -105,8 +109,10 @@ public interface IRetry<E extends Exception, F extends Exception, G extends Exce
 
     /**
      * Apply the retry logic.
+     *
+     * @return time to wait in milliseconds.
      */
-    void nextWait() throws InterruptedException;
+    Duration nextWait() throws InterruptedException;
 
 
 
