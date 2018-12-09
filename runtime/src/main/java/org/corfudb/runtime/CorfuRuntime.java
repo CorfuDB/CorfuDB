@@ -1,9 +1,9 @@
 package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 
@@ -32,6 +32,7 @@ import lombok.Setter;
 import lombok.Singular;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
@@ -311,6 +312,13 @@ public class CorfuRuntime {
          */
         @Default
         int systemDownHandlerTriggerLimit = 20;
+
+        /**
+         * Maximum duration for exponential backoff, after this threshold attempts to reconnect
+         * will occur at this constant ratio.
+         */
+        @Default
+        Duration maxDurationExponentialReconnect = Duration.ofMinutes(5);
 
         /**
          * The initial list of layout servers.
