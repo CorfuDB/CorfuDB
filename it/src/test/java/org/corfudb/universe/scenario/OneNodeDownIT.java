@@ -1,9 +1,9 @@
 package org.corfudb.universe.scenario;
 
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
+import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
@@ -20,11 +20,10 @@ import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveSer
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 
-@Slf4j
 public class OneNodeDownIT extends GenericIntegrationTest {
 
     /**
-     * Test cluster behavior after one node down
+     * Test cluster behavior after one node down.
      * <p>
      * 1) Deploy and bootstrap a three nodes cluster
      * 2) Stop one node
@@ -46,24 +45,22 @@ public class OneNodeDownIT extends GenericIntegrationTest {
             }
 
             testCase.it("Should stop one node and then restart", data -> {
-                CorfuServer server1 = corfuCluster.getFirstServer();
+                CorfuServer server0 = corfuCluster.getFirstServer();
 
                 // Stop one node and wait for layout's unresponsive servers to change
-                server1.stop(Duration.ofSeconds(10));
+                server0.stop(Duration.ofSeconds(10));
                 waitForUnresponsiveServersChange(size -> size == 1, corfuClient);
 
                 // Verify layout, unresponsive servers should contain only the stopped node
                 Layout layout = corfuClient.getLayout();
-                assertThat(layout.getUnresponsiveServers()).containsExactly(server1.getEndpoint());
+                assertThat(layout.getUnresponsiveServers()).containsExactly(server0.getEndpoint());
 
                 // Verify cluster status is DEGRADED with one node down
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                assertThat(clusterStatusReport.getClusterStatus())
-                        .isEqualTo(ClusterStatusReport.ClusterStatus.DEGRADED);
+                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
 
-                Map<String, ClusterStatusReport.NodeStatus> statusMap = clusterStatusReport
-                        .getClientServerConnectivityStatusMap();
-                assertThat(statusMap.get(server1.getEndpoint())).isEqualTo(ClusterStatusReport.NodeStatus.DOWN);
+                Map<String, NodeStatus> statusMap = clusterStatusReport.getClientServerConnectivityStatusMap();
+                assertThat(statusMap.get(server0.getEndpoint())).isEqualTo(NodeStatus.DOWN);
 
                 // Verify data path working fine
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
@@ -71,7 +68,7 @@ public class OneNodeDownIT extends GenericIntegrationTest {
                 }
 
                 // restart the stopped node and wait for layout's unresponsive servers to change
-                server1.start();
+                server0.start();
                 waitForUnresponsiveServersChange(size -> size == 0, corfuClient);
 
                 final Duration sleepDuration = Duration.ofSeconds(1);

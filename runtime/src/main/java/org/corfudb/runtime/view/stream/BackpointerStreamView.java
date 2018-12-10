@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -454,6 +455,11 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 d -> BackpointerOp.INCLUDE);
 
         return ! context.readCpQueue.isEmpty() || !context.readQueue.isEmpty();
+    }
+
+    @VisibleForTesting
+    AbstractQueuedStreamView.QueuedStreamContext getContext() {
+        return this.baseContext;
     }
 }
 

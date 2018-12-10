@@ -4,8 +4,7 @@ if [ "$TRAVIS_BRANCH" == "master" ] && [ "$TRAVIS_PULL_REQUEST" == "false" ]; th
     if [ "$TRAVIS_JDK_VERSION" == "oraclejdk8" ]; then
         echo -e "Publishing javadocs..."
 
-        mvn -N io.takari:maven:wrapper -Dmaven=3.3.9
-        mvn javadoc:javadoc -DskipTests=true
+        ./mvnw javadoc:javadoc -DskipTests=true
         cp -R target/site/apidocs $HOME/javadoc
         cd $HOME
         git config --global user.email "travis@travis-ci.org"

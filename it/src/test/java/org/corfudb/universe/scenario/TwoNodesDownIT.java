@@ -24,7 +24,7 @@ import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DE
 public class TwoNodesDownIT extends GenericIntegrationTest {
 
     /**
-     * Test cluster behavior after two nodes down
+     * Test cluster behavior after two nodes down.
      * <p>
      * 1) Deploy and bootstrap a three nodes cluster
      * 2) Sequentially stop two nodes

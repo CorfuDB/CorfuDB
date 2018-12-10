@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -20,10 +21,27 @@ import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.util.concurrent.GlobalEventExecutor;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
+
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLException;
+
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler;
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler.ClientHandshakeEvent;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -45,20 +63,7 @@ import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
-
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLException;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicLong;
+import org.corfudb.util.retry.ExponentialBackoffRetry;
 
 
 /**
@@ -118,11 +123,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     private volatile Channel channel = null;
 
-    /**
-     * The {@link EventLoopGroup} for this router which services requests.
-     */
-    public final EventLoopGroup eventLoopGroup;
-
     /** Whether to shutdown the {@code eventLoopGroup} or not. Only applies when
      *  a deprecated constructor (which generates its own {@link EventLoopGroup} is used.
      */
@@ -132,6 +132,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * Whether or not this router is shutdown.
      */
     public volatile boolean shutdown;
+
+    private final ExponentialBackoffRetry retryPolicy;
 
     /** The {@link NodeLocator} which represents the remote node this
      *  {@link NettyClientRouter} connects to.
@@ -168,7 +170,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         @Nonnull CorfuRuntimeParameters parameters) {
         this.node = node;
         this.parameters = parameters;
-        this.eventLoopGroup = eventLoopGroup;
 
         // Set timer mapping
         ImmutableMap.Builder<CorfuMsgType, String> mapBuilder = ImmutableMap.builder();
@@ -190,6 +191,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         requestID = new AtomicLong();
         outstandingRequests = new ConcurrentHashMap<>();
         shutdown = true;
+
+        retryPolicy = new ExponentialBackoffRetry(null, parameters.getMaxDurationExponentialReconnect());
 
         if (parameters.isTlsEnabled()) {
             try {
@@ -329,7 +332,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             });
             // If we aren't shutdown, reconnect.
             if (!shutdown) {
-                log.info("addReconnectionOnCloseFuture[{}]: reconnecting", node);
+                Duration reconnectTime = retryPolicy.nextWait();
+                log.info("addReconnectionOnCloseFuture[{}]: client backoff. Reconnecting in {} milliseconds", node, reconnectTime.toMillis());
+                Sleep.MILLISECONDS.sleepUninterruptibly(reconnectTime);
                 // Asynchronously connect again.
                 connectAsync(bootstrap);
             }
@@ -363,13 +368,17 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         if (future.isSuccess()) {
             // Register a future to reconnect in case we get disconnected
             addReconnectionOnCloseFuture(future.channel(), bootstrap);
+            // On channel connection reset retryPolicy time compute.
+            retryPolicy.reset();
             log.info("connectAsync[{}]: Channel connected.", node);
         } else {
             // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
             // a sleep period.
             if (!shutdown) {
-                log.info("connectAsync[{}]: Channel connection failed, reconnecting...", node);
-                Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
+                Duration reconnectTime = retryPolicy.nextWait();
+                log.info("connectAsync[{}]: Client backoff. Reconnecting in {} milliseconds", node, reconnectTime.toMillis());
+                Sleep.MILLISECONDS.sleepUninterruptibly(reconnectTime);
+
                 // Call connect, which will retry the call again.
                 // Note that this is not recursive, because it is called in the
                 // context of the handler future.
@@ -386,23 +395,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         log.debug("stop: Shutting down router for {}", node);
         shutdown = true;
         connectionFuture.completeExceptionally(new ShutdownException());
-        try {
-            channel.disconnect();
-            channel.close().syncUninterruptibly();
-        } catch (Exception e) {
-            log.error("Error in closing channel");
-        }
-        try {
-            if (shutdownEventLoop) {
-                eventLoopGroup.shutdownGracefully(
-                        parameters.getNettyShutdownQuitePeriod(),
-                        parameters.getNettyShutdownTimeout(),
-                        TimeUnit.MILLISECONDS
-                ).sync();
-            }
-        } catch (InterruptedException e) {
-            throw new UnrecoverableCorfuInterruptedError("Interrupted while stopping", e);
-        }
     }
 
     /** {@inheritDoc}

@@ -23,10 +23,10 @@ public class ClusterRecommendationEngineFactory {
      * @return a concrete instance of {@link ClusterRecommendationEngine} specific to the
      * provided strategy.
      */
-    public ClusterRecommendationEngine createForStrategy(ClusterRecommendationStrategy strategy) {
+    public static ClusterRecommendationEngine createForStrategy(ClusterRecommendationStrategy strategy) {
         switch (strategy) {
             case FULLY_CONNECTED_CLUSTER:
-                throw new UnsupportedOperationException(strategy.name());
+                return new FullyConnectedClusterRecommendationEngine();
             case CENTRALIZED_CLUSTER:
                 throw new UnsupportedOperationException(strategy.name());
             default:
