@@ -43,7 +43,7 @@ jobs:
     name: Code Quality
     script:
     - |
-      ./mvnw verify -Pit -T 1C sonar:sonar \
+      ./mvnw verify -Pit sonar:sonar \
       -Dtest.travisBuild=true \
       -Dsonar.host.url=https://sonarqube.com \
       -Dsonar.github.pullRequest=$TRAVIS_PULL_REQUEST \
