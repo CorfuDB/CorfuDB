@@ -3,6 +3,7 @@ package org.corfudb.universe.scenario;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
+import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
@@ -56,12 +57,10 @@ public class OneNodeDownIT extends GenericIntegrationTest {
 
                 // Verify cluster status is DEGRADED with one node down
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                assertThat(clusterStatusReport.getClusterStatus())
-                        .isEqualTo(ClusterStatusReport.ClusterStatus.DEGRADED);
+                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
 
-                Map<String, ClusterStatusReport.NodeStatus> statusMap = clusterStatusReport
-                        .getClientServerConnectivityStatusMap();
-                assertThat(statusMap.get(server0.getEndpoint())).isEqualTo(ClusterStatusReport.NodeStatus.DOWN);
+                Map<String, NodeStatus> statusMap = clusterStatusReport.getClientServerConnectivityStatusMap();
+                assertThat(statusMap.get(server0.getEndpoint())).isEqualTo(NodeStatus.DOWN);
 
                 // Verify data path working fine
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
