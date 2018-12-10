@@ -51,12 +51,13 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
                 CorfuServer server1 = corfuCluster.getServerByIndex(1);
                 CorfuServer server2 = corfuCluster.getServerByIndex(2);
 
+                // Stop server2 and wait for layout's unresponsive servers to change
                 server2.stop(Duration.ofSeconds(10));
                 waitForUnresponsiveServersChange(size -> size == 1, corfuClient);
 
                 assertThat(corfuClient.getLayout().getUnresponsiveServers()).containsExactly(server2.getEndpoint());
 
-                // Partition server0 and server1 and wait for layout's unresponsive servers to change
+                // Create link failure between server0 and server1
                 // After this, cluster becomes unavailable.
                 // NOTE: cannot use waitForClusterDown() since the partition only happens on server side, client
                 // can still connect to two nodes, write to table so system down handler will not be triggered.

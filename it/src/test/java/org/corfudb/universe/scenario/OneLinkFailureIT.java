@@ -28,7 +28,7 @@ public class OneLinkFailureIT extends GenericIntegrationTest {
      * 2) Create a link failure between two nodes which
      *    results in a partial partition
      * 3) Verify layout, cluster status and data path
-     * 4) Recover cluster by removing the link failure
+     * 4) Recover cluster by removing the link failures
      * 5) Verify layout, cluster status and data path again
      */
     @Test(timeout = 300000)
@@ -47,7 +47,7 @@ public class OneLinkFailureIT extends GenericIntegrationTest {
                 CorfuServer server0 = corfuCluster.getServerByIndex(0);
                 CorfuServer server2 = corfuCluster.getServerByIndex(2);
 
-                // Partition server0 and server2 and wait for layout's unresponsive servers to change
+                // Create link failure between server0 and server2
                 server0.disconnect(Collections.singletonList(server2));
                 // Server0 and server2 has same number of link failure ie. 1, the one with
                 // larger endpoint should be marked as unresponsive.
