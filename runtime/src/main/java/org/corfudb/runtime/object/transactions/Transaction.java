@@ -6,8 +6,10 @@ import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 
 /**
@@ -45,11 +47,41 @@ public class Transaction {
      * to the builder.
      */
     public void begin() {
-        //TODO(Maithem) move timestamp validation here
+        verify();
         TransactionalContext.newContext(type.get.apply(this));
     }
 
     public boolean isLoggingEnabled() {
         return runtime.getObjectsView().isTransactionLogging();
+    }
+
+    /**
+     * Verifies that this transaction  has a valid snapshot and context.
+     */
+    private void verify() {
+        final AbstractTransactionalContext parentCtx = TransactionalContext.getCurrentContext();
+        if (parentCtx != null) {
+            if (parentCtx.getTransaction().getRuntime() != this.runtime) {
+                throw new IllegalStateException("Attempting to nest transactions from different clients!");
+            }
+            // If we're in a nested transaction, the first read timestamp
+            // needs to come from the root.
+            Token parentTimestamp = parentCtx.getSnapshotTimestamp();
+            if (!this.snapshot.equals(Token.UNINITIALIZED)
+                    && !this.snapshot.equals(parentTimestamp)) {
+                String msg = String.format("Attempting to nest transactions with" +
+                                " different timestamps, parent ts=%s, user defined ts=%s", parentCtx.getSnapshotTimestamp(),
+                        this.snapshot);
+                throw new IllegalArgumentException(msg);
+            }
+        } else if (!this.snapshot.equals(Token.UNINITIALIZED)) {
+            // Since this is a user-defined snapshot we must make sure that
+            // the corresponding log position is valid (i.e. the slot has been written)
+            ILogData pos = getRuntime().getAddressSpaceView().peek(this.snapshot.getSequence());
+            if (pos == null || !pos.getToken().equals(this.snapshot)) {
+                String msg = String.format("User Defined snapshot(ts=%s) is invalid", this.snapshot);
+                throw new IllegalArgumentException(msg);
+            }
+        }
     }
 }

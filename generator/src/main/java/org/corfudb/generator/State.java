@@ -117,6 +117,14 @@ public class State {
         return runtime.getObjectsView().TXEnd();
     }
 
+    public void startSnapshotTx() {
+        runtime.getObjectsView()
+                .TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .build()
+                .begin();
+    }
+
     public void startSnapshotTx(Token snapshot) {
         runtime.getObjectsView()
                 .TXBuild()

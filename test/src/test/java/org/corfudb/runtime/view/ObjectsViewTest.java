@@ -139,7 +139,7 @@ public class ObjectsViewTest extends AbstractViewTest {
         map.get("key1");
 
         // Try to start a new nested transaction with a different runtime
-        assertThatThrownBy(() -> r2.getObjectsView().TXBegin()).isInstanceOf(UnrecoverableCorfuError.class);
+        assertThatThrownBy(() -> r2.getObjectsView().TXBegin()).isInstanceOf(IllegalStateException.class);
     }
 
     @Test
