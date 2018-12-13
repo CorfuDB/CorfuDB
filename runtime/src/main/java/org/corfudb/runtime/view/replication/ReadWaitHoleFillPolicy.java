@@ -59,7 +59,7 @@ public class ReadWaitHoleFillPolicy implements IHoleFillPolicy {
         final AtomicLong startTime = new AtomicLong();
 
         try {
-            IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
+            return IRetry.build(ExponentialBackoffRetry.class, RetryExhaustedException.class, () -> {
 
                 // Try the read
                 ILogData data = peekFunction.apply(address);
