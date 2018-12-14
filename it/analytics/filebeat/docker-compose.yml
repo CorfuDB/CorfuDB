@@ -1,0 +1,25 @@
+version: '2'
+
+services:
+
+  filebit:
+    image: docker.elastic.co/beats/filebeat:${ELK_VERSION}
+    container_name: filebeat
+    user: root
+    volumes:
+      - /var/lib/docker/containers:/mnt/log/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./filebeat.docker.yml:/usr/share/filebeat/filebeat.yml:ro
+    environment:
+      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+    networks:
+      - elk
+    depends_on:
+      - elasticsearch
+      - kibana
+      - logstash
+
+networks:
+
+  elk:
+    driver: bridge

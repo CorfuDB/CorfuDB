@@ -222,3 +222,4 @@ target
 *.dat
 
 /it/src/test/resources/vm.properties
+it/analytics/generated
