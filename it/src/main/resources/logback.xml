@@ -20,10 +20,10 @@
     <logger name="org.corfudb.runtime.clients.NettyClientRouter" level="error"/>
     <logger name="org.corfudb.protocols.wireprotocol.ClientHandshakeHandler" level="off"/>
     <logger name="org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder" level="off"/>
-    <logger name="org.corfudb.runtime.view.workflows.WorkflowRequest" level="off"/>
+    <logger name="org.corfudb.runtime.view.workflows.WorkflowRequest" level="debug"/>
 
     <!-- Control logging levels for individual components here. -->
-    <root level="info">
-        <!--<appender-ref ref="STDOUT"/>-->
+    <root level="warn">
+        <appender-ref ref="STDOUT"/>
     </root>
 </configuration>

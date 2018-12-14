@@ -1,0 +1,7 @@
+- type: log
+  paths:
+  - '/mnt/log/containers/*/*.log'
+  json.message_key: log
+  json.keys_under_root: true
+  processors:
+  - add_docker_metadata: ~

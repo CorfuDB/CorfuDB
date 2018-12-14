@@ -49,6 +49,12 @@ public class RemoveNode extends WorkflowRequest {
     }
 
     @Override
+    public void invoke() {
+        log.info("REMOVE NODE: {}", nodeForWorkflow);
+        super.invoke();
+    }
+
+    @Override
     public String toString() {
         return this.getClass().getSimpleName() + " " + nodeForWorkflow;
     }

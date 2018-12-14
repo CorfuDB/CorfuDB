@@ -135,6 +135,8 @@ public abstract class WorkflowRequest {
                 Layout requestLayout = new Layout(runtime.getLayoutView().getLayout());
                 ManagementClient orchestrator = getOrchestrator(requestLayout);
                 UUID workflowId = sendRequest(orchestrator);
+
+                System.err.println("Wait for workflow. Node: " + nodeForWorkflow);
                 waitForWorkflow(workflowId, orchestrator, timeout, pollPeriod);
             } catch (NetworkException | TimeoutException e) {
                 log.warn("WorkflowRequest: Error while running {} on attempt {}, cause {}", this, x, e);

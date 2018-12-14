@@ -8,13 +8,82 @@ import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.junit.Test;
 
+import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Random;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
 
 public class ClusterResizeIT extends GenericIntegrationTest {
+    private static final Random RND = new SecureRandom();
+
+    /**
+     * For all nodes:
+     * - remove a node from the cluster
+     * - add the node back to the cluster
+     *
+     * After all check corfu cluster.
+     */
+    @Test//(timeout = 300000)
+    public void testShrinkAndRestoreNodesOneByOne() {
+        final int iterations = 1000;
+
+        getScenario().describe((fixture, testCase) -> {
+            ClientParams clientFixture = fixture.getClient();
+            CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
+            CorfuClient corfuClient = corfuCluster.getLocalCorfuClient();
+
+            CorfuTable<String, String> table =
+                    corfuClient.createDefaultCorfuTable(TestFixtureConst.DEFAULT_STREAM_NAME);
+
+            for (int i = 0; i < TestFixtureConst.DEFAULT_TABLE_ITER; i++) {
+                table.put(String.valueOf(i), String.valueOf(i));
+            }
+
+            List<CorfuServer> clusterNodes = corfuCluster.<CorfuServer>nodes().values().asList();
+
+            List<CorfuServer> load = new ArrayList<>();
+
+            for (int i = 0; i < iterations; i++) {
+                int index = RND.nextInt(clusterNodes.size());
+                load.add(clusterNodes.get(index));
+            }
+
+            int index = 0;
+            for (CorfuServer server: load) {
+                long start = System.currentTimeMillis();
+                System.err.println("!!!!!!!!!!!!!!!! REMOVE node");
+                corfuClient.getManagementView().removeNode(
+                        server.getEndpoint(),
+                        clientFixture.getNumRetry(),
+                        clientFixture.getTimeout(),
+                        clientFixture.getPollPeriod()
+                );
+
+                System.err.println("!!!!!!!!!!!!!!!! ADD node");
+                corfuClient.getManagementView().addNode(
+                        server.getEndpoint(),
+                        clientFixture.getNumRetry(),
+                        clientFixture.getTimeout(),
+                        clientFixture.getPollPeriod()
+                );
+
+                index++;
+                System.err.println("Iteration: " + index + ", took: " + (System.currentTimeMillis() - start));
+            }
+
+            corfuClient.invalidateLayout();
+            assertThat(corfuClient.getLayout().getAllServers().size()).isEqualTo(corfuCluster.nodes().size());
+
+            // Verify data path working fine
+            for (int x = 0; x < TestFixtureConst.DEFAULT_TABLE_ITER; x++) {
+                assertThat(table.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
+            }
+        });
+    }
 
     /**
      * Test cluster behavior after add/remove nodes
