@@ -1,6 +1,6 @@
 package org.corfudb.runtime.view;
 
-import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
