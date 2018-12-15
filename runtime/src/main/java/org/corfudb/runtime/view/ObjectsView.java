@@ -1,8 +1,5 @@
 package org.corfudb.runtime.view;
 
-import com.sun.xml.internal.bind.v2.TODO;
-
-import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -11,7 +8,6 @@ import javax.annotation.Nonnull;
 
 import lombok.Data;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -21,16 +17,16 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
-import org.corfudb.runtime.object.CorfuCompileWrapperBuilder;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
-import org.corfudb.runtime.object.transactions.TransactionBuilder;
+import org.corfudb.runtime.object.transactions.Transaction;
+import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.util.serializer.Serializers;
+import sun.nio.ch.Net;
 
 /**
  * A view of the objects inside a Corfu instance.
@@ -78,22 +74,27 @@ public class ObjectsView extends AbstractView {
 
         /* If it is a nested transaction, inherit type of parent */
         if (TransactionalContext.isInTransaction()) {
-            type = TransactionalContext.getCurrentContext().getBuilder().getType();
+            type = TransactionalContext.getCurrentContext().getTransaction().getType();
             log.trace("Inheriting parent's transaction type {}", type);
         }
 
         TXBuild()
-                .setType(type)
+                .type(type)
+                .build()
                 .begin();
     }
 
-    /** Builds a new transaction using the transaction
+    /**
+     * Builds a new transaction using the transaction
      * builder.
-     * @return  A transaction builder to build a transaction with.
+     *
+     * @return A transaction builder to build a transaction with.
      */
     @SuppressWarnings({"checkstyle:methodname", "checkstyle:abbreviation"})
     public TransactionBuilder TXBuild() {
-        return new TransactionBuilder(runtime);
+        TransactionBuilder builder = Transaction.builder();
+        builder.runtime(runtime);
+        return builder;
     }
 
     /**
@@ -119,7 +120,7 @@ public class ObjectsView extends AbstractView {
      * Query whether a transaction is currently running.
      *
      * @return True, if called within a transactional context,
-     *         False, otherwise.
+     * False, otherwise.
      */
     @SuppressWarnings({"checkstyle:methodname", "checkstyle:abbreviation"})
     public boolean TXActive() {
@@ -130,7 +131,6 @@ public class ObjectsView extends AbstractView {
      * End a transaction on the current thread.
      *
      * @return The address of the transaction, if it commits.
-     *
      * @throws TransactionAbortedException If the transaction could not be executed successfully.
      */
     @SuppressWarnings({"checkstyle:methodname", "checkstyle:abbreviation"})
@@ -149,8 +149,8 @@ public class ObjectsView extends AbstractView {
                 log.warn("TXEnd[{}] Aborted Exception {}", context, e);
                 TransactionalContext.getCurrentContext().abortTransaction(e);
                 throw e;
-            } catch (NetworkException e) {
-                log.warn("TXEnd[{}] Network Exception {}", context, e);
+            } catch (NetworkException | WriteSizeException e) {
+
                 Token snapshotTimestamp;
                 try {
                     snapshotTimestamp = context.getSnapshotTimestamp();
@@ -158,18 +158,28 @@ public class ObjectsView extends AbstractView {
                     snapshotTimestamp = Token.UNINITIALIZED;
                 }
                 TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
-                    snapshotTimestamp);
+                        snapshotTimestamp);
+
+                AbortCause cause = AbortCause.UNDEFINED;
+                if (e instanceof NetworkException) {
+                    log.warn("TXEnd[{}] Network Exception {}", context, e);
+                    cause = AbortCause.NETWORK;
+                } else if (e instanceof WriteSizeException) {
+                    log.error("TXEnd[{}] transaction size limit exceeded {}", context, e);
+                    cause = AbortCause.SIZE_EXCEEDED;
+                }
+
                 TransactionAbortedException tae = new TransactionAbortedException(txInfo,
-                    null, null, AbortCause.NETWORK, e, context);
+                        null, null, cause, e, context);
                 context.abortTransaction(tae);
                 throw tae;
 
             } catch (Exception e) {
-               log.error("TXEnd[{}]: Unexpected exception", context, e);
+                log.error("TXEnd[{}]: Unexpected exception", context, e);
                 TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
-                    Token.UNINITIALIZED);
+                        Token.UNINITIALIZED);
                 TransactionAbortedException tae = new TransactionAbortedException(txInfo,
-                    null, null, AbortCause.UNDEFINED, e, context);
+                        null, null, AbortCause.UNDEFINED, e, context);
                 context.abortTransaction(tae);
                 throw new UnrecoverableCorfuError("Unexpected exception during commit", e);
             } finally {
@@ -181,7 +191,6 @@ public class ObjectsView extends AbstractView {
     /**
      * Run garbage collection on all opened objects. Note that objects
      * open with the NO_CACHE options will not be gc'd
-     *
      */
     public void gc(long trimMark) {
         for (Object obj : getObjectCache().values()) {

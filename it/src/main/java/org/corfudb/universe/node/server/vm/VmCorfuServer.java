@@ -7,7 +7,6 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.cluster.vm.RemoteOperationHelper;
-import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.NodeException;
 import org.corfudb.universe.node.server.AbstractCorfuServer;
 import org.corfudb.universe.node.server.CorfuServer;
@@ -18,6 +17,7 @@ import org.corfudb.universe.util.IpTablesUtil;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
 
 /**
  * Implements a {@link CorfuServer} instance that is running on VM.
@@ -69,17 +69,37 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     }
 
     /**
-     * Disconnect the VM from the vSphere network
+     * Symmetrically disconnect the server from the cluster,
+     * which creates a complete partition.
      */
     @Override
     public void disconnect() {
-        log.info("Disconnecting the server from the network. VM: {}", params.getVmName());
+        log.info("Disconnecting the VM server: {} from the network.", params.getVmName());
 
         universeParams.getVmIpAddresses().values().stream()
                 .filter(addr -> !addr.equals(getIpAddress()))
                 .forEach(addr -> {
-                    executeSudoCommand(IpTablesUtil.dropInput(addr));
-                    executeSudoCommand(IpTablesUtil.dropOutput(addr));
+                    executeSudoCommand(String.join(" ", IpTablesUtil.dropInput(addr)));
+                    executeSudoCommand(String.join(" ", IpTablesUtil.dropOutput(addr)));
+                });
+    }
+
+    /**
+     * Symmetrically disconnect a server from a list of other servers,
+     * which creates a partial partition.
+     *
+     * @param servers List of servers to disconnect from
+     */
+    @Override
+    public void disconnect(List<CorfuServer> servers) {
+        log.info("Disconnecting the VM server: {} from the specified servers: {}",
+                params.getName(), servers);
+
+        servers.stream()
+                .filter(s -> !s.getParams().equals(params))
+                .forEach(s -> {
+                    executeCommand(String.join(" ", IpTablesUtil.dropInput(s.getIpAddress())));
+                    executeCommand(String.join(" ", IpTablesUtil.dropOutput(s.getIpAddress())));
                 });
     }
 
@@ -88,7 +108,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
      */
     @Override
     public void pause() {
-        log.info("Pausing the Corfu server: {}", params.getName());
+        log.info("Pausing the VM Corfu server: {}", params.getName());
 
         String cmd = "ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -STOP";
         executeCommand(cmd);
@@ -118,14 +138,30 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     }
 
     /**
-     * Reconnect a {@link Node} to the vSphere network
+     * Reconnect a server to the cluster
      */
     @Override
     public void reconnect() {
-        log.info("Reconnecting the corfu server to the network. VM: {}", params.getVmName());
+        log.info("Reconnecting the VM server: {} to the cluster.", params.getVmName());
 
         executeSudoCommand(String.join(" ", IpTablesUtil.cleanInput()));
         executeSudoCommand(String.join(" ", IpTablesUtil.cleanOutput()));
+    }
+
+    /**
+     * Reconnect a server to a list of servers.
+     */
+    @Override
+    public void reconnect(List<CorfuServer> servers) {
+        log.info("Reconnecting the VM server: {} to specified servers: {}",
+                params.getName(), servers);
+
+        servers.stream()
+                .filter(s -> !s.getParams().equals(params))
+                .forEach(s -> {
+                    executeCommand(String.join(" ", IpTablesUtil.revertDropInput(s.getIpAddress())));
+                    executeCommand(String.join(" ", IpTablesUtil.revertDropOutput(s.getIpAddress())));
+                });
     }
 
     /**

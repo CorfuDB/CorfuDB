@@ -1,12 +1,12 @@
 package org.corfudb.runtime.view;
 
-import static org.corfudb.util.Utils.getMaxGlobalTail;
+import static org.corfudb.util.Utils.getTails;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
-import com.github.benmanes.caffeine.cache.CacheLoader;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Iterables;
 
 import java.time.Duration;
@@ -15,11 +15,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import com.google.common.util.concurrent.ExecutionError;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
 import lombok.extern.slf4j.Slf4j;
 
@@ -27,6 +31,7 @@ import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
@@ -54,7 +59,7 @@ public class AddressSpaceView extends AbstractView {
     /**
      * A cache for read results.
      */
-    final LoadingCache<Long, ILogData> readCache = Caffeine.newBuilder()
+    final LoadingCache<Long, ILogData> readCache = CacheBuilder.newBuilder()
             .maximumSize(runtime.getParameters().getNumCacheEntries())
             .expireAfterAccess(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
             .expireAfterWrite(runtime.getParameters().getCacheExpiryTime(), TimeUnit.SECONDS)
@@ -79,7 +84,7 @@ public class AddressSpaceView extends AbstractView {
         MetricRegistry metrics = runtime.getMetrics();
         final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(),
                                          this.hashCode());
-        metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::estimatedSize);
+        metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::size);
         metrics.register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
         metrics.register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
         metrics.register(pfx + "hits", (Gauge<Long>) () -> readCache.stats().hitCount());
@@ -225,7 +230,20 @@ public class AddressSpaceView extends AbstractView {
      */
     public @Nonnull ILogData read(long address) {
         if (!runtime.getParameters().isCacheDisabled()) {
-            ILogData data = readCache.get(address);
+            ILogData data;
+            try {
+                data = readCache.get(address);
+            } catch (ExecutionException | UncheckedExecutionException e) {
+                // Guava wraps the exceptions thrown from the lower layers, therefore
+                // we need to unwrap them before throwing them to the upper layers that
+                // don't understand the guava exceptions
+                Throwable cause = e.getCause();
+                if (cause instanceof RuntimeException) {
+                    throw (RuntimeException) cause;
+                } else {
+                    throw new RuntimeException(cause);
+                }
+            }
             if (data == null || data.getType() == DataType.EMPTY) {
                 throw new RuntimeException("Unexpected return of empty data at address "
                         + address + " on read");
@@ -246,7 +264,16 @@ public class AddressSpaceView extends AbstractView {
     public Map<Long, ILogData> read(Iterable<Long> addresses) {
         Map<Long, ILogData> addressesMap;
         if (!runtime.getParameters().isCacheDisabled()) {
-            addressesMap = readCache.getAll(addresses);
+            try {
+                addressesMap = readCache.getAll(addresses);
+            } catch (ExecutionException | UncheckedExecutionException e) {
+                Throwable cause = e.getCause();
+                if (cause instanceof RuntimeException) {
+                    throw (RuntimeException) cause;
+                } else {
+                    throw new RuntimeException(cause);
+                }
+            }
         } else {
             addressesMap = this.cacheFetch(addresses);
         }
@@ -271,19 +298,32 @@ public class AddressSpaceView extends AbstractView {
                             .flatMap(stripe -> stripe.getLogServers().stream())
                             .map(e::getLogUnitClient)
                             .map(LogUnitClient::getTrimMark)
-                            .map(CFUtils::getUninterruptibly)
+                            .map(future -> {
+                                // This doesn't look nice, but its required to trigger
+                                // the retry mechanism in AbstractView. Also, getUninterruptibly
+                                // can't be used here because it throws a UnrecoverableCorfuInterruptedError
+                                try {
+                                    return future.join();
+                                } catch (CompletionException ex) {
+                                    Throwable cause = ex.getCause();
+                                    if (cause instanceof RuntimeException) {
+                                        throw (RuntimeException) cause;
+                                    } else {
+                                        throw new RuntimeException(cause);
+                                    }
+                                }
+                            })
                             .max(Comparator.naturalOrder()).get();
                     return new Token(e.getLayout().getEpoch(), trimMark);
                 });
-
     }
 
     /**
      * Get the last address in the address space
      */
-    public Token getLogTail() {
+    public TailsResponse getAllTails() {
         return layoutHelper(
-                e -> getMaxGlobalTail(e.getLayout(), runtime));
+                e -> getTails(e.getLayout(), runtime));
     }
 
     /**

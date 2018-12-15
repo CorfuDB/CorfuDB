@@ -104,4 +104,14 @@ public class ScenarioUtils {
             log.info("Successfully waited failure detector to detect cluster down");
         }
     }
+
+    /**
+     * Wait for a specific amount of time. This should only be used when there is nothing
+     * else we can wait on, e.g. no layout change, no cluster status change.
+     *
+     * @param duration duration to wait
+     */
+    static void waitUninterruptibly(Duration duration) {
+        Sleep.sleepUninterruptibly(duration);
+    }
 }

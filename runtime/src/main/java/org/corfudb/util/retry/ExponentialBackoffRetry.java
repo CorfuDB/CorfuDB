@@ -6,7 +6,6 @@ import java.util.Random;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.util.Sleep;
 
 
 /**
@@ -21,7 +20,11 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
 
     private static final int DEFAULT_BASE = 2;
     private static final float DEFAULT_RANDOM_PORTION = 0f;
-    private static final Duration DEFAULT_BACKOFF_DURATION = Duration.ofMinutes(1);
+    // By default set to a max value, so backoff time increases exponentially
+    // until maxDurationExponentialReconnect value is reached, then stays constant.
+    // If the desired behaviour is that exponential calculator restarts after X minutes,
+    // set this variable to this X value.
+    private static final Duration DEFAULT_BACKOFF_DURATION = Duration.ofDays(365);
     private long retryCounter = 0;
     private long nextBackoffTime = 0;
 
@@ -60,8 +63,13 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
         super(runFunction);
     }
 
+    public ExponentialBackoffRetry(IRetryable runFunction, Duration maxRetryThreshold) {
+        super(runFunction);
+        this.maxRetryThreshold = maxRetryThreshold;
+    }
+
     @Override
-    public void nextWait() {
+    public Duration nextWait() {
         if (nextBackoffTime == 0) {
             nextBackoffTime = System.currentTimeMillis() + backoffDuration.toMillis();
         }
@@ -80,7 +88,12 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
             sleepTime = base + extraWait;
             sleepTime -= sleepTime * randomPart;
         }
-        Sleep.MILLISECONDS.sleepUninterruptibly(sleepTime);
+        return Duration.ofMillis(sleepTime);
+    }
+
+    public void reset() {
+        retryCounter = 0;
+        nextBackoffTime = 0;
     }
 
 }

@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.List;
 
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 
 /**
@@ -55,9 +56,9 @@ public interface StreamLog {
     void compact();
 
     /**
-     * Get the last global address that was written.
+     * Get the global tail and stream tails.
      */
-    long getGlobalTail();
+    TailsResponse getTails();
 
     /**
      * Get the first untrimmed address in the address space.

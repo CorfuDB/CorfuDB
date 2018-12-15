@@ -421,10 +421,12 @@ public class SequencerServer extends AbstractServer {
         // Note, this is correct, but conservative (may lead to false abort).
         // It is necessary because we reset the sequencer.
         if (!bootstrapWithoutTailsUpdate) {
+            // Evict all entries from the cache. This eviction triggers the callback modifying the maxConflictWildcard.
+            conflictToGlobalTailCache.cleanUp();
+
             globalLogTail.set(initialToken);
             maxConflictWildcard = initialToken - 1;
             maxConflictNewSequencer = maxConflictWildcard;
-            conflictToGlobalTailCache.invalidateAll();
 
             // Clear the existing map as it could have been populated by an earlier reset.
             streamTailToGlobalTailMap.clear();
@@ -435,9 +437,9 @@ public class SequencerServer extends AbstractServer {
         sequencerEpoch = bootstrapMsgEpoch;
         serverContext.setSequencerEpoch(bootstrapMsgEpoch);
 
-        log.info("Sequencer reset with token = {}, streamTailToGlobalTailMap = {},"
+        log.info("Sequencer reset with token = {}, size {} streamTailToGlobalTailMap = {},"
                         + " sequencerEpoch = {}",
-                globalLogTail.get(), streamTailToGlobalTailMap, sequencerEpoch);
+                globalLogTail.get(), streamTailToGlobalTailMap.size(), streamTailToGlobalTailMap, sequencerEpoch);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 

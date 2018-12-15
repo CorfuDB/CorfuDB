@@ -3,7 +3,7 @@ package org.corfudb.infrastructure.management;
 /**
  * {@link ClusterRecommendationStrategy} is the enumeration of policies each of which representing
  * specific algorithms for evaluating the cluster and providing recommendation on the failure or
- * healing status of servers in a Corfu cluster of servers.
+ * healing status of nodes in a Corfu server cluster.
  *
  * Created by Sam Behnam on 10/19/18.
  */

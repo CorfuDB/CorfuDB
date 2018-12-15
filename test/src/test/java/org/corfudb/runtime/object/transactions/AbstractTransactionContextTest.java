@@ -3,6 +3,7 @@ package org.corfudb.runtime.object.transactions;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.CorfuSharedCounter;
@@ -104,11 +105,17 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
 
     @Test
     public void ensureUserTsIsInherited() {
-        final Token parentTs = new Token(0L, 10L);
+        TokenResponse resp = getRuntime().getSequencerView().next();
+        getRuntime().getAddressSpaceView().write(resp, "data".getBytes());
+
+        final Token parentTs = resp.getToken();
+
         getRuntime().getObjectsView().TXBuild()
-                .setSnapshot(parentTs)
+                .snapshot(parentTs)
+                .build()
                 .begin();
         getRuntime().getObjectsView().TXBuild()
+                .build()
                 .begin();
 
         // Verify that the child inherits the user defined
@@ -135,8 +142,10 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
         }
 
         getRuntime().getObjectsView().TXBuild()
+                .build()
                 .begin();
         getRuntime().getObjectsView().TXBuild()
+                .build()
                 .begin();
 
         // Verify that the child inherits timestamp
@@ -160,16 +169,42 @@ public abstract class AbstractTransactionContextTest extends AbstractTransaction
         final Token childTs = new Token(0L, 5L);
         getRuntime().getObjectsView()
                 .TXBuild()
+                .build()
                 .begin();
         // nest a transaction with a user defined ts
         // and verify that it fails
-        getRuntime().getObjectsView()
+        assertThatThrownBy(() -> getRuntime().getObjectsView()
                 .TXBuild()
-                .setSnapshot(childTs)
-                .begin();
-        assertThatThrownBy(() -> TransactionalContext.getCurrentContext().getSnapshotTimestamp())
+                .snapshot(childTs)
+                .build()
+                .begin())
                 .isInstanceOf(IllegalArgumentException.class);
-        getRuntime().getObjectsView().TXEnd();
+
     }
 
+    @Test
+    public void invalidUserDefinedTs() {
+        final Token emptySlot = new Token(0L, 2);
+
+        assertThatThrownBy(() -> getRuntime().getObjectsView()
+                .TXBuild()
+                .snapshot(emptySlot)
+                .build()
+                .begin())
+                .isInstanceOf(IllegalArgumentException.class);
+
+
+        TokenResponse res = getRuntime().getSequencerView().next();
+        getRuntime().getAddressSpaceView().write(res, "data".getBytes());
+
+        // We construct an invalid token and try to start a new transaction
+        final Token invalidTs = new Token(res.getEpoch() + 1, res.getSequence());
+
+        assertThatThrownBy(() -> getRuntime().getObjectsView()
+                .TXBuild()
+                .snapshot(invalidTs)
+                .build()
+                .begin())
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

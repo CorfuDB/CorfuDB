@@ -424,8 +424,9 @@ public class CheckpointTest extends AbstractObjectTest {
             // start a snapshot TX at position snapshotPosition
             Token timestamp = new Token(0L, snapshotPosition - 1);
             rt.getObjectsView().TXBuild()
-                    .setType(TransactionType.SNAPSHOT)
-                    .setSnapshot(timestamp)
+                    .type(TransactionType.SNAPSHOT)
+                    .snapshot(timestamp)
+                    .build()
                     .begin();
 
             // finally, instantiate the map for the snapshot and assert is has the right state
@@ -510,8 +511,9 @@ public class CheckpointTest extends AbstractObjectTest {
         // TX1: Move object to 1
         Token timestamp = new Token(0L, 1);
         getRuntime().getObjectsView().TXBuild()
-                .setType(TransactionType.SNAPSHOT)
-                .setSnapshot(timestamp)
+                .type(TransactionType.SNAPSHOT)
+                .snapshot(timestamp)
+                .build()
                 .begin();
 
         testMap.get("a");

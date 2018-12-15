@@ -2,12 +2,19 @@ package org.corfudb.runtime.view;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Multimaps;
+import com.google.common.collect.TreeMultimap;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -20,6 +27,8 @@ import org.corfudb.runtime.exceptions.AppendException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.CorfuCompileProxy;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Utils;
@@ -36,6 +45,9 @@ public class StreamsView extends AbstractView {
      */
     public static final String CHECKPOINT_SUFFIX = "_cp";
 
+    @Getter
+    Multimap<UUID, IStreamView> streamCache = Multimaps.synchronizedMultimap(HashMultimap.create());
+
     public StreamsView(final CorfuRuntime runtime) {
         super(runtime);
     }
@@ -51,14 +63,47 @@ public class StreamsView extends AbstractView {
     }
 
     /**
+     * Since streams can also be used by higher level abstractions, some consumers implement
+     * synchronization at a higher level, so the stream implementation doesn't have to
+     * be thread-safe. Also, gc will not be called on unsafe streams therefore gc needs to
+     * be managed by the consumer.
+     *
+     * @param stream stream id
+     * @return an unsafe (not thread safe) stream implementation
+     */
+    public IStreamView getUnsafe(UUID stream) {
+        return this.getUnsafe(stream, StreamOptions.DEFAULT);
+    }
+
+    /**
      * Get a view on a stream. The view has its own pointer to the stream.
      *
      * @param stream The UUID of the stream to get a view on.
      * @return A view
      */
     public IStreamView get(UUID stream, StreamOptions options) {
-        return runtime.getLayoutView().getLayout().getLatestSegment()
+        IStreamView streamView = runtime.getLayoutView().getLayout().getLatestSegment()
                 .getReplicationMode().getStreamView(runtime, stream, options);
+        streamCache.put(stream, streamView);
+        return streamView;
+    }
+
+    public IStreamView getUnsafe(UUID stream, StreamOptions options) {
+        return runtime.getLayoutView().getLayout().getLatestSegment()
+                .getReplicationMode().getUnsafeStreamView(runtime, stream, options);
+    }
+
+    /**
+     * Run garbage collection on all opened streams. Note that opened
+     * unsafe streams will be excluded (because its unsafe for the garbage
+     * collector thread to operate on them while being used by a different
+     * thread).
+     *
+     */
+    public void gc(long trimMark) {
+        for (IStreamView streamView : getStreamCache().values()) {
+            streamView.gc(trimMark);
+        }
     }
 
     /**

@@ -253,7 +253,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Write all CP data.
         r.getObjectsView().TXBuild()
-                .setType(TransactionType.SNAPSHOT)
+                .type(TransactionType.SNAPSHOT)
+                .build()
                 .begin();
         try {
             long startAddress = cpw.startCheckpoint();
@@ -380,8 +381,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 try {
                     Token ts = new Token(0L, thisAddress);
                     r.getObjectsView().TXBuild()
-                            .setType(TransactionType.SNAPSHOT)
-                            .setSnapshot(ts)
+                            .type(TransactionType.SNAPSHOT)
+                            .snapshot(ts)
+                            .build()
                             .begin();
                     m2.size(); // Just call any accessor
                 } catch (TransactionAbortedException tae) {
@@ -393,8 +395,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             } else {
                 Token ts = new Token(0L, globalAddr);
                 r.getObjectsView().TXBuild()
-                        .setType(TransactionType.SNAPSHOT)
-                        .setSnapshot(ts)
+                        .type(TransactionType.SNAPSHOT)
+                        .snapshot(ts)
+                        .build()
                         .begin();
 
                 assertThat(m2.entrySet())

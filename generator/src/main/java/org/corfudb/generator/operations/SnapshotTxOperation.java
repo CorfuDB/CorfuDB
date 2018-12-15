@@ -30,17 +30,11 @@ public class SnapshotTxOperation extends Operation {
 
             // Safety Hack for not having snapshot in the future
 
-            Token currentMax = state.getRuntime().getSequencerView()
-                    .query()
-                    .getToken();
-
-            long snapShotAddress = Long.min(trimMark.getSequence() + delta, currentMax.getSequence());
-
             Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_START);
 
-            // TODO(Maithem) the tail subtraction results in an sequence from a different
-            // epoch, this would fail
-            state.startSnapshotTx(new Token(currentMax.getEpoch(), snapShotAddress));
+            // TODO(Maithem) keep a window of tokens issued in the past and select
+            // a random token to use for user-defined snapshot transactions
+            state.startSnapshotTx();
 
             int numOperations = state.getOperationCount().sample(1).get(0);
             List<Operation> operations = state.getOperations().sample(numOperations);

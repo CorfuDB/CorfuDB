@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -93,7 +94,7 @@ public abstract class AbstractTransactionalContext implements
      * The builder used to create this transaction.
      */
     @Getter
-    public final TransactionBuilder builder;
+    public final Transaction transaction;
 
     /**
      * The start time of the context.
@@ -139,9 +140,9 @@ public abstract class AbstractTransactionalContext implements
     @Getter
     private final Map<UUID, Long> knownStreamPosition = new HashMap<>();
 
-    AbstractTransactionalContext(TransactionBuilder builder) {
+    AbstractTransactionalContext(Transaction transaction) {
         transactionID = UUID.randomUUID();
-        this.builder = builder;
+        this.transaction = transaction;
 
         startTime = System.currentTimeMillis();
 
@@ -182,7 +183,7 @@ public abstract class AbstractTransactionalContext implements
                                     Token snapshotTimestamp,
                                     ICorfuSMRProxyInternal proxy,
                                     @Nullable Consumer<VersionLockedObject> optimisticStreamSetter) {
-        for (int x = 0; x < this.builder.getRuntime().getParameters().getTrimRetry(); x++) {
+        for (int x = 0; x < this.transaction.getRuntime().getParameters().getTrimRetry(); x++) {
             try {
                 if (optimisticStreamSetter != null) {
                     // Swap ourselves to be the active optimistic stream.
@@ -198,7 +199,7 @@ public abstract class AbstractTransactionalContext implements
                 // If a trim is encountered, we must reset the object
                 vlo.resetUnsafe();
                 if (!te.isRetriable()
-                        || x == this.builder.getRuntime().getParameters().getTrimRetry() - 1) {
+                        || x == this.transaction.getRuntime().getParameters().getTrimRetry() - 1) {
                     // abort the transaction
                     TransactionAbortedException tae =
                             new TransactionAbortedException(
@@ -262,29 +263,22 @@ public abstract class AbstractTransactionalContext implements
      */
     private Token obtainSnapshotTimestamp() {
         final AbstractTransactionalContext parentCtx = getParentContext();
-        final Token txnBuilderTs = getBuilder().getSnapshot();
+        final Token txnBuilderTs = getTransaction().getSnapshot();
         if (parentCtx != null) {
             // If we're in a nested transaction, the first read timestamp
             // needs to come from the root.
             Token parentTimestamp = parentCtx.getSnapshotTimestamp();
-            if (!txnBuilderTs.equals(Token.UNINITIALIZED)
-                    && !txnBuilderTs.equals(parentTimestamp)) {
-                String msg = String.format("Attempting to nest transactions with" +
-                        " different timestamps, parent ts=%s, user defined ts=%s", parentCtx.getSnapshotTimestamp(),
-                        txnBuilderTs);
-                throw new IllegalArgumentException(msg);
-            }
-            log.trace("obtainSnapshotTimestamp: nested transaction, inheriting parent" +
+            log.trace("obtainSnapshotTimestamp: inheriting parent snapshot" +
                     " SnapshotTimestamp[{}] {}", this, parentTimestamp);
             return parentTimestamp;
         } else if (!txnBuilderTs.equals(Token.UNINITIALIZED)) {
-            log.trace("obtainSnapshotTimestamp: using snapshot from builder" +
+            log.trace("obtainSnapshotTimestamp: using user defined snapshot" +
                     " SnapshotTimestamp[{}] {}", this, txnBuilderTs);
             return txnBuilderTs;
         } else {
             // Otherwise, fetch a read token from the sequencer the linearize
             // ourselves against.
-            Token timestamp = getBuilder()
+            Token timestamp = getTransaction()
                     .getRuntime()
                     .getSequencerView()
                     .query()
