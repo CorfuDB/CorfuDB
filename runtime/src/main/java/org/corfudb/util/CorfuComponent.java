@@ -12,9 +12,12 @@ public enum CorfuComponent {
     CLIENT_ROUTER("corfu.runtime.client-router."),
     LOG_UNIT_CLIENT("corfu.runtime.log-unit-client."),
     OBJECT("corfu.runtime.object."),
+    CLIENT_SEQUENCER("corfu.runtime.sequencer."),
 
     // Infrastructure components
-    INFRA_MSG_HANDLER("corfu.infrastructure.message-handler.");
+    INFRA_MSG_HANDLER("corfu.infrastructure.message-handler."),
+    INFRA_SEQUENCER("corfu.infrastructure.sequencer."),
+    INFRA_STREAM_OPS("corfu.infrastructure.stream-ops.");
 
     CorfuComponent(String value) {
         this.value = value;
