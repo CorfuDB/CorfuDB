@@ -986,17 +986,17 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
                 1,
                 SequencerMetrics.UNKNOWN,
                 endpoint0Map);
-        NodeState nodeStateEndpoint1 = new NodeState(NodeLocator.parseString(SERVERS.ENDPOINT_0),
+        NodeState nodeStateEndpoint1 = new NodeState(NodeLocator.parseString(SERVERS.ENDPOINT_1),
                 layout.getEpoch(),
                 1,
                 SequencerMetrics.UNKNOWN,
                 endpoint1Map);
-        NodeState nodeStateEndpoint2 = new NodeState(NodeLocator.parseString(SERVERS.ENDPOINT_0),
+        NodeState nodeStateEndpoint2 = new NodeState(NodeLocator.parseString(SERVERS.ENDPOINT_2),
                 layout.getEpoch(),
                 1,
                 SequencerMetrics.UNKNOWN,
                 endpoint2Map);
-        NodeState nodeStateEndpoint3 = new NodeState(NodeLocator.parseString(SERVERS.ENDPOINT_0),
+        NodeState nodeStateEndpoint3 = new NodeState(NodeLocator.parseString(SERVERS.ENDPOINT_3),
                 layout.getEpoch(),
                 1,
                 SequencerMetrics.UNKNOWN,
