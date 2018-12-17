@@ -3,6 +3,8 @@ package org.corfudb.infrastructure;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
+import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -126,26 +128,21 @@ public class SequencerServer extends AbstractServer {
      */
     public SequencerServer(ServerContext serverContext) {
         this.serverContext = serverContext;
-        Map<String, Object> opts = serverContext.getServerConfig();
+        Config config = Config.parse(serverContext.getServerConfig());
+
         this.executor = Executors.newFixedThreadPool(
                 serverContext.getSequencerThreadCount(),
                 new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler())
         );
 
-        long initialToken = Utils.parseLong(opts.get("--initial-token"));
+        long initialToken = config.getInitialToken();
         if (Address.nonAddress(initialToken)) {
-            globalLogTail.set(0L);
+            globalLogTail.set(Address.getMinAddress());
         } else {
             globalLogTail.set(initialToken);
         }
 
-        long cacheSize = 250_000;
-        if (opts.get("--sequencer-cache-size") != null) {
-            cacheSize = Long.parseLong((String) opts.get("--sequencer-cache-size"));
-
-        }
-
-        this.cache = new SequencerServerCache(cacheSize);
+        this.cache = new SequencerServerCache(config.getCacheSize());
 
         setUpTimerNameCache();
     }
@@ -553,5 +550,26 @@ public class SequencerServer extends AbstractServer {
     @Override
     public void shutdown() {
         super.shutdown();
+    }
+
+    /**
+     * Sequencer server configuration
+     */
+    @Builder
+    @Getter
+    public static class Config {
+        private static final long DEFAULT_CACHE_SIZE = 250000L;
+
+        private final long initialToken;
+        @Default
+        private final long cacheSize = DEFAULT_CACHE_SIZE;
+
+        public static Config parse(Map<String, Object> opts) {
+            long cacheSize = Utils.parseLong(opts.getOrDefault("--sequencer-cache-size", DEFAULT_CACHE_SIZE));
+            return Config.builder()
+                    .initialToken(Utils.parseLong(opts.get("--initial-token")))
+                    .cacheSize(cacheSize)
+                    .build();
+        }
     }
 }
