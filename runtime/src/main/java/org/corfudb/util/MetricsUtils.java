@@ -110,19 +110,19 @@ public class MetricsUtils {
         metricsJvmCollectionEnabled = Boolean.valueOf(System.getProperty(PROPERTY_JVM_METRICS_COLLECTION));
 
         metricsLogInterval = Long.valueOf(System.getProperty(PROPERTY_LOG_INTERVAL, "0"));
-        metricsSlf4jReportingEnabled = metricsLogInterval > 0 ? true : false;
+        metricsSlf4jReportingEnabled = metricsLogInterval > 0;
 
         metricsCsvInterval = Long.valueOf(System.getProperty(PROPERTY_CSV_INTERVAL, "0"));
         metricsCsvFolder = String.valueOf(System.getProperty(PROPERTY_CSV_FOLDER));
-        metricsCsvReportingEnabled = metricsCsvInterval > 0 ? true : false;
+        metricsCsvReportingEnabled = metricsCsvInterval > 0;
     }
 
     /**
-     * Check if the metricsReportingSetup() function has been called
-     * on 'metrics' before now.
+     * Check whether the metrics reporting has been already set up using metricsReportingSetup.
      *
      * @param metrics Metric Registry
-     * @return True if metricsReportingSetup() function has been called earlier
+     * @return a boolean representing whether metrics reporting has been already set up.
+     * earlier
      */
     public static boolean isMetricsReportingSetUp(@NonNull MetricRegistry metrics) {
         return metrics.getNames().contains(mpTrigger);
@@ -295,7 +295,7 @@ public class MetricsUtils {
      * This method adds different properties of provided instance of {@link Cache} to the
      * indicated metrics registry. The added properties of cache are:
      *
-     * cache.object-counts: estemated size of cache.
+     * cache.object-counts: estimated size of cache.
      * cache.evictions : number of cache evictions
      * cache.hit-rate : hit rate of cache.
      * cache.hits :

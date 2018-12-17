@@ -1,10 +1,11 @@
 package org.corfudb.infrastructure.log;
 
-import com.codahale.metrics.Counter;
+import com.codahale.metrics.Timer;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
 
 import java.time.Duration;
 import java.util.concurrent.Executors;
@@ -20,7 +21,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 public class StreamLogCompaction {
-    public static final String STREAM_COMPACT_METRIC = StreamLogCompaction.class.getName();
+    static final String STREAM_COMPACT_METRIC = CorfuComponent.INFRA_STREAM_OPS + "compaction";
 
     private final ThreadFactory threadFactory = new ThreadFactoryBuilder()
             .setDaemon(true)
@@ -28,12 +29,12 @@ public class StreamLogCompaction {
             .build();
 
     /**
-     * How many times log compaction executed
+     * A timer that collect metrics about log compaction
      */
-    private final Counter gcCounter = ServerContext.metrics.counter(STREAM_COMPACT_METRIC);
+    private final Timer compactionTimer = ServerContext.getMetrics().timer(STREAM_COMPACT_METRIC);
 
     /**
-     * A scheduler, which is used to schedule periodic garbage collection.
+     * A scheduler, which is used to schedule periodic stream log compaction for garbage collection.
      */
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(threadFactory);
     private final ScheduledFuture<?> compactor;
@@ -43,12 +44,11 @@ public class StreamLogCompaction {
                                Duration shutdownTimer) {
         this.shutdownTimer = shutdownTimer;
         Runnable task = () -> {
-            gcCounter.inc();
-            log.debug("Start log compaction. GC counter: {}", gcCounter.getCount());
-            try {
+            log.debug("Start log compaction.");
+            try (Timer.Context context = MetricsUtils.getConditionalContext(compactionTimer)){
                 streamLog.compact();
             } catch (Exception ex) {
-                log.error("Can't compact stream log. GC counter: {}", gcCounter.getCount(), ex);
+                log.error("Can't compact stream log.", ex);
             }
         };
         compactor = scheduler.scheduleWithFixedDelay(task, initialDelay, period, timeUnit);
