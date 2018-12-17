@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure;
 
+import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
+
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -8,9 +10,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
-import org.corfudb.infrastructure.management.FailureDetector;
-import org.corfudb.infrastructure.management.HealingDetector;
-import org.corfudb.infrastructure.management.IDetector;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -37,8 +36,6 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
 /**
  * Server Context:
@@ -84,7 +81,7 @@ public class ServerContext implements AutoCloseable {
     private static final String EPOCH_WATER_MARK = "EPOCH_WATER_MARK";
 
     /** The node Id, stored as a base64 string. */
-    public static final String NODE_ID = "NODE_ID";
+    private static final String NODE_ID = "NODE_ID";
 
     /**
      * various duration constants.
@@ -125,7 +122,7 @@ public class ServerContext implements AutoCloseable {
     private boolean bindToAllInterfaces = false;
 
     @Getter
-    public static final MetricRegistry metrics = new MetricRegistry();
+    private static final MetricRegistry metrics = new MetricRegistry();
 
     @Getter
     private final Set<String> dsFilePrefixesForCleanup =
@@ -148,15 +145,15 @@ public class ServerContext implements AutoCloseable {
         final boolean providedEventLoops =
                  getChannelImplementation().equals(ChannelImplementation.LOCAL);
 
-        clientGroup = providedEventLoops
-            ? getServerConfig(EventLoopGroup.class, "client") :
-            getNewClientGroup();
-        workerGroup = providedEventLoops
-            ? getServerConfig(EventLoopGroup.class, "worker") :
-            getNewWorkerGroup();
-        bossGroup = providedEventLoops
-            ? getServerConfig(EventLoopGroup.class, "boss") :
-            getNewBossGroup();
+        if (providedEventLoops) {
+            clientGroup = getServerConfig(EventLoopGroup.class, "client");
+            workerGroup = getServerConfig(EventLoopGroup.class, "worker");
+            bossGroup = getServerConfig(EventLoopGroup.class, "boss");
+        } else {
+            clientGroup = getNewClientGroup();
+            workerGroup = getNewWorkerGroup();
+            bossGroup = getNewBossGroup();
+        }
 
         // Metrics setup & reporting configuration
         if (!isMetricsReportingSetUp(metrics)) {
@@ -173,7 +170,7 @@ public class ServerContext implements AutoCloseable {
      * fileName when so that the number of these files don't exceed the user-defined
      * retention limit. Cleanup is always done on files with lower epochs.
      */
-    void dataStoreFileCleanup(String fileName) {
+    private void dataStoreFileCleanup(String fileName) {
         String logDirPath = getServerConfig(String.class, "--log-path");
         if (logDirPath == null) {
             return;
@@ -211,16 +208,22 @@ public class ServerContext implements AutoCloseable {
                 });
     }
 
-    /** Get the {@link ChannelImplementation}to use.
+    /**
+     * Get the {@link ChannelImplementation} to use.
      *
-     * @return              The server channel type.
+     * @return The server channel type.
      */
-    public ChannelImplementation getChannelImplementation() {
+    ChannelImplementation getChannelImplementation() {
         final String type = getServerConfig(String.class, "--implementation");
         return ChannelImplementation.valueOf(type.toUpperCase());
     }
 
-
+    /**
+     * Get an instance of {@link CorfuRuntimeParameters} representing the default Corfu Runtime's
+     * parameters.
+     *
+     * @return an instance of {@link CorfuRuntimeParameters}
+     */
     public CorfuRuntimeParameters getDefaultRuntimeParameters() {
         return CorfuRuntime.CorfuRuntimeParameters.builder()
                 .nettyEventLoop(clientGroup)
@@ -237,8 +240,8 @@ public class ServerContext implements AutoCloseable {
                 .build();
     }
 
-    /** Generate a Node Id if not present.
-     *
+    /**
+     * Generate a Node Id if not present.
      */
     private void generateNodeId() {
         String currentId = getDataStore().get(String.class, "", ServerContext.NODE_ID);
@@ -251,7 +254,8 @@ public class ServerContext implements AutoCloseable {
         }
     }
 
-    /** Get the node id as an UUID.
+    /**
+     * Get the node id as an UUID.
      *
      * @return  A UUID for this node.
      */
@@ -267,7 +271,8 @@ public class ServerContext implements AutoCloseable {
         return getDataStore().get(String.class, "", ServerContext.NODE_ID);
     }
 
-    /** Get a field from the server configuration map.
+    /**
+     * Get a field from the server configuration map.
      *
      * @param type          The type of the field.
      * @param optionName    The name of the option to retrieve.
@@ -280,8 +285,9 @@ public class ServerContext implements AutoCloseable {
     }
 
 
-    /** Install a single node layout if and only if no layout is currently installed.
-     *  Synchronized, so this method is thread-safe.
+    /**
+     * Install a single node layout if and only if no layout is currently installed.
+     * Synchronized, so this method is thread-safe.
      *
      *  @return True, if a new layout was installed, false otherwise.
      */
@@ -293,8 +299,9 @@ public class ServerContext implements AutoCloseable {
         return false;
     }
 
-    /** Get a new single node layout used for self-bootstrapping a server started with
-     *  the -s flag.
+    /**
+     * Get a new single node layout used for self-bootstrapping a server started with
+     * the -s flag.
      *
      *  @returns A new single node layout with a unique cluster Id
      *  @throws IllegalArgumentException    If the cluster id was not auto, base64 or a UUID string
@@ -335,8 +342,10 @@ public class ServerContext implements AutoCloseable {
         );
     }
 
-    /** Get the current {@link Layout} stored in the {@link DataStore}.
-     *  @return The current stored {@link Layout}
+    /**
+     * Get the current {@link Layout} stored in the {@link DataStore}.
+     *
+     * @return The current stored {@link Layout}
      */
     public Layout getCurrentLayout() {
         return getDataStore().get(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT);
@@ -522,9 +531,10 @@ public class ServerContext implements AutoCloseable {
         }
     }
 
-    /** Get a new "boss" group, which services (accepts) incoming connections.
+    /**
+     * Get a new "boss" group, which services (accepts) incoming connections.
      *
-     * @return              A boss group.
+     * @return A boss group.
      */
     private EventLoopGroup getNewBossGroup() {
         final ThreadFactory threadFactory = new ThreadFactoryBuilder()
@@ -536,9 +546,10 @@ public class ServerContext implements AutoCloseable {
         return group;
     }
 
-    /** Get a new "worker" group, which services incoming requests.
+    /**
+     * Get a new "worker" group, which services incoming requests.
      *
-     * @return          A worker group.
+     * @return A worker group.
      */
     private @Nonnull EventLoopGroup getNewWorkerGroup() {
         final ThreadFactory threadFactory = new ThreadFactoryBuilder()
@@ -558,9 +569,10 @@ public class ServerContext implements AutoCloseable {
         return group;
     }
 
-    /** Get a new "client" group, which services incoming client requests.
+    /**
+     * Get a new "client" group, which services incoming client requests.
      *
-     * @return          A worker group.
+     * @return A worker group.
      */
     private @Nonnull EventLoopGroup getNewClientGroup() {
         final ThreadFactory threadFactory = new ThreadFactoryBuilder()
@@ -580,9 +592,10 @@ public class ServerContext implements AutoCloseable {
         return group;
     }
 
-    /** Get the prefix for threads this server creates.
+    /**
+     * Get the prefix for threads this server creates.
      *
-     * @return  A string that should be prepended to threads this server creates.
+     * @return A string that should be prepended to threads this server creates.
      */
     public @Nonnull String getThreadPrefix() {
         final String prefix = getServerConfig(String.class, "--Prefix");
