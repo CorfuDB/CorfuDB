@@ -1,22 +1,9 @@
 package org.corfudb.runtime.object.transactions;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
-
-import javax.annotation.Nullable;
-
 import lombok.Getter;
-import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -26,8 +13,16 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
-import org.corfudb.runtime.view.Address;
 import org.corfudb.util.Utils;
+
+import javax.annotation.Nullable;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 /**
  * Represents a transactional context. Transactional contexts
@@ -56,7 +51,6 @@ import org.corfudb.util.Utils;
  * <p>Created by mwei on 4/4/16.
  */
 @Slf4j
-@ToString
 public abstract class AbstractTransactionalContext implements
         Comparable<AbstractTransactionalContext> {
 
