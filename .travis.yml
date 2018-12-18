@@ -1,7 +1,5 @@
-language: java
 sudo: required
 dist: xenial
-jdk: oraclejdk8
 
 stages:
 - name: test
@@ -20,10 +18,14 @@ cache:
   - "$HOME/.m2"
   - "$HOME/.sonar/cache"
 
-before_install: |
+before_install:
+- curl -s https://get.sdkman.io | bash
+- source $HOME/.sdkman/bin/sdkman-init.sh
+- sdk install 8.0.191-oracle
+- |
   ./mvnw build-helper:parse-version versions:set \
-    -DnewVersion=\${parsedVersion.majorVersion}.\${parsedVersion.minorVersion}.\${parsedVersion.incrementalVersion}-${TRAVIS_BUILD_NUMBER} \
-    -q
+  -DnewVersion=\${parsedVersion.majorVersion}.\${parsedVersion.minorVersion}.\${parsedVersion.incrementalVersion}-${TRAVIS_BUILD_NUMBER} \
+  -q
 
 install: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C
 
@@ -67,7 +69,8 @@ notifications:
 
 addons:
   apt:
-    packages: reprepro
+    packages:
+    - reprepro
 
 env:
   global:
