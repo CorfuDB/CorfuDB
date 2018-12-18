@@ -17,11 +17,14 @@ cache:
   directories:
   - "$HOME/.m2"
   - "$HOME/.sonar/cache"
+  - "$HOME/.sdkman"
 
 before_install:
-- curl -s https://get.sdkman.io | bash
-- source $HOME/.sdkman/bin/sdkman-init.sh
-- yes | sdk install java 8.0.191-oracle
+- sudo apt-get install -y python-software-properties debconf-utils
+- sudo add-apt-repository -y ppa:webupd8team/java
+- sudo apt-get update -q
+- echo "oracle-java8-installer shared/accepted-oracle-license-v1-1 select true" | sudo debconf-set-selections
+- sudo apt install -y oracle-java8-installer
 - |
   ./mvnw build-helper:parse-version versions:set \
   -DnewVersion=\${parsedVersion.majorVersion}.\${parsedVersion.minorVersion}.\${parsedVersion.incrementalVersion}-${TRAVIS_BUILD_NUMBER} \
