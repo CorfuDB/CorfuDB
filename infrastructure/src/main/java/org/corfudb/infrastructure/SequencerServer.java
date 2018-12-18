@@ -4,6 +4,7 @@ import static org.corfudb.protocols.wireprotocol.TokenType.TX_ABORT_NEWSEQ;
 import static org.corfudb.protocols.wireprotocol.TokenType.TX_ABORT_SEQ_OVERFLOW;
 
 import com.codahale.metrics.Timer;
+import com.codahale.metrics.Timer.Context;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -44,6 +45,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -142,6 +144,8 @@ public class SequencerServer extends AbstractServer {
      */
     private final Map<Byte, String> timerNameCache = new HashMap<>();
 
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
     /**
      * Handler for this server.
      */
@@ -168,7 +172,7 @@ public class SequencerServer extends AbstractServer {
     ThreadFactory threadFactory = new ServerThreadFactory("sequencer-",
             new ServerThreadFactory.ExceptionHandler());
 
-    ExecutorService executor = Executors.newSingleThreadExecutor(threadFactory);
+    private final ExecutorService executor = Executors.newFixedThreadPool(2, threadFactory);
 
     @Override
     public ExecutorService getExecutor() {
@@ -247,8 +251,7 @@ public class SequencerServer extends AbstractServer {
      * @return Returns the type of token reponse based on whether the txn commits, or the abort
      *     cause.
      */
-    private TokenType txnCanCommit(TxResolutionInfo txInfo, /** Input. */
-                                  AtomicReference<byte[]> conflictKey /** Output. */) {
+    private TokenType txnCanCommit(TxResolutionInfo txInfo, AtomicReference<byte[]> conflictKey) {
         log.trace("Commit-req[{}]", txInfo);
         final Token txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
 
@@ -256,14 +259,12 @@ public class SequencerServer extends AbstractServer {
         // epoch, so we need to reject transactions that have a snapshot
         // timestamp with a different epoch than the this sequencer's epoch.
         if (txSnapshotTimestamp.getEpoch() != sequencerEpoch) {
-            log.debug("ABORT[{}] snapshot-ts[{}] current epoch[{}]", txInfo,
-                    txSnapshotTimestamp, sequencerEpoch);
+            log.debug("ABORT[{}] snapshot-ts[{}] current epoch[{}]", txInfo, txSnapshotTimestamp, sequencerEpoch);
             return TokenType.TX_ABORT_NEWSEQ;
         }
 
         if (txSnapshotTimestamp.getSequence() < trimMark) {
-            log.debug("ABORT[{}] snapshot-ts[{}] trimMark-ts[{}]", txInfo,
-                    txSnapshotTimestamp, trimMark);
+            log.debug("ABORT[{}] snapshot-ts[{}] trimMark-ts[{}]", txInfo, txSnapshotTimestamp, trimMark);
             return TokenType.TX_ABORT_SEQ_TRIM;
         }
 
@@ -277,9 +278,8 @@ public class SequencerServer extends AbstractServer {
             // if conflict-parameters are present, check for conflict based on conflict-parameter
             // updates
             Set<byte[]> conflictParamSet = entry.getValue();
-            if (conflictParamSet != null && conflictParamSet.size() > 0) {
-                // for each key pair, check for conflict;
-                // if not present, check against the wildcard
+            if (conflictParamSet != null && !conflictParamSet.isEmpty()) {
+                // for each key pair, check for conflict if not present, check against the wildcard
                 for (byte[] conflictParam : conflictParamSet) {
 
                     String conflictKeyHash = getConflictHashCode(entry.getKey(),
@@ -324,8 +324,7 @@ public class SequencerServer extends AbstractServer {
                         return null;
                     }
                     if (v > txSnapshotTimestamp.getSequence()) {
-                        log.debug("ABORT[{}] conflict-stream[{}](ts={})",
-                                txInfo, Utils.toReadableId(streamId), v);
+                        log.debug("ABORT[{}] conflict-stream[{}](ts={})", txInfo, Utils.toReadableId(streamId), v);
                         response.set(TokenType.TX_ABORT_CONFLICT);
                     }
                     return v;
@@ -346,54 +345,69 @@ public class SequencerServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    private void handleTokenQuery(CorfuPayloadMsg<TokenRequest> msg,
-                                  ChannelHandlerContext ctx, IServerRouter r) {
+    private void handleTokenQuery(CorfuPayloadMsg<TokenRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
         List<UUID> streams = req.getStreams();
         List<Long> streamTails;
         Token token;
-        if (req.getStreams().isEmpty()) {
-            // Global tail query
-            token = new Token(sequencerEpoch, globalLogTail.get() - 1);
-            streamTails = Collections.emptyList();
-        } else if (req.getStreams().size() == 1) {
-            // single stream query
-            token = new Token(sequencerEpoch, streamTailToGlobalTailMap.getOrDefault(streams.get(0), Address.NON_EXIST));
-            streamTails = Collections.emptyList();
-        } else {
-            // multiple stream query, the token is populated with the global tail and the tail queries are stored in
-            // streamTails
-            token = new Token(sequencerEpoch, globalLogTail.get() - 1);
-            streamTails = new ArrayList<>(streams.size());
-            for (int x = 0; x < streams.size(); x++) {
-                streamTails.add(streamTailToGlobalTailMap.getOrDefault(streams.get(x), Address.NON_EXIST));
+
+        try {
+            lock.writeLock().lock();
+
+            if (req.getStreams().isEmpty()) {
+                // Global tail query
+                token = new Token(sequencerEpoch, globalLogTail.get() - 1);
+                streamTails = Collections.emptyList();
+            } else if (req.getStreams().size() == 1) {
+                // single stream query
+                token = new Token(
+                        sequencerEpoch,
+                        streamTailToGlobalTailMap.getOrDefault(streams.get(0), Address.NON_EXIST)
+                );
+                streamTails = Collections.emptyList();
+            } else {
+                // multiple stream query, the token is populated with the global tail and the tail queries are stored in
+                // streamTails
+                token = new Token(sequencerEpoch, globalLogTail.get() - 1);
+                streamTails = new ArrayList<>(streams.size());
+                for (UUID stream : streams) {
+                    streamTails.add(streamTailToGlobalTailMap.getOrDefault(stream, Address.NON_EXIST));
+                }
             }
+        } finally {
+            lock.writeLock().unlock();
         }
 
-        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, Collections.emptyMap(),
-                streamTails)));
+        TokenResponse payload = new TokenResponse(
+                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, Collections.emptyMap(), streamTails
+        );
 
+        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(payload));
     }
 
 
     @ServerHandler(type = CorfuMsgType.SEQUENCER_TRIM_REQ)
-    public synchronized void trimCache(CorfuPayloadMsg<Long> msg,
-                                       ChannelHandlerContext ctx, IServerRouter r) {
-        log.info("trimCache: Starting cache eviction");
-        if (trimMark < msg.getPayload()) {
-            // Advance the trim mark, if the new trim request has a higher trim mark.
-            trimMark = msg.getPayload();
+    public void trimCache(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        try {
+            lock.writeLock().lock();
+            log.info("trimCache: Starting cache eviction");
+            if (trimMark < msg.getPayload()) {
+                // Advance the trim mark, if the new trim request has a higher trim mark.
+                trimMark = msg.getPayload();
+            }
+
+            long entries = 0;
+            for (Map.Entry<String, Long> entry : conflictToGlobalTailCache.asMap().entrySet()) {
+                if (entry.getValue() < trimMark) {
+                    conflictToGlobalTailCache.invalidate(entry.getKey());
+                    entries++;
+                }
+            }
+            log.info("trimCache: Evicted {} entries", entries);
+        } finally {
+            lock.writeLock().unlock();
         }
 
-        long entries = 0;
-        for (Map.Entry<String, Long> entry : conflictToGlobalTailCache.asMap().entrySet()) {
-            if (entry.getValue() < trimMark) {
-                conflictToGlobalTailCache.invalidate(entry.getKey());
-                entries++;
-            }
-        }
-        log.info("trimCache: Evicted {} entries", entries);
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
@@ -401,8 +415,7 @@ public class SequencerServer extends AbstractServer {
      * Service an incoming request to reset the sequencer.
      */
     @ServerHandler(type = CorfuMsgType.BOOTSTRAP_SEQUENCER)
-    public synchronized void resetServer(CorfuPayloadMsg<SequencerTailsRecoveryMsg> msg,
-                                         ChannelHandlerContext ctx, IServerRouter r) {
+    public void resetServer(CorfuPayloadMsg<SequencerTailsRecoveryMsg> msg, ChannelHandlerContext ctx, IServerRouter r) {
         long initialToken = msg.getPayload().getGlobalTail();
         final Map<UUID, Long> streamTails = msg.getPayload().getStreamTails();
         final long bootstrapMsgEpoch = msg.getPayload().getSequencerEpoch();
@@ -413,54 +426,61 @@ public class SequencerServer extends AbstractServer {
         final boolean bootstrapWithoutTailsUpdate = msg.getPayload()
                 .getBootstrapWithoutTailsUpdate();
 
-        // If sequencerEpoch is -1 (startup) OR bootstrapMsgEpoch is not the consecutive epoch of
-        // the sequencerEpoch then the sequencer should not accept bootstrapWithoutTailsUpdate
-        // bootstrap messages.
-        if (bootstrapWithoutTailsUpdate
-                && (sequencerEpoch == Layout.INVALID_EPOCH
-                || bootstrapMsgEpoch != sequencerEpoch + 1)) {
-            log.warn("Cannot update existing sequencer. Require full bootstrap. "
-                    + "SequencerEpoch : {}, MsgEpoch : {}", sequencerEpoch, bootstrapMsgEpoch);
+        boolean ack = true;
+        try {
+            lock.writeLock().lock();
+
+            // If sequencerEpoch is -1 (startup) OR bootstrapMsgEpoch is not the consecutive epoch of
+            // the sequencerEpoch then the sequencer should not accept bootstrapWithoutTailsUpdate
+            // bootstrap messages.
+            if (bootstrapWithoutTailsUpdate
+                    && (sequencerEpoch == Layout.INVALID_EPOCH
+                    || bootstrapMsgEpoch != sequencerEpoch + 1)) {
+                log.warn("Cannot update existing sequencer. Require full bootstrap. "
+                        + "SequencerEpoch : {}, MsgEpoch : {}", sequencerEpoch, bootstrapMsgEpoch);
+                ack = false;
+            } else if (serverContext.getSequencerEpoch() >= bootstrapMsgEpoch) {
+                // Stale bootstrap request should be discarded.
+                log.info("Sequencer already bootstrapped at epoch {}. "
+                        + "Discarding bootstrap request with epoch {}", sequencerEpoch, bootstrapMsgEpoch);
+                ack = false;
+            }
+
+            // If the sequencer is reset, then we can't know when was
+            // the latest update to any stream or conflict parameter.
+            // hence, we will accept any bootstrap message with a higher epoch and forget any existing
+            // token count or stream tails.
+            //
+            // Note, this is correct, but conservative (may lead to false abort).
+            // It is necessary because we reset the sequencer.
+            if (!bootstrapWithoutTailsUpdate) {
+                // Evict all entries from the cache. This eviction triggers the callback modifying the maxConflictWildcard.
+                conflictToGlobalTailCache.cleanUp();
+
+                globalLogTail.set(initialToken);
+                maxConflictWildcard = initialToken - 1;
+                maxConflictNewSequencer = maxConflictWildcard;
+
+                // Clear the existing map as it could have been populated by an earlier reset.
+                streamTailToGlobalTailMap.clear();
+                streamTailToGlobalTailMap.putAll(streamTails);
+            }
+
+            // Mark the sequencer as ready after the tails have been populated.
+            sequencerEpoch = bootstrapMsgEpoch;
+            serverContext.setSequencerEpoch(bootstrapMsgEpoch);
+
+            log.info("Sequencer reset with token = {}, size {} streamTailToGlobalTailMap = {}, sequencerEpoch = {}",
+                    globalLogTail.get(), streamTailToGlobalTailMap.size(), streamTailToGlobalTailMap, sequencerEpoch);
+        } finally {
+            lock.writeLock().unlock();
+        }
+
+        if (ack) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        } else {
             r.sendResponse(ctx, msg, CorfuMsgType.NACK.msg());
-            return;
         }
-
-        // Stale bootstrap request should be discarded.
-        if (serverContext.getSequencerEpoch() >= bootstrapMsgEpoch) {
-            log.info("Sequencer already bootstrapped at epoch {}. "
-                    + "Discarding bootstrap request with epoch {}", sequencerEpoch, bootstrapMsgEpoch);
-            r.sendResponse(ctx, msg, CorfuMsgType.NACK.msg());
-            return;
-        }
-
-        // If the sequencer is reset, then we can't know when was
-        // the latest update to any stream or conflict parameter.
-        // hence, we will accept any bootstrap message with a higher epoch and forget any existing
-        // token count or stream tails.
-        //
-        // Note, this is correct, but conservative (may lead to false abort).
-        // It is necessary because we reset the sequencer.
-        if (!bootstrapWithoutTailsUpdate) {
-            // Evict all entries from the cache. This eviction triggers the callback modifying the maxConflictWildcard.
-            conflictToGlobalTailCache.cleanUp();
-
-            globalLogTail.set(initialToken);
-            maxConflictWildcard = initialToken - 1;
-            maxConflictNewSequencer = maxConflictWildcard;
-
-            // Clear the existing map as it could have been populated by an earlier reset.
-            streamTailToGlobalTailMap.clear();
-            streamTailToGlobalTailMap.putAll(streamTails);
-        }
-
-        // Mark the sequencer as ready after the tails have been populated.
-        sequencerEpoch = bootstrapMsgEpoch;
-        serverContext.setSequencerEpoch(bootstrapMsgEpoch);
-
-        log.info("Sequencer reset with token = {}, size {} streamTailToGlobalTailMap = {},"
-                        + " sequencerEpoch = {}",
-                globalLogTail.get(), streamTailToGlobalTailMap.size(), streamTailToGlobalTailMap, sequencerEpoch);
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     /**
@@ -471,21 +491,19 @@ public class SequencerServer extends AbstractServer {
         // Sequencer Ready flag is set to true as this message will be responded to only if the
         // sequencer is in a ready state.
         SequencerMetrics sequencerMetrics = new SequencerMetrics(SequencerStatus.READY);
-        r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.SEQUENCER_METRICS_RESPONSE,
-                sequencerMetrics));
+        r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.SEQUENCER_METRICS_RESPONSE, sequencerMetrics));
     }
 
     /**
      * Service an incoming token request.
      */
     @ServerHandler(type = CorfuMsgType.TOKEN_REQ)
-    public synchronized void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
-                                          ChannelHandlerContext ctx, IServerRouter r) {
+    public void tokenRequest(CorfuPayloadMsg<TokenRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         TokenRequest req = msg.getPayload();
-        final Timer timer = getTimer(req.getReqType());
+        Timer timer = getTimer(req.getReqType());
 
         // dispatch request handler according to request type while collecting the timer metrics
-        try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {
+        try (Context context = MetricsUtils.getConditionalContext(timer)) {
             switch (req.getReqType()) {
                 case TokenRequest.TK_QUERY:
                     handleTokenQuery(msg, ctx, r);
@@ -501,7 +519,6 @@ public class SequencerServer extends AbstractServer {
 
                 default:
                     handleAllocation(msg, ctx, r);
-                    return;
             }
         }
     }
@@ -514,8 +531,7 @@ public class SequencerServer extends AbstractServer {
      * @return an instance {@link Timer} corresponding to the provided {@param reqType}
      */
     private Timer getTimer(byte reqType) {
-        final String timerName = timerNameCache.getOrDefault(reqType,
-                CorfuComponent.INFRA_SEQUENCER + "unknown");
+        String timerName = timerNameCache.getOrDefault(reqType, CorfuComponent.INFRA_SEQUENCER + "unknown");
         return ServerContext.getMetrics().timer(timerName);
     }
 
@@ -527,14 +543,25 @@ public class SequencerServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    private void handleRawToken(CorfuPayloadMsg<TokenRequest> msg,
-                                ChannelHandlerContext ctx, IServerRouter r) {
+    private void handleRawToken(CorfuPayloadMsg<TokenRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         final TokenRequest req = msg.getPayload();
 
-        Token token = new Token(sequencerEpoch, globalLogTail.getAndAdd(req.getNumTokens()));
-        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, Collections.emptyMap(), Collections.emptyList())));
+        Token token;
+        try {
+            lock.writeLock().lock();
+            token = new Token(sequencerEpoch, globalLogTail.getAndAdd(req.getNumTokens()));
+        } finally {
+            lock.writeLock().unlock();
+        }
 
+        TokenResponse tokenResponse = new TokenResponse(
+                TokenType.NORMAL,
+                TokenResponse.NO_CONFLICT_KEY,
+                token,
+                Collections.emptyMap(),
+                Collections.emptyList()
+        );
+        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(tokenResponse));
     }
 
     /**
@@ -559,15 +586,34 @@ public class SequencerServer extends AbstractServer {
         // responsible for an aborted transaction.
         AtomicReference<byte[]> conflictKey = new AtomicReference(TokenResponse.NO_CONFLICT_KEY);
 
-        // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
-        // Token allocation is conditioned on commit.
-        // First, we check if the transaction can commit.
-        TokenType tokenType = txnCanCommit(req.getTxnResolution(), conflictKey);
-        if (tokenType != TokenType.NORMAL) {
-            // If the txn aborts, then DO NOT hand out a token.
-            Token token = new Token(sequencerEpoch, Address.ABORTED);
-            r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(tokenType,
-                    conflictKey.get(), token, Collections.emptyMap(), Collections.emptyList())));
+        Token token = null;
+        TokenType tokenType;
+        boolean aborted = false;
+
+        try {
+            lock.writeLock().lock();
+            // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
+            // Token allocation is conditioned on commit.
+            // First, we check if the transaction can commit.
+            tokenType = txnCanCommit(req.getTxnResolution(), conflictKey);
+            if (tokenType != TokenType.NORMAL) {
+                // If the txn aborts, then DO NOT hand out a token.
+                token = new Token(sequencerEpoch, Address.ABORTED);
+                aborted = true;
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+
+        if (aborted) {
+            TokenResponse payload = new TokenResponse(
+                    tokenType,
+                    conflictKey.get(),
+                    token,
+                    Collections.emptyMap(),
+                    Collections.emptyList()
+            );
+            r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(payload));
             return;
         }
 
@@ -586,59 +632,62 @@ public class SequencerServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    private void handleAllocation(CorfuPayloadMsg<TokenRequest> msg,
-                                  ChannelHandlerContext ctx, IServerRouter r) {
+    private void handleAllocation(CorfuPayloadMsg<TokenRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         final TokenRequest req = msg.getPayload();
 
-        // extend the tail of the global log by the requested # of tokens
-        // currentTail is the first available position in the global log
-        long currentTail = globalLogTail.getAndAdd(req.getNumTokens());
-        long newTail = currentTail + req.getNumTokens();
-
-        // for each streams:
-        //   1. obtain the last back-pointer for this streams, if exists; -1L otherwise.
-        //   2. record the new global tail as back-pointer for this streams.
-        //   3. extend the tail by the requested # tokens.
+        Token token;
         ImmutableMap.Builder<UUID, Long> backPointerMap = ImmutableMap.builder();
-        for (UUID id : req.getStreams()) {
+        try {
+            lock.writeLock().lock();
 
-            // step 1. and 2. (comment above)
-            streamTailToGlobalTailMap.compute(id, (k, v) -> {
-                if (v == null) {
-                    backPointerMap.put(k, Address.NON_EXIST);
+            // extend the tail of the global log by the requested # of tokens
+            // currentTail is the first available position in the global log
+            long currentTail = globalLogTail.getAndAdd(req.getNumTokens());
+            long newTail = currentTail + req.getNumTokens();
+
+            // for each streams:
+            //   1. obtain the last back-pointer for this streams, if exists; -1L otherwise.
+            //   2. record the new global tail as back-pointer for this streams.
+            //   3. extend the tail by the requested # tokens.
+            for (UUID id : req.getStreams()) {
+
+                // step 1. and 2. (comment above)
+                streamTailToGlobalTailMap.compute(id, (k, v) -> {
+                    long address = v == null ? Address.NON_EXIST: v;
+                    backPointerMap.put(k, address);
                     return newTail - 1;
-                } else {
-                    backPointerMap.put(k, v);
-                    return newTail - 1;
+                });
+            }
+
+            // update the cache of conflict parameters
+            if (req.getTxnResolution() != null) {
+                // for each entry
+                // and for each conflict param
+                Map<UUID, Set<byte[]>> conflictParams = req.getTxnResolution().getWriteConflictParams();
+
+                for (UUID key : conflictParams.keySet()) {
+                    // insert an entry with the new timestamp using the hash code based on the param and the stream id.
+                    conflictParams.get(key).forEach(conflictParam ->
+                            conflictToGlobalTailCache.put(getConflictHashCode(key, conflictParam), newTail - 1)
+                    );
                 }
-            });
+            }
+
+            log.trace("token {} backpointers {}", currentTail, backPointerMap.build());
+            // return the token response with the new global tail and the streams backpointers
+            token = new Token(sequencerEpoch, currentTail);
+        } finally {
+          lock.writeLock().unlock();
         }
 
-        // update the cache of conflict parameters
-        if (req.getTxnResolution() != null) {
-            req.getTxnResolution().getWriteConflictParams().entrySet()
-                    .stream()
-                    // for each entry
-                    .forEach(txEntry ->
-                            // and for each conflict param
-                            txEntry.getValue().stream().forEach(conflictParam ->
-                                    // insert an entry with the new timestamp
-                                    // using the hash code based on the param
-                                    // and the stream id.
-                                    conflictToGlobalTailCache.put(
-                                            getConflictHashCode(txEntry
-                                                    .getKey(), conflictParam),
-                                            newTail - 1)));
-        }
-
-        log.trace("token {} backpointers {}",
-                currentTail, backPointerMap.build());
-        // return the token response with the new global tail
-        // and the streams backpointers
-        Token token = new Token(sequencerEpoch, currentTail);
-        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token,
-                backPointerMap.build(), Collections.emptyList())));
+        TokenResponse payload = new TokenResponse(
+                TokenType.NORMAL,
+                TokenResponse.NO_CONFLICT_KEY,
+                token,
+                backPointerMap.build(),
+                Collections.emptyList()
+        );
+        r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(payload));
     }
 
     @Override
