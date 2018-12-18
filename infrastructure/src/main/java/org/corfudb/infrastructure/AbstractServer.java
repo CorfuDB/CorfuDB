@@ -14,9 +14,7 @@ import java.util.concurrent.ExecutorService;
 @Slf4j
 public abstract class AbstractServer {
 
-    @Getter
-    @Setter
-    volatile boolean shutdown;
+    private volatile boolean shutdown;
 
     public AbstractServer() {
         shutdown = false;
@@ -51,6 +49,11 @@ public abstract class AbstractServer {
      * @param r   The router that took in the message.
      */
     public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        if (shutdown) {
+            log.warn("Server received {} but is already shutdown.", msg.getMsgType().toString());
+            return;
+        }
+
         if (!getHandler().handle(msg, ctx, r)) {
             log.warn("Received unhandled message type {}", msg.getMsgType());
         }
@@ -62,7 +65,7 @@ public abstract class AbstractServer {
      * Shutdown the server.
      */
     public void shutdown() {
-        setShutdown(true);
+        shutdown = true;
         getExecutor().shutdownNow();
     }
 
