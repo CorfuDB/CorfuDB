@@ -21,7 +21,7 @@ cache:
 before_install:
 - curl -s https://get.sdkman.io | bash
 - source $HOME/.sdkman/bin/sdkman-init.sh
-- sdk install 8.0.191-oracle
+- sdk ls java
 - |
   ./mvnw build-helper:parse-version versions:set \
   -DnewVersion=\${parsedVersion.majorVersion}.\${parsedVersion.minorVersion}.\${parsedVersion.incrementalVersion}-${TRAVIS_BUILD_NUMBER} \
