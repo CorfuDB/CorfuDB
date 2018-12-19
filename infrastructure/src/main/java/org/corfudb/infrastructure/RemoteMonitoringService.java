@@ -2,33 +2,12 @@ package org.corfudb.infrastructure;
 
 import static org.corfudb.util.LambdaUtils.runSansThrow;
 
-import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
-import java.time.Duration;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.management.ClusterRecommendationEngine;
 import org.corfudb.infrastructure.management.ClusterRecommendationEngineFactory;
 import org.corfudb.infrastructure.management.ClusterRecommendationStrategy;
@@ -45,9 +24,26 @@ import org.corfudb.runtime.view.QuorumFuturesFactory;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.concurrent.SingletonResource;
 
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
 /**
  * Remote Monitoring Service constitutes of failure and healing monitoring and handling.
- * This service is responsible for heartbeat and aggregating the cluster view. This is
+ * This service is responsible for sending heartbeats and aggregating the cluster view. This is
  * updated in the shared context with the management server which serves the heartbeat responses.
  * The failure detector updates the unreachable nodes in the layout.
  * The healing detector heals nodes which were previously marked unresponsive but have now healed.
@@ -195,7 +191,6 @@ public class RemoteMonitoringService implements MonitoringService {
     private synchronized void runDetectionTasks() {
 
         CorfuRuntime corfuRuntime = getCorfuRuntime();
-        getCorfuRuntime().invalidateLayout();
         serverContext.saveManagementLayout(corfuRuntime.getLayoutView().getLayout());
 
         if (!canHandleReconfigurations()) {
