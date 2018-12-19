@@ -5,12 +5,20 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.object.CorfuCompileProxy;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -384,5 +392,76 @@ public class StreamViewTest extends AbstractViewTest {
         // We should get a prefix trim exception when we try to read
         assertThatThrownBy(() -> sv.next())
                 .isInstanceOf(TrimmedException.class);
+    }
+
+    @Test
+    public void testPreviousWithNoCheckpoints() {
+        IStreamView sv = r.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
+        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sv.current()).isNull();
+        final long pos0 = 0l;
+        byte[] payload = "entry1".getBytes();
+        assertThat(sv.append(payload)).isEqualTo(pos0);
+        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(sv.next().getPayload(r)).isEqualTo(payload);
+        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(pos0);
+        assertThat(sv.previous()).isNull();
+        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(Address.NON_ADDRESS);
+        // Calling previous(again) when the stream pointer is pointing to the beginning shouldn't
+        // change the stream pointer
+        assertThat(sv.previous()).isNull();
+        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(Address.NON_ADDRESS);
+    }
+
+    @Test
+    public void testPreviousWithStreamCheckpoint() throws Exception {
+        String stream = "stream1";
+        Map<String, String> map = r.getObjectsView()
+                .build()
+                .setStreamName(stream)
+                .setType(CorfuTable.class)
+                .open();
+
+        map.put("k1", "k1");
+
+        Token baseVersion = r.getSequencerView().query(CorfuRuntime.getStreamID(stream)).getToken();
+
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap(map);
+        Token token = mcw.appendCheckpoints(r, "cp");
+
+        // Add some more write after the checkpoint
+        map.put("k2", "k2");
+        map.put("k3", "k3");
+
+
+        Map<String, String> mapCopy = r.getObjectsView()
+                .build()
+                .setStreamName(stream)
+                .setType(CorfuTable.class)
+                .setOptions(Collections.singleton(ObjectOpenOptions.NO_CACHE))
+                .open();
+
+        mapCopy.size();
+        VersionLockedObject vlo = ((CorfuCompileProxy) ((ICorfuSMR) mapCopy).
+                getCorfuSMRProxy()).getUnderlyingObject();
+
+        Token finalVersion = r.getSequencerView().query().getToken();
+
+        IStreamView sv = r.getStreamsView().get(CorfuRuntime.getStreamID(stream));
+
+        // Need to call this to bump up the stream pointer
+        // TODO(Maithem): other streaming APIs seem to be broken (i.e. they don't increment
+        // the stream pointer).
+        while (sv.nextUpTo(Long.MAX_VALUE) != null);
+
+        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(finalVersion.getSequence());
+        assertThat(sv.previous()).isNotNull();
+        assertThat(sv.previous()).isNull();
+        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(baseVersion.getSequence());
+        // Calling previous on a stream when the pointer points to a a base checkpoint
+        // should throw a TrimmedException
+        assertThatThrownBy(() -> sv.previous()).isInstanceOf(TrimmedException.class);
+        assertThat(sv.getCurrentGlobalPosition()).isEqualTo(baseVersion.getSequence());
     }
 }
