@@ -1,7 +1,5 @@
 package org.corfudb.universe.node.server.docker;
 
-import static com.spotify.docker.client.DockerClient.LogsParam;
-
 import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.LogStream;
 import com.spotify.docker.client.exceptions.DockerException;
@@ -38,6 +36,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static com.spotify.docker.client.DockerClient.LogsParam;
 
 /**
  * Implements a docker instance representing a {@link CorfuServer}.
@@ -140,29 +140,30 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     public void disconnect() {
         log.info("Disconnecting the docker server: {} from the cluster ", params.getName());
 
-        clusterParams.getNodesParams()
-                .stream()
-                .filter(neighbourServer -> !neighbourServer.equals(params))
-                .forEach(neighbourServer -> {
-                    try {
-                        ContainerInfo server = docker.inspectContainer(neighbourServer.getName());
-                        String neighbourIp = server.networkSettings().networks().values().asList().get(0).ipAddress();
+        clusterParams.getNodesParams().forEach(neighbourServer -> {
+            if (neighbourServer.equals(params)) {
+                return;
+            }
 
-                        if (StringUtils.isEmpty(neighbourIp)) {
-                            throw new NodeException("Empty ip address. Container: " + neighbourServer.getName());
-                        }
+            try {
+                ContainerInfo server = docker.inspectContainer(neighbourServer.getName());
+                String neighbourIp = server.networkSettings().networks().values().asList().get(0).ipAddress();
 
-                        // iptables -A INPUT -s $neighbourIp -j DROP
-                        dockerManager.execCommand(params.getName(),
-                                "iptables", "-A", "INPUT", "-s", neighbourIp, "-j", "DROP");
-                        // iptables -A OUTPUT -d $neighbourIp -j DROP
-                        dockerManager.execCommand(params.getName(),
-                                "iptables", "-A", "OUTPUT", "-d", neighbourIp, "-j", "DROP");
-                    } catch (DockerException | InterruptedException ex) {
-                        throw new NodeException("Can't disconnect container: " + params.getName() +
-                                " from docker network ", ex);
-                    }
-                });
+                if (StringUtils.isEmpty(neighbourIp)) {
+                    throw new NodeException("Empty ip address. Container: " + neighbourServer.getName());
+                }
+
+                // iptables -A INPUT -s $neighbourIp -j DROP
+                dockerManager.execCommand(params.getName(),
+                        "iptables", "-A", "INPUT", "-s", neighbourIp, "-j", "DROP");
+                // iptables -A OUTPUT -d $neighbourIp -j DROP
+                dockerManager.execCommand(params.getName(),
+                        "iptables", "-A", "OUTPUT", "-d", neighbourIp, "-j", "DROP");
+            } catch (DockerException | InterruptedException ex) {
+                throw new NodeException("Can't disconnect container: " + params.getName() +
+                        " from docker network ", ex);
+            }
+        });
     }
 
     /**
@@ -177,19 +178,21 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
         log.info("Disconnecting the docker server: {} from specified servers: {}",
                 params.getName(), servers);
 
-        servers.stream()
-               .filter(neighbourServer -> !neighbourServer.getParams().equals(params))
-               .forEach(neighbourServer -> {
-                    try {
-                        dockerManager.execCommand(params.getName(),
-                                IpTablesUtil.dropInput(neighbourServer.getIpAddress()));
-                        dockerManager.execCommand(params.getName(),
-                                IpTablesUtil.dropOutput(neighbourServer.getIpAddress()));
-                    } catch (DockerException | InterruptedException ex) {
-                        throw new NodeException("Can't disconnect container: " + params.getName() +
-                                " from server: " + neighbourServer.getParams().getName(), ex);
-                    }
-                });
+        servers.forEach(neighbourServer -> {
+            if (neighbourServer.getParams().equals(params)) {
+                return;
+            }
+
+            try {
+                dockerManager.execCommand(params.getName(),
+                        IpTablesUtil.dropInput(neighbourServer.getIpAddress()));
+                dockerManager.execCommand(params.getName(),
+                        IpTablesUtil.dropOutput(neighbourServer.getIpAddress()));
+            } catch (DockerException | InterruptedException ex) {
+                throw new NodeException("Can't disconnect container: " + params.getName() +
+                        " from server: " + neighbourServer.getParams().getName(), ex);
+            }
+        });
     }
 
     /**
@@ -252,19 +255,21 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
         log.info("Reconnecting the docker server: {} to specified servers: {}",
                 params.getName(), servers);
 
-        servers.stream()
-               .filter(neighbourServer -> !neighbourServer.getParams().equals(params))
-               .forEach(neighbourServer -> {
-                    try {
-                        dockerManager.execCommand(params.getName(),
-                                IpTablesUtil.revertDropInput(neighbourServer.getIpAddress()));
-                        dockerManager.execCommand(params.getName(),
-                                IpTablesUtil.revertDropOutput(neighbourServer.getIpAddress()));
-                    } catch (DockerException | InterruptedException ex) {
-                        throw new NodeException("Can't reconnect container: " + params.getName() +
-                                " to server: " + neighbourServer.getParams().getName(), ex);
-                    }
-               });
+        servers.forEach(neighbourServer -> {
+            if (neighbourServer.getParams().equals(params)) {
+                return;
+            }
+
+            try {
+                dockerManager.execCommand(params.getName(),
+                        IpTablesUtil.revertDropInput(neighbourServer.getIpAddress()));
+                dockerManager.execCommand(params.getName(),
+                        IpTablesUtil.revertDropOutput(neighbourServer.getIpAddress()));
+            } catch (DockerException | InterruptedException ex) {
+                throw new NodeException("Can't reconnect container: " + params.getName() +
+                        " to server: " + neighbourServer.getParams().getName(), ex);
+            }
+        });
     }
 
     /**
