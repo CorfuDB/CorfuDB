@@ -74,7 +74,8 @@ public class MultiCheckpointWriter<T extends Map> {
                                   BiConsumer<CheckpointEntry, Long> postAppendFunc) {
 
         rt.getObjectsView().TXBuild()
-                .setType(TransactionType.SNAPSHOT)
+                .type(TransactionType.SNAPSHOT)
+                .build()
                 .begin();
 
         Token snapshot = TransactionalContext.getCurrentContext().getSnapshotTimestamp();

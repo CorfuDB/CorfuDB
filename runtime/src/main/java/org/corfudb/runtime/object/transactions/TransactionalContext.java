@@ -77,10 +77,6 @@ public class TransactionalContext {
      */
     public static AbstractTransactionalContext newContext(AbstractTransactionalContext context) {
         log.debug("TX begin[{}]", context);
-        AbstractTransactionalContext parent = getTransactionStack().peekFirst();
-        if (parent != null && parent.getBuilder().getRuntime() != context.getBuilder().getRuntime()) {
-            throw new UnrecoverableCorfuError("Can't nest transactions from different clients!");
-        }
         getTransactionStack().addFirst(context);
         return context;
     }
