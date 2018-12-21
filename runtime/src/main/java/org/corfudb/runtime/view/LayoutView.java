@@ -2,16 +2,7 @@ package org.corfudb.runtime.view;
 
 import static java.util.Arrays.stream;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
@@ -20,6 +11,13 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
+
+import javax.annotation.Nonnull;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/10/15.
@@ -277,13 +275,17 @@ public class LayoutView extends AbstractView {
         committed(epoch, layout, false);
     }
 
+    // FIXME: Commit should not need a quorum of servers to complete.
+    // FIXME: This implementation should be removed as soon as the failure detectors can
+    // FIXME: remedy the servers that missed Commit Messages.
     /**
      * Send committed layout to the old Layout servers and the new Layout Servers.
      * If force is true, then the layout forced on all layout servers.
+     * Currently it will ensure that a quorum of layout servers got the layout commit message.
      */
     @SuppressWarnings("unchecked")
     public void committed(long epoch, Layout layout, boolean force)
-            throws WrongEpochException {
+            throws WrongEpochException, QuorumUnreachableException {
         CompletableFuture<Boolean>[] commitList = layout.getLayoutServers().stream()
                 .map(x -> {
                     CompletableFuture<Boolean> cf = new CompletableFuture<>();
@@ -301,14 +303,21 @@ public class LayoutView extends AbstractView {
                 })
                 .toArray(CompletableFuture[]::new);
 
+        // Make sure a quorum gets to commit.
         int timeouts = 0;
-        int responses = 0;
-        while (responses < commitList.length) {
-            // wait for someone to complete.
+        long wrongEpochRejected = 0L;
+        while (true) {
+            if (commitList.length < getQuorumNumber()) {
+                log.debug("commit: Quorum unreachable, remaining={}, required={}", commitList,
+                        getQuorumNumber());
+                throw new QuorumUnreachableException(commitList.length, getQuorumNumber());
+            }
+
             try {
                 CFUtils.getUninterruptibly(CompletableFuture.anyOf(commitList),
                         WrongEpochException.class, TimeoutException.class, NetworkException.class);
             } catch (WrongEpochException e) {
+                wrongEpochRejected++;
                 if (!force) {
                     throw  e;
                 }
@@ -317,12 +326,31 @@ public class LayoutView extends AbstractView {
                 log.warn("committed: Error while committing", e);
                 timeouts++;
             }
-            responses++;
+
+            // Exclude from the commit list those that completed exceptionally.
             commitList = Arrays.stream(commitList)
                     .filter(x -> !x.isCompletedExceptionally())
                     .toArray(CompletableFuture[]::new);
 
-            log.debug("committed: Successful responses={}, timeouts={}", responses, timeouts);
+            // Count successes.
+            long count = stream(commitList)
+                    .map(x -> {
+                        try {
+                            return x.getNow(false);
+                        } catch (Exception e) {
+                            return false;
+                        }
+                    })
+                    .filter(x -> x)
+                    .count();
+
+            log.debug("commit: Successful responses={}, needed={}, timeouts={}, "
+                            + "wrongEpochRejected={}",
+                    count, getQuorumNumber(), timeouts, wrongEpochRejected);
+
+            if (count >= getQuorumNumber()) {
+                break;
+            }
         }
     }
 }
