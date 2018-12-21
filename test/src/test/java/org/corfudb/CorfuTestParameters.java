@@ -1,14 +1,14 @@
 package org.corfudb;
 
+import static java.time.temporal.ChronoUnit.MILLIS;
+import static java.time.temporal.ChronoUnit.MINUTES;
+import static java.time.temporal.ChronoUnit.SECONDS;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Comparator;
-
-import static java.time.temporal.ChronoUnit.MILLIS;
-import static java.time.temporal.ChronoUnit.MINUTES;
-import static java.time.temporal.ChronoUnit.SECONDS;
 
 
 /** This class contains automatically calculated parameters used for timeouts
@@ -96,16 +96,17 @@ public class CorfuTestParameters {
             System.out.println("Building on travis, increased timeouts, "
                    + "shorter tests and reduced concurrency will be used.");
         }
-        
+
+        // FIXME: increased the long timeout. Should be increased back once test can adjust timeouts
         // Timeouts
         TIMEOUT_VERY_SHORT = TRAVIS_BUILD ? Duration.of(1, SECONDS) :
                                             Duration.of(100, MILLIS);
         TIMEOUT_SHORT = TRAVIS_BUILD ? Duration.of(5, SECONDS) :
-                                        Duration.of(1, SECONDS);
+                                       Duration.of(1, SECONDS);
         TIMEOUT_NORMAL = TRAVIS_BUILD ? Duration.of(20, SECONDS) :
                                         Duration.of(10, SECONDS);
-        TIMEOUT_LONG = TRAVIS_BUILD ? Duration.of(2, MINUTES):
-                                        Duration.of(1, MINUTES);
+        TIMEOUT_LONG = TRAVIS_BUILD ? Duration.of(3, MINUTES):
+                                        Duration.of(2, MINUTES);
 
         // Iterations
         NUM_ITERATIONS_VERY_LOW = TRAVIS_BUILD ? 1 : 10;
