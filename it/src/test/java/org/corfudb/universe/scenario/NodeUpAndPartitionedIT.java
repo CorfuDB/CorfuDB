@@ -70,8 +70,9 @@ public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
                 // servers to change After this, cluster becomes unavailable.
                 // NOTE: cannot use waitForClusterDown() since the partition only happens on server side, client
                 // can still connect to two nodes, write to table so system down handler will not be triggered.
-                server0.disconnect(Arrays.asList(server1, server2));
                 server1.start();
+                Sleep.sleepUninterruptibly(Duration.ofSeconds(2));
+                server0.disconnect(Arrays.asList(server1, server2));
                 waitForLayoutChange(layout -> layout.getUnresponsiveServers()
                                                     .contains(server0.getEndpoint()),
                                     corfuClient);

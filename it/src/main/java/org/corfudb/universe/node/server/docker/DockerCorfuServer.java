@@ -212,6 +212,25 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     public void start() {
         log.info("Starting the corfu server: {}", params.getName());
         dockerManager.start(params.getName());
+
+        if (this.id != null) {
+            try {
+                String ipAddr = docker.inspectContainer(id)
+                        .networkSettings().networks()
+                        .values().asList().get(0)
+                        .ipAddress();
+
+                if (StringUtils.isEmpty(ipAddr)) {
+                    throw new NodeException("Empty Ip address for container: " + params.getName());
+                }
+
+                ipAddress.set(ipAddr);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+
     }
 
     /**
@@ -288,6 +307,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
      *
      * @return docker container id
      */
+    volatile String id;
     private String deployContainer() {
         ContainerConfig containerConfig = buildContainerConfig();
 
@@ -313,6 +333,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
             }
 
             ipAddress.set(ipAddr);
+            this.id = id;
         } catch (InterruptedException | DockerException e) {
             throw new NodeException("Can't start a container", e);
         }
