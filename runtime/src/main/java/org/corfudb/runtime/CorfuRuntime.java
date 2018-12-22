@@ -3,27 +3,8 @@ package org.corfudb.runtime;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
-
-import java.lang.Thread.UncaughtExceptionHandler;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeoutException;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
-
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Data;
@@ -32,7 +13,6 @@ import lombok.Setter;
 import lombok.Singular;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
@@ -49,7 +29,6 @@ import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.AddressSpaceView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutManagementView;
@@ -65,6 +44,21 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
+
+import javax.annotation.Nonnull;
+import java.lang.Thread.UncaughtExceptionHandler;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeoutException;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Created by mwei on 12/9/15.
@@ -879,48 +873,36 @@ public class CorfuRuntime {
             int systemDownTriggerCounter = 0;
 
             while (true) {
+                if (isShutdown) {
+                    return null;
+                }
+                try {
+                    // Fetch the latest layout we can possibly fetch from the list of layout servers.
+                    Layout l = getLatestLayout(layoutServersCopy);
 
-                Collections.shuffle(layoutServersCopy);
-                // Iterate through the layout servers, attempting to connect to one
-                for (String s : layoutServersCopy) {
-                    log.debug("Trying connection to layout server {}", s);
-                    try {
-                        IClientRouter router = getRouter(s);
-                        // Try to get a layout.
-                        CompletableFuture<Layout> layoutFuture =
-                                new LayoutClient(router, Layout.INVALID_EPOCH).getLayout();
-                        // Wait for layout
-                        Layout l = layoutFuture.get();
-
-                        // If the layout we got has a smaller epoch than the latestLayout epoch,
-                        // we discard it.
-                        if (latestLayout != null && latestLayout.getEpoch() > l.getEpoch()) {
-                            log.warn("fetchLayout: Received a layout with epoch {} from server "
-                                            + "{}:{} smaller than latestLayout epoch {}, "
-                                            + "discarded.",
-                                    l.getEpoch(), router.getHost(), router.getPort(),
-                                    latestLayout.getEpoch());
-                            continue;
-                        }
-
+                    // If the layout we got has a smaller epoch than the existing latestLayout epoch,
+                    // we discard it.
+                    if (latestLayout != null && latestLayout.getEpoch() > l.getEpoch()) {
+                        log.warn("fetchLayout: Received a layout with epoch {} "
+                                        + " smaller than latestLayout epoch {}, "
+                                        + "discarded.",
+                                l.getEpoch(),
+                                latestLayout.getEpoch());
+                    } else {
                         checkClusterId(l);
-
-                        layout = layoutFuture;
                         latestLayout = l;
-                        log.debug("Layout server {} responded with layout {}", s, l);
-
+                        CompletableFuture<Layout> completedFuture = new CompletableFuture<Layout>();
+                        completedFuture.complete(latestLayout);
+                        layout = completedFuture;
                         // Prune away removed node routers from the nodeRouterPool.
                         pruneRemovedRouters(l);
 
                         return l;
-                    } catch (InterruptedException ie) {
-                        throw new UnrecoverableCorfuInterruptedError(
-                                "Interrupted during layout fetch", ie);
-                    } catch (Exception e) {
-                        log.warn("Tried to get layout from {} but failed with exception:", s, e);
                     }
+                } catch (Exception e) {
+                    log.warn("Tried to get layout but failed with exception:", e);
                 }
-
+                // logging and invoking system down handler.
                 log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}, "
                                 + "Retried {} times, systemDownHandlerTriggerLimit = {}",
                         parameters.connectionRetryRate, systemDownTriggerCounter,
@@ -930,13 +912,56 @@ public class CorfuRuntime {
                     log.info("fetchLayout: Invoking the systemDownHandler.");
                     parameters.getSystemDownHandler().run();
                 }
-
+                // Backoff for some time before trying to fetch the layout again.
                 Sleep.sleepUninterruptibly(parameters.connectionRetryRate);
-                if (isShutdown) {
-                    return null;
-                }
             }
         });
+    }
+
+    /**
+     * Helper function to fetch the latest layout from provided list of {@param layoutServers}
+     *
+     * @param layoutServers list layout servers
+     * @return Completed Future with the latest layout or an exception if no layout was found.
+     */
+    private Layout getLatestLayout(List<String> layoutServers) {
+        long latestEpoch = -1;
+        Layout latestLayout = null;
+        int quorum = (layoutServers.size() / 2)  + 1;
+
+        CompletableFuture<Layout>[] layoutFutures = new CompletableFuture[layoutServers.size()];
+        // Iterate through the layout servers, attempting to connect to them
+        for(int i = 0; i < layoutServers.size(); i++) {
+            try {
+                log.debug("Trying to connect to layout server: {}", layoutServers.get(i));
+                IClientRouter router = getRouter(layoutServers.get(i));
+                // Try to get a layout.
+                CompletableFuture<Layout> layoutFuture =
+                        new LayoutClient(router, Layout.INVALID_EPOCH).getLayout();
+                layoutFutures[i] = layoutFuture;
+            } catch (Exception ex) {
+                CompletableFuture<Layout> future = new CompletableFuture<Layout>();
+                future.completeExceptionally(ex);
+                layoutFutures[i] = future;
+            }
+        }
+        int responseCount = 0;
+        for(int i = 0; i < layoutFutures.length; i++) {
+            try {
+                Layout l = (Layout) CompletableFuture.anyOf(layoutFutures).get();
+                responseCount++;
+                if (l.getEpoch() > latestEpoch) {
+                    latestEpoch = l.getEpoch();
+                    latestLayout = l;
+                }
+                if(responseCount >= quorum) {
+                    return latestLayout;
+                }
+            }catch(Exception ex) {
+                log.warn("Tried to get layout from server {} but failed with exception:{}", layoutServers.get(i), ex);
+            }
+        }
+        return latestLayout;
     }
 
     @SuppressWarnings("unchecked")
