@@ -46,6 +46,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class ClusterReconfigIT extends AbstractIT {
@@ -88,25 +89,69 @@ public class ClusterReconfigIT extends AbstractIT {
     }
 
     /**
-     * Refreshes the layout and waits for a limited time for the refreshed layout to satisfy the
+     * Wait for the Supplier (some condition) to return true.
+     * @param supplier
+     */
+    private void waitFor(Supplier<Boolean> supplier) {
+        while(!supplier.get()) {
+            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+        }
+    }
+
+
+    /**
+     * Refreshes the layout and waits for the refreshed layout to satisfy the
      * expected epoch verifier.
      *
      * @param epochVerifier Predicate to test the refreshed epoch value.
      * @param corfuRuntime  Runtime.
      */
     private void waitForEpochChange(Predicate<Long> epochVerifier, CorfuRuntime corfuRuntime) {
-        corfuRuntime.invalidateLayout();
-        Layout refreshedLayout = corfuRuntime.getLayoutView().getLayout();
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
-            if (epochVerifier.test(refreshedLayout.getEpoch())) {
-                break;
-            }
+        waitFor(() -> {
             corfuRuntime.invalidateLayout();
-            refreshedLayout = corfuRuntime.getLayoutView().getLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
-        }
-        assertThat(epochVerifier.test(refreshedLayout.getEpoch())).isTrue();
+            Layout refreshedLayout = corfuRuntime.getLayoutView().getLayout();
+            return epochVerifier.test(refreshedLayout.getEpoch());
+        });
     }
+
+    /**
+     * Waits for a write to complete.
+     * @param runtime
+     * @param table
+     */
+    private void waitForWrite(CorfuRuntime runtime, CorfuTable table, String data, Random random) {
+        waitFor(() -> {
+            try {
+                runtime.getObjectsView().TXBegin();
+                table.put(Integer.toString(random.nextInt()), data);
+                runtime.getObjectsView().TXEnd();
+                return true;
+            } catch (TransactionAbortedException tae) {
+                // A transaction aborted exception is expected during
+                // some reconfiguration cases.
+                tae.printStackTrace();
+                return false;
+            }
+        });
+    }
+
+    /**
+     * Waits until layout stabilizes.
+     * @param runtime
+     * @param nodesCount
+     */
+    private void waitForLayoutToStabilize(CorfuRuntime runtime, int nodesCount) {
+        waitFor( () -> {
+                    runtime.invalidateLayout();
+                    Layout finalLayout = runtime.getLayoutView().getLayout();
+                    return (finalLayout.getUnresponsiveServers().isEmpty()
+                            && finalLayout.getSegments().size() == 1
+                            && finalLayout.getSegments().get(0).getAllLogServers().size() == nodesCount);
+                }
+
+        );
+    }
+
 
     /**
      * Creates a message of specified size in bytes.
@@ -449,22 +494,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // Ensure writes still going through.
         // Fail test if write fails.
-        boolean writeAfterKillNode = false;
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
-            try {
-                runtime.getObjectsView().TXBegin();
-                table.put(Integer.toString(r.nextInt()), data);
-                runtime.getObjectsView().TXEnd();
-                writeAfterKillNode = true;
-                break;
-            } catch (TransactionAbortedException tae) {
-                // A transaction aborted exception is expected during
-                // some reconfiguration cases.
-                tae.printStackTrace();
-            }
-            Thread.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
-        }
-        assertThat(writeAfterKillNode).isTrue();
+        waitForWrite(runtime, table, data, r);
 
         for (int i = 0; i < corfuServers.size(); i++) {
             if (i == killNode) {
@@ -685,21 +715,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // Ensure writes still going through. Daemon writer thread does not ensure this.
         // Fail test if write fails.
-        boolean writeAfterKillNode = false;
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
-            try {
-                runtime.getObjectsView().TXBegin();
-                table.put(Integer.toString(r.nextInt()), data);
-                runtime.getObjectsView().TXEnd();
-                writeAfterKillNode = true;
-                break;
-            } catch (TransactionAbortedException tae) {
-                // A transaction aborted exception is expected during
-                // some reconfiguration cases.
-            }
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
-        }
-        assertThat(writeAfterKillNode).isTrue();
+        waitForWrite(runtime, table, data, r);
 
         // PART 2.
         // Reviving same node.
@@ -757,17 +773,7 @@ public class ClusterReconfigIT extends AbstractIT {
         assertThat(shutdownCorfuServer(corfuServer_1)).isTrue();
 
         Thread t = new Thread(() -> {
-            for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
-                try {
-                    runtime.getObjectsView().TXBegin();
-                    table.put(Integer.toString(r.nextInt()), data);
-                    runtime.getObjectsView().TXEnd();
-                    break;
-                } catch (TransactionAbortedException tae) {
-                    // A transaction aborted exception is expected during
-                    // some reconfiguration cases.
-                }
-            }
+            waitForWrite(runtime, table, data, r);
         });
         t.start();
 
@@ -977,17 +983,7 @@ public class ClusterReconfigIT extends AbstractIT {
             stream.append(Integer.toString(counter++).getBytes());
         }
         final long endAddress = 5;
-
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
-            Layout finalLayout = runtime.getLayoutView().getLayout();
-            if (finalLayout.getUnresponsiveServers().isEmpty()
-                    && finalLayout.getSegments().size() == 1
-                    && finalLayout.getSegments().get(0).getAllLogServers().size() == nodesCount) {
-                break;
-            }
-            runtime.invalidateLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
-        }
+        waitForLayoutToStabilize(runtime, nodesCount);
 
         assertThat(runtime.getLayoutView().getLayout().getUnresponsiveServers()).isEmpty();
 
@@ -1059,16 +1055,7 @@ public class ClusterReconfigIT extends AbstractIT {
         }
         final long endAddress = 5;
 
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
-            Layout finalLayout = runtime.getLayoutView().getLayout();
-            if (finalLayout.getUnresponsiveServers().isEmpty()
-                    && finalLayout.getSegments().size() == 1
-                    && finalLayout.getSegments().get(0).getAllLogServers().size() == nodesCount) {
-                break;
-            }
-            runtime.invalidateLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
-        }
+        waitForLayoutToStabilize(runtime, nodesCount);
 
         assertThat(runtime.getLayoutView().getLayout().getUnresponsiveServers()).isEmpty();
 
