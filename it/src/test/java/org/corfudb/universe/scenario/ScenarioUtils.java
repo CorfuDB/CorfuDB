@@ -11,6 +11,7 @@ import org.corfudb.util.Sleep;
 import java.time.Duration;
 import java.util.function.IntPredicate;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -20,6 +21,16 @@ import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DE
 public class ScenarioUtils {
 
     /**
+     * Wait for the Supplier (some condition) to return true.
+     * @param supplier
+     */
+    private static void waitFor(Supplier<Boolean> supplier) {
+        while(!supplier.get()) {
+            Sleep.sleepUninterruptibly(Duration.ofSeconds(DEFAULT_WAIT_TIME));
+        }
+    }
+
+    /**
      * Refreshes the layout and waits for a limited time for the refreshed layout to
      * satisfy the expected verifier.
      *
@@ -27,19 +38,11 @@ public class ScenarioUtils {
      * @param corfuClient corfu client.
      */
     public static void waitForLayoutChange(Predicate<Layout> verifier, CorfuClient corfuClient) {
-        corfuClient.invalidateLayout();
-        Layout refreshedLayout = corfuClient.getLayout();
-
-        for (int i = 0; i < TestFixtureConst.DEFAULT_WAIT_POLL_ITER; i++) {
-            if (verifier.test(refreshedLayout)) {
-                break;
-            }
+        waitFor(() -> {
             corfuClient.invalidateLayout();
-            refreshedLayout = corfuClient.getLayout();
-            Sleep.sleepUninterruptibly(Duration.ofSeconds(DEFAULT_WAIT_TIME));
-        }
-
-        assertThat(verifier.test(refreshedLayout)).isTrue();
+            Layout refreshedLayout = corfuClient.getLayout();
+            return verifier.test(refreshedLayout);
+        });
     }
 
     /**
@@ -50,19 +53,11 @@ public class ScenarioUtils {
      * @param corfuClient corfu client.
      */
     public static void waitForUnresponsiveServersChange(IntPredicate verifier, CorfuClient corfuClient) {
-        corfuClient.invalidateLayout();
-        Layout refreshedLayout = corfuClient.getLayout();
-
-        for (int i = 0; i < TestFixtureConst.DEFAULT_WAIT_POLL_ITER; i++) {
-            if (verifier.test(refreshedLayout.getUnresponsiveServers().size())) {
-                break;
-            }
+        waitFor(() -> {
             corfuClient.invalidateLayout();
-            refreshedLayout = corfuClient.getLayout();
-            Sleep.sleepUninterruptibly(Duration.ofSeconds(DEFAULT_WAIT_TIME));
-        }
-
-        assertThat(verifier.test(refreshedLayout.getUnresponsiveServers().size())).isTrue();
+            Layout refreshedLayout = corfuClient.getLayout();
+            return verifier.test(refreshedLayout.getUnresponsiveServers().size());
+        });
     }
 
     /**
@@ -73,19 +68,11 @@ public class ScenarioUtils {
      * @param corfuClient corfu client.
      */
     public static void waitForLayoutServersChange(IntPredicate verifier, CorfuClient corfuClient) {
-        corfuClient.invalidateLayout();
-        Layout refreshedLayout = corfuClient.getLayout();
-
-        for (int i = 0; i < TestFixtureConst.DEFAULT_WAIT_POLL_ITER; i++) {
-            if (verifier.test(refreshedLayout.getAllServers().size())) {
-                break;
-            }
+        waitFor(() -> {
             corfuClient.invalidateLayout();
-            refreshedLayout = corfuClient.getLayout();
-            Sleep.sleepUninterruptibly(Duration.ofSeconds(DEFAULT_WAIT_TIME));
-        }
-
-        assertThat(verifier.test(refreshedLayout.getAllServers().size())).isTrue();
+            Layout refreshedLayout = corfuClient.getLayout();
+            return verifier.test(refreshedLayout.getAllServers().size());
+        });
     }
 
     /**

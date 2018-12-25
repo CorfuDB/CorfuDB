@@ -14,6 +14,7 @@ import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.util.ClassUtils;
 
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -30,7 +31,7 @@ class CorfuClusterParams implements GroupParams {
     private String name = RandomStringUtils.randomAlphabetic(6).toLowerCase();
     @Default
     @NonNull
-    private final SortedSet<CorfuServerParams> nodes = new TreeSet<>();
+    private final SortedSet<CorfuServerParams> nodes = new TreeSet<>(Comparator.comparing(s -> s.getName()));
     @Getter
     @Default
     @NonNull
