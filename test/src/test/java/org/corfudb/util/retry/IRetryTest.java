@@ -52,7 +52,7 @@ public class IRetryTest extends AbstractCorfuTest {
         int expectedOccurrences = (int) (Math.log(maxSleepTimeMs) / Math.log(BASE));
 
         ExponentialBackoffRetry backoffCalculator = new ExponentialBackoffRetry(null,
-                Duration.ofMillis(maxSleepTimeMs));
+                Duration.ofMillis(maxSleepTimeMs), 1);
 
         Duration currentSleepTime = Duration.ZERO;
 

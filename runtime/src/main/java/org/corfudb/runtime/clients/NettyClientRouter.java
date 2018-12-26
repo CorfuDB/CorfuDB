@@ -192,7 +192,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         outstandingRequests = new ConcurrentHashMap<>();
         shutdown = true;
 
-        retryPolicy = new ExponentialBackoffRetry(null, parameters.getMaxDurationExponentialReconnect());
+        // Start retry policy backoff at 256ms = 2^8
+        retryPolicy = new ExponentialBackoffRetry(null, parameters.getMaxDurationExponentialReconnect(), 8);
 
         if (parameters.isTlsEnabled()) {
             try {

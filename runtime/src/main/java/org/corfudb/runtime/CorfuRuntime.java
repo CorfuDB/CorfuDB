@@ -318,7 +318,7 @@ public class CorfuRuntime {
          * will occur at this constant ratio.
          */
         @Default
-        Duration maxDurationExponentialReconnect = Duration.ofMinutes(5);
+        Duration maxDurationExponentialReconnect = Duration.ofMillis(500);
 
         /**
          * The initial list of layout servers.

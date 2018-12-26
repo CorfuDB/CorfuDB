@@ -2,6 +2,7 @@ package org.corfudb.util.retry;
 
 import java.time.Duration;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -25,7 +26,8 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
     // If the desired behaviour is that exponential calculator restarts after X minutes,
     // set this variable to this X value.
     private static final Duration DEFAULT_BACKOFF_DURATION = Duration.ofDays(365);
-    private long retryCounter = 0;
+
+    private AtomicInteger retryCounter = new AtomicInteger(0);
     private long nextBackoffTime = 0;
 
     @Getter
@@ -53,6 +55,11 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
     private long extraWait = 0;
 
     /**
+     * Start time of exponential backoff, expressed as the first power of base.
+     */
+    private int startPower = 0;
+
+    /**
      * Maximum duration at which the wait time needs to be capped.
      */
     @Getter
@@ -63,9 +70,15 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
         super(runFunction);
     }
 
-    public ExponentialBackoffRetry(IRetryable runFunction, Duration maxRetryThreshold) {
+    public ExponentialBackoffRetry(IRetryable runFunction, Duration maxRetryThreshold, int startBase) {
         super(runFunction);
         this.maxRetryThreshold = maxRetryThreshold;
+        setStartPower(startBase);
+    }
+
+    private void setStartPower(int startPower) {
+        this.startPower = startPower - 1;
+        retryCounter.set(this.startPower);
     }
 
     @Override
@@ -73,8 +86,8 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
         if (nextBackoffTime == 0) {
             nextBackoffTime = System.currentTimeMillis() + backoffDuration.toMillis();
         }
-        retryCounter++;
-        long sleepTime = (long) Math.pow(base, retryCounter);
+
+        long sleepTime = (long) Math.pow(base, retryCounter.incrementAndGet());
         sleepTime += extraWait;
         float randomPart = new Random().nextFloat() * randomPortion;
         sleepTime -= sleepTime * randomPart;
@@ -84,7 +97,7 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
 
         if (System.currentTimeMillis() + sleepTime > nextBackoffTime) {
             nextBackoffTime = 0;
-            retryCounter = 1;
+            retryCounter.set(this.startPower);
             sleepTime = base + extraWait;
             sleepTime -= sleepTime * randomPart;
         }
@@ -92,7 +105,7 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
     }
 
     public void reset() {
-        retryCounter = 0;
+        retryCounter.set(startPower);
         nextBackoffTime = 0;
     }
 
