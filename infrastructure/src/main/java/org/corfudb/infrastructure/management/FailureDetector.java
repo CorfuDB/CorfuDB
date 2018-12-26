@@ -1,24 +1,9 @@
 package org.corfudb.infrastructure.management;
 
 import com.google.common.collect.ImmutableSet;
-
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
-
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.infrastructure.management.PollReport.PollReportBuilder;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -28,6 +13,17 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
+
+import javax.annotation.Nonnull;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * FailureDetector polls all the "responsive members" in the layout.
@@ -53,7 +49,7 @@ public class FailureDetector implements IDetector {
     private int failureThreshold = 3;
 
     /**
-     * Max duration for the responseTimeouts of the routers.
+     * Max duration for the responseTimeouts of the routers in milliseconds.
      * In the worst case scenario or in case of failed servers, their response timeouts will be
      * set to a maximum value of maxPeriodDuration.
      */
@@ -62,7 +58,7 @@ public class FailureDetector implements IDetector {
     private long maxPeriodDuration = 8_000L;
 
     /**
-     * Minimum duration for the responseTimeouts of the routers.
+     * Minimum duration for the responseTimeouts of the routers in milliseconds.
      * Under ideal conditions the routers will have a response timeout set to this.
      */
     @Getter
@@ -76,15 +72,15 @@ public class FailureDetector implements IDetector {
     private long period = initPeriodDuration;
 
     /**
-     * Interval between iterations in a pollRound.
+     * Poll interval between iterations in a pollRound in milliseconds.
      */
     @Getter
     @Setter
-    private long interIterationInterval = 1_000;
+    private long initialPollInterval = 1_000;
 
     /**
      * Increments in which the period moves towards the maxPeriodDuration in every failed
-     * iteration.
+     * iteration provided in milliseconds.
      */
     @Getter
     @Setter
@@ -153,6 +149,9 @@ public class FailureDetector implements IDetector {
         // In each iteration we poll all the servers in the members list.
         for (int iteration = 0; iteration < failureThreshold; iteration++) {
 
+            final long pollIterationStartTime = System.nanoTime();
+            long pollInterval = initialPollInterval;
+
             // Ping all nodes and await their responses.
             Map<String, CompletableFuture<ClusterState>> pollCompletableFutures =
                     pollOnceAsync(members, routerMap, epoch);
@@ -174,13 +173,25 @@ public class FailureDetector implements IDetector {
                 // Timeout is increased anytime a failure is encountered.
                 // Failure includes both, unresponsive and outOfPhaseEpoch nodes.
                 if (failuresDetected) {
+                    final long iterationElapsedTime = TimeUnit.MILLISECONDS.convert(
+                            System.nanoTime() - pollIterationStartTime, TimeUnit.NANOSECONDS);
+
+                    // Increase the inter iteration sleep time by increasing poll interval if the
+                    // period time increases
+                    pollInterval = Math.max(initialPollInterval,
+                                            period - iterationElapsedTime);
                     period = getIncreasedPeriod();
                     tuneRoutersResponseTimeout(members, routerMap, new HashSet<>(members), period);
                 }
                 final int pollIteration = iteration;
                 responses.forEach(s -> responsesMap.put(s, pollIteration));
             }
-            Sleep.MILLISECONDS.sleepUninterruptibly(interIterationInterval);
+            log.debug("Time taken for iteration's failure detection: {}",
+                      TimeUnit.MILLISECONDS.convert(System.nanoTime() - pollIterationStartTime,
+                                                    TimeUnit.NANOSECONDS));
+
+            // Sleep for the provided poll interval before starting the next iteration
+            Sleep.MILLISECONDS.sleepUninterruptibly(pollInterval);
         }
 
         // End round and generate report.
