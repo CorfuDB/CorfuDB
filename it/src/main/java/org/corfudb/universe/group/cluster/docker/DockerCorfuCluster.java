@@ -2,9 +2,16 @@ package org.corfudb.universe.group.cluster.docker;
 
 import com.google.common.collect.ImmutableSortedSet;
 import com.spotify.docker.client.DockerClient;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
@@ -17,11 +24,6 @@ import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.node.server.docker.DockerCorfuServer;
 import org.corfudb.universe.universe.UniverseParams;
 import org.corfudb.universe.util.DockerManager;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Provides Docker implementation of {@link CorfuCluster}.
@@ -72,7 +74,7 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams,
         Layout layout = getLayout();
         log.info("Bootstrap docker corfu cluster. Cluster: {}. layout: {}", params.getName(), layout.asJSONString());
 
-        BootstrapUtil.bootstrap(layout, params.getBootStrapRetries(), params.getRetryTimeout());
+        BootstrapUtil.bootstrap(layout, params.getRetryTimeout());
     }
 
     private Layout getLayout() {

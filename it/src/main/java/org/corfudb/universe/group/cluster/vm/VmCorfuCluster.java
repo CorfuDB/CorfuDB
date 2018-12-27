@@ -3,8 +3,15 @@ package org.corfudb.universe.group.cluster.vm;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.vmware.vim25.mo.VirtualMachine;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.group.cluster.AbstractCorfuCluster;
@@ -19,11 +26,6 @@ import org.corfudb.universe.node.server.vm.VmCorfuServerParams;
 import org.corfudb.universe.node.stress.vm.VmStress;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
 import org.corfudb.universe.util.ClassUtils;
-
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * Provides VM implementation of a {@link CorfuCluster}.
@@ -75,7 +77,7 @@ public class VmCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams, VmU
         Layout layout = buildLayout();
         log.info("Bootstrap corfu cluster. Cluster: {}. layout: {}", params.getName(), layout.asJSONString());
 
-        BootstrapUtil.bootstrap(layout, params.getBootStrapRetries(), params.getRetryTimeout());
+        BootstrapUtil.bootstrap(layout, params.getRetryTimeout());
     }
 
     /**

@@ -4,14 +4,6 @@ import static org.corfudb.AbstractCorfuTest.PARAMETERS;
 import static org.corfudb.integration.AbstractIT.PROPERTIES;
 import static org.corfudb.integration.AbstractIT.getCorfuServerLogPath;
 
-import lombok.Builder;
-import lombok.Getter;
-import org.corfudb.integration.cluster.Harness.Action;
-import org.corfudb.integration.cluster.Harness.Node;
-import org.corfudb.runtime.BootstrapUtil;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.Layout;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -20,6 +12,15 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+
+import lombok.Builder;
+import lombok.Getter;
+
+import org.corfudb.integration.cluster.Harness.Action;
+import org.corfudb.integration.cluster.Harness.Node;
+import org.corfudb.runtime.BootstrapUtil;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Layout;
 
 /**
  * Utilities to form and manipulate a corfu cluster. This class provides a convenience instance builder
@@ -185,9 +186,8 @@ public class Harness {
         }
 
         final Layout layout = getLayoutForNodes(n);
-        final int retries = 3;
         CorfuRuntime.CorfuRuntimeParameters runtimeParameters = createRuntimeParameters();
-        BootstrapUtil.bootstrap(layout, runtimeParameters, retries, PARAMETERS.TIMEOUT_LONG);
+        BootstrapUtil.bootstrap(layout, runtimeParameters, PARAMETERS.TIMEOUT_LONG);
         return nodes;
     }
 
