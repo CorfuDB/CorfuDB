@@ -4,17 +4,10 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
-
 import io.netty.channel.ChannelHandlerContext;
-
-import java.lang.invoke.MethodHandles;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
+import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
@@ -29,8 +22,8 @@ import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -39,6 +32,11 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.util.Utils;
+
+import java.lang.invoke.MethodHandles;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -67,7 +65,7 @@ public class LogUnitServer extends AbstractServer {
     /**
      * The options map.
      */
-    private final Map<String, Object> opts;
+    private final LogUnitServerConfig config;
 
     /**
      * The server context of the node.
@@ -78,8 +76,7 @@ public class LogUnitServer extends AbstractServer {
      * Handler for this server.
      */
     @Getter
-    private final CorfuMsgHandler handler =
-        CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
+    private final CorfuMsgHandler handler = CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
 
     /**
      * This cache services requests for data at various addresses. In a memory implementation,
@@ -87,8 +84,6 @@ public class LogUnitServer extends AbstractServer {
      * storage.
      */
     private final LoadingCache<Long, ILogData> dataCache;
-    private final long maxCacheSize;
-
     private final StreamLog streamLog;
     private final StreamLogCompaction logCleaner;
     private final BatchWriter<Long, ILogData> batchWriter;
@@ -99,33 +94,25 @@ public class LogUnitServer extends AbstractServer {
      */
     public LogUnitServer(ServerContext serverContext) {
         this.serverContext = serverContext;
-        this.opts = serverContext.getServerConfig();
-        double cacheSizeHeapRatio = Double.parseDouble((String) opts.get("--cache-heap-ratio"));
+        this.config = LogUnitServerConfig.parse(serverContext.getServerConfig());
 
-        maxCacheSize = (long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio);
-
-        if ((Boolean) opts.get("--memory")) {
+        if (config.isMemoryMode()) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). "
                     + "This should be run for testing purposes only. "
                     + "If you exceed the maximum size of the unit, old entries will be "
                     + "AUTOMATICALLY trimmed. "
                     + "The unit WILL LOSE ALL DATA if it exits.", Utils
-                    .convertToByteStringRepresentation(maxCacheSize));
+                    .convertToByteStringRepresentation(config.getMaxCacheSize()));
             streamLog = new InMemoryStreamLog();
         } else {
-            streamLog = new StreamLogFiles(serverContext, (Boolean) opts.get("--no-verify"));
+            streamLog = new StreamLogFiles(serverContext, config.isNoVerify());
         }
 
-        batchWriter = new BatchWriter<>(
-                streamLog,
-                serverContext.getServerEpoch(),
-                !((Boolean) opts.get("--no-sync"))
-        );
+        batchWriter = new BatchWriter<>(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
 
         dataCache = Caffeine.newBuilder()
-                .<Long, ILogData>weigher((k, v) -> ((LogData) v).getData() == null ? 1 : (
-                        (LogData) v).getData().length)
-                .maximumWeight(maxCacheSize)
+                .<Long, ILogData>weigher((k, v) -> ((LogData) v).getData() == null ? 1 : ((LogData) v).getData().length)
+                .maximumWeight(config.getMaxCacheSize())
                 .removalListener(this::handleEviction)
                 .writer(batchWriter)
                 .build(this::handleRetrieval);
@@ -368,6 +355,37 @@ public class LogUnitServer extends AbstractServer {
 
     @VisibleForTesting
     long getMaxCacheSize() {
-        return maxCacheSize;
+        return config.getMaxCacheSize();
+    }
+
+    /**
+     * Log unit server configuration class
+     */
+    @Builder
+    @Getter
+    public static class LogUnitServerConfig {
+        private final double cacheSizeHeapRatio;
+        private final long maxCacheSize;
+        private final boolean memoryMode;
+        private final boolean noVerify;
+        private final boolean noSync;
+
+        /**
+         * Parse legacy configuration options
+         *
+         * @param opts legacy config
+         * @return log unit configuration
+         */
+        public static LogUnitServerConfig parse(Map<String, Object> opts) {
+            double cacheSizeHeapRatio = Double.parseDouble((String) opts.get("--cache-heap-ratio"));
+
+            return LogUnitServerConfig.builder()
+                    .cacheSizeHeapRatio(cacheSizeHeapRatio)
+                    .maxCacheSize((long) (Runtime.getRuntime().maxMemory() * cacheSizeHeapRatio))
+                    .memoryMode(Boolean.valueOf(opts.get("--memory").toString()))
+                    .noVerify((Boolean) opts.get("--no-verify"))
+                    .noSync((Boolean) opts.get("--no-sync"))
+                    .build();
+        }
     }
 }

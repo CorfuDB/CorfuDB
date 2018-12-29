@@ -4,7 +4,7 @@
 
     <groupId>org.corfudb</groupId>
     <artifactId>corfu</artifactId>
-    <version>0.2.2.20181208191959.9209</version>
+    <version>0.2.2.20181229045140.7081</version>
 
     <modules>
         <module>infrastructure</module>
@@ -141,7 +141,7 @@
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>21.0</version>
+            <version>23.0</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>

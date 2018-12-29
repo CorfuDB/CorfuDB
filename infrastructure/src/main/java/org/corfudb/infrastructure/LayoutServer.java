@@ -57,11 +57,6 @@ import org.corfudb.runtime.view.Layout;
 @Slf4j
 public class LayoutServer extends AbstractServer {
 
-    /**
-     * The options map.
-     */
-    private final Map<String, Object> opts;
-
     @Getter
     private final ServerContext serverContext;
 
@@ -78,7 +73,6 @@ public class LayoutServer extends AbstractServer {
      * @param serverContext context object providing settings and objects
      */
     public LayoutServer(@Nonnull ServerContext serverContext) {
-        this.opts = serverContext.getServerConfig();
         this.serverContext = serverContext;
 
         if (serverContext.installSingleNodeLayoutIfAbsent()) {
@@ -86,9 +80,7 @@ public class LayoutServer extends AbstractServer {
         }
     }
 
-
-
-    boolean checkBootstrap(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private boolean isBootstrapped(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (getCurrentLayout() == null) {
             log.warn("Received message but not bootstrapped! Message={}", msg);
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.LAYOUT_NOBOOTSTRAP));
@@ -109,14 +101,13 @@ public class LayoutServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.LAYOUT_REQUEST)
     public synchronized void handleMessageLayoutRequest(CorfuPayloadMsg<Long> msg,
                                                     ChannelHandlerContext ctx, IServerRouter r) {
-        if (!checkBootstrap(msg, ctx, r)) {
+        if (!isBootstrapped(msg, ctx, r)) {
             return;
         }
         long epoch = msg.getPayload();
         if (epoch <= serverContext.getServerEpoch()) {
             r.sendResponse(ctx, msg, new LayoutMsg(getCurrentLayout(), CorfuMsgType
                     .LAYOUT_RESPONSE));
-            return;
         } else {
             // else the client is somehow ahead of the server.
             //TODO figure out a strategy to deal with this situation
@@ -171,7 +162,7 @@ public class LayoutServer extends AbstractServer {
             @NonNull IServerRouter r) {
 
         // Check if the prepare is for the correct epoch
-        if (!checkBootstrap(msg, ctx, r)) {
+        if (!isBootstrapped(msg, ctx, r)) {
             return;
         }
         Rank prepareRank = new Rank(msg.getPayload().getRank(), msg.getClientID());
@@ -219,7 +210,7 @@ public class LayoutServer extends AbstractServer {
             ChannelHandlerContext ctx,
             @NonNull IServerRouter r) {
 
-        if (!checkBootstrap(msg, ctx, r)) {
+        if (!isBootstrapped(msg, ctx, r)) {
             return;
         }
         Rank proposeRank = new Rank(msg.getPayload().getRank(), msg.getClientID());
@@ -257,7 +248,7 @@ public class LayoutServer extends AbstractServer {
         // In addition, if the rank in the propose message is equal to the current phase 2 rank
         // (already accepted message), reject.
         // This can happen in case of duplicate messages.
-        if (phase2Rank != null && proposeRank.equals(phase2Rank)) {
+        if (proposeRank.equals(phase2Rank)) {
             log.debug("handleMessageLayoutPropose: Rejected phase 2 propose of rank={}, "
                     + "phase2Rank={}", proposeRank, phase2Rank);
             r.sendResponse(ctx, msg, CorfuMsgType.LAYOUT_PROPOSE_REJECT.payloadMsg(new
@@ -324,7 +315,7 @@ public class LayoutServer extends AbstractServer {
         }
 
         Layout commitLayout = msg.getPayload().getLayout();
-        if (!checkBootstrap(msg, ctx, r)) {
+        if (!isBootstrapped(msg, ctx, r)) {
             return;
         }
         long serverEpoch = getServerEpoch();
