@@ -1,31 +1,29 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
-
-import java.lang.invoke.MethodHandles;
-import java.time.Duration;
-import java.util.Map;
-
-import javax.annotation.Nonnull;
-
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
-
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
-
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
+
+import javax.annotation.Nonnull;
+import java.lang.invoke.MethodHandles;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 
 /**
@@ -216,11 +214,30 @@ public class ManagementServer extends AbstractServer {
             return;
         }
 
+        // Collecting the failed nodes in the message that are amongst the responsive nodes in the
+        // layout
+        final Set<String> allActiveServers = layout.getAllActiveServers();
+        final Set<String> responsiveFailedNodes = detectorMsg.getFailedNodes()
+                .stream()
+                .filter(allActiveServers::contains)
+                .collect(Collectors.toSet());
+
+        // If it is not an out of phase and there is no need to update the layout, return without
+        // any reconfiguration
+        if (!detectorMsg.getFailedNodes().isEmpty() && responsiveFailedNodes.isEmpty()) {
+            log.warn("handleFailureDetectedMsg: No action is taken as none of the failed nodes " +
+                            "are responsive. failedNodes:{} responsive layout nodes: {}, " +
+                            "latestLayout epoch:{} ",
+                    detectorMsg.getFailedNodes(), allActiveServers, layout.getEpoch());
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+            return;
+        }
+
         boolean result = ReconfigurationEventHandler.handleFailure(
                 failureHandlerPolicy,
                 layout,
                 managementAgent.getCorfuRuntime(),
-                detectorMsg.getFailedNodes());
+                responsiveFailedNodes);
 
         if (result) {
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
@@ -263,10 +280,30 @@ public class ManagementServer extends AbstractServer {
             return;
         }
 
+        // Collecting the healed nodes in the message that are amongst the unresponsive nodes in the
+        // layout
+        final List<String> unresponsiveServers = layout.getUnresponsiveServers();
+        final Set<String> unresponsiveHealedNodes = detectorMsg.getHealedNodes()
+                .stream()
+                .filter(unresponsiveServers::contains)
+                .collect(Collectors.toSet());
+
+        // If it is not an out of phase and there is no need to update the layout, return without
+        // any reconfiguration
+        if (!detectorMsg.getHealedNodes().isEmpty() && unresponsiveHealedNodes.isEmpty()) {
+            log.warn("handleHealingDetectedMsg: No action is taken as none of the healedNodes are" +
+                            " unresponsive. healedNodes:{}, unresponsive layout nodes: {}, " +
+                            "latestLayout epoch:{} ",
+                    detectorMsg.getHealedNodes(), unresponsiveServers, layout.getEpoch());
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+            return;
+        }
+
+
         final Duration retryWorkflowQueryTimeout = Duration.ofSeconds(1L);
         boolean result = ReconfigurationEventHandler.handleHealing(
                 managementAgent.getCorfuRuntime(),
-                detectorMsg.getHealedNodes(),
+                unresponsiveHealedNodes,
                 retryWorkflowQueryTimeout);
 
         if (result) {
