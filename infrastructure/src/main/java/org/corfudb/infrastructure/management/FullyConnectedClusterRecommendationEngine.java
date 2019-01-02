@@ -93,7 +93,7 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
     @Override
     public List<String> failedServers(ClusterState clusterState, Layout layout) {
 
-        log.debug("Detecting the failed nodes for: \nClusterState= {} \nLayout= {}",
+        log.trace("Detecting the failed nodes for: \nClusterState= {} \nLayout= {}",
                 gson.toJson(clusterState), gson.toJson(layout));
 
         // Remove asymmetry by converting all asymmetric link failures to symmetric failures
@@ -155,7 +155,7 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
      */
     private Map<String, Set<String>> convertAsymmetricToSymmetricFailures(ClusterState clusterState) {
 
-        log.debug("Converting to symmetric view for the provided cluster view: {}",
+        log.trace("Converting to symmetric view for the provided cluster view: {}",
                 gson.toJson(clusterState.getNodeStatusMap()));
 
         Map<String, Set<String>> clusterMatrix = new HashMap<>();
@@ -192,7 +192,7 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
                                     .add(currentNode));
         }
 
-        log.debug("Converted view of the cluster to a symmetric view of connectivity failures: {}",
+        log.trace("Converted view of the cluster to a symmetric view of connectivity failures: {}",
                 gson.toJson(clusterMatrix));
 
         return clusterMatrix;
@@ -330,7 +330,7 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
     @Override
     public List<String> healedServers(final ClusterState clusterState, final Layout layout) {
 
-        log.debug("Detecting the healed nodes for: \nClusterState: {} \nLayout: {}",
+        log.trace("Detecting the healed nodes for: \nClusterState: {} \nLayout: {}",
                 gson.toJson(clusterState), gson.toJson(layout));
 
         // Remove asymmetry by converting all asymmetric link failures to symmetric failures
