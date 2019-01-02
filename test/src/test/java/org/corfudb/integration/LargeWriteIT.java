@@ -17,85 +17,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * large writes.
  */
 
-public class LargeWriteIT extends AbstractIT {
+public class LargeWriteIT  {
 
     @Test
     public void largeStreamWrite() throws Exception {
 
         final String streamName = "s1";
+        CorfuRuntime rt = new CorfuRuntime("localhost:9000").connect();
+        CorfuRuntime rt2 = new CorfuRuntime("localhost:9000").connect();
 
-        // Start node one and populate it with data
-        Process server_1 = new CorfuServerRunner()
-                .setHost(DEFAULT_HOST)
-                .setPort(DEFAULT_PORT)
-                .setSingle(true)
-                .runServer();
+        Map<String, String> map = rt.getObjectsView().build().setStreamName("s1").setType(CorfuTable.class).open();
+        Map<String, String> map2 = rt2.getObjectsView().build().setStreamName("s1").setType(CorfuTable.class).open();
 
-        final int maxWriteSize = 100;
-
-        // Configure a client with a max write limit
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
-                .builder()
-                .maxWriteSize(maxWriteSize)
-                .build();
-
-        CorfuRuntime rt = CorfuRuntime.fromParameters(params);
-        rt.parseConfigurationString(DEFAULT_ENDPOINT);
-        rt.connect();
-
-        final int bufSize = maxWriteSize * 2;
-
-        // Attempt to write a payload that is greater than the configured limit.
-        assertThatThrownBy(() -> rt.getStreamsView()
-                .get(CorfuRuntime.getStreamID(streamName))
-                .append(new byte[bufSize]))
-                .isInstanceOf(WriteSizeException.class);
-        shutdownCorfuServer(server_1);
-    }
-
-    @Test
-    public void largeTransaction() throws Exception {
-        final String tableName = "table1";
-
-        // Start node one and populate it with data
-        Process server_1 = new CorfuServerRunner()
-                .setHost(DEFAULT_HOST)
-                .setPort(DEFAULT_PORT)
-                .setSingle(true)
-                .runServer();
-
-        final int maxWriteSize = 100;
-
-        // Configure a client with a max write limit
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
-                .builder()
-                .maxWriteSize(maxWriteSize)
-                .build();
-
-        CorfuRuntime rt = CorfuRuntime.fromParameters(params);
-        rt.parseConfigurationString(DEFAULT_ENDPOINT);
-        rt.connect();
-
-        String largePayload = new String(new byte[maxWriteSize * 2]);
-
-        Map<String, String> map = rt.getObjectsView()
-                .build()
-                .setType(CorfuTable.class)
-                .setStreamName(tableName)
-                .open();
-
-
-        rt.getObjectsView().TXBegin();
-        map.put("key1", largePayload);
-        boolean aborted = false;
-        try {
-            rt.getObjectsView().TXEnd();
-        } catch (TransactionAbortedException e) {
-            aborted = true;
-            assertThat(e.getCause()).isInstanceOf(WriteSizeException.class);
-            assertThat(e.getAbortCause()).isEqualTo(AbortCause.SIZE_EXCEEDED);
+        for (;;) {
+            map.put("s1", "S2");
+            Thread.sleep(3000);
         }
-        assertThat(aborted).isTrue();
-        shutdownCorfuServer(server_1);
     }
 }

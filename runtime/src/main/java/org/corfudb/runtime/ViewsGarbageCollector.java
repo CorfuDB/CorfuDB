@@ -36,6 +36,11 @@ public class ViewsGarbageCollector {
                     .setNameFormat("ViewsGarbageCollector")
                     .build());
 
+    final ScheduledExecutorService syncThread = Executors.newSingleThreadScheduledExecutor(
+            new ThreadFactoryBuilder().setDaemon(true)
+                    .setNameFormat("ViewsGarbageCollector-sync")
+                    .build());
+
     final CorfuRuntime runtime;
 
     public ViewsGarbageCollector(CorfuRuntime runtime) {
@@ -48,12 +53,33 @@ public class ViewsGarbageCollector {
                 runtime.getParameters().getRuntimeGCPeriod().toMinutes(),
                 runtime.getParameters().getRuntimeGCPeriod().toMinutes(),
                 TimeUnit.MINUTES);
+        //1200
+        syncThread.scheduleAtFixedRate(() -> syncObjects(),
+                10, 30, TimeUnit.SECONDS);
         this.started = true;
     }
 
     public void stop() {
         gcThread.shutdownNow();
+        syncThread.shutdownNow();
         this.started = false;
+    }
+
+    private void syncObjects() {
+        try {
+            long s1 = System.currentTimeMillis();
+            runtime.getObjectsView().syncObjects();
+            long s2 = System.currentTimeMillis();
+            log.info("syncObjects: sync took {} ms, total maps {}", s2 - s1, runtime.getObjectsView()
+                    .getObjectCache().size());
+        } catch (Exception e) {
+            if (e.getCause() instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+                throw new GarbageCollectorException(e);
+            } else {
+                log.error("Encountered an error while running runtime GC", e);
+            }
+        }
     }
 
     /**

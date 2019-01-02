@@ -199,6 +199,12 @@ public class ObjectsView extends AbstractView {
         }
     }
 
+    public void syncObjects() {
+        for (Object obj : getObjectCache().values()) {
+            ((Map) obj).size();
+        }
+    }
+
     @Data
     @SuppressWarnings({"checkstyle:abbreviation"})
     public static class ObjectID<T> {
