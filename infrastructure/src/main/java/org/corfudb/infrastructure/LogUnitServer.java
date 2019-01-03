@@ -142,8 +142,8 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("log write: global: {}, streams: {}, backpointers: {}", msg
-                .getPayload().getGlobalAddress(), msg.getPayload().getData().getBackpointerMap());
+        log.debug("log write: global: {}, streams: {}", msg.getPayload().getToken(),
+                msg.getPayload().getData().getBackpointerMap());
 
         try {
             LogData logData = (LogData) msg.getPayload().getData();
