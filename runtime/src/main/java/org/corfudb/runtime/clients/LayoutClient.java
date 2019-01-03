@@ -10,6 +10,7 @@ import org.corfudb.protocols.wireprotocol.LayoutCommittedRequest;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
+import org.corfudb.protocols.wireprotocol.LayoutQueryRequest;
 import org.corfudb.runtime.view.Layout;
 
 /**
@@ -32,7 +33,13 @@ public class LayoutClient extends AbstractClient {
      * @return A future which will be completed with the current layout.
      */
     public CompletableFuture<Layout> getLayout() {
-        return sendMessageWithFuture(CorfuMsgType.LAYOUT_REQUEST.payloadMsg(getEpoch()));
+        return sendMessageWithFuture(CorfuMsgType.LAYOUT_REQUEST
+                .payloadMsg(new LayoutQueryRequest(LayoutQueryRequest.Type.COMMITTED, getEpoch())));
+    }
+
+    public CompletableFuture<Layout> getLayout2() {
+        return sendMessageWithFuture(CorfuMsgType.LAYOUT_REQUEST
+                .payloadMsg(new LayoutQueryRequest(LayoutQueryRequest.Type.PHASE2, Layout.INVALID_EPOCH)));
     }
 
     /**

@@ -20,6 +20,7 @@ import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.protocols.wireprotocol.LayoutProposeResponse;
+import org.corfudb.protocols.wireprotocol.LayoutQueryRequest;
 import org.corfudb.runtime.view.Layout;
 
 /**
@@ -99,22 +100,37 @@ public class LayoutServer extends AbstractServer {
      * @param r                server router
      */
     @ServerHandler(type = CorfuMsgType.LAYOUT_REQUEST)
-    public synchronized void handleMessageLayoutRequest(CorfuPayloadMsg<Long> msg,
+    public synchronized void handleMessageLayoutRequest(CorfuPayloadMsg<LayoutQueryRequest> msg,
                                                     ChannelHandlerContext ctx, IServerRouter r) {
         if (!isBootstrapped(msg, ctx, r)) {
+            // return response in handler not in helper method
             return;
         }
-        long epoch = msg.getPayload();
-        if (epoch <= serverContext.getServerEpoch()) {
-            r.sendResponse(ctx, msg, new LayoutMsg(getCurrentLayout(), CorfuMsgType
-                    .LAYOUT_RESPONSE));
+        LayoutQueryRequest query = msg.getPayload();
+
+        if (query.getQueryType() == LayoutQueryRequest.Type.COMMITTED) {
+            long epoch = query.getEpoch();
+            if (epoch <= serverContext.getServerEpoch()) {
+                r.sendResponse(ctx, msg, new LayoutMsg(getCurrentLayout(), CorfuMsgType
+                        .LAYOUT_RESPONSE));
+            } else {
+                // else the client is somehow ahead of the server.
+                //TODO figure out a strategy to deal with this situation
+                long serverEpoch = serverContext.getServerEpoch();
+                r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
+                log.warn("handleMessageLayoutRequest: Message Epoch {} ahead of Server epoch {}",
+                        epoch, serverEpoch);
+            }
+        } else if (query.getQueryType() == LayoutQueryRequest.Type.PHASE2) {
+            // check if we need to use the rank here (I dont think its needed)
+            if (getPhase2Data() != null) {
+                r.sendResponse(ctx, msg, new LayoutMsg(getPhase2Data().getLayout(), CorfuMsgType
+                        .LAYOUT_RESPONSE));
+            }
+            // if phase2data is null we ignore the rpc, this is just a hack to not let the
+            // client handle this case
         } else {
-            // else the client is somehow ahead of the server.
-            //TODO figure out a strategy to deal with this situation
-            long serverEpoch = serverContext.getServerEpoch();
-            r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
-            log.warn("handleMessageLayoutRequest: Message Epoch {} ahead of Server epoch {}",
-                    epoch, serverEpoch);
+            throw new IllegalArgumentException("unknown type!");
         }
     }
 

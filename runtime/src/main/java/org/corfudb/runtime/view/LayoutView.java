@@ -2,7 +2,10 @@ package org.corfudb.runtime.view;
 
 import static java.util.Arrays.stream;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
@@ -14,9 +17,12 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.util.CFUtils;
@@ -44,6 +50,74 @@ public class LayoutView extends AbstractView {
 
     public RuntimeLayout getRuntimeLayout(@Nonnull Layout layout) {
         return new RuntimeLayout(layout, runtime);
+    }
+
+
+    private Layout quorumLayoutRead(List<String> layoutServers) throws QuorumUnreachableException {
+        CompletableFuture<Layout>[] futures = new CompletableFuture[layoutServers.size()];
+        for (int x = 0; x < layoutServers.size(); x++) {
+            try {
+                IClientRouter router = runtime.getRouter(layoutServers.get(x));
+                futures[x] = new LayoutClient(router, Layout.INVALID_EPOCH).getLayout2();
+            } catch (Exception e) {
+                futures[x].completeExceptionally(e);
+            }
+        }
+
+        QuorumFuturesFactory.CompositeFuture<Layout> quorumFuture = QuorumFuturesFactory
+                .getQuorumFuture(
+                        Comparator.comparingLong(Layout::getEpoch),
+                        futures);
+        return CFUtils.getUninterruptibly(quorumFuture, QuorumUnreachableException.class);
+    }
+
+    private Layout broadcastLayoutRead(List<String> layoutServers) {
+        CompletableFuture<Layout>[] futures = new CompletableFuture[layoutServers.size()];
+        for (int x = 0; x < layoutServers.size(); x++) {
+            try {
+                IClientRouter router = runtime.getRouter(layoutServers.get(x));
+                futures[x] = new LayoutClient(router, Layout.INVALID_EPOCH).getLayout();
+            } catch (Exception e) {
+                futures[x].completeExceptionally(e);
+            }
+        }
+
+        List<Layout> availableLayouts = new ArrayList<>(layoutServers.size());
+
+        for (CompletableFuture<Layout> future : futures) {
+            try {
+                Layout layout = future.get();
+                availableLayouts.add(layout);
+            } catch (Exception e) {
+                future.completeExceptionally(e);
+            }
+        }
+
+        Layout layout = Collections.max(availableLayouts, Comparator.comparingLong(Layout::getEpoch));
+
+        if (layout == null) {
+            throw new UnreachableClusterException("couldn't reach any of " + layoutServers.toString());
+        }
+
+        return layout;
+    }
+
+    public Layout discoverLayout(List<String> layoutServers) {
+
+        // First try attempt a quorum read
+        try {
+            return quorumLayoutRead(layoutServers);
+        } catch (QuorumUnreachableException e) {
+           log.debug("discoverLayout: failed to quorum read layout from {}", layoutServers);
+        }
+
+        // Quorum read failed, let's try acquire a committed layout via broadcast
+        try {
+            return broadcastLayoutRead(layoutServers);
+        } catch (UnreachableClusterException e) {
+            log.debug("discoverLayout: failed to broadcast read layout from {}", layoutServers);
+            throw e;
+        }
     }
 
     /**

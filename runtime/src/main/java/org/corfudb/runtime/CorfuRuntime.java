@@ -516,7 +516,7 @@ public class CorfuRuntime {
     /**
      * Latest layout seen by the runtime.
      */
-    private volatile Layout latestLayout = null;
+    public volatile Layout latestLayout = null;
 
     @Getter
     private static final MetricRegistry defaultMetrics = new MetricRegistry();
@@ -865,52 +865,39 @@ public class CorfuRuntime {
     private CompletableFuture<Layout> fetchLayout(List<String> layoutServers) {
 
         return CompletableFuture.supplyAsync(() -> {
-
             List<String> layoutServersCopy = new ArrayList<>(layoutServers);
             parameters.getBeforeRpcHandler().run();
             int systemDownTriggerCounter = 0;
 
             while (true) {
+                try {
+                    log.debug("fetchLayout: layout servers {}", layoutServersCopy);
+                    CompletableFuture<Layout> discoveredLayout = new CompletableFuture<>();
+                    discoveredLayout.complete(getLayoutView().discoverLayout(layoutServersCopy));
 
-                Collections.shuffle(layoutServersCopy);
-                // Iterate through the layout servers, attempting to connect to one
-                for (String s : layoutServersCopy) {
-                    log.debug("Trying connection to layout server {}", s);
-                    try {
-                        IClientRouter router = getRouter(s);
-                        // Try to get a layout.
-                        CompletableFuture<Layout> layoutFuture =
-                                new LayoutClient(router, Layout.INVALID_EPOCH).getLayout();
-                        // Wait for layout
-                        Layout l = layoutFuture.get();
-
-                        // If the layout we got has a smaller epoch than the latestLayout epoch,
-                        // we discard it.
-                        if (latestLayout != null && latestLayout.getEpoch() > l.getEpoch()) {
-                            log.warn("fetchLayout: Received a layout with epoch {} from server "
-                                            + "{}:{} smaller than latestLayout epoch {}, "
-                                            + "discarded.",
-                                    l.getEpoch(), router.getHost(), router.getPort(),
-                                    latestLayout.getEpoch());
-                            continue;
-                        }
-
-                        checkClusterId(l);
-
-                        layout = layoutFuture;
-                        latestLayout = l;
-                        log.debug("Layout server {} responded with layout {}", s, l);
-
-                        // Prune away removed node routers from the nodeRouterPool.
-                        pruneRemovedRouters(l);
-
-                        return l;
-                    } catch (InterruptedException ie) {
-                        throw new UnrecoverableCorfuInterruptedError(
-                                "Interrupted during layout fetch", ie);
-                    } catch (Exception e) {
-                        log.warn("Tried to get layout from {} but failed with exception:", s, e);
+                    if (latestLayout != null && latestLayout.getEpoch() > discoveredLayout.get().getEpoch()) {
+                        log.warn("fetchLayout: ignoring discovered layout {}, because latest layout {}",
+                                discoveredLayout.get(), latestLayout);
+                        pruneRemovedRouters(latestLayout);
+                        continue;
                     }
+
+                    // Accept the discovered layout because its newer
+                    checkClusterId(discoveredLayout.get());
+                    layout = discoveredLayout;
+                    latestLayout = discoveredLayout.get();
+
+                    // Prune away removed node routers from the nodeRouterPool.
+                    pruneRemovedRouters(discoveredLayout.get());
+
+                    log.info("fetchLayout: accepted layout {}", discoveredLayout.get());
+
+                    return discoveredLayout.get();
+                } catch (InterruptedException ie) {
+                    throw new UnrecoverableCorfuInterruptedError(
+                            "Interrupted during layout fetch", ie);
+                } catch (Exception e) {
+                    log.warn("Tried to get layout from {} but failed with exception:", layoutServersCopy, e);
                 }
 
                 log.warn("Couldn't connect to any up-to-date layout servers, retrying in {}, "
@@ -930,6 +917,8 @@ public class CorfuRuntime {
             }
         });
     }
+
+
 
     @SuppressWarnings("unchecked")
     private void checkVersion() {

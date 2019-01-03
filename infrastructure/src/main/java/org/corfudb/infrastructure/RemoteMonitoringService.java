@@ -484,7 +484,7 @@ public class RemoteMonitoringService implements MonitoringService {
 
         QuorumFuturesFactory.CompositeFuture<Layout> quorumFuture = QuorumFuturesFactory
                 .getQuorumFuture(
-                        Comparator.comparing(Layout::asJSONString),
+                        Comparator.comparingLong(Layout::getEpoch),
                         completableFutures);
         try {
             return quorumFuture.get();
