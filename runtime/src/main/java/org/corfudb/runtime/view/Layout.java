@@ -315,13 +315,12 @@ public class Layout {
      * @param layout layout to copy
      */
     public Layout(@Nonnull Layout layout) {
-        Layout layoutCopy = parser.fromJson(layout.asJSONString(), Layout.class);
-        this.layoutServers = layoutCopy.getLayoutServers();
-        this.sequencers = layoutCopy.getSequencers();
-        this.segments = layoutCopy.getSegments();
-        this.unresponsiveServers = layoutCopy.getUnresponsiveServers();
-        this.epoch = layoutCopy.getEpoch();
-        this.clusterId = layoutCopy.clusterId;
+        this.layoutServers = new ArrayList<>(layout.getLayoutServers());
+        this.sequencers = new ArrayList<>(layout.getSequencers());
+        this.segments = new ArrayList<>(layout.getSegments());
+        this.unresponsiveServers = new ArrayList<>(layout.getUnresponsiveServers());
+        this.epoch = layout.getEpoch();
+        this.clusterId = layout.clusterId;
     }
 
     public enum ReplicationMode {
