@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -25,6 +26,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.TrimmedUpcallException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Sleep;
@@ -470,39 +472,38 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     }
 
     private void abortTransaction(Exception e) {
-        Token snapshotTimestamp;
-        AbortCause abortCause;
-        TransactionAbortedException tae;
+        final AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
+        TransactionalContext.removeContext();
 
-        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
-
+        // Base case: No need to translate, just throw the exception as-is.
         if (e instanceof TransactionAbortedException) {
-            tae = (TransactionAbortedException) e;
-        } else {
-            if (e instanceof NetworkException) {
-                // If a 'NetworkException' was received within a transactional context, an attempt to
-                // 'getSnapshotTimestamp' will also fail (as it requests it to the Sequencer).
-                // A new NetworkException would prevent the earliest to be propagated and encapsulated
-                // as a TransactionAbortedException.
-                snapshotTimestamp = Token.UNINITIALIZED;
-                abortCause = AbortCause.NETWORK;
-            } else if (e instanceof UnsupportedOperationException) {
-                snapshotTimestamp = context.getSnapshotTimestamp();
-                abortCause = AbortCause.UNSUPPORTED;
-            } else {
-                log.error("abortTransaction[{}] Abort Transaction with Exception {}", this, e);
-                snapshotTimestamp = context.getSnapshotTimestamp();
-                abortCause = AbortCause.UNDEFINED;
-            }
-
-            TxResolutionInfo txInfo = new TxResolutionInfo(
-                    context.getTransactionID(), snapshotTimestamp);
-            tae = new TransactionAbortedException(txInfo, null, getStreamID(),
-                    abortCause, e, context);
-            context.abortTransaction(tae);
+            throw (TransactionAbortedException) e;
         }
 
-        TransactionalContext.removeContext();
+        Token snapshotTimestamp = Token.UNINITIALIZED;
+        AbortCause abortCause = AbortCause.UNDEFINED;
+
+        if (e instanceof NetworkException) {
+            // If a 'NetworkException' was received within a transactional context, an attempt to
+            // 'getSnapshotTimestamp' will also fail (as it requests it to the Sequencer).
+            // A new NetworkException would prevent the earliest to be propagated and encapsulated
+            // as a TransactionAbortedException.
+            abortCause = AbortCause.NETWORK;
+        } else if (e instanceof UnsupportedOperationException) {
+            snapshotTimestamp = context.getSnapshotTimestamp();
+            abortCause = AbortCause.UNSUPPORTED;
+        } else {
+            log.error("abortTransaction[{}] Abort Transaction with Exception {}", this, e);
+            snapshotTimestamp = context.getSnapshotTimestamp();
+        }
+
+        final TxResolutionInfo txInfo = new TxResolutionInfo(
+                context.getTransactionID(), snapshotTimestamp);
+        final TransactionAbortedException tae = new TransactionAbortedException(txInfo,
+                TokenResponse.NO_CONFLICT_KEY, getStreamID(), Address.NON_ADDRESS,
+                abortCause, e, context);
+        context.abortTransaction(tae);
+
         throw tae;
     }
 }

@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -27,7 +28,6 @@ import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-
 
 /**
  * A view of the objects inside a Corfu instance.
@@ -112,7 +112,8 @@ public class ObjectsView extends AbstractView {
             TxResolutionInfo txInfo = new TxResolutionInfo(
                     context.getTransactionID(), context.getSnapshotTimestamp());
             context.abortTransaction(new TransactionAbortedException(
-                    txInfo, null, AbortCause.USER, context));
+                    txInfo, TokenResponse.NO_CONFLICT_KEY, TokenResponse.NO_CONFLICT_STREAM,
+                    Address.NON_ADDRESS, AbortCause.USER, context));
             TransactionalContext.removeContext();
         }
     }
@@ -182,8 +183,8 @@ public class ObjectsView extends AbstractView {
                 cause = AbortCause.SIZE_EXCEEDED;
             }
 
-            TransactionAbortedException tae = new TransactionAbortedException(txInfo,
-                    null, null, cause, e, context);
+            TransactionAbortedException tae = new TransactionAbortedException(
+                    txInfo, cause, e, context);
             context.abortTransaction(tae);
             throw tae;
 
@@ -191,8 +192,8 @@ public class ObjectsView extends AbstractView {
             log.error("TXEnd[{}]: Unexpected exception", context, e);
             TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
                     Token.UNINITIALIZED);
-            TransactionAbortedException tae = new TransactionAbortedException(txInfo,
-                    null, null, AbortCause.UNDEFINED, e, context);
+            TransactionAbortedException tae = new TransactionAbortedException(
+                    txInfo, AbortCause.UNDEFINED, e, context);
             context.abortTransaction(tae);
             throw new UnrecoverableCorfuError("Unexpected exception during commit", e);
         } finally {

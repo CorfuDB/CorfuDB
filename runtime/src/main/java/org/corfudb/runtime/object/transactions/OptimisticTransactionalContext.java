@@ -16,6 +16,7 @@ import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
@@ -304,8 +305,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         } catch (AppendException oe) {
             // We were overwritten (and the original snapshot is now conflicting),
             // which means we must abort.
-            throw new TransactionAbortedException(txInfo, null, null,
-                AbortCause.OVERWRITE, oe, this);
+            throw new TransactionAbortedException(txInfo, AbortCause.OVERWRITE, oe, this);
         }
 
         log.trace("Commit[{}] Acquire address {}", this, address);
