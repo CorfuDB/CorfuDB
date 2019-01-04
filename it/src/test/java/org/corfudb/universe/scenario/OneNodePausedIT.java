@@ -1,5 +1,14 @@
 package org.corfudb.universe.scenario;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
+
+import java.time.Duration;
+import java.util.Map;
+
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
@@ -10,15 +19,6 @@ import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.util.Sleep;
 import org.junit.Test;
-
-import java.time.Duration;
-import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 
 public class OneNodePausedIT extends GenericIntegrationTest {
 
@@ -57,7 +57,7 @@ public class OneNodePausedIT extends GenericIntegrationTest {
                 // Verify cluster status is DEGRADED with one node down
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
                 assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
-                Map<String, NodeStatus> statusMap = clusterStatusReport.getClientServerConnectivityStatusMap();
+                Map<String, NodeStatus> statusMap = clusterStatusReport.getClusterNodeStatusMap();
                 assertThat(statusMap.get(server1.getEndpoint())).isEqualTo(NodeStatus.DOWN);
 
                 // Verify data path working fine
