@@ -293,7 +293,12 @@ public class ServerContext implements AutoCloseable {
      */
     public synchronized boolean installSingleNodeLayoutIfAbsent() {
         if ((Boolean) getServerConfig().get("--single") && getCurrentLayout() == null) {
-            setCurrentLayout(getNewSingleNodeLayout());
+            Layout layout = getNewSingleNodeLayout();
+            setCurrentLayout(layout);
+            UUID id = new UUID(0,0);
+            Rank rank = new Rank(1l, id);
+            setPhase1Rank(rank);
+            setPhase2Data(new Phase2Data(rank, layout));
             return true;
         }
         return false;
@@ -414,6 +419,17 @@ public class ServerContext implements AutoCloseable {
     public void setPhase2Data(Phase2Data phase2Data) {
         dataStore.put(Phase2Data.class, PREFIX_PHASE_2,
                 getServerEpoch() + KEY_SUFFIX_PHASE_2, phase2Data);
+        setLatestPhase2Data(phase2Data);
+    }
+
+    private static final String CURRENT_PREFIX_PHASE_2 = "CURRENT_PHASE_2";
+
+    public Phase2Data getLatestPhase2Data() {
+        return dataStore.get(Phase2Data.class, CURRENT_PREFIX_PHASE_2, KEY_SUFFIX_PHASE_2);
+    }
+
+    public void setLatestPhase2Data(Phase2Data phase2Data) {
+        dataStore.put(Phase2Data.class, CURRENT_PREFIX_PHASE_2, KEY_SUFFIX_PHASE_2, phase2Data);
     }
 
     public void setLayoutInHistory(Layout layout) {

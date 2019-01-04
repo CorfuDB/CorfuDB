@@ -33,14 +33,13 @@ public enum CorfuMsgType {
     NOT_READY(9, TypeToken.of(CorfuMsg.class), true),
 
     // Layout Messages
-    LAYOUT_REQUEST(10, new TypeToken<CorfuPayloadMsg<Long>>(){}, true),
+    LAYOUT_REQUEST(10, new TypeToken<CorfuPayloadMsg<LayoutQueryRequest>>(){}, true),
     LAYOUT_RESPONSE(11, TypeToken.of(LayoutMsg.class), true),
     LAYOUT_PREPARE(12, new TypeToken<CorfuPayloadMsg<LayoutPrepareRequest>>(){}, true),
     LAYOUT_PREPARE_REJECT(13, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}),
     LAYOUT_PROPOSE(14, new TypeToken<CorfuPayloadMsg<LayoutProposeRequest>>(){}, true),
     LAYOUT_PROPOSE_REJECT(15, new TypeToken<CorfuPayloadMsg<LayoutProposeResponse>>(){}),
     LAYOUT_COMMITTED(16, new TypeToken<CorfuPayloadMsg<LayoutCommittedRequest>>(){}, true),
-    LAYOUT_QUERY(17, new TypeToken<CorfuPayloadMsg<Long>>(){}),
     LAYOUT_BOOTSTRAP(18, new TypeToken<CorfuPayloadMsg<LayoutBootstrapRequest>>(){}, true),
     LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), true),
 

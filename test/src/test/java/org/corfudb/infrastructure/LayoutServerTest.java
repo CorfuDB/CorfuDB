@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.LayoutCommittedRequest;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
 import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
+import org.corfudb.protocols.wireprotocol.LayoutQueryRequest;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
@@ -508,7 +509,8 @@ public class LayoutServerTest extends AbstractServerTest {
     }
 
     private void requestLayout(long epoch) {
-        sendMessage(CorfuMsgType.LAYOUT_REQUEST.payloadMsg(epoch));
+        sendMessage(CorfuMsgType.LAYOUT_REQUEST
+                .payloadMsg(new LayoutQueryRequest(LayoutQueryRequest.Type.COMMITTED, epoch)));
     }
 
     private void setEpoch(long epoch) {

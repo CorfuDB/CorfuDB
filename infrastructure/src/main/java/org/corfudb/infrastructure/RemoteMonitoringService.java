@@ -39,6 +39,7 @@ import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
@@ -438,6 +439,7 @@ public class RemoteMonitoringService implements MonitoringService {
 
         try {
             Layout layout = serverContext.copyManagementLayout();
+
             // Query all layout servers to get quorum Layout.
             Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap = new HashMap<>();
             for (String layoutServer : layout.getLayoutServers()) {
@@ -447,11 +449,18 @@ public class RemoteMonitoringService implements MonitoringService {
             // Retrieve the correct layout from quorum of members to reseal servers.
             // If we are unable to reach a consensus from a quorum we get an exception and
             // abort the epoch correction phase.
-            Layout quorumLayout = fetchQuorumLayout(layoutCompletableFutureMap.values()
-                    .toArray(new CompletableFuture[layoutCompletableFutureMap.size()]));
+
+            // TODO(Do we really need a quorum? discover can find a new epoch, without a quorum)
+            // can reuse futures from the method above
+            Layout discoveredLayout = getCorfuRuntime().getLayoutView().discoverLayout(layout.getLayoutServers());
+
+            if (discoveredLayout.getEpoch() > layout.getEpoch()) {
+                log.info("correctOutOfPhaseEpochs: discovered new layout={} updating management layout",
+                        discoveredLayout);
+            }
 
             // Update local layout copy.
-            serverContext.saveManagementLayout(quorumLayout);
+            serverContext.saveManagementLayout(discoveredLayout);
             layout = serverContext.copyManagementLayout();
 
             // In case of a partial seal, a set of servers can be sealed with a higher epoch.
@@ -469,38 +478,8 @@ public class RemoteMonitoringService implements MonitoringService {
             // If yes patch it (commit) with the latestLayout (received from quorum).
             updateTrailingLayoutServers(layoutCompletableFutureMap);
 
-        } catch (QuorumUnreachableException e) {
+        } catch (QuorumUnreachableException | UnreachableClusterException e) {
             log.error("Error in correcting server epochs: {}", e);
-        }
-    }
-
-    /**
-     * Fetches the updated layout from quorum of layout servers.
-     *
-     * @return quorum agreed layout.
-     * @throws QuorumUnreachableException If unable to receive consensus on layout.
-     */
-    private Layout fetchQuorumLayout(CompletableFuture<Layout>[] completableFutures) {
-
-        QuorumFuturesFactory.CompositeFuture<Layout> quorumFuture = QuorumFuturesFactory
-                .getQuorumFuture(
-                        Comparator.comparing(Layout::asJSONString),
-                        completableFutures);
-        try {
-            return quorumFuture.get();
-        } catch (ExecutionException ee) {
-            if (ee.getCause() instanceof QuorumUnreachableException) {
-                throw (QuorumUnreachableException) ee.getCause();
-            }
-
-            int reachableServers = (int) Arrays.stream(completableFutures)
-                    .filter(booleanCompletableFuture -> !booleanCompletableFuture
-                            .isCompletedExceptionally()).count();
-            throw new QuorumUnreachableException(reachableServers, completableFutures.length);
-        } catch (InterruptedException ie) {
-            log.error("fetchQuorumLayout: Interrupted Exception.");
-            Thread.currentThread().interrupt();
-            throw new UnrecoverableCorfuInterruptedError(ie);
         }
     }
 
