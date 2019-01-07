@@ -300,7 +300,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
             if (singleStep) {
                 // backpointers failed, so we're
                 // downgrading to a linear scan
-                log.trace("followBackPointers: downgrading to single step, backpointer failed");
+                log.warn("followBackPointers[{}]: downgrading to single step, found hole at {}", this, currentAddress);
                 currentAddress = currentAddress - 1;
             }
         }
