@@ -259,7 +259,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 log.error("Healing nodes failed: ", ee);
             } catch (InterruptedException ie) {
                 log.error("Healing nodes interrupted: ", ie);
-                Thread.currentThread().interrupt();
+                throw new UnrecoverableCorfuInterruptedError(ie);
             }
         });
     }
@@ -499,7 +499,6 @@ public class RemoteMonitoringService implements MonitoringService {
             throw new QuorumUnreachableException(reachableServers, completableFutures.length);
         } catch (InterruptedException ie) {
             log.error("fetchQuorumLayout: Interrupted Exception.");
-            Thread.currentThread().interrupt();
             throw new UnrecoverableCorfuInterruptedError(ie);
         }
     }
@@ -527,7 +526,6 @@ public class RemoteMonitoringService implements MonitoringService {
             } catch (InterruptedException ie) {
                 log.error("updateTrailingLayoutServers: layout fetch from {} failed: {}",
                         layoutServer, ie);
-                Thread.currentThread().interrupt();
                 throw new UnrecoverableCorfuInterruptedError(ie);
             }
 
@@ -553,7 +551,6 @@ public class RemoteMonitoringService implements MonitoringService {
                 log.error("Updating layout servers failed due to : {}", ee);
             } catch (InterruptedException ie) {
                 log.error("Updating layout servers failed due to : {}", ie);
-                Thread.currentThread().interrupt();
                 throw new UnrecoverableCorfuInterruptedError(ie);
             }
         });
