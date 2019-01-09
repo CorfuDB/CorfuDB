@@ -2,33 +2,12 @@ package org.corfudb.infrastructure;
 
 import static org.corfudb.util.LambdaUtils.runSansThrow;
 
-import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
-import java.time.Duration;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.management.ClusterRecommendationEngine;
 import org.corfudb.infrastructure.management.ClusterRecommendationEngineFactory;
 import org.corfudb.infrastructure.management.ClusterRecommendationStrategy;
@@ -44,6 +23,24 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.concurrent.SingletonResource;
+
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Remote Monitoring Service constitutes of failure and healing monitoring and handling.
@@ -112,6 +109,10 @@ public class RemoteMonitoringService implements MonitoringService {
     private class SequencerNotReadyCounter {
         private final long epoch;
         private int counter;
+
+        public void increment() {
+            counter += 1;
+        }
     }
 
     private SequencerNotReadyCounter sequencerNotReadyCounter;
@@ -196,16 +197,18 @@ public class RemoteMonitoringService implements MonitoringService {
 
         CorfuRuntime corfuRuntime = getCorfuRuntime();
         getCorfuRuntime().invalidateLayout();
-        serverContext.saveManagementLayout(corfuRuntime.getLayoutView().getLayout());
+
+        Layout layout = corfuRuntime.getLayoutView().getLayout();
+        serverContext.saveManagementLayout(layout);
 
         if (!canHandleReconfigurations()) {
             return;
         }
 
-        clusterStateContext.refreshClusterView(serverContext.getLocalEndpoint(), serverContext.copyManagementLayout());
+        clusterStateContext.refreshClusterView(serverContext.getLocalEndpoint(), layout);
 
-        runFailureDetectorTask();
-        runHealingDetectorTask();
+        runFailureDetectorTask(layout);
+        runHealingDetectorTask(layout);
     }
 
 
@@ -222,7 +225,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * - The healing handler policy dictates whether the healing node should be added back as a
      * logUnit node or should only operate as a layout server or a primary/backup sequencer.
      */
-    private void runHealingDetectorTask() {
+    private void runHealingDetectorTask(Layout layout) {
 
         if (!healingDetectorFuture.isDone()) {
             log.debug("Cannot initiate new healing polling task. Polling in progress.");
@@ -232,15 +235,15 @@ public class RemoteMonitoringService implements MonitoringService {
         healingDetectorFuture = detectionTaskWorkers.submit(() -> {
 
             CorfuRuntime corfuRuntime = getCorfuRuntime();
-            final Layout layout = serverContext.copyManagementLayout();
-            final PollReport pollReport = healingDetector.poll(layout, corfuRuntime);
+            PollReport pollReport = healingDetector.poll(layout, corfuRuntime);
 
             clusterStateContext.updateResponsiveNodes(pollReport.getChangedNodes());
-            pollReport.getClusterStateMap().forEach((s, clusterStatus) ->
-                    clusterStateContext.updateNodeState(clusterStatus, layout));
+            pollReport.getClusterStateMap()
+                    .forEach((s, clusterStatus) -> clusterStateContext.updateNodeState(clusterStatus, layout));
 
-            Set<String> healedNodes = new TreeSet<>(recommendationEngine
-                    .healedServers(clusterStateContext.getClusterState(), layout));
+            Set<String> healedNodes = new TreeSet<>(
+                    recommendationEngine.healedServers(clusterStateContext.getClusterState(), layout)
+            );
 
             if (healedNodes.isEmpty()) {
                 return;
@@ -279,7 +282,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * - Finally all unresponsive server failures are handled by either removing or marking them
      * as unresponsive based on a failure handling policy.
      */
-    private void runFailureDetectorTask() {
+    private void runFailureDetectorTask(Layout layout) {
 
         if (!failureDetectorFuture.isDone()) {
             log.debug("Cannot initiate new polling task. Polling in progress.");
@@ -287,15 +290,17 @@ public class RemoteMonitoringService implements MonitoringService {
         }
 
         failureDetectorFuture = detectionTaskWorkers.submit(() -> {
+            log.trace("Run failure detector task");
 
             CorfuRuntime corfuRuntime = getCorfuRuntime();
-            final Layout layout = serverContext.copyManagementLayout();
             // Execute the failure detection poll round.
-            final PollReport pollReport = failureDetector.poll(layout, corfuRuntime);
+            PollReport pollReport = failureDetector.poll(layout, corfuRuntime);
 
             clusterStateContext.updateUnresponsiveNodes(pollReport.getChangedNodes());
-            pollReport.getClusterStateMap().forEach((s, clusterStatus) ->
-                    clusterStateContext.updateNodeState(clusterStatus, layout));
+
+            pollReport
+                    .getClusterStateMap()
+                    .forEach((s, clusterStatus) -> clusterStateContext.updateNodeState(clusterStatus, layout));
 
             // Corrects out of phase epoch issues if present in the report. This method
             // performs re-sealing of all nodes if required and catchup of a layout server to
@@ -304,7 +309,6 @@ public class RemoteMonitoringService implements MonitoringService {
 
             // Analyze the poll report and trigger failure handler if needed.
             handleFailures(pollReport);
-
         });
     }
 
@@ -320,14 +324,13 @@ public class RemoteMonitoringService implements MonitoringService {
      * @return True if latest layout slot is vacant. Else False.
      */
     private boolean isCurrentLayoutSlotUnFilled(PollReport pollReport) {
-        final Layout layout = serverContext.copyManagementLayout();
+        Layout layout = serverContext.copyManagementLayout();
         // Check if all active layout servers are present in the outOfPhaseEpochNodes map.
-        boolean result = pollReport.getOutOfPhaseEpochNodes().keySet()
-                .containsAll(layout.getLayoutServers().stream()
-                        // Unresponsive servers are excluded as they do not respond with a
-                        // WrongEpochException.
-                        .filter(s -> !layout.getUnresponsiveServers().contains(s))
-                        .collect(Collectors.toList()));
+        List<String> unresponsiveServers = layout.getLayoutServers().stream()
+                // Unresponsive servers are excluded as they do not respond with a WrongEpochException.
+                .filter(s -> !layout.getUnresponsiveServers().contains(s))
+                .collect(Collectors.toList());
+        boolean result = pollReport.getOutOfPhaseEpochNodes().keySet().containsAll(unresponsiveServers);
         if (result) {
             log.info("Current layout slot is empty. Filling slot with current layout.");
         }
@@ -338,13 +341,13 @@ public class RemoteMonitoringService implements MonitoringService {
         String primarySequencer = layout.getSequencers().get(0);
         // Fetches clusterStatus from map or creates a default ClusterState object.
         NodeState primarySequencerNodeState = clusterStateContext.getClusterState()
-                .getNodeStatusMap().getOrDefault(primarySequencer,
-                        NodeState.getDefaultNodeState(NodeLocator.parseString(primarySequencer)));
+                .getNodeStatusMap().getOrDefault(primarySequencer, NodeState.getDefaultNodeState(NodeLocator.parseString(primarySequencer)));
 
         // If we have a stale poll report, we should discard this and continue polling.
         if (layout.getEpoch() > pollReport.getPollEpoch()) {
-            log.warn("getPrimarySequencerStatus: Received poll report for epoch {} but currently "
-                    + "at epoch {}", pollReport.getPollEpoch(), layout.getEpoch());
+            log.warn("getPrimarySequencerStatus: Received poll report for epoch {} but currently at epoch {}",
+                    pollReport.getPollEpoch(), layout.getEpoch()
+            );
             return SequencerStatus.UNKNOWN;
         } else {
             return primarySequencerNodeState.getSequencerMetrics().getSequencerStatus();
@@ -358,45 +361,61 @@ public class RemoteMonitoringService implements MonitoringService {
      * @param pollReport Poll report obtained from failure detection policy.
      */
     private void handleFailures(PollReport pollReport) {
+        log.trace("Handle failures for the report: {}", pollReport);
+
         try {
             // These conditions are mutually exclusive. If there is a failure to be
             // handled, we don't need to explicitly fix the unfilled layout slot. Else we do.
             Layout layout = serverContext.copyManagementLayout();
-            Set<String> failedNodes = new TreeSet<>(recommendationEngine
-                    .failedServers(clusterStateContext.getClusterState(), layout));
+
+            Set<String> failedNodes = new TreeSet<>(
+                    recommendationEngine.failedServers(clusterStateContext.getClusterState(), layout)
+            );
 
             if (!failedNodes.isEmpty() || isCurrentLayoutSlotUnFilled(pollReport)) {
 
                 log.info("Detected failed nodes in node responsiveness: Failed:{}, pollReport:{}",
-                        failedNodes, pollReport);
-                getCorfuRuntime().getLayoutView().getRuntimeLayout(layout)
+                        failedNodes, pollReport
+                );
+
+                getCorfuRuntime()
+                        .getLayoutView()
+                        .getRuntimeLayout(layout)
                         .getManagementClient(serverContext.getLocalEndpoint())
-                        .handleFailure(pollReport.getPollEpoch(), failedNodes).get();
+                        .handleFailure(pollReport.getPollEpoch(), failedNodes)
+                        .get();
 
-            } else if (!getPrimarySequencerStatus(layout, pollReport)
-                    .equals(SequencerStatus.READY)) {
-                // If failures are not present we can check if the primary sequencer has been
-                // bootstrapped from the heartbeat responses received.
-                if (sequencerNotReadyCounter == null
-                        || sequencerNotReadyCounter.getEpoch() != layout.getEpoch()) {
-                    // If the epoch is different than the poll epoch, we reset the timeout state.
-                    sequencerNotReadyCounter = new SequencerNotReadyCounter(layout.getEpoch(), 1);
+                return;
 
-                } else if (sequencerNotReadyCounter.getEpoch() == layout.getEpoch()) {
-                    // If the epoch is same as the epoch being tracked in the tuple, we need to
-                    // increment the count and attempt to bootstrap the sequencer if the count has
-                    // crossed the threshold.
-                    sequencerNotReadyCounter.setCounter(sequencerNotReadyCounter.getCounter() + 1);
-                    if (sequencerNotReadyCounter.getCounter() >= SEQUENCER_NOT_READY_THRESHOLD) {
-                        // Launch task to bootstrap the primary sequencer.
-                        log.info("Attempting to bootstrap the primary sequencer.");
-                        // We do not care about the result of the trigger.
-                        // If it fails, we detect this again and retry in the next polling cycle.
-                        getCorfuRuntime().getLayoutManagementView()
-                                .asyncSequencerBootstrap(layout, detectionTaskWorkers);
-                    }
-                }
             }
+
+            if (getPrimarySequencerStatus(layout, pollReport).equals(SequencerStatus.READY)) {
+                return;
+            }
+
+            // If failures are not present we can check if the primary sequencer has been
+            // bootstrapped from the heartbeat responses received.
+            if (sequencerNotReadyCounter == null || sequencerNotReadyCounter.getEpoch() != layout.getEpoch()) {
+                // If the epoch is different than the poll epoch, we reset the timeout state.
+                sequencerNotReadyCounter = new SequencerNotReadyCounter(layout.getEpoch(), 1);
+                return;
+            }
+
+            // If the epoch is same as the epoch being tracked in the tuple, we need to
+            // increment the count and attempt to bootstrap the sequencer if the count has
+            // crossed the threshold.
+            sequencerNotReadyCounter.increment();
+            if (sequencerNotReadyCounter.getCounter() < SEQUENCER_NOT_READY_THRESHOLD) {
+                return;
+            }
+
+            // Launch task to bootstrap the primary sequencer.
+            log.info("Attempting to bootstrap the primary sequencer.");
+            // We do not care about the result of the trigger.
+            // If it fails, we detect this again and retry in the next polling cycle.
+            getCorfuRuntime()
+                    .getLayoutManagementView()
+                    .asyncSequencerBootstrap(layout, detectionTaskWorkers);
 
         } catch (Exception e) {
             log.error("Exception invoking failure handler : {}", e);
@@ -414,7 +433,9 @@ public class RemoteMonitoringService implements MonitoringService {
     private CompletableFuture<Layout> getLayoutFromServer(Layout layout, String endpoint) {
         CompletableFuture<Layout> completableFuture = new CompletableFuture<>();
         try {
-            completableFuture = getCorfuRuntime().getLayoutView().getRuntimeLayout(layout)
+            completableFuture = getCorfuRuntime()
+                    .getLayoutView()
+                    .getRuntimeLayout(layout)
                     .getLayoutClient(endpoint)
                     .getLayout();
         } catch (Exception e) {
@@ -510,8 +531,7 @@ public class RemoteMonitoringService implements MonitoringService {
      *
      * @param layoutCompletableFutureMap Map of layout server endpoints to their layout requests.
      */
-    private void updateTrailingLayoutServers(
-            Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap) {
+    private void updateTrailingLayoutServers(Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap) {
 
         // Patch trailing layout servers with latestLayout.
         Layout latestLayout = serverContext.copyManagementLayout();
@@ -535,6 +555,7 @@ public class RemoteMonitoringService implements MonitoringService {
             if (layout != null && layout.equals(latestLayout)) {
                 return;
             }
+
             try {
                 // Committing this layout directly to the trailing layout servers.
                 // This is safe because this layout is acquired by a quorum fetch which confirms

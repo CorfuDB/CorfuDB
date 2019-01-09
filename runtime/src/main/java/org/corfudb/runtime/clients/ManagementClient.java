@@ -8,8 +8,10 @@ import java.util.concurrent.TimeoutException;
 
 import javax.annotation.Nonnull;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
@@ -31,6 +33,7 @@ import org.corfudb.util.CFUtils;
  *
  * <p>Created by zlokhandwala on 11/4/16.
  */
+@Slf4j
 public class ManagementClient extends AbstractClient {
 
     public ManagementClient(IClientRouter router, long epoch) {
@@ -55,8 +58,13 @@ public class ManagementClient extends AbstractClient {
      * @return A future which will be return TRUE if completed successfully else returns FALSE.
      */
     public CompletableFuture<Boolean> handleFailure(long detectorEpoch, Set<String> failedNodes) {
-        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED
-                .payloadMsg(new DetectorMsg(detectorEpoch, failedNodes, Collections.emptySet())));
+        log.debug("Handle failure, detectorEpoch: {}, failed nodes: {}", detectorEpoch, failedNodes);
+
+        CorfuPayloadMsg<DetectorMsg> message = CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
+                new DetectorMsg(detectorEpoch, failedNodes, Collections.emptySet())
+        );
+
+        return sendMessageWithFuture(message);
     }
 
     /**

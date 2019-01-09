@@ -1,6 +1,15 @@
 package org.corfudb.infrastructure.management;
 
 import com.google.common.collect.ImmutableMap;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.NodeLocator;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -8,17 +17,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.protocols.wireprotocol.ClusterState;
-import org.corfudb.protocols.wireprotocol.NodeState;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.NodeLocator;
 
 /**
  * Cluster State Context maintains shared context composing of cluster connectivity.
@@ -58,9 +56,11 @@ public class ClusterStateContext {
      * @return Returns an immutable copy of the cluster state.
      */
     public synchronized ClusterState getClusterState() {
-        return new ClusterState(ImmutableMap.copyOf(clusterView.entrySet().stream()
+        Map<String, NodeState> nodeStatuses = clusterView.entrySet()
+                .stream()
                 .filter(nodeHeartbeatSnapshotEntry -> !nodeHeartbeatSnapshotEntry.getValue().isDecayed())
-                .collect(Collectors.toMap(Entry::getKey, o -> o.getValue().getNodeState()))));
+                .collect(Collectors.toMap(Entry::getKey, o -> o.getValue().getNodeState()));
+        return new ClusterState(ImmutableMap.copyOf(nodeStatuses));
     }
 
     /**
@@ -81,8 +81,7 @@ public class ClusterStateContext {
      * @return True if the node state is stale. False otherwise.
      */
     private boolean isNodeStateStale(NodeState nodeState) {
-        final NodeHeartbeat nodeHeartbeat
-                = clusterView.get(NodeLocator.getLegacyEndpoint(nodeState.getEndpoint()));
+        NodeHeartbeat nodeHeartbeat = clusterView.get(NodeLocator.getLegacyEndpoint(nodeState.getEndpoint()));
         return nodeHeartbeat != null && getHeartbeatFromNodeState(nodeState)
                 .compareTo(getHeartbeatFromNodeState(nodeHeartbeat.getNodeState())) <= 0;
     }
@@ -94,10 +93,13 @@ public class ClusterStateContext {
      * @param nodeState Node state to be updated.
      */
     private void updateNodeState(@NonNull String endpoint, @NonNull NodeState nodeState, @NonNull Layout layout) {
-        clusterView.compute(endpoint, (s, nodeHeartbeat) ->
-                nodeHeartbeat != null && isNodeStateStale(nodeState) ? nodeHeartbeat
-                        : new NodeHeartbeat(nodeState,
-                        new HeartbeatTimestamp(layout.getEpoch(), heartbeatCounter)));
+        clusterView.compute(endpoint, (s, nodeHeartbeat) -> {
+            if (nodeHeartbeat != null && isNodeStateStale(nodeState)) {
+                return nodeHeartbeat;
+            }
+
+            return new NodeHeartbeat(nodeState, new HeartbeatTimestamp(layout.getEpoch(), heartbeatCounter));
+        });
     }
 
     /**
@@ -108,8 +110,9 @@ public class ClusterStateContext {
      * @param clusterState Cluster state to update the local copy of the cluster state with.
      */
     public synchronized void updateNodeState(@NonNull ClusterState clusterState, @NonNull Layout currentLayout) {
-        clusterState.getNodeStatusMap().forEach((endpoint, nodeState) ->
-                updateNodeState(endpoint, nodeState, currentLayout));
+        clusterState
+                .getNodeStatusMap()
+                .forEach((endpoint, nodeState) -> updateNodeState(endpoint, nodeState, currentLayout));
     }
 
     /**
@@ -136,8 +139,7 @@ public class ClusterStateContext {
      *                       view map.
      * @param snapshotLayout Snapshot layout.
      */
-    public synchronized void refreshClusterView(@NonNull String localEndpoint,
-                                                @NonNull Layout snapshotLayout) {
+    public synchronized void refreshClusterView(@NonNull String localEndpoint, @NonNull Layout snapshotLayout) {
         // Increment heartbeat counter.
         incrementHeartbeat();
 

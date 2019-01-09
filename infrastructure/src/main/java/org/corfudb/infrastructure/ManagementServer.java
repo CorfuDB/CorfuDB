@@ -190,8 +190,7 @@ public class ManagementServer extends AbstractServer {
      * @param r   server router
      */
     @ServerHandler(type = CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)
-    public void handleFailureDetectedMsg(CorfuPayloadMsg<DetectorMsg> msg,
-                                         ChannelHandlerContext ctx, IServerRouter r) {
+    public void handleFailureDetectedMsg(CorfuPayloadMsg<DetectorMsg> msg, ChannelHandlerContext ctx, IServerRouter r) {
 
         // This server has not been bootstrapped yet, ignore all requests.
         if (!checkBootstrap(msg)) {
@@ -199,7 +198,7 @@ public class ManagementServer extends AbstractServer {
             return;
         }
 
-        log.info("handleFailureDetectedMsg: Received DetectorMsg : {}", msg.getPayload());
+        log.info("Handle failure. Client: {}, Received DetectorMsg: {}", msg.getClientID(), msg.getPayload());
 
         DetectorMsg detectorMsg = msg.getPayload();
         Layout layout = serverContext.copyManagementLayout();

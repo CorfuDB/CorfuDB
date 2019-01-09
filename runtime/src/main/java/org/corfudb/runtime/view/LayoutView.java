@@ -74,6 +74,8 @@ public class LayoutView extends AbstractView {
     @SuppressWarnings("unchecked")
     public void updateLayout(Layout layout, long rank)
             throws QuorumUnreachableException, OutrankedException, WrongEpochException {
+        log.debug("Update layout: {}, rank: {}", layout, rank);
+
         // Note this step is done because we have added the layout to the Epoch.
         long epoch = layout.getEpoch();
         Layout currentLayout = getLayout();

@@ -97,9 +97,7 @@ public class HealingDetector implements IDetector {
      *
      * @return Poll Report with detected healed nodes.
      */
-    private PollReport pollRound(List<String> members,
-                                 Map<String, IClientRouter> routerMap,
-                                 long epoch) {
+    private PollReport pollRound(List<String> members, Map<String, IClientRouter> routerMap, long epoch) {
 
         Map<String, Integer> pollResultMap = new HashMap<>();
 
@@ -114,8 +112,7 @@ public class HealingDetector implements IDetector {
                     pollOnceAsync(members, routerMap, epoch);
 
             // Collect all poll responses.
-            Set<String> responses = collectResponsesAndVerifyEpochs(members,
-                    pollCompletableFutures, clusterStateMap);
+            Set<String> responses = collectResponsesAndVerifyEpochs(members, pollCompletableFutures, clusterStateMap);
 
             // Count unsuccessful ping responses.
             // If we receive no responses and there are no nodes to heal,

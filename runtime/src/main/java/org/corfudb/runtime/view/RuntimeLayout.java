@@ -63,8 +63,9 @@ public class RuntimeLayout {
      */
     public void sealMinServerSet()
             throws WrongEpochException, QuorumUnreachableException {
-        log.debug("Requested move of servers to new epoch {} servers are {}", layout.getEpoch(),
-                layout.getAllServers());
+        log.debug("Requested move of servers to new epoch {} servers are {}",
+                layout.getEpoch(), layout.getAllServers()
+        );
 
         // Set remote epoch on all servers in layout.
         Map<String, CompletableFuture<Boolean>> resultMap = SealServersHelper.asyncSealServers(this);

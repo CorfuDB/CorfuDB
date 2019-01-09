@@ -79,17 +79,21 @@ public class LayoutManagementView extends AbstractView {
      * @param currentLayout The current layout
      * @param failedServers Set of failed server addresses
      */
-    public void handleFailure(IReconfigurationHandlerPolicy failureHandlerPolicy,
-                              Layout currentLayout,
-                              Set<String> failedServers)
-            throws OutrankedException, LayoutModificationException {
+    public void handleFailure(
+            IReconfigurationHandlerPolicy failureHandlerPolicy,
+            Layout currentLayout,
+            Set<String> failedServers
+    ) throws OutrankedException, LayoutModificationException {
 
+        log.debug("Handle failure, failed servers: {}", failedServers);
         // Generates a new layout by removing the failed nodes from the existing layout
-        Layout newLayout = failureHandlerPolicy
-                .generateLayout(currentLayout,
-                        runtime,
-                        failedServers,
-                        Collections.emptySet());
+        Layout newLayout = failureHandlerPolicy.generateLayout(
+                currentLayout,
+                runtime,
+                failedServers,
+                Collections.emptySet()
+        );
+
         runLayoutReconfiguration(currentLayout, newLayout, false);
     }
 
@@ -336,9 +340,9 @@ public class LayoutManagementView extends AbstractView {
      * @param forceSequencerRecovery Flag. True if want to force sequencer recovery.
      * @throws OutrankedException if consensus is outranked.
      */
-    private void runLayoutReconfiguration(Layout currentLayout, Layout newLayout,
-                                          final boolean forceSequencerRecovery)
+    private void runLayoutReconfiguration(Layout currentLayout, Layout newLayout, boolean forceSequencerRecovery)
             throws OutrankedException {
+        log.debug("Run layout reconfiguration, new layout: {}", newLayout);
 
         // Seals the incremented epoch (Assumes newLayout epoch = currentLayout epoch + 1).
         sealEpoch(currentLayout);
@@ -359,7 +363,7 @@ public class LayoutManagementView extends AbstractView {
      * @param layout Layout to be sealed
      */
     private void sealEpoch(Layout layout) throws QuorumUnreachableException {
-        layout.setEpoch(layout.getEpoch() + 1);
+        layout.nextEpoch();
         runtime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
     }
 
@@ -369,8 +373,9 @@ public class LayoutManagementView extends AbstractView {
      * @param layout Layout to propose.
      * @throws OutrankedException if consensus is outranked.
      */
-    private void attemptConsensus(Layout layout)
-            throws OutrankedException {
+    private void attemptConsensus(Layout layout) throws OutrankedException {
+        log.debug("Attempt consensus for layout: {}", layout);
+
         // Attempts to update all the layout servers with the modified layout.
         try {
             runtime.getLayoutView().updateLayout(layout, prepareRank);
@@ -407,8 +412,8 @@ public class LayoutManagementView extends AbstractView {
      * @param newLayout        New Layout to be reconfigured.
      * @param forceReconfigure Flag to force reconfiguration.
      */
-    public void reconfigureSequencerServers(Layout originalLayout, Layout newLayout,
-                                            boolean forceReconfigure) {
+    public void reconfigureSequencerServers(Layout originalLayout, Layout newLayout, boolean forceReconfigure) {
+        log.debug("Reconfigure sequencer servers, new layout: {}", newLayout);
 
         boolean acquiredLocked = recoverSequencerLock.tryLock();
         if (acquiredLocked) {

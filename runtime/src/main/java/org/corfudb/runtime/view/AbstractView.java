@@ -55,8 +55,7 @@ public abstract class AbstractView {
     }
 
     public <T, A extends RuntimeException, B extends RuntimeException, C extends RuntimeException,
-            D extends RuntimeException> T layoutHelper(LayoutFunction<Layout, T, A, B, C, D>
-                                                               function)
+            D extends RuntimeException> T layoutHelper(LayoutFunction<Layout, T, A, B, C, D> function)
             throws A, B, C, D {
         return layoutHelper(function, false);
     }
@@ -65,7 +64,7 @@ public abstract class AbstractView {
      * Maintains reference of the RuntimeLayout which gets invalidated if the AbstractView
      * encounters a newer layout. (with a greater epoch)
      */
-    private AtomicReference<RuntimeLayout> runtimeLayout = new AtomicReference<>();
+    private final AtomicReference<RuntimeLayout> runtimeLayout = new AtomicReference<>();
 
     /**
      * Fetches the layout uninterruptibly and rethrows any systemDownHandlerExceptions or Errors
@@ -90,8 +89,7 @@ public abstract class AbstractView {
             }
 
             if (ex.getCause() instanceof RuntimeException) {
-                log.error("getLayoutUninterruptibly: Encountered unchecked exception. "
-                        + "Aborting layoutHelper", ex);
+                log.error("getLayoutUninterruptibly: Encountered unchecked exception. Aborting layoutHelper", ex);
                 throw (RuntimeException) ex.getCause();
             }
 
@@ -118,10 +116,9 @@ public abstract class AbstractView {
      * @return The return value of the function.
      */
     public <T, A extends RuntimeException, B extends RuntimeException, C extends RuntimeException,
-            D extends RuntimeException> T layoutHelper(LayoutFunction<Layout, T, A, B, C, D>
-                                                               function,
-                                                       boolean rethrowAllExceptions)
-            throws A, B, C, D {
+            D extends RuntimeException> T layoutHelper(
+                    LayoutFunction<Layout, T, A, B, C, D> function, boolean rethrowAllExceptions) throws A, B, C, D {
+
         runtime.getParameters().getBeforeRpcHandler().run();
         final Duration retryRate = runtime.getParameters().getConnectionRetryRate();
         int systemDownTriggerCounter = 0;

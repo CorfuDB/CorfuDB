@@ -324,6 +324,10 @@ public class Layout {
         this.clusterId = layoutCopy.clusterId;
     }
 
+    public void nextEpoch() {
+        epoch += 1;
+    }
+
     public enum ReplicationMode {
         CHAIN_REPLICATION {
             @Override
