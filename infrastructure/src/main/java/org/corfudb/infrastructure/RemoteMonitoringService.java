@@ -444,6 +444,12 @@ public class RemoteMonitoringService implements MonitoringService {
         return completableFuture;
     }
 
+    public void correctEpoch(){
+        //у нас есть старые эпоки
+        // надо тупо оновить весь кластер зааксептив все что есть недоаксепченое?
+        //
+    }
+
     /**
      * Corrects out of phase epochs by resealing the servers.
      * This would also need to update trailing layout servers.
