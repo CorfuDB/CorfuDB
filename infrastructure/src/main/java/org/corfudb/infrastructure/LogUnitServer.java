@@ -117,7 +117,7 @@ public class LogUnitServer extends AbstractServer {
                 .writer(batchWriter)
                 .build(this::handleRetrieval);
 
-        logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
+        logCleaner = new StreamLogCompaction(streamLog, 10, 25, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
     }
 
     /**
