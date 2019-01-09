@@ -39,12 +39,6 @@ public interface StreamLog {
     LogData read(long address);
 
     /**
-     * Mark a StreamLog address as trimmed.
-     * @param address  address to trim from the log
-     */
-    void trim(long address);
-
-    /**
      * Prefix trim the global log.
      * @param address address to trim the log up to
      */

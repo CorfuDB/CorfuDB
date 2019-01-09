@@ -32,12 +32,6 @@ class SegmentHandle {
     final FileChannel readChannel;
 
     @NonNull
-    final FileChannel trimmedChannel;
-
-    @NonNull
-    final FileChannel pendingTrimChannel;
-
-    @NonNull
     String fileName;
 
     private final Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap<>();
@@ -59,7 +53,7 @@ class SegmentHandle {
 
     public void close() {
         Set<FileChannel> channels = new HashSet<>(
-                Arrays.asList(writeChannel, readChannel, trimmedChannel, pendingTrimChannel)
+                Arrays.asList(writeChannel, readChannel)
         );
 
         for (FileChannel channel : channels) {

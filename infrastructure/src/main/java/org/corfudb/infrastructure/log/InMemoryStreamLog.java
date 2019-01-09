@@ -102,11 +102,6 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     @Override
-    public synchronized void trim(long address) {
-        trimmed.add(address);
-    }
-
-    @Override
     public LogData read(long address) {
         if (isTrimmed(address)) {
             return LogData.getTrimmed(address);

@@ -161,14 +161,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         return metadata;
     }
 
-    public static String getPendingTrimsFilePath(String segmentPath) {
-        return segmentPath + ".pending";
-    }
-
-    public static String getTrimmedFilePath(String segmentPath) {
-        return segmentPath + ".trimmed";
-    }
-
     /**
      * Write the header for a Corfu log file.
      *
@@ -336,40 +328,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public void trim(long address) {
-        SegmentHandle handle = getSegmentHandleForAddress(address);
-        try {
-            if (!handle.getKnownAddresses().containsKey(address)
-                    || handle.getPendingTrims().contains(address)) {
-                return;
-            }
-
-            TrimEntry entry = TrimEntry.newBuilder()
-                    .setChecksum(getChecksum(address))
-                    .setAddress(address)
-                    .build();
-
-            // TODO(Maithem) possibly move this to SegmentHandle. Do we need to close and flush?
-            OutputStream outputStream = Channels.newOutputStream(handle.getPendingTrimChannel());
-
-            entry.writeDelimitedTo(outputStream);
-            outputStream.flush();
-            handle.getPendingTrims().add(address);
-            channelsToSync.add(handle.getPendingTrimChannel());
-        } catch (IOException e) {
-            log.warn("Exception while writing a trim entry {} : {}", address, e.toString());
-        } finally {
-            handle.release();
-        }
-    }
-
-    @Override
     public synchronized void compact() {
-        if (startingAddress == 0) {
-            spaseCompact();
-        } else {
-            trimPrefix();
-        }
+        trimPrefix();
     }
 
     @Override
@@ -403,145 +363,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         log.info("trimPrefix: completed, end segment {}", endSegment);
     }
 
-    private void spaseCompact() {
-        //TODO(Maithem) Open all segment handlers?
-        for (SegmentHandle sh : writeChannels.values()) {
-            Set<Long> pending = new HashSet(sh.getPendingTrims());
-            Set<Long> trimmed = sh.getTrimmedAddresses();
-
-            if (sh.getKnownAddresses().size() + trimmed.size() != RECORDS_PER_LOG_FILE) {
-                log.info("Log segment still not complete, skipping");
-                continue;
-            }
-
-            pending.removeAll(trimmed);
-
-            //what if pending size  == knownaddresses size ?
-            if (pending.size() < TRIM_THRESHOLD) {
-                log.trace("Thresh hold not exceeded. Ratio {} threshold {}",
-                            pending.size(), TRIM_THRESHOLD);
-                return; // TODO - should not return if compact on ranked address space is necessary
-            }
-
-            try {
-                log.info("Starting compaction, pending entries size {}", pending.size());
-                trimLogFile(sh.getFileName(), pending);
-            } catch (IOException e) {
-                log.error("Compact operation failed for file {}, {}", sh.getFileName(), e);
-            }
-        }
-    }
-
-    private void trimLogFile(String filePath, Set<Long> pendingTrim) throws IOException {
-        EnumSet<StandardOpenOption> options = EnumSet.of(
-                StandardOpenOption.TRUNCATE_EXISTING,
-                StandardOpenOption.WRITE,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.SPARSE
-        );
-        try (FileChannel fc = FileChannel.open(FileSystems.getDefault().getPath(filePath + ".copy"), options)) {
-
-            CompactedEntry log = getCompactedEntries(filePath, pendingTrim);
-
-            LogHeader header = log.getLogHeader();
-            Collection<LogEntry> compacted = log.getEntries();
-
-            writeHeader(fc, header.getVersion(), header.getVerifyChecksum());
-
-            for (LogEntry entry : compacted) {
-
-                ByteBuffer record = getByteBufferWithMetaData(entry);
-                ByteBuffer recordBuf = ByteBuffer.allocate(record.capacity());
-
-                recordBuf.put(record.array());
-                recordBuf.flip();
-
-                fc.write(recordBuf);
-            }
-
-            fc.force(true);
-        }
-
-        try (FileChannel fc2 = FileChannel.open(FileSystems.getDefault()
-                        .getPath(getTrimmedFilePath(filePath)),
-                EnumSet.of(StandardOpenOption.APPEND))) {
-            try (OutputStream outputStream = Channels.newOutputStream(fc2)) {
-                // Todo(Maithem) How do we verify that the compacted file is correct?
-                for (Long address : pendingTrim) {
-                    TrimEntry entry = TrimEntry.newBuilder()
-                            .setChecksum(getChecksum(address))
-                            .setAddress(address)
-                            .build();
-                    entry.writeDelimitedTo(outputStream);
-                }
-                outputStream.flush();
-                fc2.force(true);
-            }
-        }
-
-        Files.move(Paths.get(filePath + ".copy"), Paths.get(filePath),
-                StandardCopyOption.ATOMIC_MOVE);
-
-        // Force the reload of the new segment
-        writeChannels.remove(filePath);
-    }
-
-    private CompactedEntry getCompactedEntries(String filePath, Set<Long> pendingTrim) throws IOException {
-
-        ByteBuffer o;
-        ByteBuffer headerBuf;
-        try (FileChannel fc = getChannel(filePath, true)) {
-            // Skip the header
-            ByteBuffer headerMetadataBuf = ByteBuffer.allocate(METADATA_SIZE);
-            fc.read(headerMetadataBuf);
-            headerMetadataBuf.flip();
-
-            Metadata headerMetadata = Metadata.parseFrom(headerMetadataBuf.array());
-            headerBuf = ByteBuffer.allocate(headerMetadata.getLength());
-            fc.read(headerBuf);
-            headerBuf.flip();
-
-            o = ByteBuffer.allocate((int) fc.size() - (int) fc.position());
-            fc.read(o);
-            o.flip();
-        }
-
-        LinkedHashMap<Long, LogEntry> compacted = new LinkedHashMap<>();
-
-        while (o.hasRemaining()) {
-            byte[] metadataBuf = new byte[METADATA_SIZE];
-            o.get(metadataBuf);
-
-            try {
-                Metadata metadata = Metadata.parseFrom(metadataBuf);
-
-                byte[] logEntryBuf = new byte[metadata.getLength()];
-
-                o.get(logEntryBuf);
-
-                LogEntry entry = LogEntry.parseFrom(logEntryBuf);
-
-                if (!noVerify) {
-                    if (metadata.getPayloadChecksum() != getChecksum(entry.toByteArray())) {
-                        log.error("Checksum mismatch detected while trying to read address {}",
-                                entry.getGlobalAddress());
-                        throw new DataCorruptionException();
-                    }
-                }
-
-                if (!pendingTrim.contains(entry.getGlobalAddress())) {
-                    compacted.put(entry.getGlobalAddress(), entry);
-                }
-
-            } catch (InvalidProtocolBufferException e) {
-                throw new DataCorruptionException();
-            }
-        }
-
-        LogHeader header = LogHeader.parseFrom(headerBuf.array());
-        return new CompactedEntry(header, compacted.values());
-    }
-
     private LogData getLogData(LogEntry entry) {
         ByteBuf data = Unpooled.wrappedBuffer(entry.getData().toByteArray());
         LogData logData = new LogData(org.corfudb.protocols.wireprotocol
@@ -559,8 +380,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             long msd = entry.getClientIdMostSignificant();
             logData.setClientId(new UUID(msd, lsd));
         }
-
-
 
         if (entry.hasCheckpointEntryType()) {
             logData.setCheckpointType(CheckpointEntry.CheckpointEntryType
@@ -848,8 +667,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         SegmentHandle handle = writeChannels.computeIfAbsent(filePath, a -> {
             FileChannel writeCh = null;
             FileChannel readCh = null;
-            FileChannel trimmedCh = null;
-            FileChannel pendingTrimmedCh = null;
 
             try {
                 boolean verify = true;
@@ -859,62 +676,23 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
                 writeCh = getChannel(a, false);
                 readCh = getChannel(a, true);
-                trimmedCh = getChannel(getTrimmedFilePath(a), false);
-                pendingTrimmedCh = getChannel(getPendingTrimsFilePath(a), false);
 
-                SegmentHandle sh = new SegmentHandle(segment, writeCh, readCh, trimmedCh, pendingTrimmedCh, a);
+                SegmentHandle sh = new SegmentHandle(segment, writeCh, readCh, a);
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
                 // Once the segment address space is loaded, it should be ready to accept writes.
                 readAddressSpace(sh);
-                loadTrimAddresses(sh);
                 return sh;
             } catch (IOException e) {
                 log.error("Error opening file {}", a, e);
                 IOUtils.closeQuietly(writeCh);
                 IOUtils.closeQuietly(readCh);
-                IOUtils.closeQuietly(trimmedCh);
-                IOUtils.closeQuietly(pendingTrimmedCh);
                 throw new RuntimeException(e);
             }
         });
 
         handle.retain();
         return handle;
-    }
-
-    private void loadTrimAddresses(SegmentHandle sh) throws IOException {
-        long trimmedSize;
-        long pendingTrimSize;
-
-        //TODO(Maithem) compute checksums and refactor
-        try (MultiReadWriteLock.AutoCloseableLock ignored =
-                     segmentLocks.acquireReadLock(sh.getSegment())) {
-            trimmedSize = sh.getTrimmedChannel().size();
-            pendingTrimSize = sh.getPendingTrimChannel().size();
-        }
-
-        try (FileChannel fcTrimmed = getChannel(getTrimmedFilePath(sh.getFileName()), true)) {
-            try (InputStream inputStream = Channels.newInputStream(fcTrimmed)) {
-
-                while (fcTrimmed.position() < trimmedSize) {
-                    TrimEntry trimEntry = TrimEntry.parseDelimitedFrom(inputStream);
-                    sh.getTrimmedAddresses().add(trimEntry.getAddress());
-                }
-            } catch (FileNotFoundException fe) {
-                return;
-            }
-        }
-
-        try (FileChannel fcPending = getChannel(getPendingTrimsFilePath(sh.getFileName()), true)) {
-            try (InputStream pendingInputStream = Channels.newInputStream(fcPending)) {
-
-                while (fcPending.position() < pendingTrimSize) {
-                    TrimEntry trimEntry = TrimEntry.parseDelimitedFrom(pendingInputStream);
-                    sh.getPendingTrims().add(trimEntry.getAddress());
-                }
-            }
-        }
     }
 
     Map<String, Long> getStrLongMap(Map<UUID, Long> uuidLongMap) {
@@ -1408,23 +1186,5 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @VisibleForTesting
     Collection<SegmentHandle> getSegmentHandles() {
         return writeChannels.values();
-    }
-
-    public static class CompactedEntry {
-        private final LogHeader logHeader;
-        private final Collection<LogEntry> entries;
-
-        public CompactedEntry(LogHeader logHeader, Collection<LogEntry> entries) {
-            this.logHeader = logHeader;
-            this.entries = entries;
-        }
-
-        public LogHeader getLogHeader() {
-            return logHeader;
-        }
-
-        public Collection<LogEntry> getEntries() {
-            return entries;
-        }
     }
 }
