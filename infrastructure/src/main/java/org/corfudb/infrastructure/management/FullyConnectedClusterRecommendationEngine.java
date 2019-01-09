@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
@@ -29,6 +31,7 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
 
     private static final ClusterRecommendationStrategy STRATEGY =
             ClusterRecommendationStrategy.FULLY_CONNECTED_CLUSTER;
+    private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
     @Override
     public ClusterRecommendationStrategy getClusterRecommendationStrategy() {
@@ -90,6 +93,9 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
     @Override
     public List<String> failedServers(ClusterState clusterState, Layout layout) {
 
+        log.trace("Detecting the failed nodes for: \nClusterState= {} \nLayout= {}",
+                gson.toJson(clusterState), gson.toJson(layout));
+
         // Remove asymmetry by converting all asymmetric link failures to symmetric failures
         final Map<String, Set<String>> nodeFailedNeighborMap =
                 convertAsymmetricToSymmetricFailures(clusterState);
@@ -117,6 +123,13 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
             removeFailedCandidate(disconnectedLinksMap, failedNodeCandidate);
         }
 
+        log.debug("Proposed failed nodes: {}", proposedFailedNodes);
+        if (!proposedFailedNodes.isEmpty()) {
+            log.info("Proposed failed node: {} are decided based on the \nClusterState: {} \nAnd" +
+                    " \nLayout: {}", proposedFailedNodes, gson.toJson(clusterState),
+                    gson.toJson(layout));
+        }
+
         return proposedFailedNodes;
     }
 
@@ -141,6 +154,9 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
      *         neighbor too.
      */
     private Map<String, Set<String>> convertAsymmetricToSymmetricFailures(ClusterState clusterState) {
+
+        log.trace("Converting to symmetric view for the provided cluster view: {}",
+                gson.toJson(clusterState.getNodeStatusMap()));
 
         Map<String, Set<String>> clusterMatrix = new HashMap<>();
 
@@ -175,6 +191,9 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
                                     .computeIfAbsent(unreachableNeighbor, key -> new HashSet<>())
                                     .add(currentNode));
         }
+
+        log.trace("Converted view of the cluster to a symmetric view of connectivity failures: {}",
+                gson.toJson(clusterMatrix));
 
         return clusterMatrix;
     }
@@ -311,6 +330,9 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
     @Override
     public List<String> healedServers(final ClusterState clusterState, final Layout layout) {
 
+        log.trace("Detecting the healed nodes for: \nClusterState: {} \nLayout: {}",
+                gson.toJson(clusterState), gson.toJson(layout));
+
         // Remove asymmetry by converting all asymmetric link failures to symmetric failures
         final Map<String, Set<String>> nodeFailedNeighborMap =
                 convertAsymmetricToSymmetricFailures(clusterState);
@@ -334,6 +356,13 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
             proposedHealedNodes.add(healedNodeCandidate.getKey());
 
             removeHealedCandidate(healedLinksNodeNeighborsMap, healedNodeCandidate);
+        }
+
+        log.debug("Proposed healed nodes: {}", proposedHealedNodes);
+        if (!proposedHealedNodes.isEmpty()) {
+            log.info("Proposed healed node: {} are decided based on the \nCluster State: {} \n" +
+                    "AND\nLayout: {}", proposedHealedNodes, gson.toJson(clusterState),
+                    gson.toJson(layout));
         }
 
         return proposedHealedNodes;

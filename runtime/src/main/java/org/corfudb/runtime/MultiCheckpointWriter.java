@@ -89,7 +89,7 @@ public class MultiCheckpointWriter<T extends Map> {
             for (ICorfuSMR<T> map : maps) {
                 UUID streamId = map.getCorfuStreamID();
                 final long mapCpStart = System.currentTimeMillis();
-
+                int mapSize = ((T) map).size();
                 CheckpointWriter<T> cpw = new CheckpointWriter(rt, streamId, author, (T) map);
                 cpw.setEnablePutAll(enablePutAll);
                 ISerializer serializer =
@@ -106,8 +106,8 @@ public class MultiCheckpointWriter<T extends Map> {
 
                 final long mapCpEnd = System.currentTimeMillis();
 
-                log.info("appendCheckpoints: took {} ms to checkpoint map {}",
-                        mapCpEnd - mapCpStart, streamId);
+                log.info("appendCheckpoints: took {} ms to checkpoint {} entries for {}",
+                        mapCpEnd - mapCpStart, mapSize, streamId);
             }
         } finally {
             log.trace("appendCheckpoints: author '{}' at globalAddress {} finished",

@@ -5,11 +5,9 @@ import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
-import org.corfudb.protocols.wireprotocol.ILogData;
+
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 
 /**
@@ -74,14 +72,16 @@ public class Transaction {
                         this.snapshot);
                 throw new IllegalArgumentException(msg);
             }
-        } else if (!this.snapshot.equals(Token.UNINITIALIZED)) {
-            // Since this is a user-defined snapshot we must make sure that
-            // the corresponding log position is valid (i.e. the slot has been written)
-            ILogData pos = getRuntime().getAddressSpaceView().peek(this.snapshot.getSequence());
-            if (pos == null || !pos.getToken().equals(this.snapshot)) {
-                String msg = String.format("User Defined snapshot(ts=%s) is invalid", this.snapshot);
-                throw new IllegalArgumentException(msg);
-            }
         }
+        // User-Defined Snapshot Verification
+        //        else if (!this.snapshot.equals(Token.UNINITIALIZED)) {
+        //            // Since this is a user-defined snapshot we must make sure that
+        //            // the corresponding log position is valid (i.e. the slot has been written)
+        //            ILogData pos = getRuntime().getAddressSpaceView().peek(this.snapshot.getSequence());
+        //            if (pos == null || !pos.getToken().equals(this.snapshot)) {
+        //                String msg = String.format("User Defined snapshot(ts=%s) is invalid", this.snapshot);
+        //                throw new IllegalArgumentException(msg);
+        //            }
+        //        }
     }
 }

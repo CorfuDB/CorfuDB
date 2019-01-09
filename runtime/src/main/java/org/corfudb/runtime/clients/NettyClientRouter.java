@@ -63,7 +63,6 @@ import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
-import org.corfudb.util.retry.ExponentialBackoffRetry;
 
 
 /**
@@ -133,8 +132,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     public volatile boolean shutdown;
 
-    private final ExponentialBackoffRetry retryPolicy;
-
     /** The {@link NodeLocator} which represents the remote node this
      *  {@link NettyClientRouter} connects to.
      */
@@ -191,8 +188,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         requestID = new AtomicLong();
         outstandingRequests = new ConcurrentHashMap<>();
         shutdown = true;
-
-        retryPolicy = new ExponentialBackoffRetry(null, parameters.getMaxDurationExponentialReconnect());
 
         if (parameters.isTlsEnabled()) {
             try {
@@ -332,9 +327,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             });
             // If we aren't shutdown, reconnect.
             if (!shutdown) {
-                Duration reconnectTime = retryPolicy.nextWait();
-                log.info("addReconnectionOnCloseFuture[{}]: client backoff. Reconnecting in {} milliseconds", node, reconnectTime.toMillis());
-                Sleep.MILLISECONDS.sleepUninterruptibly(reconnectTime);
+                Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
+                log.info("addReconnectionOnCloseFuture[{}]: reconnecting...", node);
                 // Asynchronously connect again.
                 connectAsync(bootstrap);
             }
@@ -368,17 +362,13 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         if (future.isSuccess()) {
             // Register a future to reconnect in case we get disconnected
             addReconnectionOnCloseFuture(future.channel(), bootstrap);
-            // On channel connection reset retryPolicy time compute.
-            retryPolicy.reset();
             log.info("connectAsync[{}]: Channel connected.", node);
         } else {
             // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
             // a sleep period.
             if (!shutdown) {
-                Duration reconnectTime = retryPolicy.nextWait();
-                log.info("connectAsync[{}]: Client backoff. Reconnecting in {} milliseconds", node, reconnectTime.toMillis());
-                Sleep.MILLISECONDS.sleepUninterruptibly(reconnectTime);
-
+                Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
+                log.info("connectAsync[{}]: Channel connection failed, reconnecting...", node);
                 // Call connect, which will retry the call again.
                 // Note that this is not recursive, because it is called in the
                 // context of the handler future.

@@ -149,7 +149,8 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);
 
         for (int i = 1; i < numUnits; i++) {
-            log.trace("Propogate[{}]: chain {}/{}", globalAddress, i + 1, numUnits);
+            log.info("Propogate[{}]: chain {}/{}", Token.of(runtimeLayout.getLayout().getEpoch(), globalAddress),
+                    i + 1, numUnits);
             // In chain replication, we write synchronously to every unit
             // in the chain.
             try {
@@ -194,7 +195,8 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         // reading from the head, which should have the data
         // we are trying to recover
         int numUnits = layout.getSegmentLength(globalAddress);
-        log.debug("Recover[{}]: read chain head {}/{}", globalAddress, 1, numUnits);
+        log.info("Recover[{}]: read chain head {}/{}", Token.of(runtimeLayout.getLayout().getEpoch(), globalAddress),
+                1, numUnits);
         ILogData ld = CFUtils.getUninterruptibly(runtimeLayout
                 .getLogUnitClient(globalAddress, 0)
                 .read(globalAddress)).getAddresses().getOrDefault(globalAddress, null);
@@ -234,7 +236,8 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
     @Override
     protected void holeFill(RuntimeLayout runtimeLayout, long globalAddress) {
         int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);
-        log.trace("fillHole[{}]: chain head {}/{}", globalAddress, 1, numUnits);
+        log.warn("fillHole[{}]: chain head {}/{}", Token.of(runtimeLayout.getLayout().getEpoch(), globalAddress),
+                1, numUnits);
         // In chain replication, we write synchronously to every unit in
         // the chain.
         try {

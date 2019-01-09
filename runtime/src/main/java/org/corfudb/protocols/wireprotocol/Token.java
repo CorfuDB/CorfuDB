@@ -29,4 +29,8 @@ public class Token implements IToken, Comparable<Token> {
         }
         return epochCmp;
     }
+
+    public static Token of(long epoch, long sequence) {
+        return new Token(epoch, sequence);
+    }
 }
