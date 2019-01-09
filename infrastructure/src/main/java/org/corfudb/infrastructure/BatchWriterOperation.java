@@ -17,7 +17,6 @@ public class BatchWriterOperation {
         SHUTDOWN,
         WRITE,
         RANGE_WRITE,
-        TRIM,
         PREFIX_TRIM,
         SEAL,
         RESET,

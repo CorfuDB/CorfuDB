@@ -229,14 +229,6 @@ public class LogUnitClient extends AbstractClient {
         return sendMessageWithFuture(CorfuMsgType.TRIM_MARK_REQUEST.msg());
     }
 
-    /**
-     * Send a hint to the logging unit that a stream can be trimmed.
-     *
-     * @param prefix The prefix of the stream, as a global physical offset, to trim.
-     */
-    public void trim(Token prefix) {
-        sendMessage(CorfuMsgType.TRIM.payloadMsg(new TrimRequest(prefix)));
-    }
 
     /**
      * Send a prefix trim request that will trim the log up to a certian address
