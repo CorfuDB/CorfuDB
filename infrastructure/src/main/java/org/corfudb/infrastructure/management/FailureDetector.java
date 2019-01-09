@@ -1,10 +1,20 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.RemoteMonitoringService;
+import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
 import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.ManagementClient;
@@ -15,7 +25,6 @@ import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
 
 import javax.annotation.Nonnull;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -86,6 +95,17 @@ public class FailureDetector implements IDetector {
     @Setter
     private long periodDelta = 1_000L;
 
+    @NonNull
+    private final HeartbeatCounter heartbeatCounter;
+
+    @NonNull
+    private final String localEndpoint;
+
+    public FailureDetector(HeartbeatCounter heartbeatCounter, String localEndpoint) {
+        this.heartbeatCounter = heartbeatCounter;
+        this.localEndpoint = localEndpoint;
+    }
+
     /**
      * Executes the policy once.
      * Checks for changes in the layout.
@@ -93,21 +113,19 @@ public class FailureDetector implements IDetector {
      *
      * @param layout Current Layout
      */
-    public PollReport poll(@Nonnull Layout layout,
-                           @Nonnull CorfuRuntime corfuRuntime) {
+    public PollReport poll(
+            @Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime, @NonNull SequencerMetrics sequencerMetrics) {
+
+        log.trace("Poll report. Layout: {}", layout);
 
         Map<String, IClientRouter> routerMap;
 
         // Collect and set all responsive servers in the members array.
-        Set<String> allResponsiveServersSet = layout.getAllServers();
-        allResponsiveServersSet.removeAll(layout.getUnresponsiveServers());
-        List<String> members = new ArrayList<>(allResponsiveServersSet);
-
-        log.debug("Responsive members to poll, {}", members);
+        Set<String> allServers = layout.getAllServers();
 
         // Set up arrays for routers to the endpoints.
         routerMap = new HashMap<>();
-        members.forEach(s -> {
+        allServers.forEach(s -> {
             try {
                 IClientRouter router = corfuRuntime.getRouter(s);
                 router.setTimeoutResponse(period);
@@ -117,172 +135,281 @@ public class FailureDetector implements IDetector {
             }
         });
         // Perform polling of all responsive servers.
-        return pollRound(layout.getEpoch(), members, routerMap);
-
+        return pollRound(layout.getEpoch(), allServers, routerMap, sequencerMetrics, layout);
     }
 
     /**
      * PollRound consists of iterations. In each iteration, the FailureDetector pings all the
-     * responsive nodes in the layout. If a node fails to respond in an iteration, the failure
-     * detector increments the ping timeout period and starts a new iteration. If one or more nodes
-     * are still failing to respond after running a predefined max number of iterations,
-     * the FailureDetector generates poll report, suggesting those nodes to be unresponsive.
-     * If all nodes respond within an iteration, Failure Detector generates poll report with all
-     * nodes responsive.
+     * responsive nodes in the layout and also collects their {@link NodeState}-s to provide {@link ClusterState}.
+     * Failure detector collect a number of {@link PollReport}-s equals to failureThreshold number then
+     * aggregates final {@link PollReport}.
+     * Aggregation step:
+     * - go through all reports
+     * - aggregate all wrong epochs from all intermediate poll reports then remove all responsive nodes from the list.
+     * If wrongEpochsAggregated variable still contains wrong epochs
+     * then it will be corrected by {@link RemoteMonitoringService}
+     * - Aggregate connected and failed nodes from all reports
+     * - Timeouts tuning
+     * - provide a poll report based on latest pollIteration report and aggregated values
      *
      * @return Poll Report with detected failed nodes and out of phase epoch nodes.
      */
-    private PollReport pollRound(long epoch,
-                                 List<String> members,
-                                 Map<String, IClientRouter> routerMap) {
+    private PollReport pollRound(
+            long epoch, Set<String> allServers, Map<String, IClientRouter> router,
+            SequencerMetrics sequencerMetrics, Layout layout) {
 
-        Map<String, Integer> responsesMap = new HashMap<>();
-        // The out of phase epoch nodes are all those nodes which responded to the pings with a
-        // wrong epoch exception. This is due to the pinged node being at a different epoch and
-        // either this runtime needs to be updated or the node needs to catchup.
-        Map<String, Long> expectedEpoch = new HashMap<>();
-        boolean failuresDetected = false;
+        if (failureThreshold < 1) {
+            throw new IllegalStateException("Invalid failure threshold");
+        }
 
-        // Cluster State map for analysis.
-        Map<String, ClusterState> clusterStateMap = new HashMap<>();
-
-        // In each iteration we poll all the servers in the members list.
+        List<PollReport> reports = new ArrayList<>();
         for (int iteration = 0; iteration < failureThreshold; iteration++) {
+            PollReport currReport = pollIteration(allServers, router, epoch, sequencerMetrics, layout);
+            reports.add(currReport);
 
-            final long pollIterationStartTime = System.nanoTime();
-            long pollInterval = initialPollInterval;
-
-            // Ping all nodes and await their responses.
-            Map<String, CompletableFuture<ClusterState>> pollCompletableFutures =
-                    pollOnceAsync(members, routerMap, epoch);
-
-            // Collect responses and increment response counters for successful pings.
-            // Gather all clusterStatus received in the responses in the clusterStateMap.
-            Set<String> responses = collectResponsesAndVerifyEpochs(
-                    members,
-                    pollCompletableFutures,
-                    expectedEpoch,
-                    clusterStateMap);
-
-            // Aggregate the responses.
-            // Return false if we received responses from all the members - failure NOT present.
-            failuresDetected = !responses.equals(new HashSet<>(members));
-            if (!failuresDetected && expectedEpoch.isEmpty()) {
-                break;
-            } else {
-                // Timeout is increased anytime a failure is encountered.
-                // Failure includes both, unresponsive and outOfPhaseEpoch nodes.
-                if (failuresDetected) {
-                    final long iterationElapsedTime = TimeUnit.MILLISECONDS.convert(
-                            System.nanoTime() - pollIterationStartTime, TimeUnit.NANOSECONDS);
-
-                    // Increase the inter iteration sleep time by increasing poll interval if the
-                    // period time increases
-                    pollInterval = Math.max(initialPollInterval,
-                                            period - iterationElapsedTime);
-                    period = getIncreasedPeriod();
-                    tuneRoutersResponseTimeout(members, routerMap, new HashSet<>(members), period);
-                }
-                final int pollIteration = iteration;
-                responses.forEach(s -> responsesMap.put(s, pollIteration));
-            }
-            log.debug("Time taken for iteration's failure detection: {}",
-                      TimeUnit.MILLISECONDS.convert(System.nanoTime() - pollIterationStartTime,
-                                                    TimeUnit.NANOSECONDS));
+            long pollInterval = tunePollIterationTimeouts(router, currReport);
 
             // Sleep for the provided poll interval before starting the next iteration
             Sleep.MILLISECONDS.sleepUninterruptibly(pollInterval);
         }
 
-        // End round and generate report.
+        //Aggregation step
+        Map<String, Long> wrongEpochsAggregated = new HashMap<>();
+        Set<String> connectedNodesAggregated = new HashSet<>();
+        Set<String> failedNodesAggregated = new HashSet<>();
+        reports.forEach(report -> {
+            //Calculate wrong epochs
+            wrongEpochsAggregated.putAll(report.getWrongEpochs());
+            report.getConnectedNodes().forEach(wrongEpochsAggregated::remove);
 
-        ImmutableSet<String> failed;
+            //Aggregate failed/connected nodes
+            connectedNodesAggregated.addAll(report.getConnectedNodes());
+            failedNodesAggregated.addAll(report.getFailedNodes());
+        });
+        failedNodesAggregated.removeAll(connectedNodesAggregated);
 
-        // We can try to scale back the network latency time after every poll round.
-        // If there are no failures, after a few rounds our polling period converges back to
-        // initPeriodDuration.
-        period = Math.max(initPeriodDuration, (period - periodDelta));
-        tuneRoutersResponseTimeout(members, routerMap, new HashSet<>(members), period);
+        Set<String> allConnectedNodes = Sets.union(connectedNodesAggregated, wrongEpochsAggregated.keySet());
 
-        // Check all responses and collect all failures.
-        if (failuresDetected) {
-            failed = members.stream()
-                    .filter(s -> responsesMap.get(s) == null
-                            || responsesMap.get(s) != (failureThreshold - 1))
-                    .collect(ImmutableSet.toImmutableSet());
-        } else {
-            failed = ImmutableSet.of();
-        }
+        pollReportTimeoutsTuning(router, failedNodesAggregated, allConnectedNodes);
 
-        // Reset the timeout of all the failed nodes to the max value to set a longer
-        // timeout period to detect their response.
-        tuneRoutersResponseTimeout(members, routerMap, failed, maxPeriodDuration);
+        PollReport latestReport = reports.get(reports.size() - 1);
 
         return PollReport.builder()
                 .pollEpoch(epoch)
-                .changedNodes(failed)
-                .outOfPhaseEpochNodes(expectedEpoch)
-                .clusterStateMap(clusterStateMap)
+                .connectedNodes(ImmutableSet.copyOf(connectedNodesAggregated))
+                .failedNodes(ImmutableSet.copyOf(failedNodesAggregated))
+                .wrongEpochs(ImmutableMap.copyOf(wrongEpochsAggregated))
+                .currentLayoutSlotUnFilled(isCurrentLayoutSlotUnFilled(layout, wrongEpochsAggregated.keySet()))
+                .clusterState(latestReport.getClusterState())
                 .build();
+    }
+
+    /**
+     * Tune timeouts after each poll iteration, according to list of failed and connected nodes
+     *
+     * @param router     client router
+     * @param currReport current poll report
+     * @return updated poll interval
+     */
+    private long tunePollIterationTimeouts(Map<String, IClientRouter> router, PollReport currReport) {
+        long pollIterationStartTime = System.nanoTime();
+        long pollInterval = initialPollInterval;
+
+        Set<String> allConnectedNodes = currReport.getAllConnectedNodes();
+
+        if (!currReport.getFailedNodes().isEmpty()) {
+            // Increase the inter iteration sleep time by increasing poll interval if the
+            // period time increases
+            long iterationElapsedTime = TimeUnit.MILLISECONDS.convert(
+                    System.nanoTime() - pollIterationStartTime,
+                    TimeUnit.NANOSECONDS
+            );
+            pollInterval = Math.max(initialPollInterval, period - iterationElapsedTime);
+            period = getIncreasedPeriod();
+            tuneRoutersResponseTimeout(router, allConnectedNodes, period);
+        }
+        return pollInterval;
+    }
+
+    /**
+     * We can try to scale back the network latency time after every poll round.
+     * If there are no failures, after a few rounds our polling period converges back to initPeriodDuration.
+     *
+     * @param router            router
+     * @param failedNodes       list of failed nodes
+     * @param allConnectedNodes all connected nodes
+     */
+    private void pollReportTimeoutsTuning(
+            Map<String, IClientRouter> router, Set<String> failedNodes, Set<String> allConnectedNodes) {
+        period = Math.max(initPeriodDuration, period - periodDelta);
+        tuneRoutersResponseTimeout(router, allConnectedNodes, period);
+        // Reset the timeout of all the failed nodes to the max value to set a longer
+        // timeout period to detect their response.
+        tuneRoutersResponseTimeout(router, failedNodes, maxPeriodDuration);
+    }
+
+    /**
+     * Helper method to build local {@link NodeState} based on pings
+     *
+     * @param allServers        all servers in the cluster
+     * @param allConnectedNodes all connected nodes in the cluster
+     * @param epoch             current epoch
+     * @param sequencerMetrics  metrics
+     * @return local node state
+     */
+    private NodeState getLocalNodeState(Set<String> allServers, Set<String> allConnectedNodes, long epoch,
+                                        SequencerMetrics sequencerMetrics) {
+        //Get connectivity status for a local node
+        Map<String, ConnectionStatus> connectivity = new HashMap<>();
+        allServers.forEach(server -> {
+            connectivity.put(server, ConnectionStatus.fromBool(allConnectedNodes.contains(server)));
+        });
+
+        NodeConnectivity localConnectivity = NodeConnectivity.connectivity(
+                localEndpoint, ImmutableMap.copyOf(connectivity)
+        );
+
+        return NodeState.builder()
+                .connectivity(localConnectivity)
+                .heartbeat(new HeartbeatTimestamp(epoch, heartbeatCounter.incrementHeartbeat()))
+                .sequencerMetrics(sequencerMetrics)
+                .build();
+    }
+
+    /**
+     * Poll iteration step, provides a {@link PollReport} composed from pings and {@link NodeState}-s collected by
+     * this node from the cluster.
+     * Algorithm:
+     * - ping all nodes
+     * - collect all node states
+     * - collect wrong epochs
+     * - collect connected/failed nodes
+     * - calculate if current layout slot is unfilled
+     * - build poll report
+     *
+     * @param allServers       all servers in the cluster
+     * @param router           client router
+     * @param epoch            current epoch
+     * @param sequencerMetrics metrics
+     * @param layout           current layout
+     * @return a poll report
+     */
+    private PollReport pollIteration(
+            Set<String> allServers, Map<String, IClientRouter> router, long epoch, SequencerMetrics sequencerMetrics,
+            Layout layout) {
+
+        log.trace("Poll iteration. Epoch: {}", epoch);
+
+        Map<String, CompletableFuture<NodeState>> stateFuture = pollAsync(allServers, router, epoch);
+
+        Map<String, Long> wrongEpochs = new HashMap<>();
+        //The nodes local node is disconnected to.
+        Set<String> failedNodes = new HashSet<>();
+        //The nodes local node is connected to.
+        Set<String> connectedNodes = new HashSet<>();
+        //Cluster state internal map.
+        Map<String, NodeState> nodeStates = new HashMap<>();
+
+        //Collect information about cluster:
+        stateFuture.forEach((server, state) -> {
+            try {
+                //Add a node to connectedNodes list if node responded with its NodeState
+                NodeState nodeState = state.get(period, TimeUnit.MILLISECONDS);
+                connectedNodes.add(server);
+
+                //Ignore local node response. Local NodeState will be built lately
+                if (!server.equals(localEndpoint)) {
+                    nodeStates.put(server, nodeState);
+                }
+            } catch (Exception e) {
+                //Add unavailable NodeState in the list if an exception happened. Ignore for localhost
+                if (!server.equals(localEndpoint)) {
+                    nodeStates.put(server, NodeState.getUnavailableNodeState(server));
+                }
+
+                //Collect wrong epoch, don't add the node to a failedNodes list
+                if (e.getCause() instanceof WrongEpochException) {
+                    wrongEpochs.put(server, ((WrongEpochException) e.getCause()).getCorrectEpoch());
+                    return;
+                }
+
+                //Add the node to the failed nodes list
+                failedNodes.add(server);
+            }
+        });
+
+        //Build local NodeState based on pings. AllConnectedNodes - all nodes the local node connected.
+        Set<String> localNodeConnections = Sets.union(connectedNodes, wrongEpochs.keySet());
+        NodeState localNodeState = getLocalNodeState(allServers, localNodeConnections, epoch, sequencerMetrics);
+        nodeStates.put(localNodeState.getConnectivity().getEndpoint(), localNodeState);
+
+        return PollReport.builder()
+                .pollEpoch(epoch)
+                .connectedNodes(ImmutableSet.copyOf(connectedNodes))
+                .failedNodes(ImmutableSet.copyOf(failedNodes))
+                .wrongEpochs(ImmutableMap.copyOf(wrongEpochs))
+                .currentLayoutSlotUnFilled(isCurrentLayoutSlotUnFilled(layout, wrongEpochs.keySet()))
+                .clusterState(ClusterState.builder().nodes(ImmutableMap.copyOf(nodeStates)).build())
+                .build();
+    }
+
+    /**
+     * All active Layout servers have been sealed but there is no client to take this forward and
+     * fill the slot by proposing a new layout. This is determined by the outOfPhaseEpochNodes map.
+     * This map contains a map of nodes and their server router epochs iff that server responded
+     * with a WrongEpochException to the heartbeat message.
+     * In this case we can pass an empty set to propose the same layout again and fill the layout
+     * slot to un-block the data plane operations.
+     *
+     * @param layout current layout
+     * @return True if latest layout slot is vacant. Else False.
+     */
+    private boolean isCurrentLayoutSlotUnFilled(Layout layout, Set<String> wrongEpochs) {
+        log.trace("isCurrentLayoutSlotUnFilled. Wrong epochs: {}, layout: {}", wrongEpochs, layout);
+
+        // Check if all active layout servers are present in the outOfPhaseEpochNodes map.
+        List<String> allActiveLayoutServers = layout.getActiveLayoutServers();
+        boolean result = wrongEpochs.containsAll(allActiveLayoutServers);
+        if (result) {
+            String msg = "Current layout slot is empty. Filling slot with current layout." +
+                    " wrong epochs: {}, active layout servers: {}";
+            log.info(msg, wrongEpochs, allActiveLayoutServers);
+        }
+        return result;
     }
 
     /**
      * Poll all members servers once asynchronously and store their futures in
      * pollCompletableFutures.
      *
-     * @param members   All active members in the layout.
-     * @param routerMap Map of routers for all active members.
-     * @param epoch     Current epoch for the polling round to stamp the ping messages.
+     * @param allServers All active members in the layout.
+     * @param routerMap  Map of routers for all active members.
+     * @param epoch      Current epoch for the polling round to stamp the ping messages.
      * @return Map of Completable futures for the pings.
      */
-    private Map<String, CompletableFuture<ClusterState>> pollOnceAsync(List<String> members,
-                                                                       Map<String, IClientRouter>
-                                                                               routerMap,
-                                                                       final long epoch) {
+    private Map<String, CompletableFuture<NodeState>> pollAsync(
+            Set<String> allServers, Map<String, IClientRouter> routerMap, long epoch) {
         // Poll servers for health.  All ping activity will happen in the background.
-        Map<String, CompletableFuture<ClusterState>> pollCompletableFutures = new HashMap<>();
-        members.forEach(s -> {
+        Map<String, CompletableFuture<NodeState>> clusterState = new HashMap<>();
+        allServers.forEach(s -> {
             try {
-                pollCompletableFutures.put(s, new ManagementClient(routerMap.get(s), epoch)
-                        .sendHeartbeatRequest());
+                clusterState.put(s, new ManagementClient(routerMap.get(s), epoch).sendNodeStateRequest());
             } catch (Exception e) {
-                CompletableFuture<ClusterState> cf = new CompletableFuture<>();
+                CompletableFuture<NodeState> cf = new CompletableFuture<>();
                 cf.completeExceptionally(e);
-                pollCompletableFutures.put(s, cf);
+                clusterState.put(s, cf);
             }
         });
-        return pollCompletableFutures;
-    }
 
-    /**
-     * Block on all poll futures and collect the responses. There are 3 possible cases.
-     * 1. Receive a PONG. We set the responses[i] to the polling iteration number.
-     * 2. WrongEpochException is thrown. We mark as a successful response but also record the
-     * expected epoch.
-     * 3. Other Exception is thrown. We do nothing. (The response[i] in this case is left behind.)
-     */
-    private Set<String> collectResponsesAndVerifyEpochs(
-            List<String> members,
-            Map<String, CompletableFuture<ClusterState>> pollCompletableFutures,
-            Map<String, Long> expectedEpoch,
-            Map<String, ClusterState> clusterStateMap) {
-        // Collect responses and increment response counters for successful pings.
-        Set<String> responses = new HashSet<>();
-        members.forEach(s -> {
-            try {
-                ClusterState clusterState = CFUtils
-                        .within(pollCompletableFutures.get(s), Duration.ofMillis(period)).get();
-                responses.add(s);
-                expectedEpoch.remove(s);
-                clusterStateMap.put(s, clusterState);
-            } catch (Exception e) {
-                if (e.getCause() instanceof WrongEpochException) {
-                    responses.add(s);
-                    expectedEpoch.put(s, ((WrongEpochException) e.getCause()).getCorrectEpoch());
-                }
-            }
-        });
-        return responses;
+        //Ping all nodes in parallel.
+        //Possible exceptions are held by their CompletableFutures. They will be handled in pollIteration method
+        try {
+            CFUtils.allOf(clusterState.values()).join();
+        } catch (Exception ex) {
+            //ignore
+        }
+
+        return clusterState;
     }
 
     /**
@@ -291,7 +418,7 @@ public class FailureDetector implements IDetector {
      * @return The new calculated timeout value.
      */
     private long getIncreasedPeriod() {
-        return Math.min(maxPeriodDuration, (period + periodDelta));
+        return Math.min(maxPeriodDuration, period + periodDelta);
     }
 
     /**
@@ -301,15 +428,12 @@ public class FailureDetector implements IDetector {
      * @param endpoints Router endpoints.
      * @param timeout   New timeout value.
      */
-    private void tuneRoutersResponseTimeout(List<String> members,
-                                            Map<String, IClientRouter> routerMap,
-                                            Set<String> endpoints,
-                                            long timeout) {
+    private void tuneRoutersResponseTimeout(Map<String, IClientRouter> routerMap, Set<String> endpoints, long timeout) {
+
         log.trace("Tuning router timeout responses for endpoints:{} to {}ms", endpoints, timeout);
-        members.forEach(s -> {
-            // Change timeout delay of routers of members list.
-            if (endpoints.contains(s) && routerMap.get(s) != null) {
-                routerMap.get(s).setTimeoutResponse(timeout);
+        endpoints.forEach(server -> {
+            if (routerMap.get(server) != null) {
+                routerMap.get(server).setTimeoutResponse(timeout);
             }
         });
     }

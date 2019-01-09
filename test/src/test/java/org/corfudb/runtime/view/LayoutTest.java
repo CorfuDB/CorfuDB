@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import static java.lang.reflect.Modifier.TRANSIENT;
+
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
@@ -31,6 +32,15 @@ public class LayoutTest {
 
         String JSONEmptyLayout = getResourceJSONFileAsString("EmptyLayout.json");
         Layout shouldYieldException = Layout.fromJSONString(JSONEmptyLayout);
+    }
+
+    @Test
+    public void checkAllActiveLayoutServers() throws IOException {
+        String JSONEmptyLayout = getResourceJSONFileAsString("DefaultLayout.json");
+        Layout layout = Layout.fromJSONString(JSONEmptyLayout);
+        layout.unresponsiveServers.add("localhost:9001");
+
+        assertThat(layout.getActiveLayoutServers()).containsExactly("localhost:9000", "localhost:9002");
     }
 
     @Test(expected = NullPointerException.class)

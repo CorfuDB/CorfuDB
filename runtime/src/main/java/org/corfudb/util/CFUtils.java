@@ -3,6 +3,7 @@ package org.corfudb.util;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import java.time.Duration;
+import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -134,5 +135,10 @@ public class CFUtils {
     public static <T> CompletableFuture<T> within(CompletableFuture<T> future, Duration duration) {
         final CompletableFuture<T> timeout = failAfter(duration);
         return future.applyToEither(timeout, Function.identity());
+    }
+
+    public static <T> CompletableFuture<Void> allOf(Collection<CompletableFuture<T>> futures) {
+        CompletableFuture<T>[] futuresArr = futures.toArray(new CompletableFuture[futures.size()]);
+        return CompletableFuture.allOf(futuresArr);
     }
 }

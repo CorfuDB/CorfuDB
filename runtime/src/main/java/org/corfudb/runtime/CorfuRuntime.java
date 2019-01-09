@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -919,7 +920,14 @@ public class CorfuRuntime {
                     } catch (InterruptedException ie) {
                         throw new UnrecoverableCorfuInterruptedError(
                                 "Interrupted during layout fetch", ie);
-                    } catch (Exception e) {
+                    } catch (ExecutionException ee){
+                        if (ee.getCause() instanceof TimeoutException) {
+                            log.debug("Tried to get layout from {} but failed by timeout", s);
+                        } else {
+                            log.warn("Tried to get layout from {} but failed with exception:", s, ee);
+                        }
+                    }
+                    catch (Exception e) {
                         log.warn("Tried to get layout from {} but failed with exception:", s, e);
                     }
                 }

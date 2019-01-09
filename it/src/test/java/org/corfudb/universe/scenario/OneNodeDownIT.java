@@ -85,6 +85,8 @@ public class OneNodeDownIT extends GenericIntegrationTest {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }
             });
+
+            corfuClient.shutdown();
         });
     }
 }
