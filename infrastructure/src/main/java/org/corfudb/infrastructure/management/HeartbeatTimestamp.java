@@ -19,9 +19,6 @@ public class HeartbeatTimestamp implements Comparable<HeartbeatTimestamp> {
 
     @Override
     public int compareTo(@NonNull HeartbeatTimestamp heartbeatTimestamp) {
-        if (this.epoch != heartbeatTimestamp.epoch) {
-            return this.epoch > heartbeatTimestamp.epoch ? 1 : -1;
-        }
-        return this.counter > heartbeatTimestamp.counter ? 1 : -1;
+        return Long.compare(epoch, heartbeatTimestamp.epoch);
     }
 }

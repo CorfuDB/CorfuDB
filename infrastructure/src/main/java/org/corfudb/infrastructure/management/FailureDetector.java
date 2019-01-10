@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import lombok.Getter;
 import lombok.Setter;
@@ -171,7 +172,14 @@ public class FailureDetector implements IDetector {
                     if (e.getCause() instanceof WrongEpochException) {
                         responses.add(server);
                         expectedEpoch.put(server, ((WrongEpochException) e.getCause()).getCorrectEpoch());
+                        return;
                     }
+
+                    ClusterState disconnectedState = ClusterState.builder()
+                            .node(ClusterState.ClusterStateNode.DISCONNECTED)
+                            .nodeStatusMap(ImmutableMap.of())
+                            .build();
+                    cluster.put(server, disconnectedState);
                 }
             });
 
@@ -197,7 +205,7 @@ public class FailureDetector implements IDetector {
 
         // We can try to scale back the network latency time after every poll round.
         // If there are no failures, after a few rounds our polling period converges back to initPeriodDuration.
-        period = Math.max(initPeriodDuration, (period - periodDelta));
+        period = Math.max(initPeriodDuration, period - periodDelta);
         tuneRoutersResponseTimeout(members, routerMap, membersSet, period);
 
         // Check all responses and collect all failures.
@@ -252,7 +260,7 @@ public class FailureDetector implements IDetector {
      * @return The new calculated timeout value.
      */
     private long getIncreasedPeriod() {
-        return Math.min(maxPeriodDuration, (period + periodDelta));
+        return Math.min(maxPeriodDuration, period + periodDelta);
     }
 
     /**

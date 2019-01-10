@@ -54,7 +54,7 @@ public class ManagementServer extends AbstractServer {
     private IReconfigurationHandlerPolicy failureHandlerPolicy;
     private IReconfigurationHandlerPolicy healingPolicy;
 
-    private final ClusterStateContext clusterStateContext = new ClusterStateContext();
+    private final ClusterStateContext clusterStateContext;
 
     @Getter
     private final ManagementAgent managementAgent;
@@ -101,6 +101,9 @@ public class ManagementServer extends AbstractServer {
         this.healingPolicy = serverContext.getHealingHandlerPolicy();
 
         // Creating a management agent.
+        this.clusterStateContext =  new ClusterStateContext(
+                serverContext.getLocalEndpoint(), serverContext.copyManagementLayout()
+        );
         this.managementAgent = new ManagementAgent(corfuRuntime, serverContext, clusterStateContext);
         // Creating an orchestrator.
         this.orchestrator = new Orchestrator(corfuRuntime, serverContext);

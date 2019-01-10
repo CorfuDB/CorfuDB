@@ -2,7 +2,6 @@ package org.corfudb.infrastructure;
 
 import java.time.Duration;
 
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -50,16 +49,6 @@ public class ManagementAgent {
 
     private volatile boolean shutdown = false;
 
-    //  Locally collected server metrics polling interval.
-    private static final Duration METRICS_POLL_INTERVAL = Duration.ofSeconds(3);
-
-    /**
-     * MonitoringService to poll local server metrics:
-     * Sequencer ready/not ready state.
-     */
-    @Getter(AccessLevel.PROTECTED)
-    private final LocalMonitoringService localMonitoringService;
-
     /**
      * Interval in executing the failure detection policy.
      * In milliseconds.
@@ -73,6 +62,8 @@ public class ManagementAgent {
     @Getter
     private final RemoteMonitoringService remoteMonitoringService;
 
+    private final ClusterStateContext clusterStateContext;
+
     /**
      * Checks and restores if a layout is present in the local datastore to recover from.
      * Spawns the initialization task which recovers if required, bootstraps sequencer and
@@ -83,9 +74,10 @@ public class ManagementAgent {
      */
     ManagementAgent(@NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
                     @NonNull ServerContext serverContext,
-                    @NonNull ClusterStateContext clusterStateContext) {
+                    @NonNull ClusterStateContext clusterContext) {
         this.runtimeSingletonResource = runtimeSingletonResource;
         this.serverContext = serverContext;
+        this.clusterStateContext = clusterContext;
 
         Layout managementLayout = serverContext.copyManagementLayout();
         // If no state was preserved, there is no layout to recover.
@@ -108,10 +100,10 @@ public class ManagementAgent {
             log.info("Attempting to recover. Layout before shutdown: {}", managementLayout);
         }
 
-        this.localMonitoringService = new LocalMonitoringService(serverContext,
-                runtimeSingletonResource, clusterStateContext);
-        this.remoteMonitoringService = new RemoteMonitoringService(serverContext,
-                runtimeSingletonResource, clusterStateContext, new FailureDetector(), new HealingDetector());
+        this.remoteMonitoringService = new RemoteMonitoringService(
+                serverContext, runtimeSingletonResource, clusterContext,
+                new FailureDetector(), new HealingDetector()
+        );
 
         // Creating the initialization task thread.
         // This thread pool is utilized to dispatch one time recovery and sequencer bootstrap tasks.
@@ -144,8 +136,7 @@ public class ManagementAgent {
                 RecoveryHandler.retryUntilRecovery(serverContext, getCorfuRuntime());
             }
 
-            this.localMonitoringService.start(METRICS_POLL_INTERVAL);
-            this.remoteMonitoringService.start(POLICY_EXECUTE_INTERVAL);
+            remoteMonitoringService.start(POLICY_EXECUTE_INTERVAL);
 
         } catch (InterruptedException e) {
             log.error("initializationTask: InitializationTask interrupted.");
@@ -173,7 +164,6 @@ public class ManagementAgent {
         shutdown = true;
 
         remoteMonitoringService.shutdown();
-        localMonitoringService.shutdown();
 
         try {
             initializationTaskThread.interrupt();

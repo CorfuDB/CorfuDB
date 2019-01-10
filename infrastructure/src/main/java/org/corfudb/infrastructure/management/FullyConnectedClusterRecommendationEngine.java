@@ -135,7 +135,7 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
      * neighbor observes the link to the node as active. This method takes such asymmetric view of
      * the cluster and creates a symmetric view by aggressively marking any active link that has
      * observed a failed counterpart. For instance, in above example, the neighbor which had a
-     * link failure to a given node will be added to the set of failed neighbors of that node.
+     * link failure to a given node will be added to the  set of failed neighbors of that node.
      *
      * @param clusterState represents the status of a cluster.
      * @return A map which each of its entries corresponding to a Corfu server node and a set of

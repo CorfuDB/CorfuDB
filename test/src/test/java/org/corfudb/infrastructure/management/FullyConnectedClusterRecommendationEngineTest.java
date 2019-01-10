@@ -2,8 +2,10 @@ package org.corfudb.infrastructure.management;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.google.common.collect.ImmutableMap;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.ClusterState.ClusterStateNode;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -89,12 +91,16 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
                 SequencerMetrics.UNKNOWN,
                 Collections.emptyMap());
 
-        Map<String, NodeState> nodeToNodeStatesMap = new HashMap<>();
-        nodeToNodeStatesMap.put(SERVERS.ENDPOINT_0, nodeStateEndpoint0);
-        nodeToNodeStatesMap.put(SERVERS.ENDPOINT_1, nodeStateEndpoint1);
-        nodeToNodeStatesMap.put(SERVERS.ENDPOINT_2, nodeStateEndpoint2);
+        ImmutableMap<String, NodeState> nodeToNodeStatesMap = ImmutableMap.of(
+                SERVERS.ENDPOINT_0, nodeStateEndpoint0,
+                SERVERS.ENDPOINT_1, nodeStateEndpoint1,
+                SERVERS.ENDPOINT_2, nodeStateEndpoint2
+        );
 
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = ClusterState.builder()
+                .node(ClusterStateNode.CONNECTED)
+                .nodeStatusMap(nodeToNodeStatesMap)
+                .build();
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
@@ -147,7 +153,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         // failure
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_0, nodeStateEndpoint0);
 
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual =
@@ -221,7 +227,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_0, nodeStateEndpoint0);
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_4, nodeStateEndPoint4);
 
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
@@ -281,7 +287,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_1, nodeStateEndpoint1);
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_2, nodeStateEndpoint2);
 
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual =
@@ -344,7 +350,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_1, nodeStateEndpoint1);
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_2, nodeStateEndpoint2);
 
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual =
@@ -405,7 +411,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_1, nodeStateEndpoint1);
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_2, nodeStateEndpoint2);
 
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
@@ -460,7 +466,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_0, nodeStateEndpoint0);
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_1, nodeStateEndpoint1);
 
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
@@ -525,7 +531,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_1, nodeStateEndpoint1);
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_2, nodeStateEndpoint2);
 
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
@@ -593,7 +599,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_0, nodeStateEndpoint0);
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_1, nodeStateEndpoint1);
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_2, nodeStateEndPoint2);
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
@@ -652,7 +658,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_0, nodeStateEndpoint0);
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_1, nodeStateEndpoint1);
 
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
@@ -717,7 +723,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_1, nodeStateEndpoint1);
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_2, nodeStateEndpoint2);
 
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
@@ -787,7 +793,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_1, nodeStateEndpoint1);
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_2, nodeStateEndpoint2);
 
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual =
@@ -851,7 +857,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_1, nodeStateEndpoint1);
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_2, nodeStateEndpoint2);
 
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual =
@@ -922,7 +928,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_0, nodeStateEndpoint0);
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_4, nodeStateEndpoint4);
 
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
@@ -1015,7 +1021,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_3, nodeStateEndpoint3);
         nodeToNodeStatesMap.put(SERVERS.ENDPOINT_4, nodeStateEndpoint4);
 
-        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap);
+        ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
