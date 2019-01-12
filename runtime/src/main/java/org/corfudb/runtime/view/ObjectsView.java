@@ -36,6 +36,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class ObjectsView extends AbstractView {
 
+    private static final String TXN_COMMIT_TIMER_NAME =
+            CorfuComponent.OBJECT.toString() + "txn-commit-duration";
     /**
      * The Transaction stream is used to log/write successful transactions from different clients.
      * Transaction data and meta data can be obtained by reading this stream.
@@ -152,9 +154,7 @@ public class ObjectsView extends AbstractView {
         }
 
         // Create a timer to measure the transaction commit duration
-        Timer txCommitDurationTimer = context
-                .getMetrics()
-                .timer(CorfuComponent.OBJECT.toString() + "txn-commit-duration");
+        Timer txCommitDurationTimer = context.getMetrics().timer(TXN_COMMIT_TIMER_NAME);
         try (Timer.Context txCommitDuration =
                      MetricsUtils.getConditionalContext(txCommitDurationTimer)){
             return TransactionalContext.getCurrentContext().commitTransaction();

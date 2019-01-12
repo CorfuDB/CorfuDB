@@ -144,8 +144,9 @@ public abstract class AbstractTransactionalContext implements
      */
     @Getter
     private static final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
-    private final Timer txDurationTimer = metrics.timer(CorfuComponent.OBJECT.toString() +
-            "txn-op-duration");
+    private static final String TXN_OP_DURATION_TIMER_NAME = CorfuComponent.OBJECT.toString() +
+            "txn-op-duration";
+    private final Timer txDurationTimer = metrics.timer(TXN_OP_DURATION_TIMER_NAME);
     @Getter
     private final Timer.Context txOpDurationContext;
 
