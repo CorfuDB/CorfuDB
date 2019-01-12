@@ -31,7 +31,7 @@ public class ClusterState implements ICorfuPayload<ClusterState> {
      *  {"c": {"endpoint": "c", "connectivity":{"a": true, "b": false, "c": true}}}
      */
     @Singular
-    private final Map<String, NodeState> nodes;
+    private final ImmutableMap<String, NodeState> nodes;
 
     public ClusterState(ByteBuf buf) {
         nodes = ImmutableMap.copyOf(ICorfuPayload.mapFromBuffer(buf, String.class, NodeState.class));
