@@ -4,12 +4,17 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterStateContext;
+import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
+import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
+import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
@@ -23,6 +28,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 
@@ -54,7 +60,7 @@ public class ManagementServer extends AbstractServer {
     private IReconfigurationHandlerPolicy failureHandlerPolicy;
     private IReconfigurationHandlerPolicy healingPolicy;
 
-    private final ClusterStateContext clusterStateContext;
+    private final ClusterStateContext clusterContext;
 
     @Getter
     private final ManagementAgent managementAgent;
@@ -100,13 +106,62 @@ public class ManagementServer extends AbstractServer {
         this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();
         this.healingPolicy = serverContext.getHealingHandlerPolicy();
 
-        // Creating a management agent.
-        this.clusterStateContext =  new ClusterStateContext(
-                serverContext.getLocalEndpoint(), serverContext.copyManagementLayout()
+        boolean recovered = initLayout();
+
+        HeartbeatCounter counter = new HeartbeatCounter();
+
+        FailureDetector failureDetector = FailureDetector.builder()
+                .localEndpoint(serverContext.getLocalEndpoint())
+                .heartbeatCounter(counter)
+                .build();
+
+        if(serverContext.copyManagementLayout() == null){
+            throw new IllegalStateException("Server is not bootstrapped");
+        }
+
+        PollReport pollReport = failureDetector.poll(
+                serverContext.copyManagementLayout(),
+                corfuRuntime.get(),
+                SequencerMetrics.UNKNOWN
         );
-        this.managementAgent = new ManagementAgent(corfuRuntime, serverContext, clusterStateContext);
-        // Creating an orchestrator.
+
+        // Creating a management agent.
+        this.clusterContext =  ClusterStateContext.builder()
+                .counter(counter)
+                .clusterView(new AtomicReference<>(pollReport.getClusterState()))
+                .build();
+
+        this.managementAgent = new ManagementAgent(
+                corfuRuntime, serverContext, clusterContext, failureDetector, recovered
+        );
+
         this.orchestrator = new Orchestrator(corfuRuntime, serverContext);
+    }
+
+    private boolean initLayout() {
+        boolean recovered = false;
+        Layout managementLayout = serverContext.copyManagementLayout();
+        // If no state was preserved, there is no layout to recover.
+        if (managementLayout == null) {
+            recovered = true;
+        }
+
+        // The management server needs to check both the Layout Server's persisted layout as well
+        // as the Management Server's previously persisted layout. We try to recover from both of
+        // these as the more recent layout (with higher epoch is retained).
+        // When a node does not contain a layout server component and is trying to recover, we
+        // would completely rely on recovering from the management server's persisted layout.
+        // Else in every other case, the layout server is active and will contain the latest layout
+        // (In case of trailing layout server, the management server's persisted layout helps.)
+        serverContext.installSingleNodeLayoutIfAbsent();
+        serverContext.saveManagementLayout(serverContext.getCurrentLayout());
+        serverContext.saveManagementLayout(managementLayout);
+
+        if (!recovered) {
+            log.info("Attempting to recover. Layout before shutdown: {}", managementLayout);
+        }
+
+        return recovered;
     }
 
     /**
@@ -330,7 +385,13 @@ public class ManagementServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.HEARTBEAT_REQUEST)
     public void handleHeartbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         r.sendResponse(ctx, msg, CorfuMsgType.HEARTBEAT_RESPONSE
-                .payloadMsg(clusterStateContext.getClusterState()));
+                .payloadMsg(clusterContext.getClusterView()));
+    }
+
+    @ServerHandler(type = CorfuMsgType.NODE_STATE_REQUEST)
+    public void handleNodeStateRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        NodeState nodeState = clusterContext.getClusterView().getNode(serverContext.getLocalEndpoint());
+        r.sendResponse(ctx, msg, CorfuMsgType.NODE_STATE_RESPONSE.payloadMsg(nodeState));
     }
 
     /**

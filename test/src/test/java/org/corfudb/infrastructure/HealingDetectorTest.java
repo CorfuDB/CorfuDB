@@ -68,7 +68,7 @@ public class HealingDetectorTest extends AbstractViewTest {
         Set<String> expectedResult = new HashSet<>();
         expectedResult.add(getEndpoint(SERVERS.PORT_2));
 
-        assertThat(healingDetector.poll(layout, corfuRuntime).getChangedNodes())
+        assertThat(healingDetector.poll(layout, corfuRuntime).getNodes())
                 .isEqualTo(expectedResult);
     }
 }

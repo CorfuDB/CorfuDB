@@ -7,8 +7,8 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.management.ClusterStateContext;
+import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
 import org.corfudb.infrastructure.management.FailureDetector;
-import org.corfudb.infrastructure.management.HealingDetector;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Layout;
@@ -74,35 +74,19 @@ public class ManagementAgent {
      */
     ManagementAgent(@NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
                     @NonNull ServerContext serverContext,
-                    @NonNull ClusterStateContext clusterContext) {
+                    @NonNull ClusterStateContext clusterContext,
+                    @NonNull FailureDetector failureDetector,
+                    boolean recovered) {
         this.runtimeSingletonResource = runtimeSingletonResource;
         this.serverContext = serverContext;
         this.clusterStateContext = clusterContext;
-
-        Layout managementLayout = serverContext.copyManagementLayout();
-        // If no state was preserved, there is no layout to recover.
-        if (managementLayout == null) {
-            recovered = true;
-        }
-
-        // The management server needs to check both the Layout Server's persisted layout as well
-        // as the Management Server's previously persisted layout. We try to recover from both of
-        // these as the more recent layout (with higher epoch is retained).
-        // When a node does not contain a layout server component and is trying to recover, we
-        // would completely rely on recovering from the management server's persisted layout.
-        // Else in every other case, the layout server is active and will contain the latest layout
-        // (In case of trailing layout server, the management server's persisted layout helps.)
-        serverContext.installSingleNodeLayoutIfAbsent();
-        serverContext.saveManagementLayout(serverContext.getCurrentLayout());
-        serverContext.saveManagementLayout(managementLayout);
-
-        if (!recovered) {
-            log.info("Attempting to recover. Layout before shutdown: {}", managementLayout);
-        }
+        this.recovered = recovered;
 
         this.remoteMonitoringService = new RemoteMonitoringService(
-                serverContext, runtimeSingletonResource, clusterContext,
-                new FailureDetector(), new HealingDetector()
+                serverContext,
+                runtimeSingletonResource,
+                clusterContext,
+                failureDetector
         );
 
         // Creating the initialization task thread.

@@ -364,17 +364,17 @@ public class ManagementViewTest extends AbstractViewTest {
             clusterState = corfuRuntime.getLayoutView().getRuntimeLayout()
                     .getManagementClient(SERVERS.ENDPOINT_0).sendHeartbeatRequest().get();
 
-            if (!clusterState.getNodeStatusMap().isEmpty()) {
+            if (!clusterState.getNodes().isEmpty()) {
                 break;
             }
             Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
         }
         assertThat(clusterState).isNotNull();
-        assertThat(clusterState.getNodeStatusMap()).isNotNull();
-        assertThat(clusterState.getNodeStatusMap().get(SERVERS.ENDPOINT_0)).isNotNull();
+        assertThat(clusterState.getNodes()).isNotNull();
+        assertThat(clusterState.getNodes().get(SERVERS.ENDPOINT_0)).isNotNull();
 
         NodeState nodeState
-                = clusterState.getNodeStatusMap().get(SERVERS.ENDPOINT_0);
+                = clusterState.getNodes().get(SERVERS.ENDPOINT_0);
         assertThat(nodeState.getEndpoint()).isEqualTo(NodeLocator.parseString(SERVERS.ENDPOINT_0));
     }
 

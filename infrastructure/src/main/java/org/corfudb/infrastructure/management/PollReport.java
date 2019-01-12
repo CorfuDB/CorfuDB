@@ -1,12 +1,12 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
+import com.google.common.collect.Sets;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Data;
@@ -26,14 +26,23 @@ public class PollReport {
 
     @Default
     private long pollEpoch = Layout.INVALID_EPOCH;
+    /**
+     * Contains all successful connections. It doesn't contain nodes answered with WrongEpochException
+     */
     @Default
-    private final ImmutableSet<String> changedNodes = ImmutableSet.of();
+    private final ImmutableSet<String> connectedNodes = ImmutableSet.of();
     @Default
-    private final Map<String, Long> outOfPhaseEpochNodes = new HashMap<>();
+    private final ImmutableSet<String> failedNodes = ImmutableSet.of();
     @Default
-    private final Map<String, ClusterState> clusterStateMap = new HashMap<>();
+    private final ImmutableMap<String, Long> wrongEpochs = ImmutableMap.of();
+    @Default
+    private final ClusterState clusterState = new ClusterState(new HashMap<>());
 
-    public boolean isChangedNodesEmpty() {
-        return changedNodes.isEmpty();
+    /**
+     * Contains all connected nodes including nodes answered with WrongEpochException
+     * @return all connected nodes
+     */
+    public ImmutableSet<String> getAllConnectedNodes(){
+        return Sets.union(connectedNodes, wrongEpochs.keySet()).immutableCopy();
     }
 }

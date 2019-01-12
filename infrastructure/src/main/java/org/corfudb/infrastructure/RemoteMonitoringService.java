@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -22,7 +21,6 @@ import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
-import org.corfudb.util.NodeLocator;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import java.time.Duration;
@@ -59,8 +57,6 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     @Getter
     private final IDetector failureDetector;
-    @Getter
-    private final IDetector healingDetector;
 
     /**
      * Detection Task Scheduler Service
@@ -83,10 +79,9 @@ public class RemoteMonitoringService implements MonitoringService {
     /**
      * Future for periodic failure and healed nodes detection task.
      */
-    private CompletableFuture<PollReport> failureDetectorFuture;
-    private CompletableFuture<PollReport> healingDetectorFuture;
+    private CompletableFuture<Void> failureDetectorFuture = CompletableFuture.completedFuture(null);
 
-    ClusterRecommendationEngine recommendationEngine = ClusterRecommendationEngineFactory
+    private final ClusterRecommendationEngine recommendationEngine = ClusterRecommendationEngineFactory
             .createForStrategy(ClusterRecommendationStrategy.FULLY_CONNECTED_CLUSTER);
 
     /**
@@ -111,19 +106,17 @@ public class RemoteMonitoringService implements MonitoringService {
         }
     }
 
-    private SequencerNotReadyCounter sequencerNotReadyCounter;
+    private SequencerNotReadyCounter sequencerNotReadyCounter = new SequencerNotReadyCounter(0, 0);
 
     RemoteMonitoringService(@NonNull ServerContext serverContext,
                             @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
                             @NonNull ClusterStateContext clusterContext,
-                            @NonNull IDetector failureDetector,
-                            @NonNull IDetector healingDetector) {
+                            @NonNull IDetector failureDetector) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
         this.clusterContext = clusterContext;
 
         this.failureDetector = failureDetector;
-        this.healingDetector = healingDetector;
 
         final int managementServiceCount = 1;
         final int detectionWorkersCount = 3;
@@ -161,7 +154,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 .asyncSequencerBootstrap(serverContext.copyManagementLayout(), detectionTaskWorkers);
 
         detectionTasksScheduler.scheduleAtFixedRate(
-                () -> runDetectionTasks(clusterContext),
+                this::runDetectionTasks,
                 0,
                 monitoringInterval.toMillis(),
                 TimeUnit.MILLISECONDS
@@ -194,7 +187,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * - Failure detection tasks.
      * - Healing detection tasks.
      */
-    private synchronized void runDetectionTasks(ClusterStateContext clusterContext) {
+    private synchronized void runDetectionTasks() {
 
         CorfuRuntime corfuRuntime = getCorfuRuntime();
         getCorfuRuntime().invalidateLayout();
@@ -203,28 +196,23 @@ public class RemoteMonitoringService implements MonitoringService {
         serverContext.saveManagementLayout(layout);
 
         if (!canHandleReconfigurations()) {
+            log.error("Can't run failure detector. This Server: {}, is not a part of the active layout: {}",
+                    serverContext.getLocalEndpoint(), layout);
             return;
         }
 
-        CompletableFuture<PollReport> failures = runFailureDetectorTask(layout, clusterContext);
-        CompletableFuture<PollReport> healings = runHealingDetectorTask(layout, clusterContext);
-        CompletableFuture<SequencerMetrics> sequencerMetrics = queryLocalSequencerMetrics(layout);
+        if (!failureDetectorFuture.isDone()) {
+            log.debug("Cannot initiate new failure detection task. Polling in progress.");
+            return;
+        }
 
-        CompletableFuture.allOf(failures, healings, sequencerMetrics).whenComplete((val, ex) -> {
-            try {
-                clusterContext.refreshClusterView(
-                        serverContext.getLocalEndpoint(),
-                        serverContext.copyManagementLayout(),
-                        failures.get(),
-                        healings.get(),
-                        sequencerMetrics.get()
-                );
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch (ExecutionException e) {
-                log.error("Can't complete operation");
-            }
-        });
+        failureDetectorFuture = queryLocalSequencerMetrics(layout)
+                .thenCompose(metrics -> pollReport(layout, metrics))
+                .thenApply(pollReport -> {
+                    clusterContext.refreshClusterView(layout, pollReport);
+                    return pollReport;
+                })
+                .thenCompose(pollReport -> runFailureDetectorTask(layout, pollReport));
     }
 
     /**
@@ -256,64 +244,14 @@ public class RemoteMonitoringService implements MonitoringService {
                 });
     }
 
-
-    /**
-     * This contains the healing mechanism.
-     * - This task is executed in intervals of 1 second (default). This task is blocked until
-     * the management server is bootstrapped and has a connected runtime.
-     * - On every invocation, this task refreshes the runtime to fetch the latest layout and also
-     * updates the local persisted copy of the latest layout
-     * - It then executes the poll using the healingDetector which generates a pollReport at the
-     * end of the round.
-     * - The poll report contains servers that are now responsive and healed.
-     * - The healed servers in the pollReport are then handled based on the healing handler policy.
-     * - The healing handler policy dictates whether the healing node should be added back as a
-     * logUnit node or should only operate as a layout server or a primary/backup sequencer.
-     */
-    private CompletableFuture<PollReport> runHealingDetectorTask(Layout layout, ClusterStateContext clusterContext) {
-
-        if (healingDetectorFuture != null && !healingDetectorFuture.isDone()) {
-            log.debug("Cannot initiate new healing polling task. Polling in progress.");
-            return healingDetectorFuture;
-        }
-
-        healingDetectorFuture = CompletableFuture.supplyAsync(() -> {
+    private CompletableFuture<PollReport> pollReport(Layout layout, SequencerMetrics sequencerMetrics) {
+        return CompletableFuture.supplyAsync(() -> {
+            log.trace("Poll report for layout: {}", layout);
 
             CorfuRuntime corfuRuntime = getCorfuRuntime();
-            PollReport pollReport = healingDetector.poll(layout, corfuRuntime);
 
-            pollReport.getClusterStateMap()
-                    .forEach((s, clusterStatus) -> clusterContext.updateNodeState(clusterStatus, layout));
-
-            Set<String> healedNodes = new TreeSet<>(
-                    recommendationEngine.healedServers(clusterContext.getClusterState(), layout)
-            );
-
-            if (healedNodes.isEmpty()) {
-                return pollReport;
-            }
-
-            try {
-                log.info("[{}] : Attempting to heal nodes in poll report: {}",
-                        serverContext.getLocalEndpoint(), pollReport);
-
-                corfuRuntime.getLayoutView()
-                        .getRuntimeLayout(layout)
-                        .getManagementClient(serverContext.getLocalEndpoint())
-                        .handleHealing(pollReport.getPollEpoch(), healedNodes)
-                        .get();
-                log.info("Healing nodes successful: {}", pollReport);
-            } catch (ExecutionException ee) {
-                log.error("Healing nodes failed: ", ee);
-            } catch (InterruptedException ie) {
-                log.error("Healing nodes interrupted: ", ie);
-                Thread.currentThread().interrupt();
-            }
-
-            return pollReport;
-        }, detectionTaskWorkers);
-
-        return healingDetectorFuture;
+            return failureDetector.poll(layout, corfuRuntime, sequencerMetrics);
+        });
     }
 
     /**
@@ -331,32 +269,49 @@ public class RemoteMonitoringService implements MonitoringService {
      * - Finally all unresponsive server failures are handled by either removing or marking them
      * as unresponsive based on a failure handling policy.
      */
-    private CompletableFuture<PollReport> runFailureDetectorTask(Layout layout, ClusterStateContext clusterContext) {
+    private CompletableFuture<Void> runFailureDetectorTask(Layout layout, PollReport pollReport) {
 
-        if (failureDetectorFuture != null && !failureDetectorFuture.isDone()) {
-            log.debug("Cannot initiate new polling task. Polling in progress.");
-            return failureDetectorFuture;
-        }
-
-        failureDetectorFuture = CompletableFuture.supplyAsync(() -> {
-            log.trace("Run failure detector task");
-
-            CorfuRuntime corfuRuntime = getCorfuRuntime();
-            // Execute the failure detection poll round.
-            PollReport pollReport = failureDetector.poll(layout, corfuRuntime);
-
+        return CompletableFuture.runAsync(() -> {
             // Corrects out of phase epoch issues if present in the report. This method
             // performs re-sealing of all nodes if required and catchup of a layout server to
             // the current state.
-            correctOutOfPhaseEpochs(pollReport);
+            correctWrongEpochs(pollReport);
 
             // Analyze the poll report and trigger failure handler if needed.
-            handleFailures(pollReport, clusterContext);
+            handleFailures(pollReport, layout);
 
-            return pollReport;
+            handleHealing(pollReport, layout);
         }, detectionTaskWorkers);
+    }
 
-        return failureDetectorFuture;
+    private void handleHealing(PollReport pollReport, Layout layout) {
+        Set<String> healedNodes = new TreeSet<>(
+                recommendationEngine.healedServers(pollReport.getClusterState(), layout)
+        );
+
+        if (healedNodes.isEmpty()) {
+            return;
+        }
+
+        log.debug("Handle healing");
+
+        try {
+            log.info("[{}] : Attempting to heal nodes in poll report: {}", serverContext.getLocalEndpoint(), pollReport);
+            CorfuRuntime corfuRuntime = getCorfuRuntime();
+
+            corfuRuntime.getLayoutView()
+                    .getRuntimeLayout(layout)
+                    .getManagementClient(serverContext.getLocalEndpoint())
+                    .handleHealing(pollReport.getPollEpoch(), healedNodes)
+                    .get();
+
+            log.info("Healing nodes successful: {}", pollReport);
+        } catch (ExecutionException ee) {
+            log.error("Healing nodes failed: ", ee);
+        } catch (InterruptedException ie) {
+            log.error("Healing nodes interrupted: ", ie);
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**
@@ -377,21 +332,18 @@ public class RemoteMonitoringService implements MonitoringService {
                 // Unresponsive servers are excluded as they do not respond with a WrongEpochException.
                 .filter(s -> !layout.getUnresponsiveServers().contains(s))
                 .collect(Collectors.toList());
-        boolean result = pollReport.getOutOfPhaseEpochNodes().keySet().containsAll(unresponsiveServers);
+        boolean result = pollReport.getWrongEpochs().keySet().containsAll(unresponsiveServers);
         if (result) {
             log.info("Current layout slot is empty. Filling slot with current layout.");
         }
         return result;
     }
 
-    private SequencerStatus getPrimarySequencerStatus(
-            Layout layout, PollReport pollReport, ClusterStateContext clusterContext) {
+    private SequencerStatus getPrimarySequencerStatus(Layout layout, PollReport pollReport) {
 
-        String primarySequencer = layout.getSequencers().get(0);
+        String primarySequencer = layout.getPrimarySequencer();
         // Fetches clusterStatus from map or creates a default ClusterState object.
-        NodeState primarySequencerNodeState = clusterContext.getClusterState()
-                .getNodeStatusMap()
-                .getOrDefault(primarySequencer, NodeState.getDefaultNodeState(NodeLocator.parseString(primarySequencer)));
+        NodeState primarySequencerNode = pollReport.getClusterState().getNode(primarySequencer);
 
         // If we have a stale poll report, we should discard this and continue polling.
         if (layout.getEpoch() > pollReport.getPollEpoch()) {
@@ -400,7 +352,7 @@ public class RemoteMonitoringService implements MonitoringService {
             );
             return SequencerStatus.UNKNOWN;
         } else {
-            return primarySequencerNodeState.getSequencerMetrics().getSequencerStatus();
+            return primarySequencerNode.getSequencerMetrics().getSequencerStatus();
         }
     }
 
@@ -410,27 +362,19 @@ public class RemoteMonitoringService implements MonitoringService {
      *
      * @param pollReport Poll report obtained from failure detection policy.
      */
-    private void handleFailures(PollReport pollReport, ClusterStateContext clusterContext) {
+    private void handleFailures(PollReport pollReport, Layout layout) {
         log.trace("Handle failures for the report: {}", pollReport);
 
         try {
-            // These conditions are mutually exclusive. If there is a failure to be
-            // handled, we don't need to explicitly fix the unfilled layout slot. Else we do.
-            Layout layout = serverContext.copyManagementLayout();
-
-            pollReport
-                    .getClusterStateMap()
-                    .forEach((s, clusterStatus) -> clusterContext.updateNodeState(clusterStatus, layout));
-
-            if (!pollReport.getOutOfPhaseEpochNodes().isEmpty()) {
-                if(isCurrentLayoutSlotUnFilled(pollReport)) {
+            if (!pollReport.getWrongEpochs().isEmpty()) {
+                if (isCurrentLayoutSlotUnFilled(pollReport)) {
                     handleFailure(Collections.emptySortedSet(), pollReport);
                 }
                 return;
             }
 
             SortedSet<String> failedNodes = new TreeSet<>(
-                    recommendationEngine.failedServers(clusterContext.getClusterState(), layout)
+                    recommendationEngine.failedServers(pollReport.getClusterState(), layout)
             );
 
             if (!failedNodes.isEmpty()) {
@@ -438,13 +382,13 @@ public class RemoteMonitoringService implements MonitoringService {
                 return;
             }
 
-            if (getPrimarySequencerStatus(layout, pollReport, clusterContext) == SequencerStatus.READY) {
+            if (getPrimarySequencerStatus(layout, pollReport) == SequencerStatus.READY) {
                 return;
             }
 
             // If failures are not present we can check if the primary sequencer has been
             // bootstrapped from the heartbeat responses received.
-            if (sequencerNotReadyCounter == null || sequencerNotReadyCounter.getEpoch() != layout.getEpoch()) {
+            if (sequencerNotReadyCounter.getEpoch() != layout.getEpoch()) {
                 // If the epoch is different than the poll epoch, we reset the timeout state.
                 sequencerNotReadyCounter = new SequencerNotReadyCounter(layout.getEpoch(), 1);
                 return;
@@ -507,12 +451,14 @@ public class RemoteMonitoringService implements MonitoringService {
      *
      * @param pollReport Poll Report from running the failure detection policy.
      */
-    private void correctOutOfPhaseEpochs(PollReport pollReport) {
+    private void correctWrongEpochs(PollReport pollReport) {
 
-        final Map<String, Long> outOfPhaseEpochNodes = pollReport.getOutOfPhaseEpochNodes();
-        if (outOfPhaseEpochNodes.isEmpty()) {
+        Map<String, Long> wrongEpochs = pollReport.getWrongEpochs();
+        if (wrongEpochs.isEmpty()) {
             return;
         }
+
+        log.debug("Correct wrong epochs. Poll report: {}", pollReport);
 
         try {
             Layout layout = serverContext.copyManagementLayout();
@@ -535,7 +481,7 @@ public class RemoteMonitoringService implements MonitoringService {
 
             // In case of a partial seal, a set of servers can be sealed with a higher epoch.
             // We should be able to detect this and bring the rest of the servers to this epoch.
-            long maxOutOfPhaseEpoch = Collections.max(outOfPhaseEpochNodes.values());
+            long maxOutOfPhaseEpoch = Collections.max(wrongEpochs.values());
             if (maxOutOfPhaseEpoch > layout.getEpoch()) {
                 layout.setEpoch(maxOutOfPhaseEpoch);
             }

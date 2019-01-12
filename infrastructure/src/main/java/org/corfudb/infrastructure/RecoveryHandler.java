@@ -52,8 +52,7 @@ public class RecoveryHandler {
                 localRecoveryLayout.getEpoch(), clusterLayout.getEpoch());
         // The cluster has moved ahead. This node should not force any layout. Let the other
         // members detect that this node has healed and include it in the layout.
-        return clusterLayout.getEpoch() > localRecoveryLayout.getEpoch()
-                || recoveryReconfigurationResult;
+        return clusterLayout.getEpoch() > localRecoveryLayout.getEpoch() || recoveryReconfigurationResult;
     }
 
     static void retryUntilRecovery(@NonNull ServerContext serverContext,

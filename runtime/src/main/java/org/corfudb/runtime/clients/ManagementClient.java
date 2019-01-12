@@ -13,6 +13,7 @@ import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
+import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
@@ -86,6 +87,10 @@ public class ManagementClient extends AbstractClient {
      */
     public CompletableFuture<ClusterState> sendHeartbeatRequest() {
         return sendMessageWithFuture(CorfuMsgType.HEARTBEAT_REQUEST.msg());
+    }
+
+    public CompletableFuture<NodeState> sendNodeStateRequest() {
+        return sendMessageWithFuture(CorfuMsgType.NODE_STATE_REQUEST.msg());
     }
 
     /**

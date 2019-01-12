@@ -229,11 +229,11 @@ public class ManagementView extends AbstractView {
         // Truncates all nodes which did not respond to the Heartbeat request.
         peerResponsiveNodes.retainAll(clusterStatusMap.keySet());
         // Filter out all nodes which are not reachable by the cluster nodes.
-        clusterStatusMap.forEach((endpoint, clusterStatus) -> clusterStatus.getNodeStatusMap()
+        clusterStatusMap.forEach((endpoint, clusterStatus) -> clusterStatus.getNodes()
                 // For each clusterState we are only interested in the nodeState of the polling endpoint.
                 // In node X's cluster state we fetch node X's node state and so on.
-                .getOrDefault(endpoint, NodeState.getDefaultNodeState(NodeLocator.parseString(endpoint)))
-                .getConnectivityStatus().entrySet().stream()
+                .getOrDefault(endpoint, NodeState.getDefaultNodeState(endpoint))
+                .getConnectivity().entrySet().stream()
                 // Filter out all unreachable nodes from each node state's connectivity view.
                 .filter(entry -> !entry.getValue())
                 .map(Entry::getKey)

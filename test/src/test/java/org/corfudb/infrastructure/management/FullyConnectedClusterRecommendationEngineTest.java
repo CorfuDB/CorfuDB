@@ -28,14 +28,14 @@ import java.util.Map;
  */
 public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewTest {
 
-    private ClusterRecommendationEngine fullyConnectedClusterRecommendationEngine;
+    private ClusterRecommendationEngine recommendationEngine;
 
 
     @Before
     public void setUp() {
-        fullyConnectedClusterRecommendationEngine =
-                ClusterRecommendationEngineFactory
-                        .createForStrategy(ClusterRecommendationStrategy.FULLY_CONNECTED_CLUSTER);
+        recommendationEngine = ClusterRecommendationEngineFactory.createForStrategy(
+                ClusterRecommendationStrategy.FULLY_CONNECTED_CLUSTER
+        );
     }
 
     /**
@@ -43,8 +43,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
      */
     @Test
     public void getClusterRecommendationStrategyName() {
-        final ClusterRecommendationStrategy strategy =
-                fullyConnectedClusterRecommendationEngine.getClusterRecommendationStrategy();
+        ClusterRecommendationStrategy strategy = recommendationEngine.getClusterRecommendationStrategy();
         assertThat(strategy).isEqualTo(ClusterRecommendationStrategy.FULLY_CONNECTED_CLUSTER);
     }
 
@@ -99,17 +98,17 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
 
         ClusterState clusterState = ClusterState.builder()
                 .node(ClusterStateNode.CONNECTED)
-                .nodeStatusMap(nodeToNodeStatesMap)
+                .nodes(nodeToNodeStatesMap)
                 .build();
 
         // Assert that recommended failed nodes are the same as expected
-        final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
+        final List<String> failedSuspectsActual = recommendationEngine
                 .failedServers(clusterState, layout);
         final List<String> failedSuspectsExpected = Collections.singletonList(SERVERS.ENDPOINT_1);
         assertThat(failedSuspectsActual).isEqualTo(failedSuspectsExpected);
 
         // Assert that recommended healed nodes are the same as expected
-        final List<String> healedSuspectActual = fullyConnectedClusterRecommendationEngine
+        final List<String> healedSuspectActual = recommendationEngine
                 .healedServers(clusterState, layout);
         assertThat(healedSuspectActual).isEmpty();
     }
@@ -157,12 +156,12 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual =
-                fullyConnectedClusterRecommendationEngine.failedServers(clusterState, layout);
+                recommendationEngine.failedServers(clusterState, layout);
         final List<String> failedSuspectsExpected = Arrays.asList(SERVERS.ENDPOINT_1);
         assertThat(failedSuspectsActual).isEqualTo(failedSuspectsExpected);
 
         // Assert that recommended healed nodes are the same as expected
-        final List<String> healedSuspectActual = fullyConnectedClusterRecommendationEngine
+        final List<String> healedSuspectActual = recommendationEngine
                 .healedServers(clusterState, layout);
         assertThat(healedSuspectActual).isEmpty();
     }
@@ -230,15 +229,12 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
-        final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
-                .failedServers(clusterState, layout);
-        final List<String> failedSuspectsExpected = Arrays.asList(SERVERS.ENDPOINT_4,
-                                                                  SERVERS.ENDPOINT_0);
+        List<String> failedSuspectsActual = recommendationEngine.failedServers(clusterState, layout);
+        List<String> failedSuspectsExpected = Arrays.asList(SERVERS.ENDPOINT_4, SERVERS.ENDPOINT_0);
         assertThat(failedSuspectsActual).isEqualTo(failedSuspectsExpected);
 
         // Assert that recommended healed nodes are the same as expected
-        final List<String> healedSuspectActual = fullyConnectedClusterRecommendationEngine
-                .healedServers(clusterState, layout);
+        List<String> healedSuspectActual = recommendationEngine.healedServers(clusterState, layout);
         assertThat(healedSuspectActual).isEmpty();
     }
 
@@ -291,13 +287,13 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual =
-                fullyConnectedClusterRecommendationEngine.failedServers(clusterState, layout);
+                recommendationEngine.failedServers(clusterState, layout);
         final List<String> failedSuspectsExpected = Arrays.asList(SERVERS.ENDPOINT_0);
         assertThat(failedSuspectsActual).isEqualTo(failedSuspectsExpected);
 
         // Assert that recommended healed nodes are the same as expected
         final List<String> healedSuspectActual =
-                fullyConnectedClusterRecommendationEngine.healedServers(clusterState, layout);
+                recommendationEngine.healedServers(clusterState, layout);
         assertThat(healedSuspectActual).isEmpty();
     }
 
@@ -354,12 +350,12 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual =
-                fullyConnectedClusterRecommendationEngine.failedServers(clusterState, layout);
+                recommendationEngine.failedServers(clusterState, layout);
         assertThat(failedSuspectsActual).isEmpty();
 
         // Assert that recommended healed nodes are the same as expected
         final List<String> healedSuspectActual =
-                fullyConnectedClusterRecommendationEngine.healedServers(clusterState, layout);
+                recommendationEngine.healedServers(clusterState, layout);
         final List<String> healedSuspectsExpected = Arrays.asList(SERVERS.ENDPOINT_0);
         assertThat(healedSuspectActual).isEqualTo(healedSuspectsExpected);
     }
@@ -414,12 +410,12 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
-        final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
+        final List<String> failedSuspectsActual = recommendationEngine
                 .failedServers(clusterState, layout);
         assertThat(failedSuspectsActual).isEmpty();
 
         // Assert that recommended healed nodes are the same as expected
-        final List<String> healedSuspectActual = fullyConnectedClusterRecommendationEngine
+        final List<String> healedSuspectActual = recommendationEngine
                 .healedServers(clusterState, layout);
         assertThat(healedSuspectActual).isEmpty();
     }
@@ -469,14 +465,14 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
-        final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
+        final List<String> failedSuspectsActual = recommendationEngine
                 .failedServers(clusterState, layout);
         final List<String> failedSuspectExpected =
                 Collections.singletonList(SERVERS.ENDPOINT_2);
         assertThat(failedSuspectsActual).isEqualTo(failedSuspectExpected);
 
         // Assert that recommended healed nodes are the same as expected
-        final List<String> healedSuspectActual = fullyConnectedClusterRecommendationEngine
+        final List<String> healedSuspectActual = recommendationEngine
                 .healedServers(clusterState, layout);
         assertThat(healedSuspectActual).isEmpty();
     }
@@ -534,13 +530,13 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
-        final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
+        final List<String> failedSuspectsActual = recommendationEngine
                 .failedServers(clusterState, layout);
         assertThat(failedSuspectsActual).isEmpty();
 
         // Assert that recommended healed nodes are the same as expected
         final List<String> healedSuspectExpected = Collections.singletonList(SERVERS.ENDPOINT_0);
-        final List<String> healedSuspectActual = fullyConnectedClusterRecommendationEngine
+        final List<String> healedSuspectActual = recommendationEngine
                 .healedServers(clusterState, layout);
         assertThat(healedSuspectActual).isEqualTo(healedSuspectExpected);
     }
@@ -602,7 +598,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
-        final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
+        final List<String> failedSuspectsActual = recommendationEngine
                 .failedServers(clusterState, layout);
         final List<String> failedSuspectExpected =
                 Arrays.asList(SERVERS.ENDPOINT_2,
@@ -610,7 +606,7 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         assertThat(failedSuspectsActual).isEqualTo(failedSuspectExpected);
 
         // Assert that recommended healed nodes are the same as expected
-        final List<String> healedSuspectActual = fullyConnectedClusterRecommendationEngine
+        final List<String> healedSuspectActual = recommendationEngine
                 .healedServers(clusterState, layout);
         assertThat(healedSuspectActual).isEmpty();
     }
@@ -661,12 +657,12 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
-        final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
+        final List<String> failedSuspectsActual = recommendationEngine
                 .failedServers(clusterState, layout);
         assertThat(failedSuspectsActual).isEmpty();
 
         // Assert that recommended healed nodes are the same as expected
-        final List<String> healedSuspectActual = fullyConnectedClusterRecommendationEngine
+        final List<String> healedSuspectActual = recommendationEngine
                 .healedServers(clusterState, layout);
         assertThat(healedSuspectActual).isEmpty();
     }
@@ -726,12 +722,12 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
-        final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
+        final List<String> failedSuspectsActual = recommendationEngine
                 .failedServers(clusterState, layout);
         assertThat(failedSuspectsActual).isEmpty();
 
         // Assert that recommended healed nodes are the same as expected
-        final List<String> healedSuspectActual = fullyConnectedClusterRecommendationEngine
+        final List<String> healedSuspectActual = recommendationEngine
                 .healedServers(clusterState, layout);
         final List<String> healedSuspectExpected =
                 Collections.singletonList(SERVERS.ENDPOINT_1);
@@ -797,12 +793,12 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
 
         // Assert that recommended failed nodes are the same as expected
         final List<String> failedSuspectsActual =
-                fullyConnectedClusterRecommendationEngine.failedServers(clusterState, layout);
+                recommendationEngine.failedServers(clusterState, layout);
         assertThat(failedSuspectsActual).isEmpty();
 
         // Assert that recommended healed nodes are the same as expected
         final List<String> healedSuspectActual =
-                fullyConnectedClusterRecommendationEngine.healedServers(clusterState, layout);
+                recommendationEngine.healedServers(clusterState, layout);
         final List<String> healedSuspectExpected =
                 Collections.singletonList(SERVERS.ENDPOINT_1);
         assertThat(healedSuspectActual).isEqualTo(healedSuspectExpected);
@@ -860,13 +856,11 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
-        final List<String> failedSuspectsActual =
-                fullyConnectedClusterRecommendationEngine.failedServers(clusterState, layout);
+        List<String> failedSuspectsActual = recommendationEngine.failedServers(clusterState, layout);
         assertThat(failedSuspectsActual).isEmpty();
 
         // Assert that recommended healed nodes are the same as expected
-        final List<String> healedSuspectActual =
-                fullyConnectedClusterRecommendationEngine.healedServers(clusterState, layout);
+        List<String> healedSuspectActual = recommendationEngine.healedServers(clusterState, layout);
         assertThat(healedSuspectActual).isEmpty();
     }
 
@@ -931,14 +925,12 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
-        final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
-                .failedServers(clusterState, layout);
+        List<String> failedSuspectsActual = recommendationEngine.failedServers(clusterState, layout);
         assertThat(failedSuspectsActual).isEmpty();
 
         // Assert that recommended healed nodes are the same as expected
-        final List<String> healedSuspectActual = fullyConnectedClusterRecommendationEngine
-                .healedServers(clusterState, layout);
-        final List<String> healedSuspectsExpected = Collections.singletonList(SERVERS.ENDPOINT_0);
+        List<String> healedSuspectActual = recommendationEngine.healedServers(clusterState, layout);
+        List<String> healedSuspectsExpected = Collections.singletonList(SERVERS.ENDPOINT_0);
         assertThat(healedSuspectActual).isEqualTo(healedSuspectsExpected);
     }
 
@@ -1024,14 +1016,14 @@ public class FullyConnectedClusterRecommendationEngineTest extends AbstractViewT
         ClusterState clusterState = new ClusterState(nodeToNodeStatesMap, ClusterStateNode.CONNECTED);
 
         // Assert that recommended failed nodes are the same as expected
-        final List<String> failedSuspectsActual = fullyConnectedClusterRecommendationEngine
+        final List<String> failedSuspectsActual = recommendationEngine
                 .failedServers(clusterState, layout);
         final List<String> failedSuspectsExpected =
                 Arrays.asList(SERVERS.ENDPOINT_2,SERVERS.ENDPOINT_0);
         assertThat(failedSuspectsActual).isEqualTo(failedSuspectsExpected);
 
         // Assert that recommended healed nodes are the same as expected
-        final List<String> healedSuspectActual = fullyConnectedClusterRecommendationEngine
+        final List<String> healedSuspectActual = recommendationEngine
                 .healedServers(clusterState, layout);
         assertThat(healedSuspectActual).isEmpty();
     }

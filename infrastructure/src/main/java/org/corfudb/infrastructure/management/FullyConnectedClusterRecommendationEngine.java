@@ -91,6 +91,11 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
 
         log.trace("Detecting the failed nodes for: ClusterState= {} Layout= {}", clusterState, layout);
 
+        if(clusterState.size() != layout.getLayoutServers().size()){
+            log.error("Cluster representation is different than layout. Cluster: {}, layout: {}", clusterState, layout);
+            return Collections.emptyList();
+        }
+
         // Remove asymmetry by converting all asymmetric link failures to symmetric failures
         Map<String, Set<String>> nodeFailedNeighborMap = convertAsymmetricToSymmetricFailures(clusterState);
 
@@ -147,16 +152,15 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
      */
     private Map<String, Set<String>> convertAsymmetricToSymmetricFailures(ClusterState clusterState) {
 
-        log.trace("Converting to symmetric view for the provided cluster view: {}", clusterState.getNodeStatusMap());
+        log.trace("Converting to symmetric view for the provided cluster view: {}", clusterState.getNodes());
 
         Map<String, Set<String>> clusterMatrix = new HashMap<>();
 
         // Traverse a ClusterState and add reverse of observed failed links as failed links.
-        for (Map.Entry<String, NodeState> nodeNeighborEntry : clusterState.getNodeStatusMap()
-                                                                          .entrySet()) {
-            final String currentNode = nodeNeighborEntry.getKey();
+        for (Map.Entry<String, NodeState> nodeNeighborEntry : clusterState.getNodes().entrySet()) {
+            String currentNode = nodeNeighborEntry.getKey();
 
-            final Map<String, Boolean> neighborsReachabilityMap =
+            Map<String, Boolean> neighborsReachabilityMap =
                     nodeNeighborEntry
                             .getValue()
                             .getConnectivityStatus();
@@ -322,8 +326,7 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
         log.trace("Detecting the healed nodes for: ClusterState: {} Layout: {}", clusterState, layout);
 
         // Remove asymmetry by converting all asymmetric link failures to symmetric failures
-        final Map<String, Set<String>> nodeFailedNeighborMap =
-                convertAsymmetricToSymmetricFailures(clusterState);
+        Map<String, Set<String>> nodeFailedNeighborMap = convertAsymmetricToSymmetricFailures(clusterState);
 
         // Collect potential healed nodes
         Map<String, Set<String>> healedLinksNodeNeighborsMap = potentialHealedNodes(layout, nodeFailedNeighborMap);
