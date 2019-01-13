@@ -14,6 +14,7 @@ import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.ClusterType;
 import org.corfudb.infrastructure.management.IDetector;
 import org.corfudb.infrastructure.management.PollReport;
+import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
@@ -387,9 +388,16 @@ public class RemoteMonitoringService implements MonitoringService {
                 return true;
             }
 
+            ClusterState clusterState = pollReport.getClusterState();
+
+            if (clusterState.size() != layout.getAllServers().size()) {
+                log.error("Cluster representation is different than layout. Cluster: {}, layout: {}", clusterState, layout);
+                return false;
+            }
+
             Optional<NodeRank> maybeFailedNode = recommendationEngine.failedServer(
-                    pollReport.getClusterState(),
-                    layout,
+                    clusterState,
+                    layout.getUnresponsiveServers(),
                     serverContext.getLocalEndpoint()
             );
 

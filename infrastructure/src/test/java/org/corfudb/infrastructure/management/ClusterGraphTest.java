@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.management;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
@@ -16,6 +15,7 @@ import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -126,8 +126,20 @@ public class ClusterGraphTest {
     }
 
     @Test
-    public void testFindFullyConnectedResponsiveNodes(){
-        fail("cover this logic");
+    public void testFindFullyConnectedResponsiveNodes() {
+        NodeConnectivity a = connectivity("a", ImmutableMap.of("a", true, "b", true, "c", false));
+        NodeConnectivity b = connectivity("b", ImmutableMap.of("a", true, "b", true, "c", true));
+        NodeConnectivity c = connectivity("c", ImmutableMap.of("a", false, "b", true, "c", true));
+
+        ClusterGraph graph = cluster(a, b, c).toSymmetric();
+
+        ImmutableMap<String, NodeRank> responsiveNodes = graph.findFullyConnectedResponsiveNodes(
+                Collections.singletonList("b")
+        );
+
+        assertEquals(responsiveNodes.size(), 1);
+        assertEquals(responsiveNodes.get("b").getEndpoint(), "b");
+        assertEquals(responsiveNodes.get("b").getNumConnections(), graph.size());
     }
 
     private ClusterGraph cluster(NodeConnectivity... nodes) {

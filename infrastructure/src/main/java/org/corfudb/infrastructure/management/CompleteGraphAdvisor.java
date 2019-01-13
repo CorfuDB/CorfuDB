@@ -41,19 +41,18 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
      * cluster and must not rely on the implementation details of the algorithm.
      * <p>
      *
-     * @param clusterState represents the state of connectivity amongst the Corfu cluster
-     *                     nodes from a node's perspective.
-     * @param layout       expected layout of the cluster.
+     * @param clusterState        represents the state of connectivity amongst the Corfu cluster
+     *                            nodes from a node's perspective.
+     * @param unresponsiveServers list of unresponsive servers.
      * @return a server considered as failed according to the underlying strategy.
      */
     @Override
-    public Optional<NodeRank> failedServer(ClusterState clusterState, Layout layout, String localEndpoint) {
-        log.trace("Detecting the failed nodes for: ClusterState= {} Layout= {}", clusterState, layout);
+    public Optional<NodeRank> failedServer(
+            ClusterState clusterState, List<String> unresponsiveServers, String localEndpoint) {
 
-        if (clusterState.size() != layout.getAllServers().size()) {
-            log.error("Cluster representation is different than layout. Cluster: {}, layout: {}", clusterState, layout);
-            return Optional.empty();
-        }
+        log.trace("Detecting the failed nodes for: ClusterState= {} unresponsive servers= {}",
+                clusterState, unresponsiveServers
+        );
 
         ClusterGraph symmetric = ClusterGraph.transform(clusterState).toSymmetric();
         Optional<NodeRank> maybeDecisionMaker = symmetric.getDecisionMaker();
@@ -81,7 +80,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
             return Optional.empty();
         }
 
-        if (layout.getUnresponsiveServers().contains(failedNode.getEndpoint())) {
+        if (unresponsiveServers.contains(failedNode.getEndpoint())) {
             return Optional.empty();
         }
 
@@ -92,7 +91,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
      * Provide a server considered to have healed in the Corfu cluster according to
      * the COMPLETE_GRAPH implementation of algorithm for
      * {@link ClusterType}.
-     *
+     * <p>
      * The node can heal only itself. The node responsible only for itself, can't heal other nodes.
      * It simplifies healing algorithm and guaranties that if node became available it mark itself as a responsible
      * node in the layout. It helps us to simplify analysis/debugging process and brings simple and reliable algorithm

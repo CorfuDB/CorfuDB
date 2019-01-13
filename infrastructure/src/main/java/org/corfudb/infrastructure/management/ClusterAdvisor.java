@@ -38,7 +38,7 @@ public interface ClusterAdvisor {
      * @param localEndpoint local node endpoint.
      * @return a node considered to have been failed according to the underlying {@link ClusterType}.
      */
-    Optional<NodeRank> failedServer(ClusterState clusterState, Layout layout, String localEndpoint);
+    Optional<NodeRank> failedServer(ClusterState clusterState, List<String> unresponsiveServers, String localEndpoint);
 
     /**
      * Provide a server in the Corfu cluster which according to the underlying algorithm
