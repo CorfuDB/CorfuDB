@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.management;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
@@ -56,11 +57,11 @@ public class ClusterGraphTest {
         ClusterGraph graph = cluster(a, b);
         ClusterGraph symmetric = graph.toSymmetric();
 
-        assertFalse(graph.getNode("a").getNodeStatus("b"));
-        assertTrue(graph.getNode("b").getNodeStatus("a"));
+        assertFalse(graph.getNode("a").getConnectionStatus("b"));
+        assertTrue(graph.getNode("b").getConnectionStatus("a"));
 
-        assertFalse(symmetric.getNode("a").getNodeStatus("b"));
-        assertFalse(symmetric.getNode("b").getNodeStatus("a"));
+        assertFalse(symmetric.getNode("a").getConnectionStatus("b"));
+        assertFalse(symmetric.getNode("b").getConnectionStatus("a"));
     }
 
     @Test
@@ -72,8 +73,8 @@ public class ClusterGraphTest {
         ClusterGraph graph = cluster(a, b, c);
         ClusterGraph symmetric = graph.toSymmetric();
 
-        assertFalse(symmetric.getNode("b").getNodeStatus("a"));
-        assertFalse(symmetric.getNode("c").getNodeStatus("a"));
+        assertFalse(symmetric.getNode("b").getConnectionStatus("a"));
+        assertFalse(symmetric.getNode("c").getConnectionStatus("a"));
     }
 
     @Test
@@ -85,17 +86,17 @@ public class ClusterGraphTest {
         ClusterGraph graph = cluster(a, b, c);
         ClusterGraph symmetric = graph.toSymmetric();
 
-        assertTrue(symmetric.getNode("a").getNodeStatus("a"));
-        assertFalse(symmetric.getNode("a").getNodeStatus("b"));
-        assertFalse(symmetric.getNode("a").getNodeStatus("c"));
+        assertTrue(symmetric.getNode("a").getConnectionStatus("a"));
+        assertFalse(symmetric.getNode("a").getConnectionStatus("b"));
+        assertFalse(symmetric.getNode("a").getConnectionStatus("c"));
 
-        assertFalse(symmetric.getNode("b").getNodeStatus("a"));
-        assertFalse(symmetric.getNode("b").getNodeStatus("b"));
-        assertFalse(symmetric.getNode("b").getNodeStatus("c"));
+        assertFalse(symmetric.getNode("b").getConnectionStatus("a"));
+        assertFalse(symmetric.getNode("b").getConnectionStatus("b"));
+        assertFalse(symmetric.getNode("b").getConnectionStatus("c"));
 
-        assertFalse(symmetric.getNode("c").getNodeStatus("a"));
-        assertFalse(symmetric.getNode("c").getNodeStatus("b"));
-        assertTrue(symmetric.getNode("c").getNodeStatus("c"));
+        assertFalse(symmetric.getNode("c").getConnectionStatus("a"));
+        assertFalse(symmetric.getNode("c").getConnectionStatus("b"));
+        assertTrue(symmetric.getNode("c").getConnectionStatus("c"));
     }
 
     @Test
@@ -118,10 +119,15 @@ public class ClusterGraphTest {
         NodeConnectivity c = connectivity("c", ImmutableMap.of("a", true, "b", false, "c", true));
 
         ClusterGraph graph = cluster(a, b, c);
-        Optional<NodeRank> failedNode = graph.toSymmetric().getFailedNode();
+        Optional<NodeRank> failedNode = graph.toSymmetric().findFailedNode();
 
         assertTrue(failedNode.isPresent());
         assertEquals(failedNode.get(), new NodeRank("b", 1));
+    }
+
+    @Test
+    public void testFindFullyConnectedResponsiveNodes(){
+        fail("cover this logic");
     }
 
     private ClusterGraph cluster(NodeConnectivity... nodes) {

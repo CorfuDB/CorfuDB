@@ -70,7 +70,7 @@ public class NodeState implements ICorfuPayload<NodeState> {
          * @param node node name
          * @return node status
          */
-        public boolean getNodeStatus(String node) {
+        public boolean getConnectionStatus(String node) {
             if (type == NodeConnectivityState.UNAVAILABLE){
                 return false;
             }

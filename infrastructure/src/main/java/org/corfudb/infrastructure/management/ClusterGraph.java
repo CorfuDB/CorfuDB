@@ -15,6 +15,7 @@ import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivityState;
 
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Optional;
@@ -38,6 +39,7 @@ public class ClusterGraph {
 
     /**
      * Transform a cluster state to the cluster graph
+     *
      * @param cluster cluster state
      * @return cluster graph
      */
@@ -86,7 +88,7 @@ public class ClusterGraph {
     }
 
     /**
-     * Get a decision maker node. It has:
+     * Get a decision maker node to detect a failure. It must have:
      * - highest number of successful connections in the graph
      * - quorum of connected nodes to be able to make a decision (to make a node failed)
      *
@@ -114,7 +116,7 @@ public class ClusterGraph {
         return Optional.of(first);
     }
 
-    public Optional<NodeRank> getFailedNode() {
+    public Optional<NodeRank> findFailedNode() {
         log.trace("Get failed node");
 
         NavigableSet<NodeRank> nodes = getNodeRanks();
@@ -131,8 +133,32 @@ public class ClusterGraph {
         return Optional.of(last);
     }
 
+    public ImmutableMap<String, NodeRank> findFullyConnectedResponsiveNodes(List<String> unresponsiveNodes) {
+        log.trace("Find responsive node. Unresponsive nodes: {}", unresponsiveNodes);
+
+        //find all fully connected nodes, marked as unresponsive in the layout
+        Map<String, NodeRank> responsiveNodes = new HashMap<>();
+        for (String unresponsiveNode : unresponsiveNodes) {
+            if (isFullyConnected(unresponsiveNode)) {
+                responsiveNodes.put(unresponsiveNode, new NodeRank(unresponsiveNode, graph.size()));
+            }
+        }
+
+        return ImmutableMap.copyOf(responsiveNodes);
+    }
+
+    private boolean isFullyConnected(String node) {
+        for (NodeConnectivity currNode : graph.values()) {
+            if (!currNode.getConnectionStatus(node)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     @VisibleForTesting
-    NodeConnectivity getNode(String node){
+    NodeConnectivity getNode(String node) {
         return graph.get(node);
     }
 
@@ -160,7 +186,7 @@ public class ClusterGraph {
             return false;
         }
 
-        return source.getNodeStatus(targetNode);
+        return source.getConnectionStatus(targetNode);
     }
 
     @AllArgsConstructor

@@ -1,15 +1,14 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.collect.ImmutableMap;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -76,7 +75,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
             return Optional.empty();
         }
 
-        Optional<NodeRank> maybeFailedNode = symmetric.getFailedNode();
+        Optional<NodeRank> maybeFailedNode = symmetric.findFailedNode();
         if (!maybeFailedNode.isPresent()) {
             return Optional.empty();
         }
@@ -151,159 +150,18 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
      * {@link ClusterType}.
      */
     @Override
-    public List<String> healedServers(ClusterState clusterState, Layout layout) {
-
+    public Optional<NodeRank> healedServer(ClusterState clusterState, Layout layout, String localEndpoint) {
         log.trace("Detecting the healed nodes for: ClusterState: {} Layout: {}", clusterState, layout);
 
-        // Remove asymmetry by converting all asymmetric link failures to symmetric failures
-        Map<String, Set<String>> nodeFailedNeighborMap = new HashMap<>();
-
-        // Collect potential healed nodes
-        Map<String, Set<String>> healedLinksNodeNeighborsMap = potentialHealedNodes(layout, nodeFailedNeighborMap);
-
-        List<String> proposedHealedNodes = new ArrayList<>();
-
-        // Greedily add the nodes with minimum number of failed neighbors
-        while (!healedLinksNodeNeighborsMap.isEmpty()) {
-            // Sort nodes based on ascending number of failed links and then ascending id of the
-            // nodes
-            Stream<Map.Entry<String, Set<String>>> sortedNodeNeighbors = sortHealedNodes(healedLinksNodeNeighborsMap);
-
-            // Pick the fully connected nodes, a node with lowest number of link failures
-            Map.Entry<String, Set<String>> healedNodeCandidate = sortedNodeNeighbors.findFirst().get();
-            proposedHealedNodes.add(healedNodeCandidate.getKey());
-
-            removeHealedCandidate(healedLinksNodeNeighborsMap, healedNodeCandidate);
+        if (layout.getUnresponsiveServers().isEmpty()) {
+            return Optional.empty();
         }
 
-        log.debug("Proposed healed nodes: {}", proposedHealedNodes);
-        if (!proposedHealedNodes.isEmpty()) {
-            log.info("Proposed healed node: {} are decided based on the Cluster State: {} AND Layout: {}",
-                    proposedHealedNodes, clusterState, layout
-            );
-        }
+        ClusterGraph symmetricGraph = ClusterGraph.transform(clusterState).toSymmetric();
+        ImmutableMap<String, NodeRank> responsiveNodes = symmetricGraph.findFullyConnectedResponsiveNodes(
+                layout.getUnresponsiveServers()
+        );
 
-        return proposedHealedNodes;
-    }
-
-    /**
-     * Remove from the provided {@param healedNodeNeighborsMap} all the entries of the
-     * nodes that are not fully connected to the proposed healed candidate. This ensures that the
-     * {@param healedNodeNeighborsMap} remains a collection of entries representing nodes
-     * that are fully connected to both:
-     * a) the entire set of responsive nodes in the layout and
-     * b) all the proposed healed nodes.
-     * <p>
-     * Current implementation removes the candidate from the map and then iterates over the
-     * {@param healedNodeNeighborsMap} and removes the entries that observe a failed link to the
-     * {@param healedNodeCandidate}.
-     *
-     * @param healedNodeNeighborsMap represent a map of nodes that are potentially healed. This
-     *                               map representing the edges from unresponsive nodes
-     *                               in the layout to the corresponding neighbors that the
-     *                               node sees as failed due to a link or node failure.
-     * @param healedNodeCandidate    representing a healed node candidate that has been added to
-     *                               proposed healed node set.
-     */
-    private void removeHealedCandidate(
-            Map<String, Set<String>> healedNodeNeighborsMap,
-            Map.Entry<String, Set<String>> healedNodeCandidate) {
-
-        // Remove the entry for the healed node candidate
-        healedNodeNeighborsMap.remove(healedNodeCandidate.getKey());
-
-        // Remove the entries which observe a failed link to the healed node
-        healedNodeNeighborsMap
-                .entrySet()
-                .removeIf(healedNodeNeighborsEntry ->
-                        healedNodeNeighborsEntry
-                                .getValue()
-                                .contains(healedNodeCandidate.getKey()));
-    }
-
-    /**
-     * Create a sorted stream of {@link Map.Entry} representing a node and its neighboring nodes
-     * provided by {@param healedLinksNodeNeighborsMap}. The stream is built from a shallow copy
-     * of {@param healedLinksNodeNeighborsMap}. It is first sorted in ascending manner on the
-     * number of failures for each node and then on the name of node in ascending manner. In other
-     * words, the nodes with lowest number of failures will be at the beginning of stream however in
-     * case of two nodes having the same number of failures, the nodes will appear with the
-     * natural order of the node names.
-     *
-     * @param healedLinksNodeNeighborsMap A map which each of its entries corresponds to a Corfu
-     *                                    server and a set of neighboring nodes of that server. In
-     *                                    other words, each entry can represents a collection of
-     *                                    edges from the source captured as the key of that entry.
-     * @return A stream of entries from a shallow copy of the provided map which is sorted based on
-     * the ascending size of the failed links and then by the ascending order of node
-     * names as the tie breaker.
-     */
-    private Stream<Map.Entry<String, Set<String>>> sortHealedNodes(
-            Map<String, Set<String>> healedLinksNodeNeighborsMap) {
-
-        Map<String, Set<String>> copyOfNodeNeighborsMap = new HashMap<>(healedLinksNodeNeighborsMap);
-
-        Comparator<Map.Entry<String, Set<String>>> comparatorNumOfFailedLinksAscending =
-                Comparator.comparingInt(o -> o.getValue().size());
-        Comparator<Map.Entry<String, Set<String>>> comparatorNodeNameAscending = Comparator.comparing(Map.Entry::getKey);
-
-        Comparator<Map.Entry<String, Set<String>>> comparatorFailureAscendingThenNodeNameAscending =
-                comparatorNumOfFailedLinksAscending.thenComparing(comparatorNodeNameAscending);
-
-        return copyOfNodeNeighborsMap
-                .entrySet()
-                .stream()
-                .sorted(comparatorFailureAscendingThenNodeNameAscending);
-    }
-
-    /**
-     * Create of map Corfu nodes which are super set of healed nodes along with the neighbors
-     * for each node. Each of these nodes is considered as unresponsive the current layout but it
-     * has an active connection to the entire set of responsive nodes in the provided
-     * {@link Layout}.
-     *
-     * @param layout                 an instance {@link Layout} representing expected layout capturing amongst the
-     *                               other things, information about responsive and unresponsive servers.
-     * @param nodeFailedNeighborsMap A map which each of its entries corresponding to a Corfu
-     *                               server and a set of neighboring nodes of the server. In
-     *                               other words, each entry represents a collection of edges with
-     *                               link failure from the source captured as the key of that
-     *                               entry.
-     * @return A map where the keys represent Corfu servers that are currently part of unresponsive
-     * set AND either:
-     * a) have no failed link to any node in the cluster
-     * b) have no failed link to the responsive nodes
-     * The value is a set of the neighbors of the node represented by the key where there
-     * is a link failure between the key and those neighbors.
-     */
-    private Map<String, Set<String>> potentialHealedNodes(
-            Layout layout,
-            Map<String, Set<String>> nodeFailedNeighborsMap) {
-
-        Map<String, Set<String>> healedNodeNeighborsMap = new HashMap<>();
-
-        // Find all nodes that are currently unresponsive in layout with no failure to any node
-        Set<String> fullyRecoveredUnresponsiveNodes = new HashSet<>(layout.getUnresponsiveServers());
-        fullyRecoveredUnresponsiveNodes.removeAll(nodeFailedNeighborsMap.keySet());
-
-        // Add previously unresponsive nodes which are fully connected in the current cluster state
-        fullyRecoveredUnresponsiveNodes
-                .stream()
-                .forEach(fullyConnectedNode ->
-                        healedNodeNeighborsMap.put(fullyConnectedNode, Collections.emptySet()));
-
-        // Add unresponsive nodes with link failures which are fully connected to active servers
-        nodeFailedNeighborsMap
-                .entrySet()
-                .stream()
-                .filter(nodeNeighborsEntry -> layout.getUnresponsiveServers()
-                        .contains(nodeNeighborsEntry.getKey()) &&
-                        Collections.disjoint(nodeNeighborsEntry.getValue(),
-                                layout.getAllActiveServers()))
-                .forEach(healedNodeCandidate -> healedNodeNeighborsMap.put(
-                        healedNodeCandidate.getKey(),
-                        healedNodeCandidate.getValue()));
-
-        return healedNodeNeighborsMap;
+        return Optional.ofNullable(responsiveNodes.get(localEndpoint));
     }
 }
