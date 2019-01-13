@@ -4,8 +4,9 @@ import com.google.common.collect.ImmutableMap;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
-import lombok.NonNull;
+import lombok.Getter;
 import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivity;
@@ -14,8 +15,9 @@ import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivityState;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.NavigableSet;
+import java.util.Optional;
 import java.util.Set;
-import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -29,6 +31,7 @@ import java.util.stream.Collectors;
  */
 @Builder
 @ToString
+@Slf4j
 public class ClusterGraph {
     private ImmutableMap<String, NodeConnectivity> graph;
 
@@ -77,18 +80,57 @@ public class ClusterGraph {
     }
 
     /**
-     * Get nodes with a number of successful connections more than half in the cluster.
+     * Get a decision maker node. It has:
+     *  - highest number of successful connections in the graph
+     *  - quorum of connected nodes to be able to make a decision (to make a node failed)
      *
      * @return sorted set of nodes
      */
-    public SortedSet<NodeRank> getQuorumNodes() {
-        SortedSet<NodeRank> nodes = new TreeSet<>();
+    public Optional<NodeRank> getDecisionMaker() {
+        log.trace("Get decision maker");
+
+        NavigableSet<NodeRank> nodes = getNodeRanks();
+
+        if (nodes.isEmpty()) {
+            log.error("Empty graph. Can't provide decision maker");
+            return Optional.empty();
+        }
+
+        int quorum = graph.size() / 2 + 1;
+        NodeRank first = nodes.first();
+
+        if (first.numConnections < quorum) {
+            log.error("No quorum to detect failed servers. Graph: {}, decision maker candidate: {}", this, first);
+            return Optional.empty();
+        }
+
+        log.trace("Decision maker has found: {}", first);
+        return Optional.of(first);
+    }
+
+    public Optional<NodeRank> getFailedNode() {
+        log.trace("Get failed node");
+
+        NavigableSet<NodeRank> nodes = getNodeRanks();
+        if (nodes.isEmpty()) {
+            log.error("Empty graph. Can't provide failed node");
+            return Optional.empty();
+        }
+
+        NodeRank last = nodes.last();
+        if (last.numConnections == graph.size()){
+            return Optional.empty();
+        }
+
+        return Optional.of(last);
+    }
+
+    private NavigableSet<NodeRank> getNodeRanks() {
+        NavigableSet<NodeRank> nodes = new TreeSet<>();
 
         graph.keySet().forEach(node -> {
             int numConnected = graph.get(node).getConnected();
-            if (numConnected > graph.size() / 2) {
-                nodes.add(new NodeRank(node, numConnected));
-            }
+            nodes.add(new NodeRank(node, numConnected));
         });
 
         return nodes;
@@ -108,6 +150,7 @@ public class ClusterGraph {
 
     @AllArgsConstructor
     @EqualsAndHashCode
+    @Getter
     @ToString
     static class NodeRank implements Comparable<NodeRank> {
         private final String endpoint;

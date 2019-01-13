@@ -1,9 +1,11 @@
 package org.corfudb.infrastructure.management;
 
+import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * {@link ClusterRecommendationEngine} provides methods to decide the status of Corfu servers
@@ -31,13 +33,12 @@ public interface ClusterRecommendationEngine {
      * given view of the cluster captured in {@link ClusterState} along with the expected
      * {@link Layout}.
      *
-     * @param clusterStatus view of the Corfu server cluster from a client node's
-     *                      perspective.
+     * @param clusterState view of the Corfu server cluster from a client node's perspective.
      * @param layout expected layout of the cluster.
-     * @return a {@link List} of Corfu servers considered to have been failed according to the
-     * underlying {@link ClusterRecommendationStrategy}.
+     * @param localEndpoint local node endpoint.
+     * @return a node considered to have been failed according to the underlying {@link ClusterRecommendationStrategy}.
      */
-    List<String> failedServers(final ClusterState clusterStatus, final Layout layout);
+    Optional<NodeRank> failedServer(ClusterState clusterState, Layout layout, String localEndpoint);
 
     /**
      * Provide a list of servers in the Corfu cluster which according to the underlying algorithm

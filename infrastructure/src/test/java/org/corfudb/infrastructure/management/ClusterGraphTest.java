@@ -81,7 +81,7 @@ public class ClusterGraphTest {
     }
 
     @Test
-    public void testQuorumNodes() {
+    public void testDecisionMaker() {
         NodeConnectivity a = connectivity("a", ImmutableMap.of("a", true, "b", true, "c", true));
         NodeConnectivity b = connectivity("b", ImmutableMap.of("a", false, "b", true, "c", true));
         NodeConnectivity c = connectivity("a", ImmutableMap.of("a", true, "b", false, "c", true));
@@ -90,6 +90,18 @@ public class ClusterGraphTest {
         SortedSet<NodeRank> quorumNodes = graph.toSymmetric().getQuorumNodes();
 
         fail("check quorum nodes");
+    }
+
+    @Test
+    public void testFailedNode() {
+        NodeConnectivity a = connectivity("a", ImmutableMap.of("a", true, "b", true, "c", true));
+        NodeConnectivity b = connectivity("b", ImmutableMap.of("a", false, "b", true, "c", true));
+        NodeConnectivity c = connectivity("a", ImmutableMap.of("a", true, "b", false, "c", true));
+
+        ClusterGraph graph = cluster(a, b, c);
+        SortedSet<NodeRank> quorumNodes = graph.toSymmetric().getQuorumNodes();
+
+        fail("check failed node");
     }
 
     private ClusterGraph cluster(NodeConnectivity... nodes) {

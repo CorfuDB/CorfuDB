@@ -12,8 +12,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-import java.util.SortedSet;
 import java.util.stream.Stream;
 
 /**
@@ -37,48 +37,16 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
     /**
      * Provides list of servers from a given layout(epoch) that this implementation of
      * FULLY_CONNECTED_CLUSTER algorithm has determined as failed. The implementation of the
-     * algorithm in this method is a greedy approach by executing the following steps:
+     * algorithm in this method is an approach by executing the following steps:
      * <p>
-     * a) Collect all nodes with link failures to the responsive nodes in the cluster
-     * b) While possible, add the nodes with maximum number of failed links to set of
-     * failed nodes
-     * <p>
-     * The result set of failed nodes is the recommendation of this strategy which their removal
+     * The failed node is the recommendation of this strategy which their removal
      * from cluster will lead to a fully connected cluster.
      * <p>
      * The following represents the underlying implementation of one algorithm to achieve the
      * above goal however the clients of this strategy must only rely on the guarantee that removal
-     * of the returned failed nodes is a recommendation for arriving at a fully connected
+     * of the returned failed node is a recommendation for arriving at a fully connected
      * cluster and must not rely on the implementation details of the algorithm.
      * <p>
-     * Find Failed Nodes algorithm:
-     * <p>
-     * // Create the super set of failed nodes
-     * for (Node in Responsive Nodes Set):
-     * disconnectedLinksMap.put(Node, set of active peers whose their heartbeat response
-     * didn't get received by the Node)
-     * <p>
-     * Proposed Failed Set = {}
-     * <p>
-     * // Greedily find and remove the nodes with highest number of link failures until
-     * // all the remaining nodes form a fully connected corfu cluster
-     * while (disconnectedLinksMap is not empty):
-     * <p>
-     * // Descending sort of the nodes based on number of failed links
-     * sortedDisconnectedLinksMap <- descending sort by size of Node Set of
-     * disconnectedLinksMap entries
-     * <p>
-     * <p>
-     * // Collect Failed Nodes
-     * Fail Candidate entry <- remove the entry with highest number of link failure
-     * add Node of Fail Candidate entry to Proposed Failed Set
-     * disconnectedLinksMap.remove(Node of Fail Candidate entry)
-     * for (Node in Disconnected Node set of Fail Candidate entry):
-     * remove Fail Candidate Node from disconnectedLinksMap.get(Node)
-     * remove the entry for the Node from disconnectedLinksMap if its Disconnected
-     * Node set is empty
-     * <p>
-     * return Proposed Healed Set
      *
      * @param clusterState represents the state of connectivity amongst the Corfu cluster
      *                     nodes from a node's perspective.
@@ -87,37 +55,47 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
      * {@link ClusterRecommendationStrategy}.
      */
     @Override
-    public List<String> failedServers(ClusterState clusterState, Layout layout, String localEndpoint) {
+    public Optional<NodeRank> failedServer(ClusterState clusterState, Layout layout, String localEndpoint) {
         log.trace("Detecting the failed nodes for: ClusterState= {} Layout= {}", clusterState, layout);
 
         if (clusterState.size() != layout.getAllServers().size()) {
             log.error("Cluster representation is different than layout. Cluster: {}, layout: {}", clusterState, layout);
-            return Collections.emptyList();
+            return Optional.empty();
         }
 
         ClusterGraph symmetric = ClusterGraph.transform(clusterState).toSymmetric();
-        SortedSet<NodeRank> quorumNodes = symmetric.getQuorumNodes();
+        Optional<NodeRank> maybeDecisionMaker = symmetric.getDecisionMaker();
 
-        if (quorumNodes.isEmpty()) {
-            log.error("No quorum to detect failed servers. Graph: {}", symmetric);
-            return Collections.emptyList();
+        if (!maybeDecisionMaker.isPresent()) {
+            return Optional.empty();
         }
 
-        if (!quorumNodes.first().is(localEndpoint)) {
-           log.debug("The node is not a decision maker, skip operation. Decision maker is: {}", quorumNodes.first());
-           return Collections.emptyList();
+        NodeRank decisionMaker = maybeDecisionMaker.get();
+        if (!decisionMaker.is(localEndpoint)) {
+            String message = "The node can't be a decision maker, skip operation. Decision maker node is: {}";
+            log.debug(message, decisionMaker);
+            return Optional.empty();
         }
 
-        List<String> proposedFailedNodes = new ArrayList<>();
-
-        log.debug("Proposed failed nodes: {}", proposedFailedNodes);
-        if (!proposedFailedNodes.isEmpty()) {
-            log.info("Proposed failed node: {} are decided based on the ClusterState: {} And Layout: {}",
-                    proposedFailedNodes, clusterState, layout
-            );
+        Optional<NodeRank> maybeFailedNode = symmetric.getFailedNode();
+        if (!maybeFailedNode.isPresent()) {
+            return Optional.empty();
         }
 
-        return proposedFailedNodes;
+        NodeRank failedNode = maybeFailedNode.get();
+
+        if (decisionMaker.equals(failedNode)) {
+            log.error("Decision maker and failed node are same node: {}", decisionMaker);
+            return Optional.empty();
+        }
+
+        if (layout.getUnresponsiveServers().contains(failedNode.getEndpoint())) {
+            return Optional.empty();
+        }
+
+        ???check that we do not go down quorum
+
+        return Optional.of(failedNode);
     }
 
     /**
