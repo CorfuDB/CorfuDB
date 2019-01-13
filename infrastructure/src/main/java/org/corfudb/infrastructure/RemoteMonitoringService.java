@@ -1,16 +1,17 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
+import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
 import org.corfudb.infrastructure.management.ClusterRecommendationEngineFactory;
-import org.corfudb.infrastructure.management.ClusterType;
 import org.corfudb.infrastructure.management.ClusterStateContext;
+import org.corfudb.infrastructure.management.ClusterType;
 import org.corfudb.infrastructure.management.IDetector;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.protocols.wireprotocol.NodeState;
@@ -33,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -280,25 +280,37 @@ public class RemoteMonitoringService implements MonitoringService {
             correctWrongEpochs(pollReport);
 
             // Analyze the poll report and trigger failure handler if needed.
-            handleFailures(pollReport, layout);
+            boolean failure = handleFailure(pollReport, layout);
+
+            //If a failure is detected (which means we have updated a layout)
+            // then don't try to heal anything, wait for next iteration.
+            if (failure) {
+                return;
+            }
 
             handleHealing(pollReport, layout);
         }, detectionTaskWorkers);
     }
 
     private void handleHealing(PollReport pollReport, Layout layout) {
-        Set<String> healedNodes = new TreeSet<>(
-                recommendationEngine.healedServers(pollReport.getClusterState(), layout)
+
+        Optional<NodeRank> healed = recommendationEngine.healedServer(
+                pollReport.getClusterState(), layout, serverContext.getLocalEndpoint()
         );
+
+        //Tranform Optional value to a Set
+        Set<String> healedNodes = healed
+                .map(NodeRank::getEndpoint)
+                .map(ImmutableSet::of)
+                .orElse(ImmutableSet.of());
 
         if (healedNodes.isEmpty()) {
             return;
         }
 
-        log.debug("Handle healing");
+        log.info("Handle healing. Poll report: {}, Local endpoint: {}", pollReport, serverContext.getLocalEndpoint());
 
         try {
-            log.info("[{}] : Attempting to heal nodes in poll report: {}", serverContext.getLocalEndpoint(), pollReport);
             CorfuRuntime corfuRuntime = getCorfuRuntime();
 
             corfuRuntime.getLayoutView()
@@ -307,11 +319,11 @@ public class RemoteMonitoringService implements MonitoringService {
                     .handleHealing(pollReport.getPollEpoch(), healedNodes)
                     .get();
 
-            log.info("Healing nodes successful: {}", pollReport);
+            log.info("Healing local node successful: {}", pollReport);
         } catch (ExecutionException ee) {
-            log.error("Healing nodes failed: ", ee);
+            log.error("Healing local node failed: ", ee);
         } catch (InterruptedException ie) {
-            log.error("Healing nodes interrupted: ", ie);
+            log.error("Healing local node interrupted: ", ie);
             Thread.currentThread().interrupt();
         }
     }
@@ -364,7 +376,7 @@ public class RemoteMonitoringService implements MonitoringService {
      *
      * @param pollReport Poll report obtained from failure detection policy.
      */
-    private void handleFailures(PollReport pollReport, Layout layout) {
+    private boolean handleFailure(PollReport pollReport, Layout layout) {
         log.trace("Handle failures for the report: {}", pollReport);
 
         try {
@@ -372,7 +384,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 if (isCurrentLayoutSlotUnFilled(pollReport)) {
                     handleFailure(Collections.emptySet(), pollReport);
                 }
-                return;
+                return true;
             }
 
             Optional<NodeRank> maybeFailedNode = recommendationEngine.failedServer(
@@ -381,17 +393,17 @@ public class RemoteMonitoringService implements MonitoringService {
                     serverContext.getLocalEndpoint()
             );
 
-            if (maybeFailedNode.isPresent()){
+            if (maybeFailedNode.isPresent()) {
                 NodeRank failedNode = maybeFailedNode.get();
 
                 Set<String> failedNodes = new HashSet<>();
                 failedNodes.add(failedNode.getEndpoint());
                 handleFailure(failedNodes, pollReport);
-                return;
+                return true;
             }
 
             if (getPrimarySequencerStatus(layout, pollReport) == SequencerStatus.READY) {
-                return;
+                return false;
             }
 
             // If failures are not present we can check if the primary sequencer has been
@@ -399,7 +411,7 @@ public class RemoteMonitoringService implements MonitoringService {
             if (sequencerNotReadyCounter.getEpoch() != layout.getEpoch()) {
                 // If the epoch is different than the poll epoch, we reset the timeout state.
                 sequencerNotReadyCounter = new SequencerNotReadyCounter(layout.getEpoch(), 1);
-                return;
+                return false;
             }
 
             // If the epoch is same as the epoch being tracked in the tuple, we need to
@@ -407,7 +419,7 @@ public class RemoteMonitoringService implements MonitoringService {
             // crossed the threshold.
             sequencerNotReadyCounter.increment();
             if (sequencerNotReadyCounter.getCounter() < SEQUENCER_NOT_READY_THRESHOLD) {
-                return;
+                return false;
             }
 
             // Launch task to bootstrap the primary sequencer.
@@ -421,6 +433,8 @@ public class RemoteMonitoringService implements MonitoringService {
         } catch (Exception e) {
             log.error("Exception invoking failure handler : {}", e);
         }
+
+        return false;
     }
 
     private void handleFailure(Set<String> failedNodes, PollReport pollReport)

@@ -41,15 +41,15 @@ public interface ClusterAdvisor {
     Optional<NodeRank> failedServer(ClusterState clusterState, Layout layout, String localEndpoint);
 
     /**
-     * Provide a list of servers in the Corfu cluster which according to the underlying algorithm
+     * Provide a server in the Corfu cluster which according to the underlying algorithm
      * for {@link ClusterType} have healed. The decision is made based on the
      * given view of the cluster captured in {@link ClusterState} along with the expected
      * {@link Layout}.
      *
-     * @param clusterStatus view of the Corfu server cluster from a client node's perspective.
+     * @param clusterState view of the Corfu server cluster from a client node's perspective.
      * @param layout expected layout of the cluster.
-     * @return a {@link List} of servers considered to have been healed according to the underlying
+     * @return a server considered to have been healed according to the underlying
      * {@link ClusterType}.
      */
-    List<String> healedServers(final ClusterState clusterStatus, final Layout layout);
+    Optional<NodeRank> healedServer(ClusterState clusterState, Layout layout, String localEndpoint);
 }

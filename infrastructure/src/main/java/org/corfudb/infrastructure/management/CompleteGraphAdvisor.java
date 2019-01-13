@@ -6,14 +6,8 @@ import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.runtime.view.Layout;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * This class is an implementation of {@link ClusterType} where the ideal state
@@ -95,53 +89,14 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
     }
 
     /**
-     * Provide a list of servers considered to have healed in the Corfu cluster according to
+     * Provide a server considered to have healed in the Corfu cluster according to
      * the COMPLETE_GRAPH implementation of algorithm for
-     * {@link ClusterType}. The implementation of the algorithm in this method
-     * is a greedy implementation through the execution of the following steps:
-     * <p>
-     * a) Add all unresponsive nodes with active links to the entire set of responsive nodes in the
-     * cluster will be collected
-     * b) Greedily add the nodes with minimum number of failed links which are are fully
-     * connected to the set of active nodes as well as to the proposed set of healed nodes
-     * <p>
-     * Output of the above steps recommends the healed nodes which their addition will increase
-     * the number of active members of the Corfu cluster while keeping it as a fully connected
-     * cluster.
-     * <p>
-     * The following represents the underlying implementation of one algorithm to achieve the
-     * above goal however the clients of this strategy must only rely on the guarantee that addition
-     * of returned healed nodes is a recommendation for increasing responsive servers in
-     * cluster while keeping the responsive cluster as a fully connected corfu cluster. The
-     * clients must not rely on the implementation details of the algorithm as it might change in
-     * the future releases.
-     * <p>
-     * Find Healed Nodes algorithm:
-     * <p>
-     * // Create the super set of healed nodes
-     * for (Node in Unresponsive Nodes Set):
-     * reEstablishedLinksMap.put(Node, set of peers that sent successful heartbeat to
-     * Node)
-     * <p>
-     * // Collect super set of healed nodes
-     * for (entry in reEstablishedLinksMap):
-     * if (Responsive Nodes Set is NOT subset of Nodes Set of entry):
-     * reEstablishedLinksMap.remove(Node of entry)
-     * <p>
-     * // Descending sort of the nodes based on number of reestablished links
-     * sortedReEstablishedLinksMap <- descending sort by size of Node Set of
-     * reEstablishedLinksMap
-     * <p>
-     * // Greedily add fully connected nodes with highest number of established links while
-     * // keeping the invariant of Complete Graph
-     * Proposed Healed Set = {}
-     * <p>
-     * for (entry in sortedReEstablishedLinksMap):
-     * if ((Responsive Node Set union with Proposed Healed Set) is subset of Node Set of
-     * entry):
-     * add Node of entry to Proposed Healed Set
-     * <p>
-     * return Proposed Healed Set
+     * {@link ClusterType}.
+     *
+     * The node can heal only itself. The node responsible only for itself, can't heal other nodes.
+     * It simplifies healing algorithm and guaranties that if node became available it mark itself as a responsible
+     * node in the layout. It helps us to simplify analysis/debugging process and brings simple and reliable algorithm
+     * for healing process.
      *
      * @param clusterState represents the state of connectivity amongst the Corfu cluster
      *                     nodes from a node's perspective.
@@ -162,6 +117,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
                 layout.getUnresponsiveServers()
         );
 
+        //The node can heal only itself.
         return Optional.ofNullable(responsiveNodes.get(localEndpoint));
     }
 }
