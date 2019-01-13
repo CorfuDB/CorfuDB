@@ -233,7 +233,7 @@ public class ManagementView extends AbstractView {
                 // For each clusterState we are only interested in the nodeState of the polling endpoint.
                 // In node X's cluster state we fetch node X's node state and so on.
                 .getOrDefault(endpoint, NodeState.getDefaultNodeState(endpoint))
-                .getConnectivity().entrySet().stream()
+                .getConnectivity().getConnectivity().entrySet().stream()
                 // Filter out all unreachable nodes from each node state's connectivity view.
                 .filter(entry -> !entry.getValue())
                 .map(Entry::getKey)

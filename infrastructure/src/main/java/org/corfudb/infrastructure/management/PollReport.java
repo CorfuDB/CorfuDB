@@ -11,6 +11,7 @@ import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Data;
 
+import lombok.NonNull;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.runtime.view.Layout;
 
@@ -35,8 +36,8 @@ public class PollReport {
     private final ImmutableSet<String> failedNodes = ImmutableSet.of();
     @Default
     private final ImmutableMap<String, Long> wrongEpochs = ImmutableMap.of();
-    @Default
-    private final ClusterState clusterState = new ClusterState(new HashMap<>());
+    @NonNull
+    private final ClusterState clusterState;
 
     /**
      * Contains all connected nodes including nodes answered with WrongEpochException

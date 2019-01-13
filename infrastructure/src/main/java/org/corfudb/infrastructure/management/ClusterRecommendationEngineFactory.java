@@ -2,8 +2,8 @@ package org.corfudb.infrastructure.management;
 
 
 /**
- * This is a factory for creating concrete {@link ClusterRecommendationEngine}s based on
- * the requested {@link ClusterRecommendationStrategy}s.
+ * This is a factory for creating concrete {@link ClusterAdvisor}s based on
+ * the requested {@link ClusterType}s.
  *
  * Created by Sam Behnam on 10/19/18.
  */
@@ -14,23 +14,23 @@ public class ClusterRecommendationEngineFactory {
     }
 
     /**
-     * Create an instance of {@link ClusterRecommendationEngine} based on the provided
-     * {@link ClusterRecommendationStrategy}.
+     * Create an instance of {@link ClusterAdvisor} based on the provided
+     * {@link ClusterType}.
      *
-     * @param strategy a {@link ClusterRecommendationStrategy} representing desired
+     * @param strategy a {@link ClusterType} representing desired
      *               algorithm to be used for determining failure and healing status of Corfu
      *               servers.
-     * @return a concrete instance of {@link ClusterRecommendationEngine} specific to the
+     * @return a concrete instance of {@link ClusterAdvisor} specific to the
      * provided strategy.
      */
-    public static ClusterRecommendationEngine createForStrategy(ClusterRecommendationStrategy strategy) {
+    public static ClusterAdvisor createForStrategy(ClusterType strategy) {
         switch (strategy) {
-            case FULLY_CONNECTED_CLUSTER:
-                return new FullyConnectedClusterRecommendationEngine();
-            case CENTRALIZED_CLUSTER:
+            case COMPLETE_GRAPH:
+                return new CompleteGraphAdvisor();
+            case STAR_GRAPH:
                 throw new UnsupportedOperationException(strategy.name());
             default:
-                throw new UnsupportedOperationException("Unknown ClusterRecommendationStrategy");
+                throw new UnsupportedOperationException("Unknown ClusterType");
 
         }
     }

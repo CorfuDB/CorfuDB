@@ -17,7 +17,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * This class is an implementation of {@link ClusterRecommendationStrategy} where the ideal state
+ * This class is an implementation of {@link ClusterType} where the ideal state
  * of the Corfu cluster is a fully connected network (i.e. complete graph) in which there is an
  * active link amongst all nodes in the cluster. Failed and Healed nodes are recommended so that
  * the cluster remains fully connected.
@@ -25,18 +25,18 @@ import java.util.stream.Stream;
  * Created by Sam Behnam on 10/27/18.
  */
 @Slf4j
-public class FullyConnectedClusterRecommendationEngine implements ClusterRecommendationEngine {
+public class CompleteGraphAdvisor implements ClusterAdvisor {
 
-    private static final ClusterRecommendationStrategy STRATEGY = ClusterRecommendationStrategy.FULLY_CONNECTED_CLUSTER;
+    private static final ClusterType CLUSTER_TYPE = ClusterType.COMPLETE_GRAPH;
 
     @Override
-    public ClusterRecommendationStrategy getClusterRecommendationStrategy() {
-        return STRATEGY;
+    public ClusterType getType() {
+        return CLUSTER_TYPE;
     }
 
     /**
      * Provides list of servers from a given layout(epoch) that this implementation of
-     * FULLY_CONNECTED_CLUSTER algorithm has determined as failed. The implementation of the
+     * COMPLETE_GRAPH algorithm has determined as failed. The implementation of the
      * algorithm in this method is an approach by executing the following steps:
      * <p>
      * The failed node is the recommendation of this strategy which their removal
@@ -51,8 +51,7 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
      * @param clusterState represents the state of connectivity amongst the Corfu cluster
      *                     nodes from a node's perspective.
      * @param layout       expected layout of the cluster.
-     * @return a {@link List} of servers considered as failed according to the underlying
-     * {@link ClusterRecommendationStrategy}.
+     * @return a server considered as failed according to the underlying strategy.
      */
     @Override
     public Optional<NodeRank> failedServer(ClusterState clusterState, Layout layout, String localEndpoint) {
@@ -93,15 +92,13 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
             return Optional.empty();
         }
 
-        ???check that we do not go down quorum
-
         return Optional.of(failedNode);
     }
 
     /**
      * Provide a list of servers considered to have healed in the Corfu cluster according to
-     * the FULLY_CONNECTED_CLUSTER implementation of algorithm for
-     * {@link ClusterRecommendationStrategy}. The implementation of the algorithm in this method
+     * the COMPLETE_GRAPH implementation of algorithm for
+     * {@link ClusterType}. The implementation of the algorithm in this method
      * is a greedy implementation through the execution of the following steps:
      * <p>
      * a) Add all unresponsive nodes with active links to the entire set of responsive nodes in the
@@ -151,7 +148,7 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
      *                     nodes from a node's perspective.
      * @param layout       expected layout of the cluster.
      * @return a {@link List} of servers considered as healed according to the underlying
-     * {@link ClusterRecommendationStrategy}.
+     * {@link ClusterType}.
      */
     @Override
     public List<String> healedServers(ClusterState clusterState, Layout layout) {
@@ -159,7 +156,7 @@ public class FullyConnectedClusterRecommendationEngine implements ClusterRecomme
         log.trace("Detecting the healed nodes for: ClusterState: {} Layout: {}", clusterState, layout);
 
         // Remove asymmetry by converting all asymmetric link failures to symmetric failures
-        Map<String, Set<String>> nodeFailedNeighborMap = convertAsymmetricToSymmetricFailures(clusterState);
+        Map<String, Set<String>> nodeFailedNeighborMap = new HashMap<>();
 
         // Collect potential healed nodes
         Map<String, Set<String>> healedLinksNodeNeighborsMap = potentialHealedNodes(layout, nodeFailedNeighborMap);

@@ -6,9 +6,10 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.management.ClusterRecommendationEngine;
+import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
+import org.corfudb.infrastructure.management.ClusterAdvisor;
 import org.corfudb.infrastructure.management.ClusterRecommendationEngineFactory;
-import org.corfudb.infrastructure.management.ClusterRecommendationStrategy;
+import org.corfudb.infrastructure.management.ClusterType;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.IDetector;
 import org.corfudb.infrastructure.management.PollReport;
@@ -27,10 +28,11 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -81,8 +83,8 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     private CompletableFuture<Void> failureDetectorFuture = CompletableFuture.completedFuture(null);
 
-    private final ClusterRecommendationEngine recommendationEngine = ClusterRecommendationEngineFactory
-            .createForStrategy(ClusterRecommendationStrategy.FULLY_CONNECTED_CLUSTER);
+    private final ClusterAdvisor recommendationEngine = ClusterRecommendationEngineFactory
+            .createForStrategy(ClusterType.COMPLETE_GRAPH);
 
     /**
      * The management agent attempts to bootstrap a NOT_READY sequencer if the
@@ -368,16 +370,22 @@ public class RemoteMonitoringService implements MonitoringService {
         try {
             if (!pollReport.getWrongEpochs().isEmpty()) {
                 if (isCurrentLayoutSlotUnFilled(pollReport)) {
-                    handleFailure(Collections.emptySortedSet(), pollReport);
+                    handleFailure(Collections.emptySet(), pollReport);
                 }
                 return;
             }
 
-            SortedSet<String> failedNodes = new TreeSet<>(
-                    recommendationEngine.failedServers(pollReport.getClusterState(), layout)
+            Optional<NodeRank> maybeFailedNode = recommendationEngine.failedServer(
+                    pollReport.getClusterState(),
+                    layout,
+                    serverContext.getLocalEndpoint()
             );
 
-            if (!failedNodes.isEmpty()) {
+            if (maybeFailedNode.isPresent()){
+                NodeRank failedNode = maybeFailedNode.get();
+
+                Set<String> failedNodes = new HashSet<>();
+                failedNodes.add(failedNode.getEndpoint());
                 handleFailure(failedNodes, pollReport);
                 return;
             }
@@ -415,7 +423,7 @@ public class RemoteMonitoringService implements MonitoringService {
         }
     }
 
-    private void handleFailure(SortedSet<String> failedNodes, PollReport pollReport)
+    private void handleFailure(Set<String> failedNodes, PollReport pollReport)
             throws ExecutionException, InterruptedException {
         log.info("Detected failed nodes in node responsiveness: Failed:{}, pollReport:{}", failedNodes, pollReport);
 

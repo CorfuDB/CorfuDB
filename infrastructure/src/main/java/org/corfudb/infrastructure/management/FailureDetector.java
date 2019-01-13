@@ -5,7 +5,6 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import lombok.Builder;
 import lombok.Builder.Default;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
@@ -13,7 +12,7 @@ import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.ClusterState.ClusterStateBuilder;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
-import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivityType;
+import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -208,11 +207,14 @@ public class FailureDetector implements IDetector {
                 .stream()
                 .collect(Collectors.toMap(Function.identity(), allConnectedNodes::contains));
 
-        NodeState localNodeState = NodeState.builder()
+        NodeConnectivity localConnectivity = NodeConnectivity.builder()
                 .endpoint(localEndpoint)
-                .connectivityType(NodeConnectivityType.CONNECTED)
+                .type(NodeState.NodeConnectivityState.CONNECTED)
+                .connectivity(ImmutableMap.copyOf(connectivity))
+                .build();
+        NodeState localNodeState = NodeState.builder()
+                .connectivity(localConnectivity)
                 .heartbeat(new HeartbeatTimestamp(epoch, heartbeatCounter.incrementHeartbeat()))
-                .connectivity(connectivity)
                 .sequencerMetrics(sequencerMetrics)
                 .build();
 

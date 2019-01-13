@@ -40,12 +40,14 @@ public class NodeState implements ICorfuPayload<NodeState> {
 
     @Builder
     @AllArgsConstructor
+    @ToString
     public static class NodeConnectivity implements ICorfuPayload<NodeConnectivity> {
         @Getter
         private final String endpoint;
         @Getter
         private final NodeConnectivityState type;
         @Getter
+        @NonNull
         private final ImmutableMap<String, Boolean> connectivity;
 
         public NodeConnectivity(ByteBuf buf) {
@@ -69,6 +71,14 @@ public class NodeState implements ICorfuPayload<NodeState> {
          * @return node status
          */
         public boolean getNodeStatus(String node) {
+            if (type == NodeConnectivityState.UNAVAILABLE){
+                return false;
+            }
+
+            if (!connectivity.containsKey(node)){
+                throw new IllegalArgumentException("Node not exists in the graph: " + this);
+            }
+
             return connectivity.get(node);
         }
 
@@ -102,8 +112,13 @@ public class NodeState implements ICorfuPayload<NodeState> {
      * @return Default NodeState.
      */
     public static NodeState getDefaultNodeState(String endpoint) {
+        NodeConnectivity connectivity = NodeConnectivity.builder()
+                .endpoint(endpoint)
+                .type(NodeConnectivityState.UNAVAILABLE)
+                .connectivity(ImmutableMap.of())
+                .build();
         return new NodeState(
-                NodeConnectivity.builder().type(NodeConnectivityState.UNAVAILABLE).connectivity(ImmutableMap.of()).build(),
+                connectivity,
                 new HeartbeatTimestamp(Layout.INVALID_EPOCH, INVALID_HEARTBEAT_COUNTER),
                 SequencerMetrics.UNKNOWN
         );

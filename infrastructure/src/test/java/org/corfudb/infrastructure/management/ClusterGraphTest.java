@@ -1,6 +1,8 @@
 package org.corfudb.infrastructure.management;
 
-import static org.junit.Assert.fail;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
@@ -14,7 +16,7 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.Map;
-import java.util.SortedSet;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -42,7 +44,8 @@ public class ClusterGraphTest {
                 .build();
 
         ClusterGraph graph = ClusterGraph.transform(clusterState);
-        fail("check graph transformation");
+
+        assertEquals(graph.size(), nodes.size());
     }
 
     @Test
@@ -51,9 +54,13 @@ public class ClusterGraphTest {
         NodeConnectivity b = connectivity("b", ImmutableMap.of("a", true, "b", true));
 
         ClusterGraph graph = cluster(a, b);
+        ClusterGraph symmetric = graph.toSymmetric();
 
-        System.out.println(graph.toSymmetric().toString());
-        fail("check symmetric");
+        assertFalse(graph.getNode("a").getNodeStatus("b"));
+        assertTrue(graph.getNode("b").getNodeStatus("a"));
+
+        assertFalse(symmetric.getNode("a").getNodeStatus("b"));
+        assertFalse(symmetric.getNode("b").getNodeStatus("a"));
     }
 
     @Test
@@ -63,45 +70,58 @@ public class ClusterGraphTest {
         NodeConnectivity c = connectivity("c", ImmutableMap.of("a", true, "b", false, "c", true));
 
         ClusterGraph graph = cluster(a, b, c);
+        ClusterGraph symmetric = graph.toSymmetric();
 
-        System.out.println(graph.toSymmetric().toString());
-        fail("check symmetric");
+        assertFalse(symmetric.getNode("b").getNodeStatus("a"));
+        assertFalse(symmetric.getNode("c").getNodeStatus("a"));
     }
 
     @Test
-    public void testToSymmetricForThreeNodesWithUnavailableNode() {
+    public void testToSymmetricForThreeNodesWithUnavailableNodeB() {
         NodeConnectivity a = connectivity("a", ImmutableMap.of("a", true, "b", false, "c", false));
         NodeConnectivity b = unavailable("b");
         NodeConnectivity c = connectivity("c", ImmutableMap.of("a", true, "b", false, "c", true));
 
         ClusterGraph graph = cluster(a, b, c);
+        ClusterGraph symmetric = graph.toSymmetric();
 
-        System.out.println(graph.toSymmetric().toString());
-        fail("check symmetric");
+        assertTrue(symmetric.getNode("a").getNodeStatus("a"));
+        assertFalse(symmetric.getNode("a").getNodeStatus("b"));
+        assertFalse(symmetric.getNode("a").getNodeStatus("c"));
+
+        assertFalse(symmetric.getNode("b").getNodeStatus("a"));
+        assertFalse(symmetric.getNode("b").getNodeStatus("b"));
+        assertFalse(symmetric.getNode("b").getNodeStatus("c"));
+
+        assertFalse(symmetric.getNode("c").getNodeStatus("a"));
+        assertFalse(symmetric.getNode("c").getNodeStatus("b"));
+        assertTrue(symmetric.getNode("c").getNodeStatus("c"));
     }
 
     @Test
     public void testDecisionMaker() {
         NodeConnectivity a = connectivity("a", ImmutableMap.of("a", true, "b", true, "c", true));
         NodeConnectivity b = connectivity("b", ImmutableMap.of("a", false, "b", true, "c", true));
-        NodeConnectivity c = connectivity("a", ImmutableMap.of("a", true, "b", false, "c", true));
+        NodeConnectivity c = connectivity("c", ImmutableMap.of("a", true, "b", false, "c", true));
 
         ClusterGraph graph = cluster(a, b, c);
-        SortedSet<NodeRank> quorumNodes = graph.toSymmetric().getQuorumNodes();
+        Optional<NodeRank> decisionMaker = graph.toSymmetric().getDecisionMaker();
 
-        fail("check quorum nodes");
+        assertTrue(decisionMaker.isPresent());
+        assertEquals(decisionMaker.get(), new NodeRank("a", 2));
     }
 
     @Test
     public void testFailedNode() {
         NodeConnectivity a = connectivity("a", ImmutableMap.of("a", true, "b", true, "c", true));
         NodeConnectivity b = connectivity("b", ImmutableMap.of("a", false, "b", true, "c", true));
-        NodeConnectivity c = connectivity("a", ImmutableMap.of("a", true, "b", false, "c", true));
+        NodeConnectivity c = connectivity("c", ImmutableMap.of("a", true, "b", false, "c", true));
 
         ClusterGraph graph = cluster(a, b, c);
-        SortedSet<NodeRank> quorumNodes = graph.toSymmetric().getQuorumNodes();
+        Optional<NodeRank> failedNode = graph.toSymmetric().getFailedNode();
 
-        fail("check failed node");
+        assertTrue(failedNode.isPresent());
+        assertEquals(failedNode.get(), new NodeRank("b", 1));
     }
 
     private ClusterGraph cluster(NodeConnectivity... nodes) {

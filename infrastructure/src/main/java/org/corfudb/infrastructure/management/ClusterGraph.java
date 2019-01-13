@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -35,6 +36,11 @@ import java.util.stream.Collectors;
 public class ClusterGraph {
     private ImmutableMap<String, NodeConnectivity> graph;
 
+    /**
+     * Transform a cluster state to the cluster graph
+     * @param cluster cluster state
+     * @return cluster graph
+     */
     public static ClusterGraph transform(ClusterState cluster) {
         Map<String, NodeConnectivity> graph = cluster.getNodes()
                 .values()
@@ -81,8 +87,8 @@ public class ClusterGraph {
 
     /**
      * Get a decision maker node. It has:
-     *  - highest number of successful connections in the graph
-     *  - quorum of connected nodes to be able to make a decision (to make a node failed)
+     * - highest number of successful connections in the graph
+     * - quorum of connected nodes to be able to make a decision (to make a node failed)
      *
      * @return sorted set of nodes
      */
@@ -118,11 +124,20 @@ public class ClusterGraph {
         }
 
         NodeRank last = nodes.last();
-        if (last.numConnections == graph.size()){
+        if (last.numConnections == graph.size()) {
             return Optional.empty();
         }
 
         return Optional.of(last);
+    }
+
+    @VisibleForTesting
+    NodeConnectivity getNode(String node){
+        return graph.get(node);
+    }
+
+    public int size() {
+        return graph.size();
     }
 
     private NavigableSet<NodeRank> getNodeRanks() {
@@ -152,17 +167,19 @@ public class ClusterGraph {
     @EqualsAndHashCode
     @Getter
     @ToString
-    static class NodeRank implements Comparable<NodeRank> {
+    public static class NodeRank implements Comparable<NodeRank> {
         private final String endpoint;
         private final int numConnections;
 
         @Override
         public int compareTo(NodeRank other) {
-            int connectionRank = Integer.compare(numConnections, other.numConnections);
+            //Descending order
+            int connectionRank = Integer.compare(other.numConnections, numConnections);
             if (connectionRank != 0) {
                 return connectionRank;
             }
 
+            //Ascending order
             return endpoint.compareTo(other.endpoint);
         }
 
