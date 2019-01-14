@@ -1551,6 +1551,26 @@ public class ManagementViewTest extends AbstractViewTest {
                 .isTrue();
     }
 
+    /*private void setAggressiveDetectorTimeouts(int... managementServersPorts) {
+        Arrays.stream(managementServersPorts).forEach(port -> {
+            FailureDetector failureDetector = (FailureDetector) getManagementServer(port)
+                    .getManagementAgent()
+                    .getRemoteMonitoringService()
+                    .getFailureDetector();
+            failureDetector.setInitPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            failureDetector.setPeriodDelta(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            failureDetector.setMaxPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            failureDetector.setInterIterationInterval(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+
+            HealingDetector healingDetector = (HealingDetector) getManagementServer(port)
+                    .getManagementAgent()
+                    .getRemoteMonitoringService()
+                    .getHealingDetector();
+            healingDetector.setDetectionPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            healingDetector.setInterIterationInterval(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        });
+    }*/
+
     /**
      * Tests that if the cluster gets stuck in a live-lock the systemDownHandler is invoked.
      * Scenario: Cluster of 2 nodes - Nodes 0 and 1
@@ -1691,7 +1711,9 @@ public class ManagementViewTest extends AbstractViewTest {
 
         getManagementServer(SERVERS.PORT_0).getManagementAgent()
                 .getCorfuRuntime().getLayoutManagementView()
-                .asyncSequencerBootstrap(layout)
+                .asyncSequencerBootstrap(layout,
+                        getManagementServer(SERVERS.PORT_0).getManagementAgent()
+                                .getRemoteMonitoringService().getDetectionTaskWorkers())
                 .get();
     }
 

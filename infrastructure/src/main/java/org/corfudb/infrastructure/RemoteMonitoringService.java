@@ -21,7 +21,6 @@ import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
@@ -165,19 +164,10 @@ public class RemoteMonitoringService implements MonitoringService {
 
     private void sequencerBootstrap(ServerContext serverContext) {
         log.info("Trigger sequencer bootstrap on startup");
-        try {
-            getCorfuRuntime()
-                    .getLayoutManagementView()
-                    .asyncSequencerBootstrap(serverContext.copyManagementLayout())
-                    .get();
-        } catch (InterruptedException e) {
-            log.error("initializationTask: InitializationTask interrupted.");
-            Thread.currentThread().interrupt();
-            throw new UnrecoverableCorfuError(e);
-        } catch (Exception e) {
-            log.error("initializationTask: Error in initializationTask.", e);
-            throw new UnrecoverableCorfuError(e);
-        }
+        getCorfuRuntime()
+                .getLayoutManagementView()
+                .asyncSequencerBootstrap(serverContext.copyManagementLayout(), detectionTaskWorkers);
+
     }
 
     /**
@@ -452,8 +442,7 @@ public class RemoteMonitoringService implements MonitoringService {
             // If it fails, we detect this again and retry in the next polling cycle.
             getCorfuRuntime()
                     .getLayoutManagementView()
-                    .asyncSequencerBootstrap(layout)
-                    .get();
+                    .asyncSequencerBootstrap(layout, detectionTaskWorkers);
 
         } catch (Exception e) {
             log.error("Exception invoking failure handler : {}", e);

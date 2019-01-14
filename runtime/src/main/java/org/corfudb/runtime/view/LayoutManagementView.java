@@ -476,22 +476,23 @@ public class LayoutManagementView extends AbstractView {
      * @param layout Layout to use to bootstrap the primary sequencer.
      * @return Future which completes when the task completes successfully or with a failure.
      */
-    public Future<Boolean> asyncSequencerBootstrap(@NonNull Layout layout) {
+    public Future<Boolean> asyncSequencerBootstrap(@NonNull Layout layout,
+                                                   @NonNull ExecutorService service) {
         return sequencerRecoveryFuture.updateAndGet(sequencerRecovery -> {
-            if (!sequencerRecovery.isDone()) {
-                log.info("triggerSequencerBootstrap: a bootstrap task is already in progress.");
-                return sequencerRecovery;
+            if (sequencerRecovery.isDone()) {
+                return service.submit(() -> {
+                    log.info("triggerSequencerBootstrap: a bootstrap task is triggered.");
+                    try {
+                        reconfigureSequencerServers(layout, layout, true);
+                    } catch (Exception e) {
+                        log.error("triggerSequencerBootstrap: Failed with Exception: ", e);
+                    }
+                    return true;
+                });
             }
 
-            return CompletableFuture.supplyAsync(() -> {
-                log.info("triggerSequencerBootstrap: a bootstrap task is triggered.");
-                try {
-                    reconfigureSequencerServers(layout, layout, true);
-                } catch (Exception e) {
-                    log.error("triggerSequencerBootstrap: Failed with Exception: ", e);
-                }
-                return true;
-            });
+            log.info("triggerSequencerBootstrap: a bootstrap task is already in progress.");
+            return sequencerRecovery;
         });
     }
 
