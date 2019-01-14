@@ -21,6 +21,7 @@ import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.QuorumFuturesFactory;
@@ -151,12 +152,32 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     @Override
     public void start(Duration monitoringInterval) {
+        // Trigger sequencer bootstrap on startup.
+        sequencerBootstrap(serverContext);
+
         detectionTasksScheduler.scheduleAtFixedRate(
                 this::runDetectionTasks,
                 0,
                 monitoringInterval.toMillis(),
                 TimeUnit.MILLISECONDS
         );
+    }
+
+    private void sequencerBootstrap(ServerContext serverContext) {
+        log.info("Trigger sequencer bootstrap on startup");
+        try {
+            getCorfuRuntime()
+                    .getLayoutManagementView()
+                    .asyncSequencerBootstrap(serverContext.copyManagementLayout())
+                    .get();
+        } catch (InterruptedException e) {
+            log.error("initializationTask: InitializationTask interrupted.");
+            Thread.currentThread().interrupt();
+            throw new UnrecoverableCorfuError(e);
+        } catch (Exception e) {
+            log.error("initializationTask: Error in initializationTask.", e);
+            throw new UnrecoverableCorfuError(e);
+        }
     }
 
     /**

@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +10,7 @@ import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.PollReport;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
+import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -108,9 +110,6 @@ public class ManagementServer extends AbstractServer {
         this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();
         this.healingPolicy = serverContext.getHealingHandlerPolicy();
 
-        boolean recovered = initLayout();
-        sequencerBootstrap(serverContext);
-
         HeartbeatCounter counter = new HeartbeatCounter();
 
         FailureDetector failureDetector = FailureDetector.builder()
@@ -118,78 +117,14 @@ public class ManagementServer extends AbstractServer {
                 .heartbeatCounter(counter)
                 .build();
 
-        if(serverContext.copyManagementLayout() == null){
-            throw new IllegalStateException("Server is not bootstrapped");
-        }
-
-        PollReport pollReport = failureDetector.poll(
-                serverContext.copyManagementLayout(),
-                corfuRuntime.get(),
-                SequencerMetrics.UNKNOWN
-        );
-
         // Creating a management agent.
-        this.clusterContext =  ClusterStateContext.builder()
+        clusterContext =  ClusterStateContext.builder()
                 .counter(counter)
-                .clusterView(new AtomicReference<>(pollReport.getClusterState()))
+                .clusterView(new AtomicReference<>(ClusterState.builder().nodes(ImmutableMap.of()).build()))
                 .build();
 
-        this.managementAgent = new ManagementAgent(
-                corfuRuntime, serverContext, clusterContext, failureDetector, recovered
-        );
-
-        this.orchestrator = new Orchestrator(corfuRuntime, serverContext);
-    }
-
-    private void sequencerBootstrap(ServerContext serverContext) {
-        log.info("Trigger sequencer bootstrap on startup");
-        try {
-            corfuRuntime.get()
-                    .getLayoutManagementView()
-                    .asyncSequencerBootstrap(serverContext.copyManagementLayout())
-                    .get();
-        } catch (InterruptedException e) {
-            log.error("initializationTask: InitializationTask interrupted.");
-            Thread.currentThread().interrupt();
-            throw new UnrecoverableCorfuError(e);
-        } catch (Exception e) {
-            log.error("initializationTask: Error in initializationTask.", e);
-            throw new UnrecoverableCorfuError(e);
-        }
-    }
-
-    private boolean initLayout() {
-        log.info("Init layout");
-
-        boolean recovered = false;
-        Layout managementLayout = serverContext.copyManagementLayout();
-        // If no state was preserved, there is no layout to recover.
-        if (managementLayout == null) {
-            recovered = true;
-        }
-
-        // The management server needs to check both the Layout Server's persisted layout as well
-        // as the Management Server's previously persisted layout. We try to recover from both of
-        // these as the more recent layout (with higher epoch is retained).
-        // When a node does not contain a layout server component and is trying to recover, we
-        // would completely rely on recovering from the management server's persisted layout.
-        // Else in every other case, the layout server is active and will contain the latest layout
-        // (In case of trailing layout server, the management server's persisted layout helps.)
-        serverContext.installSingleNodeLayoutIfAbsent();
-        serverContext.saveManagementLayout(serverContext.getCurrentLayout());
-        serverContext.saveManagementLayout(managementLayout);
-
-        if (!recovered) {
-            log.info("Attempting to recover. Layout before shutdown: {}", managementLayout);
-        }
-
-        CorfuRuntime runtime = corfuRuntime.get();
-        runtime.invalidateLayout();
-
-        Layout layout = runtime.getLayoutView().getLayout();
-        serverContext.saveManagementLayout(layout);
-
-        return recovered;
+        managementAgent = new ManagementAgent(corfuRuntime, serverContext, clusterContext, failureDetector);
+        orchestrator = new Orchestrator(corfuRuntime, serverContext);
     }
 
     /**
