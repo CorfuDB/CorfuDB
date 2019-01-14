@@ -103,7 +103,7 @@ public enum CorfuMsgType {
     HANDSHAKE_RESPONSE(81, new TypeToken<CorfuPayloadMsg<HandshakeResponse>>() {}, true),
 
     NODE_STATE_REQUEST(82, TypeToken.of(CorfuMsg.class)),
-    NODE_STATE_RESPONSE(83, new TypeToken<CorfuPayloadMsg<NodeState>>(){}),
+    NODE_STATE_RESPONSE(83, new TypeToken<CorfuPayloadMsg<NodeState>>(){}, true),
     ;
 
 

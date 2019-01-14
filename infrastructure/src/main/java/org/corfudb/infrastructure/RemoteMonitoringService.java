@@ -364,7 +364,11 @@ public class RemoteMonitoringService implements MonitoringService {
 
         String primarySequencer = layout.getPrimarySequencer();
         // Fetches clusterStatus from map or creates a default ClusterState object.
-        NodeState primarySequencerNode = pollReport.getClusterState().getNode(primarySequencer);
+        Optional<NodeState> primarySequencerNode = pollReport.getClusterState().getNode(primarySequencer);
+
+        if(!primarySequencerNode.isPresent()){
+            return SequencerStatus.UNKNOWN;
+        }
 
         // If we have a stale poll report, we should discard this and continue polling.
         if (layout.getEpoch() > pollReport.getPollEpoch()) {
@@ -373,7 +377,7 @@ public class RemoteMonitoringService implements MonitoringService {
             );
             return SequencerStatus.UNKNOWN;
         } else {
-            return primarySequencerNode.getSequencerMetrics().getSequencerStatus();
+            return primarySequencerNode.get().getSequencerMetrics().getSequencerStatus();
         }
     }
 

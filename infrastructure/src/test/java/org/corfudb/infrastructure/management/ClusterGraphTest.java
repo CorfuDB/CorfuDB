@@ -12,6 +12,7 @@ import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
 import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivityState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -37,7 +38,7 @@ public class ClusterGraphTest {
                 .connectivity(connectivity("b", ImmutableMap.of("a", true, "b", true, "c", false)))
                 .build();
 
-        NodeState c = NodeState.getDefaultNodeState("c");
+        NodeState c = unavailableNodeState("c");
 
         ImmutableMap<String, NodeState> nodes = ImmutableMap.of("a", a, "b", b, "c", c);
         ClusterState clusterState = ClusterState.builder()
@@ -165,5 +166,13 @@ public class ClusterGraphTest {
                 .type(NodeConnectivityState.UNAVAILABLE)
                 .connectivity(ImmutableMap.of())
                 .build();
+    }
+
+    private NodeState unavailableNodeState(String endpoint) {
+        return new NodeState(
+                unavailable(endpoint),
+                new NodeState.HeartbeatTimestamp(Layout.INVALID_EPOCH, 0),
+                SequencerMetrics.UNKNOWN
+        );
     }
 }

@@ -24,6 +24,7 @@ public class ClusterStateContext {
     @Getter
     @NonNull
     private final AtomicReference<ClusterState> clusterView;
+    @Getter
     @NonNull
     private final HeartbeatCounter counter;
 
@@ -61,6 +62,10 @@ public class ClusterStateContext {
          */
         public long incrementHeartbeat() {
             return counter.incrementAndGet();
+        }
+
+        public long get() {
+            return counter.get();
         }
     }
 }

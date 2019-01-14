@@ -479,20 +479,21 @@ public class LayoutManagementView extends AbstractView {
     public Future<Boolean> asyncSequencerBootstrap(@NonNull Layout layout,
                                                    @NonNull ExecutorService service) {
         return sequencerRecoveryFuture.updateAndGet(sequencerRecovery -> {
-            if (sequencerRecovery.isDone()) {
-                return service.submit(() -> {
-                    log.info("triggerSequencerBootstrap: a bootstrap task is triggered.");
-                    try {
-                        reconfigureSequencerServers(layout, layout, true);
-                    } catch (Exception e) {
-                        log.error("triggerSequencerBootstrap: Failed with Exception: ", e);
-                    }
-                    return true;
-                });
+            if (!sequencerRecovery.isDone()) {
+                log.info("triggerSequencerBootstrap: a bootstrap task is already in progress.");
+                return sequencerRecovery;
             }
 
-            log.info("triggerSequencerBootstrap: a bootstrap task is already in progress.");
-            return sequencerRecovery;
+            return service.submit(() -> {
+                log.info("triggerSequencerBootstrap: a bootstrap task is triggered.");
+                try {
+                    reconfigureSequencerServers(layout, layout, true);
+                } catch (Exception e) {
+                    log.error("triggerSequencerBootstrap: Failed with Exception: ", e);
+                }
+                return true;
+            });
+
         });
     }
 

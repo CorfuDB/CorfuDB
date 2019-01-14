@@ -25,6 +25,7 @@ import org.corfudb.runtime.view.Layout;
 @Data
 @Builder
 @AllArgsConstructor
+@EqualsAndHashCode
 public class NodeState implements ICorfuPayload<NodeState> {
 
     public static final long INVALID_HEARTBEAT_COUNTER = -1L;
@@ -41,6 +42,7 @@ public class NodeState implements ICorfuPayload<NodeState> {
     @Builder
     @AllArgsConstructor
     @ToString
+    @EqualsAndHashCode
     public static class NodeConnectivity implements ICorfuPayload<NodeConnectivity> {
         @Getter
         private final String endpoint;
@@ -76,7 +78,7 @@ public class NodeState implements ICorfuPayload<NodeState> {
             }
 
             if (!connectivity.containsKey(node)){
-                throw new IllegalArgumentException("Node not exists in the graph: " + this);
+                return false;
             }
 
             return connectivity.get(node);
@@ -111,6 +113,7 @@ public class NodeState implements ICorfuPayload<NodeState> {
      * @param endpoint Endpoint for the NodeState.
      * @return Default NodeState.
      */
+    @Deprecated
     public static NodeState getDefaultNodeState(String endpoint) {
         NodeConnectivity connectivity = NodeConnectivity.builder()
                 .endpoint(endpoint)

@@ -54,7 +54,7 @@ public class TestChannelContext implements ChannelHandlerContext {
                     ((ByteBuf) o).release();
                 }
             } catch (Exception e) {
-                 log.warn("Error during deserialization", e);
+                 log.warn("Error during deserialization" + orig, e);
             }
         }, msgExecutorService);
     }

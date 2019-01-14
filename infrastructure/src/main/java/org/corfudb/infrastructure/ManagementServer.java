@@ -16,6 +16,8 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
+import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.runtime.CorfuRuntime;
@@ -30,6 +32,7 @@ import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -353,8 +356,31 @@ public class ManagementServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.NODE_STATE_REQUEST)
     public void handleNodeStateRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        NodeState nodeState = clusterContext.getClusterView().getNode(serverContext.getLocalEndpoint());
+        NodeState nodeState = clusterContext.getClusterView()
+                .getNode(serverContext.getLocalEndpoint())
+                .orElse(buildNodeState());
+
         r.sendResponse(ctx, msg, CorfuMsgType.NODE_STATE_RESPONSE.payloadMsg(nodeState));
+    }
+
+    private NodeState buildNodeState() {
+        log.info("Management server not ready yet, build default NodeState");
+
+        NodeConnectivity connectivity = NodeConnectivity.builder()
+                .endpoint(serverContext.getLocalEndpoint())
+                .type(NodeState.NodeConnectivityState.CONNECTED)
+                .connectivity(ImmutableMap.of())
+                .build();
+        HeartbeatTimestamp heartbeat = new HeartbeatTimestamp(
+                serverContext.copyManagementLayout().getEpoch(),
+                clusterContext.getCounter().get()
+        );
+
+        return NodeState.builder()
+                .connectivity(connectivity)
+                .heartbeat(heartbeat)
+                .sequencerMetrics(SequencerMetrics.UNKNOWN)
+                .build();
     }
 
     /**

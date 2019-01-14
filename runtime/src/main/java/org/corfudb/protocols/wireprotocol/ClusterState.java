@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 
 import java.util.Map;
+import java.util.Optional;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -46,7 +47,7 @@ public class ClusterState implements ICorfuPayload<ClusterState> {
         return nodes.size();
     }
 
-    public NodeState getNode(String endpoint) {
-        return nodes.get(endpoint);
+    public Optional<NodeState> getNode(String endpoint) {
+        return Optional.ofNullable(nodes.get(endpoint));
     }
 }

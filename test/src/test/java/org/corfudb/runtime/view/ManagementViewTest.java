@@ -8,12 +8,12 @@ import static org.junit.Assert.fail;
 import com.google.common.collect.Range;
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
-import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -57,6 +57,7 @@ import java.util.stream.Collectors;
  *
  * Created by zlokhandwala on 11/9/16.
  */
+@Slf4j
 public class ManagementViewTest extends AbstractViewTest {
 
     @Getter
@@ -1585,7 +1586,8 @@ public class ManagementViewTest extends AbstractViewTest {
      */
     @Test
     public void triggerSystemDownHandlerInDeadlock() throws Exception {
-        // Cluster Setup.
+        log.info("Setup a cluster of two nodes");
+
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
 
