@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableMap;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
 import org.corfudb.protocols.wireprotocol.ClusterState;
-import org.corfudb.runtime.view.Layout;
 
 import java.util.List;
 import java.util.Optional;
@@ -99,21 +98,25 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
      *
      * @param clusterState represents the state of connectivity amongst the Corfu cluster
      *                     nodes from a node's perspective.
-     * @param layout       expected layout of the cluster.
+     * @param unresponsiveServers unresponsive servers in a layout.
      * @return a {@link List} of servers considered as healed according to the underlying
      * {@link ClusterType}.
      */
     @Override
-    public Optional<NodeRank> healedServer(ClusterState clusterState, Layout layout, String localEndpoint) {
-        log.trace("Detecting the healed nodes for: ClusterState: {} Layout: {}", clusterState, layout);
+    public Optional<NodeRank> healedServer(
+            ClusterState clusterState, List<String> unresponsiveServers, String localEndpoint) {
 
-        if (layout.getUnresponsiveServers().isEmpty()) {
+        log.trace("Detecting the healed nodes for: ClusterState: {} unresponsive servers: {}",
+                clusterState, unresponsiveServers
+        );
+
+        if (unresponsiveServers.isEmpty()) {
             return Optional.empty();
         }
 
         ClusterGraph symmetricGraph = ClusterGraph.transform(clusterState).toSymmetric();
         ImmutableMap<String, NodeRank> responsiveNodes = symmetricGraph.findFullyConnectedResponsiveNodes(
-                layout.getUnresponsiveServers()
+                unresponsiveServers
         );
 
         //The node can heal only itself.

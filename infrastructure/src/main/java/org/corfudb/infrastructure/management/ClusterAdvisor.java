@@ -34,7 +34,7 @@ public interface ClusterAdvisor {
      * {@link Layout}.
      *
      * @param clusterState view of the Corfu server cluster from a client node's perspective.
-     * @param layout expected layout of the cluster.
+     * @param unresponsiveServers unresponsive servers in a layout.
      * @param localEndpoint local node endpoint.
      * @return a node considered to have been failed according to the underlying {@link ClusterType}.
      */
@@ -47,9 +47,9 @@ public interface ClusterAdvisor {
      * {@link Layout}.
      *
      * @param clusterState view of the Corfu server cluster from a client node's perspective.
-     * @param layout expected layout of the cluster.
+     * @param unresponsiveServers unresponsive servers in a layout.
      * @return a server considered to have been healed according to the underlying
      * {@link ClusterType}.
      */
-    Optional<NodeRank> healedServer(ClusterState clusterState, Layout layout, String localEndpoint);
+    Optional<NodeRank> healedServer(ClusterState clusterState, List<String> unresponsiveServers, String localEndpoint);
 }

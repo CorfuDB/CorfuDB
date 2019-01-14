@@ -296,7 +296,7 @@ public class RemoteMonitoringService implements MonitoringService {
     private void handleHealing(PollReport pollReport, Layout layout) {
 
         Optional<NodeRank> healed = recommendationEngine.healedServer(
-                pollReport.getClusterState(), layout, serverContext.getLocalEndpoint()
+                pollReport.getClusterState(), layout.getUnresponsiveServers(), serverContext.getLocalEndpoint()
         );
 
         //Tranform Optional value to a Set

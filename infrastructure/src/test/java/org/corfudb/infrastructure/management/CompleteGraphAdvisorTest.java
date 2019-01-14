@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.management;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
@@ -124,7 +123,20 @@ public class CompleteGraphAdvisorTest {
 
     @Test
     public void testHealedServer() {
-        fail("Implement");
+        CompleteGraphAdvisor advisor = new CompleteGraphAdvisor();
+
+        ClusterState clusterState = buildClusterState(
+                nodeState("a", true, false, true),
+                nodeState("b", false, true, true),
+                nodeState("c", true, true, true)
+        );
+
+        List<String> unresponsiveServers = new ArrayList<>();
+        unresponsiveServers.add("c");
+
+        Optional<NodeRank> healedServer = advisor.healedServer(clusterState, unresponsiveServers, "c");
+        assertTrue(healedServer.isPresent());
+        assertEquals(new NodeRank("c", clusterState.size()), healedServer.get());
     }
 
     private NodeState nodeState(String endpoint, boolean... connectionStates) {
