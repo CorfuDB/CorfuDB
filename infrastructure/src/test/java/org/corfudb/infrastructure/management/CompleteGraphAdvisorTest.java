@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.management;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
@@ -71,8 +72,58 @@ public class CompleteGraphAdvisorTest {
         );
 
         List<String> unresponsiveServers = new ArrayList<>();
-        Optional<NodeRank> failedServer = advisor.failedServer(clusterState, unresponsiveServers, "a");
+        Optional<NodeRank> failedServer = advisor.failedServer(clusterState, unresponsiveServers, "b");
         assertFalse(failedServer.isPresent());
+    }
+
+    /**
+     * Asymmetric partition where:
+     * - B and C nodes disconnected from each other
+     * - decision maker is node A
+     * - node A makes node C unresponsive
+     */
+    @Test
+    public void testFailureDetectionForThreeNodes_asymmetricPartition_b_c_disconnectedFromEachOther() {
+        CompleteGraphAdvisor nodeAAdvisor = new CompleteGraphAdvisor();
+        CompleteGraphAdvisor nodeBAdvisor = new CompleteGraphAdvisor();
+        CompleteGraphAdvisor nodeCAdvisor = new CompleteGraphAdvisor();
+
+        ClusterState nodeAClusterState = buildClusterState(
+                nodeState("a", true, true, true),
+                nodeState("b", true, true, false),
+                nodeState("c", true, false, true)
+        );
+
+        ClusterState nodeBClusterState = buildClusterState(
+                nodeState("a", true, true, true),
+                nodeState("b", true, true, false),
+                NodeState.getDefaultNodeState("c")
+        );
+        ClusterState nodeCClusterState = buildClusterState(
+                nodeState("a", true, true, true),
+                NodeState.getDefaultNodeState("b"),
+                nodeState("c", true, false, true)
+        );
+
+        List<String> unresponsiveServers = new ArrayList<>();
+
+        //Node A is a decision maker, it excludes node C from the cluster
+        Optional<NodeRank> nodeAFailedServer = nodeAAdvisor.failedServer(nodeAClusterState, unresponsiveServers, "a");
+        assertTrue(nodeAFailedServer.isPresent());
+        assertEquals(new NodeRank("c", 2), nodeAFailedServer.get());
+
+        //Node B knows that node A is a decision maker, so do nothing
+        Optional<NodeRank> nodeBFailedServer = nodeBAdvisor.failedServer(nodeBClusterState, unresponsiveServers, "b");
+        assertFalse(nodeBFailedServer.isPresent());
+
+        //Node C know that node A is a decision maker, so do nothing
+        Optional<NodeRank> nodeCFailedServer = nodeCAdvisor.failedServer(nodeCClusterState, unresponsiveServers, "c");
+        assertFalse(nodeCFailedServer.isPresent());
+    }
+
+    @Test
+    public void testHealedServer() {
+        fail("Implement");
     }
 
     private NodeState nodeState(String endpoint, boolean... connectionStates) {
