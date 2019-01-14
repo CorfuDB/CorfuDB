@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -32,7 +33,7 @@ public class CompleteGraphAdvisorTest {
         ClusterState clusterState = buildClusterState(
                 nodeState("a", true, true, false),
                 nodeState("b", true, true, false),
-                NodeState.getDefaultNodeState("c")
+                unavailable("c")
         );
 
         List<String> unresponsiveServers = new ArrayList<>();
@@ -66,9 +67,9 @@ public class CompleteGraphAdvisorTest {
         CompleteGraphAdvisor advisor = new CompleteGraphAdvisor();
 
         ClusterState clusterState = buildClusterState(
-                NodeState.getDefaultNodeState("a"),
+                unavailable("a"),
                 nodeState("b", true, true, true),
-                NodeState.getDefaultNodeState("c")
+                unavailable("c")
         );
 
         List<String> unresponsiveServers = new ArrayList<>();
@@ -97,11 +98,11 @@ public class CompleteGraphAdvisorTest {
         ClusterState nodeBClusterState = buildClusterState(
                 nodeState("a", true, true, true),
                 nodeState("b", true, true, false),
-                NodeState.getDefaultNodeState("c")
+                unavailable("c")
         );
         ClusterState nodeCClusterState = buildClusterState(
                 nodeState("a", true, true, true),
-                NodeState.getDefaultNodeState("b"),
+                unavailable("b"),
                 nodeState("c", true, false, true)
         );
 
@@ -152,5 +153,19 @@ public class CompleteGraphAdvisorTest {
         return ClusterState.builder()
                 .nodes(ImmutableMap.copyOf(graph))
                 .build();
+    }
+
+    private NodeState unavailable(String endpoint) {
+        NodeConnectivity connectivity = NodeConnectivity.builder()
+                .endpoint(endpoint)
+                .type(NodeState.NodeConnectivityState.UNAVAILABLE)
+                .connectivity(ImmutableMap.of())
+                .build();
+
+        return new NodeState(
+                connectivity,
+                new NodeState.HeartbeatTimestamp(Layout.INVALID_EPOCH, 0),
+                SequencerMetrics.UNKNOWN
+        );
     }
 }
