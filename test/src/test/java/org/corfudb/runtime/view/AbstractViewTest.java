@@ -208,7 +208,12 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param port      The port to use.
      */
     public void addServer(int port) {
-        new TestServer(new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(port)).setPort(port).build()).addToTest(port, this);
+        ServerContext serverContext = new ServerContextBuilder()
+                .setSingle(false)
+                .setServerRouter(new TestServerRouter(port))
+                .setPort(port)
+                .build();
+        new TestServer(serverContext).addToTest(port, this);
     }
 
 

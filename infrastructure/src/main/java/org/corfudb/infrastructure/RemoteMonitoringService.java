@@ -151,11 +151,6 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     @Override
     public void start(Duration monitoringInterval) {
-        // Trigger sequencer bootstrap on startup.
-        getCorfuRuntime()
-                .getLayoutManagementView()
-                .asyncSequencerBootstrap(serverContext.copyManagementLayout(), detectionTaskWorkers);
-
         detectionTasksScheduler.scheduleAtFixedRate(
                 this::runDetectionTasks,
                 0,
@@ -436,7 +431,8 @@ public class RemoteMonitoringService implements MonitoringService {
             // If it fails, we detect this again and retry in the next polling cycle.
             getCorfuRuntime()
                     .getLayoutManagementView()
-                    .asyncSequencerBootstrap(layout, detectionTaskWorkers);
+                    .asyncSequencerBootstrap(layout)
+                    .get();
 
         } catch (Exception e) {
             log.error("Exception invoking failure handler : {}", e);

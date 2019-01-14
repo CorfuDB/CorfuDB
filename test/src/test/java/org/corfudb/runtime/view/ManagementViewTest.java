@@ -1691,9 +1691,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
         getManagementServer(SERVERS.PORT_0).getManagementAgent()
                 .getCorfuRuntime().getLayoutManagementView()
-                .asyncSequencerBootstrap(layout,
-                        getManagementServer(SERVERS.PORT_0).getManagementAgent()
-                                .getRemoteMonitoringService().getDetectionTaskWorkers())
+                .asyncSequencerBootstrap(layout)
                 .get();
     }
 

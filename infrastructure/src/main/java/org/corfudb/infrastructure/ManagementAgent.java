@@ -108,6 +108,7 @@ public class ManagementAgent {
      * Initiates the failure detection and healing detection tasks.
      */
     private void initializationTask() {
+        log.info("Start initialization task");
 
         try {
             while (!shutdown && serverContext.getManagementLayout() == null) {

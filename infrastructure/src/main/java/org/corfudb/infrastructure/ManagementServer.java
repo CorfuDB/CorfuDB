@@ -18,6 +18,7 @@ import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -28,6 +29,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -107,6 +109,7 @@ public class ManagementServer extends AbstractServer {
         this.healingPolicy = serverContext.getHealingHandlerPolicy();
 
         boolean recovered = initLayout();
+        sequencerBootstrap(serverContext);
 
         HeartbeatCounter counter = new HeartbeatCounter();
 
@@ -138,7 +141,26 @@ public class ManagementServer extends AbstractServer {
         this.orchestrator = new Orchestrator(corfuRuntime, serverContext);
     }
 
+    private void sequencerBootstrap(ServerContext serverContext) {
+        log.info("Trigger sequencer bootstrap on startup");
+        try {
+            corfuRuntime.get()
+                    .getLayoutManagementView()
+                    .asyncSequencerBootstrap(serverContext.copyManagementLayout())
+                    .get();
+        } catch (InterruptedException e) {
+            log.error("initializationTask: InitializationTask interrupted.");
+            Thread.currentThread().interrupt();
+            throw new UnrecoverableCorfuError(e);
+        } catch (Exception e) {
+            log.error("initializationTask: Error in initializationTask.", e);
+            throw new UnrecoverableCorfuError(e);
+        }
+    }
+
     private boolean initLayout() {
+        log.info("Init layout");
+
         boolean recovered = false;
         Layout managementLayout = serverContext.copyManagementLayout();
         // If no state was preserved, there is no layout to recover.
@@ -160,6 +182,12 @@ public class ManagementServer extends AbstractServer {
         if (!recovered) {
             log.info("Attempting to recover. Layout before shutdown: {}", managementLayout);
         }
+
+        CorfuRuntime runtime = corfuRuntime.get();
+        runtime.invalidateLayout();
+
+        Layout layout = runtime.getLayoutView().getLayout();
+        serverContext.saveManagementLayout(layout);
 
         return recovered;
     }
