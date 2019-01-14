@@ -397,101 +397,11 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(log.getChannelsToSync().size()).isEqualTo(0);
     }
 
-    @Test
-    public void testSameAddressTrim() throws Exception {
-        StreamLogFiles log = new StreamLogFiles(getContext(), false);
-
-        // Trim an unwritten address
-        long address = 0L;
-        log.trim(address);
-
-        // Verify that the unwritten address trim is not persisted
-        SegmentHandle sh = log.getSegmentHandleForAddress(address);
-        assertThat(sh.getPendingTrims().size()).isEqualTo(0);
-
-        // Write to the same address
-        ByteBuf b = Unpooled.buffer();
-        byte[] streamEntry = "Payload".getBytes();
-        Serializers.CORFU.serialize(streamEntry, b);
-
-        log.append(address, new LogData(DataType.DATA, b));
-
-        // Verify that the address has been written
-        assertThat(log.read(address)).isNotNull();
-
-        // Trim the address
-        log.trim(address);
-        sh = log.getSegmentHandleForAddress(address);
-        assertThat(sh.getPendingTrims().contains(address)).isTrue();
-
-        // Write to a trimmed address
-        assertThatThrownBy(() -> log.append(address, new LogData(DataType.DATA, b)))
-                .isInstanceOf(OverwriteException.class);
-
-        // Read trimmed address
-        assertThat(log.read(address).isTrimmed()).isTrue();
-    }
-
     private void writeToLog(StreamLog log, long address) {
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = "Payload".getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
         log.append(address, new LogData(DataType.DATA, b));
-    }
-
-    @Test
-    public void testTrim() throws Exception {
-        StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        final int logChunk = StreamLogFiles.RECORDS_PER_LOG_FILE / 2;
-
-        // Write to the addresses then trim the addresses that span two log files
-        for (long x = 0; x < logChunk; x++) {
-            writeToLog(log, x);
-        }
-
-        // Verify that an incomplete log segment isn't compacted
-        for (long x = 0; x < logChunk; x++) {
-            log.trim(x);
-        }
-
-        log.compact();
-
-        SegmentHandle sh = log.getSegmentHandleForAddress(logChunk);
-
-        assertThat(logChunk).isGreaterThan(StreamLogFiles.TRIM_THRESHOLD);
-        assertThat(sh.getPendingTrims().size()).isEqualTo(logChunk);
-        assertThat(sh.getTrimmedAddresses().size()).isEqualTo(0);
-
-        // Fill the rest of the log segment and compact
-        for (long x = logChunk; x < logChunk * 2; x++) {
-            writeToLog(log, x);
-        }
-
-        // Verify the pending trims are compacted after the log segment has filled
-        File file = new File(sh.getFileName());
-        long sizeBeforeCompact = file.length();
-        log.compact();
-        file = new File(sh.getFileName());
-        long sizeAfterCompact = file.length();
-
-        assertThat(sizeAfterCompact).isLessThan(sizeBeforeCompact);
-
-        // Reload the segment handler and check that the first half of the segment has been trimmed
-        sh = log.getSegmentHandleForAddress(logChunk);
-        assertThat(sh.getTrimmedAddresses().size()).isEqualTo(logChunk);
-        assertThat(sh.getKnownAddresses().size()).isEqualTo(logChunk);
-
-        for (long x = logChunk; x < logChunk * 2; x++) {
-            assertThat(sh.getKnownAddresses().get(x)).isNotNull();
-        }
-
-        // Verify that the trimmed addresses cannot be written to or read from after compaction
-        for (long x = 0; x < logChunk; x++) {
-            long address = x;
-            assertThat(log.read(address).isTrimmed()).isTrue();
-            assertThatThrownBy(() -> writeToLog(log, address))
-                    .isInstanceOf(OverwriteException.class);
-        }
     }
 
     @Test
@@ -543,7 +453,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Write 50 segments and trim the first 25
         final long numSegments = 50;
-        final long filesPerSegment = 3;
+        final long filesPerSegment = 1;
         for(long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
             writeToLog(log, x);
         }
@@ -576,12 +486,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         Set<String> fileNames = new HashSet(Arrays.asList(afterTrimFiles));
         for (long x = endSegment + 1; x < numSegments; x++) {
             String logFile = Long.toString(x) + ".log";
-            String trimmedLogFile = StreamLogFiles.getTrimmedFilePath(logFile);
-            String pendingLogFile = StreamLogFiles.getPendingTrimsFilePath(logFile);
-
             assertThat(fileNames).contains(logFile);
-            assertThat(fileNames).contains(trimmedLogFile);
-            assertThat(fileNames).contains(pendingLogFile);
         }
 
         // Try to trim an address that is less than the new starting address
@@ -601,8 +506,6 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Verify that the trimmed segment channels are closed
         for (SegmentHandle sh : trimmedHandles) {
             assertThat(sh.getWriteChannel().isOpen()).isFalse();
-            assertThat(sh.getPendingTrimChannel().isOpen()).isFalse();
-            assertThat(sh.getTrimmedChannel().isOpen()).isFalse();
         }
 
         // Address 0 is not reflected in trimAddress
@@ -642,7 +545,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.compact();
 
         File logs = new File(logDir);
-        final int lastTwoSegmentsFiles = 3 * 2;
+        final int lastTwoSegmentsFiles = 2;
         assertThat(logs.list()).hasSize(lastTwoSegmentsFiles);
     }
 
@@ -665,7 +568,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         File logsDir = new File(logDir);
 
-        final int expectedFilesBeforeReset = (int) ((numSegments - filesToBeTrimmed) * 3);
+        final int expectedFilesBeforeReset = (int) (numSegments - filesToBeTrimmed);
         final long globalTailBeforeReset = (RECORDS_PER_LOG_FILE * numSegments) - 1;
         final long trimMarkBeforeReset = (RECORDS_PER_LOG_FILE * (filesToBeTrimmed + 1)) + 1;
         assertThat(logsDir.list()).hasSize(expectedFilesBeforeReset);
