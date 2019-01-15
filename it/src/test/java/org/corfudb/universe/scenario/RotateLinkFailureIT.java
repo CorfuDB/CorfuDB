@@ -1,5 +1,12 @@
 package org.corfudb.universe.scenario;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
+
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -15,13 +22,6 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
-
 public class RotateLinkFailureIT extends GenericIntegrationTest {
 
     /**
@@ -30,11 +30,11 @@ public class RotateLinkFailureIT extends GenericIntegrationTest {
      * 1) Deploy and bootstrap a three nodes cluster
      * 2) Create a link failure between node0 and node1
      * 3) Create a link failure between node1 and node2
-     *    and heal previous link failure
+     * and heal previous link failure
      * 4) Create a link failure between node2 and node0
-     *    and heal previous link failure
+     * and heal previous link failure
      * 5) Reverse rotation direction, create a link failure
-     *    between node1 and node2 and heal previous link failure
+     * between node1 and node2 and heal previous link failure
      * 6) Verify layout and data path after each rotation
      * 7) Recover cluster by removing all link failures
      * 8) Verify layout, cluster status and data path
@@ -111,6 +111,7 @@ public class RotateLinkFailureIT extends GenericIntegrationTest {
                 // Wait for some time to ensure cluster stabilizes
                 // Server1 should stay in unresponsive set, no layout change
                 waitUninterruptibly(Duration.ofSeconds(20));
+                assertThat(corfuClient.getLayout().getEpoch()).isEqualTo(lastLayout.getEpoch() + 1);
                 assertThat(corfuClient.getLayout()).isEqualTo(lastLayout);
 
                 // Verify data path working fine

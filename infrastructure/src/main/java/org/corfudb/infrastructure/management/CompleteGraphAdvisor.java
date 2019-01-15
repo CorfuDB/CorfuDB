@@ -49,7 +49,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
     public Optional<NodeRank> failedServer(
             ClusterState clusterState, List<String> unresponsiveServers, String localEndpoint) {
 
-        log.trace("Detecting the failed nodes for: ClusterState= {} unresponsive servers= {}",
+        log.trace("Detecting failed nodes for: ClusterState= {} unresponsive servers= {}",
                 clusterState, unresponsiveServers
         );
 

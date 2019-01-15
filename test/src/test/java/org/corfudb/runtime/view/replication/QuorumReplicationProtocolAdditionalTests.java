@@ -6,6 +6,7 @@ package org.corfudb.runtime.view.replication;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.LogUnitServerAssertions;
 import org.corfudb.infrastructure.TestLayoutBuilder;
@@ -39,6 +40,7 @@ import static org.junit.Assert.assertNotNull;
 /**
  * Created by Konstantin Spirov on 1/30/2017.
  */
+@Slf4j
 public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
 
 
@@ -97,10 +99,9 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void checkRecoveryWriteTriggeredFromReadRecoversDataWhenTheQuorumIsLost()
-            throws Exception {
+    public void checkRecoveryWriteTriggeredFromReadRecoversDataWhenTheQuorumIsLost() {
 
-        //configure the layout accordingly
+        log.info("configure the layout accordingly");
         CorfuRuntime r = getDefaultRuntime();
 
         LogUnitServer u0 = getLogUnit(SERVERS.PORT_0);

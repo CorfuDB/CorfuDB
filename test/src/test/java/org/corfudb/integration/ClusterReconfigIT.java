@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -48,6 +49,7 @@ import org.corfudb.util.Sleep;
 import org.junit.Before;
 import org.junit.Test;
 
+@Slf4j
 public class ClusterReconfigIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;
@@ -652,8 +654,8 @@ public class ClusterReconfigIT extends AbstractIT {
      */
     @Test
     public void killAndHealNode() throws Exception {
+        log.info("Set up cluster of 3 nodes.");
 
-        // Set up cluster of 3 nodes.
         final int PORT_0 = 9000;
         final int PORT_1 = 9001;
         final int PORT_2 = 9002;
@@ -662,9 +664,11 @@ public class ClusterReconfigIT extends AbstractIT {
         Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
         final Layout layout = getLayout(3);
         final int retries = 3;
+
+        log.info("Bootstrap cluster");
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
-        // Create map and set up daemon writer thread.
+        log.info("Create map and set up daemon writer thread.");
         CorfuRuntime runtime = createDefaultRuntime();
         CorfuTable table = runtime.getObjectsView()
                 .build()
@@ -682,15 +686,15 @@ public class ClusterReconfigIT extends AbstractIT {
         }
 
         // PART 1.
-        // Killing killNode.
+        log.info("Killing node: corfuServer_1");
         assertThat(shutdownCorfuServer(corfuServer_1)).isTrue();
 
-        // We wait for failure to be detected and the cluster to stabilize by waiting for the epoch
-        // to increment.
+        log.info("We wait for failure to be detected and the cluster to " +
+                "stabilize by waiting for the epoch to increment.");
         waitForEpochChange(refreshedEpoch -> refreshedEpoch > layout.getEpoch(), runtime);
 
-        // Ensure writes still going through. Daemon writer thread does not ensure this.
-        // Fail test if write fails.
+        log.info("Ensure writes still going through. " +
+                "Daemon writer thread does not ensure this. Fail test if write fails.");
         boolean writeAfterKillNode = false;
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             try {
@@ -708,14 +712,15 @@ public class ClusterReconfigIT extends AbstractIT {
         assertThat(writeAfterKillNode).isTrue();
 
         // PART 2.
-        // Reviving same node.
+        log.info("Reviving same node: corfuServer_1");
         corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
         final long epochAfterHealingNode = 3L;
 
-        // Waiting node to be healed and added back to the layout.
+        log.info("Waiting node to be healed and added back to the layout.");
         waitForEpochChange(refreshedEpoch -> refreshedEpoch >= epochAfterHealingNode, runtime);
         verifyData(runtime);
 
+        log.info("Shutdown corfu cluster");
         shutdownCorfuServer(corfuServer_1);
         shutdownCorfuServer(corfuServer_2);
         shutdownCorfuServer(corfuServer_3);
@@ -940,7 +945,7 @@ public class ClusterReconfigIT extends AbstractIT {
      */
     @Test
     public void reconnectDisconnectedClient() throws Exception {
-        // Set up cluster of 3 nodes.
+        log.info("Set up cluster of 3 nodes.");
         final int PORT_0 = 9000;
         final int PORT_1 = 9001;
         final int PORT_2 = 9002;
@@ -972,7 +977,7 @@ public class ClusterReconfigIT extends AbstractIT {
             stream.append(Integer.toString(counter++).getBytes());
         }
 
-        // Shutdown the servers 9000 and 9002.
+        log.info("Shutdown the servers 9000 and 9002.");
         shutdownCorfuServer(corfuServer_1);
         shutdownCorfuServer(corfuServer_3);
 
@@ -1001,7 +1006,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         assertThat(latch.tryAcquire(PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS))
                 .isTrue();
-        // Restart both the servers.
+        log.info("Restart both the servers.");
         corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
         corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
 
@@ -1015,6 +1020,7 @@ public class ClusterReconfigIT extends AbstractIT {
                     .isEqualTo(Integer.toString(i).getBytes());
         }
 
+        log.info("Shutdown corfu cluster");
         shutdownCorfuServer(corfuServer_1);
         shutdownCorfuServer(corfuServer_2);
         shutdownCorfuServer(corfuServer_3);

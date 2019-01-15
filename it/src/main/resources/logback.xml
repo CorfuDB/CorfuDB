@@ -24,6 +24,6 @@
 
     <!-- Control logging levels for individual components here. -->
     <root level="info">
-        <!--<appender-ref ref="STDOUT"/>-->
+        <appender-ref ref="STDOUT"/>
     </root>
 </configuration>

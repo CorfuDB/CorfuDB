@@ -117,7 +117,7 @@ public class ClusterGraph {
     }
 
     public Optional<NodeRank> findFailedNode() {
-        log.trace("Get failed node");
+        log.trace("Looking for failed node");
 
         NavigableSet<NodeRank> nodes = getNodeRanks();
         if (nodes.isEmpty()) {

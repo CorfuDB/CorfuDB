@@ -65,7 +65,7 @@ public class FailureDetector implements IDetector {
      * Response timeout for every router.
      */
     @Default
-    private final Duration period = Duration.ofMillis(500);
+    private final Duration period = Duration.ofSeconds(1);
 
     /**
      * Executes the policy once.
@@ -75,7 +75,7 @@ public class FailureDetector implements IDetector {
      * @param layout Current Layout
      */
     public PollReport poll(
-            @Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime, @NonNull  SequencerMetrics sequencerMetrics) {
+            @Nonnull Layout layout, @Nonnull CorfuRuntime corfuRuntime, @NonNull SequencerMetrics sequencerMetrics) {
 
         log.trace("Poll report. Layout: {}", layout);
 
@@ -124,27 +124,27 @@ public class FailureDetector implements IDetector {
         PollReport latestReport = null;
 
         //for (int iteration = 1; iteration <= failureThreshold; iteration++) {
-            PollReport currReport = pollIteration(allServers, routerMap, epoch, sequencerMetrics);
-            latestReport = currReport;
+        PollReport currReport = pollIteration(allServers, routerMap, epoch, sequencerMetrics);
+        latestReport = currReport;
 
-            wrongEpochs.putAll(currReport.getWrongEpochs());
+        wrongEpochs.putAll(currReport.getWrongEpochs());
 
-            int pollIteration = 1;
-            currReport.getConnectedNodes().forEach(server -> {
-                wrongEpochs.remove(server);
-                connectedNodesMap.put(server, pollIteration);
-            });
+        int pollIteration = 1;
+        currReport.getConnectedNodes().forEach(server -> {
+            wrongEpochs.remove(server);
+            connectedNodesMap.put(server, pollIteration);
+        });
 
-            // Aggregate the responses. Return false if we received responses from all the members - failure NOT present
-            failuresDetected = !currReport.getFailedNodes().isEmpty();
-            //if (!failuresDetected && currReport.getWrongEpochs().isEmpty()) {
-            //    break;
-            //}
-
-            Sleep.MILLISECONDS.sleepUninterruptibly(period.toMillis());
+        // Aggregate the responses. Return false if we received responses from all the members - failure NOT present
+        failuresDetected = !currReport.getFailedNodes().isEmpty();
+        //if (!failuresDetected && currReport.getWrongEpochs().isEmpty()) {
+        //    break;
         //}
 
-        if(latestReport == null){
+        Sleep.MILLISECONDS.sleepUninterruptibly(period.toMillis());
+        //}
+
+        if (latestReport == null) {
             throw new IllegalStateException("Can't build poll report");
         }
 
@@ -184,7 +184,7 @@ public class FailureDetector implements IDetector {
 
         asyncClusterState.forEach((server, state) -> {
             try {
-                if(server.equals(localEndpoint)){
+                if (server.equals(localEndpoint)) {
                     connectedNodes.add(localEndpoint);
                     return;
                 }
@@ -235,9 +235,9 @@ public class FailureDetector implements IDetector {
      * Poll all members servers once asynchronously and store their futures in
      * pollCompletableFutures.
      *
-     * @param allServers   All active members in the layout.
-     * @param routerMap Map of routers for all active members.
-     * @param epoch     Current epoch for the polling round to stamp the ping messages.
+     * @param allServers All active members in the layout.
+     * @param routerMap  Map of routers for all active members.
+     * @param epoch      Current epoch for the polling round to stamp the ping messages.
      * @return Map of Completable futures for the pings.
      */
     private Map<String, CompletableFuture<NodeState>> pollAsync(

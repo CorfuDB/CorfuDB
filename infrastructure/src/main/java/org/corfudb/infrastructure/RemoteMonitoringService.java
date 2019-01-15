@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableSet;
-import com.google.common.util.concurrent.AtomicLongMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -229,7 +228,12 @@ public class RemoteMonitoringService implements MonitoringService {
                     clusterContext.refreshClusterView(layout, pollReport);
                     return pollReport;
                 })
-                .thenCompose(this::runFailureDetectorTask);
+                .thenCompose(this::runFailureDetectorTask)
+                .whenComplete((val, ex) -> {
+                    if (ex != null) {
+                        log.error("Failure detection task finished with error", ex);
+                    }
+                });
     }
 
     /**
@@ -300,7 +304,7 @@ public class RemoteMonitoringService implements MonitoringService {
                     }
                     return;
                 }
-            } catch (Exception ex){
+            } catch (Exception ex) {
                 log.error("Can't fill slot. Poll report: {}", pollReport);
             }
 
@@ -320,6 +324,7 @@ public class RemoteMonitoringService implements MonitoringService {
     }
 
     private void handleHealing(PollReport pollReport, Layout layout) {
+        log.trace("Handle healing");
 
         Optional<NodeRank> healed = recommendationEngine.healedServer(
                 pollReport.getClusterState(), layout.getUnresponsiveServers(), serverContext.getLocalEndpoint()
@@ -387,6 +392,7 @@ public class RemoteMonitoringService implements MonitoringService {
     }
 
     private SequencerStatus getPrimarySequencerStatus(Layout layout, PollReport pollReport) {
+        log.trace("Get primary sequencer status");
 
         String primarySequencer = layout.getPrimarySequencer();
         // Fetches clusterStatus from map or creates a default ClusterState object.
@@ -448,7 +454,10 @@ public class RemoteMonitoringService implements MonitoringService {
     }
 
     private void handleSequencer(PollReport pollReport, Layout layout) {
+        log.trace("Handling sequencer failures");
+
         if (getPrimarySequencerStatus(layout, pollReport) == SequencerStatus.READY) {
+            log.trace("Primary sequencer is ready. Nothing to do");
             return;
         }
 
@@ -456,6 +465,7 @@ public class RemoteMonitoringService implements MonitoringService {
         // bootstrapped from the heartbeat responses received.
         if (sequencerNotReadyCounter.getEpoch() != layout.getEpoch()) {
             // If the epoch is different than the poll epoch, we reset the timeout state.
+            log.trace("Current epoch is different to layout epoch. Update current epoch to: {}", layout.getEpoch());
             sequencerNotReadyCounter = new SequencerNotReadyCounter(layout.getEpoch(), 1);
             return;
         }

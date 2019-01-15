@@ -346,7 +346,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
         NodeState nodeState = clusterState.getNodes().get(SERVERS.ENDPOINT_0);
         assertThat(nodeState.getConnectivity().getEndpoint())
-                .isEqualTo(NodeLocator.parseString(SERVERS.ENDPOINT_0));
+                .isEqualTo(SERVERS.ENDPOINT_0);
     }
 
     /**
@@ -887,6 +887,7 @@ public class ManagementViewTest extends AbstractViewTest {
         CorfuRuntime corfuRuntime = getDefaultRuntime();
         Layout l = new Layout(corfuRuntime.getLayoutView().getLayout());
 
+        log.info("Wait for sequencer to bootstrap");
         waitForSequencerToBootstrap(SERVERS.PORT_0);
 
         l.setEpoch(l.getEpoch() + 1);
