@@ -160,9 +160,13 @@ public class FailureDetector implements IDetector {
                     .collect(ImmutableSet.toImmutableSet());
         }
 
+        Set<String> connectedNodes = new HashSet<>(allServers);
+        connectedNodes.removeAll(failed);
+        connectedNodes.removeAll(wrongEpochs.keySet());
+
         return PollReport.builder()
                 .pollEpoch(epoch)
-                .connectedNodes(Sets.difference(allServers, failed).immutableCopy())
+                .connectedNodes(ImmutableSet.copyOf(connectedNodes))
                 .failedNodes(failed)
                 .wrongEpochs(ImmutableMap.copyOf(wrongEpochs))
                 .clusterState(latestReport.getClusterState())

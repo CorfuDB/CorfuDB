@@ -62,8 +62,6 @@ public class ManagementAgent {
     @Getter
     private final RemoteMonitoringService remoteMonitoringService;
 
-    private final ClusterStateContext clusterStateContext;
-
     /**
      * Checks and restores if a layout is present in the local datastore to recover from.
      * Spawns the initialization task which recovers if required, bootstraps sequencer and
@@ -78,7 +76,6 @@ public class ManagementAgent {
                     @NonNull FailureDetector failureDetector) {
         this.runtimeSingletonResource = runtimeSingletonResource;
         this.serverContext = serverContext;
-        this.clusterStateContext = clusterContext;
 
         Layout managementLayout = serverContext.copyManagementLayout();
         // If no state was preserved, there is no layout to recover.

@@ -109,7 +109,7 @@ public class RemoteMonitoringService implements MonitoringService {
         }
     }
 
-    private SequencerNotReadyCounter sequencerNotReadyCounter = new SequencerNotReadyCounter(0, 0);
+    private volatile SequencerNotReadyCounter sequencerNotReadyCounter = new SequencerNotReadyCounter(0, 0);
 
     RemoteMonitoringService(@NonNull ServerContext serverContext,
                             @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
@@ -215,13 +215,13 @@ public class RemoteMonitoringService implements MonitoringService {
             return;
         }
 
-        failureDetectorFuture = queryLocalSequencerMetrics(layout)
-                .thenCompose(metrics -> pollReport(layout, metrics))
+        failureDetectorFuture = queryLocalSequencerMetrics(layout, serverContext.getLocalEndpoint())
+                .thenCompose(this::pollReport)
                 .thenApply(pollReport -> {
                     clusterContext.refreshClusterView(layout, pollReport);
                     return pollReport;
                 })
-                .thenCompose(pollReport -> runFailureDetectorTask(layout, pollReport));
+                .thenCompose(this::runFailureDetectorTask);
     }
 
     /**
@@ -231,17 +231,17 @@ public class RemoteMonitoringService implements MonitoringService {
      * @param layout Current Management layout.
      * @return Sequencer Metrics.
      */
-    private CompletableFuture<SequencerMetrics> queryLocalSequencerMetrics(Layout layout) {
+    private CompletableFuture<SequencerMetrics> queryLocalSequencerMetrics(Layout layout, String localEndpoint) {
         // This is an optimization. If this node is not the primary sequencer for the current
         // layout, there is no reason to request metrics from this sequencer.
-        if (!layout.getPrimarySequencer().equals(serverContext.getLocalEndpoint())) {
+        if (!layout.getPrimarySequencer().equals(localEndpoint)) {
             return CompletableFuture.completedFuture(SequencerMetrics.UNKNOWN);
         }
 
         return getCorfuRuntime()
                 .getLayoutView()
                 .getRuntimeLayout(layout)
-                .getSequencerClient(serverContext.getLocalEndpoint())
+                .getSequencerClient(localEndpoint)
                 .requestMetrics()
                 .exceptionally(ex -> {
                     if (ex instanceof ServerNotReadyException) {
@@ -253,10 +253,9 @@ public class RemoteMonitoringService implements MonitoringService {
                 });
     }
 
-    private CompletableFuture<PollReport> pollReport(Layout layout, SequencerMetrics sequencerMetrics) {
+    private CompletableFuture<PollReport> pollReport(SequencerMetrics sequencerMetrics) {
         return CompletableFuture.supplyAsync(() -> {
-            log.trace("Poll report for layout: {}", layout);
-
+            Layout layout = serverContext.copyManagementLayout();
             CorfuRuntime corfuRuntime = getCorfuRuntime();
 
             return failureDetector.poll(layout, corfuRuntime, sequencerMetrics);
@@ -278,7 +277,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * - Finally all unresponsive server failures are handled by either removing or marking them
      * as unresponsive based on a failure handling policy.
      */
-    private CompletableFuture<Void> runFailureDetectorTask(Layout layout, PollReport pollReport) {
+    private CompletableFuture<Void> runFailureDetectorTask(PollReport pollReport) {
 
         return CompletableFuture.runAsync(() -> {
             // Corrects out of phase epoch issues if present in the report. This method
@@ -286,8 +285,19 @@ public class RemoteMonitoringService implements MonitoringService {
             // the current state.
             correctWrongEpochs(pollReport);
 
+            try {
+                if (!pollReport.getWrongEpochs().isEmpty()) {
+                    if (isCurrentLayoutSlotUnFilled(pollReport)) {
+                        handleFailure(Collections.emptySet(), pollReport);
+                    }
+                    return;
+                }
+            } catch (Exception ex){
+                log.error("Can't fill slot. Poll report: {}", pollReport);
+            }
+
             // Analyze the poll report and trigger failure handler if needed.
-            boolean failure = handleFailure(pollReport, layout);
+            boolean failure = handleFailure(pollReport);
 
             //If a failure is detected (which means we have updated a layout)
             // then don't try to heal anything, wait for next iteration.
@@ -295,7 +305,9 @@ public class RemoteMonitoringService implements MonitoringService {
                 return;
             }
 
-            handleHealing(pollReport, layout);
+            handleSequencer(pollReport, serverContext.copyManagementLayout());
+            handleHealing(pollReport, serverContext.copyManagementLayout());
+
         }, detectionTaskWorkers);
     }
 
@@ -348,14 +360,20 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     private boolean isCurrentLayoutSlotUnFilled(PollReport pollReport) {
         Layout layout = serverContext.copyManagementLayout();
+
+        log.info("isCurrentLayoutSlotUnFilled. Poll: {}, layout: {}", pollReport, layout);
+
         // Check if all active layout servers are present in the outOfPhaseEpochNodes map.
-        List<String> unresponsiveServers = layout.getLayoutServers().stream()
+        List<String> differentEpochServers = layout.getLayoutServers().stream()
                 // Unresponsive servers are excluded as they do not respond with a WrongEpochException.
                 .filter(s -> !layout.getUnresponsiveServers().contains(s))
+                .filter(s -> !serverContext.getLocalEndpoint().equals(s))
                 .collect(Collectors.toList());
-        boolean result = pollReport.getWrongEpochs().keySet().containsAll(unresponsiveServers);
+        boolean result = pollReport.getWrongEpochs().keySet().containsAll(differentEpochServers);
         if (result) {
-            log.info("Current layout slot is empty. Filling slot with current layout.");
+            String msg = "Current layout slot is empty. Filling slot with current layout." +
+                    " Poll report: {}, Different epoch servers: {}";
+            log.info(msg, pollReport, differentEpochServers);
         }
         return result;
     }
@@ -366,7 +384,7 @@ public class RemoteMonitoringService implements MonitoringService {
         // Fetches clusterStatus from map or creates a default ClusterState object.
         Optional<NodeState> primarySequencerNode = pollReport.getClusterState().getNode(primarySequencer);
 
-        if(!primarySequencerNode.isPresent()){
+        if (!primarySequencerNode.isPresent()) {
             return SequencerStatus.UNKNOWN;
         }
 
@@ -387,17 +405,12 @@ public class RemoteMonitoringService implements MonitoringService {
      *
      * @param pollReport Poll report obtained from failure detection policy.
      */
-    private boolean handleFailure(PollReport pollReport, Layout layout) {
+    private boolean handleFailure(PollReport pollReport) {
         log.trace("Handle failures for the report: {}", pollReport);
 
-        try {
-            if (!pollReport.getWrongEpochs().isEmpty()) {
-                if (isCurrentLayoutSlotUnFilled(pollReport)) {
-                    handleFailure(Collections.emptySet(), pollReport);
-                }
-                return true;
-            }
+        Layout layout = serverContext.copyManagementLayout();
 
+        try {
             ClusterState clusterState = pollReport.getClusterState();
 
             if (clusterState.size() != layout.getAllServers().size()) {
@@ -419,35 +432,6 @@ public class RemoteMonitoringService implements MonitoringService {
                 handleFailure(failedNodes, pollReport);
                 return true;
             }
-
-            if (getPrimarySequencerStatus(layout, pollReport) == SequencerStatus.READY) {
-                return false;
-            }
-
-            // If failures are not present we can check if the primary sequencer has been
-            // bootstrapped from the heartbeat responses received.
-            if (sequencerNotReadyCounter.getEpoch() != layout.getEpoch()) {
-                // If the epoch is different than the poll epoch, we reset the timeout state.
-                sequencerNotReadyCounter = new SequencerNotReadyCounter(layout.getEpoch(), 1);
-                return false;
-            }
-
-            // If the epoch is same as the epoch being tracked in the tuple, we need to
-            // increment the count and attempt to bootstrap the sequencer if the count has
-            // crossed the threshold.
-            sequencerNotReadyCounter.increment();
-            if (sequencerNotReadyCounter.getCounter() < SEQUENCER_NOT_READY_THRESHOLD) {
-                return false;
-            }
-
-            // Launch task to bootstrap the primary sequencer.
-            log.info("Attempting to bootstrap the primary sequencer.");
-            // We do not care about the result of the trigger.
-            // If it fails, we detect this again and retry in the next polling cycle.
-            getCorfuRuntime()
-                    .getLayoutManagementView()
-                    .asyncSequencerBootstrap(layout, detectionTaskWorkers);
-
         } catch (Exception e) {
             log.error("Exception invoking failure handler : {}", e);
         }
@@ -455,8 +439,39 @@ public class RemoteMonitoringService implements MonitoringService {
         return false;
     }
 
+    private void handleSequencer(PollReport pollReport, Layout layout) {
+        if (getPrimarySequencerStatus(layout, pollReport) == SequencerStatus.READY) {
+            return;
+        }
+
+        // If failures are not present we can check if the primary sequencer has been
+        // bootstrapped from the heartbeat responses received.
+        if (sequencerNotReadyCounter.getEpoch() != layout.getEpoch()) {
+            // If the epoch is different than the poll epoch, we reset the timeout state.
+            sequencerNotReadyCounter = new SequencerNotReadyCounter(layout.getEpoch(), 1);
+            return;
+        }
+
+        // If the epoch is same as the epoch being tracked in the tuple, we need to
+        // increment the count and attempt to bootstrap the sequencer if the count has
+        // crossed the threshold.
+        sequencerNotReadyCounter.increment();
+        if (sequencerNotReadyCounter.getCounter() < SEQUENCER_NOT_READY_THRESHOLD) {
+            return;
+        }
+
+        // Launch task to bootstrap the primary sequencer.
+        log.info("Attempting to bootstrap the primary sequencer.");
+        // We do not care about the result of the trigger.
+        // If it fails, we detect this again and retry in the next polling cycle.
+        getCorfuRuntime()
+                .getLayoutManagementView()
+                .asyncSequencerBootstrap(serverContext.copyManagementLayout(), detectionTaskWorkers);
+    }
+
     private void handleFailure(Set<String> failedNodes, PollReport pollReport)
             throws ExecutionException, InterruptedException {
+
         log.info("Detected failed nodes in node responsiveness: Failed:{}, pollReport:{}", failedNodes, pollReport);
 
         Layout layout = serverContext.copyManagementLayout();

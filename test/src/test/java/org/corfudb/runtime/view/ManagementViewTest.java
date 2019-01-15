@@ -39,7 +39,6 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -1591,6 +1590,7 @@ public class ManagementViewTest extends AbstractViewTest {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);
 
+        log.info("Build layout");
         Layout layout = new TestLayoutBuilder()
                 .setEpoch(1L)
                 .addLayoutServer(SERVERS.PORT_0)
@@ -1605,20 +1605,26 @@ public class ManagementViewTest extends AbstractViewTest {
                 .addToLayout()
                 .setClusterId(UUID.randomUUID())
                 .build();
+
+        log.info("Bootstrap servers and corfuRuntime connect");
         bootstrapAllServers(layout);
         corfuRuntime = getRuntime(layout).connect();
 
+        log.info("Connect to first management server");
         CorfuRuntime managementRuntime0 = getManagementServer(SERVERS.PORT_0)
                 .getManagementAgent().getCorfuRuntime();
+
+        log.info("Connect to second management server");
         CorfuRuntime managementRuntime1 = getManagementServer(SERVERS.PORT_1)
                 .getManagementAgent().getCorfuRuntime();
 
+        log.info("wait for sequencer to bootstrap");
         waitForSequencerToBootstrap(SERVERS.PORT_0);
 
-        // Setting aggressive timeouts
+        log.info("Setting aggressive timeouts");
         setAggressiveTimeouts(layout, corfuRuntime, managementRuntime0, managementRuntime1);
 
-        // Append data.
+        log.info("Append data.");
         IStreamView streamView = corfuRuntime.getStreamsView()
                 .get(CorfuRuntime.getStreamID("testStream"));
         final byte[] payload = "test".getBytes();
@@ -1627,22 +1633,23 @@ public class ManagementViewTest extends AbstractViewTest {
             streamView.append(payload);
         }
 
-        // Register custom systemDownHandler to detect live-lock.
-        final Semaphore semaphore = new Semaphore(2);
+        log.info("Register custom systemDownHandler to detect live-lock.");
+        Semaphore semaphore = new Semaphore(2);
         semaphore.acquire(2);
 
         final int sysDownTriggerLimit = 3;
         managementRuntime0.getParameters().setSystemDownHandlerTriggerLimit(sysDownTriggerLimit);
         managementRuntime1.getParameters().setSystemDownHandlerTriggerLimit(sysDownTriggerLimit);
 
+        log.info("Setup rule to drop SET_EPOCH messages");
         TestRule testRule = new TestRule()
                 .matches(m -> m.getMsgType().equals(CorfuMsgType.SET_EPOCH))
                 .drop();
         addClientRule(managementRuntime0, testRule);
         addClientRule(managementRuntime1, testRule);
 
-        // Since the fast loader will retrieve the tails from the head node,
-        // we need to drop all tail requests to hang the FastObjectLoaders
+        log.info("Since the fast loader will retrieve the tails from the head node, " +
+                "we need to drop all tail requests to hang the FastObjectLoaders");
         addServerRule(SERVERS.PORT_0, new TestRule().matches(m -> {
             if (m.getMsgType().equals(CorfuMsgType.TAIL_RESPONSE)) {
                 semaphore.release();
@@ -1651,7 +1658,7 @@ public class ManagementViewTest extends AbstractViewTest {
             return false;
         }).drop());
 
-        // Trigger an epoch change to trigger FastObjectLoader to run for sequencer bootstrap.
+        log.info("Trigger an epoch change to trigger FastObjectLoader to run for sequencer bootstrap.");
         Layout layout1 = new Layout(layout);
         layout1.setEpoch(layout1.getEpoch() + 1);
         corfuRuntime.getLayoutView().getRuntimeLayout(layout1).sealMinServerSet();
@@ -1661,14 +1668,13 @@ public class ManagementViewTest extends AbstractViewTest {
                 .tryAcquire(2, PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS))
                 .isTrue();
 
-        // Create a fault - Epoch instability by just sealing the cluster but not filling the
-        // layout slot.
+        log.info("Create a fault - Epoch instability by just sealing the cluster but not filling thelayout slot.");
         corfuRuntime.invalidateLayout();
         Layout layout2 = new Layout(corfuRuntime.getLayoutView().getLayout());
         layout2.setEpoch(layout2.getEpoch() + 1);
         corfuRuntime.getLayoutView().getRuntimeLayout(layout2).sealMinServerSet();
 
-
+        log.info("Clear client rules");
         clearClientRules(managementRuntime0);
         clearClientRules(managementRuntime1);
 
@@ -1684,6 +1690,7 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch())
                 .isEqualTo(layout2.getEpoch());
 
+        log.info("Clear server rules");
         clearServerRules(SERVERS.PORT_0);
         // Once the rules are cleared, the detectors should resolve the epoch instability,
         // bootstrap the sequencer and fetch a new token.

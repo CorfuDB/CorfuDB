@@ -403,6 +403,7 @@ public class SequencerServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.BOOTSTRAP_SEQUENCER)
     public synchronized void resetServer(CorfuPayloadMsg<SequencerTailsRecoveryMsg> msg,
                                          ChannelHandlerContext ctx, IServerRouter r) {
+
         long initialToken = msg.getPayload().getGlobalTail();
         final Map<UUID, Long> streamTails = msg.getPayload().getStreamTails();
         final long bootstrapMsgEpoch = msg.getPayload().getSequencerEpoch();
