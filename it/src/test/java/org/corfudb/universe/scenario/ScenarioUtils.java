@@ -19,6 +19,11 @@ import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DE
 @Slf4j
 public class ScenarioUtils {
 
+    public static void waitForNextEpoch(CorfuClient corfuClient) {
+        final long nextEpoch = corfuClient.getLayout().getEpoch() + 1;
+        waitForLayoutChange(layout -> layout.getEpoch() == nextEpoch, corfuClient);
+    }
+
     /**
      * Refreshes the layout and waits for a limited time for the refreshed layout to
      * satisfy the expected verifier.

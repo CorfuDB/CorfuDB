@@ -74,7 +74,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * To dispatch tasks for failure or healed nodes detection.
      */
     @Getter
-    private final ExecutorService detectionTaskWorkers;
+    private final ExecutorService failureDetectorWorker;
 
     private final ServerContext serverContext;
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
@@ -125,7 +125,6 @@ public class RemoteMonitoringService implements MonitoringService {
         this.failureDetector = failureDetector;
 
         final int managementServiceCount = 1;
-        final int detectionWorkersCount = 3;
 
         this.detectionTasksScheduler = Executors.newScheduledThreadPool(
                 managementServiceCount,
@@ -137,12 +136,12 @@ public class RemoteMonitoringService implements MonitoringService {
         // Creating the detection worker thread pool.
         // This thread pool is utilized to dispatch detection tasks at regular intervals in the
         // detectorTaskScheduler.
-        this.detectionTaskWorkers = Executors.newFixedThreadPool(
-                detectionWorkersCount,
+        this.failureDetectorWorker = Executors.newSingleThreadExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
                         .setNameFormat(serverContext.getThreadPrefix() + "DetectionWorker-%d")
-                        .build());
+                        .build()
+        );
     }
 
     private CorfuRuntime getCorfuRuntime() {
@@ -169,8 +168,7 @@ public class RemoteMonitoringService implements MonitoringService {
         log.info("Trigger sequencer bootstrap on startup");
         getCorfuRuntime()
                 .getLayoutManagementView()
-                .asyncSequencerBootstrap(serverContext.copyManagementLayout(), detectionTaskWorkers);
-
+                .asyncSequencerBootstrap(serverContext.copyManagementLayout(), failureDetectorWorker);
     }
 
     /**
@@ -271,7 +269,7 @@ public class RemoteMonitoringService implements MonitoringService {
             CorfuRuntime corfuRuntime = getCorfuRuntime();
 
             return failureDetector.poll(layout, corfuRuntime, sequencerMetrics);
-        });
+        }, failureDetectorWorker);
     }
 
     /**
@@ -320,7 +318,7 @@ public class RemoteMonitoringService implements MonitoringService {
             handleSequencer(pollReport, serverContext.copyManagementLayout());
             handleHealing(pollReport, serverContext.copyManagementLayout());
 
-        }, detectionTaskWorkers);
+        }, failureDetectorWorker);
     }
 
     private void handleHealing(PollReport pollReport, Layout layout) {
@@ -484,7 +482,7 @@ public class RemoteMonitoringService implements MonitoringService {
         // If it fails, we detect this again and retry in the next polling cycle.
         getCorfuRuntime()
                 .getLayoutManagementView()
-                .asyncSequencerBootstrap(serverContext.copyManagementLayout(), detectionTaskWorkers);
+                .asyncSequencerBootstrap(serverContext.copyManagementLayout(), failureDetectorWorker);
     }
 
     private void handleFailure(Set<String> failedNodes, PollReport pollReport)
@@ -661,7 +659,7 @@ public class RemoteMonitoringService implements MonitoringService {
     public void shutdown() {
         // Shutting the fault detector.
         detectionTasksScheduler.shutdownNow();
-        detectionTaskWorkers.shutdownNow();
+        failureDetectorWorker.shutdownNow();
         log.info("Fault Detection MonitoringService shutting down.");
     }
 }

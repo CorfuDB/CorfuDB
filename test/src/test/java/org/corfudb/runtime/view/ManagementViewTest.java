@@ -33,7 +33,6 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.junit.Assert;
 import org.junit.Test;
@@ -1725,7 +1724,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 .getCorfuRuntime().getLayoutManagementView()
                 .asyncSequencerBootstrap(layout,
                         getManagementServer(SERVERS.PORT_0).getManagementAgent()
-                                .getRemoteMonitoringService().getDetectionTaskWorkers())
+                                .getRemoteMonitoringService().getFailureDetectorWorker())
                 .get();
     }
 
