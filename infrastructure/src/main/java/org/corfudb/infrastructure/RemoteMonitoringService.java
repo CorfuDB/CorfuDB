@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.util.concurrent.AtomicLongMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -41,6 +42,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -92,6 +94,8 @@ public class RemoteMonitoringService implements MonitoringService {
      * sequencerNotReadyCounter counter exceeds this value.
      */
     private static final int SEQUENCER_NOT_READY_THRESHOLD = 3;
+
+    private final AtomicLong counter = new AtomicLong(1);
 
     /**
      * This tuple maintains, in an epoch, how many heartbeats the primary sequencer has responded
@@ -211,13 +215,17 @@ public class RemoteMonitoringService implements MonitoringService {
         }
 
         if (!failureDetectorFuture.isDone()) {
-            log.debug("Cannot initiate new failure detection task. Polling in progress.");
+            log.debug("Cannot initiate new failure detection task. Polling in progress. Counter: {}", counter.get());
+            counter.incrementAndGet();
             return;
         }
+
+        counter.set(1);
 
         failureDetectorFuture = queryLocalSequencerMetrics(layout, serverContext.getLocalEndpoint())
                 .thenCompose(this::pollReport)
                 .thenApply(pollReport -> {
+                    log.trace("Update cluster state: {}", pollReport.getClusterState());
                     clusterContext.refreshClusterView(layout, pollReport);
                     return pollReport;
                 })

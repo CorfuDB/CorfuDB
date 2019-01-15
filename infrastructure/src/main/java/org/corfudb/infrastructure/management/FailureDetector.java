@@ -65,7 +65,7 @@ public class FailureDetector implements IDetector {
      * Response timeout for every router.
      */
     @Default
-    private final Duration period = Duration.ofSeconds(1);
+    private final Duration period = Duration.ofMillis(500);
 
     /**
      * Executes the policy once.
@@ -83,8 +83,6 @@ public class FailureDetector implements IDetector {
 
         // Collect and set all responsive servers in the members array.
         ImmutableSet<String> allServers = ImmutableSet.copyOf(layout.getAllServers());
-
-        log.debug("Responsive members to poll, {}", allServers);
 
         // Set up arrays for routers to the endpoints.
         routerMap = new HashMap<>();
@@ -125,13 +123,13 @@ public class FailureDetector implements IDetector {
         Map<String, Integer> connectedNodesMap = new HashMap<>();
         PollReport latestReport = null;
 
-        for (int iteration = 1; iteration <= failureThreshold; iteration++) {
+        //for (int iteration = 1; iteration <= failureThreshold; iteration++) {
             PollReport currReport = pollIteration(allServers, routerMap, epoch, sequencerMetrics);
             latestReport = currReport;
 
             wrongEpochs.putAll(currReport.getWrongEpochs());
 
-            int pollIteration = iteration;
+            int pollIteration = 1;
             currReport.getConnectedNodes().forEach(server -> {
                 wrongEpochs.remove(server);
                 connectedNodesMap.put(server, pollIteration);
@@ -139,12 +137,12 @@ public class FailureDetector implements IDetector {
 
             // Aggregate the responses. Return false if we received responses from all the members - failure NOT present
             failuresDetected = !currReport.getFailedNodes().isEmpty();
-            if (!failuresDetected && currReport.getWrongEpochs().isEmpty()) {
-                break;
-            }
+            //if (!failuresDetected && currReport.getWrongEpochs().isEmpty()) {
+            //    break;
+            //}
 
             Sleep.MILLISECONDS.sleepUninterruptibly(period.toMillis());
-        }
+        //}
 
         if(latestReport == null){
             throw new IllegalStateException("Can't build poll report");
@@ -155,7 +153,7 @@ public class FailureDetector implements IDetector {
         if (failuresDetected) {
             failed = allServers
                     .stream()
-                    .filter(server -> !connectedNodesMap.containsKey(server))
+                    .filter(connectedNodesMap::containsKey)
                     .filter(server -> connectedNodesMap.get(server) != failureThreshold)
                     .collect(ImmutableSet.toImmutableSet());
         }

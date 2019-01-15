@@ -8,7 +8,6 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Singular;
 import lombok.ToString;
 import org.corfudb.runtime.view.Layout;
 

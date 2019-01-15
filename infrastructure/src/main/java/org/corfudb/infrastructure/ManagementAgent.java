@@ -132,6 +132,11 @@ public class ManagementAgent {
                 Sleep.MILLISECONDS.sleepRecoverably(CHECK_BOOTSTRAP_INTERVAL.toMillis());
             }
 
+            if (shutdown){
+                log.info("Shutdown signal. Interrupt initialization");
+                return;
+            }
+
             // Recover if flag is false
             if (!recovered) {
                 RecoveryHandler.retryUntilRecovery(serverContext, getCorfuRuntime());

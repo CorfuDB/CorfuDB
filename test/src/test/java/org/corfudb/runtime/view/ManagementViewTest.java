@@ -490,6 +490,7 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
     private void induceSequencerFailureAndWait() {
+        log.info("induceSequencerFailureAndWait for node: {}", SERVERS.PORT_0);
 
         long currentEpoch = getCorfuRuntime().getLayoutView().getLayout().getEpoch();
 
@@ -658,6 +659,7 @@ public class ManagementViewTest extends AbstractViewTest {
      */
     @Test
     public void ckSequencerFailoverTXResolution1() {
+        log.info("Build management layout");
         getManagementTestLayout();
 
         Map<Integer, String> map = getMap();

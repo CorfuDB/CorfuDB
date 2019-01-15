@@ -364,7 +364,7 @@ public class ManagementServer extends AbstractServer {
     }
 
     private NodeState buildNodeState() {
-        log.info("Management server not ready yet, build default NodeState");
+        log.info("Management server: {}, not ready yet, return default NodeState", serverContext.getLocalEndpoint());
 
         NodeConnectivity connectivity = NodeConnectivity.builder()
                 .endpoint(serverContext.getLocalEndpoint())
