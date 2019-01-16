@@ -138,7 +138,9 @@ public class FailureDetector implements IDetector {
                 }
 
                 failedNodes.add(server);
-                clusterStateBuilder.node(server, NodeState.getDefaultNodeState(server));
+                if (!server.equals(localEndpoint)) {
+                    clusterStateBuilder.node(server, NodeState.getDefaultNodeState(server));
+                }
             }
         });
 
