@@ -19,6 +19,7 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.List;
 
 @Slf4j
 public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
@@ -76,7 +77,10 @@ public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
                 server1.start();
                 waitForNextEpoch(corfuClient);
                 // Verify server0 is unresponsive
-                assertThat(corfuClient.getLayout().getUnresponsiveServers()).containsExactly(server0.getEndpoint());
+                List<String> unresponsiveServers = corfuClient.getLayout().getUnresponsiveServers();
+                assertThat(unresponsiveServers)
+                        .as("Wrong number of unresponsive servers: %s", unresponsiveServers)
+                        .containsExactly(server0.getEndpoint());
 
                 // Verify unresponsive server1 gets healed
                 waitForUnresponsiveServersChange(size -> size == 1, corfuClient);

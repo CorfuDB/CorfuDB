@@ -34,19 +34,7 @@
     <!-- Control logging levels for individual components here. -->
     <logger name="org.corfudb.runtime.object" level="INFO"/>
     <logger name="org.corfudb.runtime.clients" level="INFO"/>
-    <logger name="org.corfudb" level="warn"/>
-
-    <logger name="org.corfudb.infrastructure.management.ClusterGraph" level="trace"/>
-    <logger name="org.corfudb.infrastructure.management.CompleteGraphAdvisor" level="trace"/>
-    <logger name="org.corfudb.infrastructure.management.FailureDetector" level="trace"/>
-    <logger name="org.corfudb.infrastructure.RemoteMonitoringService" level="trace"/>
-    <logger name="org.corfudb.infrastructure.ManagementServer" level="trace"/>
-    <logger name="org.corfudb.infrastructure.ManagementAgent" level="trace"/>
-    <logger name="org.corfudb.infrastructure.management.ClusterStateContext" level="trace"/>
-    <logger name="org.corfudb.infrastructure.management" level="info"/>
-    <logger name="org.corfudb" level="debug"/>
-
-
+    <logger name="org.corfudb.infrastructure" level="INFO"/>
     <logger name="io.netty.util" level="INFO"/>
     <logger name="io.netty.util.internal" level="INFO"/>
     <logger name="io.netty.buffer" level="INFO"/>
@@ -56,9 +44,9 @@
     </logger>
 
 
-    <root level="debug">
+    <root level="INFO">
         <!--<appender-ref ref="FILE" />-->
-        <appender-ref ref="STDOUT" />
+        <!--<appender-ref ref="STDOUT" />-->
         <!--<appender-ref ref="MetricsRollingFile" />-->
     </root>
 </configuration>
