@@ -2,15 +2,13 @@ package org.corfudb.protocols.wireprotocol;
 
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
-
-import java.util.Map;
-import java.util.Optional;
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.Singular;
 import lombok.ToString;
+
+import java.util.Optional;
 
 /**
  * Records the cluster state of the system.
@@ -27,9 +25,9 @@ public class ClusterState implements ICorfuPayload<ClusterState> {
     /**
      * Node's view of the cluster. The node collects states from all the other nodes in the cluster.
      * For instance, three node cluster:
-     *  {"a": {"endpoint": "a", "connectivity":{"a": true, "b": true, "c": true}}}
-     *  {"b": {"endpoint": "b", "connectivity":{"a": true, "b": true, "c": false}}}
-     *  {"c": {"endpoint": "c", "connectivity":{"a": true, "b": false, "c": true}}}
+     * {"a": {"endpoint": "a", "connectivity":{"a": true, "b": true, "c": true}}}
+     * {"b": {"endpoint": "b", "connectivity":{"a": true, "b": true, "c": false}}}
+     * {"c": {"endpoint": "c", "connectivity":{"a": true, "b": false, "c": true}}}
      */
     @Singular
     private final ImmutableMap<String, NodeState> nodes;
@@ -43,7 +41,7 @@ public class ClusterState implements ICorfuPayload<ClusterState> {
         ICorfuPayload.serialize(buf, nodes);
     }
 
-    public int size(){
+    public int size() {
         return nodes.size();
     }
 

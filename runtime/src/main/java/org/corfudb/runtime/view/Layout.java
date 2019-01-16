@@ -335,6 +335,14 @@ public class Layout {
                 .collect(Collectors.toList());
     }
 
+    public int getQuorum() {
+        return layoutServers.size() / 2 + 1;
+    }
+
+    public int failedNodesThreshold() {
+        return layoutServers.size() - getQuorum();
+    }
+
     public enum ReplicationMode {
         CHAIN_REPLICATION {
             @Override

@@ -241,6 +241,12 @@ public class ManagementServer extends AbstractServer {
                 .filter(allActiveServers::contains)
                 .collect(Collectors.toSet());
 
+        if (responsiveFailedNodes.size() > layout.failedNodesThreshold()) {
+            log.error("Can't update layout. Exceed num of failed nodes. Layout servers: {}, failed nodes: {}",
+                    layout.getLayoutServers(), responsiveFailedNodes);
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
+        }
+
         // If it is not an out of phase and there is no need to update the layout, return without
         // any reconfiguration
         if (!detectorMsg.getFailedNodes().isEmpty() && responsiveFailedNodes.isEmpty()) {
@@ -354,7 +360,7 @@ public class ManagementServer extends AbstractServer {
     public void handleNodeStateRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         NodeState nodeState = clusterContext.getClusterView()
                 .getNode(serverContext.getLocalEndpoint())
-                .orElse(buildNodeState());
+                .orElseGet(this::buildNodeState);
 
         r.sendResponse(ctx, msg, CorfuMsgType.NODE_STATE_RESPONSE.payloadMsg(nodeState));
     }
@@ -368,10 +374,14 @@ public class ManagementServer extends AbstractServer {
                 .type(NodeState.NodeConnectivityState.CONNECTED)
                 .connectivity(ImmutableMap.of())
                 .build();
-        HeartbeatTimestamp heartbeat = new HeartbeatTimestamp(
-                serverContext.copyManagementLayout().getEpoch(),
-                clusterContext.getCounter().get()
-        );
+
+        long epoch = Layout.INVALID_EPOCH;
+        Layout layout = serverContext.copyManagementLayout();
+        if (layout != null){
+            epoch = layout.getEpoch();
+        }
+
+        HeartbeatTimestamp heartbeat = new HeartbeatTimestamp(epoch, clusterContext.getCounter().get());
 
         return NodeState.builder()
                 .connectivity(connectivity)

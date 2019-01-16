@@ -341,6 +341,12 @@ public class LayoutManagementView extends AbstractView {
             throws OutrankedException {
         log.debug("Run layout reconfiguration, new layout: {}", newLayout);
 
+        if (newLayout.getUnresponsiveServers().size() > newLayout.failedNodesThreshold()) {
+            log.error("Can't update layout. Exceed num of failed nodes. Layout servers: {}, failed nodes: {}",
+                    newLayout.getLayoutServers(), newLayout.getUnresponsiveServers());
+            return;
+        }
+
         // Seals the incremented epoch (Assumes newLayout epoch = currentLayout epoch + 1).
         sealEpoch(currentLayout);
 

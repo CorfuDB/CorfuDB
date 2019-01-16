@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.management;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
 
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
@@ -143,6 +144,37 @@ public class ClusterGraphTest {
         assertEquals(responsiveNodes.get("b").getNumConnections(), graph.size());
     }
 
+    @Test
+    public void testMaxFailedNodes(){
+        ImmutableMap<String, NodeConnectivity> graph = ImmutableMap.of(
+                "a", mock(NodeConnectivity.class),
+                "b", mock(NodeConnectivity.class),
+                "c", mock(NodeConnectivity.class)
+        );
+
+        ClusterGraph cluster = ClusterGraph.builder().graph(graph).build();
+        assertEquals(cluster.failedNodesThreshold(), 1);
+
+        graph = ImmutableMap.of(
+                "a", mock(NodeConnectivity.class),
+                "b", mock(NodeConnectivity.class),
+                "c", mock(NodeConnectivity.class),
+                "d", mock(NodeConnectivity.class)
+        );
+        cluster = ClusterGraph.builder().graph(graph).build();
+        assertEquals(cluster.failedNodesThreshold(), 1);
+
+        graph = ImmutableMap.of(
+                "a", mock(NodeConnectivity.class),
+                "b", mock(NodeConnectivity.class),
+                "c", mock(NodeConnectivity.class),
+                "d", mock(NodeConnectivity.class),
+                "e", mock(NodeConnectivity.class)
+        );
+        cluster = ClusterGraph.builder().graph(graph).build();
+        assertEquals(cluster.failedNodesThreshold(), 2);
+    }
+
     private ClusterGraph cluster(NodeConnectivity... nodes) {
         Map<String, NodeConnectivity> graph = Arrays.stream(nodes)
                 .collect(Collectors.toMap(NodeConnectivity::getEndpoint, Function.identity()));
@@ -171,7 +203,7 @@ public class ClusterGraphTest {
     private NodeState unavailableNodeState(String endpoint) {
         return new NodeState(
                 unavailable(endpoint),
-                new NodeState.HeartbeatTimestamp(Layout.INVALID_EPOCH, 0),
+                new HeartbeatTimestamp(Layout.INVALID_EPOCH, 0),
                 SequencerMetrics.UNKNOWN
         );
     }

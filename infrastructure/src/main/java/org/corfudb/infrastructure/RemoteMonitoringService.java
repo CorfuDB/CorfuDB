@@ -605,7 +605,8 @@ public class RemoteMonitoringService implements MonitoringService {
                 // Committing this layout directly to the trailing layout servers.
                 // This is safe because this layout is acquired by a quorum fetch which confirms
                 // that there was a consensus on this layout and has been committed to a quorum.
-                boolean result = getCorfuRuntime().getLayoutView().getRuntimeLayout(latestLayout)
+                boolean result = getCorfuRuntime().getLayoutView()
+                        .getRuntimeLayout(latestLayout)
                         .getLayoutClient(layoutServer)
                         .committed(latestLayout.getEpoch(), latestLayout).get();
                 if (result) {

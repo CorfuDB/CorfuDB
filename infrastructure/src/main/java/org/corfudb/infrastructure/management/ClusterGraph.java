@@ -133,6 +133,15 @@ public class ClusterGraph {
         return Optional.of(last);
     }
 
+    /**
+     * Maximum possible number of failed nodes
+     * @return max possible failed nodes in a graph
+     */
+    public int failedNodesThreshold() {
+        int quorum = size() / 2 + 1;
+        return size() - quorum;
+    }
+
     public ImmutableMap<String, NodeRank> findFullyConnectedResponsiveNodes(List<String> unresponsiveNodes) {
         log.trace("Find responsive node. Unresponsive nodes: {}", unresponsiveNodes);
 

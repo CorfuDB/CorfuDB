@@ -53,7 +53,16 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
                 clusterState, unresponsiveServers
         );
 
-        ClusterGraph symmetric = ClusterGraph.transform(clusterState).toSymmetric();
+        ClusterGraph graph = ClusterGraph.transform(clusterState);
+
+        if (unresponsiveServers.size() + 1 > graph.failedNodesThreshold()) {
+            log.info("Can't detect failed node. Exceeded failed nodes threshold: '{}' nodes",
+                    graph.failedNodesThreshold()
+            );
+            return Optional.empty();
+        }
+
+        ClusterGraph symmetric = graph.toSymmetric();
         Optional<NodeRank> maybeDecisionMaker = symmetric.getDecisionMaker();
 
         if (!maybeDecisionMaker.isPresent()) {
@@ -83,6 +92,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
             return Optional.empty();
         }
 
+        log.debug("Failed node found: {}", failedNode);
         return Optional.of(failedNode);
     }
 
@@ -96,8 +106,8 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
      * node in the layout. It helps us to simplify analysis/debugging process and brings simple and reliable algorithm
      * for healing process.
      *
-     * @param clusterState represents the state of connectivity amongst the Corfu cluster
-     *                     nodes from a node's perspective.
+     * @param clusterState        represents the state of connectivity amongst the Corfu cluster
+     *                            nodes from a node's perspective.
      * @param unresponsiveServers unresponsive servers in a layout.
      * @return a {@link List} of servers considered as healed according to the underlying
      * {@link ClusterType}.
