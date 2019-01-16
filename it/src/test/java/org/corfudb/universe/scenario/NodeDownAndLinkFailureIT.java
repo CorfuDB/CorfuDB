@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
@@ -88,11 +89,12 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
                 log.info("Repair the partition between server0 and server1");
                 server0.reconnect(Collections.singletonList(server1));
                 waitForNextEpoch(corfuClient);
-                assertThat(corfuClient.getLayout().getUnresponsiveServers())
-                        .as("Wrong layout. Unresponsive servers: %s", corfuClient.getLayout().getUnresponsiveServers())
+                Layout layout = corfuClient.getLayout();
+                assertThat(layout.getUnresponsiveServers())
+                        .as("Wrong layout: %s. Unresponsive servers: %s",
+                                layout.getLayoutServers(), layout.getUnresponsiveServers()
+                        )
                         .hasSize(0);
-
-                fail("yay");
 
                 final Duration sleepDuration = Duration.ofSeconds(1);
                 // Verify cluster status is STABLE
