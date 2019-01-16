@@ -239,6 +239,7 @@ public class ClusterReconfigIT extends AbstractIT {
         final Duration pollPeriod = Duration.ofSeconds(5);
         final int workflowNumRetry = 3;
 
+        log.info("Setup 3 node cluster");
         Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, true);
         Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
         Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);

@@ -44,6 +44,7 @@
     <logger name="org.corfudb.infrastructure.ManagementAgent" level="trace"/>
     <logger name="org.corfudb.infrastructure.management.ClusterStateContext" level="trace"/>
     <logger name="org.corfudb.infrastructure.management" level="info"/>
+    <logger name="org.corfudb" level="debug"/>
 
 
     <logger name="io.netty.util" level="INFO"/>
@@ -55,7 +56,7 @@
     </logger>
 
 
-    <root level="warn">
+    <root level="debug">
         <!--<appender-ref ref="FILE" />-->
         <appender-ref ref="STDOUT" />
         <!--<appender-ref ref="MetricsRollingFile" />-->

@@ -184,14 +184,12 @@ public class FailureDetector implements IDetector {
 
         asyncClusterState.forEach((server, state) -> {
             try {
-                if (server.equals(localEndpoint)) {
-                    connectedNodes.add(localEndpoint);
-                    return;
-                }
-
                 NodeState nodeState = state.get(period.toMillis(), TimeUnit.MILLISECONDS);
-                clusterStateBuilder.node(server, nodeState);
                 connectedNodes.add(server);
+
+                if (!server.equals(localEndpoint)) {
+                    clusterStateBuilder.node(server, nodeState);
+                }
             } catch (Exception e) {
                 if (e.getCause() instanceof WrongEpochException) {
                     wrongEpochs.put(server, ((WrongEpochException) e.getCause()).getCorrectEpoch());

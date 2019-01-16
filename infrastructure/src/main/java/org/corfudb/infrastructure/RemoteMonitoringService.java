@@ -378,7 +378,6 @@ public class RemoteMonitoringService implements MonitoringService {
         List<String> differentEpochServers = layout.getLayoutServers().stream()
                 // Unresponsive servers are excluded as they do not respond with a WrongEpochException.
                 .filter(s -> !layout.getUnresponsiveServers().contains(s))
-                .filter(s -> !serverContext.getLocalEndpoint().equals(s))
                 .collect(Collectors.toList());
         boolean result = pollReport.getWrongEpochs().keySet().containsAll(differentEpochServers);
         if (result) {

@@ -16,6 +16,7 @@ import java.util.Arrays;
 import java.util.Collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.universe.scenario.ScenarioUtils.*;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
@@ -71,12 +72,15 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
                 server2.start();
                 String serverToKick = Collections.max(Arrays.asList(server0.getEndpoint(), server1.getEndpoint()));
 
-                log.info("Wait for epoch update");
+                log.info("Wait until epoch is updated two times");
                 waitForNextEpoch(corfuClient);
-                assertThat(corfuClient.getLayout().getUnresponsiveServers()).containsExactly(serverToKick);
+                waitForNextEpoch(corfuClient);
+                assertThat(corfuClient.getLayout().getUnresponsiveServers())
+                        .as("Incorrect unresponsive servers: %s", corfuClient.getLayout().getUnresponsiveServers())
+                        .containsExactly(serverToKick);
 
                 // Cluster status should be DEGRADED after one node is marked unresponsive
-                ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
+                //ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
                 // TODO: uncomment the following line after ClusterStatus API is fixed for partial partition
                 // assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
                 // TODO: add node status check after we redefine NodeStatus semantics
@@ -84,17 +88,21 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
                 log.info("Repair the partition between server0 and server1");
                 server0.reconnect(Collections.singletonList(server1));
                 waitForNextEpoch(corfuClient);
-                assertThat(corfuClient.getLayout().getUnresponsiveServers()).hasSize(0);
+                assertThat(corfuClient.getLayout().getUnresponsiveServers())
+                        .as("Wrong layout. Unresponsive servers: %s", corfuClient.getLayout().getUnresponsiveServers())
+                        .hasSize(0);
+
+                fail("yay");
 
                 final Duration sleepDuration = Duration.ofSeconds(1);
                 // Verify cluster status is STABLE
-                clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
+                /*clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
                 while (!clusterStatusReport.getClusterStatus().equals(ClusterStatus.STABLE)) {
                     clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
                     Sleep.sleepUninterruptibly(sleepDuration);
                 }
                 assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
-
+*/
                 // Verify data path working fine
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
