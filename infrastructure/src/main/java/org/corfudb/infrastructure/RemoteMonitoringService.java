@@ -31,7 +31,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -296,10 +295,12 @@ public class RemoteMonitoringService implements MonitoringService {
             correctWrongEpochs(pollReport);
 
             try {
+                if (pollReport.isCurrentLayoutSlotUnFilled()) {
+                    handleFailure(Collections.emptySet(), pollReport);
+                    return;
+                }
+
                 if (!pollReport.getWrongEpochs().isEmpty()) {
-                    if (isCurrentLayoutSlotUnFilled(pollReport)) {
-                        handleFailure(Collections.emptySet(), pollReport);
-                    }
                     return;
                 }
             } catch (Exception ex) {
@@ -356,36 +357,6 @@ public class RemoteMonitoringService implements MonitoringService {
             log.error("Healing local node interrupted: ", ie);
             Thread.currentThread().interrupt();
         }
-    }
-
-    /**
-     * All active Layout servers have been sealed but there is no client to take this forward and
-     * fill the slot by proposing a new layout. This is determined by the outOfPhaseEpochNodes map.
-     * This map contains a map of nodes and their server router epochs iff that server responded
-     * with a WrongEpochException to the heartbeat message.
-     * In this case we can pass an empty set to propose the same layout again and fill the layout
-     * slot to un-block the data plane operations.
-     *
-     * @param pollReport Report from the polling task
-     * @return True if latest layout slot is vacant. Else False.
-     */
-    private boolean isCurrentLayoutSlotUnFilled(PollReport pollReport) {
-        Layout layout = serverContext.copyManagementLayout();
-
-        log.info("isCurrentLayoutSlotUnFilled. Poll: {}, layout: {}", pollReport, layout);
-
-        // Check if all active layout servers are present in the outOfPhaseEpochNodes map.
-        List<String> differentEpochServers = layout.getLayoutServers().stream()
-                // Unresponsive servers are excluded as they do not respond with a WrongEpochException.
-                .filter(s -> !layout.getUnresponsiveServers().contains(s))
-                .collect(Collectors.toList());
-        boolean result = pollReport.getWrongEpochs().keySet().containsAll(differentEpochServers);
-        if (result) {
-            String msg = "Current layout slot is empty. Filling slot with current layout." +
-                    " Poll report: {}, Different epoch servers: {}";
-            log.info(msg, pollReport, differentEpochServers);
-        }
-        return result;
     }
 
     private SequencerStatus getPrimarySequencerStatus(Layout layout, PollReport pollReport) {

@@ -41,7 +41,7 @@ public class ClusterStateContext {
      *
      * @param layout Snapshot layout.
      */
-    public void refreshClusterView(@NonNull Layout layout, @NonNull PollReport report) {
+    public synchronized void refreshClusterView(@NonNull Layout layout, @NonNull PollReport report) {
         log.trace("Refresh cluster view, layout: {}", layout);
 
         clusterView.set(report.getClusterState());
@@ -49,7 +49,7 @@ public class ClusterStateContext {
         markDecayedNodeStates(layout);
     }
 
-    public ClusterState getClusterView(){
+    public synchronized ClusterState getClusterView(){
         return clusterView.get();
     }
 

@@ -360,7 +360,8 @@ public class ManagementServer extends AbstractServer {
     }
 
     private NodeState buildNodeState() {
-        log.info("Management server: {}, not ready yet, return default NodeState", serverContext.getLocalEndpoint());
+        log.info("Management server: {}, not ready yet, return default NodeState, current cluster view: {}",
+                serverContext.getLocalEndpoint(), clusterContext.getClusterView());
 
         NodeConnectivity connectivity = NodeConnectivity.builder()
                 .endpoint(serverContext.getLocalEndpoint())

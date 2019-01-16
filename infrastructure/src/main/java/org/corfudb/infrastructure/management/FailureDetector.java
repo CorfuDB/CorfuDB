@@ -26,6 +26,7 @@ import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -54,12 +55,6 @@ public class FailureDetector implements IDetector {
 
     @NonNull
     private final String localEndpoint;
-
-    /**
-     * Number of iterations to execute to detect a failure in a round.
-     */
-    @Default
-    private final int failureThreshold = 3;
 
     /**
      * Response timeout for every router.
@@ -96,7 +91,7 @@ public class FailureDetector implements IDetector {
             }
         });
         // Perform polling of all responsive servers.
-        return pollRound(layout.getEpoch(), allServers, routerMap, sequencerMetrics);
+        return pollRound(layout.getEpoch(), allServers, routerMap, sequencerMetrics, layout);
     }
 
     /**
@@ -112,68 +107,14 @@ public class FailureDetector implements IDetector {
      */
     private PollReport pollRound(
             long epoch, ImmutableSet<String> allServers, Map<String, IClientRouter> routerMap,
-            SequencerMetrics sequencerMetrics) {
+            SequencerMetrics sequencerMetrics, Layout layout) {
 
-        boolean failuresDetected = false;
-
-        // The out of phase epoch nodes are all those nodes which responded to the pings with a
-        // wrong epoch exception. This is due to the pinged node being at a different epoch and
-        // either this runtime needs to be updated or the node needs to catchup.
-        Map<String, Long> wrongEpochs = new HashMap<>();
-        Map<String, Integer> connectedNodesMap = new HashMap<>();
-        PollReport latestReport = null;
-
-        //for (int iteration = 1; iteration <= failureThreshold; iteration++) {
-        PollReport currReport = pollIteration(allServers, routerMap, epoch, sequencerMetrics);
-        latestReport = currReport;
-
-        wrongEpochs.putAll(currReport.getWrongEpochs());
-
-        int pollIteration = 1;
-        currReport.getConnectedNodes().forEach(server -> {
-            wrongEpochs.remove(server);
-            connectedNodesMap.put(server, pollIteration);
-        });
-
-        // Aggregate the responses. Return false if we received responses from all the members - failure NOT present
-        failuresDetected = !currReport.getFailedNodes().isEmpty();
-        //if (!failuresDetected && currReport.getWrongEpochs().isEmpty()) {
-        //    break;
-        //}
-
-        Sleep.MILLISECONDS.sleepUninterruptibly(period.toMillis());
-        //}
-
-        if (latestReport == null) {
-            throw new IllegalStateException("Can't build poll report");
-        }
-
-        // Check all responses and collect all failures.
-        ImmutableSet<String> failed = ImmutableSet.of();
-        if (failuresDetected) {
-            failed = allServers
-                    .stream()
-                    .filter(connectedNodesMap::containsKey)
-                    .filter(server -> connectedNodesMap.get(server) != failureThreshold)
-                    .collect(ImmutableSet.toImmutableSet());
-        }
-
-        Set<String> connectedNodes = new HashSet<>(allServers);
-        connectedNodes.removeAll(failed);
-        connectedNodes.removeAll(wrongEpochs.keySet());
-
-        return PollReport.builder()
-                .pollEpoch(epoch)
-                .connectedNodes(ImmutableSet.copyOf(connectedNodes))
-                .failedNodes(failed)
-                .wrongEpochs(ImmutableMap.copyOf(wrongEpochs))
-                .clusterState(latestReport.getClusterState())
-                .build();
+        return pollIteration(allServers, routerMap, epoch, sequencerMetrics, layout);
     }
 
     private PollReport pollIteration(
             ImmutableSet<String> allServers, Map<String, IClientRouter> router, long epoch,
-            SequencerMetrics sequencerMetrics) {
+            SequencerMetrics sequencerMetrics, Layout layout) {
 
         Map<String, CompletableFuture<NodeState>> asyncClusterState = pollAsync(allServers, router, epoch);
 
@@ -225,8 +166,34 @@ public class FailureDetector implements IDetector {
                 .connectedNodes(ImmutableSet.copyOf(connectedNodes))
                 .failedNodes(ImmutableSet.copyOf(failedNodes))
                 .wrongEpochs(ImmutableMap.copyOf(wrongEpochs))
+                .currentLayoutSlotUnFilled(isCurrentLayoutSlotUnFilled(layout, wrongEpochs.keySet()))
                 .clusterState(clusterStateBuilder.build())
                 .build();
+    }
+
+    /**
+     * All active Layout servers have been sealed but there is no client to take this forward and
+     * fill the slot by proposing a new layout. This is determined by the outOfPhaseEpochNodes map.
+     * This map contains a map of nodes and their server router epochs iff that server responded
+     * with a WrongEpochException to the heartbeat message.
+     * In this case we can pass an empty set to propose the same layout again and fill the layout
+     * slot to un-block the data plane operations.
+     *
+     * @param layout current layout
+     * @return True if latest layout slot is vacant. Else False.
+     */
+    private boolean isCurrentLayoutSlotUnFilled(Layout layout, Set<String> wrongEpochs) {
+        log.trace("isCurrentLayoutSlotUnFilled. Wrong epochs: {}, layout: {}", wrongEpochs, layout);
+
+        // Check if all active layout servers are present in the outOfPhaseEpochNodes map.
+        List<String> allActiveLayoutServers = layout.getActiveLayoutServers();
+        boolean result = wrongEpochs.containsAll(allActiveLayoutServers);
+        if (result) {
+            String msg = "Current layout slot is empty. Filling slot with current layout." +
+                    " wrong epochs: {}, active layout servers: {}";
+            log.info(msg, wrongEpochs, allActiveLayoutServers);
+        }
+        return result;
     }
 
     /**

@@ -36,14 +36,8 @@ public class PollReport {
     private final ImmutableSet<String> failedNodes = ImmutableSet.of();
     @Default
     private final ImmutableMap<String, Long> wrongEpochs = ImmutableMap.of();
+    @Default
+    private final boolean currentLayoutSlotUnFilled = false;
     @NonNull
     private final ClusterState clusterState;
-
-    /**
-     * Contains all connected nodes including nodes answered with WrongEpochException
-     * @return all connected nodes
-     */
-    public ImmutableSet<String> getAllConnectedNodes(){
-        return Sets.union(connectedNodes, wrongEpochs.keySet()).immutableCopy();
-    }
 }

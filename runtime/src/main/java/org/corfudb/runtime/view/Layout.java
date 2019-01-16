@@ -328,6 +328,13 @@ public class Layout {
         epoch += 1;
     }
 
+    public List<String> getActiveLayoutServers() {
+        return layoutServers.stream()
+                // Unresponsive servers are excluded as they do not respond with a WrongEpochException.
+                .filter(s -> !unresponsiveServers.contains(s))
+                .collect(Collectors.toList());
+    }
+
     public enum ReplicationMode {
         CHAIN_REPLICATION {
             @Override
