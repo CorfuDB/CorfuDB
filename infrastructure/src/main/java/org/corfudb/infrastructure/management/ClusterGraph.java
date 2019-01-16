@@ -135,6 +135,7 @@ public class ClusterGraph {
 
     /**
      * Maximum possible number of failed nodes
+     *
      * @return max possible failed nodes in a graph
      */
     public int failedNodesThreshold() {
@@ -142,28 +143,28 @@ public class ClusterGraph {
         return size() - quorum;
     }
 
-    public ImmutableMap<String, NodeRank> findFullyConnectedResponsiveNodes(List<String> unresponsiveNodes) {
+    public Optional<NodeRank> findFullyConnectedResponsiveNode(String localEndpoint, List<String> unresponsiveNodes) {
         log.trace("Find responsive node. Unresponsive nodes: {}", unresponsiveNodes);
 
-        //find all fully connected nodes, marked as unresponsive in the layout
-        Map<String, NodeRank> responsiveNodes = new HashMap<>();
-        for (String unresponsiveNode : unresponsiveNodes) {
-            if (isFullyConnected(unresponsiveNode)) {
-                responsiveNodes.put(unresponsiveNode, new NodeRank(unresponsiveNode, graph.size()));
+        NodeConnectivity localNode = getNode(localEndpoint);
+        for (String adjacent : localNode.getConnectivity().keySet()) {
+            if (unresponsiveNodes.contains(adjacent)) {
+                continue;
+            }
+
+            NodeConnectivity adjacentNode = getNode(adjacent);
+
+            if (adjacentNode.getType() == NodeConnectivityState.UNAVAILABLE){
+                continue;
+            }
+
+            if (!adjacentNode.getConnectionStatus(localEndpoint)) {
+                log.trace("Fully connected node not found");
+                return Optional.empty();
             }
         }
 
-        return ImmutableMap.copyOf(responsiveNodes);
-    }
-
-    private boolean isFullyConnected(String node) {
-        for (NodeConnectivity currNode : graph.values()) {
-            if (!currNode.getConnectionStatus(node)) {
-                return false;
-            }
-        }
-
-        return true;
+        return Optional.of(new NodeRank(localEndpoint, getNode(localEndpoint).getConnected()));
     }
 
     @VisibleForTesting

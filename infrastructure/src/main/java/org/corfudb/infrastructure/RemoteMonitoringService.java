@@ -135,7 +135,8 @@ public class RemoteMonitoringService implements MonitoringService {
         // Creating the detection worker thread pool.
         // This thread pool is utilized to dispatch detection tasks at regular intervals in the
         // detectorTaskScheduler.
-        this.failureDetectorWorker = Executors.newSingleThreadExecutor(
+        this.failureDetectorWorker = Executors.newFixedThreadPool(
+                10,
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
                         .setNameFormat(serverContext.getThreadPrefix() + "DetectionWorker-%d")
@@ -336,6 +337,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 .orElse(ImmutableSet.of());
 
         if (healedNodes.isEmpty()) {
+            log.trace("Nothing to heal");
             return;
         }
 

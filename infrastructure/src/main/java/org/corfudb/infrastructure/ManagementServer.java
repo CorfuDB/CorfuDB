@@ -93,7 +93,7 @@ public class ManagementServer extends AbstractServer {
      * defaulted to 1 second in the Runtime parameters. This gives the Runtime a total of 1 minute
      * to make progress. Else the ongoing task is aborted.
      */
-    private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 60;
+    private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 3;
 
     /**
      * Returns new ManagementServer.

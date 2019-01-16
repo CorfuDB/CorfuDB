@@ -121,15 +121,17 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
         );
 
         if (unresponsiveServers.isEmpty()) {
+            log.trace("All nodes responsive. Nothing to heal");
             return Optional.empty();
         }
 
-        ClusterGraph symmetricGraph = ClusterGraph.transform(clusterState).toSymmetric();
-        ImmutableMap<String, NodeRank> responsiveNodes = symmetricGraph.findFullyConnectedResponsiveNodes(
-                unresponsiveServers
-        );
+        if (!unresponsiveServers.contains(localEndpoint)){
+            log.trace("Local node is responsive. Nothing to heal");
+        }
 
-        //The node can heal only itself.
-        return Optional.ofNullable(responsiveNodes.get(localEndpoint));
+        ClusterGraph symmetricGraph = ClusterGraph.transform(clusterState).toSymmetric();
+        return symmetricGraph.findFullyConnectedResponsiveNode(
+                localEndpoint, unresponsiveServers
+        );
     }
 }

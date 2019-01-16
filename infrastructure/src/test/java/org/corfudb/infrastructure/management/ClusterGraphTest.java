@@ -129,23 +129,41 @@ public class ClusterGraphTest {
 
     @Test
     public void testFindFullyConnectedResponsiveNodes() {
-        NodeConnectivity a = connectivity("a", ImmutableMap.of("a", true, "b", true, "c", false));
-        NodeConnectivity b = connectivity("b", ImmutableMap.of("a", true, "b", true, "c", true));
-        NodeConnectivity c = connectivity("c", ImmutableMap.of("a", false, "b", true, "c", true));
-
-        ClusterGraph graph = cluster(a, b, c).toSymmetric();
-
-        ImmutableMap<String, NodeRank> responsiveNodes = graph.findFullyConnectedResponsiveNodes(
-                Collections.singletonList("b")
+        ClusterGraph graph = cluster(
+                connectivity("a", ImmutableMap.of("a", true, "b", false, "c", true)),
+                unavailable("b"),
+                connectivity("c", ImmutableMap.of("a", true, "b", false, "c", true))
         );
+        graph = graph.toSymmetric();
 
-        assertEquals(responsiveNodes.size(), 1);
-        assertEquals(responsiveNodes.get("b").getEndpoint(), "b");
-        assertEquals(responsiveNodes.get("b").getNumConnections(), graph.size());
+        Optional<NodeRank> responsiveNode = graph.findFullyConnectedResponsiveNode("c", Collections.singletonList("b"));
+
+        assertTrue(responsiveNode.isPresent());
+        assertEquals("c", responsiveNode.get().getEndpoint());
+        assertEquals(2, responsiveNode.get().getNumConnections());
+
+        responsiveNode = graph.findFullyConnectedResponsiveNode("c", Collections.singletonList("c"));
+
+        assertTrue(responsiveNode.isPresent());
+        assertEquals("c", responsiveNode.get().getEndpoint());
+        assertEquals(2, responsiveNode.get().getNumConnections());
+
+        graph = cluster(
+                connectivity("a", ImmutableMap.of("a", true, "b", false, "c", true)),
+                connectivity("b", ImmutableMap.of("a", false, "b", true, "c", false)),
+                connectivity("c", ImmutableMap.of("a", true, "b", false, "c", true))
+        );
+        graph = graph.toSymmetric();
+
+        responsiveNode = graph.findFullyConnectedResponsiveNode("c", Collections.singletonList("b"));
+
+        assertTrue(responsiveNode.isPresent());
+        assertEquals("c", responsiveNode.get().getEndpoint());
+        assertEquals(2, responsiveNode.get().getNumConnections());
     }
 
     @Test
-    public void testMaxFailedNodes(){
+    public void testMaxFailedNodes() {
         ImmutableMap<String, NodeConnectivity> graph = ImmutableMap.of(
                 "a", mock(NodeConnectivity.class),
                 "b", mock(NodeConnectivity.class),
