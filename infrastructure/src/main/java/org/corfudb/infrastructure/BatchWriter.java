@@ -233,8 +233,8 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                     processed++;
                     lastOp = currOp;
                 } else if (currOp.getEpoch() != sealEpoch) {
-                    log.warn("batchWriteProcessor: wrong epoch on {} msg, seal epoch is {}",
-                            currOp.getType(), currOp.getEpoch());
+                    log.warn("batchWriteProcessor: wrong epoch on {} msg, seal epoch is {}, and msg epoch is {}",
+                            currOp.getType(), sealEpoch, currOp.getEpoch());
                     currOp.setException(new WrongEpochException(sealEpoch));
                     res.add(currOp);
                     processed++;
