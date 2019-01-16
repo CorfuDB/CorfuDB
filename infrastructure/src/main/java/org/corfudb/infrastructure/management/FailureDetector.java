@@ -20,7 +20,7 @@ import org.corfudb.runtime.clients.ManagementClient;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.Sleep;
+import org.corfudb.util.CFUtils;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
@@ -115,6 +115,8 @@ public class FailureDetector implements IDetector {
     private PollReport pollIteration(
             ImmutableSet<String> allServers, Map<String, IClientRouter> router, long epoch,
             SequencerMetrics sequencerMetrics, Layout layout) {
+
+        log.trace("Poll iteration. Epoch: {}", epoch);
 
         Map<String, CompletableFuture<NodeState>> asyncClusterState = pollAsync(allServers, router, epoch);
 
@@ -220,6 +222,14 @@ public class FailureDetector implements IDetector {
                 clusterState.put(s, cf);
             }
         });
+
+        //Ping all nodes in parallel
+        try {
+            CFUtils.allOf(clusterState.values()).join();
+        } catch (Exception ex) {
+            //ignore
+        }
+
         return clusterState;
     }
 }
