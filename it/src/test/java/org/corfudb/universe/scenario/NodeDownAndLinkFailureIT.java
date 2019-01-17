@@ -34,7 +34,7 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
      * 6) Remove the link failure
      * 7) Verify layout, cluster status and data path again
      */
-    @Test(timeout = 120000)
+    @Test(timeout = 300000)
     public void nodeDownAndLinkFailureTest() {
         getScenario().describe((fixture, testCase) -> {
             CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
