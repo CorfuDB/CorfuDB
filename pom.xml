@@ -367,7 +367,6 @@
                 <version>3.0.0-M1</version>
                 <configuration>
                     <argLine>${argLine}</argLine>
-                    <forkCount>1C</forkCount>
                     <reuseForks>true</reuseForks>
                     <trimStackTrace>false</trimStackTrace>
                     <skipAfterFailureCount>2</skipAfterFailureCount>

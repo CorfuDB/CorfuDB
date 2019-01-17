@@ -8,17 +8,19 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
-import org.corfudb.infrastructure.management.ClusterGraph;
-import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
+import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.infrastructure.management.ClusterRecommendationEngineFactory;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.ClusterType;
 import org.corfudb.infrastructure.management.IDetector;
 import org.corfudb.infrastructure.management.PollReport;
+import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics.FailureDetectorAction;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
@@ -85,7 +87,7 @@ public class RemoteMonitoringService implements MonitoringService {
      */
     private CompletableFuture<Void> failureDetectorFuture = CompletableFuture.completedFuture(null);
 
-    private final ClusterAdvisor recommendationEngine = ClusterRecommendationEngineFactory
+    private final ClusterAdvisor advisor = ClusterRecommendationEngineFactory
             .createForStrategy(ClusterType.COMPLETE_GRAPH);
 
     /**
@@ -326,8 +328,10 @@ public class RemoteMonitoringService implements MonitoringService {
     private void handleHealing(PollReport pollReport, Layout layout) {
         log.trace("Handle healing");
 
-        Optional<NodeRank> healed = recommendationEngine.healedServer(
-                pollReport.getClusterState(), layout.getUnresponsiveServers(), serverContext.getLocalEndpoint()
+        Optional<NodeRank> healed = advisor.healedServer(
+                pollReport.getClusterState(),
+                layout.getUnresponsiveServers(),
+                serverContext.getLocalEndpoint()
         );
 
         //Tranform Optional value to a Set
@@ -341,7 +345,18 @@ public class RemoteMonitoringService implements MonitoringService {
             return;
         }
 
-        log.info("Handle healing. Poll report: {}, Local endpoint: {}", pollReport, serverContext.getLocalEndpoint());
+        //save history
+        FailureDetectorMetrics history = FailureDetectorMetrics.builder()
+                .localNode(serverContext.getLocalEndpoint())
+                .graph(ClusterGraph.transform(pollReport.getClusterState()).toSymmetric().connectivityGraph())
+                .healed(healed.get())
+                .action(FailureDetectorAction.HEAL)
+                .unresponsiveNodes(layout.getUnresponsiveServers())
+                .layout(layout.getLayoutServers())
+                .epoch(layout.getEpoch())
+                .build();
+
+        log.info("Handle healing. Failure detector state: {}", history.toJson());
 
         try {
             CorfuRuntime corfuRuntime = getCorfuRuntime();
@@ -352,7 +367,9 @@ public class RemoteMonitoringService implements MonitoringService {
                     .handleHealing(pollReport.getPollEpoch(), healedNodes)
                     .get();
 
-            log.info("Healing local node successful: {}", pollReport);
+            serverContext.saveFailureDetectorMetrics(history);
+
+            log.info("Healing local node successful: {}", history.toJson());
         } catch (ExecutionException ee) {
             log.error("Healing local node failed: ", ee);
         } catch (InterruptedException ie) {
@@ -402,7 +419,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 return false;
             }
 
-            Optional<NodeRank> maybeFailedNode = recommendationEngine.failedServer(
+            Optional<NodeRank> maybeFailedNode = advisor.failedServer(
                     clusterState,
                     layout.getUnresponsiveServers(),
                     serverContext.getLocalEndpoint()
@@ -410,6 +427,19 @@ public class RemoteMonitoringService implements MonitoringService {
 
             if (maybeFailedNode.isPresent()) {
                 NodeRank failedNode = maybeFailedNode.get();
+
+                //save history
+                FailureDetectorMetrics history = FailureDetectorMetrics.builder()
+                        .localNode(serverContext.getLocalEndpoint())
+                        .graph(ClusterGraph.transform(pollReport.getClusterState()).toSymmetric().connectivityGraph())
+                        .healed(failedNode)
+                        .action(FailureDetectorAction.FAIL)
+                        .unresponsiveNodes(layout.getUnresponsiveServers())
+                        .layout(layout.getLayoutServers())
+                        .epoch(layout.getEpoch())
+                        .build();
+
+                serverContext.saveFailureDetectorMetrics(history);
 
                 Set<String> failedNodes = new HashSet<>();
                 failedNodes.add(failedNode.getEndpoint());

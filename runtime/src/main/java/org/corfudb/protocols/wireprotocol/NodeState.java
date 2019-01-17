@@ -6,9 +6,10 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.corfudb.runtime.view.Layout;
 
 /**
@@ -38,60 +39,6 @@ public class NodeState implements ICorfuPayload<NodeState> {
      */
     private final SequencerMetrics sequencerMetrics;
 
-    @Builder
-    @AllArgsConstructor
-    @ToString
-    @EqualsAndHashCode
-    public static class NodeConnectivity implements ICorfuPayload<NodeConnectivity> {
-        @Getter
-        private final String endpoint;
-        @Getter
-        private final NodeConnectivityState type;
-        @Getter
-        @NonNull
-        private final ImmutableMap<String, Boolean> connectivity;
-
-        public NodeConnectivity(ByteBuf buf) {
-            endpoint = ICorfuPayload.fromBuffer(buf, String.class);
-            String typeName = ICorfuPayload.fromBuffer(buf, String.class);
-            type = NodeConnectivityState.valueOf(typeName);
-            connectivity = ImmutableMap.copyOf(ICorfuPayload.mapFromBuffer(buf, String.class, Boolean.class));
-        }
-
-        @Override
-        public void doSerialize(ByteBuf buf) {
-            ICorfuPayload.serialize(buf, endpoint);
-            ICorfuPayload.serialize(buf, type.name());
-            ICorfuPayload.serialize(buf, connectivity);
-        }
-
-        /**
-         * Returns node status: connected, disconnected
-         *
-         * @param node node name
-         * @return node status
-         */
-        public boolean getConnectionStatus(String node) {
-            if (type == NodeConnectivityState.UNAVAILABLE){
-                return false;
-            }
-
-            if (!connectivity.containsKey(node)){
-                return false;
-            }
-
-            return connectivity.get(node);
-        }
-
-        /**
-         * Get number of connected nodes
-         * @return number of connected nodes
-         */
-        public int getConnected() {
-            return connectivity.keySet().stream().mapToInt(node -> connectivity.get(node) ? 1 : 0).sum();
-        }
-    }
-
     public NodeState(ByteBuf buf) {
         connectivity = ICorfuPayload.fromBuffer(buf, NodeConnectivity.class);
         heartbeat = ICorfuPayload.fromBuffer(buf, HeartbeatTimestamp.class);
@@ -116,7 +63,7 @@ public class NodeState implements ICorfuPayload<NodeState> {
     public static NodeState getDefaultNodeState(String endpoint) {
         NodeConnectivity connectivity = NodeConnectivity.builder()
                 .endpoint(endpoint)
-                .type(NodeConnectivityState.UNAVAILABLE)
+                .type(NodeConnectivityType.UNAVAILABLE)
                 .connectivity(ImmutableMap.of())
                 .build();
         return new NodeState(
@@ -154,16 +101,5 @@ public class NodeState implements ICorfuPayload<NodeState> {
             ICorfuPayload.serialize(buf, epoch);
             ICorfuPayload.serialize(buf, counter);
         }
-    }
-
-    public enum NodeConnectivityState {
-        /**
-         * Two nodes are connected
-         */
-        CONNECTED,
-        /**
-         * We are unable to get node state from the node (link failure between the nodes)
-         */
-        UNAVAILABLE
     }
 }

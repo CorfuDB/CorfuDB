@@ -347,6 +347,8 @@ public class AbstractIT extends AbstractCorfuTest {
             if (!logPath.exists()) {
                 logPath.mkdir();
             }
+            log.info("Corfu server log path: {}", logPath);
+
             ProcessBuilder builder = new ProcessBuilder();
             builder.command("sh", "-c", "bin/corfu_server " + getOptionsString());
             builder.directory(new File(CORFU_PROJECT_DIR));

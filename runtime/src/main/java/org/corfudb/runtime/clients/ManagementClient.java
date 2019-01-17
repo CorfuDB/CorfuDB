@@ -14,6 +14,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
@@ -91,6 +92,10 @@ public class ManagementClient extends AbstractClient {
 
     public CompletableFuture<NodeState> sendNodeStateRequest() {
         return sendMessageWithFuture(CorfuMsgType.NODE_STATE_REQUEST.msg());
+    }
+
+    public CompletableFuture<FailureDetectorMetrics> sendFailureDetectorMetricsRequest() {
+        return sendMessageWithFuture(CorfuMsgType.FAILURE_DETECTOR_METRICS_REQUEST.msg());
     }
 
     /**

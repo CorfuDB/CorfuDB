@@ -12,8 +12,9 @@ import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.ClusterState.ClusterStateBuilder;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
-import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivity;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.ManagementClient;
@@ -154,7 +155,7 @@ public class FailureDetector implements IDetector {
 
         NodeConnectivity localConnectivity = NodeConnectivity.builder()
                 .endpoint(localEndpoint)
-                .type(NodeState.NodeConnectivityState.CONNECTED)
+                .type(NodeConnectivityType.CONNECTED)
                 .connectivity(ImmutableMap.copyOf(connectivity))
                 .build();
         NodeState localNodeState = NodeState.builder()

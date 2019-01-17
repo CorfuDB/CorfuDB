@@ -10,6 +10,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -75,6 +76,9 @@ public class ServerContext implements AutoCloseable {
     // Management Server
     private static final String PREFIX_MANAGEMENT = "MANAGEMENT";
     private static final String MANAGEMENT_LAYOUT = "LAYOUT";
+
+    // Failure detector
+    private static final String PREFIX_FAILURE_DETECTOR = "FAILURE_DETECTOR";
 
     // LogUnit Server
     private static final String PREFIX_LOGUNIT = "LOGUNIT";
@@ -487,6 +491,34 @@ public class ServerContext implements AutoCloseable {
                             + "Ignoring layout because new epoch {} <= old epoch {}",
                     layout.getEpoch(), currentLayout.getEpoch());
         }
+    }
+
+    public synchronized void saveFailureDetectorMetrics(FailureDetectorMetrics detector) {
+        dataStore.put(
+                FailureDetectorMetrics.class,
+                PREFIX_FAILURE_DETECTOR,
+                String.valueOf(getManagementLayout().getEpoch()),
+                detector
+        );
+    }
+
+    public FailureDetectorMetrics getFailureDetectorMetrics() {
+        FailureDetectorMetrics failureMetrics = dataStore.get(
+                FailureDetectorMetrics.class, PREFIX_FAILURE_DETECTOR, String.valueOf(getManagementLayout().getEpoch())
+        );
+
+        if (failureMetrics == null){
+            Layout layout = getManagementLayout();
+
+            return FailureDetectorMetrics.builder()
+                    .localNode(getLocalEndpoint())
+                    .layout(layout.getLayoutServers())
+                    .unresponsiveNodes(layout.getUnresponsiveServers())
+                    .epoch(layout.getEpoch())
+                    .build();
+        }
+
+        return failureMetrics;
     }
 
     /**

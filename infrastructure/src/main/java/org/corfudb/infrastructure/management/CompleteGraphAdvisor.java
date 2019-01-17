@@ -1,9 +1,9 @@
 package org.corfudb.infrastructure.management;
 
-import com.google.common.collect.ImmutableMap;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
+import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 
 import java.util.List;
 import java.util.Optional;

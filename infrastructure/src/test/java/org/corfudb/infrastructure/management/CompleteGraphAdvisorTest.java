@@ -5,11 +5,13 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableMap;
-import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
-import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivity;
+import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
@@ -147,13 +149,13 @@ public class CompleteGraphAdvisorTest {
 
         NodeConnectivity nodeConnectivity = NodeConnectivity.builder()
                 .endpoint(endpoint)
-                .type(NodeState.NodeConnectivityState.CONNECTED)
+                .type(NodeConnectivityType.CONNECTED)
                 .connectivity(ImmutableMap.copyOf(connectivity))
                 .build();
 
         return NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
-                .heartbeat(new NodeState.HeartbeatTimestamp(0, 0))
+                .heartbeat(new HeartbeatTimestamp(0, 0))
                 .connectivity(nodeConnectivity)
                 .build();
     }
@@ -170,13 +172,13 @@ public class CompleteGraphAdvisorTest {
     private NodeState unavailable(String endpoint) {
         NodeConnectivity connectivity = NodeConnectivity.builder()
                 .endpoint(endpoint)
-                .type(NodeState.NodeConnectivityState.UNAVAILABLE)
+                .type(NodeConnectivityType.UNAVAILABLE)
                 .connectivity(ImmutableMap.of())
                 .build();
 
         return new NodeState(
                 connectivity,
-                new NodeState.HeartbeatTimestamp(Layout.INVALID_EPOCH, 0),
+                new HeartbeatTimestamp(Layout.INVALID_EPOCH, 0),
                 SequencerMetrics.UNKNOWN
         );
     }

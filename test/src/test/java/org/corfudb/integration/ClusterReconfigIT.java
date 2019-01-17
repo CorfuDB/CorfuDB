@@ -105,6 +105,7 @@ public class ClusterReconfigIT extends AbstractIT {
             }
             corfuRuntime.invalidateLayout();
             refreshedLayout = corfuRuntime.getLayoutView().getLayout();
+            log.info("Wait for next epoch. Refreshed layout: {}", refreshedLayout);
             Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
         }
         assertThat(epochVerifier.test(refreshedLayout.getEpoch())).isTrue();
@@ -679,7 +680,7 @@ public class ClusterReconfigIT extends AbstractIT {
         final String data = createStringOfSize(1_000);
         Random r = getRandomNumberGenerator();
 
-        // Some preliminary writes into the corfu table.
+        log.info("Some preliminary writes into the corfu table.");
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
             runtime.getObjectsView().TXBegin();
             table.put(Integer.toString(r.nextInt()), data);

@@ -9,8 +9,8 @@ import com.google.gson.JsonParser;
  * Created by mdhawan on 6/28/16.
  */
 public class JsonUtils {
-    public static final Gson prettyParser = new GsonBuilder().setPrettyPrinting().create();
-    public static final Gson parser = new GsonBuilder().create();
+    public static final Gson parser = new GsonBuilder().setPrettyPrinting().create();
+    private static final Gson REGULAR_PARSER = new GsonBuilder().create();
 
 
     /**
@@ -21,10 +21,18 @@ public class JsonUtils {
     public static String prettyPrint(String jsonString) {
         JsonParser p = new JsonParser();
         JsonElement e = p.parse(jsonString);
-        return prettyParser.toJson(e);
+        return parser.toJson(e);
     }
 
-    public static <T> String toJsonString(T obj){
+    public static <T> String toJson(T obj){
+        return REGULAR_PARSER.toJson(obj);
+    }
+
+    public static <T> T fromJson(String json, Class<T> classOf){
+        return parser.fromJson(json, classOf);
+    }
+
+    public static <T> String toPrettyJson(T obj){
         return parser.toJson(obj);
     }
 }

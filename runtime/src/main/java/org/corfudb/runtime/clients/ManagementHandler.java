@@ -69,4 +69,10 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
                                                   ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }
+
+    @ClientHandler(type = CorfuMsgType.FAILURE_DETECTOR_METRICS_RESPONSE)
+    private static Object handleFailureDetectorMetricsResponse(CorfuPayloadMsg<NodeState> msg,
+                                                  ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
 }

@@ -2,7 +2,7 @@ package org.corfudb.infrastructure.management;
 
 import static org.junit.Assert.assertEquals;
 
-import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.junit.Test;
 
 import java.util.Arrays;

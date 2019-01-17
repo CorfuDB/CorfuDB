@@ -57,14 +57,14 @@ public class WorkflowIT extends AbstractIT {
         final int n1Port = 9000;
         final int numIter = 11_000;
 
-        // Start node one and populate it with data
+        log.info("Start node one and populate it with data");
         Process server_1 = runServer(n1Port, true);
 
-        // start a second node
+        log.info("start a second node");
         final int n2Port = 9001;
         Process server_2 = runServer(n2Port, false);
 
-        // start a third node
+        log.info("start a third node");
         final int n3Port = 9002;
         Process server_3 = runServer(n3Port, false);
 
@@ -99,11 +99,11 @@ public class WorkflowIT extends AbstractIT {
         n1Rt.getAddressSpaceView().invalidateServerCaches();
         n1Rt.getAddressSpaceView().gc();
 
-        // Add a third node after compaction
+        log.info("Add a third node after compaction");
         n1Rt.getManagementView().addNode(getConnectionString(n3Port), workflowNumRetry,
                 timeout, pollPeriod);
 
-        // Verify that the third node has been added and data can be read back
+        log.info("Verify that the third node has been added and data can be read back");
         n1Rt.invalidateLayout();
         final int clusterSizeN3 = 3;
         assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
@@ -118,24 +118,24 @@ public class WorkflowIT extends AbstractIT {
                 .setEpoch(n3Layout.getEpoch() + 1)
                 .build();
 
-        // Remove node 2
+        log.info("Remove node 2");
         n1Rt.getManagementView().removeNode(getConnectionString(n2Port), workflowNumRetry,
                 timeout, pollPeriod);
         n1Rt.invalidateLayout();
         assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
 
 
-        // Remove node 2 again and verify that the epoch doesn't change
+        log.info("Remove node 2 again and verify that the epoch doesn't change");
         n1Rt.getManagementView().removeNode(getConnectionString(n2Port), workflowNumRetry,
                 timeout, pollPeriod);
         shutdownCorfuServer(server_2);
 
         n1Rt.invalidateLayout();
-        // Verify that the layout epoch hasn't changed after the second remove and that
-        // the sequencers/layouts/segments nodes include the first and third node
+        log.info("Verify that the layout epoch hasn't changed after the second remove and that " +
+                "the sequencers/layouts/segments nodes include the first and third node");
         assertThat(n1Rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
 
-        // Force remove node 3
+        log.info("Force remove node 3");
         n1Rt.getManagementView().forceRemoveNode(getConnectionString(n3Port), workflowNumRetry,
                 timeout, pollPeriod);
         shutdownCorfuServer(server_3);
@@ -144,7 +144,7 @@ public class WorkflowIT extends AbstractIT {
         assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(1);
 
         server_2 = runServer(n2Port, false);
-        // Re-add node 2
+        log.info("Re-add node 2");
         n1Rt.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
                 timeout, pollPeriod);
 

@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.management;
 
-import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
 import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.List;

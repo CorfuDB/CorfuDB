@@ -16,8 +16,10 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
-import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivity;
+import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
@@ -359,13 +361,19 @@ public class ManagementServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.NODE_STATE_RESPONSE.payloadMsg(nodeState));
     }
 
+    @ServerHandler(type = CorfuMsgType.FAILURE_DETECTOR_METRICS_REQUEST)
+    public void handleFailureDetectorMetricsRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        FailureDetectorMetrics metrics = serverContext.getFailureDetectorMetrics();
+        r.sendResponse(ctx, msg, CorfuMsgType.FAILURE_DETECTOR_METRICS_RESPONSE.payloadMsg(metrics));
+    }
+
     private NodeState buildNodeState() {
         log.info("Management server: {}, not ready yet, return default NodeState, current cluster view: {}",
                 serverContext.getLocalEndpoint(), clusterContext.getClusterView());
 
         NodeConnectivity connectivity = NodeConnectivity.builder()
                 .endpoint(serverContext.getLocalEndpoint())
-                .type(NodeState.NodeConnectivityState.CONNECTED)
+                .type(NodeConnectivityType.CONNECTED)
                 .connectivity(ImmutableMap.of())
                 .build();
 

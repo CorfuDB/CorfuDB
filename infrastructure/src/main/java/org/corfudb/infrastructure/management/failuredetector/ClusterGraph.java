@@ -1,19 +1,19 @@
-package org.corfudb.infrastructure.management;
+package org.corfudb.infrastructure.management.failuredetector;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
-import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivity;
-import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivityState;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
+import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics.ConnectivityGraph;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.util.JsonUtils;
 
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -64,7 +64,7 @@ public class ClusterGraph {
 
         graph.keySet().forEach(node -> {
             NodeConnectivity adjacent = graph.get(node);
-            if (adjacent.getType() == NodeConnectivityState.UNAVAILABLE) {
+            if (adjacent.getType() == NodeConnectivityType.UNAVAILABLE) {
                 symmetric.put(node, adjacent);
                 return;
             }
@@ -108,7 +108,7 @@ public class ClusterGraph {
         int quorum = graph.size() / 2 + 1;
         NodeRank first = nodes.first();
 
-        if (first.numConnections < quorum) {
+        if (first.getNumConnections() < quorum) {
             log.error("No quorum to detect failed servers. Graph: {}, decision maker candidate: {}", this, first);
             return Optional.empty();
         }
@@ -127,7 +127,7 @@ public class ClusterGraph {
         }
 
         NodeRank last = nodes.last();
-        if (last.numConnections == graph.size()) {
+        if (last.getNumConnections() == graph.size()) {
             return Optional.empty();
         }
 
@@ -137,7 +137,7 @@ public class ClusterGraph {
     public Optional<NodeRank> findFullyConnectedResponsiveNode(String localEndpoint, List<String> unresponsiveNodes) {
         log.trace("Find responsive node. Unresponsive nodes: {}", unresponsiveNodes);
 
-        if (!unresponsiveNodes.contains(localEndpoint)){
+        if (!unresponsiveNodes.contains(localEndpoint)) {
             log.trace("Local node is responsive. Nothing to heal");
             return Optional.empty();
         }
@@ -150,7 +150,7 @@ public class ClusterGraph {
 
             NodeConnectivity adjacentNode = getNode(adjacent);
 
-            if (adjacentNode.getType() == NodeConnectivityState.UNAVAILABLE){
+            if (adjacentNode.getType() == NodeConnectivityType.UNAVAILABLE) {
                 continue;
             }
 
@@ -164,7 +164,7 @@ public class ClusterGraph {
     }
 
     @VisibleForTesting
-    NodeConnectivity getNode(String node) {
+    public NodeConnectivity getNode(String node) {
         return graph.get(node);
     }
 
@@ -172,8 +172,12 @@ public class ClusterGraph {
         return graph.size();
     }
 
-    public String toJson(){
-        return JsonUtils.toJsonString(this);
+    public String toJson() {
+        return JsonUtils.toJson(this);
+    }
+
+    public ConnectivityGraph connectivityGraph(){
+        return new ConnectivityGraph(new TreeSet<>(graph.values()));
     }
 
     private NavigableSet<NodeRank> getNodeRanks() {
@@ -191,36 +195,53 @@ public class ClusterGraph {
         NodeConnectivity source = graph.get(sourceNode);
         NodeConnectivity target = graph.get(targetNode);
 
-        Set<NodeConnectivityState> types = EnumSet.of(source.getType(), target.getType());
-        if (types.contains(NodeConnectivityState.UNAVAILABLE)) {
+        Set<NodeConnectivityType> types = EnumSet.of(source.getType(), target.getType());
+        if (types.contains(NodeConnectivityType.UNAVAILABLE)) {
             return false;
         }
 
         return source.getConnectionStatus(targetNode);
     }
 
-    @AllArgsConstructor
-    @EqualsAndHashCode
-    @Getter
-    @ToString
-    public static class NodeRank implements Comparable<NodeRank> {
-        private final String endpoint;
-        private final int numConnections;
+    /**
+     * Helper provides methods to build cluster graph
+     * <pre>
+     * ClusterGraph graph = cluster(
+     *     connectivity("a", ImmutableMap.of("a", true, "b", false, "c", true)),
+     *     unavailable("b"),
+     *     connectivity("c", ImmutableMap.of("a", true, "b", false, "c", true))
+     * );
+     * </pre>
+     */
+    public static class ClusterGraphHelper {
 
-        @Override
-        public int compareTo(NodeRank other) {
-            //Descending order
-            int connectionRank = Integer.compare(other.numConnections, numConnections);
-            if (connectionRank != 0) {
-                return connectionRank;
-            }
-
-            //Ascending order
-            return endpoint.compareTo(other.endpoint);
+        private ClusterGraphHelper(){
+            //prevent creating instances
         }
 
-        public boolean is(String endpoint) {
-            return this.endpoint.equals(endpoint);
+        public static ClusterGraph cluster(NodeConnectivity... nodes) {
+            Map<String, NodeConnectivity> graph = Arrays.stream(nodes)
+                    .collect(Collectors.toMap(NodeConnectivity::getEndpoint, Function.identity()));
+
+            return ClusterGraph.builder()
+                    .graph(ImmutableMap.copyOf(graph))
+                    .build();
+        }
+
+        public static NodeConnectivity connectivity(String endpoint, ImmutableMap<String, Boolean> state) {
+            return NodeConnectivity.builder()
+                    .endpoint(endpoint)
+                    .type(NodeConnectivityType.CONNECTED)
+                    .connectivity(state)
+                    .build();
+        }
+
+        public static NodeConnectivity unavailable(String endpoint) {
+            return NodeConnectivity.builder()
+                    .endpoint(endpoint)
+                    .type(NodeConnectivityType.UNAVAILABLE)
+                    .connectivity(ImmutableMap.of())
+                    .build();
         }
     }
 }

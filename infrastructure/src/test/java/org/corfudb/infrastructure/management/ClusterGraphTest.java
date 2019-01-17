@@ -1,27 +1,25 @@
 package org.corfudb.infrastructure.management;
 
+import static org.corfudb.infrastructure.management.failuredetector.ClusterGraph.ClusterGraphHelper.cluster;
+import static org.corfudb.infrastructure.management.failuredetector.ClusterGraph.ClusterGraphHelper.unavailable;
+import static org.corfudb.infrastructure.management.failuredetector.ClusterGraph.ClusterGraphHelper.connectivity;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.mock;
 
 import com.google.common.collect.ImmutableMap;
-import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
+import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
-import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivity;
-import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivityState;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 public class ClusterGraphTest {
 
@@ -155,31 +153,6 @@ public class ClusterGraphTest {
         responsiveNode = graph.findFullyConnectedResponsiveNode("c", Collections.singletonList("b"));
 
         assertFalse(responsiveNode.isPresent());
-    }
-
-    private ClusterGraph cluster(NodeConnectivity... nodes) {
-        Map<String, NodeConnectivity> graph = Arrays.stream(nodes)
-                .collect(Collectors.toMap(NodeConnectivity::getEndpoint, Function.identity()));
-
-        return ClusterGraph.builder()
-                .graph(ImmutableMap.copyOf(graph))
-                .build();
-    }
-
-    private NodeConnectivity connectivity(String endpoint, ImmutableMap<String, Boolean> state) {
-        return NodeConnectivity.builder()
-                .endpoint(endpoint)
-                .type(NodeConnectivityState.CONNECTED)
-                .connectivity(state)
-                .build();
-    }
-
-    private NodeConnectivity unavailable(String endpoint) {
-        return NodeConnectivity.builder()
-                .endpoint(endpoint)
-                .type(NodeConnectivityState.UNAVAILABLE)
-                .connectivity(ImmutableMap.of())
-                .build();
     }
 
     private NodeState unavailableNodeState(String endpoint) {

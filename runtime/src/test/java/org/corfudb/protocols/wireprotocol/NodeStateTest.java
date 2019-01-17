@@ -7,8 +7,8 @@ import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
-import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivity;
-import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivityState;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.junit.Test;
 
 public class NodeStateTest {
@@ -16,7 +16,7 @@ public class NodeStateTest {
     @Test
     public void testSerializeDeserialize() {
         NodeConnectivity co = NodeConnectivity.builder()
-                .type(NodeConnectivityState.CONNECTED)
+                .type(NodeConnectivityType.CONNECTED)
                 .endpoint("localhost:9000")
                 .connectivity(ImmutableMap.of())
                 .build();

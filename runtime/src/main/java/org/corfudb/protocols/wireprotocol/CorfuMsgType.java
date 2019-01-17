@@ -104,6 +104,9 @@ public enum CorfuMsgType {
 
     NODE_STATE_REQUEST(82, TypeToken.of(CorfuMsg.class)),
     NODE_STATE_RESPONSE(83, new TypeToken<CorfuPayloadMsg<NodeState>>(){}, true),
+
+    FAILURE_DETECTOR_METRICS_REQUEST(84, TypeToken.of(CorfuMsg.class)),
+    FAILURE_DETECTOR_METRICS_RESPONSE(85, new TypeToken<CorfuPayloadMsg<NodeState>>(){}, true),
     ;
 
 
