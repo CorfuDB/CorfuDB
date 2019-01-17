@@ -138,7 +138,7 @@ public class ClusterGraphTest {
 
         Optional<NodeRank> responsiveNode = graph.findFullyConnectedResponsiveNode("c", Collections.singletonList("b"));
 
-        assertTrue(responsiveNode.isPresent());
+        assertFalse(responsiveNode.isPresent());
         assertEquals("c", responsiveNode.get().getEndpoint());
         assertEquals(2, responsiveNode.get().getNumConnections());
 
@@ -160,37 +160,6 @@ public class ClusterGraphTest {
         assertTrue(responsiveNode.isPresent());
         assertEquals("c", responsiveNode.get().getEndpoint());
         assertEquals(2, responsiveNode.get().getNumConnections());
-    }
-
-    @Test
-    public void testMaxFailedNodes() {
-        ImmutableMap<String, NodeConnectivity> graph = ImmutableMap.of(
-                "a", mock(NodeConnectivity.class),
-                "b", mock(NodeConnectivity.class),
-                "c", mock(NodeConnectivity.class)
-        );
-
-        ClusterGraph cluster = ClusterGraph.builder().graph(graph).build();
-        assertEquals(cluster.failedNodesThreshold(), 1);
-
-        graph = ImmutableMap.of(
-                "a", mock(NodeConnectivity.class),
-                "b", mock(NodeConnectivity.class),
-                "c", mock(NodeConnectivity.class),
-                "d", mock(NodeConnectivity.class)
-        );
-        cluster = ClusterGraph.builder().graph(graph).build();
-        assertEquals(cluster.failedNodesThreshold(), 1);
-
-        graph = ImmutableMap.of(
-                "a", mock(NodeConnectivity.class),
-                "b", mock(NodeConnectivity.class),
-                "c", mock(NodeConnectivity.class),
-                "d", mock(NodeConnectivity.class),
-                "e", mock(NodeConnectivity.class)
-        );
-        cluster = ClusterGraph.builder().graph(graph).build();
-        assertEquals(cluster.failedNodesThreshold(), 2);
     }
 
     private ClusterGraph cluster(NodeConnectivity... nodes) {

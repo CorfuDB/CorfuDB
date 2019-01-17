@@ -2,6 +2,7 @@ package org.corfudb.universe.scenario;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForNextEpoch;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 
@@ -51,7 +52,6 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
                 CorfuServer server2 = corfuCluster.getServerByIndex(2);
 
                 long currEpoch = corfuClient.getLayout().getEpoch();
-                assertThat(currEpoch).isEqualTo(0);
 
                 log.info("Stop server2 and wait for layout's unresponsive servers to change");
                 server2.stop(Duration.ofSeconds(10));
@@ -86,13 +86,10 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
                 // assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
                 // TODO: add node status check after we redefine NodeStatus semantics
 
-                Layout prevLayout = corfuClient.getLayout();
-
                 log.info("Repair the partition between server0 and server1");
                 server0.reconnect(Collections.singletonList(server1));
-                //TODO why we update epoch twice?
-                waitForNextEpoch(corfuClient, currEpoch + 3);
-                assertThat(prevLayout).isEqualTo(corfuClient.getLayout());
+                //TODO why we update epoch many times?
+                waitForUnresponsiveServersChange(size -> size == 0, corfuClient);
 
                 Layout layout = corfuClient.getLayout();
                 assertThat(layout.getUnresponsiveServers())

@@ -134,18 +134,13 @@ public class ClusterGraph {
         return Optional.of(last);
     }
 
-    /**
-     * Maximum possible number of failed nodes
-     *
-     * @return max possible failed nodes in a graph
-     */
-    public int failedNodesThreshold() {
-        int quorum = size() / 2 + 1;
-        return size() - quorum;
-    }
-
     public Optional<NodeRank> findFullyConnectedResponsiveNode(String localEndpoint, List<String> unresponsiveNodes) {
         log.trace("Find responsive node. Unresponsive nodes: {}", unresponsiveNodes);
+
+        if (!unresponsiveNodes.contains(localEndpoint)){
+            log.trace("Local node is responsive. Nothing to heal");
+            return Optional.empty();
+        }
 
         NodeConnectivity localNode = getNode(localEndpoint);
         for (String adjacent : localNode.getConnectivity().keySet()) {

@@ -55,13 +55,6 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
 
         ClusterGraph graph = ClusterGraph.transform(clusterState);
 
-        if (unresponsiveServers.size() + 1 > graph.failedNodesThreshold()) {
-            log.info("Can't detect failed node. Exceeded failed nodes threshold: '{}' nodes",
-                    graph.failedNodesThreshold()
-            );
-            return Optional.empty();
-        }
-
         ClusterGraph symmetric = graph.toSymmetric();
         Optional<NodeRank> maybeDecisionMaker = symmetric.getDecisionMaker();
 
@@ -127,6 +120,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
 
         if (!unresponsiveServers.contains(localEndpoint)){
             log.trace("Local node is responsive. Nothing to heal");
+            return Optional.empty();
         }
 
         ClusterGraph symmetricGraph = ClusterGraph.transform(clusterState).toSymmetric();
