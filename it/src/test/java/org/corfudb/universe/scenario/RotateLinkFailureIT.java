@@ -7,7 +7,6 @@ import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveSer
 import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
-import static org.junit.Assert.fail;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -63,8 +62,12 @@ public class RotateLinkFailureIT extends GenericIntegrationTest {
                 log.info("1st link failure rotation, disconnect between server0 and server1. Current layout: {}",
                         corfuClient.getLayout()
                 );
+
+                long currEpoch = corfuClient.getLayout().getEpoch();
+
                 server0.disconnect(Collections.singletonList(server1));
-                waitForNextEpoch(corfuClient);
+                waitForNextEpoch(corfuClient, currEpoch + 1);
+                currEpoch++;
 
                 String firstServerToKick = server1.getEndpoint();
                 Layout latestLayout = corfuClient.getLayout();

@@ -1,26 +1,22 @@
 package org.corfudb.universe.scenario;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForNextEpoch;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
+
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.view.ClusterStatusReport;
-import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
-import org.corfudb.util.Sleep;
 import org.junit.Test;
 
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
-import static org.corfudb.universe.scenario.ScenarioUtils.*;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 
 @Slf4j
 public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
@@ -31,13 +27,13 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
      * 1) Deploy and bootstrap a three nodes cluster
      * 2) Stop one node
      * 3) Create a link failure between two nodes which
-     *    results in a partial partition
+     * results in a partial partition
      * 4) Restart the stopped node
      * 5) Verify layout, cluster status and data path
      * 6) Remove the link failure
      * 7) Verify layout, cluster status and data path again
      */
-    @Test(timeout = 300000)
+    @Test(timeout = 120000)
     public void nodeDownAndLinkFailureTest() {
         getScenario().describe((fixture, testCase) -> {
             CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
@@ -54,10 +50,14 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
                 CorfuServer server1 = corfuCluster.getServerByIndex(1);
                 CorfuServer server2 = corfuCluster.getServerByIndex(2);
 
+                long currEpoch = corfuClient.getLayout().getEpoch();
+                assertThat(currEpoch).isEqualTo(0);
+
                 log.info("Stop server2 and wait for layout's unresponsive servers to change");
                 server2.stop(Duration.ofSeconds(10));
-                waitForNextEpoch(corfuClient);
+                waitForNextEpoch(corfuClient, currEpoch + 1);
                 assertThat(corfuClient.getLayout().getUnresponsiveServers()).containsExactly(server2.getEndpoint());
+                currEpoch++;
 
                 // Create link failure between server0 and server1
                 // After this, cluster becomes unavailable.
@@ -74,11 +74,11 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
                 String serverToKick = Collections.max(Arrays.asList(server0.getEndpoint(), server1.getEndpoint()));
 
                 log.info("Wait until epoch is updated two times");
-                waitForNextEpoch(corfuClient);
-                waitForNextEpoch(corfuClient);
+                waitForNextEpoch(corfuClient, currEpoch + 2);
                 assertThat(corfuClient.getLayout().getUnresponsiveServers())
                         .as("Incorrect unresponsive servers: %s", corfuClient.getLayout().getUnresponsiveServers())
                         .containsExactly(serverToKick);
+                currEpoch += 2;
 
                 // Cluster status should be DEGRADED after one node is marked unresponsive
                 //ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
@@ -86,9 +86,14 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
                 // assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
                 // TODO: add node status check after we redefine NodeStatus semantics
 
+                Layout prevLayout = corfuClient.getLayout();
+
                 log.info("Repair the partition between server0 and server1");
                 server0.reconnect(Collections.singletonList(server1));
-                waitForNextEpoch(corfuClient);
+                //TODO why we update epoch twice?
+                waitForNextEpoch(corfuClient, currEpoch + 3);
+                assertThat(prevLayout).isEqualTo(corfuClient.getLayout());
+
                 Layout layout = corfuClient.getLayout();
                 assertThat(layout.getUnresponsiveServers())
                         .as("Wrong layout: %s. Unresponsive servers: %s",
@@ -104,7 +109,8 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
                     Sleep.sleepUninterruptibly(sleepDuration);
                 }
                 assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
-*/
+                */
+
                 // Verify data path working fine
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));

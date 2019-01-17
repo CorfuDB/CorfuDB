@@ -43,6 +43,7 @@ public class AllNodesPartitionedIT extends GenericIntegrationTest {
             testCase.it("Should partition all nodes and then recover", data -> {
                 // Symmetrically partition all nodes and wait for failure
                 // detector to work and cluster to stabilize
+
                 corfuCluster.<CorfuServer>nodes().values().forEach(CorfuServer::disconnect);
 
                 // Verify cluster status is UNAVAILABLE with all nodes UP

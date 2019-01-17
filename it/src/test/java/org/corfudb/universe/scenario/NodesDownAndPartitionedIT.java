@@ -10,6 +10,7 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import java.time.Duration;
+import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
@@ -48,7 +49,7 @@ public class NodesDownAndPartitionedIT extends GenericIntegrationTest {
 
                 // Stop one node and partition another one
                 server1.stop(Duration.ofSeconds(10));
-                server2.disconnect();
+                server2.disconnect(Arrays.asList(server1, server2));
 
                 // TODO: There is a bug in NodeStatus API, waiting for patch and uncomment following lines
                 // Verify cluster status is UNAVAILABLE with two nodes up and one node down
