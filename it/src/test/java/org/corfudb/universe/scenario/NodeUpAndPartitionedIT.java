@@ -42,7 +42,7 @@ public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
      * 5) Verify that the restarted unresponsive node in step 3 gets healed
      * 6) Verify cluster status and data path
      */
-    @Test(timeout = 180000)
+    @Test(timeout = 300000)
     public void nodeUpAndPartitionedTest() {
         getScenario().describe((fixture, testCase) -> {
             CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());

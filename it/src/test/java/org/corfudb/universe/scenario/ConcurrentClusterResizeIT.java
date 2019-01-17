@@ -30,7 +30,7 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
      * 4) Concurrently add four nodes back into cluster
      * 5) Verify layout and data path again
      */
-    @Test(timeout = 500000)
+    @Test(timeout = 600000)
     public void concurrentClusterResizeTest() {
         // Deploy a five nodes cluster
         final int numNodes = 5;
