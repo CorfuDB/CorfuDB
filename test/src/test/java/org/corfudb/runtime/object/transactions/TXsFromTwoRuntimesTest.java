@@ -100,6 +100,7 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
                 e.printStackTrace();
             } catch (TransactionAbortedException te) {
                 assertThat(te.getAbortCause()).isEqualTo(AbortCause.CONFLICT);
+                assertThat(te.getConflictStream()).isEqualTo(CorfuRuntime.getStreamID("nonidepmpotentmaptest"));
                 isAbort = true;
             }
 

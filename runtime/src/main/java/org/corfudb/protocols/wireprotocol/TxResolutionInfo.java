@@ -134,6 +134,5 @@ public class TxResolutionInfo implements ICorfuPayload<TxResolutionInfo> {
         return "TXINFO[" + Utils.toReadableId(TXid) + "](ts="
                 + snapshotTimestamp + ")";
     }
-
 }
 

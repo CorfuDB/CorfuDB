@@ -280,7 +280,8 @@ public class SequencerServerTest extends AbstractServerTest {
 
         sendMessage(CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(0L, Collections.emptyList())));
         assertThat(getLastPayloadMessageAs(TokenResponse.class))
-                .isEqualTo(new TokenResponse(TokenType.NORMAL, new byte[0], new Token(newEpoch, num - 1),
+                .isEqualTo(new TokenResponse(TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY,
+                        TokenResponse.NO_CONFLICT_STREAM, new Token(newEpoch, num - 1),
                         Collections.emptyMap(), Collections.emptyList()));
     }
 

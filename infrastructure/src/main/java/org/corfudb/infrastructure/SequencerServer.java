@@ -2,17 +2,34 @@ package org.corfudb.infrastructure;
 
 import static org.corfudb.protocols.wireprotocol.TokenType.TX_ABORT_NEWSEQ;
 import static org.corfudb.protocols.wireprotocol.TokenType.TX_ABORT_SEQ_OVERFLOW;
-
 import com.codahale.metrics.Timer;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+
 import io.netty.channel.ChannelHandlerContext;
+
+import java.lang.invoke.MethodHandles;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -29,21 +46,6 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
-
-import java.lang.invoke.MethodHandles;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -248,7 +250,8 @@ public class SequencerServer extends AbstractServer {
      *     cause.
      */
     private TokenType txnCanCommit(TxResolutionInfo txInfo, /** Input. */
-                                  AtomicReference<byte[]> conflictKey /** Output. */) {
+                                  AtomicReference<byte[]> conflictKey, /** Output. */
+                                  AtomicReference<UUID> conflictStreamID /** Output. */) {
         log.trace("Commit-req[{}]", txInfo);
         final Token txSnapshotTimestamp = txInfo.getSnapshotTimestamp();
 
@@ -291,6 +294,7 @@ public class SequencerServer extends AbstractServer {
                     if (v != null && v > txSnapshotTimestamp.getSequence()) {
                         log.debug("ABORT[{}] conflict-key[{}](ts={})", txInfo, conflictParam, v);
                         conflictKey.set(conflictParam);
+                        conflictStreamID.set(entry.getKey());
                         response.set(TokenType.TX_ABORT_CONFLICT);
                         break;
                     }
@@ -371,7 +375,7 @@ public class SequencerServer extends AbstractServer {
         }
 
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, Collections.emptyMap(),
+                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, TokenResponse.NO_CONFLICT_STREAM, token, Collections.emptyMap(),
                 streamTails)));
 
     }
@@ -533,7 +537,7 @@ public class SequencerServer extends AbstractServer {
 
         Token token = new Token(sequencerEpoch, globalLogTail.getAndAdd(req.getNumTokens()));
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token, Collections.emptyMap(), Collections.emptyList())));
+                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, TokenResponse.NO_CONFLICT_STREAM, token, Collections.emptyMap(), Collections.emptyList())));
 
     }
 
@@ -541,7 +545,7 @@ public class SequencerServer extends AbstractServer {
      * this method serves token-requests for transaction-commit entries.
      *
      * <p>it checks if the transaction can commit.
-     * - if the transction must abort,
+     * - if the transaction must abort,
      * then a 'error token' containing an Address.ABORTED address is returned.
      * - if the transaction may commit,
      * then a normal allocation of log position(s) is pursued.
@@ -558,22 +562,23 @@ public class SequencerServer extends AbstractServer {
         // variable is passed to the consumer that will use it to indicate to us if/what key was
         // responsible for an aborted transaction.
         AtomicReference<byte[]> conflictKey = new AtomicReference(TokenResponse.NO_CONFLICT_KEY);
+        AtomicReference<UUID> conflictStreamID = new AtomicReference(TokenResponse.NO_CONFLICT_STREAM);
 
         // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
         // Token allocation is conditioned on commit.
         // First, we check if the transaction can commit.
-        TokenType tokenType = txnCanCommit(req.getTxnResolution(), conflictKey);
+        TokenType tokenType = txnCanCommit(req.getTxnResolution(), conflictKey, conflictStreamID);
         if (tokenType != TokenType.NORMAL) {
             // If the txn aborts, then DO NOT hand out a token.
             Token token = new Token(sequencerEpoch, Address.ABORTED);
             r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(tokenType,
-                    conflictKey.get(), token, Collections.emptyMap(), Collections.emptyList())));
+                    conflictKey.get(), conflictStreamID.get(), token, Collections.emptyMap(), Collections.emptyList())));
             return;
         }
 
         // if we get here, this means the transaction can commit.
         // handleAllocation() does the actual allocation of log position(s)
-        // and returns the reponse
+        // and returns the response
         handleAllocation(msg, ctx, r);
     }
 
@@ -637,7 +642,7 @@ public class SequencerServer extends AbstractServer {
         // and the streams backpointers
         Token token = new Token(sequencerEpoch, currentTail);
         r.sendResponse(ctx, msg, CorfuMsgType.TOKEN_RES.payloadMsg(new TokenResponse(
-                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, token,
+                TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY, TokenResponse.NO_CONFLICT_STREAM, token,
                 backPointerMap.build(), Collections.emptyList())));
     }
 
