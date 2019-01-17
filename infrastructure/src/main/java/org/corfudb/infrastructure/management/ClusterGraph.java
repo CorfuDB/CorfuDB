@@ -12,6 +12,7 @@ import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivity;
 import org.corfudb.protocols.wireprotocol.NodeState.NodeConnectivityState;
+import org.corfudb.util.JsonUtils;
 
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -112,7 +113,7 @@ public class ClusterGraph {
             return Optional.empty();
         }
 
-        log.trace("Decision maker has found: {}", first);
+        log.trace("Decision maker has found: {}, all node ranks: {}", first, nodes);
         return Optional.of(first);
     }
 
@@ -174,6 +175,10 @@ public class ClusterGraph {
 
     public int size() {
         return graph.size();
+    }
+
+    public String toJson(){
+        return JsonUtils.toJsonString(this);
     }
 
     private NavigableSet<NodeRank> getNodeRanks() {

@@ -8,6 +8,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterAdvisor;
+import org.corfudb.infrastructure.management.ClusterGraph;
 import org.corfudb.infrastructure.management.ClusterGraph.NodeRank;
 import org.corfudb.infrastructure.management.ClusterRecommendationEngineFactory;
 import org.corfudb.infrastructure.management.ClusterStateContext;
@@ -125,8 +126,7 @@ public class RemoteMonitoringService implements MonitoringService {
 
         final int managementServiceCount = 1;
 
-        this.detectionTasksScheduler = Executors.newScheduledThreadPool(
-                managementServiceCount,
+        this.detectionTasksScheduler = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
                         .setNameFormat(serverContext.getThreadPrefix() + "ManagementService")
@@ -460,7 +460,11 @@ public class RemoteMonitoringService implements MonitoringService {
     private void handleFailure(Set<String> failedNodes, PollReport pollReport)
             throws ExecutionException, InterruptedException {
 
-        log.info("Detected failed nodes in node responsiveness: Failed:{}, pollReport:{}", failedNodes, pollReport);
+        ClusterGraph graph = ClusterGraph.transform(pollReport.getClusterState()).toSymmetric();
+
+        log.info("Detected failed nodes in node responsiveness: Failed:{}, clusterState:{}",
+                failedNodes, graph.toJson()
+        );
 
         Layout layout = serverContext.copyManagementLayout();
 

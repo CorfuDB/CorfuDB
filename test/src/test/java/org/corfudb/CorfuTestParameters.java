@@ -88,9 +88,7 @@ public class CorfuTestParameters {
     @SuppressWarnings("checkstyle:magicnumber")
     public CorfuTestParameters(){
 
-        TRAVIS_BUILD = System.getProperty("test.travisBuild")
-                != null && System.getProperty("test.travisBuild").toLowerCase()
-                .equals("true");
+        TRAVIS_BUILD = true;
         
         if (TRAVIS_BUILD) {
             System.out.println("Building on travis, increased timeouts, "

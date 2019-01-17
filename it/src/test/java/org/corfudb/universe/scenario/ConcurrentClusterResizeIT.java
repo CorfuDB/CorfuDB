@@ -17,6 +17,7 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutServersChange;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForNextEpoch;
 
 public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
 
@@ -94,7 +95,7 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
                 ));
 
                 // Wait for layout servers to change
-                waitForLayoutServersChange(size -> size == numNodes, corfuClient);
+                waitForNextEpoch(corfuClient);
                 executor.shutdownNow();
 
                 // Verify data path working fine

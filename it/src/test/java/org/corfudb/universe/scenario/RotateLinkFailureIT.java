@@ -2,11 +2,14 @@ package org.corfudb.universe.scenario;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForNextEpoch;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitUninterruptibly;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
+import static org.junit.Assert.fail;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -22,6 +25,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 
+@Slf4j
 public class RotateLinkFailureIT extends GenericIntegrationTest {
 
     /**
@@ -56,80 +60,88 @@ public class RotateLinkFailureIT extends GenericIntegrationTest {
                 CorfuServer server1 = corfuCluster.getServerByIndex(1);
                 CorfuServer server2 = corfuCluster.getServerByIndex(2);
 
-                // 1st link failure rotation, disconnect between server0 and server1
+                log.info("1st link failure rotation, disconnect between server0 and server1. Current layout: {}",
+                        corfuClient.getLayout()
+                );
                 server0.disconnect(Collections.singletonList(server1));
-                waitForUnresponsiveServersChange(size -> size == 1, corfuClient);
+                waitForNextEpoch(corfuClient);
 
-                String firstServerToKick = Collections.max(Arrays.asList(server0.getEndpoint(), server1.getEndpoint()));
-                assertThat(corfuClient.getLayout().getUnresponsiveServers()).containsExactly(firstServerToKick);
+                String firstServerToKick = server1.getEndpoint();
+                Layout latestLayout = corfuClient.getLayout();
+                assertThat(latestLayout.getUnresponsiveServers())
+                        .as("Incorrect unresponsive servers: %s, expected: %s",
+                                latestLayout.getUnresponsiveServers(), firstServerToKick
+                        )
+                        .containsExactly(firstServerToKick);
 
-                Layout lastLayout = corfuClient.getLayout();
+                latestLayout = corfuClient.getLayout();
 
-                // Verify data path working fine
+                log.info("Verify data path working fine");
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }
 
-                // 2nd link failure rotation, disconnect between server1 and server2
-                // and heal previous link failure between server0 and server1
+                log.info("2nd link failure rotation, disconnect between server1 and server2 " +
+                        "and heal previous link failure between server0 and server1");
                 server1.disconnect(Collections.singletonList(server2));
                 server0.reconnect(Collections.singletonList(server1));
 
-                // Wait for some time to ensure cluster stabilizes
-                // Server1 should stay in unresponsive set, no layout change
+                log.info("Wait for some time to ensure cluster stabilizes Server1 should stay in unresponsive set, " +
+                        "no layout change");
                 waitUninterruptibly(Duration.ofSeconds(20));
-                assertThat(corfuClient.getLayout()).isEqualTo(lastLayout);
+                assertThat(corfuClient.getLayout()).isEqualTo(latestLayout);
 
-                // Verify data path working fine
+                log.info("Verify data path working fine");
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }
 
-                // 3rd link failure rotation, disconnect between server2 and server0
-                // and heal previous link failure between server1 and server2
+                log.info("3rd link failure rotation, disconnect between server2 and server0 " +
+                        "and heal previous link failure between server1 and server2");
                 server2.disconnect(Collections.singletonList(server0));
                 server1.reconnect(Collections.singletonList(server2));
 
-                // Server0 and server2 has same number of link failure ie. 1, the one with
-                // larger endpoint should be marked as unresponsive.
+                log.info("Server0 and server2 has same number of link failure ie. 1, " +
+                        "the one with larger endpoint should be marked as unresponsive.");
                 String secondServerToKick = Collections.max(Arrays.asList(server0.getEndpoint(), server2.getEndpoint()));
                 waitForLayoutChange(layout -> layout.getUnresponsiveServers()
                         .equals(Collections.singletonList(secondServerToKick)), corfuClient);
 
-                lastLayout = corfuClient.getLayout();
+                latestLayout = corfuClient.getLayout();
 
-                // Verify data path working fine
+                log.info("Verify data path working fine");
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }
 
-                // 4th link failure rotation, reverse the rotating direction, disconnect between
-                // server1 and server2 and heal previous link failure between server1 and server2
+                log.info("4th link failure rotation, reverse the rotating direction, " +
+                        "disconnect between server1 and server2 " +
+                        "and heal previous link failure between server1 and server2");
                 server1.disconnect(Collections.singletonList(server2));
                 server2.reconnect(Collections.singletonList(server0));
 
-                // Wait for some time to ensure cluster stabilizes
-                // Server1 should stay in unresponsive set, no layout change
-                waitUninterruptibly(Duration.ofSeconds(20));
-                assertThat(corfuClient.getLayout().getEpoch()).isEqualTo(lastLayout.getEpoch() + 1);
-                assertThat(corfuClient.getLayout().getLayoutServers()).isEqualTo(lastLayout.getLayoutServers());
+                log.info("Wait for some time to ensure cluster stabilizes " +
+                        "Server1 should stay in unresponsive set, no layout change");
+                waitUninterruptibly(Duration.ofSeconds(30));
+                assertThat(corfuClient.getLayout().getEpoch()).isEqualTo(latestLayout.getEpoch() + 2);
+                assertThat(corfuClient.getLayout().getLayoutServers()).isEqualTo(latestLayout.getLayoutServers());
                 assertThat(corfuClient.getLayout().getUnresponsiveServers()).isEqualTo(server2.getEndpoint());
                 assertThat(corfuClient.getLayout().getSegments().size()).isEqualTo(1);
                 assertThat(corfuClient.getLayout().getSegments().get(0).getStripes().size()).isEqualTo(1);
                 assertThat(corfuClient.getLayout().getSegments().get(0).getStripes().get(0).getLogServers())
                         .isEqualTo(Arrays.asList(server0.getEndpoint(), server1.getEndpoint()));
 
-                // Verify data path working fine
+                log.info("Verify data path working fine");
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }
 
-                // Finally stop rotation and heal all link failures.
+                log.info("Finally stop rotation and heal all link failures.");
                 server1.reconnect(Collections.singletonList(server2));
                 waitForUnresponsiveServersChange(size -> size == 0, corfuClient);
 
                 final Duration sleepDuration = Duration.ofSeconds(1);
-                // Verify cluster status is STABLE
+                log.info("Verify cluster status is STABLE");
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
                 while (!clusterStatusReport.getClusterStatus().equals(ClusterStatus.STABLE)) {
                     clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
@@ -137,7 +149,7 @@ public class RotateLinkFailureIT extends GenericIntegrationTest {
                 }
                 assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
 
-                // Verify data path working fine
+                log.info("Verify data path working fine");
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }

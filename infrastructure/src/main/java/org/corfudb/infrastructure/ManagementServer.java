@@ -93,7 +93,7 @@ public class ManagementServer extends AbstractServer {
      * defaulted to 1 second in the Runtime parameters. This gives the Runtime a total of 1 minute
      * to make progress. Else the ongoing task is aborted.
      */
-    private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 3;
+    private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 60;
 
     /**
      * Returns new ManagementServer.
@@ -240,12 +240,6 @@ public class ManagementServer extends AbstractServer {
                 .stream()
                 .filter(allActiveServers::contains)
                 .collect(Collectors.toSet());
-
-        if (responsiveFailedNodes.size() > layout.failedNodesThreshold()) {
-            log.error("Can't update layout. Exceed num of failed nodes. Layout servers: {}, failed nodes: {}",
-                    layout.getLayoutServers(), responsiveFailedNodes);
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
-        }
 
         // If it is not an out of phase and there is no need to update the layout, return without
         // any reconfiguration
