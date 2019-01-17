@@ -193,7 +193,6 @@
                         <artifactId>maven-failsafe-plugin</artifactId>
                         <version>3.0.0-M1</version>
                         <configuration>
-                            <forkCount>1</forkCount>
                             <includes>
                                 <include>**/*IT.java</include>
                             </includes>
