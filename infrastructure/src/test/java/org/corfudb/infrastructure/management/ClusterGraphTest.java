@@ -137,10 +137,7 @@ public class ClusterGraphTest {
         graph = graph.toSymmetric();
 
         Optional<NodeRank> responsiveNode = graph.findFullyConnectedResponsiveNode("c", Collections.singletonList("b"));
-
         assertFalse(responsiveNode.isPresent());
-        assertEquals("c", responsiveNode.get().getEndpoint());
-        assertEquals(2, responsiveNode.get().getNumConnections());
 
         responsiveNode = graph.findFullyConnectedResponsiveNode("c", Collections.singletonList("c"));
 
@@ -157,9 +154,7 @@ public class ClusterGraphTest {
 
         responsiveNode = graph.findFullyConnectedResponsiveNode("c", Collections.singletonList("b"));
 
-        assertTrue(responsiveNode.isPresent());
-        assertEquals("c", responsiveNode.get().getEndpoint());
-        assertEquals(2, responsiveNode.get().getNumConnections());
+        assertFalse(responsiveNode.isPresent());
     }
 
     private ClusterGraph cluster(NodeConnectivity... nodes) {
