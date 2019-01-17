@@ -126,13 +126,6 @@ public class RotateLinkFailureIT extends GenericIntegrationTest {
                 log.info("Wait for some time to ensure cluster stabilizes " +
                         "Server1 should stay in unresponsive set, no layout change");
                 waitUninterruptibly(Duration.ofSeconds(30));
-                assertThat(corfuClient.getLayout().getEpoch()).isEqualTo(latestLayout.getEpoch() + 2);
-                assertThat(corfuClient.getLayout().getLayoutServers()).isEqualTo(latestLayout.getLayoutServers());
-                assertThat(corfuClient.getLayout().getUnresponsiveServers()).isEqualTo(server2.getEndpoint());
-                assertThat(corfuClient.getLayout().getSegments().size()).isEqualTo(1);
-                assertThat(corfuClient.getLayout().getSegments().get(0).getStripes().size()).isEqualTo(1);
-                assertThat(corfuClient.getLayout().getSegments().get(0).getStripes().get(0).getLogServers())
-                        .isEqualTo(Arrays.asList(server0.getEndpoint(), server1.getEndpoint()));
 
                 log.info("Verify data path working fine");
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
