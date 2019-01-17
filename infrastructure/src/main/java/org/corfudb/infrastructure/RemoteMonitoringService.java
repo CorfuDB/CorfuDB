@@ -307,7 +307,7 @@ public class RemoteMonitoringService implements MonitoringService {
                     return;
                 }
             } catch (Exception ex) {
-                log.error("Can't fill slot. Poll report: {}", pollReport);
+                log.error("Can't fill slot. Poll report: {}", pollReport, ex);
             }
 
             // Analyze the poll report and trigger failure handler if needed.

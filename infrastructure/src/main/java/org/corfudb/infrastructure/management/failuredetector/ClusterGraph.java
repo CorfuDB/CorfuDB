@@ -195,6 +195,13 @@ public class ClusterGraph {
         NodeConnectivity source = graph.get(sourceNode);
         NodeConnectivity target = graph.get(targetNode);
 
+        if (source == null || target == null){
+            log.warn("Can't get connection status for source or target node, " +
+                    "it doesn't exists. Source: '{}', target: {}", source, target
+            );
+            return false;
+        }
+
         Set<NodeConnectivityType> types = EnumSet.of(source.getType(), target.getType());
         if (types.contains(NodeConnectivityType.UNAVAILABLE)) {
             return false;
