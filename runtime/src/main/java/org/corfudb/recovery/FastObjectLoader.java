@@ -17,9 +17,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
@@ -41,6 +42,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuTable.IndexRegistry;
 import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.exceptions.FastObjectLoaderException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.view.Address;
@@ -75,6 +77,7 @@ public class FastObjectLoader {
     static final int DEFAULT_TIMEOUT_MINUTES_FAST_LOADING = 30;
     static final int NUMBER_OF_ATTEMPT = 3;
     static final int STATUS_UPDATE_PACE = 10000;
+    static final int DEFAULT_NUMBER_OF_PENDING_FUTURES = 1_000;
 
     private CorfuRuntime runtime;
 
@@ -85,6 +88,10 @@ public class FastObjectLoader {
     @Setter
     @Getter
     private boolean loadInCache;
+
+    @Setter
+    @Getter
+    int numberOfPendingFutures = DEFAULT_NUMBER_OF_PENDING_FUTURES;
 
     @Getter
     private long logHead = Address.NON_EXIST;
@@ -112,6 +119,9 @@ public class FastObjectLoader {
 
     @VisibleForTesting
     void setLogTail(long tail) { this.logTail = tail; }
+
+    // A future to track the last submitted read request
+    volatile private Future lastReadRequest;
 
     /**
      * Enable whiteList mode where we only reconstruct
@@ -187,8 +197,6 @@ public class FastObjectLoader {
     private int retryIteration = 0;
     private long nextRead;
 
-    private List<Future> futureList;
-
     public FastObjectLoader(@Nonnull final CorfuRuntime corfuRuntime) {
         this.runtime = corfuRuntime;
         loadInCache = !corfuRuntime.getParameters().isCacheDisabled();
@@ -216,17 +224,24 @@ public class FastObjectLoader {
      *
      */
     private void summonNecromancer() {
-        necromancer = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
-                .setNameFormat("necromancer-%d").build());
-        futureList = new ArrayList<>();
+        // Note that the queue implementation requires the corePoolSize to
+        // be equal to maximumPoolSize, so this should be fine for a single threaded
+        // executor
+        necromancer = new ThreadPoolExecutor(1, 1,
+                0L, TimeUnit.MILLISECONDS,
+                new BoundedQueue<>(numberOfPendingFutures),
+                new ThreadFactoryBuilder()
+                        .setNameFormat("FastObjectLoaderReaderThread-%d").build());
+        lastReadRequest = null;
     }
 
     private void invokeNecromancer(Map<Long, ILogData> logDataMap, BiConsumer<Long, ILogData> resurrectionSpell) {
-        futureList.add(necromancer.submit(() -> {
+        lastReadRequest = necromancer.submit(() ->
+        {
             logDataMap.forEach((address, logData) -> {
                 resurrectionSpell.accept(address, logData);
             });
-        }));
+        });
     }
 
     private void killNecromancer() {
@@ -234,14 +249,25 @@ public class FastObjectLoader {
         try {
             necromancer.awaitTermination(timeoutInMinutesForLoading, TimeUnit.MINUTES);
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             String msg = "Necromancer is taking too long to load the maps. Gave up.";
-            log.error(msg);
-            fail(msg);
+            throw new FastObjectLoaderException(msg);
         }
-        for (Future future : futureList) {
-            CFUtils.getUninterruptibly(future);
 
+        if (lastReadRequest == null) {
+            log.info("killNecromancer: no read requests have been processed.");
+            return;
         }
+
+        // Only waiting on the last requests seems like a hack, but it should
+        // be correct, because the fast loader has the following invariants:
+        // 1. Will submit read requests in order for the whole range [trimMark, tail]
+        // 2. Will verify that all entries are processed in strictly ascending order
+        // 3. Kill killNecromancer will only be invoked after all the requests have
+        //    been submitted
+        // Because of #1, #2 and #3 , if awaitTermination doesn't fail, then lastReadRequest
+        // will be the last request submitted
+        CFUtils.getUninterruptibly(lastReadRequest);
     }
 
     /**
@@ -496,15 +522,6 @@ public class FastObjectLoader {
     }
 
     /**
-     * Fail the FastObjectLoader throwing a RuntimeException
-     *
-     * @param msg message passed in the RuntimeException
-     */
-    private void fail(String msg) {
-        throw new RuntimeException(msg);
-    }
-
-    /**
      * Dispatch logData given it's type
      *
      * @param address
@@ -558,7 +575,7 @@ public class FastObjectLoader {
         } catch (Exception e) {
             log.error("findCheckpointsInLogAddress[{}]: "
                     + "Couldn't get the snapshotAddress", address, e);
-            fail("Couldn't get the snapshotAddress at address " + address);
+            throw new IllegalStateException("Couldn't get the snapshotAddress at address " + address);
         }
     }
 
@@ -691,7 +708,7 @@ public class FastObjectLoader {
                 long address = entry.getKey();
                 ILogData logData = entry.getValue();
                 if (address != addressProcessed + 1) {
-                    fail("We missed an entry. It can lead to correctness issues.");
+                    throw new IllegalStateException("We missed an entry. It can lead to correctness issues.");
                 }
                 addressProcessed++;
 
@@ -756,6 +773,31 @@ public class FastObjectLoader {
                     contender.getSnapshotAddress() > latestCheckPoint.getSnapshotAddress()) {
                         latestCheckPoint = contender;
             }
+        }
+    }
+
+    /**
+     * This queue implementation is to be used by single threaded exeuctors
+     * to restrict the amount of pending job submissions.
+     */
+    public class BoundedQueue<E> extends ArrayBlockingQueue<E> {
+
+        public BoundedQueue(int size) {
+            // This queue will be used to processes a consecutive range
+            // of elements: FIFO order is needed. Thus, fair=true
+            super(size, true);
+        }
+
+        @Override
+        public boolean offer(E e) {
+            try {
+                put(e);
+                return true;
+            } catch(InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+            // Needed to cause the consumer executor to throw a RejectedExecutionException
+            return false;
         }
     }
 }
