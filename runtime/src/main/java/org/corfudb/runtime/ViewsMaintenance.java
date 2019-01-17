@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.GarbageCollectorException;
 import org.corfudb.runtime.view.Address;
@@ -13,17 +14,17 @@ import java.util.concurrent.TimeUnit;
 
 
 /**
- * A CorfuRuntime garbage collector. The runtime contains some views that track
+ * Periodic tasks to maintain the CorfuRuntime Views. The runtime contains some views that track
  * the global log, as sections of the global log get checkpointed and trimmed
  * the runtime's views need to remove log metadata that corresponds to the trimmed
- * parts of the log.
+ * parts of the log. Also, auto sync objects to amortize the log sync costs.
  * <p>
  * Created by Maithem on 11/16/18.
  */
 
 @Slf4j
 @NotThreadSafe
-public class ViewsGarbageCollector {
+public class ViewsMaintenance {
 
 
     private long trimMark = Address.NON_ADDRESS;
@@ -31,29 +32,70 @@ public class ViewsGarbageCollector {
     @Getter
     private boolean started;
 
-    final ScheduledExecutorService gcThread = Executors.newSingleThreadScheduledExecutor(
+    /**
+     * How often to sync opened objects
+     */
+    @Getter
+    @Setter
+    long objectSyncDelayInSeconds = 30;
+
+    /**
+     * How often to run GC on the opened objects
+     */
+    @Getter
+    @Setter
+    long objectGCPeriodInSeconds = 20 * 60;
+
+    /**
+     * This single thread is shared by the two tasks (i.e. object GC and object syncing)
+     */
+    final ScheduledExecutorService maintenance = Executors.newSingleThreadScheduledExecutor(
             new ThreadFactoryBuilder().setDaemon(true)
-                    .setNameFormat("ViewsGarbageCollector")
+                    .setNameFormat("ViewsMaintenance")
                     .build());
 
     final CorfuRuntime runtime;
 
-    public ViewsGarbageCollector(CorfuRuntime runtime) {
+    public ViewsMaintenance(CorfuRuntime runtime) {
         this.runtime = runtime;
         this.started = false;
     }
 
     public void start() {
-        gcThread.scheduleAtFixedRate(() -> runRuntimeGC(),
-                runtime.getParameters().getRuntimeGCPeriod().toMinutes(),
-                runtime.getParameters().getRuntimeGCPeriod().toMinutes(),
-                TimeUnit.MINUTES);
+        maintenance.scheduleAtFixedRate(() -> runRuntimeGC(),
+                objectGCPeriodInSeconds, objectGCPeriodInSeconds,
+                TimeUnit.SECONDS);
+        maintenance.scheduleAtFixedRate(() -> runSyncObjects(),
+                objectSyncDelayInSeconds, objectGCPeriodInSeconds,
+                TimeUnit.SECONDS);
         this.started = true;
     }
 
     public void stop() {
-        gcThread.shutdownNow();
+        maintenance.shutdownNow();
         this.started = false;
+    }
+
+    /**
+     * Objects are synced on access, if a client access an object irregularly, then over time
+     * it can experience unpredictable latencies because of syncing. When used, the ViewsMaintinance
+     * will periodically sync the object ao amortize the sync costs.
+     */
+    private void runSyncObjects() {
+        try {
+            long s1 = System.currentTimeMillis();
+            runtime.getObjectsView().syncObjects();
+            long s2 = System.currentTimeMillis();
+            log.info("syncObjects: sync took {} ms, total maps {}", s2 - s1, runtime.getObjectsView()
+                    .getObjectCache().size());
+        } catch (Exception e) {
+            if (e.getCause() instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+                throw new GarbageCollectorException(e);
+            } else {
+                log.error("Encountered an error while running runtime GC", e);
+            }
+        }
     }
 
     /**

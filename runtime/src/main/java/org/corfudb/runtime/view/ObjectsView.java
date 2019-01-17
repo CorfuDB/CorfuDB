@@ -12,6 +12,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -196,6 +197,29 @@ public class ObjectsView extends AbstractView {
         for (Object obj : getObjectCache().values()) {
             ((CorfuCompileProxy) ((ICorfuSMR) obj).
                     getCorfuSMRProxy()).getUnderlyingObject().gc(trimMark);
+        }
+    }
+
+    /**
+     * Syncs all opened objects to the latest tails. Sync failures will be
+     * ignored.
+     */
+    public void syncObjects() {
+        for (Map.Entry<ObjectID, Object> obj : getObjectCache().entrySet()) {
+            try {
+                TokenResponse streamTail = runtime.getSequencerView().query(obj.getKey().getStreamID());
+                ((CorfuCompileProxy) ((ICorfuSMR) obj.getValue()).getCorfuSMRProxy())
+                        .getUnderlyingObject()
+                        .safeObjectSync(streamTail.getToken().getSequence());
+
+            } catch (Exception e) {
+                if (e instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Interrupted while syncing");
+                }
+                // Ignore sync exceptions
+                log.warn("syncObjects: error during syncing {}", obj.getKey().getStreamID(), e);
+            }
         }
     }
 

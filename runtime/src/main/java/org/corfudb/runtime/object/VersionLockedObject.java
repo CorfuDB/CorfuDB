@@ -303,6 +303,19 @@ public class VersionLockedObject<T> {
     }
 
     /**
+     * Sync the object to a timestamp.
+     * @param timestamp stream address to sync to
+     */
+    public void safeObjectSync(long timestamp) {
+        long ts = lock.writeLock();
+        try {
+            syncObjectUnsafe(timestamp);
+        } finally {
+            lock.unlock(ts);
+        }
+    }
+
+    /**
      * Bring the object to the requested version, rolling back or syncing
      * the object from the log if necessary to reach the requested version.
      *

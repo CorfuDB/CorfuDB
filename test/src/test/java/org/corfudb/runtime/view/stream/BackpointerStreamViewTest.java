@@ -184,7 +184,7 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
         assertThat(bpsvB.getContext().resolvedQueue).hasSize(PARAMETERS.NUM_ITERATIONS_LOW);
         TokenResponse tail = runtime.getSequencerView().query();
         runtime.getAddressSpaceView().prefixTrim(tail.getToken());
-        runtime.getGarbageCollector().runRuntimeGC();
+        runtime.getViewsMaintenance().runRuntimeGC();
         assertThat(bpsvA.getContext().resolvedQueue).isEmpty();
         assertThat(bpsvA.getContext().readQueue).isEmpty();
         assertThat(bpsvA.getContext().readCpQueue).isEmpty();
