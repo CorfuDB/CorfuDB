@@ -285,11 +285,13 @@ public class LayoutBuilder {
         if (oldSegmentStripeList.size() != newSegmentStripeList.size()) {
             throw new LayoutModificationException("Stripe addition/deletion not allowed.");
         }
+
         for (int i = 0; i < oldSegmentStripeList.size(); i++) {
+
             if (!allowNonidenticalStripes && !oldSegmentStripeList.get(i).equals(newSegmentStripeList.get(i))) {
                 throw new LayoutModificationException("Merging nonidentical stripes is not allowed.");
             }
-
+            
             Set<String> oldSegmentStripe =
                     new HashSet<>(oldSegmentStripeList.get(i).getLogServers());
             Set<String> newSegmentStripe =
@@ -359,7 +361,7 @@ public class LayoutBuilder {
      * @return this builder
      */
     public LayoutBuilder attemptMergePreviousSegment(int segmentIndex) {
-        return attemptMergePreviousSegmentInternal(segmentIndex, false, 0);
+        return attemptMergePreviousSegmentInternal(segmentIndex, true, 0);
     }
 
     /**
@@ -371,7 +373,7 @@ public class LayoutBuilder {
     public LayoutBuilder mergeSegments() {
         LayoutBuilder layoutBuilder = this;
 
-        for (int i = layout.getSegments().size() - 1; i >= 0; --i) {
+        for (int i = layout.getSegments().size() - 1; i > 0; --i) {
             layoutBuilder = layoutBuilder.attemptMergePreviousSegment(i);
         }
 
