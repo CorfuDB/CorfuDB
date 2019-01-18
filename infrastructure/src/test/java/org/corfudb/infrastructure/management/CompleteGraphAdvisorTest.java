@@ -61,7 +61,7 @@ public class CompleteGraphAdvisorTest {
 
     /**
      * B node believes that everyone disconnected, but actually it's B disconnected.
-     * Can't make a decision.
+     * Make a decision to exclude C.
      */
     @Test
     public void testFailedServer_allDisconnected_from_b_perspective() {
@@ -75,7 +75,8 @@ public class CompleteGraphAdvisorTest {
 
         List<String> unresponsiveServers = new ArrayList<>();
         Optional<NodeRank> failedServer = advisor.failedServer(clusterState, unresponsiveServers, "b");
-        assertFalse(failedServer.isPresent());
+        assertTrue(failedServer.isPresent());
+        assertEquals(new NodeRank("c", 0), failedServer.get());
     }
 
     /**
