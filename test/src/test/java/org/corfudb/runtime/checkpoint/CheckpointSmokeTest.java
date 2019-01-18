@@ -231,7 +231,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         final String keyPrefix = "a-prefix";
         final int numKeys = 5;
         final String author = "Me, myself, and I";
-        final Long fudgeFactor = 75L;
         final int smallBatchSize = 4;
 
         Map<String, Long> m = instantiateMap(streamName);
@@ -253,7 +252,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // also used for assertion checks later.
         CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, (SMRMap) m);
         cpw.setSerializer(serializer);
-        cpw.setValueMutator((l) -> (Long) l + fudgeFactor);
         cpw.setBatchSize(smallBatchSize);
 
         // Write all CP data.
@@ -276,7 +274,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             Map<String, Long> m2 = instantiateMap(streamName);
             for (int i = 0; i < numKeys; i++) {
                 assertThat(m2.get(keyPrefix + Integer.toString(i))).describedAs("get " + i)
-                        .isEqualTo(i + fudgeFactor);
+                        .isEqualTo(i);
             }
         } finally {
             r.getObjectsView().TXEnd();
@@ -332,6 +330,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         CheckpointWriter<SMRMap> cpw = new CheckpointWriter(getRuntime(), streamId, author, (SMRMap) m);
         cpw.setSerializer(serializer);
         cpw.setBatchSize(1);
+        cpw.setNumCPThreads(1);
         cpw.setPostAppendFunc((cp, pos) -> {
             // No mutation, be we need to add a history snapshot at this START/END location.
             history.add(ImmutableMap.copyOf(snapshot));
@@ -363,17 +362,13 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         long startAddress = globalTail.getSequence() + 1;
         assertThat(r.getAddressSpaceView().read(startAddress).getCheckpointType())
                 .isEqualTo(CheckpointEntry.CheckpointEntryType.START);
-        final long contRecordffset = startAddress + 1;
-        assertThat(r.getAddressSpaceView().read(contRecordffset).getCheckpointType())
+        assertThat(r.getAddressSpaceView().read(startAddress + 1).getCheckpointType())
                 .isEqualTo(CheckpointEntry.CheckpointEntryType.CONTINUATION);
-        final long cont2Recordffset = startAddress + 3;
-        assertThat(r.getAddressSpaceView().read(cont2Recordffset).getCheckpointType())
+        assertThat(r.getAddressSpaceView().read(startAddress + 2).getCheckpointType())
                 .isEqualTo(CheckpointEntry.CheckpointEntryType.CONTINUATION);
-        final long cont3Recordffset = startAddress + 5;
-        assertThat(r.getAddressSpaceView().read(cont3Recordffset).getCheckpointType())
+        assertThat(r.getAddressSpaceView().read(startAddress + 3).getCheckpointType())
                 .isEqualTo(CheckpointEntry.CheckpointEntryType.CONTINUATION);
-        final long finishRecord1Offset = startAddress + 7;
-        assertThat(r.getAddressSpaceView().read(finishRecord1Offset).getCheckpointType())
+        assertThat(r.getAddressSpaceView().read(startAddress + 4).getCheckpointType())
                 .isEqualTo(CheckpointEntry.CheckpointEntryType.END);
 
         // Write last keys
