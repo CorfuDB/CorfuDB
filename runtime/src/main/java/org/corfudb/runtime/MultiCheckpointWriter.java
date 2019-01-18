@@ -29,13 +29,6 @@ public class MultiCheckpointWriter<T extends Map> {
     @Getter
     private List<ICorfuSMR<T>> maps = new ArrayList<>();
 
-    @Getter
-    private List<Long> checkpointLogAddresses = new ArrayList<>();
-
-    @Setter
-    @Getter
-    boolean enablePutAll = false;
-
     /** Add a map to the list of maps to be checkpointed by this class. */
     @SuppressWarnings("unchecked")
     public void addMap(T map) {
@@ -50,75 +43,56 @@ public class MultiCheckpointWriter<T extends Map> {
         }
     }
 
-    /** Checkpoint multiple SMRMaps serially.
+
+    /** Checkpoint multiple SMRMaps. Since this method is Map specific
+     *  then the keys are unique and the order doesn't matter.
      *
      * @param rt CorfuRuntime
      * @param author Author's name, stored in checkpoint metadata
      * @return Global log address of the first record of
      */
-    public Token appendCheckpoints(CorfuRuntime rt, String author)
-            throws Exception {
-        return appendCheckpoints(rt, author, (x,y) -> { });
-    }
 
-    /** Checkpoint multiple SMRMaps serially.
-     *
-     * @param rt CorfuRuntime
-     * @param author Author's name, stored in checkpoint metadata
-     * @param postAppendFunc User-supplied lambda for post-append action on each
-     *                       checkpoint entry type.
-     * @return Global log address of the first record of
-     */
-
-    public Token appendCheckpoints(CorfuRuntime rt, String author,
-                                  BiConsumer<CheckpointEntry, Long> postAppendFunc) {
-
-        rt.getObjectsView().TXBuild()
-                .type(TransactionType.SNAPSHOT)
-                .build()
-                .begin();
-
-        Token snapshot = TransactionalContext.getCurrentContext().getSnapshotTimestamp();
-
-        log.trace("appendCheckpoints: author '{}' at globalAddress {} begins",
-                author, snapshot);
-
+    public Token appendCheckpoints(CorfuRuntime rt, String author) {
         log.info("appendCheckpoints: appending checkpoints for {} maps", maps.size());
+
+        // TODO(Maithem) should we throw an exception if a new min is not discovered
+        Token minSnapshot = Token.UNINITIALIZED;
+
         final long cpStart = System.currentTimeMillis();
         try {
             for (ICorfuSMR<T> map : maps) {
                 UUID streamId = map.getCorfuStreamID();
-                final long mapCpStart = System.currentTimeMillis();
-                int mapSize = ((T) map).size();
+
                 CheckpointWriter<T> cpw = new CheckpointWriter(rt, streamId, author, (T) map);
-                cpw.setEnablePutAll(enablePutAll);
                 ISerializer serializer =
                         ((CorfuCompileProxy<Map>) map.getCorfuSMRProxy())
                                 .getSerializer();
                 cpw.setSerializer(serializer);
-                cpw.setPostAppendFunc(postAppendFunc);
-                log.trace("appendCheckpoints: checkpoint map {} begin",
-                        Utils.toReadableId(map.getCorfuStreamID()));
-                List<Long> addresses = cpw.appendCheckpoint();
-                log.trace("appendCheckpoints: checkpoint map {} end",
-                        Utils.toReadableId(map.getCorfuStreamID()));
-                checkpointLogAddresses.addAll(addresses);
 
-                final long mapCpEnd = System.currentTimeMillis();
+                Token minCPSnapshot = cpw.appendCheckpoint();
 
-                log.info("appendCheckpoints: took {} ms to checkpoint {} entries for {}",
-                        mapCpEnd - mapCpStart, mapSize, streamId);
+                if (minSnapshot == Token.UNINITIALIZED) {
+                    minSnapshot = minCPSnapshot;
+                } else if (minSnapshot.getEpoch() != minCPSnapshot.getEpoch()) {
+                    String msg = String.format("Epoch changed during GC cycle from %s to %s", minSnapshot,
+                            minCPSnapshot);
+                    throw new IllegalStateException(msg);
+                } else if (Token.min(minCPSnapshot, minSnapshot) == minCPSnapshot) {
+                    // Adopt the new min
+                    minSnapshot = minCPSnapshot;
+                }
             }
         } finally {
-            log.trace("appendCheckpoints: author '{}' at globalAddress {} finished",
-                    author, snapshot);
+            // TODO(Maithem): print cp id?
+            log.trace("appendCheckpoints: finished, author '{}' at min globalAddress {}",
+                    author, minSnapshot);
             rt.getObjectsView().TXEnd();
         }
         final long cpStop = System.currentTimeMillis();
 
         log.info("appendCheckpoints: took {} ms to append {} checkpoints", cpStop - cpStart,
                 maps.size());
-        return snapshot;
+        return minSnapshot;
     }
 
 }

@@ -101,7 +101,7 @@ public class CheckpointTest extends AbstractObjectTest {
                 // shouldn't happen
                 te.printStackTrace();
                 throw te;
-            } catch (ExecutionException ee) {
+            } catch (Exception e) {
                 // We are the only thread performing trimming, therefore any
                 // prior trim must have been by our own action.  We assume
                 // that we don't go backward, so checking for equality will

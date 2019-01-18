@@ -26,7 +26,7 @@ import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
-import sun.nio.ch.Net;
+
 
 /**
  * A view of the objects inside a Corfu instance.
