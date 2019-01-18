@@ -254,13 +254,15 @@ public class LayoutBuilder {
     /**
      * Merges the specified segment and the segment before this.
      * No addition or removal of stripes are allowed.
-     * Only 1 log unit server addition/removal allowed between segments.
      *
      * @param segmentIndex Segment to merge.
+     * @param allowNonidenticalStripes Allow segments with nonidentical stripes to merge.
+     * @param allowedUpdates Number of allowed server addition/removal between segments, if allow nonidentical stripes.
      *
      * @return this builder
      */
-    public LayoutBuilder mergePreviousSegment(int segmentIndex) {
+    public LayoutBuilder mergePreviousSegmentInternal(int segmentIndex, boolean allowNonidenticalStripes,
+                                                      int allowedUpdates) {
         if (segmentIndex < 1) {
             log.warn("mergePreviousSegment: No segments to merge.");
             return this;
@@ -272,14 +274,22 @@ public class LayoutBuilder {
             throw new LayoutModificationException("Cannot merge disjoint segments.");
         }
 
+        if (layoutSegmentList.get(segmentIndex).replicationMode != layoutSegmentList.get(segmentIndex - 1).replicationMode) {
+            throw new LayoutModificationException("Cannot merge segments with different replication modes.");
+        }
+
         List<LayoutStripe> oldSegmentStripeList = layoutSegmentList.get(segmentIndex - 1).getStripes();
         List<LayoutStripe> newSegmentStripeList = layoutSegmentList.get(segmentIndex).getStripes();
 
-        int allowedUpdates = 1;
+        int updates = 0;
         if (oldSegmentStripeList.size() != newSegmentStripeList.size()) {
             throw new LayoutModificationException("Stripe addition/deletion not allowed.");
         }
         for (int i = 0; i < oldSegmentStripeList.size(); i++) {
+            if (!allowNonidenticalStripes && !oldSegmentStripeList.get(i).equals(newSegmentStripeList.get(i))) {
+                throw new LayoutModificationException("Merging nonidentical stripes is not allowed.");
+            }
+
             Set<String> oldSegmentStripe =
                     new HashSet<>(oldSegmentStripeList.get(i).getLogServers());
             Set<String> newSegmentStripe =
@@ -287,8 +297,8 @@ public class LayoutBuilder {
             Set<String> differences = Sets.difference(
                     Sets.union(oldSegmentStripe, newSegmentStripe),
                     Sets.intersection(oldSegmentStripe, newSegmentStripe));
-            allowedUpdates = allowedUpdates - differences.size();
-            if (allowedUpdates < 0) {
+            updates = updates + differences.size();
+            if (updates > allowedUpdates) {
                 throw new LayoutModificationException(
                         "At most " + allowedUpdates + " log unit server update allowed.");
             }
@@ -303,6 +313,69 @@ public class LayoutBuilder {
         layoutSegmentList.remove(segmentIndex - 1);
         layoutSegmentList.add(segmentIndex - 1, mergedSegment);
         return this;
+    }
+
+    /**
+     * Merges the specified segment and the segment before this.
+     * No addition or removal of stripes are allowed.
+     * Only 1 log unit server addition/removal allowed between segments.
+     *
+     * @param segmentIndex Segment to merge.
+     *
+     * @return this builder
+     */
+    public LayoutBuilder mergePreviousSegment(int segmentIndex) {
+        return mergePreviousSegmentInternal(segmentIndex, true, 1);
+    }
+
+    /**
+     * Helper function attempts to merge specific segment and the segment before it.
+     * If an exception happens, leave layout unmodified.
+     * No addition or removal of stripes are allowed.
+     *
+     * @param segmentIndex Segment to merge.
+     * @param allowNonidenticalStripes Allow segments with nonidentical stripes to merge.
+     * @param allowedUpdates Number of allowed server addition/removal between segments, if allow nonidentical stripes.
+     *
+     * @return this builder
+     */
+    public LayoutBuilder attemptMergePreviousSegmentInternal(int segmentIndex, boolean allowNonidenticalStripes,
+                                                     int allowedUpdates) {
+        try {
+            return mergePreviousSegmentInternal(segmentIndex, allowNonidenticalStripes, allowedUpdates);
+        } catch (LayoutModificationException le) {
+            log.info("attemptMergePreviousSegment: " + le.getMessage());
+            return this;
+        }
+    }
+
+    /**
+     * Attempts merging the specified segment and the segment before this.
+     * No addition or removal of stripes are allowed.
+     * No log unit server addition/removal allowed between segments.
+     *
+     * @param segmentIndex Segment to merge.
+     *
+     * @return this builder
+     */
+    public LayoutBuilder attemptMergePreviousSegment(int segmentIndex) {
+        return attemptMergePreviousSegmentInternal(segmentIndex, false, 0);
+    }
+
+    /**
+     * Coalesces the layout if adjacent segments could be merged.
+     * This method allows merging of two segments if two stripe sets are the same no matter the order of the stripes.
+     * (See Issue #1672)
+     * @return this builder
+     */
+    public LayoutBuilder mergeSegments() {
+        LayoutBuilder layoutBuilder = this;
+
+        for (int i = layout.getSegments().size() - 1; i >= 0; --i) {
+            layoutBuilder = layoutBuilder.attemptMergePreviousSegment(i);
+        }
+
+        return layoutBuilder;
     }
 
     /**

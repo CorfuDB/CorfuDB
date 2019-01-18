@@ -420,4 +420,57 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .assignResponsiveSequencerAsPrimary(Collections.singleton(SERVERS.ENDPOINT_0));
         layoutBuilder.build();
     }
+
+    /**
+     * Tests the modification of the layout by merging segments.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void checkSegmentMerge() throws Exception {
+
+        final long globalLogTail = 50L;
+
+        Layout originalLayout = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .setEnd(globalLogTail)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .buildSegment()
+                .setStart(globalLogTail)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        LayoutBuilder layoutBuilder = new LayoutBuilder(originalLayout);
+        LayoutBuilder newLayoutBuilder = layoutBuilder.mergeSegments();
+
+        // Expected layout
+        Layout expectedLayout = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .buildSegment()
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .build();
+
+        assertThat(newLayoutBuilder.build()).isEqualTo(expectedLayout);
+    }
 }
