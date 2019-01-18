@@ -368,8 +368,7 @@ public class ManagementViewTest extends AbstractViewTest {
      * @throws Exception
      */
     @Test
-    public void handleTransientFailure()
-            throws Exception {
+    public void handleTransientFailure() throws Exception {
         // Boolean flag turned to true when the MANAGEMENT_FAILURE_DETECTED message
         // is sent by the Management client to its server.
         final Semaphore failureDetected = new Semaphore(2, true);
@@ -408,8 +407,7 @@ public class ManagementViewTest extends AbstractViewTest {
 
         failureDetected.acquire(2);
 
-        // Only allow SERVERS.PORT_0 to manage failures.
-        // Prevent the other servers from handling failures.
+        log.info("Only allow SERVERS.PORT_0 to manage failures. Prevent the other servers from handling failures.");
         TestRule testRule = new TestRule()
                 .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.SET_EPOCH)
                         || corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED))
@@ -417,21 +415,26 @@ public class ManagementViewTest extends AbstractViewTest {
 
         addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
                 SERVERS.ENDPOINT_1, testRule);
+        addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_2, testRule);
         addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
                 SERVERS.ENDPOINT_2, testRule);
+        addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_1, testRule);
 
         // PART 1.
-        // Prevent ENDPOINT_1 from sealing.
+        log.info("Prevent ENDPOINT_1 from sealing.");
         addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
                 SERVERS.ENDPOINT_1, new TestRule()
                         .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.SET_EPOCH))
                         .drop());
-        // Simulate ENDPOINT_2 failure from ENDPOINT_0 (only Management Server)
+
+        log.info("Simulate ENDPOINT_2 failure from ENDPOINT_0 (only Management Server)");
         addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
                 SERVERS.ENDPOINT_2, new TestRule().always().drop());
 
-        // Adding a rule on SERVERS.PORT_1 to toggle the flag when it sends the
-        // MANAGEMENT_FAILURE_DETECTED message.
+        log.info("Adding a rule on SERVERS.PORT_1 to toggle the flag when " +
+                "it sends the MANAGEMENT_FAILURE_DETECTED message.");
         addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
                 new TestRule().matches(corfuMsg -> {
                     if (corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)) {
@@ -440,7 +443,7 @@ public class ManagementViewTest extends AbstractViewTest {
                     return true;
                 }));
 
-        // Go ahead when sealing of ENDPOINT_0 takes place.
+        log.info("Go ahead when sealing of ENDPOINT_0 takes place.");
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             if (getServerRouter(SERVERS.PORT_0).getServerEpoch() == 2L) {
                 failureDetected.release();
@@ -457,8 +460,8 @@ public class ManagementViewTest extends AbstractViewTest {
                         corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED))
                         .drop());
 
-        // Assert that only a partial seal was successful.
-        // ENDPOINT_0 sealed. ENDPOINT_1 & ENDPOINT_2 not sealed.
+        log.info("Assert that only a partial seal was successful. " +
+                "ENDPOINT_0 sealed. ENDPOINT_1 & ENDPOINT_2 not sealed.");
         assertThat(getServerRouter(SERVERS.PORT_0).getServerEpoch()).isEqualTo(2L);
         assertThat(getServerRouter(SERVERS.PORT_1).getServerEpoch()).isEqualTo(1L);
         assertThat(getServerRouter(SERVERS.PORT_2).getServerEpoch()).isEqualTo(1L);
@@ -467,11 +470,11 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(getLayoutServer(SERVERS.PORT_2).getCurrentLayout().getEpoch()).isEqualTo(1L);
 
         // PART 2.
-        // Simulate normal operations for all servers and clients.
+        log.info("Simulate normal operations for all servers and clients.");
         clearClientRules(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
 
         // PART 3.
-        // Allow management server to detect partial seal and correct this issue.
+        log.info("Allow management server to detect partial seal and correct this issue.");
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             // Assert successful seal of all servers.
@@ -1681,14 +1684,19 @@ public class ManagementViewTest extends AbstractViewTest {
         clearClientRules(managementRuntime1);
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
-            if (corfuRuntime.getLayoutView().getLayout().getEpoch() == layout2.getEpoch()) {
+            log.info("Wait for epochs equality between two nodes");
+
+            Layout firstLayout = corfuRuntime.getLayoutView().getLayout();
+            if (firstLayout.getEpoch() == layout2.getEpoch()) {
                 break;
             }
+            log.info("First layout:\n{},\nsecond layout:\n{}", firstLayout, layout2);
+
             corfuRuntime.invalidateLayout();
             Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
         }
-        // Assert that the DetectionWorker threads are freed from the deadlock and are able to fill
-        // up the layout slot and stabilize the cluster.
+        log.info("Assert that the DetectionWorker threads are freed from the deadlock and are able " +
+                "to fill up the layout slot and stabilize the cluster.");
         assertThat(corfuRuntime.getLayoutView().getLayout().getEpoch())
                 .isEqualTo(layout2.getEpoch());
 

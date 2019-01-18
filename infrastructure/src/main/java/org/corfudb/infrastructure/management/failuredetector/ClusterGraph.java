@@ -91,7 +91,6 @@ public class ClusterGraph {
     /**
      * Get a decision maker node to detect a failure. It must have:
      * - highest number of successful connections in the graph
-     * - quorum of connected nodes to be able to make a decision (to make a node failed)
      *
      * @return sorted set of nodes
      */
@@ -105,13 +104,7 @@ public class ClusterGraph {
             return Optional.empty();
         }
 
-        int quorum = graph.size() / 2 + 1;
         NodeRank first = nodes.first();
-
-        if (first.getNumConnections() < quorum) {
-            log.error("No quorum to detect failed servers. Graph: {}, decision maker candidate: {}", this, first);
-            return Optional.empty();
-        }
 
         log.trace("Decision maker has found: {}, all node ranks: {}", first, nodes);
         return Optional.of(first);
