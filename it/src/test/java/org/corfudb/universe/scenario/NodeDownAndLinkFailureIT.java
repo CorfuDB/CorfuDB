@@ -53,9 +53,8 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
 
                 // Stop server2 and wait for layout's unresponsive servers to change
                 server2.stop(Duration.ofSeconds(10));
-                waitForUnresponsiveServersChange(size -> size == 1, corfuClient);
-
-                assertThat(corfuClient.getLayout().getUnresponsiveServers()).containsExactly(server2.getEndpoint());
+                waitForLayoutChange(layout -> layout.getUnresponsiveServers()
+                        .equals(Collections.singletonList(server2.getEndpoint())), corfuClient);
 
                 // Create link failure between server0 and server1
                 // After this, cluster becomes unavailable.
@@ -69,8 +68,6 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
                 String serverToKick = Collections.max(Arrays.asList(server0.getEndpoint(), server1.getEndpoint()));
                 waitForLayoutChange(layout -> layout.getUnresponsiveServers().equals(
                         Collections.singletonList(serverToKick)), corfuClient);
-
-                assertThat(corfuClient.getLayout().getUnresponsiveServers()).containsExactly(serverToKick);
 
                 // Cluster status should be DEGRADED after one node is marked unresponsive
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
