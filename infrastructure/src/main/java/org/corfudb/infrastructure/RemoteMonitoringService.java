@@ -311,13 +311,7 @@ public class RemoteMonitoringService implements MonitoringService {
             }
 
             // Analyze the poll report and trigger failure handler if needed.
-            boolean failure = handleFailure(pollReport);
-
-            //If a failure is detected (which means we have updated a layout)
-            // then don't try to heal anything, wait for next iteration.
-            if (failure) {
-                return;
-            }
+            handleFailure(pollReport);
 
             handleSequencer(pollReport, serverContext.copyManagementLayout());
             handleHealing(pollReport, serverContext.copyManagementLayout());

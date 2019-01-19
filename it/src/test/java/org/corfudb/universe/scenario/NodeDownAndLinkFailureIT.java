@@ -5,14 +5,18 @@ import static org.corfudb.universe.scenario.ScenarioUtils.waitForNextEpoch;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
+import static org.junit.Assert.assertEquals;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.view.ClusterStatusReport;
+import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
+import org.corfudb.util.Sleep;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -58,6 +62,7 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
                 waitForNextEpoch(corfuClient, currEpoch + 1);
                 assertThat(corfuClient.getLayout().getUnresponsiveServers()).containsExactly(server2.getEndpoint());
                 currEpoch++;
+                Layout currLayout = corfuClient.getLayout();
 
                 // Create link failure between server0 and server1
                 // After this, cluster becomes unavailable.
@@ -74,6 +79,15 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
                 String serverToKick = Collections.max(Arrays.asList(server0.getEndpoint(), server1.getEndpoint()));
 
                 log.info("Wait until epoch is updated two times");
+                waitForNextEpoch(corfuClient, currEpoch + 1);
+                Layout nextLayout = corfuClient.getLayout();
+                assertThat(nextLayout.getUnresponsiveServers())
+                        .as("Incorrect unresponsive servers: %s.\n prev layout:\n%s\nnext layout:\n%s",
+                                nextLayout.getUnresponsiveServers(), currLayout, nextLayout
+                        )
+                        .containsExactlyInAnyOrder(server1.getEndpoint(), server2.getEndpoint());
+                currEpoch++;
+
                 waitForNextEpoch(corfuClient, currEpoch + 2);
                 assertThat(corfuClient.getLayout().getUnresponsiveServers())
                         .as("Incorrect unresponsive servers: %s", corfuClient.getLayout().getUnresponsiveServers())
@@ -100,13 +114,13 @@ public class NodeDownAndLinkFailureIT extends GenericIntegrationTest {
 
                 final Duration sleepDuration = Duration.ofSeconds(1);
                 // Verify cluster status is STABLE
-                /*clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
+                ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
                 while (!clusterStatusReport.getClusterStatus().equals(ClusterStatus.STABLE)) {
                     clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
                     Sleep.sleepUninterruptibly(sleepDuration);
                 }
                 assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
-                */
+
 
                 // Verify data path working fine
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {

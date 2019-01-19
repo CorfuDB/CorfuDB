@@ -119,9 +119,12 @@ public class ManagementServer extends AbstractServer {
                 .build();
 
         // Creating a management agent.
+        ClusterState defaultView = ClusterState.builder()
+                .nodes(ImmutableMap.of())
+                .build();
         clusterContext =  ClusterStateContext.builder()
                 .counter(counter)
-                .clusterView(new AtomicReference<>(ClusterState.builder().nodes(ImmutableMap.of()).build()))
+                .clusterView(new AtomicReference<>(defaultView))
                 .build();
 
         managementAgent = new ManagementAgent(corfuRuntime, serverContext, clusterContext, failureDetector);
@@ -356,7 +359,7 @@ public class ManagementServer extends AbstractServer {
     public void handleNodeStateRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         NodeState nodeState = clusterContext.getClusterView()
                 .getNode(serverContext.getLocalEndpoint())
-                .orElseGet(this::buildNodeState);
+                .orElseGet(this::buildDefaultNodeState);
 
         r.sendResponse(ctx, msg, CorfuMsgType.NODE_STATE_RESPONSE.payloadMsg(nodeState));
     }
@@ -367,7 +370,7 @@ public class ManagementServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.FAILURE_DETECTOR_METRICS_RESPONSE.payloadMsg(metrics));
     }
 
-    private NodeState buildNodeState() {
+    private NodeState buildDefaultNodeState() {
         log.info("Management server: {}, not ready yet, return default NodeState, current cluster view: {}",
                 serverContext.getLocalEndpoint(), clusterContext.getClusterView());
 

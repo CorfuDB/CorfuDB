@@ -494,6 +494,11 @@ public class ServerContext implements AutoCloseable {
     }
 
     public synchronized void saveFailureDetectorMetrics(FailureDetectorMetrics detector) {
+        boolean enabled = Boolean.parseBoolean(System.getProperty("corfu.failuredetector", Boolean.FALSE.toString()));
+        if (!enabled){
+            return;
+        }
+
         dataStore.put(
                 FailureDetectorMetrics.class,
                 PREFIX_FAILURE_DETECTOR,
@@ -503,6 +508,11 @@ public class ServerContext implements AutoCloseable {
     }
 
     public FailureDetectorMetrics getFailureDetectorMetrics() {
+        boolean enabled = Boolean.parseBoolean(System.getProperty("corfu.failuredetector", Boolean.FALSE.toString()));
+        if(!enabled){
+            return getDefaultFailureDetectorMetric(getManagementLayout());
+        }
+
         FailureDetectorMetrics failureMetrics = dataStore.get(
                 FailureDetectorMetrics.class, PREFIX_FAILURE_DETECTOR, String.valueOf(getManagementLayout().getEpoch())
         );
@@ -510,15 +520,19 @@ public class ServerContext implements AutoCloseable {
         if (failureMetrics == null){
             Layout layout = getManagementLayout();
 
-            return FailureDetectorMetrics.builder()
-                    .localNode(getLocalEndpoint())
-                    .layout(layout.getLayoutServers())
-                    .unresponsiveNodes(layout.getUnresponsiveServers())
-                    .epoch(layout.getEpoch())
-                    .build();
+            return getDefaultFailureDetectorMetric(layout);
         }
 
         return failureMetrics;
+    }
+
+    private FailureDetectorMetrics getDefaultFailureDetectorMetric(Layout layout) {
+        return FailureDetectorMetrics.builder()
+                .localNode(getLocalEndpoint())
+                .layout(layout.getLayoutServers())
+                .unresponsiveNodes(layout.getUnresponsiveServers())
+                .epoch(layout.getEpoch())
+                .build();
     }
 
     /**

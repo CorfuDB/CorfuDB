@@ -1,11 +1,15 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import lombok.Builder;
 import lombok.Builder.Default;
@@ -40,4 +44,8 @@ public class PollReport {
     private final boolean currentLayoutSlotUnFilled = false;
     @NonNull
     private final ClusterState clusterState;
+
+    public ImmutableSet<String> getAllConnectedNodes() {
+        return Sets.union(connectedNodes, wrongEpochs.keySet()).immutableCopy();
+    }
 }
