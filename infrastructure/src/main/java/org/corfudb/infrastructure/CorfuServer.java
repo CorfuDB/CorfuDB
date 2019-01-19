@@ -140,7 +140,7 @@ public class CorfuServer {
                     + "              The read/write batch size used for data transfer operations [default: 100].\n"
                     + " -R <retention>, --metadata-retention=<retention>                         "
                     + "              Maximum number of system reconfigurations (i.e. layouts)    "
-                    + "retained for debugging purposes [default: 100].\n"
+                    + "retained for debugging purposes [default: 1000].\n"
                     + " -p <seconds>, --compact=<seconds>                                        "
                     + "              The rate the log unit should compact entries (find the,\n"
                     + "                                                                          "
