@@ -104,23 +104,6 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
     }
 
     /**
-     * Trim an address from the log.
-     *
-     * @param address log address to trim
-     * @param epoch   Epoch at which the trim operation is received.
-     */
-    public void trim(@Nonnull long address, @Nonnull long epoch) {
-        try {
-            CompletableFuture<Void> cf = new CompletableFuture();
-            operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.TRIM,
-                    address, null, epoch, null, cf));
-            cf.get();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    /**
      * Trim addresses from log up to a prefix.
      *
      * @param address prefix address to trim to (inclusive)
@@ -250,8 +233,8 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                     processed++;
                     lastOp = currOp;
                 } else if (currOp.getEpoch() != sealEpoch) {
-                    log.warn("batchWriteProcessor: wrong epoch on {} msg, seal epoch is {}",
-                            currOp.getType(), currOp.getEpoch());
+                    log.warn("batchWriteProcessor: wrong epoch on {} msg, seal epoch is {}, and msg epoch is {}",
+                            currOp.getType(), sealEpoch, currOp.getEpoch());
                     currOp.setException(new WrongEpochException(sealEpoch));
                     res.add(currOp);
                     processed++;
@@ -259,10 +242,6 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                 } else {
                     try {
                         switch (currOp.getType()) {
-                            case TRIM:
-                                streamLog.trim(currOp.getAddress());
-                                res.add(currOp);
-                                break;
                             case PREFIX_TRIM:
                                 streamLog.prefixTrim(currOp.getAddress());
                                 res.add(currOp);

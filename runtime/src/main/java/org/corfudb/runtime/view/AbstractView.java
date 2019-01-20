@@ -153,7 +153,7 @@ public abstract class AbstractView {
                     throw re;
                 }
                 if (rethrowAllExceptions) {
-                    throw new RuntimeException(re);
+                    throw re;
                 }
             }
 

@@ -238,7 +238,7 @@ public class ManagementViewTest extends AbstractViewTest {
             failureDetector.setInitPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             failureDetector.setPeriodDelta(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             failureDetector.setMaxPeriodDuration(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-            failureDetector.setInterIterationInterval(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            failureDetector.setInitialPollInterval(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
 
             HealingDetector healingDetector = (HealingDetector) getManagementServer(port)
                     .getManagementAgent()
