@@ -16,6 +16,7 @@ import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.collections.StringIndexer;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.util.serializer.ISerializer;
@@ -361,11 +362,11 @@ public class FastObjectLoaderTest extends AbstractViewTest {
     @Test
     public void canFindTailsWithFailedCheckpoint() throws Exception {
         CorfuRuntime rt1 = getDefaultRuntime();
-
-        Map<String, String> map = Helpers.createMap("Map1", rt1);
+        String streamName = "Map1";
+        Map<String, String> map = Helpers.createMap(streamName, rt1);
         map.put("k1", "v1");
 
-        UUID stream1 = CorfuRuntime.getStreamID("Map1");
+        UUID stream1 = CorfuRuntime.getStreamID(streamName);
 
         CheckpointWriter cpw = new CheckpointWriter(getDefaultRuntime(), stream1,
                 "author", (SMRMap) map);
@@ -373,9 +374,13 @@ public class FastObjectLoaderTest extends AbstractViewTest {
                 .type(TransactionType.SNAPSHOT)
                 .build()
                 .begin();
+        Token snapshot = TransactionalContext
+                .getCurrentContext()
+                .getSnapshotTimestamp();
+        Token streamTail = getDefaultRuntime().getSequencerView().query(stream1).getToken();
         try {
-            cpw.startCheckpoint();
-            cpw.appendObjectState();
+            cpw.startCheckpoint(snapshot, streamTail.getSequence());
+            cpw.appendObjectState(map.entrySet());
         } finally {
             getDefaultRuntime().getObjectsView().TXEnd();
         }
