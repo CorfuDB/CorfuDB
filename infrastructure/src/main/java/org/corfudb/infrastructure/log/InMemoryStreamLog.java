@@ -111,6 +111,11 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     @Override
+    public void persistCommittedAddress(){
+        //no-op
+    }
+
+    @Override
     public void sync(boolean force){
         //no-op
     }

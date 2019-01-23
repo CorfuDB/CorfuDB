@@ -211,6 +211,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                     if (currOp == null || processed == BATCH_SIZE
                             || currOp == BatchWriterOperation.SHUTDOWN) {
                         streamLog.sync(sync);
+                        streamLog.persistCommittedAddress();
                         log.trace("Sync'd {} writes", processed);
 
                         for (BatchWriterOperation operation : res) {
@@ -226,6 +227,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
                 } else if (currOp == BatchWriterOperation.SHUTDOWN) {
                     log.trace("Shutting down the write processor");
                     streamLog.sync(true);
+                    streamLog.persistCommittedAddress();
                     break;
                 } else if (currOp.getType() == Type.SEAL && currOp.getEpoch() >= sealEpoch) {
                     sealEpoch = currOp.getEpoch();

@@ -60,6 +60,11 @@ public interface StreamLog {
     long getTrimMark();
 
     /**
+     * Persist the committed address. This effectively acts as a journal.
+     */
+    void persistCommittedAddress();
+
+    /**
      * Sync the stream log file to secondary storage.
      *
      * @param force force data to secondary storage if true

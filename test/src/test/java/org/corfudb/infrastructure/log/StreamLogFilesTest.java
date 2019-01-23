@@ -1,8 +1,9 @@
 package org.corfudb.infrastructure.log;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
+import static org.corfudb.infrastructure.log.StreamLogFiles.BEGINNING_OF_FILE_OFFSET;
 import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
 
 import io.netty.buffer.ByteBuf;
@@ -21,6 +22,7 @@ import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.Metadata;
+import org.corfudb.infrastructure.DataStore;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -31,7 +33,6 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
-
 
 /**
  * Created by maithem on 11/2/16.
@@ -301,24 +302,52 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
                 .isInstanceOf(RuntimeException.class);
     }
 
+    private int getLogEntrySize(long address, LogData logData) {
+        Types.LogEntry logEntry = StreamLogFiles.getLogEntry(address, logData);
+        ByteBuffer record = StreamLogFiles.getByteBuffer(
+                StreamLogFiles.getMetadata(logEntry), logEntry);
+        return record.remaining();
+    }
+
+    private int segmentHeaderSize() {
+        Types.LogHeader header = Types.LogHeader.newBuilder()
+                .setVersion(0)
+                .setVerifyChecksum(true)
+                .build();
+        return StreamLogFiles.getByteBufferWithMetaData(header).remaining();
+    }
+
     @Test
     public void testStreamLogDataCorruption() throws Exception {
         // This test manipulates a log file directly and manipulates
         // log records by overwriting some parts of the record simulating
         // different data corruption scenarios
         String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
-        StreamLog log = new StreamLogFiles(getContext(), false);
-        ByteBuf b = Unpooled.buffer();
-        byte[] streamEntry = "Payload".getBytes();
-        Serializers.CORFU.serialize(streamEntry, b);
-        // Write to two segments
-        long address0 = 0;
-        long address1 = StreamLogFiles.RECORDS_PER_LOG_FILE + 1L;
-        log.append(address0, new LogData(DataType.DATA, b));
-        log.append(address1, new LogData(DataType.DATA, b));
+        DataStore dataStore = new DataStore(getContext().getServerConfig(), string -> {});
+        final long commitedAddressSegment2 = 1000L;
+        dataStore.put(Long.class, ServerContext.PREFIX_LOGUNIT,
+                ServerContext.ADDRESS_JOURNAL, commitedAddressSegment2);
 
-        assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
-        log.close();
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
+        ByteBuf b = Unpooled.buffer();
+        final byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        // Write to two segments        log = new StreamLogFiles(getContext(), false);
+        final long address0_0 = 0;
+        final long address0_1 = address0_0 + 1;
+        final long address0_2 = address0_1 + 1;
+
+        final long address1_0 = StreamLogFiles.RECORDS_PER_LOG_FILE + 1L;
+        final long address1_1 = address1_0 + 1;
+
+        final LogData sampleEntry = new LogData(DataType.DATA, b);
+        log.append(address0_0, sampleEntry);
+        log.append(address0_1, sampleEntry);
+        log.append(address0_2, sampleEntry);
+
+        log.append(address1_0, sampleEntry);
+        log.append(address1_1, sampleEntry);
+        assertThat(log.read(address0_0).getPayload(null)).isEqualTo(streamEntry);
 
         final int OVERWRITE_BYTES = 4;
 
@@ -327,22 +356,66 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         String logFilePath2 = logDir + File.separator + 1 + ".log";
         RandomAccessFile file1 = new RandomAccessFile(logFilePath1, "rw");
         RandomAccessFile file2 = new RandomAccessFile(logFilePath2, "rw");
-        ByteBuffer metaDataBuf = ByteBuffer.allocate(METADATA_SIZE);
-        file1.getChannel().read(metaDataBuf);
-        metaDataBuf.flip();
 
-        Metadata metadata = Metadata.parseFrom(metaDataBuf.array());
-
-        final int offset = METADATA_SIZE + metadata.getLength() + OVERWRITE_BYTES;
-
-        // Corrupt metadata in the second segment
-        file2.seek(offset);
+        // Corrupt data in the second log entry in the second segment.
+        final int dataOffset1_1 = segmentHeaderSize() +
+                getLogEntrySize(address1_0, sampleEntry) +
+                getLogEntrySize(address1_1, sampleEntry) - 4;
+        file2.seek(dataOffset1_1);
         file2.writeInt(OVERWRITE_BYTES);
-        file2.close();
+        log = new StreamLogFiles(getContext(), false);
+        assertThat(log.getTails().getLogTail()).isEqualTo(address1_0);
 
-        assertThatThrownBy(() -> new StreamLogFiles(getContext(), false))
+        // Corrupt metadata in the second log entry in the second segment.
+        final int metadataOffset1_1 = segmentHeaderSize() +
+                getLogEntrySize(address1_0, sampleEntry) + 4;
+        file2.seek(metadataOffset1_1);
+        file2.writeInt(OVERWRITE_BYTES);
+        log = new StreamLogFiles(getContext(), false);
+        assertThat(log.getTails().getLogTail()).isEqualTo(address1_0);
+
+        // Corrupt metadata in the first log entry in the second segment.
+        final int metadataOffset1_0 = segmentHeaderSize() + 4;
+        file2.seek(metadataOffset1_0);
+        file2.writeInt(OVERWRITE_BYTES);
+        log = new StreamLogFiles(getContext(), false);
+        assertThat(log.getTails().getLogTail()).isEqualTo(address0_2);
+
+        // Assert that the log has been trimmed on a partial write.
+        log.append(address1_1, sampleEntry);
+        assertThat(log.getTails().getLogTail()).isEqualTo(address1_1);
+
+        // Make sure the above condition is also true for restarts.
+        log = new StreamLogFiles(getContext(), false);
+        assertThat(log.getTails().getLogTail()).isEqualTo(address1_1);
+
+        // Corrupt the checksum in the second segment header.
+        final int segmentHeaderCheckSum1 = segmentHeaderSize() - 4;
+        file2.seek(segmentHeaderCheckSum1);
+        file2.writeInt(OVERWRITE_BYTES);
+        log = new StreamLogFiles(getContext(), false);
+        assertThat(log.getTails().getLogTail()).isEqualTo(address0_2);
+
+        // Corrupt the second segment header.
+        final int segmentHeader1 = BEGINNING_OF_FILE_OFFSET;
+        file2.seek(segmentHeader1);
+        file2.writeInt(OVERWRITE_BYTES);
+        log = new StreamLogFiles(getContext(), false);
+        assertThat(log.getTails().getLogTail()).isEqualTo(address0_2);
+
+        final long committedAddressSegment1 = 10L;
+        dataStore.put(Long.class, ServerContext.PREFIX_LOGUNIT, ServerContext.ADDRESS_JOURNAL, committedAddressSegment1);
+        log.close();
+
+        // Ensure that true data-corrutions are detected.
+        final long dataOffset0_5 = segmentHeaderSize() +
+                (address0_2 + 1) * getLogEntrySize(address0_2, sampleEntry) - 4;
+        file1.seek(dataOffset0_5);
+        file1.writeInt(OVERWRITE_BYTES);
+        assertThatCode(() -> new StreamLogFiles(getContext(), false))
                 .isInstanceOf(DataCorruptionException.class);
     }
+
 
     @Test
     public void multiThreadedReadWrite() throws Exception {

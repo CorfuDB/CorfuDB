@@ -13,6 +13,7 @@ import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
@@ -54,34 +55,35 @@ import java.util.regex.Pattern;
 @Slf4j
 public class ServerContext implements AutoCloseable {
     // Layout Server
-    private static final String PREFIX_EPOCH = "SERVER_EPOCH";
-    private static final String KEY_EPOCH = "CURRENT";
-    private static final String PREFIX_LAYOUT = "LAYOUT";
-    private static final String KEY_LAYOUT = "CURRENT";
-    private static final String PREFIX_PHASE_1 = "PHASE_1";
-    private static final String KEY_SUFFIX_PHASE_1 = "RANK";
-    private static final String PREFIX_PHASE_2 = "PHASE_2";
-    private static final String KEY_SUFFIX_PHASE_2 = "DATA";
-    private static final String PREFIX_LAYOUTS = "LAYOUTS";
+    public static final String PREFIX_EPOCH = "SERVER_EPOCH";
+    public static final String KEY_EPOCH = "CURRENT";
+    public static final String PREFIX_LAYOUT = "LAYOUT";
+    public static final String KEY_LAYOUT = "CURRENT";
+    public static final String PREFIX_PHASE_1 = "PHASE_1";
+    public static final String KEY_SUFFIX_PHASE_1 = "RANK";
+    public static final String PREFIX_PHASE_2 = "PHASE_2";
+    public static final String KEY_SUFFIX_PHASE_2 = "DATA";
+    public static final String PREFIX_LAYOUTS = "LAYOUTS";
 
     // Sequencer Server
-    private static final String PREFIX_TAIL_SEGMENT = "TAIL_SEGMENT";
-    private static final String KEY_TAIL_SEGMENT = "CURRENT";
-    private static final String PREFIX_STARTING_ADDRESS = "STARTING_ADDRESS";
-    private static final String KEY_STARTING_ADDRESS = "CURRENT";
-    private static final String KEY_SEQUENCER = "SEQUENCER";
-    private static final String PREFIX_SEQUENCER_EPOCH = "EPOCH";
+    public static final String PREFIX_TAIL_SEGMENT = "TAIL_SEGMENT";
+    public static final String KEY_TAIL_SEGMENT = "CURRENT";
+    public static final String PREFIX_STARTING_ADDRESS = "STARTING_ADDRESS";
+    public static final String KEY_STARTING_ADDRESS = "CURRENT";
+    public static final String KEY_SEQUENCER = "SEQUENCER";
+    public static final String PREFIX_SEQUENCER_EPOCH = "EPOCH";
 
     // Management Server
-    private static final String PREFIX_MANAGEMENT = "MANAGEMENT";
-    private static final String MANAGEMENT_LAYOUT = "LAYOUT";
+    public static final String PREFIX_MANAGEMENT = "MANAGEMENT";
+    public static final String MANAGEMENT_LAYOUT = "LAYOUT";
 
     // LogUnit Server
-    private static final String PREFIX_LOGUNIT = "LOGUNIT";
-    private static final String EPOCH_WATER_MARK = "EPOCH_WATER_MARK";
+    public static final String PREFIX_LOGUNIT = "LOGUNIT";
+    public static final String EPOCH_WATER_MARK = "EPOCH_WATER_MARK";
+    public static final String ADDRESS_JOURNAL = "ADDRESS_JOURNAL";
 
     /** The node Id, stored as a base64 string. */
-    private static final String NODE_ID = "NODE_ID";
+    public static final String NODE_ID = "NODE_ID";
 
     /**
      * various duration constants.
@@ -440,8 +442,28 @@ public class ServerContext implements AutoCloseable {
         return startingAddress == null ? 0 : startingAddress;
     }
 
+
     public void setStartingAddress(long startingAddress) {
         dataStore.put(Long.class, PREFIX_STARTING_ADDRESS, KEY_STARTING_ADDRESS, startingAddress);
+    }
+
+    /**
+     * Fetch last globally committed address for this server context.
+     *
+     * @return global address
+     */
+    public long getLastCommittedAddress() {
+        Long address = dataStore.get(Long.class, PREFIX_LOGUNIT, ADDRESS_JOURNAL);
+        return address == null ? Address.NON_ADDRESS : address;
+    }
+
+    /**
+     * Set the last globally committed address for this server context.
+     *
+     * @param address the address to set
+     */
+    public synchronized void setLastCommittedAddress(long address) {
+        dataStore.put(Long.class, PREFIX_LOGUNIT, ADDRESS_JOURNAL, address);
     }
 
     /**

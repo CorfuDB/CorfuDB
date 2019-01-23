@@ -1,6 +1,8 @@
 package org.corfudb.runtime.clients;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 import static org.junit.Assert.assertEquals;
@@ -8,6 +10,7 @@ import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 
+import com.google.common.collect.Range;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
@@ -20,7 +23,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.IntStream;
 
+import org.assertj.core.api.Assertions;
 import org.assertj.core.api.Condition;
 import org.corfudb.format.Types;
 import org.corfudb.infrastructure.AbstractServer;
@@ -399,35 +404,49 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
     @Test
     public void CorruptedDataReadThrowsException() throws Exception {
-        byte[] testString = "hello world".getBytes();
-        client.write(0, Collections.<UUID>emptySet(), null, testString, Collections.emptyMap()).get();
-        client.write(StreamLogFiles.RECORDS_PER_LOG_FILE + 1, Collections.<UUID>emptySet(), null,
-                testString, Collections.emptyMap()).get();
+        final String testString = "hello world";
+        final int max_address = 3;
+        for(int address = 0; address < max_address; address++) {
+            client.write(address, Collections.emptySet(), null,
+                    testString.getBytes(), Collections.emptyMap()).get();
+        }
+
+        // Should be valid.
+        assertThat(client.read(2).get().getAddresses().values().stream()
+                .findFirst().get().getData()).isNotNull();
 
         // Corrupt the written log entry
         String logDir = serverContext.getServerConfig().get("--log-path") + File.separator + "log";
         String logFilePath = logDir + File.separator + "0.log";
         RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
-
+        final long fileSize = file.length();
         ByteBuffer metaDataBuf = ByteBuffer.allocate(METADATA_SIZE);
         file.getChannel().read(metaDataBuf);
         metaDataBuf.flip();
 
-        LogUnitServer server2 = new LogUnitServer(serverContext);
         serverRouter.reset();
-        serverRouter.addServer(server2);
+        serverRouter.addServer(new LogUnitServer(serverContext));
 
-        Types.Metadata metadata = Types.Metadata.parseFrom(metaDataBuf.array());
-        final int fileOffset = Integer.BYTES + METADATA_SIZE + metadata.getLength() + 20;
         final int CORRUPT_BYTES = 0xFFFF;
-        file.seek(fileOffset); // Skip file header
+        final long corruptionOffset_4 = fileSize + 4;
+        file.seek(corruptionOffset_4);
+        file.writeInt(CORRUPT_BYTES);
+
+        // Should be detected as a partial write.
+        assertThat(client.read(max_address).get().getAddresses().values().stream()
+                .findFirst().get().getData()).isNull();
+
+        final long corruptionOffset_3 = fileSize - 4;
+        file.seek(corruptionOffset_3);
         file.writeInt(CORRUPT_BYTES);
         file.close();
 
-        // Try to read a corrupted log entry
-        assertThatThrownBy(() -> client.read(0).get())
-                .isInstanceOf(ExecutionException.class)
-                .hasCauseInstanceOf(DataCorruptionException.class);
+        // Should be detected as a corrupted log entry.
+        client.flushCache();
+        assertThatExceptionOfType(ExecutionException.class)
+                .isThrownBy(() -> client.read(2).get()
+                        .getAddresses().values().stream().findFirst().get().getData() )
+                .withCauseInstanceOf(DataCorruptionException.class);
     }
 
     /**
