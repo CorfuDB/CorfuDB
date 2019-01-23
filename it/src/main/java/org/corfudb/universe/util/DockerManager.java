@@ -134,8 +134,8 @@ public class DockerManager {
 
         try {
             ContainerInfo container = docker.inspectContainer(containerName);
-            if (container.state().running() || container.state().paused()) {
-                log.warn("The container `{}` already running, should stop before restart", container.name());
+            if (container.state().restarting()) {
+                log.warn("The container `{}` is already restarting", container.name());
                 return;
             }
             docker.restartContainer(containerName);

@@ -5,6 +5,7 @@ import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
+import org.apache.velocity.context.AbstractContext;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -16,6 +17,7 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
@@ -256,10 +258,14 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 .type(TransactionType.SNAPSHOT)
                 .build()
                 .begin();
+        Token snapshot = TransactionalContext
+                .getCurrentContext()
+                .getSnapshotTimestamp();
+        Token streamTail = r.getSequencerView().query(streamId).getToken();
         try {
-            long startAddress = cpw.startCheckpoint();
-            List<Long> continuationAddrs = cpw.appendObjectState();
-            long endAddress = cpw.finishCheckpoint();
+            cpw.startCheckpoint(snapshot, streamTail.getSequence());
+            cpw.appendObjectState(m.entrySet());
+            cpw.finishCheckpoint();
 
             // Instantiate new runtime & map.  All map entries (except 'just one more')
             // should have fudgeFactor added.
@@ -345,12 +351,27 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         });
 
         // Write all CP data + interleaving middle map updates
-        List<Long> addresses = cpw.appendCheckpoint();
-        long startAddress = addresses.get(0);
-        // Batch size is 1, so there should be 1 CONTINUATION
-        // entry for each of the numKeys put()s that we wrote
-        // for keyPrefixFirst.
-        assertThat(addresses.size()).isEqualTo(numKeys + 2);
+        Token globalTail = r.getSequencerView().query().getToken();
+        cpw.appendCheckpoint();
+        // First write after the current tail should be the start address entry
+        // for the checkpoint. Since regular writes are being interleaved with
+        // the checkpointer perfectly, the checkpointer will write on every other
+        // address (i.e. odd offsets from the base, startAddress)
+        long startAddress = globalTail.getSequence() + 1;
+        assertThat(r.getAddressSpaceView().read(startAddress).getCheckpointType())
+                .isEqualTo(CheckpointEntry.CheckpointEntryType.START);
+        final long contRecordffset = startAddress + 1;
+        assertThat(r.getAddressSpaceView().read(contRecordffset).getCheckpointType())
+                .isEqualTo(CheckpointEntry.CheckpointEntryType.CONTINUATION);
+        final long cont2Recordffset = startAddress + 3;
+        assertThat(r.getAddressSpaceView().read(cont2Recordffset).getCheckpointType())
+                .isEqualTo(CheckpointEntry.CheckpointEntryType.CONTINUATION);
+        final long cont3Recordffset = startAddress + 5;
+        assertThat(r.getAddressSpaceView().read(cont3Recordffset).getCheckpointType())
+                .isEqualTo(CheckpointEntry.CheckpointEntryType.CONTINUATION);
+        final long finishRecord1Offset = startAddress + 7;
+        assertThat(r.getAddressSpaceView().read(finishRecord1Offset).getCheckpointType())
+                .isEqualTo(CheckpointEntry.CheckpointEntryType.END);
 
         // Write last keys
         for (int i = 0; i < numKeys; i++) {
@@ -506,7 +527,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         mcw1.addMap((SMRMap) mB);
         long firstGlobalAddress1 = mcw1.appendCheckpoints(r, author).getSequence();
         assertThat(firstGlobalAddress1).isGreaterThan(-1);
-        assertThat(mcw1.getCheckpointLogAddresses().size()).isGreaterThan(-1);
 
         setRuntime();
         Map<String, Long> m2c = instantiateMap(streamNameA);

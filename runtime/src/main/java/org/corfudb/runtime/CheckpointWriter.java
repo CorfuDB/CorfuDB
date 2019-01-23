@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -16,6 +17,7 @@ import java.util.function.Function;
 import lombok.Getter;
 import lombok.Setter;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -37,6 +39,7 @@ import org.corfudb.util.serializer.Serializers;
  *  stream.
  *  TODO: Generalize to all SMR objects.
  */
+@Slf4j
 public class CheckpointWriter<T extends Map> {
     /** Metadata to be stored in the CP's 'dict' map.
      */
@@ -68,15 +71,6 @@ public class CheckpointWriter<T extends Map> {
     @Getter
     @Setter
     Function<Object,Object> valueMutator = (x) -> x;
-
-    /**
-     * This option optimizes the checkpoint encoding by grouping multiple
-     * map entries into a map instead of using a single smr entry per map
-     * entry.
-     */
-    @Getter
-    @Setter
-    boolean enablePutAll = false;
 
     /** Batch size: number of SMREntry in a single CONTINUATION.
      */
@@ -123,34 +117,29 @@ public class CheckpointWriter<T extends Map> {
         sv = rt.getStreamsView();
     }
 
-    /** Static method for all steps necessary to append checkpoint
-     *  data for a Corfu Map into its own stream.  An optimistic
-     *  read-only transaction is used to freeze the contents of
-     *  the map while the checkpoint entries are written to
-     *  the stream.
-     */
-    public List<Long> appendCheckpoint() {
-        return appendCheckpoint(cpw -> { });
-    }
-
     /**
-     * @param setupWriter Lambda to transform the new CheckPointWriter
-     *                    object (e.g., change batch size, etc) prior
-     *                    to use.
      * @return List of global addresses of all entries for this checkpoint.
      */
-    public List<Long> appendCheckpoint(Consumer<CheckpointWriter> setupWriter) {
-        List<Long> addrs = new ArrayList<>();
-        setupWriter.accept(this);
+    public Token appendCheckpoint() {
+        long start = System.currentTimeMillis();
         rt.getObjectsView().TXBuild()
                 .type(TransactionType.SNAPSHOT)
                 .build()
                 .begin();
         try {
-            addrs.add(startCheckpoint());
-            addrs.addAll(appendObjectState());
-            addrs.add(finishCheckpoint());
-            return addrs;
+            Token snapshot = TransactionalContext.getCurrentContext().getSnapshotTimestamp();
+            // A checkpoint writer will do two accesses one to obtain the object
+            // vlo version and to get a shallow copy of the entry set
+            log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshot);
+            ICorfuSMR<T> corfuObject = (ICorfuSMR<T>) this.map;
+            Set<Map.Entry> entries = this.map.entrySet();
+            long vloVersion = corfuObject.getCorfuSMRProxy().getVersion();
+            startCheckpoint(snapshot, vloVersion);
+            appendObjectState(entries);
+            finishCheckpoint();
+            log.info("appendCheckpoint: completed checkpoint for {} at snapshot {} in {} ms", streamId, snapshot,
+                    System.currentTimeMillis() - start);
+            return snapshot;
         } finally {
             rt.getObjectsView().TXEnd();
         }
@@ -163,18 +152,13 @@ public class CheckpointWriter<T extends Map> {
      *
      * @return Global log address of the START record.
      */
-    public long startCheckpoint() {
+    public void startCheckpoint(Token txnSnapshot, long vloVersion) {
         startTime = LocalDateTime.now();
-        AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
-        Token txBeginGlobalAddress = context.getSnapshotTimestamp();
-
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_TIME, startTime.toString());
-        // Need the actual object's version
-        ICorfuSMR<T> corfuObject = (ICorfuSMR<T>) this.map;
-        this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS,
-                Long.toString(corfuObject.getCorfuSMRProxy().getVersion()));
+        // VLO version at time of snapshot
+        this.mdkv.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(vloVersion));
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS,
-                Long.toString(txBeginGlobalAddress.getSequence()));
+                Long.toString(txnSnapshot.getSequence()));
 
         ImmutableMap<CheckpointEntry.CheckpointDictKey,String> mdkv =
                 ImmutableMap.copyOf(this.mdkv);
@@ -183,7 +167,6 @@ public class CheckpointWriter<T extends Map> {
         startAddress = nonCachedAppend(cp, checkpointStreamID);
 
         postAppendFunc.accept(cp, startAddress);
-        return startAddress;
     }
 
     /**
@@ -217,72 +200,31 @@ public class CheckpointWriter<T extends Map> {
      *
      * @return Stream of global log addresses of the CONTINUATION records written.
      */
-    public List<Long> appendObjectState() {
-        ImmutableMap<CheckpointEntry.CheckpointDictKey,String> mdkv =
+    public void appendObjectState(Set<Map.Entry> entries) {
+        ImmutableMap<CheckpointEntry.CheckpointDictKey, String> mdkv =
                 ImmutableMap.copyOf(this.mdkv);
-        List<Long> continuationAddresses = new ArrayList<>();
 
-        Class underlyingObjectType = ((CorfuCompileProxy<Map>)
-                ((ICorfuSMR<T>) map).getCorfuSMRProxy())
-                .getObjectType();
+        Iterable<List<Map.Entry>> partitions = Iterables.partition(entries, batchSize);
 
-        if (enablePutAll) {
-            Iterable<List<Map.Entry>> partitions = Iterables.partition(map.entrySet(), batchSize);
-
-            for (List<Map.Entry> partition : partitions) {
-                Map tmp = new HashMap();
-                for (Map.Entry entry : partition) {
-                    tmp.put(keyMutator.apply(entry.getKey()), valueMutator.apply(map.get(entry.getValue())));
-                }
-
-                SMREntry smrEntry = new SMREntry("putAll", new Object[]{tmp}, serializer
-                );
-                MultiSMREntry smrEntries = new MultiSMREntry();
-                smrEntries.addTo(smrEntry);
-
-                CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.CONTINUATION,
-                        author, checkpointId, streamId, mdkv, smrEntries);
-
-                long pos = nonCachedAppend(cp, checkpointStreamID);
-
-                postAppendFunc.accept(cp, pos);
-                continuationAddresses.add(pos);
-
-                numEntries++;
-                // CheckpointEntry::serialize() has a side-effect we use
-                // for an accurate count of serialized bytes of SRMEntries.
-                numBytes += cp.getSmrEntriesBytes();
+        for (List<Map.Entry> partition : partitions) {
+            MultiSMREntry smrEntries = new MultiSMREntry();
+            for (Map.Entry entry : partition) {
+                smrEntries.addTo(new SMREntry("put",
+                        new Object[]{keyMutator.apply(entry.getKey()),
+                                valueMutator.apply(entry.getValue())},
+                        serializer));
             }
-        } else {
 
-            Iterable<List<Map.Entry>> partitions = Iterables.partition(map.entrySet(), batchSize);
-
-            for (List<Map.Entry> partition : partitions) {
-                MultiSMREntry smrEntries = new MultiSMREntry();
-                for (Map.Entry entry : partition) {
-                    smrEntries.addTo(new SMREntry("put",
-                            new Object[]{keyMutator.apply(entry.getKey()),
-                                    valueMutator.apply(entry.getValue())},
-                            serializer));
-                }
-
-                CheckpointEntry cp = new CheckpointEntry(CheckpointEntry
-                        .CheckpointEntryType.CONTINUATION,
-                        author, checkpointId, streamId, mdkv, smrEntries);
-                long pos = nonCachedAppend(cp, checkpointStreamID);
-
-                postAppendFunc.accept(cp, pos);
-                continuationAddresses.add(pos);
-
-                numEntries++;
-                // CheckpointEntry::serialize() has a side-effect we use
-                // for an accurate count of serialized bytes of SRMEntries.
-                numBytes += cp.getSmrEntriesBytes();
-
-            }
+            CheckpointEntry cp = new CheckpointEntry(CheckpointEntry
+                    .CheckpointEntryType.CONTINUATION,
+                    author, checkpointId, streamId, mdkv, smrEntries);
+            long pos = nonCachedAppend(cp, checkpointStreamID);
+            postAppendFunc.accept(cp, pos);
+            numEntries++;
+            // CheckpointEntry::serialize() has a side-effect we use
+            // for an accurate count of serialized bytes of SRMEntries.
+            numBytes += cp.getSmrEntriesBytes();
         }
-
-        return continuationAddresses;
     }
 
     /** Append a checkpoint END record to this object's stream.
@@ -292,7 +234,7 @@ public class CheckpointWriter<T extends Map> {
      *
      * @return Global log address of the END record.
      */
-    public long finishCheckpoint() {
+    public void finishCheckpoint() {
         LocalDateTime endTime = LocalDateTime.now();
         mdkv.put(CheckpointEntry.CheckpointDictKey.END_TIME, endTime.toString());
         numEntries++;
@@ -306,6 +248,5 @@ public class CheckpointWriter<T extends Map> {
         endAddress = nonCachedAppend(cp, checkpointStreamID);
 
         postAppendFunc.accept(cp, endAddress);
-        return endAddress;
     }
 }
