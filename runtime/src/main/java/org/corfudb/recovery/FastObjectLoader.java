@@ -18,7 +18,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -78,6 +81,7 @@ public class FastObjectLoader {
     static final int NUMBER_OF_ATTEMPT = 3;
     static final int STATUS_UPDATE_PACE = 10000;
     static final int DEFAULT_NUMBER_OF_PENDING_FUTURES = 1_000;
+    static final int DEFAULT_NUMBER_OF_WORKERS = 4;
 
     private CorfuRuntime runtime;
 
@@ -92,6 +96,15 @@ public class FastObjectLoader {
     @Setter
     @Getter
     int numberOfPendingFutures = DEFAULT_NUMBER_OF_PENDING_FUTURES;
+
+    /**
+     * The number of threads to use for various operations
+     * related to building checkpoints and reading addresspace
+     * segmenents
+     */
+    @Getter
+    @Setter
+    int numOfWorkers = DEFAULT_NUMBER_OF_WORKERS;
 
     @Getter
     private long logHead = Address.NON_EXIST;
@@ -632,8 +645,13 @@ public class FastObjectLoader {
      *
      */
     private void resurrectCheckpoints() {
-        streamsMetaData.entrySet().parallelStream()
-                .forEach(entry -> {
+        ExecutorService executorService = Executors.newFixedThreadPool(numOfWorkers, new ThreadFactoryBuilder()
+                .setNameFormat("FastObjectLoaderResurrectCheckpointsThread-%d").build());
+        CompletableFuture[] cfs = new CompletableFuture[streamsMetaData.size()];
+        int i = 0;
+        try {
+            for (Map.Entry<UUID, StreamMetaData> entry : streamsMetaData.entrySet()) {
+                cfs[i++] = CompletableFuture.runAsync(() -> {
                     CheckPoint checkPoint = entry.getValue().getLatestCheckPoint();
                     if (checkPoint == null) {
                         log.info("resurrectCheckpoints[{}]: Truncated checkpoint for this stream",
@@ -645,7 +663,28 @@ public class FastObjectLoader {
                     for (long address : checkPoint.getAddresses()) {
                         updateCorfuObject(getLogData(runtime, loadInCache, address));
                     }
-                });
+                }, executorService);
+            }
+
+            executorService.shutdown();
+            // Since we call shutdown after pushing all tests into the executors its sufficient to rely
+            // awaitTermination to make sure that all checkpoints have been loaded
+            executorService.awaitTermination(timeoutInMinutesForLoading, TimeUnit.MINUTES);
+
+            // Waiting on all tasks to complete is not enough, therefore we need to make sure that
+            // all submitted tasks have completed successfully
+            for (CompletableFuture future : cfs) {
+                if (!future.isDone() || future.isCancelled() || future.isCompletedExceptionally()) {
+                    throw new FastObjectLoaderException("Failed to load checkpoints");
+                }
+            }
+
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new FastObjectLoaderException("Failed to resurrectCheckpoints");
+        } finally {
+            executorService.shutdownNow();
+        }
     }
 
     /**

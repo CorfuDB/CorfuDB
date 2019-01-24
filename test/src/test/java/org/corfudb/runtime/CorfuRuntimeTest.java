@@ -1,14 +1,14 @@
 package org.corfudb.runtime;
 
+import org.assertj.core.api.Assertions;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.TestRule;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
@@ -62,6 +62,19 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
         executeScheduled(PARAMETERS.CONCURRENCY_TWO, PARAMETERS.TIMEOUT_LONG);
 
+    }
+
+    /**
+     * Ensure that the interrupt flag is always set to true when throwing
+     * {@link UnrecoverableCorfuInterruptedError}
+     */
+    @Test
+    public void interruptedFlagSet() {
+        try {
+            throw new UnrecoverableCorfuInterruptedError(new InterruptedException());
+        } catch (UnrecoverableCorfuInterruptedError ok) {
+            Assertions.assertThat(Thread.currentThread().isInterrupted()).isTrue();
+        }
     }
 
     @Test

@@ -281,7 +281,6 @@ public class ManagementView extends AbstractView {
                     layout = nodeLayout;
                 }
             } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
                 throw new UnrecoverableCorfuInterruptedError(ie);
             } catch (ExecutionException ee) {
                 log.error("getClusterStatus: Error while fetching layout from {}.",

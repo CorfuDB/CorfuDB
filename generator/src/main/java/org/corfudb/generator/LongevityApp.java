@@ -5,6 +5,7 @@ import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -121,7 +122,7 @@ public class LongevityApp {
                 System.exit(1);
             }
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            throw new UnrecoverableCorfuInterruptedError(e);
         } finally {
             taskProducer.shutdownNow();
             checkpointer.shutdownNow();
@@ -131,8 +132,7 @@ public class LongevityApp {
             try {
                 checkpointHasFinished = checkpointer.awaitTermination(APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                exitStatus = 1;
+                throw new UnrecoverableCorfuInterruptedError(e);
             }
 
             exitStatus = checkpointHasFinished ? 0 : 1;
@@ -164,8 +164,7 @@ public class LongevityApp {
                 try {
                     operationQueue.put(current);
                 } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
+                    throw new UnrecoverableCorfuInterruptedError(e);
                 } catch (Exception e) {
                     log.error("operation error", e);
                 }
