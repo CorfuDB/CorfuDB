@@ -8,6 +8,9 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Iterables;
+import com.google.common.util.concurrent.UncheckedExecutionException;
+
+import io.netty.handler.timeout.TimeoutException;
 
 import java.time.Duration;
 import java.util.Comparator;
@@ -22,9 +25,6 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import com.google.common.util.concurrent.ExecutionError;
-import com.google.common.util.concurrent.UncheckedExecutionException;
-import io.netty.handler.timeout.TimeoutException;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -348,9 +348,12 @@ public class AddressSpaceView extends AbstractView {
                                     .flatMap(stripe -> stripe.getLogServers().stream())
                                     .map(e::getLogUnitClient)
                                     .map(client -> client.prefixTrim(address))
-                                    .forEach(CFUtils::getUninterruptibly);
-                            return null;    // No return value
-                        }, true);
+                                    .forEach(cf -> {CFUtils.getUninterruptibly(cf,
+                                            NetworkException.class, TimeoutException.class,
+                                            WrongEpochException.class);
+                                    });
+                            return null;
+                }, true);
                 // TODO(Maithem): trimCache should be epoch aware?
                 runtime.getSequencerView().trimCache(address.getSequence());
                 break;
@@ -358,6 +361,21 @@ public class AddressSpaceView extends AbstractView {
                 log.warn("prefixTrim: encountered a network error on try {}", x, e);
                 Duration retryRate = runtime.getParameters().getConnectionRetryRate();
                 Sleep.sleepUninterruptibly(retryRate);
+            } catch (WrongEpochException wee) {
+                long serverEpoch = wee.getCorrectEpoch();
+                // Retry if wrongEpochException corresponds to message epoch (only)
+                if (address.getEpoch() == serverEpoch) {
+                    long runtimeEpoch = runtime.getLayoutView().getLayout().getEpoch();
+                    log.warn("prefixTrim[{}]: wrongEpochException, runtime is in epoch {}, " +
+                            "while server is in epoch {}. Invalidate layout for this client " +
+                            "and retry, attempt: {}/{}", address, runtimeEpoch, serverEpoch, x+1, numRetries);
+                    runtime.invalidateLayout();
+                } else {
+                    // wrongEpochException corresponds to a stale trim address (prefix trim token on the wrong epoch)
+                    log.error("prefixTrim[{}]: stale prefix trim. Prefix trim on wrong epoch {}, " +
+                            "while server on epoch {}", address, address.getEpoch(), serverEpoch);
+                    throw wee;
+                }
             }
         }
     }

@@ -298,7 +298,7 @@ public abstract class AbstractQueuedStreamView extends
         if (prevAddress == null && Address.isAddress(context.minResolution)
                 || prevAddress != null && prevAddress <= context.minResolution) {
             context.globalPointer = prevAddress == null ? Address.NEVER_READ :
-                                                prevAddress - 1L;
+                    prevAddress - 1L;
 
             remainingUpTo(context.minResolution);
             context.minResolution = Address.NON_ADDRESS;
@@ -311,14 +311,31 @@ public abstract class AbstractQueuedStreamView extends
         // Clear the read queue, it may no longer be valid
         context.readQueue.clear();
 
-        // If still null, we're done.
-        if (prevAddress == null) {
+        if (prevAddress != null) {
+            log.trace("previous[{}]: updated read queue {}", this, context.readQueue);
+            // Update the global pointer
+            context.globalPointer = prevAddress;
+            return read(prevAddress);
+        }
+
+        if (context.checkpointSuccessId == null) {
+            // The stream hasn't been checkpointed and we need to
+            // move the stream pointer to an address before the first
+            // entry
+            log.trace("previous[{}]: reached the beginning of the stream resetting" +
+                    " the stream pointer to {}", this, Address.NON_ADDRESS);
+            context.globalPointer = Address.NON_ADDRESS;
             return null;
         }
-        log.trace("previous[{}]: updated read queue {}", this, context.readQueue);
-        // Update the global pointer
-        context.globalPointer = prevAddress;
-        return read(prevAddress);
+
+        if (context.resolvedQueue.first() == context.globalPointer) {
+            log.trace("previous[{}]: reached the beginning of the stream resetting" +
+                    " the stream pointer to checkpoint version {}", this, context.checkpointSuccessStartAddr);
+            context.globalPointer = context.checkpointSuccessStartAddr;
+            return null;
+        }
+
+        throw new IllegalStateException("The stream pointer seems to be corrupted!");
     }
 
 

@@ -142,8 +142,8 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("log write: global: {}, streams: {}, backpointers: {}", msg
-                .getPayload().getGlobalAddress(), msg.getPayload().getData().getBackpointerMap());
+        log.debug("log write: global: {}, streams: {}", msg.getPayload().getToken(),
+                msg.getPayload().getData().getBackpointerMap());
 
         try {
             LogData logData = (LogData) msg.getPayload().getData();
@@ -221,14 +221,6 @@ public class LogUnitServer extends AbstractServer {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_VALUE_ADOPTED.payloadMsg(e
                     .getReadResponse()));
         }
-    }
-
-    @ServerHandler(type = CorfuMsgType.TRIM)
-    private void trim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        TrimRequest req = msg.getPayload();
-        batchWriter.trim(req.getAddress().getSequence(), req.getAddress().getEpoch());
-        //TODO(Maithem): should we return an error if the write fails
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
     @ServerHandler(type = CorfuMsgType.PREFIX_TRIM)
