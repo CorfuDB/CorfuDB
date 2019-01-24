@@ -26,6 +26,7 @@ import org.corfudb.protocols.wireprotocol.orchestrator.Response;
 import org.corfudb.infrastructure.orchestrator.workflows.ForceRemoveWorkflow;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -262,7 +263,7 @@ public class Orchestrator {
             executor.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(), TimeUnit.SECONDS);
         } catch (InterruptedException ie) {
             log.debug("Orchestrator executor awaitTermination interrupted : {}", ie);
-            Thread.currentThread().interrupt();
+            throw new UnrecoverableCorfuInterruptedError(ie);
         }
         log.info("Orchestrator shutting down.");
     }
