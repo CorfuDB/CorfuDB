@@ -1,7 +1,6 @@
 package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
@@ -15,6 +14,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiFunction;
@@ -483,7 +484,7 @@ public class CorfuRuntime {
      * A list of known layout servers.
      */
     @Getter
-    private List<String> layoutServers;
+    private volatile List<String> layoutServers;
 
     /**
      * Node Router Pool.
@@ -512,6 +513,15 @@ public class CorfuRuntime {
      */
     @Getter
     private volatile boolean isShutdown = false;
+
+
+    /**
+     * This thread is used by fetchLayout to find a new layout in the system
+     */
+    final ExecutorService runtimeExecutor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder()
+            .setDaemon(true)
+            .setNameFormat("CorfuRuntime-%d")
+            .build());
 
     /**
      * Latest layout seen by the runtime.
@@ -678,6 +688,7 @@ public class CorfuRuntime {
         // Stopping async task from fetching layout.
         isShutdown = true;
         garbageCollector.stop();
+        runtimeExecutor.shutdownNow();
         if (layout != null) {
             try {
                 layout.cancel(true);
@@ -859,14 +870,14 @@ public class CorfuRuntime {
      * This future will continue retrying until it gets a layout.
      * If you need this completable future to fail, you should chain it with a timeout.
      *
-     * @param layoutServers Layout servers to fetch the layout from.
+     * @param servers Layout servers to fetch the layout from.
      * @return A completable future containing a layout.
      */
-    private CompletableFuture<Layout> fetchLayout(List<String> layoutServers) {
+    private CompletableFuture<Layout> fetchLayout(List<String> servers) {
 
         return CompletableFuture.supplyAsync(() -> {
 
-            List<String> layoutServersCopy = new ArrayList<>(layoutServers);
+            List<String> layoutServersCopy = new ArrayList<>(servers);
             parameters.getBeforeRpcHandler().run();
             int systemDownTriggerCounter = 0;
 
@@ -928,7 +939,7 @@ public class CorfuRuntime {
                     return null;
                 }
             }
-        });
+        }, runtimeExecutor);
     }
 
     @SuppressWarnings("unchecked")
