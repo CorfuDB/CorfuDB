@@ -167,7 +167,7 @@ public class ManagementView extends AbstractView {
      */
     private ClusterStatus getLogUnitServersClusterHealth(Layout layout,
                                                          Set<String> peerResponsiveNodes) {
-        // logUnitRedundancyStatus marks the cluster as degraded if any of the nodes is performing
+        // logUnitRedundancyStatus marks the cluster as DB_SYNCING if any of the nodes is performing
         // stateTransfer and is in process of achieving full redundancy.
         ClusterStatus logUnitRedundancyStatus = peerResponsiveNodes.stream()
                 .anyMatch(s -> getLogUnitNodeStatusInLayout(layout, s) == NodeStatus.DB_SYNCING)
@@ -539,6 +539,8 @@ public class ManagementView extends AbstractView {
             if (layout.getUnresponsiveServers().contains(endpoint)) {
                 nodeStatusMap.put(endpoint, NodeStatus.DOWN);
             } else if (layout.getSegments().size() != layout.getSegmentsForEndpoint(endpoint).size()) {
+                // Note: this is based on the assumption that all nodes in the layout are log unit servers
+                // (TODO) We can go ahead with this assumption, but in the future we should change this accordingly.
                 nodeStatusMap.put(endpoint, NodeStatus.DB_SYNCING);
             } else {
                 nodeStatusMap.put(endpoint, NodeStatus.UP);
