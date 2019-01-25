@@ -183,7 +183,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         client.prefixTrim(new Token(0L, address0));
         client.compact();
 
-        // For logunit cach flush
+        // For logunit cache flush
         LogUnitServer server2 = new LogUnitServer(serverContext);
         serverRouter.reset();
         serverRouter.addServer(server2);

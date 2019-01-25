@@ -1,14 +1,16 @@
 package org.corfudb.infrastructure.log;
 
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.AbstractCorfuTest;
-import org.junit.Test;
-
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.AbstractCorfuTest;
+import org.junit.Test;
 
 /**
  * Created by kspirov on 3/8/17.
@@ -153,7 +155,7 @@ public class MultiReadWriteLockTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void testWrongUnlocksOrderCatched()  {
+    public void testWrongUnlocksOrderCaught()  {
         MultiReadWriteLock locks = new MultiReadWriteLock();
         MultiReadWriteLock.AutoCloseableLock ignored1 = locks.acquireWriteLock(1l);
         MultiReadWriteLock.AutoCloseableLock ignored2 = locks.acquireReadLock(2l);
@@ -166,7 +168,7 @@ public class MultiReadWriteLockTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void testWrongUnlocksTypeCatched()  {
+    public void testWrongUnlocksTypeCaught()  {
         MultiReadWriteLock locks = new MultiReadWriteLock();
         MultiReadWriteLock.AutoCloseableLock ignored1 = locks.acquireWriteLock(1l);
         MultiReadWriteLock.AutoCloseableLock ignored2 = locks.acquireReadLock(1l);

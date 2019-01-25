@@ -1,11 +1,11 @@
 package org.corfudb.samples;
 
-import org.corfudb.runtime.collections.SMRMap;
-
 import java.util.Map;
 
+import org.corfudb.runtime.collections.SMRMap;
+
 /**
- * A write-only transaction is a normal transaction that has only object-mutator method invokations,
+ * A write-only transaction is a normal transaction that has only object-mutator method invocations,
  * and does not perform any object-accessor invocations.
  *
  * In the default (Optimistic) transaction isolation level, since it has no read-set,

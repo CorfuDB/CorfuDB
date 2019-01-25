@@ -15,7 +15,7 @@ import javax.security.auth.spi.LoginModule;
 /**
  * Created by sneginhal on 01/27/2017
  *
- * <p>Implementation of the plain text LoginMoodule.
+ * <p>Implementation of the plain text LoginModule.
  * http://docs.oracle.com/javase/8/docs/technotes/guides/security/jaas/JAASRefGuide.html
  */
 

@@ -10,7 +10,7 @@ import lombok.Setter;
 public class TrimmedException extends LogUnitException {
 
     /*
-     * This flag determins whether the operation that caused this exception
+     * This flag determines whether the operation that caused this exception
      * can retry or not.
      */
     @Getter

@@ -151,7 +151,7 @@ class TestClass extends AbstractViewTest {
 
 We provide a framework for controlled thread interleaving.
 To use this framework, we program a multi-step "task" using a sequence of calls to ```addTestStep()```. The test is run by invoking ```executeInterleaved```,
-specifying a task reptition count and a desired concurrency level.
+specifying a task repetition count and a desired concurrency level.
 The interleaving engine starts the specified number of threads and executes the desired number of task instances. Each thread executes one task at a time to completion,
 and then instantiates another. Each task is passed its index as parameter.
 Task steps on different thread are interleaved according to a schedule determined by a random number generator seeded by ```PARAMETERS.SEED```.

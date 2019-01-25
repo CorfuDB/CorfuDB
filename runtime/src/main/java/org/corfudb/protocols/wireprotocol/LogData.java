@@ -67,7 +67,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                         ByteBuf copyBuf = Unpooled.wrappedBuffer(data);
                         final Object actualValue =
                                 Serializers.CORFU.deserialize(copyBuf, runtime);
-                        // TODO: Remove circular dependency on logentry.
+                        // TODO: Remove circular dependency on logEntry.
                         if (actualValue instanceof LogEntry) {
                             ((LogEntry) actualValue).setEntry(this);
                             ((LogEntry) actualValue).setRuntime(runtime);

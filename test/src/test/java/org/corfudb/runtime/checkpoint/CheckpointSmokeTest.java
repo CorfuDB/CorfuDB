@@ -142,7 +142,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     /** Second smoke test, steps:
      *
      * 1. Put a few keys into an SMRMap "m" with prefix keyPrefixFirst.
-     * 2. Write a checkpoint (3 records totoal) into "m"'s stream.
+     * 2. Write a checkpoint (3 records total) into "m"'s stream.
      *    The SMREntry records in the checkpoint will *not* match
      *    the keys written by step #1.
      *    In between the 3 CP records, write some additional keys to "m"

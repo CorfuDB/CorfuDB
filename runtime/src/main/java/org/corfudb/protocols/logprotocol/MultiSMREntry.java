@@ -8,9 +8,9 @@ import java.util.List;
 import java.util.UUID;
 
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.Serializers;
@@ -19,7 +19,7 @@ import org.corfudb.util.serializer.Serializers;
 
 /**
  * This class captures a list of updates.
- * Its primary use case is to alow a single log entry to
+ * Its primary use case is to allow a single log entry to
  * hold a sequence of updates made by a transaction, which are applied atomically.
  */
 @Deprecated // TODO: Add replacement method that conforms to style

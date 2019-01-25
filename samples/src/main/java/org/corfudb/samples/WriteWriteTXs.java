@@ -1,14 +1,14 @@
 package org.corfudb.samples;
 
+import java.util.ArrayList;
+import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.corfudb.runtime.collections.ISMRMap;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.object.transactions.TransactionType;
-
-import java.util.ArrayList;
-import java.util.Random;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This class demonstrates transactions with write-write isolation level.
@@ -22,11 +22,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * By default, the snapshot time of a transaction is the time of its first object accessor.
  * Corfu supports explicitly designating snapshot time (a log offset, which is returned by object mutators).
  *
- * Below, the utilitiy method {@link WriteWriteTXs ::TXBegin()} illustrates how to replace TXBegin()
- * with a transasction-builder indicating write-write isolation.
+ * Below, the utility method {@link WriteWriteTXs ::TXBegin()} illustrates how to replace TXBegin()
+ * with a transaction-builder indicating write-write isolation.
  *
  * The utility method {@link WriteWriteTXs ::TXBegin(long snapTime)} illustrates how to additionally set
- * a transasction snapshot-time to a specific position.
+ * a transaction snapshot-time to a specific position.
  *
  * Created by dalia on 12/30/16.
  */
@@ -157,10 +157,10 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
      *   - NUM_BATCHES TX's
      *   - each TX performs BATCH_SZ operations, mixing R/W according to the specified ratio.
      *
-     * @param readPrecent ratio of reads (to 100)
+     * @param readPercent ratio of reads (to 100)
      */
     @SuppressWarnings({"checkstyle:printLine", "checkstyle:print"}) // Sample code
-    void mixedReadWriteLoad1(int threadNum, int readPrecent) {
+    void mixedReadWriteLoad1(int threadNum, int readPercent) {
         System.out.print("running mixedRWload1..");
         long startt = System.currentTimeMillis();
         AtomicInteger aborts = new AtomicInteger(0);
@@ -172,7 +172,7 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
             for (int j = 0; j < BATCH_SZ; j++) {
 
                 // perform random get()'s with probability 'readPercent/100'
-                if (rand.nextInt(TOTAL_PERCENT) < readPrecent) {
+                if (rand.nextInt(TOTAL_PERCENT) < readPercent) {
                     int r1 = rand.nextInt(numTasks);
                     int r2 = rand.nextInt(numTasks);
                     int r3 = rand.nextInt(numTasks);
@@ -212,20 +212,20 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
                 + ":   #aborts/#TXs: " + aborts.get() + "/" + numTasks);
     }
 
-    /**
-     * This is a similar workload to mixedReadWriteLoad1, with an important optimization.
-     *
-     * All the transactions indicate an explicit snapshot timestamp to read from.
-     * This prevents concurrent threads from flip-flopping between snapshots.
-     * In order to prevent a transaction from viewing stale snapshots, transactions touch the entries they get().
-     * This causes abort if a transaction get()'s an entry which is modified by another.
-     *
-     * @param readPrecent ratio of reads (to 100)
-     */
+//    /**
+//     * This is a similar workload to mixedReadWriteLoad1, with an important optimization.
+//     *
+//     * All the transactions indicate an explicit snapshot timestamp to read from.
+//     * This prevents concurrent threads from flip-flopping between snapshots.
+//     * In order to prevent a transaction from viewing stale snapshots, transactions touch the entries they get().
+//     * This causes abort if a transaction get()'s an entry which is modified by another.
+//     *
+//     * @param readPercent ratio of reads (to 100)
+//     */
     // This sample is currently not working, because snapshots for non read-only
     // transactions don't work.
     /*
-    void mixedReadWriteLoad2(int threadNum, int readPrecent) {
+    void mixedReadWriteLoad2(int threadNum, int readPercent) {
         System.out.print("running mixedRWload2..");
         long startt = System.currentTimeMillis();
         AtomicInteger aborts = new AtomicInteger(0);
@@ -243,7 +243,7 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
             for (int j = 0; j < BATCH_SZ; j++) {
 
                 // perform random get()'s with probability 'readPercent/100'
-                if (rand.nextInt(TOTAL_PERCENT) < readPrecent) {
+                if (rand.nextInt(TOTAL_PERCENT) < readPercent) {
                     int r1 = rand.nextInt(numTasks);
                     int r2 = rand.nextInt(numTasks);
                     int r3 = rand.nextInt(numTasks);
