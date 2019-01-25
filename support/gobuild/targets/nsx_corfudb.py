@@ -15,9 +15,6 @@ import specs.nsx_corfudb
 import specs.constants
 
 
-RELEASENAME = specs.constants.RELEASENAME
-MIRROR = specs.constants.UBUNTU_MIRROR
-APT_MIRROR = specs.constants.APT_MIRROR
 BUILDROOT = "%(buildroot)"
 BUILDNUMBER = "%(buildnumber)"
 DIST = "xenial_amd64"
@@ -128,20 +125,12 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
         })
 
         suite, arch = DIST.split("_")
-        components = "main restricted multiverse universe"
-        cmds = [
-            DebianHelper.apt_sources_clean(),
-            DebianHelper.apt_sources_add(MIRROR, suite, components=components),
-            DebianHelper.apt_sources_add(APT_MIRROR, "%s/%s/" % (suite, arch)),
-            DebianHelper.apt_sources_add(APT_MIRROR, "%s/all/" % suite),
-            DebianHelper.apt_update()
-            ]
-        cmd = "; ".join(cmds)
+        cmd = DebianHelper.setup_with_nsbu_repos(suite, chroot_dir)
         commands.append({
             "desc": "Setting up apt repositories",
             "root": BUILDROOT,
             "log": "gobuild_apt_update.log",
-            "command": ChrootHelper.chroot_cmd(cmd, chroot_dir),
+            "command": cmd,
             "env": self._GetEnvironment(hosttype)
         })
 
@@ -230,5 +219,11 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
             "change": specs.nsx_corfudb.NSX_BUILDENV_CLN,
             "buildtype": specs.nsx_corfudb.NSX_BUILDENV_BUILDTYPE,
             "files": specs.nsx_corfudb.NSX_BUILDENV_FILES
+        }
+        comps["nsbu-repos"] = {
+            "branch": specs.nsx_corfudb.NSBU_REPOS_BRANCH,
+            "change": specs.nsx_corfudb.NSBU_REPOS_CLN,
+            "buildtype": specs.nsx_corfudb.NSBU_REPOS_BUILDTYPE,
+            "files": specs.nsx_corfudb.NSBU_REPOS_FILES
         }
         return comps
