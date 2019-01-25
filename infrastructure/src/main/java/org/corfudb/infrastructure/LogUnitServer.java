@@ -167,6 +167,26 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
+    /**
+     * Services incoming range write calls.
+     */
+    @ServerHandler(type = CorfuMsgType.RANGE_WRITE)
+    public void rangeWrite(CorfuPayloadMsg<RangeWriteMsg> msg,
+                            ChannelHandlerContext ctx, IServerRouter r) {
+        try {
+            List<LogData> entries = msg.getPayload().getEntries();
+            batchWriter.bulkWrite(entries, msg.getEpoch());
+            r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
+        } catch (OverwriteException ex) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE.payloadMsg(ex.getOverWriteCause().getId()));
+        } catch (DataOutrankedException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
+        } catch (ValueAdoptedException e) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_VALUE_ADOPTED.payloadMsg(e
+                    .getReadResponse()));
+        }
+    }
+
     @ServerHandler(type = CorfuMsgType.READ_REQUEST)
     private void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("read: {}", msg.getPayload().getRange());
@@ -261,18 +281,6 @@ public class LogUnitServer extends AbstractServer {
             log.error("Encountered error while flushing cache {}", e);
         }
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-    }
-
-
-    /**
-     * Services incoming range write calls.
-     */
-    @ServerHandler(type = CorfuMsgType.RANGE_WRITE)
-    private void rangeWrite(CorfuPayloadMsg<RangeWriteMsg> msg,
-                                  ChannelHandlerContext ctx, IServerRouter r) {
-        List<LogData> entries = msg.getPayload().getEntries();
-        batchWriter.bulkWrite(entries, msg.getEpoch());
-        r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
     }
 
     /**

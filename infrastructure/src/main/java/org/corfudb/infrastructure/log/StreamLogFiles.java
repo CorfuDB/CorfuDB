@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log;
 import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Sets;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import com.google.protobuf.AbstractMessage;
@@ -52,6 +53,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
 
 
 /**
@@ -952,6 +954,26 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         LogData last = entries.get(entries.size() - 1);
         SegmentHandle firstSh = getSegmentHandleForAddress(first.getGlobalAddress());
         SegmentHandle lastSh = getSegmentHandleForAddress(last.getGlobalAddress());
+
+        // Extract all addresses associated with the provided write range.
+        Set<Long> pendingWrites = range.stream()
+                .map(entry -> entry.getGlobalAddress()).collect(Collectors.toSet());
+
+        // Input validation.
+        if (pendingWrites.size() != range.size()) {
+            log.error("Input validation failed! Received entries are not unique.");
+            throw new OverwriteException(OverwriteCause.SAME_DATA);
+        }
+
+        // See if the provided range overlaps with any of the previously written entries.
+        Set<Long> segOneOverlap = Sets.intersection(pendingWrites,
+                firstSh.getKnownAddresses().keySet());
+        Set<Long> segTwoOverlap = Sets.intersection(pendingWrites,
+                lastSh.getKnownAddresses().keySet());
+        if (!segOneOverlap.isEmpty() || !segTwoOverlap.isEmpty()) {
+            log.error("Overlapping addresses detected: {}, {}", segOneOverlap, segTwoOverlap);
+            throw new OverwriteException(OverwriteCause.SAME_DATA);
+        }
 
         List<LogData> segOneEntries = new ArrayList<>();
         List<LogData> segTwoEntries = new ArrayList<>();

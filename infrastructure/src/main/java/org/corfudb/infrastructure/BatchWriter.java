@@ -93,6 +93,7 @@ public class BatchWriter<K, V> implements CacheWriter<K, V>, AutoCloseable {
             CompletableFuture<Void> cf = new CompletableFuture();
             operationsQueue.add(new BatchWriterOperation(BatchWriterOperation.Type.RANGE_WRITE,
                     null, null, epoch, entries, cf));
+            cf.get();
         } catch (Exception e) {
             log.trace("Write Exception {}", e);
             if (e.getCause() instanceof RuntimeException) {
