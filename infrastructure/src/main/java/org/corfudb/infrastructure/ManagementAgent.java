@@ -12,6 +12,7 @@ import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.HealingDetector;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -149,7 +150,7 @@ public class ManagementAgent {
 
         } catch (InterruptedException e) {
             log.error("initializationTask: InitializationTask interrupted.");
-            Thread.currentThread().interrupt();
+            throw new UnrecoverableCorfuInterruptedError(e);
         } catch (Exception e) {
             log.error("initializationTask: Error in initializationTask.", e);
             throw new UnrecoverableCorfuError(e);
@@ -180,7 +181,7 @@ public class ManagementAgent {
             initializationTaskThread.join(ServerContext.SHUTDOWN_TIMER.toMillis());
         } catch (InterruptedException ie) {
             log.error("initializationTask interrupted : {}", ie);
-            Thread.currentThread().interrupt();
+            throw new UnrecoverableCorfuInterruptedError(ie);
         }
 
         log.info("Management Agent shutting down.");

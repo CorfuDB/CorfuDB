@@ -117,7 +117,6 @@ public enum Sleep {
             final long ms = toMillis(duration);
             Thread.sleep(ms, excessNanos(duration, ms));
         } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
             throw new UnrecoverableCorfuInterruptedError(
                 "Uninterruptible sleep interrupted", ie);
         }

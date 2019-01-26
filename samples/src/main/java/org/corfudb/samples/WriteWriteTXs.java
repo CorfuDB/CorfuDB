@@ -88,7 +88,6 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
             try {
                 th.join(THREAD_TIMEOUT);
             } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
                 System.out.println("Thread timeout!");
                 throw new UnrecoverableCorfuInterruptedError(ie);
             }
@@ -108,7 +107,6 @@ public class WriteWriteTXs extends BaseCorfuAppUtils {
             try {
                 th.join(THREAD_TIMEOUT);
             } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
                 System.out.println("Thread timeout!");
                 throw new UnrecoverableCorfuInterruptedError(ie);
             }

@@ -4,6 +4,7 @@ import com.codahale.metrics.Timer;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 
@@ -61,7 +62,7 @@ public class StreamLogCompaction {
             scheduler.awaitTermination(shutdownTimer.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException ie) {
             log.debug("Stream log compaction, awaitTermination interrupted : {}", ie);
-            Thread.currentThread().interrupt();
+            throw new UnrecoverableCorfuInterruptedError(ie);
         }
     }
 }
