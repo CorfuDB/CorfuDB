@@ -252,7 +252,7 @@ public class CorfuRuntime {
          * shutdown abruptly without terminating the connection properly.
          */
         @Default
-        int idleConnectionTimeout = 30;
+        int idleConnectionTimeout = 7;
 
         /**
          * The period at which the client sends keep-alive messages to the
@@ -260,7 +260,7 @@ public class CorfuRuntime {
          * for the whole period.
          */
         @Default
-        int keepAlivePeriod = 10;
+        int keepAlivePeriod = 2;
 
         /**
          * {@link Duration} before connections timeout.
