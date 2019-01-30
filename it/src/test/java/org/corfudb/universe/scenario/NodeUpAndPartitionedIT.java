@@ -2,10 +2,11 @@ package org.corfudb.universe.scenario;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForNextEpoch;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.universe.GenericIntegrationTest;
@@ -17,7 +18,9 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.List;
 
+@Slf4j
 public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
 
     /**
@@ -40,7 +43,7 @@ public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
      * 5) Verify that the restarted unresponsive node in step 3 gets healed
      * 6) Verify cluster status and data path
      */
-    @Test(timeout = 300000)
+    @Test(timeout = 600000)
     public void nodeUpAndPartitionedTest() {
         getScenario().describe((fixture, testCase) -> {
             CorfuCluster corfuCluster = universe.getGroup(fixture.getCorfuCluster().getName());
@@ -58,12 +61,14 @@ public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
                 CorfuServer server1 = corfuCluster.getServerByIndex(1);
                 CorfuServer server2 = corfuCluster.getServerByIndex(2);
 
-                // Stop server1
-                server1.stop(Duration.ofSeconds(10));
-                waitForUnresponsiveServersChange(size -> size == 1, corfuClient);
+                long currEpoch = corfuClient.getLayout().getEpoch();
 
-                assertThat(corfuClient.getLayout().getUnresponsiveServers())
-                        .containsExactly(server1.getEndpoint());
+                log.info("Stop server1");
+                server1.stop(Duration.ofSeconds(10));
+                waitForNextEpoch(corfuClient, currEpoch + 1);
+                assertThat(corfuClient.getLayout().getUnresponsiveServers()).hasSize(1);
+                assertThat(corfuClient.getLayout().getUnresponsiveServers()).containsExactly(server1.getEndpoint());
+                currEpoch++;
 
                 // Partition the responsive server0 from both unresponsive server1
                 // and responsive server2 and reconnect server 1. Wait for layout's unresponsive
@@ -72,20 +77,21 @@ public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
                 // can still connect to two nodes, write to table so system down handler will not be triggered.
                 server0.disconnect(Arrays.asList(server1, server2));
                 server1.start();
-                waitForLayoutChange(layout -> layout.getUnresponsiveServers()
-                                                    .contains(server0.getEndpoint()),
-                                    corfuClient);
+                waitForLayoutChange(l -> {
+                    List<String> unresponsive = l.getUnresponsiveServers();
+                    return unresponsive.size() == 1 && unresponsive.contains(server0.getEndpoint());
+                }, corfuClient);
 
                 // Verify server0 is unresponsive
-                assertThat(corfuClient.getLayout().getUnresponsiveServers())
-                        .contains(server0.getEndpoint());
-
-                // Verify unresponsive server1 gets healed
-                waitForUnresponsiveServersChange(size -> size == 1, corfuClient);
-                assertThat(corfuClient.getLayout().getUnresponsiveServers())
+                List<String> unresponsiveServers = corfuClient.getLayout().getUnresponsiveServers();
+                assertThat(unresponsiveServers)
+                        .as("Wrong number of unresponsive servers: %s", unresponsiveServers)
                         .containsExactly(server0.getEndpoint());
-                assertThat(corfuClient.getLayout().getAllActiveServers())
-                        .contains(server1.getEndpoint());
+                currEpoch += 2;
+
+                log.info("Verify unresponsive server1 gets healed");
+                assertThat(corfuClient.getLayout().getUnresponsiveServers()).containsExactly(server0.getEndpoint());
+                assertThat(corfuClient.getLayout().getAllActiveServers()).contains(server1.getEndpoint());
 
                 // Verify cluster status. Cluster status should be DEGRADED after one node is
                 // marked unresponsive
@@ -96,9 +102,10 @@ public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
 
                 // Heal all the link failures
                 server0.reconnect(Arrays.asList(server1, server2));
-                waitForUnresponsiveServersChange(size -> size == 0, corfuClient);
+                waitForNextEpoch(corfuClient, currEpoch + 1);
+                currEpoch++;
 
-                final Duration sleepDuration = Duration.ofSeconds(1);
+                Duration sleepDuration = Duration.ofSeconds(1);
                 // Verify cluster status is STABLE
                 clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
                 while (!clusterStatusReport.getClusterStatus().equals(ClusterStatusReport.ClusterStatus.STABLE)) {
@@ -107,11 +114,15 @@ public class NodeUpAndPartitionedIT extends GenericIntegrationTest {
                 }
                 assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatusReport.ClusterStatus.STABLE);
 
+                ScenarioUtils.waitForClusterUp(table, "0");
+
                 // Verify data path is working fine
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }
             });
+
+            corfuClient.shutdown();
         });
     }
 }

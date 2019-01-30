@@ -63,6 +63,7 @@ public class OneLinkFailureIT extends GenericIntegrationTest {
                 // TODO: add node status check after we redefine NodeStatus semantics
 
                 // Verify data path working fine
+                ScenarioUtils.waitUninterruptibly(Duration.ofSeconds(10));
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }
@@ -85,6 +86,8 @@ public class OneLinkFailureIT extends GenericIntegrationTest {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }
             });
+
+            corfuClient.shutdown();
         });
     }
 }

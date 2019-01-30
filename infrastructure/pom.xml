@@ -5,7 +5,7 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.2.2.20190129002306.6574</version>
+        <version>0.2.2.20190130054849.530</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 

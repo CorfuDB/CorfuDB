@@ -26,6 +26,10 @@ public class Scenario<D, T extends Fixture<D>> {
         this.fixture = fixture;
     }
 
+    public D getFixtureData(){
+        return fixture.data();
+    }
+
     /**
      * Create a new scenario base on a fixture
      *

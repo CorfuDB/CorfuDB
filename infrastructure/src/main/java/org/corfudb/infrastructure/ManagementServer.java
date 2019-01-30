@@ -1,15 +1,25 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterStateContext;
+import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
+import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
+import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
+import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
+import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeConnectivityType;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
@@ -23,6 +33,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 
@@ -54,7 +65,7 @@ public class ManagementServer extends AbstractServer {
     private IReconfigurationHandlerPolicy failureHandlerPolicy;
     private IReconfigurationHandlerPolicy healingPolicy;
 
-    private final ClusterStateContext clusterStateContext = new ClusterStateContext();
+    private final ClusterStateContext clusterContext;
 
     @Getter
     private final ManagementAgent managementAgent;
@@ -100,10 +111,21 @@ public class ManagementServer extends AbstractServer {
         this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();
         this.healingPolicy = serverContext.getHealingHandlerPolicy();
 
+        HeartbeatCounter counter = new HeartbeatCounter();
+
+        FailureDetector failureDetector = new FailureDetector(counter, serverContext.getLocalEndpoint());
+
         // Creating a management agent.
-        this.managementAgent = new ManagementAgent(corfuRuntime, serverContext, clusterStateContext);
-        // Creating an orchestrator.
-        this.orchestrator = new Orchestrator(corfuRuntime, serverContext);
+        ClusterState defaultView = ClusterState.builder()
+                .nodes(ImmutableMap.of())
+                .build();
+        clusterContext =  ClusterStateContext.builder()
+                .counter(counter)
+                .clusterView(new AtomicReference<>(defaultView))
+                .build();
+
+        managementAgent = new ManagementAgent(corfuRuntime, serverContext, clusterContext, failureDetector);
+        orchestrator = new Orchestrator(corfuRuntime, serverContext);
     }
 
     /**
@@ -328,7 +350,57 @@ public class ManagementServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.HEARTBEAT_REQUEST)
     public void handleHeartbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         r.sendResponse(ctx, msg, CorfuMsgType.HEARTBEAT_RESPONSE
-                .payloadMsg(clusterStateContext.getClusterState()));
+                .payloadMsg(clusterContext.getClusterView()));
+    }
+
+    /**
+     * Returns current {@link NodeState} provided by failure detector.
+     * The detector periodically collects current cluster state and saves it in {@link ClusterStateContext}.
+     * Servers periodically inspect cluster and ask each other of the connectivity/node state
+     * (connection status between current node and all the others).
+     * The node provides its current node state.
+     *
+     * Default NodeState has been providing unless the node is not bootstrapped.
+     * Failure detector updates ClusterNodeState by current state then current NodeState can be provided to other nodes.
+     *
+     * @param msg corfu message containing NODE_STATE_REQUEST
+     * @param ctx netty ChannelHandlerContext
+     * @param r server router
+     */
+    @ServerHandler(type = CorfuMsgType.NODE_STATE_REQUEST)
+    public void handleNodeStateRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        NodeState nodeState = clusterContext.getClusterView()
+                .getNode(serverContext.getLocalEndpoint())
+                .orElseGet(this::buildDefaultNodeState);
+
+        r.sendResponse(ctx, msg, CorfuMsgType.NODE_STATE_RESPONSE.payloadMsg(nodeState));
+    }
+
+    @ServerHandler(type = CorfuMsgType.FAILURE_DETECTOR_METRICS_REQUEST)
+    public void handleFailureDetectorMetricsRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        FailureDetectorMetrics metrics = serverContext.getFailureDetectorMetrics();
+        r.sendResponse(ctx, msg, CorfuMsgType.FAILURE_DETECTOR_METRICS_RESPONSE.payloadMsg(metrics));
+    }
+
+    /**
+     * Build default {@link NodeState} nodes state to provide current connectivity status.
+     *
+     * @return node state
+     */
+    private NodeState buildDefaultNodeState() {
+        log.info("Management server: {}, not ready yet, return default NodeState, current cluster view: {}",
+                serverContext.getLocalEndpoint(), clusterContext.getClusterView());
+
+        long epoch = Layout.INVALID_EPOCH;
+        Layout layout = serverContext.copyManagementLayout();
+        if (layout != null){
+            epoch = layout.getEpoch();
+        }
+
+        //Node state is connected by default.
+        //We believe two servers are connected if another servers is able to send command NODE_STATE_REQUEST
+        // and get a response. If we are able to provide NodeState we believe that the state is CONNECTED.
+        return NodeState.getNotReadyNodeState(localEndpoint, epoch, clusterContext.getCounter().get());
     }
 
     /**
