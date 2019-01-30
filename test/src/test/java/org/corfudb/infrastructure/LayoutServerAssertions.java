@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import org.assertj.core.api.AbstractAssert;
+import org.corfudb.protocols.wireprotocol.Rank;
 import org.corfudb.runtime.view.Layout;
 
 /**

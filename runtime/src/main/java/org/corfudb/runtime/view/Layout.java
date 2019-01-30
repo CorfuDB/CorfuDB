@@ -4,6 +4,7 @@ import static java.util.Objects.requireNonNull;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import io.netty.buffer.ByteBuf;
 import lombok.Data;
 import lombok.Getter;
 import lombok.NonNull;
@@ -24,6 +25,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -615,5 +617,19 @@ public class Layout {
         public LayoutStripe(@NonNull List<String> logServers) {
             this.logServers = logServers;
         }
+    }
+
+    public void serialize(ByteBuf buf) {
+        String jsonStr = asJSONString();
+        buf.writeInt(jsonStr.length());
+        buf.writeBytes(jsonStr.getBytes());
+    }
+
+    public static Layout deserialize(ByteBuf buf) {
+        int strLen = buf.readInt();
+        byte[] bytes = new byte[strLen];
+        buf.readBytes(bytes);
+        String jsonStr = new String(bytes);
+        return parser.fromJson(jsonStr, Layout.class);
     }
 }

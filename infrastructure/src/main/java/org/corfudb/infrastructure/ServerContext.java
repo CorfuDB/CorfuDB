@@ -11,6 +11,9 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
+
+import org.corfudb.protocols.wireprotocol.Phase2Data;
+import org.corfudb.protocols.wireprotocol.Rank;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -403,6 +406,7 @@ public class ServerContext implements AutoCloseable {
      */
     public synchronized long getServerEpoch() {
         Long epoch = dataStore.get(Long.class, PREFIX_EPOCH, KEY_EPOCH);
+        //TODO(Maithem): shouldn't this be an invalid epoch
         return epoch == null ? 0 : epoch;
     }
 
@@ -438,6 +442,11 @@ public class ServerContext implements AutoCloseable {
     public Phase2Data getPhase2Data() {
         return dataStore.get(Phase2Data.class, PREFIX_PHASE_2,
                 getServerEpoch() + KEY_SUFFIX_PHASE_2);
+    }
+
+    public Phase2Data getSecondLastPhase2Data() {
+        return dataStore.get(Phase2Data.class, PREFIX_PHASE_2,
+                getServerEpoch() - 1 + KEY_SUFFIX_PHASE_2);
     }
 
     public void setPhase2Data(Phase2Data phase2Data) {

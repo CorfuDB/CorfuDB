@@ -1,7 +1,8 @@
-package org.corfudb.infrastructure;
+package org.corfudb.protocols.wireprotocol;
 
 import java.util.UUID;
 
+import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -17,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 @AllArgsConstructor
 @EqualsAndHashCode
 public class Rank {
+
     @Getter
     Long rank;
     @Getter
@@ -37,5 +39,18 @@ public class Rank {
             return true;
         }
         return this.rank.compareTo(other.rank) <= 0;
+    }
+
+    public void serialize(ByteBuf buf) {
+        buf.writeLong(rank);
+        buf.writeLong(clientId.getLeastSignificantBits());
+        buf.writeLong(clientId.getMostSignificantBits());
+    }
+
+    public static Rank deserialize(ByteBuf buf) {
+        long rank = buf.readLong();
+        long lsb = buf.readLong();
+        long msb = buf.readLong();
+        return new Rank(rank, new UUID(msb, lsb));
     }
 }

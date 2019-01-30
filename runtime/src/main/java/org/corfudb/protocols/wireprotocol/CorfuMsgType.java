@@ -40,7 +40,8 @@ public enum CorfuMsgType {
     LAYOUT_PROPOSE(14, new TypeToken<CorfuPayloadMsg<LayoutProposeRequest>>(){}, true),
     LAYOUT_PROPOSE_REJECT(15, new TypeToken<CorfuPayloadMsg<LayoutProposeResponse>>(){}),
     LAYOUT_COMMITTED(16, new TypeToken<CorfuPayloadMsg<LayoutCommittedRequest>>(){}, true),
-    LAYOUT_QUERY(17, new TypeToken<CorfuPayloadMsg<Long>>(){}),
+    LAYOUT_QUERY(17, TypeToken.of(CorfuMsg.class), true),
+    LAYOUT_QUERY_RESPONSE(85, new TypeToken<CorfuPayloadMsg<LayoutQueryResponse>>(){}, true),
     LAYOUT_BOOTSTRAP(18, new TypeToken<CorfuPayloadMsg<LayoutBootstrapRequest>>(){}, true),
     LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), true),
 

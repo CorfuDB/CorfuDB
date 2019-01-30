@@ -4,12 +4,14 @@ import java.util.concurrent.CompletableFuture;
 
 import javax.annotation.Nonnull;
 
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
 import org.corfudb.protocols.wireprotocol.LayoutCommittedRequest;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
+import org.corfudb.protocols.wireprotocol.LayoutQueryResponse;
 import org.corfudb.runtime.view.Layout;
 
 /**
@@ -98,6 +100,10 @@ public class LayoutClient extends AbstractClient {
     public CompletableFuture<Boolean> force(@Nonnull Layout layout) {
         return sendMessageWithFuture(CorfuMsgType.LAYOUT_COMMITTED
                 .payloadMsg(new LayoutCommittedRequest(true, layout.getEpoch(), layout)));
+    }
+
+    public CompletableFuture<LayoutQueryResponse> query() {
+        return sendMessageWithFuture(CorfuMsgType.LAYOUT_QUERY.msg());
     }
 
 }

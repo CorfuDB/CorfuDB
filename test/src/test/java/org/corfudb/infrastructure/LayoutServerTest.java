@@ -15,6 +15,7 @@ import org.corfudb.protocols.wireprotocol.LayoutCommittedRequest;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
 import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
+import org.corfudb.protocols.wireprotocol.Rank;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 

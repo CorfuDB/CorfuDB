@@ -8,11 +8,13 @@ import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayload;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.LayoutMsg;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.protocols.wireprotocol.LayoutProposeResponse;
+import org.corfudb.protocols.wireprotocol.LayoutQueryResponse;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -83,5 +85,11 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
                                                  ChannelHandlerContext ctx, IClientRouter r)
             throws Exception {
         throw new AlreadyBootstrappedException();
+    }
+
+    @ClientHandler(type = CorfuMsgType.LAYOUT_QUERY_RESPONSE)
+    private static Object handleQueryResponse(CorfuPayloadMsg<LayoutQueryResponse> msg,
+                                                           ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
     }
 }

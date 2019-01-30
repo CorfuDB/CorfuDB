@@ -21,6 +21,9 @@ import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.protocols.wireprotocol.LayoutProposeResponse;
+import org.corfudb.protocols.wireprotocol.LayoutQueryResponse;
+import org.corfudb.protocols.wireprotocol.Phase2Data;
+import org.corfudb.protocols.wireprotocol.Rank;
 import org.corfudb.runtime.view.Layout;
 
 /**
@@ -126,6 +129,18 @@ public class LayoutServer extends AbstractServer {
             log.warn("handleMessageLayoutRequest: Message Epoch {} ahead of Server epoch {}",
                     epoch, serverEpoch);
         }
+    }
+
+    @ServerHandler(type = CorfuMsgType.LAYOUT_QUERY)
+    public synchronized void handleLayoutQueryRequest(CorfuMsg msg,
+                                                      ChannelHandlerContext ctx, IServerRouter r) {
+        long epoch = getServerEpoch();
+        Phase2Data p2d = getPhase2Data();
+        Phase2Data secondLastP2d = serverContext.getSecondLastPhase2Data();
+        //TODO(Maithem): rename layout_current to committed
+        Layout committed = getCurrentLayout();
+        LayoutQueryResponse resp = new LayoutQueryResponse(epoch, p2d, secondLastP2d, committed);
+        r.sendResponse(ctx, msg, CorfuMsgType.LAYOUT_QUERY_RESPONSE.payloadMsg(resp));
     }
 
     /**

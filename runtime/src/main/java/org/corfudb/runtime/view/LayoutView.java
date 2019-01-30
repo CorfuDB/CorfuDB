@@ -3,7 +3,12 @@ package org.corfudb.runtime.view;
 import static java.util.Arrays.stream;
 
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
@@ -13,6 +18,8 @@ import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
+import org.corfudb.protocols.wireprotocol.LayoutQueryResponse;
+import org.corfudb.protocols.wireprotocol.Phase2Data;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -324,5 +331,255 @@ public class LayoutView extends AbstractView {
 
             log.debug("committed: Successful responses={}, timeouts={}", responses, timeouts);
         }
+    }
+
+
+    /**
+     * Collect a majority of layout query responses.
+     *
+     * @param allResponses
+     * @return An array of successful layout query responses
+     */
+    LayoutQueryResponse[] getQuorumResp(CompletableFuture<LayoutQueryResponse>[] allResponses) {
+        LayoutQueryResponse[] respOk = Arrays.stream(allResponses)
+                .filter(f -> f.isDone() && !f.isCompletedExceptionally() && !f.isCancelled())
+                .toArray(LayoutQueryResponse[]::new);
+
+        if (respOk.length < (allResponses.length / 2) + 1) {
+            // quorum is not available
+            int reachable = respOk.length;
+            int required = (allResponses.length / 2) + 1;
+            throw new QuorumUnreachableException(reachable, required);
+        }
+
+        return respOk;
+    }
+
+    /**
+     * Attempts to find the majority epoch.
+     *
+     * @param responses query results of layout servers that responded
+     * @param majorityCount the majority
+     * @return possibly a majority epoch
+     */
+    Optional<Long> findMajorityEpoch(LayoutQueryResponse[] responses, int majorityCount) {
+        Map<Long, Integer> epochCounts = new HashMap<>();
+        for (LayoutQueryResponse resp : responses) {
+            int freq = epochCounts.getOrDefault(resp.getCurrentEpoch(), 0) + 1;
+            if (freq >= majorityCount) {
+                return Optional.of(resp.getCurrentEpoch());
+            }
+            epochCounts.put(resp.getCurrentEpoch(), freq);
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * This method is used to discover the latest committed layout. It is to be used
+     * when there exists no majority epoch[1] on the layout servers and we need to complete sealing.
+     * Since we we only seal committed layouts, then the latest epoch and the last successfully
+     * committed layout's epoch can only differ by one[2]. Because of [1] and [2] a phase2 layout
+     * majority has to exist (except for the case the min replication factor is violated).
+     *
+     * @param responses
+     * @param majorityCount majority quorum size
+     * @return The latest known committed layout
+     */
+    Optional<Layout> findLastCommittedLayout(LayoutQueryResponse[] responses, int majorityCount) {
+        Map<Phase2Data, Integer> phase2DataCounts = new HashMap<>();
+        for (LayoutQueryResponse resp : responses) {
+
+            if (resp.getCurrentEpochPhase2().isPresent()) {
+                int freq = phase2DataCounts.getOrDefault(resp.getCurrentEpochPhase2().get(), 0) + 1;
+                if (freq >= majorityCount) {
+                    return Optional.of(resp.getCurrentEpochPhase2().get().getLayout());
+                }
+                phase2DataCounts.put(resp.getCurrentEpochPhase2().get(), freq);
+            }
+
+            if (resp.getLastEpochPhase2().isPresent()) {
+                int freq = phase2DataCounts.getOrDefault(resp.getLastEpochPhase2().get(), 0) + 1;
+                if (freq >= majorityCount) {
+                    return Optional.of(resp.getLastEpochPhase2().get().getLayout());
+                }
+                phase2DataCounts.put(resp.getLastEpochPhase2().get(), freq);
+            }
+        }
+
+        // TODO(Maithem) keep all majorities and pick the greatest epoch at the end
+        return Optional.empty();
+    }
+
+    /**
+     * Attempts a quorum read on the latest phase 2 data. If a quorum read is not possible, then
+     * the quorum write failed and it it needs to be completed, or that the layouts are influx.
+     * @param responses
+     * @param majorityCount majority quorum size
+     * @return
+     */
+    Optional<Phase2Data> findPhase2DataMajority(LayoutQueryResponse[] responses, int majorityCount) {
+        Map<Phase2Data, Integer> phase2DataCounts = new HashMap<>();
+        for (LayoutQueryResponse resp : responses) {
+            if (resp.getCurrentEpochPhase2().isPresent()) {
+                int freq = phase2DataCounts.getOrDefault(resp.getCurrentEpochPhase2().get(), 0) + 1;
+                if (freq >= majorityCount) {
+                    return Optional.of(resp.getCurrentEpochPhase2().get());
+                }
+                phase2DataCounts.put(resp.getCurrentEpochPhase2().get(), freq);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Queries the layout servers and returns only valid responses (i.e. queries that completed).
+     * If a majority of queries can't be collected this method will fail with a QuorumUnreachableException
+     * @param layoutServers layout servers to query
+     * @return an array of completed queries
+     */
+    LayoutQueryResponse[] queryLayouts(List<String> layoutServers) {
+        CompletableFuture<LayoutQueryResponse>[] futures = new CompletableFuture[layoutServers.size()];
+        int ind = 0;
+
+        for (String address : layoutServers) {
+            //TODO(Maithem) since this uses a runtime client don't use the passed layoutServers argument?
+            CompletableFuture<LayoutQueryResponse> resp = runtime.getLayoutView()
+                    .getRuntimeLayout()
+                    .getLayoutClient(address)
+                    .query();
+            futures[ind++] = resp;
+        }
+
+        // Wait on all futures to complete/fail.
+        CompletableFuture.allOf(futures);
+
+        // If a quorum doesn't respond this method will fail because we don't enough information
+        LayoutQueryResponse[] respOk = getQuorumResp(futures);
+        return respOk;
+    }
+
+    // TODO(Maithem): seperate the read logic from error detection and repair logic
+    Layout quorumReadLayout(List<String> layoutServers) {
+        LayoutQueryResponse[] responses = queryLayouts(layoutServers);
+
+        int majorityCount = (layoutServers.size() / 2) + 1;
+
+        Optional<Phase2Data> latestPhase2DataQuorum = findPhase2DataMajority(responses, majorityCount);
+
+        if (latestPhase2DataQuorum.isPresent()) {
+            return latestPhase2DataQuorum.get().getLayout();
+        }
+
+        // At this point, we are unable to quorum read a layout because of possible
+        // partial failures in seal and quorum write.
+        try {
+            repairLayoutServers(responses, majorityCount);
+        } catch (QuorumUnreachableException | OutrankedException | WrongEpochException e) {
+            log.error("quorumReadLayout: failed to repair layout", e);
+            throw new IllegalStateException("Layout Repair Failed!");
+        }
+
+        // Attempt to read again after repair
+        LayoutQueryResponse[] queriesAfterRepair = queryLayouts(layoutServers);
+
+        latestPhase2DataQuorum = findPhase2DataMajority(queriesAfterRepair, majorityCount);
+
+        if (latestPhase2DataQuorum.isPresent()) {
+            // TODO(Maithem): should trigger an async layout committed task?
+            return latestPhase2DataQuorum.get().getLayout();
+        }
+
+        throw new IllegalStateException("failed to read and repair the layout servers");
+    }
+
+
+    /**
+     * Attempts to repair the layout servers.
+     * 1. epoch repair (resealing)
+     * 2. phase 2 data repair (completing rounds)
+     * 2. patching layout committed? (or should this be completed by the periodic tasks)
+     * @param responses
+     * @param majorityCount
+     */
+    void repairLayoutServers(LayoutQueryResponse[] responses, int majorityCount) throws
+            QuorumUnreachableException, OutrankedException, WrongEpochException {
+
+        Optional<Long> majorityEpoch = findMajorityEpoch(responses, majorityCount);
+
+        // Repair epochs by completing seal (using the last known committed layout
+        if (!majorityEpoch.isPresent()) {
+            // This can happen when the last seal fails
+            // this method (i.e. repairLayoutServers) is called when a quorum
+            // read on the phase2Data fails, therefore we need to find the layout
+            // that that was committed for the last epoch
+            Optional<Layout> lastCommittedLayout = findLastCommittedLayout(responses, majorityCount);
+
+            if (!lastCommittedLayout.isPresent()) {
+                throw new IllegalStateException("Couldn't find a committed layout");
+            }
+
+            // check that the max epoch is lastCommittedLayout epoch - 1
+            sealEpoch(lastCommittedLayout.get());
+        }
+
+        // At this point the epochs should have been repair, we proceed to fix the
+        // layouts. We either attempt to recommit a layout with a higher rank (in the
+        // case of partial failure in the phase2), or use
+        Optional<Phase2Data> highestRankedPhase2 = getHighestRankedLayout(responses, majorityCount);
+
+        if (highestRankedPhase2.isPresent()) {
+            // attempt consensus
+            Layout partiallyProposedLayout = new Layout(highestRankedPhase2.get().getLayout());
+            runtime.getLayoutView().updateLayout(partiallyProposedLayout,
+                    highestRankedPhase2.get().getRank().getRank() + 1);
+
+        } else {
+            // Fill in the new slot (new epoch) from the last layout
+            Optional<Layout> lastCommittedLayout = findLastCommittedLayout(responses, majorityCount);
+            Layout layoutFromTheLastEpoch = lastCommittedLayout.get();
+            Layout newLayout = new LayoutBuilder(layoutFromTheLastEpoch)
+                    .setEpoch(layoutFromTheLastEpoch.getEpoch() + 1)
+                    .build();
+            // verify that this layout matches the epoch we are trying to update
+            runtime.getLayoutView().updateLayout(newLayout, 1L);
+            // log success
+        }
+    }
+
+    /**
+     * Scan the latest phase2Data for the latest epoch (repaired) and find the max ranked
+     * layout
+     * @param responses
+     * @return
+     */
+    Optional<Phase2Data> getHighestRankedLayout(LayoutQueryResponse[] responses, int targetEpoch) {
+        Optional<Phase2Data> highestRankPhase2Data = Optional.empty();
+        for (LayoutQueryResponse response : responses) {
+            if(response.getCurrentEpochPhase2().isPresent()) {
+                if (!highestRankPhase2Data.isPresent()) {
+                    // Initialize first max
+                    highestRankPhase2Data = Optional.of(response.getCurrentEpochPhase2().get());
+                } else {
+                    // We need to find the max rank between the last known max and this response
+                    if (response.getCurrentEpochPhase2().get().getRank().getRank() >
+                            highestRankPhase2Data.get().getRank().getRank()) {
+                        // adopt a new max
+                        highestRankPhase2Data = Optional.of(response.getCurrentEpochPhase2().get());
+                    }
+                }
+            }
+        }
+        return highestRankPhase2Data;
+    }
+
+    /**
+     * Repairing the epochs (via completing the seal) should happen on all
+     * components and not just the layout servers.
+     * @param layout
+     * @throws QuorumUnreachableException
+     */
+    private void sealEpoch(Layout layout) throws QuorumUnreachableException {
+        layout.setEpoch(layout.getEpoch() + 1);
+        runtime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
     }
 }
