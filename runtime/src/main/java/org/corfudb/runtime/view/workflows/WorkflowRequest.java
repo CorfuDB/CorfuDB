@@ -59,20 +59,19 @@ public abstract class WorkflowRequest {
      * orchestrator
      */
     protected ManagementClient getOrchestrator(@NonNull Layout layout) {
-        List<String> activeLayoutServers = layout.getLayoutServers().stream()
-                .filter(s -> !layout.getUnresponsiveServers().contains(s)
-                        && !s.equals(nodeForWorkflow))
+        List<String> availableLayoutServers = layout.getLayoutServers().stream()
+                .filter(s -> !s.equals(nodeForWorkflow))
                 .collect(Collectors.toList());
 
-        if (activeLayoutServers.isEmpty()) {
+        if (availableLayoutServers.isEmpty()) {
             throw new WorkflowException("getOrchestrator: no available orchestrators " + layout);
         }
 
         // Select an available orchestrator
         ManagementClient managementClient = runtime.getLayoutView().getRuntimeLayout(layout)
-                .getManagementClient(activeLayoutServers.get(0));
+                .getManagementClient(availableLayoutServers.get(0));
 
-        for (String endpoint : activeLayoutServers) {
+        for (String endpoint : availableLayoutServers) {
             BaseClient client = runtime.getLayoutView().getRuntimeLayout(layout)
                     .getBaseClient(endpoint);
             if (client.pingSync()) {
