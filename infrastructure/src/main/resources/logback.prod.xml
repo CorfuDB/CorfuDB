@@ -8,7 +8,7 @@
         <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
             <fileNamePattern>${LOG_DIRECTORY}/corfu.9000.%i.log.gz</fileNamePattern>
             <minIndex>1</minIndex>
-            <maxIndex>20</maxIndex>
+            <maxIndex>30</maxIndex>
         </rollingPolicy>
         <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
             <maxFileSize>100MB</maxFileSize>

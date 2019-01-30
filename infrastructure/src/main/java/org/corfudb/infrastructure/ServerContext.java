@@ -487,7 +487,7 @@ public class ServerContext implements AutoCloseable {
             log.info("saveManagementLayout: Updated to new layout at epoch {}",
                     getManagementLayout().getEpoch());
         } else {
-            log.debug("saveManagementLayout: "
+            log.trace("saveManagementLayout: "
                             + "Ignoring layout because new epoch {} <= old epoch {}",
                     layout.getEpoch(), currentLayout.getEpoch());
         }
