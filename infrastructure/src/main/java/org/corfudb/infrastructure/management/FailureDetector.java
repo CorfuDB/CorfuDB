@@ -55,7 +55,7 @@ public class FailureDetector implements IDetector {
      */
     @Getter
     @Setter
-    private long maxPeriodDuration = 8_000L;
+    private long maxPeriodDuration = 5_000L;
 
     /**
      * Minimum duration for the responseTimeouts of the routers in milliseconds.
@@ -63,7 +63,7 @@ public class FailureDetector implements IDetector {
      */
     @Getter
     @Setter
-    private long initPeriodDuration = 5_000L;
+    private long initPeriodDuration = 2_000L;
 
     /**
      * Response timeout for every router.

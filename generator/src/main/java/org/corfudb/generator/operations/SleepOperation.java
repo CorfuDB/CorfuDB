@@ -4,6 +4,7 @@ import java.util.Random;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.State;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 /**
  * Created by maithem on 7/14/17.
@@ -25,9 +26,7 @@ public class SleepOperation extends Operation {
         try {
             Thread.sleep(sleepTime);
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException(e);
-
+            throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
 }

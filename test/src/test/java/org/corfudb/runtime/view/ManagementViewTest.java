@@ -4,10 +4,25 @@ package org.corfudb.runtime.view;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.Assert.fail;
-
 import com.google.common.collect.Range;
 import com.google.common.reflect.TypeToken;
+
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Random;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
 import lombok.Getter;
+
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
@@ -32,26 +47,14 @@ import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
+import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
+import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatusReliability;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.time.Duration;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 /**
  * Test to verify the Management Server functionalities.
@@ -1153,6 +1156,19 @@ public class ManagementViewTest extends AbstractViewTest {
                 .addToSegment()
                 .addToLayout()
                 .build();
+
+        ClusterStatusReport clusterStatus = rt.getManagementView().getClusterStatus();
+        Map<String, ConnectivityStatus> nodeConnectivityMap = clusterStatus.getClientServerConnectivityStatusMap();
+        Map<String, NodeStatus> nodeStatusMap = clusterStatus.getClusterNodeStatusMap();
+        ClusterStatusReliability clusterStatusReliability = clusterStatus.getClusterStatusReliability();
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_0)).isEqualTo(ConnectivityStatus.RESPONSIVE);
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_1)).isEqualTo(ConnectivityStatus.RESPONSIVE);
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_2)).isEqualTo(ConnectivityStatus.RESPONSIVE);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.UP);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.DB_SYNCING);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
+        assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.DB_SYNCING);
+        assertThat(clusterStatusReliability).isEqualTo(ClusterStatusReliability.STRONG_QUORUM);
         assertThat(rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
 
         TokenResponse tokenResponse = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
@@ -1466,8 +1482,8 @@ public class ManagementViewTest extends AbstractViewTest {
      *
      * STEP 2: In this step the client is partitioned from the 2 nodes in the cluster.
      * The cluster however is healthy. Status query:
-     * PORT_0 and PORT_1 are DOWN. Cluster status: UNAVAILABLE
-     * (Since the client cannot reach all healthy servers)
+     * PORT_0 and PORT_1 are UNRESPONSIVE. Cluster status: STABLE
+     * (Since the cluster is table it is just the client that cannot reach all healthy servers)
      *
      * A few entries are appended on a Stream. This data is written to PORT_0, PORT_1 and PORT_2.
      *
@@ -1476,16 +1492,12 @@ public class ManagementViewTest extends AbstractViewTest {
      * PORT_0 is DOWN. Cluster status: DEGRADED.
      *
      * STEP 4: PORT_1 is failed. The cluster is non-operational now. Status query:
-     * PORT_0 and PORT_1 DOWN. Cluster status: UNAVAILABLE.
+     * PORT_0 and PORT_1 UNRESPONSIVE, however the Cluster status: DEGRADED, as layout cannot
+     * converge to a new layout (no consensus).
      *
-     * STEP 5: All rules are cleared so that PORT_1 is revived. Similarly PORT_0 is also revived.
-     * PORT_0 now tries to heal and add itself to the log unit chain. However, bulk reads from
-     * PORT_2 are dropped causing stateTransfer to fail leaving the segments divided. Now on a
-     * cluster status query, we see that PORT_0 in a DB_SYNCING state.
-     * PORT_0 is DB_SYNCING, PORT_1 and PORT_2 are UP. Cluster status: DEGRADED.
+     * STEP 5: All nodes are failed. The cluster is non-operational now. Status query:
+     * PORT_0, PORT_1 and PORT_2 DOWN/UNRESPONSIVE. Cluster status: UNAVAILABLE.
      *
-     * STEP 6: All nodes are failed. The cluster is non-operational now. Status query:
-     * PORT_0, PORT_1 and PORT_2 DOWN. Cluster status: UNAVAILABLE.
      */
     @Test
     public void queryClusterStatus() throws Exception {
@@ -1496,24 +1508,39 @@ public class ManagementViewTest extends AbstractViewTest {
 
         // STEP 1.
         ClusterStatusReport clusterStatus = getCorfuRuntime().getManagementView().getClusterStatus();
-        Map<String, NodeStatus> nodeStatusMap = clusterStatus.getClientServerConnectivityStatusMap();
+        Map<String, ConnectivityStatus> nodeConnectivityMap = clusterStatus.getClientServerConnectivityStatusMap();
+        Map<String, NodeStatus> nodeStatusMap = clusterStatus.getClusterNodeStatusMap();
+        ClusterStatusReport.ClusterStatusReliability clusterStatusReliability = clusterStatus.getClusterStatusReliability();
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_0)).isEqualTo(ConnectivityStatus.RESPONSIVE);
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_1)).isEqualTo(ConnectivityStatus.RESPONSIVE);
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_2)).isEqualTo(ConnectivityStatus.RESPONSIVE);
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.UP);
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.UP);
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
+        assertThat(clusterStatusReliability).isEqualTo(ClusterStatusReport.ClusterStatusReliability.STRONG_QUORUM);
         assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
 
         // STEP 2.
+        // Because we are explicitly dropping PING messages only (which are used to verify
+        // client's connectivity) on ENDPOINT_0 and ENDPOINT_1, this test will show both nodes
+        // unresponsive, despite of their actual node status being UP.
         TestRule rule = new TestRule()
-                .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.HEARTBEAT_REQUEST))
+                .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.PING))
                 .drop();
         addClientRule(getCorfuRuntime(), SERVERS.ENDPOINT_0, rule);
         addClientRule(getCorfuRuntime(), SERVERS.ENDPOINT_1, rule);
         clusterStatus = getCorfuRuntime().getManagementView().getClusterStatus();
-        nodeStatusMap = clusterStatus.getClientServerConnectivityStatusMap();
-        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.DOWN);
-        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.DOWN);
+        nodeConnectivityMap = clusterStatus.getClientServerConnectivityStatusMap();
+        nodeStatusMap = clusterStatus.getClusterNodeStatusMap();
+        clusterStatusReliability = clusterStatus.getClusterStatusReliability();
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_0)).isEqualTo(ConnectivityStatus.UNRESPONSIVE);
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_1)).isEqualTo(ConnectivityStatus.UNRESPONSIVE);
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_2)).isEqualTo(ConnectivityStatus.RESPONSIVE);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.UP);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.UP);
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
-        assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
+        assertThat(clusterStatusReliability).isEqualTo(ClusterStatusReport.ClusterStatusReliability.STRONG_QUORUM);
+        assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
 
         // Write 10 entries. 0-9.
         IStreamView streamView = getCorfuRuntime().getStreamsView()
@@ -1527,23 +1554,27 @@ public class ManagementViewTest extends AbstractViewTest {
         // STEP 3.
         clearClientRules(getCorfuRuntime());
         addServerRule(SERVERS.PORT_0, new TestRule().drop().always());
-        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
-                new TestRule().always().drop());
         waitForLayoutChange(layout -> layout.getUnresponsiveServers().size() == 1
                         && layout.getUnresponsiveServers().contains(SERVERS.ENDPOINT_0)
                         && layout.getSegments().size() == 1,
                 getCorfuRuntime());
-
         clusterStatus = getCorfuRuntime().getManagementView().getClusterStatus();
-        nodeStatusMap = clusterStatus.getClientServerConnectivityStatusMap();
+        nodeConnectivityMap = clusterStatus.getClientServerConnectivityStatusMap();
+        nodeStatusMap = clusterStatus.getClusterNodeStatusMap();
+        clusterStatusReliability = clusterStatus.getClusterStatusReliability();
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_0)).isEqualTo(ConnectivityStatus.UNRESPONSIVE);
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_1)).isEqualTo(ConnectivityStatus.RESPONSIVE);
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_2)).isEqualTo(ConnectivityStatus.RESPONSIVE);
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.DOWN);
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.UP);
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
+        assertThat(clusterStatusReliability).isEqualTo(ClusterStatusReport.ClusterStatusReliability.STRONG_QUORUM);
         assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.DEGRADED);
 
         // STEP 4.
-        // Since there will be no epoch change as majority of servers are down, we rely on PORT_2
-        // to send a MANAGEMENT_FAILURE_DETECTED after which we query the cluster status.
+        // Since there will be no epoch change as majority of servers are down, we cannot obtain
+        // a reliable state of the cluster and report unavailable, still responsiveness to each node
+        // in the cluster is reported.
         Semaphore latch1 = new Semaphore(1);
         latch1.acquire();
         addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
@@ -1560,29 +1591,34 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(latch1.tryAcquire(PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS))
                 .isTrue();
         clusterStatus = getCorfuRuntime().getManagementView().getClusterStatus();
-        nodeStatusMap = clusterStatus.getClientServerConnectivityStatusMap();
-        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.DOWN);
-        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.DOWN);
-        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.UP);
+        nodeConnectivityMap = clusterStatus.getClientServerConnectivityStatusMap();
+        nodeStatusMap = clusterStatus.getClusterNodeStatusMap();
+        clusterStatusReliability = clusterStatus.getClusterStatusReliability();
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_0)).isEqualTo(ConnectivityStatus.UNRESPONSIVE);
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_1)).isEqualTo(ConnectivityStatus.UNRESPONSIVE);
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_2)).isEqualTo(ConnectivityStatus.RESPONSIVE);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.NA);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.NA);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.NA);
+        assertThat(clusterStatusReliability).isEqualTo(ClusterStatusReport.ClusterStatusReliability.WEAK_NO_QUORUM);
         assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
 
+
         // STEP 5.
-        // PORT_1 is revived and PORT_0 is also revived. PORT_0 attempts to add itself back to the
-        // log unit chain.
-        Semaphore latch2 = new Semaphore(1);
-        addServerRule(SERVERS.PORT_2, new TestRule().matches(corfuMsg -> {
-            if (corfuMsg.getMsgType().equals(CorfuMsgType.READ_RESPONSE)) {
-                latch2.release();
-                return true;
-            }
-            return false;
-        }).drop());
-        clearClientRules(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime());
-        clearServerRules(SERVERS.PORT_1);
-        clearClientRules(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
-        clearServerRules(SERVERS.PORT_0);
-        assertThat(latch2.tryAcquire(PARAMETERS.TIMEOUT_LONG.toMillis(), TimeUnit.MILLISECONDS))
-                .isTrue();
+        clearClientRules(getCorfuRuntime());
+        addServerRule(SERVERS.PORT_2, new TestRule().drop().always());
+        clusterStatus = getCorfuRuntime().getManagementView().getClusterStatus();
+        nodeConnectivityMap = clusterStatus.getClientServerConnectivityStatusMap();
+        nodeStatusMap = clusterStatus.getClusterNodeStatusMap();
+        clusterStatusReliability = clusterStatus.getClusterStatusReliability();
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_0)).isEqualTo(ConnectivityStatus.UNRESPONSIVE);
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_1)).isEqualTo(ConnectivityStatus.UNRESPONSIVE);
+        assertThat(nodeConnectivityMap.get(SERVERS.ENDPOINT_2)).isEqualTo(ConnectivityStatus.UNRESPONSIVE);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_0)).isEqualTo(NodeStatus.NA);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_1)).isEqualTo(NodeStatus.NA);
+        assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.NA);
+        assertThat(clusterStatusReliability).isEqualTo(ClusterStatusReport.ClusterStatusReliability.UNAVAILABLE);
+        assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
     }
 
     /**
