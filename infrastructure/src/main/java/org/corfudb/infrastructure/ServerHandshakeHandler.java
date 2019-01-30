@@ -6,17 +6,21 @@ import io.netty.channel.ChannelPromise;
 import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.util.AttributeKey;
+
+import java.util.LinkedList;
+import java.util.Queue;
+import java.util.UUID;
+
+import javax.net.ssl.SSLHandshakeException;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.HandshakeMsg;
 import org.corfudb.protocols.wireprotocol.HandshakeResponse;
 import org.corfudb.protocols.wireprotocol.HandshakeState;
-
-import java.util.LinkedList;
-import java.util.Queue;
-import java.util.UUID;
 
 /**
  * The ServerHandshakeHandler waits for the handshake message, validates and sends
@@ -187,6 +191,13 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
                 log.debug("exceptionCaught: Handshake timeout " +
                         "checker: discarded (handshake OK)");
             }
+        } else if (cause instanceof SSLHandshakeException) {
+            // If an SslException is thrown by the inbound SslHandler it will be caught by this
+            // upstream handler (in the pipeline). For debugging purposes we log the address of
+            // the client that failed to authenticate.
+
+            log.error("Client authentication failed for remote address {}",
+                    ctx.channel().remoteAddress());
         } else {
             super.exceptionCaught(ctx, cause);
         }
