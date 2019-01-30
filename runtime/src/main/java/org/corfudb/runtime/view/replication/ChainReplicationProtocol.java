@@ -1,21 +1,21 @@
 package org.corfudb.runtime.view.replication;
 
 import com.google.common.collect.Range;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
-import javax.annotation.Nullable;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.RecoveryException;
-import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.util.CFUtils;
+
+import javax.annotation.Nullable;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 
 
 
@@ -143,13 +143,14 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
      * @param data          The data to propagate, or NULL,
      *                      if it is to be a hole.
      */
-    protected void propagate(RuntimeLayout runtimeLayout,
+    private void propagate(RuntimeLayout runtimeLayout,
                              long globalAddress,
                              @Nullable ILogData data) {
         int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);
 
         for (int i = 1; i < numUnits; i++) {
-            log.info("Propogate[{}]: chain {}/{}", Token.of(runtimeLayout.getLayout().getEpoch(), globalAddress),
+            log.trace("Propagate[{}]: chain {}/{}", Token.of(runtimeLayout.getLayout().getEpoch(),
+                    globalAddress),
                     i + 1, numUnits);
             // In chain replication, we write synchronously to every unit
             // in the chain.
@@ -166,7 +167,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                             .fillHole(token), OverwriteException.class);
                 }
             } catch (OverwriteException oe) {
-                log.trace("Propogate[{}]: Completed by other writer", globalAddress);
+                log.info("Propagate[{}]: Completed by other writer", globalAddress);
             }
         }
     }
@@ -188,14 +189,15 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
      *                          the recovery protocol
      *
      */
-    protected void recover(RuntimeLayout runtimeLayout, long globalAddress) {
+    private void recover(RuntimeLayout runtimeLayout, long globalAddress) {
         final Layout layout = runtimeLayout.getLayout();
         // In chain replication, we started writing from the head,
         // and propagated down to the tail. To recover, we start
         // reading from the head, which should have the data
         // we are trying to recover
         int numUnits = layout.getSegmentLength(globalAddress);
-        log.info("Recover[{}]: read chain head {}/{}", Token.of(runtimeLayout.getLayout().getEpoch(), globalAddress),
+        log.warn("Recover[{}]: read chain head {}/{}", Token.of(runtimeLayout.getLayout().getEpoch()
+                , globalAddress),
                 1, numUnits);
         ILogData ld = CFUtils.getUninterruptibly(runtimeLayout
                 .getLogUnitClient(globalAddress, 0)
