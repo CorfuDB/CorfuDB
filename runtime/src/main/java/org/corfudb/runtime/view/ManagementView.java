@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -300,7 +301,7 @@ public class ManagementView extends AbstractView {
             if (layoutMap.isEmpty()) {
                 // If no layout server responded with a Layout, report cluster status as UNAVAILABLE.
                 log.debug("getClusterStatus: all layout servers {} failed to respond with layouts.", layoutServers);
-                // Even if we weren't able to obtain any layout fom LayoutServers, we attempt to ping all
+                // Even if we weren't able to obtain any layout from LayoutServers, we attempt to ping all
                 // layoutServers for this runtime, to provide info of connectivity.
                 // Note: layout should be null, as this is not the layout that leads to cluster status.
                 Map<String, ConnectivityStatus> connectivityStatusMap = getConnectivityStatusMap(runtime.getLayoutView().getLayout());
@@ -317,7 +318,11 @@ public class ManagementView extends AbstractView {
                     log.info("getClusterStatus: Quorum unreachable, reachable={}, required={}. Cluster status in unavailable.",
                             serversLayoutResponses, quorum);
                     layout = getHighestEpochLayout(layoutMap);
-                    return getUnavailableClusterStatusReport(layoutServers, ClusterStatusReliability.WEAK_NO_QUORUM, layoutMap.keySet(), layout);
+                    // Note: we can't pass the list of layoutServers obtained from the CorfuRuntime,
+                    // as this might only reflect the servers used for initialization of RT.
+                    // (which does not necessarily mean all), so we should retrieve from the available layout(s)
+                    return getUnavailableClusterStatusReport(getLayoutServers(layoutMap.values()),
+                            ClusterStatusReliability.WEAK_NO_QUORUM, layoutMap.keySet(), layout);
                 } else {
                     layout = getLayoutFromQuorum(layoutMap, quorum);
 
@@ -327,7 +332,8 @@ public class ManagementView extends AbstractView {
                         // information of the highest epoch layout in the system.
                         log.info("getClusterStatus: majority of nodes sharing the same layout not found. Cluster status is unavailable.");
                         layout = getHighestEpochLayout(layoutMap);
-                        return getUnavailableClusterStatusReport(layoutServers, ClusterStatusReliability.WEAK_NO_QUORUM, layoutMap.keySet(), layout);
+                        return getUnavailableClusterStatusReport(getLayoutServers(layoutMap.values()),
+                                ClusterStatusReliability.WEAK_NO_QUORUM, layoutMap.keySet(), layout);
                     }
 
                     log.debug("getClusterStatus: quorum layout {}", layout);
@@ -408,6 +414,7 @@ public class ManagementView extends AbstractView {
                     .collect(Collectors.toList());
 
             if (!discoveredLayoutServers.isEmpty()) {
+                log.debug("Get layout from discovered layout servers: {} ", discoveredLayoutServers);
                 Map <String, Layout> recursiveLayouts = getLayouts(new ArrayList<>(discoveredLayoutServers), false);
                 layoutMap.putAll(recursiveLayouts);
             }
@@ -546,5 +553,14 @@ public class ManagementView extends AbstractView {
         }
 
         return nodeStatusMap;
+    }
+
+    private List<String> getLayoutServers(Collection<Layout> layouts) {
+        List<String> allLayoutServers = new ArrayList<>();
+        for (Layout layout : layouts) {
+            allLayoutServers.addAll(layout.getLayoutServers());
+        }
+
+        return allLayoutServers.stream().distinct().collect(Collectors.toList());
     }
 }
