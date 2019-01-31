@@ -53,7 +53,7 @@ public class LayoutClient extends AbstractClient {
      * @param epoch epoch for which the paxos rounds are being run
      * @param rank  The rank to use for the prepare.
      * @return True, if the prepare was successful.
-     * Otherwise, the completablefuture completes exceptionally
+     * Otherwise, the completableFuture completes exceptionally
      * with OutrankedException.
      */
     public CompletableFuture<LayoutPrepareResponse> prepare(long epoch, long rank) {
@@ -69,7 +69,7 @@ public class LayoutClient extends AbstractClient {
      *               rank from a successful prepare (phase 1).
      * @param layout The layout to install for phase 2.
      * @return True, if the propose was successful.
-     * Otherwise, the completablefuture completes exceptionally
+     * Otherwise, the completableFuture completes exceptionally
      * with OutrankedException.
      */
     public CompletableFuture<Boolean> propose(long epoch, long rank, Layout layout) {

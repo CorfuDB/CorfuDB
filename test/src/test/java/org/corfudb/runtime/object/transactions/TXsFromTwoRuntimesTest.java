@@ -92,7 +92,7 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
             boolean isAbort = false;
             try {
                 // wait for thread 1 to do its work;
-                // completion is indicated thru sem0
+                // completion is indicated through sem0
                 sem0.acquire();
                 myruntime.getObjectsView().TXEnd();
 
@@ -203,7 +203,7 @@ public class TXsFromTwoRuntimesTest extends AbstractTransactionsTest {
             boolean isAbort = false;
             try {
                 // wait for thread 1 to do its work;
-                // completion is indicated thru sem0
+                // completion is indicated through sem0
                 sem0.acquire();
                 myruntime.getObjectsView().TXEnd();
 

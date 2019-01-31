@@ -2,17 +2,34 @@ package org.corfudb.infrastructure;
 
 import static org.corfudb.protocols.wireprotocol.TokenType.TX_ABORT_NEWSEQ;
 import static org.corfudb.protocols.wireprotocol.TokenType.TX_ABORT_SEQ_OVERFLOW;
-
 import com.codahale.metrics.Timer;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+
 import io.netty.channel.ChannelHandlerContext;
+
+import java.lang.invoke.MethodHandles;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -29,21 +46,6 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
-
-import java.lang.invoke.MethodHandles;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -237,14 +239,14 @@ public class SequencerServer extends AbstractServer {
      * If the request submits a timestamp (a global offset) that is less than one of the
      * global offsets of a streams specified in the request, then abort; otherwise commit.
      *
-     * @param txInfo      info provided by corfuRuntime for conflict resolultion:
+     * @param txInfo      info provided by corfuRuntime for conflict resolution:
      *                    - timestamp : the snapshot (global) offset that this TX reads
      *                    - conflictSet: conflict set of the txn.
      *                    if any conflict-param (or stream, if empty) in this set has a later
      *                    timestamp than the snapshot, abort
      * @param conflictKey is a return parameter that signals to the consumer which key was
      *                    responsible for unsuccessful allocation af a token.
-     * @return Returns the type of token reponse based on whether the txn commits, or the abort
+     * @return Returns the type of token response based on whether the txn commits, or the abort
      *     cause.
      */
     private TokenType txnCanCommit(TxResolutionInfo txInfo, /** Input. */
@@ -541,7 +543,7 @@ public class SequencerServer extends AbstractServer {
      * this method serves token-requests for transaction-commit entries.
      *
      * <p>it checks if the transaction can commit.
-     * - if the transction must abort,
+     * - if the transaction must abort,
      * then a 'error token' containing an Address.ABORTED address is returned.
      * - if the transaction may commit,
      * then a normal allocation of log position(s) is pursued.
@@ -573,7 +575,7 @@ public class SequencerServer extends AbstractServer {
 
         // if we get here, this means the transaction can commit.
         // handleAllocation() does the actual allocation of log position(s)
-        // and returns the reponse
+        // and returns the response
         handleAllocation(msg, ctx, r);
     }
 

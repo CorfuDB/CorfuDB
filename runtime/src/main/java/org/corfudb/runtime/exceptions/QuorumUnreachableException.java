@@ -14,7 +14,7 @@ public class QuorumUnreachableException extends RuntimeException {
     public int required;
 
     /**
-     * Constuctor.
+     * Constructor.
      * @param reachable number of quorum reachable
      * @param required number of required quorum
      */

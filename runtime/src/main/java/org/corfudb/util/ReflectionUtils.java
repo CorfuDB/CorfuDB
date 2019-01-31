@@ -77,7 +77,7 @@ public class ReflectionUtils {
     }
 
     /**
-     * Extract argument types from a string that reperesents the method
+     * Extract argument types from a string that represents the method
      * signature.
      * @param args Signature string
      * @return Array of types

@@ -1,16 +1,16 @@
 package org.corfudb.runtime.view;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.util.ArrayList;
+import java.util.List;
+
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.junit.Test;
-
-import java.util.ArrayList;
-import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests sealing scenarios.
@@ -135,7 +135,7 @@ public class LayoutSealTest extends AbstractViewTest {
 
     /**
      * Scenario: 5 Servers.
-     * ENDPOINT_1, ENDPOINT_3 and ENDPOINT_3 failed and attempted to seal.
+     * ENDPOINT_1, ENDPOINT_3 and ENDPOINT_4 failed and attempted to seal.
      * LayoutServers quorum is possible,    -   Seal passes
      * Stripe 1: 1 failed, 2 responses.     -   Seal passes
      * Stripe 2: 2 failed, 0 responses.     -   Seal failed

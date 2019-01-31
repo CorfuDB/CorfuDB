@@ -14,7 +14,7 @@ public enum OverwriteCause {
     DIFF_DATA(2),
     /** Indicates this address was already trimmed.*/
     TRIM(3),
-    /** Indicates there is no actual cause for the overwrite, hence no overwrite ecception has occured. */
+    /** Indicates there is no actual cause for the overwrite, hence no overwrite exception has occurred. */
     NONE(4);
 
     private int id;

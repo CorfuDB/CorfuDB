@@ -1,12 +1,11 @@
 package org.corfudb.samples;
 
+import java.util.Map;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.util.GitRepositoryState;
-
 import org.docopt.Docopt;
-
-import java.util.Map;
 
 /**
  * This tutorial demonstrates a simple Corfu application.
@@ -67,7 +66,7 @@ public class HelloCorfu {
                 .open();                // instantiate the object!
 
         /**
-         * The magic has aleady happened! mapis an in-memory view of a shared map, backed by the Corfu log.
+         * The magic has already happened! map is an in-memory view of a shared map, backed by the Corfu log.
          * The application can perform put and get on this map from different application instances,
          * crash and restart applications, and so on.
          * The map will persist and be consistent across all applications.

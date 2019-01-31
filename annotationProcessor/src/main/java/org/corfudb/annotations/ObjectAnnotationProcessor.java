@@ -108,7 +108,7 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
     }
 
     /** Process each class, checking if the class is annotated and
-     * generating the appropiate proxy class.
+     * generating the appropriate proxy class.
      * @param classElement  The element to process.
      */
     public void processClass(TypeElement classElement) {

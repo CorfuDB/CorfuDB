@@ -149,7 +149,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      * @param msg Incoming Message
      * @param ctx Context
      * @param r   Router
-     * @throws Exception Throws excepton if write is performed to a non-existent entry.
+     * @throws Exception Throws exception if write is performed to a non-existent entry.
      */
     @ClientHandler(type = CorfuMsgType.ERROR_NOENTRY)
     private static Object handleNoEntry(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r)

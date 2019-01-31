@@ -6,8 +6,16 @@ import com.google.common.collect.Range;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
 import lombok.Getter;
 import lombok.NonNull;
+
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -19,8 +27,8 @@ import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
@@ -28,12 +36,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.serializer.Serializers;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 
 /**
@@ -124,7 +126,7 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
-     * Verify that max payload is enforced if a limit is confugred
+     * Verify that max payload is enforced if a limit is configured
      *
      * @param ld the LogData to check
      */
@@ -231,7 +233,7 @@ public class LogUnitClient extends AbstractClient {
 
 
     /**
-     * Send a prefix trim request that will trim the log up to a certian address
+     * Send a prefix trim request that will trim the log up to a certain address
      *
      * @param address An address to trim up to (i.e. [0, address))
      */

@@ -1,5 +1,7 @@
 package org.corfudb.runtime.view.stream;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -9,8 +11,8 @@ import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
-import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -426,7 +428,7 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
         if (Address.nonAddress(latestTokenValue)) {
 
             // sanity check:
-            // curretly, the only possible non-address return value for a token-query
+            // currently, the only possible non-address return value for a token-query
             // is Address.NON_EXIST
             if (latestTokenValue != Address.NON_EXIST) {
                 log.warn("TOKEN[{}] unexpected return value", latestTokenValue);

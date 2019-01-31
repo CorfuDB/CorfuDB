@@ -1,12 +1,13 @@
 package org.corfudb.runtime.concurrent;
 
+import java.util.Map;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.util.Map;
 
 @Slf4j
 public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
@@ -230,7 +231,7 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
     }
 
     /**
-     * A helper function that ends a fransaciton.
+     * A helper function that ends a transaction.
      */
     protected void TXEnd() {
         getRuntime().getObjectsView().TXEnd();

@@ -387,7 +387,7 @@ public class SMRMapTest extends AbstractViewTest {
 
    @Test
     @SuppressWarnings("unchecked")
-    public void canUpdateSingleObjectTransacationally()
+    public void canUpdateSingleObjectTransactionally()
             throws Exception {
         Map<String, String> testMap = getRuntime().getObjectsView()
                 .build()
@@ -508,7 +508,7 @@ public class SMRMapTest extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canUpdateSingleObjectTransacationallyWhenCached()
+    public void canUpdateSingleObjectTransactionallyWhenCached()
             throws Exception {
         r.setCacheDisabled(false);
 
