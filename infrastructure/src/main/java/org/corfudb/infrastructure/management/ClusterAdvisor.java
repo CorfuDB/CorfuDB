@@ -1,0 +1,61 @@
+package org.corfudb.infrastructure.management;
+
+import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
+import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
+import org.corfudb.runtime.view.Layout;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * {@link ClusterAdvisor} provides methods to decide the status of Corfu servers
+ * (failed or healed) in a given {@link Layout} and for a specific view of the cluster
+ * captured in a {@link ClusterState}. Decisions are dependant on the concrete underlying algorithm
+ * corresponding to a {@link ClusterType}.
+ *
+ * Created by Sam Behnam on 10/19/18.
+ */
+public interface ClusterAdvisor {
+
+    /**
+     * Get the corresponding {@link ClusterType} used in the current instance of
+     * {@link ClusterAdvisor}. This strategy represents the characteristics of the
+     * underlying algorithm used for making a decision about the failed or healed status of
+     * Corfu servers.
+     *
+     * @return a concrete instance of {@link ClusterType}
+     */
+    ClusterType getType();
+
+    /**
+     * Provide a list of servers in the Corfu cluster which according to the underlying algorithm
+     * for {@link ClusterType} have failed. The decision is made based on the
+     * given view of the cluster captured in {@link ClusterState} along with the expected
+     * {@link Layout}.
+     *
+     * @param clusterState view of the Corfu server cluster from a client node's perspective.
+     * @param unresponsiveServers unresponsive servers in a layout.
+     * @return a node considered to have been failed according to the underlying {@link ClusterType}.
+     */
+    Optional<NodeRank> failedServer(ClusterState clusterState, List<String> unresponsiveServers);
+
+    /**
+     * Provide a server in the Corfu cluster which according to the underlying algorithm
+     * for {@link ClusterType} have healed. The decision is made based on the
+     * given view of the cluster captured in {@link ClusterState} along with the expected
+     * {@link Layout}.
+     *
+     * @param clusterState view of the Corfu server cluster from a client node's perspective.
+     * @param unresponsiveServers unresponsive servers in a layout.
+     * @return a server considered to have been healed according to the underlying
+     * {@link ClusterType}.
+     */
+    Optional<NodeRank> healedServer(ClusterState clusterState, List<String> unresponsiveServers);
+
+    /**
+     * Provides a cluster graph generated from the {@link ClusterState}
+     * @return
+     */
+    ClusterGraph getGraph(ClusterState clusterState);
+}

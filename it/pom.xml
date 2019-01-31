@@ -88,8 +88,7 @@
                         <version>3.0.0-M1</version>
                         <configuration>
                             <skipITs>false</skipITs>
-                            <forkCount>2</forkCount>
-                            <reuseForks>true</reuseForks>
+                            <reuseForks>false</reuseForks>
                             <systemProperties>
                                 <property>
                                     <name>project.version</name>

@@ -63,4 +63,16 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
             throws Exception {
         throw new AlreadyBootstrappedException();
     }
+
+    @ClientHandler(type = CorfuMsgType.NODE_STATE_RESPONSE)
+    private static Object handleNodeStateResponse(CorfuPayloadMsg<NodeState> msg,
+                                                  ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    @ClientHandler(type = CorfuMsgType.FAILURE_DETECTOR_METRICS_RESPONSE)
+    private static Object handleFailureDetectorMetricsResponse(CorfuPayloadMsg<NodeState> msg,
+                                                  ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
 }

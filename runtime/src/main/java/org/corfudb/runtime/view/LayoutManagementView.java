@@ -45,7 +45,7 @@ public class LayoutManagementView extends AbstractView {
      * Future which is reset every time a new task to bootstrap the sequencer is launched.
      * This is to avoid multiple bootstrap requests.
      */
-    private final AtomicReference<Future<Boolean>> sequencerRecoveryFuture
+    private final AtomicReference<CompletableFuture<Boolean>> sequencerRecoveryFuture
             = new AtomicReference<>(CompletableFuture.completedFuture(true));
 
     private volatile long lastKnownSequencerEpoch = Layout.INVALID_EPOCH;
@@ -359,7 +359,7 @@ public class LayoutManagementView extends AbstractView {
      * @param layout Layout to be sealed
      */
     private void sealEpoch(Layout layout) throws QuorumUnreachableException {
-        layout.setEpoch(layout.getEpoch() + 1);
+        layout.nextEpoch();
         runtime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
     }
 
@@ -471,23 +471,24 @@ public class LayoutManagementView extends AbstractView {
      * @param layout Layout to use to bootstrap the primary sequencer.
      * @return Future which completes when the task completes successfully or with a failure.
      */
-    public Future<Boolean> asyncSequencerBootstrap(@NonNull Layout layout,
-                                                   @NonNull ExecutorService service) {
+    public CompletableFuture<Boolean> asyncSequencerBootstrap(
+            @NonNull Layout layout, @NonNull ExecutorService service) {
+
         return sequencerRecoveryFuture.updateAndGet(sequencerRecovery -> {
-            if (sequencerRecovery.isDone()) {
-                return service.submit(() -> {
-                    log.info("triggerSequencerBootstrap: a bootstrap task is triggered.");
-                    try {
-                        reconfigureSequencerServers(layout, layout, true);
-                    } catch (Exception e) {
-                        log.error("triggerSequencerBootstrap: Failed with Exception: ", e);
-                    }
-                    return true;
-                });
+            if (!sequencerRecovery.isDone()) {
+                log.info("triggerSequencerBootstrap: a bootstrap task is already in progress.");
+                return sequencerRecovery;
             }
 
-            log.info("triggerSequencerBootstrap: a bootstrap task is already in progress.");
-            return sequencerRecovery;
+            return CompletableFuture.supplyAsync(() -> {
+                log.info("triggerSequencerBootstrap: a bootstrap task is triggered.");
+                try {
+                    reconfigureSequencerServers(layout, layout, true);
+                } catch (Exception e) {
+                    log.error("triggerSequencerBootstrap: Failed with Exception: ", e);
+                }
+                return true;
+            }, service);
         });
     }
 

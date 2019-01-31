@@ -3,23 +3,20 @@ package org.corfudb.infrastructure;
 import static org.corfudb.util.LambdaUtils.runSansThrow;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
-import java.time.Duration;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.CFUtils;
 import org.corfudb.util.concurrent.SingletonResource;
+
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Local Metrics Polling Service polls the local server state.
@@ -27,19 +24,21 @@ import org.corfudb.util.concurrent.SingletonResource;
  */
 @Slf4j
 class LocalMonitoringService implements MonitoringService {
+    private static final CompletableFuture<SequencerMetrics> UNKNOWN = CompletableFuture
+            .completedFuture(SequencerMetrics.UNKNOWN);
 
     private final ServerContext serverContext;
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
-    private final ClusterStateContext clusterStateContext;
 
     private final ScheduledExecutorService pollingService;
 
+    private final AtomicReference<CompletableFuture<SequencerMetrics>> sequencerMetricsHolder;
+
     LocalMonitoringService(@NonNull ServerContext serverContext,
-                           @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
-                           @NonNull ClusterStateContext clusterStateContext) {
+                           @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
-        this.clusterStateContext = clusterStateContext;
+        sequencerMetricsHolder = new AtomicReference<>();
 
         this.pollingService = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
@@ -59,27 +58,28 @@ class LocalMonitoringService implements MonitoringService {
      * @param layout Current Management layout.
      * @return Sequencer Metrics.
      */
-    private SequencerMetrics queryLocalSequencerMetrics(Layout layout) {
+    private CompletableFuture<SequencerMetrics> queryLocalSequencerMetrics(Layout layout) {
         // This is an optimization. If this node is not the primary sequencer for the current
         // layout, there is no reason to request metrics from this sequencer.
         if (!layout.getPrimarySequencer().equals(serverContext.getLocalEndpoint())) {
-            return SequencerMetrics.UNKNOWN;
+            return UNKNOWN;
         }
 
-        SequencerMetrics sequencerMetrics;
-        try {
-            sequencerMetrics = CFUtils.getUninterruptibly(
-                    getCorfuRuntime()
-                            .getLayoutView().getRuntimeLayout(layout)
-                            .getSequencerClient(serverContext.getLocalEndpoint())
-                            .requestMetrics());
-        } catch (ServerNotReadyException snre) {
-            sequencerMetrics = SequencerMetrics.NOT_READY;
-        } catch (Exception e) {
-            log.error("Error while requesting metrics from the sequencer: ", e);
-            sequencerMetrics = SequencerMetrics.UNKNOWN;
-        }
-        return sequencerMetrics;
+
+        return getCorfuRuntime()
+                .getLayoutView()
+                .getRuntimeLayout(layout)
+                .getSequencerClient(serverContext.getLocalEndpoint())
+                .requestMetrics()
+                //Handle possible exceptions and transform to the sequencer status
+                .exceptionally(ex -> {
+                    if (ex instanceof ServerNotReadyException) {
+                        return SequencerMetrics.NOT_READY;
+                    }
+
+                    log.error("Error while requesting metrics from the sequencer: ", ex);
+                    return SequencerMetrics.UNKNOWN;
+                });
     }
 
     /**
@@ -99,7 +99,7 @@ class LocalMonitoringService implements MonitoringService {
         }
 
         // Build and replace existing locally stored sequencerMetrics
-        clusterStateContext.updateLocalServerMetrics(queryLocalSequencerMetrics(layout));
+        sequencerMetricsHolder.set(queryLocalSequencerMetrics(layout));
     }
 
     /**
@@ -112,7 +112,8 @@ class LocalMonitoringService implements MonitoringService {
                 () -> runSansThrow(this::updateLocalMetrics),
                 0,
                 monitoringInterval.toMillis(),
-                TimeUnit.MILLISECONDS);
+                TimeUnit.MILLISECONDS
+        );
     }
 
     /**
@@ -123,6 +124,10 @@ class LocalMonitoringService implements MonitoringService {
         // Shutting the local metrics polling task.
         pollingService.shutdownNow();
         log.info("Local Metrics Polling Task shutting down.");
+    }
+
+    public CompletableFuture<SequencerMetrics> getMetrics() {
+        return sequencerMetricsHolder.get();
     }
 
 }
