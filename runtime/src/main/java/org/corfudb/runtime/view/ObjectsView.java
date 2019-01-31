@@ -1,16 +1,10 @@
 package org.corfudb.runtime.view;
 
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-
-import javax.annotation.Nonnull;
-
+import com.codahale.metrics.Timer;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
@@ -26,6 +20,13 @@ import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
+
+import javax.annotation.Nonnull;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -134,57 +135,68 @@ public class ObjectsView extends AbstractView {
      * @throws TransactionAbortedException If the transaction could not be executed successfully.
      */
     @SuppressWarnings({"checkstyle:methodname", "checkstyle:abbreviation"})
-    public long TXEnd()
-            throws TransactionAbortedException {
+    public long TXEnd() throws TransactionAbortedException {
         AbstractTransactionalContext context = TransactionalContext.getCurrentContext();
         if (context == null) {
             log.warn("Attempted to end a transaction, but no transaction active!");
             return AbstractTransactionalContext.UNCOMMITTED_ADDRESS;
-        } else {
-            long totalTime = System.currentTimeMillis() - context.getStartTime();
-            log.trace("TXEnd[{}] time={} ms", context, totalTime);
+        }
+
+        // Continue with ending the transaction if the context is not null
+        long totalTime = System.currentTimeMillis() - context.getStartTime();
+        log.trace("TXEnd[{}] time={} ms", context, totalTime);
+
+        // If exist, stop the timer for timing the beginning of transaction to start of commit.
+        if (context.getTxOpDurationContext() != null) {
+            context.getTxOpDurationContext().stop();
+        }
+
+        // Create a timer to measure the transaction commit duration
+        Timer txCommitDurationTimer = context
+                .getMetrics()
+                .timer(CorfuComponent.OBJECT.toString() + "txn-commit-duration");
+        try (Timer.Context txCommitDuration =
+                     MetricsUtils.getConditionalContext(txCommitDurationTimer)){
+            return TransactionalContext.getCurrentContext().commitTransaction();
+        } catch (TransactionAbortedException e) {
+            log.warn("TXEnd[{}] Aborted Exception {}", context, e);
+            TransactionalContext.getCurrentContext().abortTransaction(e);
+            throw e;
+        } catch (NetworkException | WriteSizeException e) {
+
+            Token snapshotTimestamp;
             try {
-                return TransactionalContext.getCurrentContext().commitTransaction();
-            } catch (TransactionAbortedException e) {
-                log.warn("TXEnd[{}] Aborted Exception {}", context, e);
-                TransactionalContext.getCurrentContext().abortTransaction(e);
-                throw e;
-            } catch (NetworkException | WriteSizeException e) {
-
-                Token snapshotTimestamp;
-                try {
-                    snapshotTimestamp = context.getSnapshotTimestamp();
-                } catch (NetworkException ne) {
-                    snapshotTimestamp = Token.UNINITIALIZED;
-                }
-                TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
-                        snapshotTimestamp);
-
-                AbortCause cause = AbortCause.UNDEFINED;
-                if (e instanceof NetworkException) {
-                    log.warn("TXEnd[{}] Network Exception {}", context, e);
-                    cause = AbortCause.NETWORK;
-                } else if (e instanceof WriteSizeException) {
-                    log.error("TXEnd[{}] transaction size limit exceeded {}", context, e);
-                    cause = AbortCause.SIZE_EXCEEDED;
-                }
-
-                TransactionAbortedException tae = new TransactionAbortedException(txInfo,
-                        null, null, cause, e, context);
-                context.abortTransaction(tae);
-                throw tae;
-
-            } catch (Exception e) {
-                log.error("TXEnd[{}]: Unexpected exception", context, e);
-                TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
-                        Token.UNINITIALIZED);
-                TransactionAbortedException tae = new TransactionAbortedException(txInfo,
-                        null, null, AbortCause.UNDEFINED, e, context);
-                context.abortTransaction(tae);
-                throw new UnrecoverableCorfuError("Unexpected exception during commit", e);
-            } finally {
-                TransactionalContext.removeContext();
+                snapshotTimestamp = context.getSnapshotTimestamp();
+            } catch (NetworkException ne) {
+                snapshotTimestamp = Token.UNINITIALIZED;
             }
+            TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
+                    snapshotTimestamp);
+
+            AbortCause cause = AbortCause.UNDEFINED;
+            if (e instanceof NetworkException) {
+                log.warn("TXEnd[{}] Network Exception {}", context, e);
+                cause = AbortCause.NETWORK;
+            } else if (e instanceof WriteSizeException) {
+                log.error("TXEnd[{}] transaction size limit exceeded {}", context, e);
+                cause = AbortCause.SIZE_EXCEEDED;
+            }
+
+            TransactionAbortedException tae = new TransactionAbortedException(txInfo,
+                    null, null, cause, e, context);
+            context.abortTransaction(tae);
+            throw tae;
+
+        } catch (Exception e) {
+            log.error("TXEnd[{}]: Unexpected exception", context, e);
+            TxResolutionInfo txInfo = new TxResolutionInfo(context.getTransactionID(),
+                    Token.UNINITIALIZED);
+            TransactionAbortedException tae = new TransactionAbortedException(txInfo,
+                    null, null, AbortCause.UNDEFINED, e, context);
+            context.abortTransaction(tae);
+            throw new UnrecoverableCorfuError("Unexpected exception during commit", e);
+        } finally {
+            TransactionalContext.removeContext();
         }
     }
 
