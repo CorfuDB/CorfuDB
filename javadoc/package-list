@@ -6,6 +6,7 @@ org.corfudb.generator.operations
 org.corfudb.infrastructure
 org.corfudb.infrastructure.log
 org.corfudb.infrastructure.management
+org.corfudb.infrastructure.management.failuredetector
 org.corfudb.infrastructure.orchestrator
 org.corfudb.infrastructure.orchestrator.workflows
 org.corfudb.infrastructure.utils
@@ -13,6 +14,7 @@ org.corfudb.metrics
 org.corfudb.migration
 org.corfudb.protocols.logprotocol
 org.corfudb.protocols.wireprotocol
+org.corfudb.protocols.wireprotocol.failuredetector
 org.corfudb.protocols.wireprotocol.orchestrator
 org.corfudb.recovery
 org.corfudb.runtime
