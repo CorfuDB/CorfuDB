@@ -51,10 +51,10 @@ public class ManagementServerTest extends AbstractServerTest {
     @Test
     public void checkFailureDetectorStatus() {
         assertThat(managementServer.getManagementAgent().getRemoteMonitoringService()
-                .getDetectionTaskWorkers().isShutdown()).isFalse();
+                .getFailureDetectorWorker().isShutdown()).isFalse();
         managementServer.shutdown();
         assertThat(managementServer.getManagementAgent().getRemoteMonitoringService()
-                .getDetectionTaskWorkers().isShutdown()).isTrue();
+                .getFailureDetectorWorker().isShutdown()).isTrue();
     }
 
     /**

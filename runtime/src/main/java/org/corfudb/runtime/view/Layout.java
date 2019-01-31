@@ -23,6 +23,7 @@ import org.corfudb.runtime.view.stream.ThreadSafeStreamView;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,12 @@ import java.util.stream.Collectors;
  */
 @Data
 public class Layout {
+
+    /**
+     * Sorting layouts according to epochs in descending order
+     */
+    public static final Comparator<Layout> LAYOUT_COMPARATOR = Comparator.comparing(Layout::getEpoch).reversed();
+
     /**
      * A Gson parser.
      */
@@ -322,6 +329,17 @@ public class Layout {
         this.unresponsiveServers = layoutCopy.getUnresponsiveServers();
         this.epoch = layoutCopy.getEpoch();
         this.clusterId = layoutCopy.clusterId;
+    }
+
+    public void nextEpoch() {
+        epoch += 1;
+    }
+
+    public List<String> getActiveLayoutServers() {
+        return layoutServers.stream()
+                // Unresponsive servers are excluded as they do not respond with a WrongEpochException.
+                .filter(s -> !unresponsiveServers.contains(s))
+                .collect(Collectors.toList());
     }
 
     public enum ReplicationMode {

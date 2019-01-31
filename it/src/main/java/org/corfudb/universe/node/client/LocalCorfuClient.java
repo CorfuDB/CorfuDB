@@ -127,4 +127,9 @@ public class LocalCorfuClient implements CorfuClient {
     public void invalidateLayout() {
         runtime.invalidateLayout();
     }
+
+    @Override
+    public void shutdown() {
+        runtime.shutdown();
+    }
 }

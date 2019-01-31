@@ -59,4 +59,6 @@ public interface CorfuClient extends Node {
         throw new UnreachableClusterException("Cluster is unavailable");
     }
 
+    void shutdown();
+
 }
