@@ -102,6 +102,8 @@ public class ConcurrentClusterResizeIT extends GenericIntegrationTest {
                     assertThat(table.get(String.valueOf(x))).isEqualTo(String.valueOf(x));
                 }
             });
+
+            corfuClient.shutdown();
         });
     }
 }

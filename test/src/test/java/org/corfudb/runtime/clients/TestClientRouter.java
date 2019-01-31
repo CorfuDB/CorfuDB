@@ -128,6 +128,10 @@ public class TestClientRouter implements IClientRouter {
             CorfuMsg m = (CorfuMsg) o;
             if (validateClientId(m)) {
                 IClient handler = handlerMap.get(m.getMsgType());
+                if (handler == null){
+                    throw new IllegalStateException("Client handler doesn't exists for message: " + m.getMsgType());
+                }
+
                 handler.handleMessage(m, null);
             }
         }

@@ -14,6 +14,7 @@ import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.util.ClassUtils;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -64,5 +65,15 @@ class CorfuClusterParams implements GroupParams {
 
     public String getFullNodeName(String nodeName) {
         return name + "-corfu-" + nodeName;
+    }
+
+    public int size(){
+        return getNodesParams().size();
+    }
+
+    public List<String> getClusterNodes() {
+        return getNodesParams().stream()
+                .map(CorfuServerParams::getName)
+                .collect(Collectors.toList());
     }
 }

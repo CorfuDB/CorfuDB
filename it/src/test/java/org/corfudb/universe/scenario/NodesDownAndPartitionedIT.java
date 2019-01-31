@@ -10,6 +10,7 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import java.time.Duration;
+import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
@@ -28,7 +29,6 @@ public class NodesDownAndPartitionedIT extends GenericIntegrationTest {
      * 5) Recover cluster by restart the stopped node and fix partition
      * 5) Verify layout, cluster status and data path
      */
-    @Ignore("Fix iptables for travis")
     @Test(timeout = 300000)
     public void nodeDownAndPartitionTest() {
         getScenario().describe((fixture, testCase) -> {
@@ -48,7 +48,7 @@ public class NodesDownAndPartitionedIT extends GenericIntegrationTest {
 
                 // Stop one node and partition another one
                 server1.stop(Duration.ofSeconds(10));
-                server2.disconnect();
+                server2.disconnect(Arrays.asList(server1, server2));
 
                 // TODO: There is a bug in NodeStatus API, waiting for patch and uncomment following lines
                 // Verify cluster status is UNAVAILABLE with two nodes up and one node down
@@ -81,6 +81,8 @@ public class NodesDownAndPartitionedIT extends GenericIntegrationTest {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }
             });
+
+            corfuClient.shutdown();
         });
     }
 }
