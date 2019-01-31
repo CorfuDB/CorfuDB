@@ -159,8 +159,9 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
                         dockerManager.execCommand(params.getName(),
                                 "iptables", "-A", "OUTPUT", "-d", neighbourIp, "-j", "DROP");
                     } catch (DockerException | InterruptedException ex) {
+                        List<String> clusterNodes = clusterParams.getClusterNodes();
                         throw new NodeException("Can't disconnect container: " + params.getName() +
-                                " from docker network ", ex);
+                                " from docker network. Corfu cluster: " + clusterNodes, ex);
                     }
                 });
     }

@@ -71,6 +71,8 @@ public class ReconfigurationEventHandler {
     public static boolean handleHealing(@Nonnull CorfuRuntime runtime,
                                         @Nonnull Set<String> healedServers,
                                         @Nonnull Duration retryQueryTimeout) {
+        log.info("Handle healing: {}", healedServers);
+
         try {
             for (String healedServer : healedServers) {
                 // Try to estimate a reasonable timeout to rebuild the logging unit

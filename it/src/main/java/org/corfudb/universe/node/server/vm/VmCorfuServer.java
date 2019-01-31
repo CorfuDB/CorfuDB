@@ -98,8 +98,8 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         servers.stream()
                 .filter(s -> !s.getParams().equals(params))
                 .forEach(s -> {
-                    executeCommand(String.join(" ", IpTablesUtil.dropInput(s.getIpAddress())));
-                    executeCommand(String.join(" ", IpTablesUtil.dropOutput(s.getIpAddress())));
+                    executeSudoCommand(String.join(" ", IpTablesUtil.dropInput(s.getIpAddress())));
+                    executeSudoCommand(String.join(" ", IpTablesUtil.dropOutput(s.getIpAddress())));
                 });
     }
 
@@ -159,8 +159,8 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         servers.stream()
                 .filter(s -> !s.getParams().equals(params))
                 .forEach(s -> {
-                    executeCommand(String.join(" ", IpTablesUtil.revertDropInput(s.getIpAddress())));
-                    executeCommand(String.join(" ", IpTablesUtil.revertDropOutput(s.getIpAddress())));
+                    executeSudoCommand(String.join(" ", IpTablesUtil.revertDropInput(s.getIpAddress())));
+                    executeSudoCommand(String.join(" ", IpTablesUtil.revertDropOutput(s.getIpAddress())));
                 });
     }
 

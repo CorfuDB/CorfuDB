@@ -26,7 +26,6 @@ public class NodesPausedAndPartitionedIT extends GenericIntegrationTest {
      * 5) Recover cluster by restart the stopped node and fix partition
      * 5) Verify layout, cluster status and data path
      */
-    @Ignore("Fix iptables for travis")
     @Test(timeout = 300000)
     public void nodesPausedAndPartitionedTest() {
         getScenario().describe((fixture, testCase) -> {
@@ -79,6 +78,8 @@ public class NodesPausedAndPartitionedIT extends GenericIntegrationTest {
                     assertThat(table.get(String.valueOf(i))).isEqualTo(String.valueOf(i));
                 }
             });
+
+            corfuClient.shutdown();
         });
     }
 }

@@ -318,7 +318,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 ch.force(true);
             }
         }
-        log.debug("Sync'd {} channels", channelsToSync.size());
+        log.trace("Sync'd {} channels", channelsToSync.size());
         channelsToSync.clear();
     }
 

@@ -34,10 +34,10 @@ jobs:
     script:
     - ./mvnw -pl :test clean test -T 1C -Dtest.travisBuild=true
   - script:
-    - ./mvnw -pl :test clean verify -T 1C -Pit -DskipTests -Dtest.travisBuild=true
+    - ./mvnw -pl :test clean verify -Pit -DskipTests -Dtest.travisBuild=true
     name: Integration Tests
   - script:
-    - ./mvnw -pl :universe clean verify -T 1C -Pit
+    - ./mvnw -pl :universe clean verify -Pit
     name: Testing Framework Tests
   - stage: code_quality
     name: Code Quality
