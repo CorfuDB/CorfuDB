@@ -167,7 +167,7 @@ public class FailureDetector implements IDetector {
             PollReport currReport = pollIteration(allServers, router, epoch, sequencerMetrics, layout);
             reports.add(currReport);
 
-            long pollInterval = tunePollIterationTimeouts(router, currReport);
+            long pollInterval = modifyIterationTimeouts(router, currReport);
 
             // Sleep for the provided poll interval before starting the next iteration
             Sleep.MILLISECONDS.sleepUninterruptibly(pollInterval);
@@ -190,7 +190,7 @@ public class FailureDetector implements IDetector {
 
         Set<String> allConnectedNodes = Sets.union(connectedNodesAggregated, wrongEpochsAggregated.keySet());
 
-        pollReportTimeoutsTuning(router, failedNodesAggregated, allConnectedNodes);
+        tunePollReportTimeouts(router, failedNodesAggregated, allConnectedNodes);
 
         PollReport latestReport = reports.get(reports.size() - 1);
 
@@ -211,7 +211,7 @@ public class FailureDetector implements IDetector {
      * @param currReport current poll report
      * @return updated poll interval
      */
-    private long tunePollIterationTimeouts(Map<String, IClientRouter> router, PollReport currReport) {
+    private long modifyIterationTimeouts(Map<String, IClientRouter> router, PollReport currReport) {
         long pollIterationStartTime = System.nanoTime();
         long pollInterval = initialPollInterval;
 
@@ -235,17 +235,17 @@ public class FailureDetector implements IDetector {
      * We can try to scale back the network latency time after every poll round.
      * If there are no failures, after a few rounds our polling period converges back to initPeriodDuration.
      *
-     * @param router            router
+     * @param clientRouters            clientRouters
      * @param failedNodes       list of failed nodes
      * @param allConnectedNodes all connected nodes
      */
-    private void pollReportTimeoutsTuning(
-            Map<String, IClientRouter> router, Set<String> failedNodes, Set<String> allConnectedNodes) {
+    private void tunePollReportTimeouts(
+            Map<String, IClientRouter> clientRouters, Set<String> failedNodes, Set<String> allConnectedNodes) {
         period = Math.max(initPeriodDuration, period - periodDelta);
-        tuneRoutersResponseTimeout(router, allConnectedNodes, period);
+        tuneRoutersResponseTimeout(clientRouters, allConnectedNodes, period);
         // Reset the timeout of all the failed nodes to the max value to set a longer
         // timeout period to detect their response.
-        tuneRoutersResponseTimeout(router, failedNodes, maxPeriodDuration);
+        tuneRoutersResponseTimeout(clientRouters, failedNodes, maxPeriodDuration);
     }
 
     /**
@@ -288,19 +288,19 @@ public class FailureDetector implements IDetector {
      * - build poll report
      *
      * @param allServers       all servers in the cluster
-     * @param router           client router
+     * @param clientRouters           client clientRouters
      * @param epoch            current epoch
      * @param sequencerMetrics metrics
      * @param layout           current layout
      * @return a poll report
      */
     private PollReport pollIteration(
-            Set<String> allServers, Map<String, IClientRouter> router, long epoch, SequencerMetrics sequencerMetrics,
+            Set<String> allServers, Map<String, IClientRouter> clientRouters, long epoch, SequencerMetrics sequencerMetrics,
             Layout layout) {
 
         log.trace("Poll iteration. Epoch: {}", epoch);
 
-        Map<String, CompletableFuture<NodeState>> stateFuture = pollAsync(allServers, router, epoch);
+        Map<String, CompletableFuture<NodeState>> stateFuture = pollAsync(allServers, clientRouters, epoch);
 
         Map<String, Long> wrongEpochs = new HashMap<>();
         //The nodes local node is disconnected to.
@@ -383,17 +383,17 @@ public class FailureDetector implements IDetector {
      * pollCompletableFutures.
      *
      * @param allServers All active members in the layout.
-     * @param routerMap  Map of routers for all active members.
+     * @param clientRouters  Map of routers for all active members.
      * @param epoch      Current epoch for the polling round to stamp the ping messages.
      * @return Map of Completable futures for the pings.
      */
     private Map<String, CompletableFuture<NodeState>> pollAsync(
-            Set<String> allServers, Map<String, IClientRouter> routerMap, long epoch) {
+            Set<String> allServers, Map<String, IClientRouter> clientRouters, long epoch) {
         // Poll servers for health.  All ping activity will happen in the background.
         Map<String, CompletableFuture<NodeState>> clusterState = new HashMap<>();
         allServers.forEach(s -> {
             try {
-                clusterState.put(s, new ManagementClient(routerMap.get(s), epoch).sendNodeStateRequest());
+                clusterState.put(s, new ManagementClient(clientRouters.get(s), epoch).sendNodeStateRequest());
             } catch (Exception e) {
                 CompletableFuture<NodeState> cf = new CompletableFuture<>();
                 cf.completeExceptionally(e);
@@ -428,12 +428,12 @@ public class FailureDetector implements IDetector {
      * @param endpoints Router endpoints.
      * @param timeout   New timeout value.
      */
-    private void tuneRoutersResponseTimeout(Map<String, IClientRouter> routerMap, Set<String> endpoints, long timeout) {
+    private void tuneRoutersResponseTimeout(Map<String, IClientRouter> clientRouters, Set<String> endpoints, long timeout) {
 
         log.trace("Tuning router timeout responses for endpoints:{} to {}ms", endpoints, timeout);
         endpoints.forEach(server -> {
-            if (routerMap.get(server) != null) {
-                routerMap.get(server).setTimeoutResponse(timeout);
+            if (clientRouters.get(server) != null) {
+                clientRouters.get(server).setTimeoutResponse(timeout);
             }
         });
     }

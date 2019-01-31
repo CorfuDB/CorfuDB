@@ -304,9 +304,9 @@ public class RemoteMonitoringService implements MonitoringService {
      *  - correct wrong epochs by resealing the servers and updating trailing layout servers.
      *    Fetch quorum layout and update the epoch according to the quorum.
      *  - check if current layout slot is unfilled then update layout to latest one.
-     *  - Looking for link failures in the cluster, handle failure if found
+     *  - handle healed nodes.
+     *  - Looking for link failures in the cluster, handle failure if found.
      *  - bootstrap sequencer if needed
-     *  - handle healed nodes
      * </pre>
      *
      * @param pollReport cluster status
@@ -328,7 +328,7 @@ public class RemoteMonitoringService implements MonitoringService {
 
             try {
                 if (pollReport.isCurrentLayoutSlotUnFilled()) {
-                    handleFailure(Collections.emptySet(), pollReport).get();
+                    detectFailure(Collections.emptySet(), pollReport).get();
                     return DetectorTask.COMPLETED;
                 }
 
@@ -342,14 +342,17 @@ public class RemoteMonitoringService implements MonitoringService {
                 log.error("Can't fill slot. Poll report: {}", pollReport, ex);
             }
 
-            DetectorTask healing = handleHealing(pollReport, serverContext.copyManagementLayout());
+            DetectorTask healing = detectHealing(pollReport, serverContext.copyManagementLayout());
 
+            //If local node healed it causes change in the cluster state which means the layout is changed also.
+            //If the cluster status is changed let failure detector detect the change on next iteration and
+            //behave according to latest cluster state.
             if (healing == DetectorTask.COMPLETED){
                 return DetectorTask.COMPLETED;
             }
 
             // Analyze the poll report and trigger failure handler if needed.
-            DetectorTask handleFailure = handleFailure(pollReport);
+            DetectorTask handleFailure = detectFailure(pollReport);
 
             //If a failure is detected (which means we have updated a layout)
             // then don't try to heal anything, wait for next iteration.
@@ -367,12 +370,12 @@ public class RemoteMonitoringService implements MonitoringService {
      * Handle healed node.
      * Cluster advisor provides healed node based on current cluster state if healed node found then
      * save healed node in the history and send a message with the detected healed node
-     * to the relevant management server
+     * to the relevant management server.
      *
      * @param pollReport poll report
      * @param layout     current layout
      */
-    private DetectorTask handleHealing(PollReport pollReport, Layout layout) {
+    private DetectorTask detectHealing(PollReport pollReport, Layout layout) {
         log.trace("Handle healing, layout: {}", layout);
 
         Optional<NodeRank> healed = advisor.healedServer(
@@ -440,7 +443,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * @param pollReport Poll report obtained from failure detection policy.
      * @return boolean result if failure was handled. False if there is no failure
      */
-    private DetectorTask handleFailure(PollReport pollReport) {
+    private DetectorTask detectFailure(PollReport pollReport) {
         log.trace("Handle failures for the report: {}", pollReport);
 
         Layout layout = serverContext.copyManagementLayout();
@@ -476,7 +479,7 @@ public class RemoteMonitoringService implements MonitoringService {
 
                 Set<String> failedNodes = new HashSet<>();
                 failedNodes.add(failedNode.getEndpoint());
-                return handleFailure(failedNodes, pollReport).get();
+                return detectFailure(failedNodes, pollReport).get();
             }
         } catch (Exception e) {
             log.error("Exception invoking failure handler : {}", e);
@@ -531,7 +534,7 @@ public class RemoteMonitoringService implements MonitoringService {
      * @param failedNodes list of failed nodes
      * @param pollReport  poll report
      */
-    private CompletableFuture<DetectorTask> handleFailure(Set<String> failedNodes, PollReport pollReport) {
+    private CompletableFuture<DetectorTask> detectFailure(Set<String> failedNodes, PollReport pollReport) {
 
         ClusterGraph graph = advisor.getGraph(pollReport.getClusterState());
 

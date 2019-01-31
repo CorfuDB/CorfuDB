@@ -922,7 +922,7 @@ public class CorfuRuntime {
                                 "Interrupted during layout fetch", ie);
                     } catch (ExecutionException ee){
                         if (ee.getCause() instanceof TimeoutException) {
-                            log.debug("Tried to get layout from {} but failed by timeout", s);
+                            log.warn("Tried to get layout from {} but failed by timeout", s);
                         } else {
                             log.warn("Tried to get layout from {} but failed with exception:", s, ee);
                         }
