@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -16,6 +17,7 @@ import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
@@ -215,10 +217,9 @@ public abstract class AbstractTransactionalContext implements
                     // abort the transaction
                     TransactionAbortedException tae =
                             new TransactionAbortedException(
-                                    new TxResolutionInfo(getTransactionID(),
-                                            snapshotTimestamp), null,
-                                    proxy.getStreamID(),
-                                    AbortCause.TRIM, te, this);
+                                    new TxResolutionInfo(getTransactionID(), snapshotTimestamp),
+                                    TokenResponse.NO_CONFLICT_KEY, proxy.getStreamID(),
+                                    Address.NON_ADDRESS, AbortCause.TRIM, te, this);
                     abortTransaction(tae);
                     throw tae;
                 }
