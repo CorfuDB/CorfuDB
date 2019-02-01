@@ -126,7 +126,7 @@ public abstract class TXConflictScenariosTest extends AbstractTransactionContext
      *  - task j reads counter j+1 mod n (own), expecting to read OVERWRITE_TWICE,
      *  - task j reads counter j (the one it changed before), expecting to read OVERWRITE_ONCE ,
      *
-     *  Then all tasks try to commit their transasctions.
+     *  Then all tasks try to commit their transactions.
      */
     void testRWConflicts(boolean testInterleaved)
             throws Exception {

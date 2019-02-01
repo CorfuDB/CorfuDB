@@ -230,9 +230,9 @@ public class StreamTest extends AbstractTransactionsTest {
      *   - NUM_BATCHES TX's
      *   - each TX performs BATCH_SZ operations, mixing R/W according to the specified ratio.
      *
-     * @param readPrecent ratio of reads (to 100)
+     * @param readPercent ratio of reads (to 100)
      */
-    public void concurrentStreamRWLoad(int ignoredThreadNum, int readPrecent) {
+    public void concurrentStreamRWLoad(int ignoredThreadNum, int readPercent) {
         final AtomicInteger aborts = new AtomicInteger(0);
 
         for (int i = 0; i < NUM_BATCHES; i++) {
@@ -256,7 +256,7 @@ public class StreamTest extends AbstractTransactionsTest {
                     accumulator += map3.get("m3" + r3);
 
                     // perform random put()'s with probability '1 - readPercent/100'
-                    if (rand.nextInt(MAX_PERCENT) >= readPrecent) {
+                    if (rand.nextInt(MAX_PERCENT) >= readPercent) {
                         if (rand.nextInt(2) == 1)
                             map2.put("m2" + rand.nextInt(numTasks), accumulator);
                         else

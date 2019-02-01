@@ -34,7 +34,7 @@ public class Serializers {
     /**
      * Return the serializer byte.
      * @param type A byte that tags a serializer
-     * @return     A serializer that corrosponds to the type byte
+     * @return     A serializer that corresponds to the type byte
      */
     public static ISerializer getSerializer(Byte type) {
         if (type <= SYSTEM_SERIALIZERS_COUNT) {

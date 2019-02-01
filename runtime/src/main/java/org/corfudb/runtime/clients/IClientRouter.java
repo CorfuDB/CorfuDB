@@ -11,7 +11,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
  * This is an interface in which all client routers must implement.
  * Client routers are classes which talk to server routers. Clients are registered
  * on client routers using the addClient() interface, and can be retrieved using the
- * getClient() inteface.
+ * getClient() interface.
  *
  * <p>Created by mwei on 12/13/15.
  */

@@ -1,8 +1,8 @@
 package org.corfudb.samples;
 
-import org.corfudb.runtime.collections.SMRMap;
-
 import java.util.Map;
+
+import org.corfudb.runtime.collections.SMRMap;
 
 /**
  * Consider again the code from {@link org.corfudb.samples::HeloCorfu.java}:
@@ -26,7 +26,7 @@ import java.util.Map;
  *
  * Note that there is no need to worry about the atomicity of interleaved calls to individual Corfu-object methods,
  * e.g., `map.put` and `map.get`. All Corfu-object methods are guaranteed to be atomic
- * against multi-threaded programs and concurrent program instaces.
+ * against multi-threaded programs and concurrent program instances.
  *
  * However, there is no guarantee about the interleaving of `map.get` followed by `map.put`,
  * when invoked from concurrent program instances. Therefore, any of the following outputs are valid:

@@ -1,7 +1,14 @@
 package org.corfudb.runtime.view.workflows;
 
+import java.time.Duration;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.ManagementClient;
@@ -10,13 +17,6 @@ import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.exceptions.WorkflowResultUnknownException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
-
-import java.time.Duration;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
 
 /**
  * An abstract class that defines a generic workflow request structure.
@@ -100,7 +100,7 @@ public abstract class WorkflowRequest {
      *                   running the workflow
      * @param timeout    the total time to wait for the workflow to complete
      * @param pollPeriod the poll period to query the completion of the workflow
-     * @throws TimeoutException if the workflow doesn't complete withint the timout
+     * @throws TimeoutException if the workflow doesn't complete within the timeout
      *                          period
      */
     private void waitForWorkflow(@NonNull UUID workflow, @NonNull ManagementClient client,
@@ -121,7 +121,7 @@ public abstract class WorkflowRequest {
      * Starts executing the workflow request.
      *
      * This method will succeed only if the workflow executed successfully, otherwise
-     * it can throw a WorkflowResultUnknownException when the timeouts are exhauseted
+     * it can throw a WorkflowResultUnknownException when the timeouts are exhausted
      * and the expected side effect cannot be verified.
      *
      * @throws WorkflowResultUnknownException when the workflow result cannot be

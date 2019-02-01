@@ -1,14 +1,14 @@
 package org.corfudb.runtime.object.transactions;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import com.google.common.reflect.TypeToken;
-import org.corfudb.runtime.collections.SMRMap;
-import org.junit.Test;
 
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.corfudb.runtime.collections.SMRMap;
+import org.junit.Test;
 
 /**
  * Created by dmalkhi on 12/13/16.
@@ -70,7 +70,7 @@ public class WriteWriteTXConcurrencyTest extends TXConflictScenariosTest {
     public void testOpacityWW(boolean testInterleaved) throws Exception {
         testOpacity(testInterleaved);
 
-        // verfiy that all aborts are justified
+        // verify that all aborts are justified
         for (int task_num = 0; task_num < numTasks; task_num++) {
             if (commitStatus.get(task_num) != COMMITVALUE) {
                 assertThat(sharedCounters.get((task_num + 1) % numTasks).getValue())
@@ -89,7 +89,7 @@ public class WriteWriteTXConcurrencyTest extends TXConflictScenariosTest {
 
         testRWConflicts(testInterleaved);
 
-        // verfiy that all aborts are justified
+        // verify that all aborts are justified
         for (int task_num = 0; task_num < numTasks; task_num++) {
             if (commitStatus.get(task_num) != COMMITVALUE)
                 assertThat(commitStatus.get((task_num + 1) % numTasks) == COMMITVALUE ||

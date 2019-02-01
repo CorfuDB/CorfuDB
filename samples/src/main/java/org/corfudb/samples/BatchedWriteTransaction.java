@@ -1,10 +1,10 @@
 package org.corfudb.samples;
 
-import org.corfudb.runtime.collections.SMRMap;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import org.corfudb.runtime.collections.SMRMap;
 
 /**
  * Sometimes developers may group mutator operations into transactions for performance reasons.
@@ -14,7 +14,7 @@ import java.util.Map;
  * Workload 1:
  * This workload populates a large map with entries, in two ways,
  *   - default, where one mutation is dumped to the log
- *   - in batches, each batch is a "transaction", dumped to the log as an indivisuble entry.
+ *   - in batches, each batch is a "transaction", dumped to the log as an indivisible entry.
  *
  * Running on my macbook, the first loop takes (roughly) 57 seconds, the second one 5 seconds.
  *

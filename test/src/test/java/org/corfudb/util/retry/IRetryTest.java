@@ -4,13 +4,13 @@
  */
 package org.corfudb.util.retry;
 
-import org.corfudb.AbstractCorfuTest;
-import org.junit.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.sql.SQLException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.corfudb.AbstractCorfuTest;
+import org.junit.Test;
 
 /**
  * Created by Konstantin Spirov on 4/6/2017.
@@ -32,7 +32,7 @@ public class IRetryTest extends AbstractCorfuTest {
     }
 
     @Test(expected = SQLException.class)
-    public void testIRetryIsAbleToThrowCatchedExceptions()
+    public void testIRetryIsAbleToThrowCaughtExceptions()
             throws SQLException, InterruptedException {
         IRetry.build(ExponentialBackoffRetry.class, SQLException.class, () -> {
             throw new SQLException();

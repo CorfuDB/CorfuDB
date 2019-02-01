@@ -14,7 +14,7 @@ public class JsonUtils {
 
 
     /**
-     * Return an intedented json string.
+     * Return an indented json string.
      * @param jsonString Json String
      * @return           Pretty json string
      */

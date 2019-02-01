@@ -1,10 +1,19 @@
 package org.corfudb.runtime.object;
 
+import static java.lang.Long.min;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+
+import java.lang.reflect.Constructor;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Supplier;
+
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -23,14 +32,6 @@ import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.ISerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.lang.reflect.Constructor;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.function.Supplier;
-
-import static java.lang.Long.min;
 
 /**
  * In the Corfu runtime, on top of a stream,
@@ -351,7 +352,7 @@ public class CorfuCompileProxy<T> implements ICorfuSMRProxyInternal<T> {
     @Deprecated // TODO: Add replacement method that conforms to style
     @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"}) // Due to deprecation
     private <R> R TXExecuteInner(Supplier<R> txFunction, boolean isMetricsEnabled) {
-        // Don't nest transactions if we are already running transactionally
+        // Don't nest transactions if we are already running in a transaction
         if (TransactionalContext.isInTransaction()) {
             try {
                 return txFunction.get();

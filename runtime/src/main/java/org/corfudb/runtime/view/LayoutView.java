@@ -93,7 +93,7 @@ public class LayoutView extends AbstractView {
         Layout layoutToPropose = alreadyProposedLayout != null ? alreadyProposedLayout : layout;
         //phase 2: propose the new layout.
         propose(epoch, rank, layoutToPropose);
-        //phase 3: commited
+        //phase 3: committed
         committed(epoch, layoutToPropose);
     }
 

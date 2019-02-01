@@ -1,6 +1,13 @@
 package org.corfudb.runtime.view;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.google.common.reflect.TypeToken;
+
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Semaphore;
+
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
@@ -9,18 +16,9 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.SMRMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Semaphore;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by mwei on 2/18/16.
@@ -48,7 +46,7 @@ public class ObjectsViewTest extends AbstractViewTest {
     public void abortedTransactionDoesNotConflict()
             throws Exception {
         final String mapA = "map a";
-        //Enbale transaction logging
+        //Enable transaction logging
         CorfuRuntime r = getDefaultRuntime()
                 .setTransactionLogging(true);
 
