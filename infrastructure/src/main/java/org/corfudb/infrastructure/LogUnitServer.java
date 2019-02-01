@@ -46,18 +46,13 @@ import java.util.concurrent.TimeUnit;
  * Distributed Shared Log.
  *
  * <p>All reads and writes go through a cache. For persistence, every 10,000 log entries are written
- * to individual
- * files (logs), which are represented as FileHandles. Each FileHandle contains a pointer to the
- * tail of the file, a
- * memory-mapped file channel, and a set of addresses known to be in the file. To append an
- * entry, the pointer to the
- * tail is first extended to the length of the entry, and the entry is added to the set of known
- * addresses. A header
- * is written, which consists of the ASCII characters LE, followed by a set of flags, the log
- * unit address, the size
- * of the entry, then the metadata size, metadata and finally the entry itself. When the entry is
- * complete, a written
- * flag is set in the flags field.
+ * to individual files (logs), which are represented as FileHandles. Each FileHandle contains a
+ * pointer to the tail of the file, a memory-mapped file channel, and a set of addresses known
+ * to be in the file. To append an entry, the pointer to the tail is first extended to the
+ * length of the entry, and the entry is added to the set of known addresses. A header is
+ * written, which consists of the ASCII characters LE, followed by a set of flags, the log unit
+ * address, the size of the entry, then the metadata size, metadata and finally the entry itself
+ * . When the entry is complete, a written flag is set in the flags field.
  */
 @Slf4j
 public class LogUnitServer extends AbstractServer {
@@ -319,13 +314,13 @@ public class LogUnitServer extends AbstractServer {
      *     the read() and append(). Any address that cannot be retrieved should be returned as
      *     unwritten (null).
      */
-    public synchronized ILogData handleRetrieval(long address) {
+    private synchronized ILogData handleRetrieval(long address) {
         LogData entry = streamLog.read(address);
         log.trace("Retrieved[{} : {}]", address, entry);
         return entry;
     }
 
-    public synchronized void handleEviction(long address, ILogData entry, RemovalCause cause) {
+    private synchronized void handleEviction(long address, ILogData entry, RemovalCause cause) {
         log.trace("Eviction[{}]: {}", address, cause);
         streamLog.release(address, (LogData) entry);
     }
