@@ -1,11 +1,11 @@
 package org.corfudb.runtime.view.stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests the BackpointerStreamView
@@ -47,7 +47,7 @@ public class BackpointerStreamViewTest extends AbstractViewTest {
             sv.append(String.valueOf(i).getBytes());
         }
 
-        // travese the stream forward while periodically (every ten
+        // traverse the stream forward while periodically (every ten
         // iterations) appending to it
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             assertThat(sv.hasNext()).isTrue();

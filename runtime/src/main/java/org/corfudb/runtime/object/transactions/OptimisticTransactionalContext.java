@@ -16,6 +16,7 @@ import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.AppendException;
@@ -36,7 +37,7 @@ import org.corfudb.runtime.object.VersionLockedObject;
  * <p>(2) Opacity:
  *  Read in a transaction observe the state of the system ("snapshot") as of the time of the
  *      first read which occurs in the transaction ("first read
- *      timestamp"), except in case (1) above where they observe the own tranasction's writes.
+ *      timestamp"), except in case (1) above where they observe the own transaction's writes.
  *
  * <p>(3) Atomicity:
  *  Writes in a transaction are guaranteed to commit atomically,
@@ -194,7 +195,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * is logged to the write set for the transaction.
      *
      * <p>Return the "address" of the update; used for retrieving results
-     * from operations via getUpcallRestult.
+     * from operations via getUpcallResult.
      *
      * @param proxy         The proxy making the request.
      * @param updateEntry   The timestamp of the request.
@@ -304,8 +305,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         } catch (AppendException oe) {
             // We were overwritten (and the original snapshot is now conflicting),
             // which means we must abort.
-            throw new TransactionAbortedException(txInfo, null, null,
-                AbortCause.OVERWRITE, oe, this);
+            throw new TransactionAbortedException(txInfo, AbortCause.OVERWRITE, oe, this);
         }
 
         log.trace("Commit[{}] Acquire address {}", this, address);

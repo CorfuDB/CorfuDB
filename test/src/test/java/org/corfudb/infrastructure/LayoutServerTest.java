@@ -1,6 +1,10 @@
 package org.corfudb.infrastructure;
 
 
+import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
+
+import java.util.UUID;
+
 import lombok.extern.slf4j.Slf4j;
 
 import org.assertj.core.api.Assertions;
@@ -14,11 +18,7 @@ import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
-
-import java.util.UUID;
-
 //import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
 
 /**
  * Created by mwei on 12/14/15.
@@ -371,7 +371,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
     /**
      * Validates that the layout server accept or rejects incoming phase1 and phase2 messages from multiple
-     * clients based on current state {Phease1Rank [rank, clientID], Phase2Rank [rank, clientID] }
+     * clients based on current state {Phase1Rank [rank, clientID], Phase2Rank [rank, clientID] }
      * If LayoutServer has accepted a phase1 message from a client , it can only accept a higher ranked phase1 message
      * from another client.
      * A phase2 message can only be accepted if the last accepted phase1 message is from the same client and has the

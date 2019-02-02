@@ -21,7 +21,7 @@ public @interface MutatorAccessor {
 
     /** The name of the function to undo this mutation, which needs to belong
      * to the same object.
-     * @return The name of the undo functino.
+     * @return The name of the undo function.
      */
     String undoFunction() default "";
 

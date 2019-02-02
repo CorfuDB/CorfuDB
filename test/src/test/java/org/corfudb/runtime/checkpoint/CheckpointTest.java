@@ -1,11 +1,9 @@
 package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
 import com.google.common.reflect.TypeToken;
 
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import lombok.extern.slf4j.Slf4j;
@@ -164,13 +162,13 @@ public class CheckpointTest extends AbstractObjectTest {
     /**
      * this test builds two maps, m2A m2B, and brings up three threads:
      * <p>
-     * 1. one pupolates the maps with mapSize items
+     * 1. one populates the maps with mapSize items
      * 2. one does a periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times
      * 3. one repeatedly (LOW times) starts a fresh runtime, and instantiates the maps.
      * they should rebuild from the latest checkpoint (if available).
      * this thread performs some sanity checks on the map state
      * <p>
-     * Finally, after all three threads finish, again we start a fresh runtime and instante the maps.
+     * Finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
      * This time the we check that the new map instances contains all values
      *
      * @throws Exception
@@ -204,7 +202,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
         executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
 
-        // finally, after all three threads finish, again we start a fresh runtime and instante the maps.
+        // finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
         // This time the we check that the new map instances contains all values
         validateMapRebuild(mapSize, true);
 
@@ -218,7 +216,7 @@ public class CheckpointTest extends AbstractObjectTest {
      * 2. one thread repeats ITERATIONS_LOW times starting a fresh runtime, and instantiating the maps.
      * they should be empty.
      * <p>
-     * Finally, after the two threads finish, again we start a fresh runtime and instante the maps.
+     * Finally, after the two threads finish, again we start a fresh runtime and instantiate the maps.
      * Then verify they are empty.
      *
      * @throws Exception
@@ -243,7 +241,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
         executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
 
-        // Finally, after the two threads finish, again we start a fresh runtime and instante the maps.
+        // Finally, after the two threads finish, again we start a fresh runtime and instantiate the maps.
         // Then verify they are empty.
         validateMapRebuild(mapSize, true);
 
@@ -271,7 +269,7 @@ public class CheckpointTest extends AbstractObjectTest {
      * they should rebuild from the latest checkpoint (if available).
      * this thread checks that all values are present in the maps
      * <p>
-     * Finally, after all three threads finish, again we start a fresh runtime and instante the maps.
+     * Finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
      * This time the we check that the new map instances contains all values
      *
      * @throws Exception
@@ -301,7 +299,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
         executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
 
-        // Finally, after all three threads finish, again we start a fresh runtime and instante the maps.
+        // Finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
         // This time the we check that the new map instances contains all values
         validateMapRebuild(mapSize, true);
 
@@ -320,7 +318,7 @@ public class CheckpointTest extends AbstractObjectTest {
      * they should rebuild from the latest checkpoint (if available).
      * this thread performs some sanity checks on the map state
      * <p>
-     * Finally, after all three threads finish, again we start a fresh runtime and instante the maps.
+     * Finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
      * This time the we check that the new map instances contains all values
      *
      * @throws Exception
@@ -355,7 +353,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
         executeScheduled(PARAMETERS.CONCURRENCY_SOME, PARAMETERS.TIMEOUT_LONG);
 
-        // finally, after all three threads finish, again we start a fresh runtime and instante the maps.
+        // finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
         // This time the we check that the new map instances contains all values
         validateMapRebuild(mapSize, true);
 

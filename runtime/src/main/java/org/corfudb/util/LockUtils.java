@@ -18,7 +18,7 @@ public class LockUtils {
         }
 
         /**
-         * Aquire a write lock.
+         * Acquire a write lock.
          * @return Write lock
          */
         public AutoCloseRwLock writeLock() {
@@ -32,7 +32,7 @@ public class LockUtils {
         }
 
         /**
-         * Aquire read lock.
+         * Acquire read lock.
          * @return read lock
          */
         public AutoCloseRwLock readLock() {

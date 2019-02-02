@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.log;
 
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
@@ -15,7 +17,6 @@ import org.corfudb.format.Types;
 import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
-import org.corfudb.format.Types.TrimEntry;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -30,31 +31,22 @@ import java.io.File;
 import java.io.FileFilter;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-
-import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
 
 /**
@@ -264,7 +256,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             // TODO(Maithem): Although this operation is persisted to disk,
             // the startingAddress can be lost even after the method has completed.
             // This is due to the fact that updates on the local datastore don't
-            // expose disk sync functionalty.
+            // expose disk sync functionality.
             long newStartingAddress = address + 1;
             serverContext.setStartingAddress(newStartingAddress);
             startingAddress = newStartingAddress;
@@ -475,7 +467,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         Metadata metadata = parseMetadata(ch);
         if (metadata == null) {
             // Partial write on the metadata for the header
-            // Rewind the channel position to the begining of the file
+            // Rewind the channel position to the beginning of the file
             ch.position(0);
             return null;
         }
@@ -483,7 +475,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         ByteBuffer buffer = getPayloadForMetadata(ch, metadata);
         if (buffer == null) {
             // partial write on the header payload
-            // Rewind the channel position to the begining of the file
+            // Rewind the channel position to the beginning of the file
             ch.position(0);
             return null;
         }
@@ -574,11 +566,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 log.warn("Malformed entry, metadata {} in file {}", metadata, sh.getFileName());
 
                 // Note that after rewinding the channel pointer, it is important to truncate
-                // any bytes that were written. This is required to avoid an ambigous case
+                // any bytes that were written. This is required to avoid an ambiguous case
                 // where a subsequent write (after a failed write) succeeds but writes less
                 // bytes than the partially written buffer. In that case, the log unit can't
-                // determine if the bytes correspund to a partially written buffer that needs
-                // to be ignored, or if the bytes corrrespond to a corrupted metadata field.
+                // determine if the bytes correspond to a partially written buffer that needs
+                // to be ignored, or if the bytes correspond to a corrupted metadata field.
                 fc.truncate(fc.position());
                 fc.force(true);
                 return;
@@ -615,7 +607,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
     }
 
-    private @Nullable FileChannel getChannel(String filePath, boolean readOnly) throws IOException {
+    @Nullable
+    private FileChannel getChannel(String filePath, boolean readOnly) throws IOException {
         try {
 
             if (readOnly) {
@@ -788,7 +781,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         return Optional.of(result);
     }
 
-    private @Nullable IMetadata.DataRank createDataRank(LogEntry entity) {
+    @Nullable
+    private IMetadata.DataRank createDataRank(LogEntry entity) {
         if (!entity.hasRank()) {
             return null;
         }
@@ -852,7 +846,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     /**
      *
      * Attempts to write a buffer to a file channel, if write fails with an
-     * IOException then the channel pointer is moved back to its original positon
+     * IOException then the channel pointer is moved back to its original position
      * before the write
      *
      * @param channel the channel to write to
@@ -922,7 +916,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         List<LogData> processed  = new ArrayList<>();
         for (int x = 0; x < range.size(); x++) {
             // TODO(Maithem) Add an extra check to make
-            // sure that trimmed entres don't alternate
+            // sure that trimmed entries don't alternate
             // with non-trimmed entries
             LogData curr = range.get(x);
             if (curr.isTrimmed()) {

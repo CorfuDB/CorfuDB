@@ -1,8 +1,13 @@
 package org.corfudb.recovery;
 
+import static org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS;
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
+
+import java.util.Map;
+import java.util.UUID;
+
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -12,11 +17,6 @@ import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.ObjectBuilder;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.serializer.ISerializer;
-
-import java.util.Map;
-import java.util.UUID;
-
-import static org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS;
 
 /**
  * Created by rmichoud on 6/22/17.
@@ -96,7 +96,7 @@ public class RecoveryUtils {
     /** Deserialize a logData by getting the logEntry
      *
      * Getting the underlying logEntry should trigger deserialization only once.
-     * Next access should just returned the logEntry direclty.
+     * Next access should just returned the logEntry directly.
      *
      * @param logData
      * @return
