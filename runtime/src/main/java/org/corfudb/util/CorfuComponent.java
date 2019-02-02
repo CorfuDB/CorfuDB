@@ -12,6 +12,7 @@ public enum CorfuComponent {
     CLIENT_ROUTER("corfu.runtime.client-router."),
     LOG_UNIT_CLIENT("corfu.runtime.log-unit-client."),
     OBJECT("corfu.runtime.object."),
+    GARBAGE_COLLECTION("corfu.runtime.gc."),
     CLIENT_SEQUENCER("corfu.runtime.sequencer."),
 
     // Infrastructure components
