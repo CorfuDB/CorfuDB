@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -25,6 +26,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.util.Utils;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 
 /** A view of a stream implemented with backpointers.
@@ -39,6 +41,8 @@ import org.corfudb.util.Utils;
 public class BackpointerStreamView extends AbstractQueuedStreamView {
 
     final StreamOptions options;
+    final Roaring64NavigableMap streamAddresses = new Roaring64NavigableMap();
+    AtomicLong lastResolved = new AtomicLong(Address.getMinAddress());
 
     /** Create a new backpointer stream view.
      *
@@ -109,6 +113,8 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                         .write(tokenResponse, object);
                 // The write completed successfully, so we return this
                 // address to the client.
+                // record that the address belongs to this stream
+                addToStreamAddresses(tokenResponse.getToken().getSequence());
                 return tokenResponse.getToken().getSequence();
             } catch (OverwriteException oe) {
                 log.trace("Overwrite occurred at {}", tokenResponse);
@@ -140,6 +146,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 runtime.getParameters().getWriteRetry(),
                 ILogData.getSerializedSize(object));
         throw new AppendException();
+    }
+
+    private synchronized void addToStreamAddresses(long address) {
+        if(!streamAddresses.contains(address)) {
+            streamAddresses.addLong(address);
+        }
     }
 
     void processTrimmedException(TrimmedException te) {
@@ -266,8 +278,12 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
 
             // If it contains the stream we are interested in
             if (d.containsStream(streamId)) {
+                if(this.getId() == streamId) {
+                    addToStreamAddresses(currentAddress);
+                }
                 log.trace("followBackPointers: address[{}] contains streamId[{}], apply filter", currentAddress,
                         streamId);
+
                 // Check whether we should include the address
                 BackpointerOp op = filter.apply(d);
                 if (op == BackpointerOp.INCLUDE
@@ -296,19 +312,32 @@ public class BackpointerStreamView extends AbstractQueuedStreamView {
                 if (Address.isAddress(tmp) || tmp == Address.NON_EXIST) {
                     currentAddress = tmp;
                     singleStep = false;
+                } else if (lastResolved.get() > currentAddress) {
+                    long prevAddress = currentAddress - 1;
+                    while(Address.isAddress(prevAddress) && prevAddress != Address.getMinAddress()) {
+                       if(streamAddresses.contains(prevAddress)) {
+                           currentAddress = prevAddress;
+                           singleStep = false;
+                           break;
+                       }
+                       prevAddress--;
+                    }
                 }
             }
 
             if (singleStep) {
+
                 // backpointers failed, so we're
                 // downgrading to a linear scan
+
                 log.warn("followBackPointers[{}]: downgrading to single step, found hole at {}", this, currentAddress);
                 currentAddress = currentAddress - 1;
             }
+
         }
-
+        // compare and set the last Resolved.
+        while(!lastResolved.compareAndSet(lastResolved.get(), Math.max(lastResolved.get(), startAddress)));
         return entryAdded;
-
     }
 
     protected BackpointerOp resolveCheckpoint(final QueuedStreamContext context, ILogData data,
