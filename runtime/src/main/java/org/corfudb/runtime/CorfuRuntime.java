@@ -482,7 +482,14 @@ public class CorfuRuntime {
     private final ManagementView managementView = new ManagementView(this);
 
     /**
-     * A list of known layout servers.
+     * List of initial set of layout servers, i.e., servers specified in
+     * connection string on bootstrap.
+     */
+    @Getter
+    private volatile List<String> bootstrapLayoutServers;
+
+    /**
+     * List of known layout servers, refreshed on each fetchLayout.
      */
     @Getter
     private volatile List<String> layoutServers;
@@ -624,9 +631,12 @@ public class CorfuRuntime {
         this.parameters = parameters;
 
         // Populate the initial set of layout servers
-        layoutServers = parameters.getLayoutServers().stream()
+        bootstrapLayoutServers = parameters.getLayoutServers().stream()
                 .map(NodeLocator::toString)
                 .collect(Collectors.toList());
+
+        // Initialize list of layout servers (this list will get updated for every new layout)
+        layoutServers = new ArrayList<>(bootstrapLayoutServers);
 
         // Set the initial cluster Id
         clusterId = parameters.getClusterId();
@@ -774,10 +784,11 @@ public class CorfuRuntime {
      */
     public CorfuRuntime parseConfigurationString(String configurationString) {
         // Parse comma sep. list.
-        layoutServers = Pattern.compile(",")
+        bootstrapLayoutServers = Pattern.compile(",")
                 .splitAsStream(configurationString)
                 .map(String::trim)
                 .collect(Collectors.toList());
+        layoutServers = new ArrayList<>(bootstrapLayoutServers);
         return this;
     }
 
@@ -788,6 +799,7 @@ public class CorfuRuntime {
      * @return A CorfuRuntime, to support the builder pattern.
      */
     public CorfuRuntime addLayoutServer(String layoutServer) {
+        bootstrapLayoutServers.add(layoutServer);
         layoutServers.add(layoutServer);
         return this;
     }
@@ -814,7 +826,7 @@ public class CorfuRuntime {
             return;
         }
         layout = fetchLayout(latestLayout == null
-                ? layoutServers : latestLayout.getLayoutServers());
+                ? bootstrapLayoutServers : latestLayout.getLayoutServers());
     }
 
     /**
@@ -909,6 +921,9 @@ public class CorfuRuntime {
 
                         checkClusterId(l);
 
+                        // Update/refresh list of layout servers
+                        this.layoutServers = l.getLayoutServers();
+
                         layout = layoutFuture;
                         latestLayout = l;
                         log.debug("Layout server {} responded with layout {}", s, l);
@@ -990,9 +1005,9 @@ public class CorfuRuntime {
      */
     public synchronized CorfuRuntime connect() {
         if (layout == null) {
-            log.info("Connecting to Corfu server instance, layout servers={}", layoutServers);
+            log.info("Connecting to Corfu server instance, layout servers={}", bootstrapLayoutServers);
             // Fetch the current layout and save the future.
-            layout = fetchLayout(layoutServers);
+            layout = fetchLayout(bootstrapLayoutServers);
             try {
                 layout.get();
             } catch (Exception e) {

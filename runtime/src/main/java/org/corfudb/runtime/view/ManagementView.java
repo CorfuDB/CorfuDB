@@ -279,6 +279,9 @@ public class ManagementView extends AbstractView {
     public ClusterStatusReport getClusterStatus() {
         Layout layout;
         ClusterStatusReliability statusReliability = ClusterStatusReliability.STRONG_QUORUM;
+
+        // Get layout servers from runtime set of layout servers (specified in connection string).
+        // This list is refreshed whenever a new layout is fetched.
         List<String> layoutServers = runtime.getLayoutServers().stream()
                 .map(endpoint -> NodeLocator.getLegacyEndpoint(NodeLocator.parseString(endpoint)))
                 .collect(Collectors.toList());
@@ -383,7 +386,7 @@ public class ManagementView extends AbstractView {
      * @param layoutServers list of initial layout servers to retrieve layouts from.
      * @param discoverLayoutServers flag to indicate if we want to discover new layout servers from
      *                              the layouts retrieved from initial set of layout servers.
-     *                              Note: this is required as runtime.getLayoutServers might have been
+     *                              Note: this is required as runtime.getBootstrapLayoutServers might have been
      *                              initialized with a single server (from all in cluster).
      * @return Map of endpoint id and layout.
      */
