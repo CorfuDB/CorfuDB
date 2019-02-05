@@ -73,7 +73,8 @@ class LocalMonitoringService implements MonitoringService {
                 .requestMetrics()
                 //Handle possible exceptions and transform to the sequencer status
                 .exceptionally(ex -> {
-                    if (ex instanceof ServerNotReadyException) {
+                    // All Exceptions are CompletionExceptions. Need to unwrap them to obtain the cause.
+                    if (ex.getCause() instanceof ServerNotReadyException) {
                         return SequencerMetrics.NOT_READY;
                     }
 
