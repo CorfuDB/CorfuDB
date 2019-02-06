@@ -2,22 +2,22 @@ package org.corfudb.universe.scenario;
 
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
+import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.time.Duration;
 import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForUnresponsiveServersChange;
+import static org.corfudb.universe.scenario.ScenarioUtils.*;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 
-public class NodesDownAndPartitionedIT extends GenericIntegrationTest {
+public class NodeDownAndPartitionedIT extends GenericIntegrationTest {
 
     /**
      * Test cluster behavior after one down and another node partitioned
@@ -48,33 +48,30 @@ public class NodesDownAndPartitionedIT extends GenericIntegrationTest {
 
                 // Stop one node and partition another one
                 server1.stop(Duration.ofSeconds(10));
-                server2.disconnect(Arrays.asList(server1, server2));
+                server2.disconnect(Arrays.asList(server0, server1));
 
-                // TODO: There is a bug in NodeStatus API, waiting for patch and uncomment following lines
-                // Verify cluster status is UNAVAILABLE with two nodes up and one node down
+                waitUninterruptibly(Duration.ofSeconds(20));
+
+                // Verify cluster status
                 corfuClient.invalidateLayout();
                 ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
-                // assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
-                //
-                // Map<String, NodeStatus> statusMap = clusterStatusReport.getClientServerConnectivityStatusMap();
-                // assertThat(statusMap.get(server0.getParams().getEndpoint())).isEqualTo(NodeStatus.UP);
-                // assertThat(statusMap.get(server1.getParams().getEndpoint())).isEqualTo(NodeStatus.DOWN);
-                // assertThat(statusMap.get(server2.getParams().getEndpoint())).isEqualTo(NodeStatus.UP);
-                //
-                // // Wait for failure detector finds cluster is down before recovering
-                // waitForClusterDown(table);
+                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
+
+                // Wait for failure detector finds cluster is down before recovering
+                waitForClusterDown(table);
 
                 // Recover cluster by restarting the stopped node, removing
                 // partition and wait for layout's unresponsive servers to change
                 server1.start();
-                server2.reconnect();
+                server2.reconnect(Arrays.asList(server0, server1));
                 waitForUnresponsiveServersChange(size -> size == 0, corfuClient);
 
-                // Verify cluster status is STABLE
-                clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
+                waitUninterruptibly(Duration.ofSeconds(20));
 
-                //FIXME status always - UNAVAILABLE, must be STABLE
-                //assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
+                // Verify cluster status is STABLE
+                corfuClient.invalidateLayout();
+                clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
+                assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
 
                 // Verify data path working fine
                 for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {

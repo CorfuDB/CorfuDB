@@ -1,15 +1,5 @@
 package org.corfudb.universe.scenario;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForClusterDown;
-import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
-
-import java.time.Duration;
-import java.util.Map;
-
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatusReliability;
@@ -22,6 +12,16 @@ import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.util.Sleep;
 import org.junit.Test;
+
+import java.time.Duration;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForClusterDown;
+import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 
 public class TwoNodesDownIT extends GenericIntegrationTest {
 

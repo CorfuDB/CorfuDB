@@ -6,7 +6,6 @@ import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.node.client.ClientParams;
 import org.corfudb.universe.node.client.CorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
-import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.Universe.UniverseMode;
 import org.junit.Test;
 
