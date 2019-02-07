@@ -84,9 +84,10 @@ public class WorkflowIT extends AbstractIT {
         n1Rt.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
                 timeout, pollPeriod);
 
-        n1Rt.invalidateLayout();
+        // Wait for servers
         final int clusterSizeN2 = 2;
-        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+        waitForLayoutChange(layout -> layout.getAllServers().size() == clusterSizeN2
+                && layout.getSegments().size() == 1, n1Rt);
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
@@ -104,19 +105,9 @@ public class WorkflowIT extends AbstractIT {
                 timeout, pollPeriod);
 
         // Verify that the third node has been added and data can be read back
-        n1Rt.invalidateLayout();
         final int clusterSizeN3 = 3;
-        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN3);
-
-        Layout n3Layout = new Layout(n1Rt.getLayoutView().getLayout());
-
-        Layout expectedLayout = new LayoutBuilder(n3Layout)
-                .removeLayoutServer(getConnectionString(n2Port))
-                .removeSequencerServer(getConnectionString(n2Port))
-                .removeLogunitServer(getConnectionString(n2Port))
-                .removeUnresponsiveServer(getConnectionString(n2Port))
-                .setEpoch(n3Layout.getEpoch() + 1)
-                .build();
+        waitForLayoutChange(layout -> layout.getAllServers().size() == clusterSizeN3
+                && layout.getSegments().size() == 1, n1Rt);
 
         // Remove node 2
         n1Rt.getManagementView().removeNode(getConnectionString(n2Port), workflowNumRetry,
@@ -130,10 +121,11 @@ public class WorkflowIT extends AbstractIT {
                 timeout, pollPeriod);
         shutdownCorfuServer(server_2);
 
-        n1Rt.invalidateLayout();
         // Verify that the layout epoch hasn't changed after the second remove and that
         // the sequencers/layouts/segments nodes include the first and third node
-        assertThat(n1Rt.getLayoutView().getLayout()).isEqualTo(expectedLayout);
+        waitForLayoutChange(layout ->
+                layout.getAllServers().size() == 2
+                        && !layout.getAllServers().contains(getConnectionString(n2Port)), n1Rt);
 
         // Force remove node 3
         n1Rt.getManagementView().forceRemoveNode(getConnectionString(n3Port), workflowNumRetry,
@@ -148,8 +140,8 @@ public class WorkflowIT extends AbstractIT {
         n1Rt.getManagementView().addNode(getConnectionString(n2Port), workflowNumRetry,
                 timeout, pollPeriod);
 
-        n1Rt.invalidateLayout();
-        assertThat(n1Rt.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
+        waitForLayoutChange(layout -> layout.getAllServers().size() == clusterSizeN2
+                && layout.getSegments().size() == 1, n1Rt);
 
         for (int x = 0; x < numIter; x++) {
             String v = (String) table.get(String.valueOf(x));

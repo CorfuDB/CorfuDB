@@ -275,11 +275,32 @@ public class Layout {
     }
 
     /**
+     * Get the first segment.
+     * @return Returns the segment at index 0.
+     */
+    public LayoutSegment getFirstSegment() {
+        return this.getSegments().get(0);
+    }
+
+    /**
      * Return latest segment.
-     *
+     * @return the latest segment.
      */
     public LayoutSegment getLatestSegment() {
         return this.getSegments().get(this.getSegments().size() - 1);
+    }
+
+    /**
+     * Get the last node in the last segment.
+     *
+     * @return Returns the last node in the last segment.
+     */
+    public String getLastAddedNodeInLastSegment() {
+
+        // Fetching the latest segment. Note: This is the unbounded segment with ongoing writes.
+        // Returning the last node in the first stripe for determinism.
+        List<String> firstStripeLogServers = getLatestSegment().getFirstStripe().getLogServers();
+        return firstStripeLogServers.get(firstStripeLogServers.size() - 1);
     }
 
     /**
@@ -563,6 +584,15 @@ public class Layout {
 
         public int getNumberOfStripes() {
             return stripes.size();
+        }
+
+        /**
+         * Gets the first stripe.
+         *
+         * @return Returns the stripe at index 0.
+         */
+        public LayoutStripe getFirstStripe() {
+            return stripes.get(0);
         }
 
         /**
