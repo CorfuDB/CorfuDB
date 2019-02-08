@@ -8,6 +8,7 @@ org.corfudb.infrastructure.log
 org.corfudb.infrastructure.management
 org.corfudb.infrastructure.management.failuredetector
 org.corfudb.infrastructure.orchestrator
+org.corfudb.infrastructure.orchestrator.actions
 org.corfudb.infrastructure.orchestrator.workflows
 org.corfudb.infrastructure.utils
 org.corfudb.metrics
