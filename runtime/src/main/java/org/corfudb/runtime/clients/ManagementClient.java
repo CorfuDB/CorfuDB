@@ -17,6 +17,7 @@ import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
@@ -135,6 +136,21 @@ public class ManagementClient extends AbstractClient {
                         isSequencerServer,
                         isLogUnitServer,
                         stripeIndex));
+        CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
+                .ORCHESTRATOR_REQUEST
+                .payloadMsg(req));
+        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();
+    }
+
+    /**
+     * Creates a workflow request to restore all redundancies and merge all segments.
+     *
+     * @param endpoint Endpoint to restore redundancy.
+     * @return CreateWorkflowResponse which gives the workflowId.
+     * @throws TimeoutException when the rpc times out
+     */
+    public CreateWorkflowResponse mergeSegments(@Nonnull String endpoint) throws TimeoutException {
+        OrchestratorMsg req = new OrchestratorMsg(new RestoreRedundancyMergeSegmentsRequest(endpoint));
         CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
                 .ORCHESTRATOR_REQUEST
                 .payloadMsg(req));

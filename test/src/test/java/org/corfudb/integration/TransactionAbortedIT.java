@@ -11,11 +11,8 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 
 /**
@@ -41,18 +38,17 @@ public class TransactionAbortedIT extends AbstractIT {
                 .open();
         final String key = "key";
         final String value = "value";
-        map.put(key, value);
+
         startLatch.countDown();
+        runtime.getObjectsView().TXBegin();
+        UUID myTxId = TransactionalContext.getCurrentContext().getTransactionID();
+        map.put(key, value);
+
         try {
             startLatch.await();
         } catch (InterruptedException fail) {
             throw new RuntimeException(fail);
         }
-
-        runtime.getObjectsView().TXBegin();
-        UUID myTxId = TransactionalContext.getCurrentContext().getTransactionID();
-
-        map.put(key, value);
 
         try {
             offendingAddress = runtime.getObjectsView().TXEnd();

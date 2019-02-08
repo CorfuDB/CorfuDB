@@ -224,7 +224,7 @@ public class ClusterReconfigIT extends AbstractIT {
      * This is to ensure we have at least 1.5 data log files.
      * A daemon thread is instantiated to randomly put data while add node is executed.
      * 2 nodes - 9001 and 9002 are added to the cluster.
-     * Finally the epoch and the addition of the 2 nodes in the layout is verified.
+     * Finally the addition of the 2 nodes in the layout is verified.
      *
      * @throws Exception
      */
@@ -265,9 +265,10 @@ public class ClusterReconfigIT extends AbstractIT {
         runtime.getManagementView().addNode("localhost:9002", workflowNumRetry,
                 timeout, pollPeriod);
 
-        final long epochAfter2Adds = 4L;
-        runtime.invalidateLayout();
-        assertThat(runtime.getLayoutView().getLayout().getEpoch()).isEqualTo(epochAfter2Adds);
+        final int nodesCount = 3;
+        waitForLayoutChange(layout -> layout.getAllActiveServers().size() == nodesCount
+                && layout.getUnresponsiveServers().isEmpty()
+                && layout.getSegments().size() == 1, runtime);
 
         moreDataToBeWritten.set(false);
         t.join();
